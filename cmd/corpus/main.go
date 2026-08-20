@@ -9,6 +9,7 @@
 //	corpus candidates                 pairs that may be one human, for review
 //	corpus search -q <text>           which chains are about this
 //	corpus spec -q <text> -o f.json   a timeline spec for those chains
+//	corpus unnest -id <gmail-id>      what extraction recovers from one message
 package main
 
 import (
@@ -23,6 +24,7 @@ import (
 	"github.com/zachpmanson/chainmail/internal/corpus"
 	"github.com/zachpmanson/chainmail/internal/mailingest"
 	"github.com/zachpmanson/chainmail/internal/spec"
+	"github.com/zachpmanson/chainmail/internal/unnest"
 )
 
 func defaultPath() string {
@@ -180,6 +182,46 @@ func run(args []string) error {
 			return err
 		}
 		fmt.Printf("wrote %s — %d entries from %d chains\n", *out, len(sp.Messages), len(chains))
+		return nil
+
+	case "unnest":
+		// Inspect what quoted-block extraction recovers from one message, before
+		// it is wired into ingest.
+		fs := flag.NewFlagSet("unnest", flag.ContinueOnError)
+		id := fs.String("id", "", "gmail message id")
+		full := fs.Bool("full", false, "print each block's text in full")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *id == "" {
+			return fmt.Errorf("usage: corpus unnest -id <gmail-id> [-full]")
+		}
+		msg, err := mailingest.Client{}.Read(*id)
+		if err != nil {
+			return err
+		}
+		blocks := unnest.Peel(msg.Body)
+		fmt.Printf("%s\n%s\n%d bytes -> %d blocks\n\n",
+			msg.Subject, msg.Date, len(msg.Body), len(blocks))
+		for i, b := range blocks {
+			fmt.Printf("── block %d  depth %d  %s  lines %d-%d\n",
+				i, b.Depth, kindName(b.Kind), b.Start, b.End)
+			if b.Sentinel != "" {
+				for _, l := range strings.Split(b.Sentinel, "\n") {
+					fmt.Printf("   ⌐ %s\n", trunc(l, 96))
+				}
+			}
+			text := b.Text
+			if !*full {
+				if lines := strings.Split(text, "\n"); len(lines) > 3 {
+					text = strings.Join(lines[:3], "\n") + fmt.Sprintf("\n   … %d more lines", len(lines)-3)
+				}
+			}
+			for _, l := range strings.Split(text, "\n") {
+				fmt.Printf("     %s\n", trunc(l, 96))
+			}
+			fmt.Println()
+		}
 		return nil
 
 	case "alias":
@@ -372,6 +414,19 @@ func orElse(a, b string) string {
 		return a
 	}
 	return b
+}
+
+func kindName(k unnest.Kind) string {
+	switch k {
+	case unnest.KindAttribution:
+		return "attribution"
+	case unnest.KindHeaderBlock:
+		return "header block"
+	case unnest.KindForwardRule:
+		return "forward rule"
+	default:
+		return "visible message"
+	}
 }
 
 func plural(n int, one, many string) string {
