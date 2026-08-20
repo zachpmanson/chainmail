@@ -295,3 +295,40 @@ func TestRepeatedEditsKeepTheIndexSound(t *testing.T) {
 		t.Fatalf("removed identifier still indexed: %d hits", n)
 	}
 }
+
+// The zone offset is stored, not just the label. Spec generation needs it to
+// render the sender's own clock; a label alone forces a lookup table and leaves
+// no honest answer for a label the table does not know.
+func TestZoneOffsetRoundTrips(t *testing.T) {
+	s := open(t)
+	off := 330 // +0530, a real offset seen in this corpus
+	e := entry("mail:<a@x>", "hello")
+	e.TZ = "+0530"
+	e.TZOffset = &off
+	if _, err := s.Put(e, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	var gotTZ string
+	var gotOff *int
+	if err := s.DB().QueryRow(
+		`select tz, tz_offset from entries where ext_id='mail:<a@x>'`).Scan(&gotTZ, &gotOff); err != nil {
+		t.Fatal(err)
+	}
+	if gotTZ != "+0530" || gotOff == nil || *gotOff != 330 {
+		t.Fatalf("got tz=%q offset=%v, want +0530 / 330", gotTZ, gotOff)
+	}
+
+	// A source that stated no zone must leave the offset null rather than
+	// defaulting to UTC, which would be a fabricated fact.
+	e2 := entry("mail:<b@x>", "hello")
+	if _, err := s.Put(e2, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DB().QueryRow(
+		`select tz_offset from entries where ext_id='mail:<b@x>'`).Scan(&gotOff); err != nil {
+		t.Fatal(err)
+	}
+	if gotOff != nil {
+		t.Fatalf("unstated zone stored an offset of %d", *gotOff)
+	}
+}

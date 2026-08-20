@@ -151,4 +151,21 @@ var migrations = []string{
 	  merged_at    integer not null
 	);
 	`,
+
+	// 4: store the UTC offset, not just the zone label.
+	//
+	// `tz` holds what the source stated ("NZST", "+0530"). Rendering the sender's
+	// own clock needs the offset in minutes, and a label alone does not give it:
+	// spec generation had to mirror a label->offset table from the renderer, and
+	// an unrecognised label left no honest option but a UTC clock. The Date header
+	// carries the offset directly, so capture it at ingest and the whole class of
+	// caveat disappears.
+	//
+	// `org` likewise: colour and grouping are driven by org, and people held only
+	// a display name, so it was being inferred from the mail domain. An inferred
+	// value is fine as a default but should be storable and correctable.
+	`
+	alter table entries add column tz_offset integer;   -- minutes east of UTC
+	alter table people  add column org text;
+	`,
 }

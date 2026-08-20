@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // maxBytes is passed to every read. docket truncates from the END of a body,
@@ -115,18 +116,31 @@ func (c Client) Thread(id string) (struct {
 	}](c, "mail", "thread", "--id", id)
 }
 
-// SupportsThreadingHeaders reports whether the docket on PATH exposes the
-// fields this package needs. An older build returns an envelope without them,
-// and would silently produce a corpus with no reply graph at all.
+// SupportsThreadingHeaders reports whether the docket on PATH exposes the fields
+// this package needs. An older build returns an envelope without them and would
+// silently produce a corpus with no reply graph at all, so this fails closed.
+//
+// It retries once: the probe is a live API call, and a token refresh or a rate
+// blip should not abort a backfill that may otherwise run for hours.
 func (c Client) SupportsThreadingHeaders() (bool, error) {
-	out, err := run[[]Envelope](c, "mail", "search", "--query", "has:nouserlabels", "--limit", "1")
-	if err != nil {
-		return false, err
+	var lastErr error
+	for attempt := 0; attempt < 2; attempt++ {
+		if attempt > 0 {
+			time.Sleep(2 * time.Second)
+		}
+		out, err := run[[]Envelope](c, "mail", "search", "--query", "in:anywhere", "--limit", "1")
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if len(out) == 0 {
+			return false, fmt.Errorf(
+				"%s returned no messages, so it is impossible to tell whether it exposes "+
+					"threading headers", c.bin())
+		}
+		return out[0].MessageID != "", nil
 	}
-	if len(out) == 0 {
-		return false, fmt.Errorf("no messages returned, cannot tell whether %s exposes threading headers", c.bin())
-	}
-	return out[0].MessageID != "", nil
+	return false, fmt.Errorf("probing %s for threading headers: %w", c.bin(), lastErr)
 }
 
 func ifNotEmpty(prefix, s string) string {

@@ -98,7 +98,7 @@ func IngestIDs(store *corpus.Store, c Client, ids []string) (Result, error) {
 
 // Put converts one docket message into an entry and stores it.
 func Put(store *corpus.Store, msg Message) (corpus.PutResult, error) {
-	ts, tz := parseDate(msg.Date)
+	ts, tz, off := parseDate(msg.Date)
 
 	// A message with no Message-ID is unusual but legal; fall back to the Gmail
 	// id so the entry still has a stable natural key.
@@ -118,6 +118,7 @@ func Put(store *corpus.Store, msg Message) (corpus.PutResult, error) {
 		Kind:      "message",
 		TS:        ts,
 		TZ:        tz,
+		TZOffset:  off,
 		PersonID:  person,
 		Container: msg.ThreadID,
 		ParentRef: msg.InReplyTo,
@@ -206,16 +207,20 @@ func cleanSubject(s string) string {
 // parseDate reads an RFC5322 Date header, returning the instant and the zone
 // label as stated. The label is kept because the renderer shows the sender's own
 // zone and marks inferred ones differently; the instant is what ordering uses.
-func parseDate(s string) (time.Time, string) {
+// parseDate reads an RFC5322 Date header, returning the instant, the zone label
+// as stated, and the offset in minutes east of UTC. The label is kept because the
+// renderer shows the sender's own zone and marks inferred ones differently; the
+// instant is what ordering uses; the offset is what lets the stated clock be
+// rendered without a label lookup table.
+func parseDate(s string) (time.Time, string, *int) {
 	t, err := mail.ParseDate(s)
 	if err != nil {
-		return time.Time{}, ""
+		return time.Time{}, "", nil
 	}
-	name, _ := t.Zone()
-	// Go reports an unnamed zone as e.g. "+1000"; keep that, it is still what the
-	// source said.
+	name, secs := t.Zone()
 	if name == "" {
 		name = t.Format("-0700")
 	}
-	return t, name
+	mins := secs / 60
+	return t, name, &mins
 }

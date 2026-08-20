@@ -22,12 +22,16 @@ const (
 
 // Entry is one atomic thing someone said, whatever the medium.
 type Entry struct {
-	ID        int64
-	Source    string
-	ExtID     string
-	Kind      string // message | note
-	TS        time.Time
-	TZ        string // as stated by the source; empty when it stated none
+	ID     int64
+	Source string
+	ExtID  string
+	Kind   string // message | note
+	TS     time.Time
+	TZ     string // as stated by the source; empty when it stated none
+	// TZOffset is minutes east of UTC, as the source stated it. Kept alongside
+	// the label because a label alone cannot render the sender's own clock, and
+	// an unrecognised label would otherwise force a UTC fallback.
+	TZOffset  *int
 	PersonID  int64
 	Container string
 	ParentRef string // raw Message-ID / thread_ts; resolved separately
@@ -183,20 +187,21 @@ func (s *Store) Put(e Entry, m *Mail, atts []Attachment) (PutResult, error) {
 		personID = e.PersonID
 	}
 	row := tx.QueryRow(`
-		insert into entries (source, ext_id, kind, ts, tz, person_id, container,
-		                     parent_ref, subject, body_html, body_text, permalink,
-		                     body_sha, ingested_at)
-		values (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+		insert into entries (source, ext_id, kind, ts, tz, tz_offset, person_id,
+		                     container, parent_ref, subject, body_html, body_text,
+		                     permalink, body_sha, ingested_at)
+		values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		on conflict(source, ext_id) do update set
 		  kind=excluded.kind, ts=excluded.ts, tz=excluded.tz,
+		  tz_offset=excluded.tz_offset,
 		  person_id=coalesce(excluded.person_id, entries.person_id),
 		  container=excluded.container, parent_ref=excluded.parent_ref,
 		  subject=excluded.subject, body_html=excluded.body_html,
 		  body_text=excluded.body_text, permalink=excluded.permalink,
 		  body_sha=excluded.body_sha, ingested_at=excluded.ingested_at
 		returning id`,
-		e.Source, e.ExtID, e.Kind, e.TS.UTC().Unix(), nullStr(e.TZ), personID,
-		nullStr(e.Container), nullStr(e.ParentRef), nullStr(e.Subject),
+		e.Source, e.ExtID, e.Kind, e.TS.UTC().Unix(), nullStr(e.TZ), nullInt(e.TZOffset),
+		personID, nullStr(e.Container), nullStr(e.ParentRef), nullStr(e.Subject),
 		nullStr(e.BodyHTML), e.BodyText, nullStr(e.Permalink), sha, time.Now().Unix())
 	if err := row.Scan(&res.ID); err != nil {
 		return res, fmt.Errorf("upserting %s: %w", e.ExtID, err)
@@ -341,6 +346,13 @@ func (s *Store) Stats() (Stats, error) {
 		return st, err
 	}
 	return st, nil
+}
+
+func nullInt(i *int) any {
+	if i == nil {
+		return nil
+	}
+	return *i
 }
 
 func nullStr(s string) any {
