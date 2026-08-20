@@ -3,6 +3,8 @@
 //	corpus init                       create or migrate the database
 //	corpus ingest mail -q <query>     slurp a Gmail query
 //	corpus stats                      what is in it, and what is missing
+//	corpus people                     everyone involved, senders and recipients
+//	corpus merge -keep <a> -drop <b>  same human, two addresses
 package main
 
 import (
@@ -48,6 +50,46 @@ func run(args []string) error {
 		}
 		defer s.Close()
 		fmt.Println("corpus ready at", path)
+		return nil
+
+	case "people":
+		s, err := corpus.Open(path)
+		if err != nil {
+			return err
+		}
+		defer s.Close()
+		ps, err := corpus.People(s)
+		if err != nil {
+			return err
+		}
+		for _, p := range ps {
+			ids := strings.Join(p.Identities, ", ")
+			fmt.Printf("%4d  %-28s sent %3d  recv %3d  %s\n",
+				p.PersonID, trunc(p.DisplayName, 28), p.Sent, p.Received, ids)
+		}
+		fmt.Printf("\n%d people\n", len(ps))
+		return nil
+
+	case "merge":
+		fs := flag.NewFlagSet("merge", flag.ContinueOnError)
+		keep := fs.String("keep", "", "email address of the person to keep")
+		drop := fs.String("drop", "", "email address of the person to merge away")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *keep == "" || *drop == "" {
+			return fmt.Errorf("usage: corpus merge -keep <email> -drop <email>")
+		}
+		s, err := corpus.Open(path)
+		if err != nil {
+			return err
+		}
+		defer s.Close()
+		id, err := corpus.MergeByEmail(s, *keep, *drop)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("merged into person %d\n", id)
 		return nil
 
 	case "stats":
@@ -121,4 +163,11 @@ func run(args []string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown command %q", args[0])
+}
+
+func trunc(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n-1] + "…"
 }
