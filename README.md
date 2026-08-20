@@ -84,6 +84,13 @@ npm run typecheck
 npm run gen:types  # regenerate src/lib/spec.d.ts from the schema
 ```
 
-`fixtures/` holds a synthetic trail covering the timezone and notice cases, and a
-1-entry degenerate case. Real mail trails are sensitive and never committed: keep
-them as `fixtures/*.local.json`, which is gitignored.
+`fixtures/synthetic.json` is a full-complexity trail: 58 entries across 7 chains
+(sharing 4 lanes), 51 reply edges, 37 stated and 18 inferred timezones, 3 meeting
+notices, 11 @mentions, 6 tables, 37 internal cross-links, 5 avatars, 15
+participants and 17 open items. It mirrors a real trail's structure exactly —
+same timestamps, same reply graph, same interlinking — with the cast and content
+rewritten, so the renderer is exercised at real scale by a file that is safe to
+commit. `fixtures/minimal.json` is the 1-entry degenerate case.
+
+Real mail trails are sensitive and are never committed. Keep them untracked at
+`fixtures/local.json` and load them with `?spec=`.

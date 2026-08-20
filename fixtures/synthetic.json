@@ -1,46 +1,1102 @@
 {
- "specVersion": 1,
- "title": "#synthetic-trail",
- "subtitle": "Covers the cases that are easy to get wrong: a cross-timezone reply whose clock reads earlier than its parent, and a meeting that never existed as an email.",
- "messages": [
+ "title": "#daystrom-telemetry-csv",
+ "subtitle": "Every email about the Daystrom report / telemetry CSV, unspooled out of its threads and forwards and replayed as one continuous conversation. 55 messages + 3 meeting notices, 25 November 2025 → 20 August 2026. Hover any message for a <code>#</code> permalink, follow <b>↩ in reply to</b> to jump to its parent, and the dotted underlines in the commentary link to the message being referenced. Searches, threads and avatar provenance are in the panels above.",
+ "avatars": {
+  "Jean-Luc Picard": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI5NiIgaGVpZ2h0PSI5NiI+PHJlY3Qgd2lkdGg9Ijk2IiBoZWlnaHQ9Ijk2IiBmaWxsPSIjMmE0ZjdjIi8+PHRleHQgeD0iNDgiIHk9IjYyIiBmb250LWZhbWlseT0iSGVsdmV0aWNhIiBmb250LXNpemU9IjQyIiBmaWxsPSIjZmZmIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5KUDwvdGV4dD48L3N2Zz4=",
+  "William Riker": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI5NiIgaGVpZ2h0PSI5NiI+PHJlY3Qgd2lkdGg9Ijk2IiBoZWlnaHQ9Ijk2IiBmaWxsPSIjN2MzZjJhIi8+PHRleHQgeD0iNDgiIHk9IjYyIiBmb250LWZhbWlseT0iSGVsdmV0aWNhIiBmb250LXNpemU9IjQyIiBmaWxsPSIjZmZmIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5XUjwvdGV4dD48L3N2Zz4=",
+  "Geordi La Forge": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI5NiIgaGVpZ2h0PSI5NiI+PHJlY3Qgd2lkdGg9Ijk2IiBoZWlnaHQ9Ijk2IiBmaWxsPSIjMmE3YzVmIi8+PHRleHQgeD0iNDgiIHk9IjYyIiBmb250LWZhbWlseT0iSGVsdmV0aWNhIiBmb250LXNpemU9IjQyIiBmaWxsPSIjZmZmIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5HTDwvdGV4dD48L3N2Zz4=",
+  "Deanna Troi": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI5NiIgaGVpZ2h0PSI5NiI+PHJlY3Qgd2lkdGg9Ijk2IiBoZWlnaHQ9Ijk2IiBmaWxsPSIjNmIyYTdjIi8+PHRleHQgeD0iNDgiIHk9IjYyIiBmb250LWZhbWlseT0iSGVsdmV0aWNhIiBmb250LXNpemU9IjQyIiBmaWxsPSIjZmZmIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5EVDwvdGV4dD48L3N2Zz4=",
+  "Tasha Yar": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI5NiIgaGVpZ2h0PSI5NiI+PHJlY3Qgd2lkdGg9Ijk2IiBoZWlnaHQ9Ijk2IiBmaWxsPSIjN2MyYTNmIi8+PHRleHQgeD0iNDgiIHk9IjYyIiBmb250LWZhbWlseT0iSGVsdmV0aWNhIiBmb250LXNpemU9IjQyIiBmaWxsPSIjZmZmIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5UWTwvdGV4dD48L3N2Zz4="
+ },
+ "openItems": [
+  "<b>What value Daystrom expects in the Berth Name column</b>, and whether it lives in the Billing Agent Membership spreadsheet. Asked <a class='xref' href='#m-20260820-1440-wr'>20 Aug</a> and unanswered — this is the column the report currently emits as <code>PLACEHOLDER TBD</code>, so it blocks the real file.",
+  "<b>Who sends the member-facing invoices</b> once the CSV is live — Starfleet directly, or Daystrom through their own system. Asked <a class='xref' href='#m-20260820-1440-wr'>20 Aug</a>, unanswered.",
+  "<b>Leah expects five members on the first billing file; Starfleet is sending one.</b> He listed <a class=\"xref\" href=\"#m-20260819-0821-lb\">Vega Relay, Kepler's, Denobula Yard, Ferrix Dock and Lumen Direct on 19 Aug</a>; <a class=\"xref\" href=\"#m-20260819-0951-dt\">Deanna replied the same morning</a> that it will be a single client. Leah and Jo are holding member communications until this is settled.",
+  "<b>Leah's two direct questions are unanswered</b> — when the last payment members make direct to Starfleet will be, and whether the first Daystrom bill covers August consumption. Both are prerequisites for telling members anything.",
+  "<b><a class=\"xref\" href=\"#m-20260819-0842-dt\">Will was asked to call Leah on the morning of 19 Aug</a></b> to name the single September client, and Deanna has already told Leah to expect it. That action currently sits with Will and nothing in email records it as done.",
+  "Which retailer the pilot uses. The client is now settled — Will confirmed <b>Kepler Station</b> to Leah on <a class='xref' href='#m-20260820-1440-wr'>20 Aug</a>. Retailer is still open: the 18 Aug meeting settled on Vulcan Freight-only, at 17:16 that day <a class='xref' href='#m-20260818-1716-dt'>Deanna proposed Utopia Planitia instead</a>, and nothing since names one.",
+  "Daystrom has not answered how the file should be delivered. Jean-Luc asked Soong on <a class='xref' href='#m-20260818-1647-jlp'>18 Aug</a>; Will asked Leah again on <a class='xref' href='#m-20260820-1440-wr'>20 Aug</a>. Asked twice, still unanswered.",
+  "<b>Whether Daystrom's production deploy actually happened.</b> <a class=\"xref\" href=\"#m-20260709-1352-ns\">Soong said on 9 Jul</a> that e2e was complete and they were “good to go with the changes in Production next week”, gated on a business-team walkthrough of the member statement. Nothing since confirms it shipped, and Starfleet was never invited to the walkthrough.",
+  "<b>Andorian Power's billing terms are still unknown</b>, and are now the stated reason for restricting September to one client — Deanna says many sites sit with them and he needs time to align them.",
+  "<b>The Registry Code → Fellow Number rename was queried on 17 Mar 2026 and never answered.</b> <a class=\"xref\" href=\"#m-20251125-1329-jlp\">Soong asked twice</a> — “Is there a reason for this change? Can't we keep the same column as that of Vulcan Freight?” — against both renamed columns. The file must match Daystrom's template exactly or their system strips the data, so a renamed header is a live failure mode for the 2 September file.",
+  "<b>Billing CSV export still to be updated</b> to 2% + Duty commission, reported Inc-Duty, with <code>bill_amount_fee</code> recalculated to match — <a class=\"xref\" href=\"#m-20260802-1306-jlp\">flagged 2 Aug</a> as that week's first priority, and now due before a real customer's file goes out on 2 September.",
+  "<b>Tasha's list of recently-switched sites never reached Leah.</b> <a class=\"xref\" href=\"#m-20260819-0920-ty\">Her 19 Aug reply</a> opens “Hi Leah” but was addressed only to Deanna, so Bajor Depot, Selar Outpost and Corvan Depot are unknown on the Daystrom side.",
+  "<b>Registry code must move from the master sheet into the database</b> — assigned at <a class=\"xref\" href=\"#m-20260818-note\">the 18 Aug meeting</a>; no email confirms it done.",
+  "<b>Late-payment reminders for Daystrom clients are still on.</b> Jean-Luc to coordinate with Emil/Julie; Daystrom carries the collection risk, so duplicate chasing is a live customer-facing risk.",
+  "<b>Utopia Planitia will not guarantee actual meter reads for Kepler Station</b> (<a class=\"xref\" href=\"#m-20260729-1808-oq\">29 Jul</a>) — the client asked for no estimated bills, and the last over-estimate produced large credits. Only a best-effort commitment was given. Kepler's is also on Leah's list for the first file.",
+  "<b>Formal handover of billing-file generation</b> initiated at <a class=\"xref\" href=\"#m-20260817-note\">the 17 Aug WarRoom</a>; the 18 Aug meeting names Will for file generation, but no handover completion is recorded.",
+  "<b>Daystrom entity hierarchy in the DB still inconsistent</b> (the 14 misaligned sensor IDs), which feeds the same billing and reporting scope."
+ ],
+ "runLabel": "pass 2, 20 Aug 2026",
+ "participants": [
   {
-   "kind": "message", "id": "a",
-   "date": "Tue 25 Nov 2025", "time": "13:29", "tz": "AEST",
-   "sender": "Ada Kessler", "org": "Northwind", "fromEmail": "ada@northwind.example",
-   "to": "Bo Tran", "subject": "Column mapping",
-   "body": "<p>First draft of the column mapping.</p>"
+   "name": "Jean-Luc Picard",
+   "org": "Starfleet",
+   "email": "jeanluc@starfleet.fed",
+   "role": "wrote the original column spec"
   },
   {
-   "kind": "message", "id": "b",
-   "date": "Wed 19 Aug 2026", "time": "09:51", "tz": "NZST",
-   "sender": "Bo Tran", "org": "Harrow Co", "fromEmail": "bo@harrow.example",
-   "to": "Ada Kessler", "parent": "a", "quoted": true,
-   "source": "unspooled from the 20 Aug forward",
-   "body": "<p>Sent at 09:51 NZST, which is <b>earlier in absolute time</b> than the 09:20 AEST reply below.</p>"
+   "name": "Noonien Soong",
+   "org": "Daystrom",
+   "email": "Noonien.Soong@daystrom.fed",
+   "role": "Daystrom technical — owns the ingestion end"
   },
   {
-   "kind": "message", "id": "c",
-   "date": "Wed 19 Aug 2026", "time": "09:20", "tz": "AEST",
-   "sender": "Cy Ferris", "org": "Northwind", "fromEmail": "cy@northwind.example",
-   "to": "Bo Tran", "parent": "b", "me": true,
-   "body": "<p>Replying the same morning; the clock reads earlier but this is later.</p>",
-   "attachments": [{ "name": "sample.csv", "kind": "CSV", "size": "717 B" }]
+   "name": "Bruce Maddox",
+   "org": "Daystrom",
+   "role": "appears only in quoted text"
   },
   {
-   "kind": "note", "id": "n",
-   "date": "Mon 17 Aug 2026",
-   "label": "Kickoff call, 11:00 AEST",
-   "body": "<p class='ed'>Not an email — inferred from a later reference.</p>"
+   "name": "William Riker",
+   "org": "Starfleet",
+   "email": "riker@starfleet.fed",
+   "role": "builds the CSV; owns file generation"
+  },
+  {
+   "name": "Geordi La Forge",
+   "org": "Starfleet",
+   "email": "geordi@starfleet.fed"
+  },
+  {
+   "name": "Leah Brahms",
+   "org": "Daystrom",
+   "email": "Leah.Brahms@daystrom.fed",
+   "role": "Daystrom commercial — set the 2% + Duty terms"
+  },
+  {
+   "name": "Beverly Crusher",
+   "org": "Starfleet",
+   "email": "crusher@starfleet.fed"
+  },
+  {
+   "name": "Orfil Quinteros",
+   "org": "Utopia Planitia",
+   "role": "Utopia Planitia — appears only in quoted text"
+  },
+  {
+   "name": "Deanna Troi",
+   "org": "Starfleet",
+   "email": "troi@starfleet.fed",
+   "role": "runs the migration thread"
+  },
+  {
+   "name": "Tasha Yar",
+   "org": "Starfleet",
+   "email": "yar@starfleet.fed",
+   "role": "switch status for member sites"
+  },
+  {
+   "name": "Reginald Barclay",
+   "org": "Daystrom",
+   "note": "cc only — never sent; “Reg” in quoted headers"
+  },
+  {
+   "name": "Miles",
+   "org": "Daystrom",
+   "note": "cc only — never sent; first name only"
+  },
+  {
+   "name": "Alyssa",
+   "org": "Daystrom",
+   "note": "cc only — never sent; first name only"
+  },
+  {
+   "name": "Ro",
+   "org": "Daystrom",
+   "note": "cc only — never sent; first name only"
+  },
+  {
+   "name": "Utopia Planitia Ops",
+   "org": "Utopia Planitia",
+   "note": "distribution alias, not a person"
   }
  ],
- "participants": [
-  { "name": "Ada Kessler", "org": "Northwind", "email": "ada@northwind.example", "role": "wrote the mapping" },
-  { "name": "Bo Tran", "org": "Harrow Co", "email": "bo@harrow.example" },
-  { "name": "Cy Ferris", "org": "Northwind", "email": "cy@northwind.example" },
-  { "name": "Dee", "org": "Harrow Co", "note": "cc only — never sent; first name only" }
+ "queries": [
+  {
+   "q": "daystrom after:2026/08/17",
+   "note": "pass 1"
+  },
+  {
+   "q": "daystrom after:2026/08/18",
+   "note": "pass 1"
+  },
+  {
+   "q": "after:2026/08/18 (billing OR csv OR daystrom OR commission)",
+   "note": "pass 1"
+  },
+  {
+   "q": "billing file after:2026/08/18",
+   "note": "pass 1"
+  },
+  {
+   "q": "from:daystrom.fed",
+   "note": "pass 1"
+  },
+  {
+   "q": "\"payment file\" after:2026/08/01",
+   "note": "pass 1"
+  },
+  {
+   "q": "summary invoice after:2026/08/15",
+   "note": "pass 1"
+  },
+  {
+   "q": "Rigel Station",
+   "note": "pass 1"
+  },
+  {
+   "q": "andorian power after:2026/08/01",
+   "note": "pass 1"
+  },
+  {
+   "q": "vulcan freight after:2026/08/10",
+   "note": "pass 1"
+  },
+  {
+   "q": "\"Telemetry Migration\"",
+   "note": "pass 1"
+  },
+  {
+   "q": "from:geordi@starfleet.fed daystrom",
+   "note": "pass 1"
+  },
+  {
+   "q": "Vega Relay OR Denobula Yard OR Ferrix Dock OR Bajor",
+   "note": "pass 1"
+  },
+  {
+   "q": "after:2026/08/19",
+   "note": "pass 1"
+  },
+  {
+   "q": "Registry code",
+   "note": "pass 1"
+  },
+  {
+   "q": "#",
+   "note": "pass 1"
+  },
+  {
+   "q": "@starfleet-legacy.fed",
+   "note": "pass 1"
+  },
+  {
+   "q": "daystrom after:2026/08/19",
+   "note": "pass 2 — found the pilot thread"
+  },
+  {
+   "q": "after:2026/08/19 (billing OR csv OR commission OR Registry)",
+   "note": "pass 2"
+  },
+  {
+   "q": "from:daystrom.fed after:2026/08/15",
+   "note": "pass 2 — no results"
+  },
+  {
+   "q": "Kepler after:2026/08/15",
+   "note": "pass 2"
+  }
  ],
- "queries": [{ "q": "mapping after:2025/11/01", "note": "the core trail" }],
- "threads": [{ "subject": "Column mapping", "count": 3, "span": "25 Nov → 19 Aug" }],
- "sourceNotes": [{ "title": "Caveats", "items": ["Dee appears only in quoted cc headers, so no address is recoverable."] }],
- "openItems": ["Whether the mapping includes the tax column."]
+ "threads": [
+  {
+   "subject": "Starfleet & Daystrom — Telemetry Sharing",
+   "id": "0c0e2ac4e9147f1f",
+   "span": "17 Mar → 2 Aug",
+   "note": "the column spec itself"
+  },
+  {
+   "subject": "Starfleet x Daystrom Telemetry Migration",
+   "id": "3221d4ee530aaec1",
+   "span": "10 Jun → 19 Aug",
+   "note": "Will not copied; recovered from a 19 Aug forward"
+  },
+  {
+   "subject": "Starfleet x Daystrom Billing Pilot",
+   "id": "c042a997bd0eccf0",
+   "span": "20 Aug",
+   "note": "new this pass"
+  },
+  {
+   "subject": "Request to Realign Billing Periods for Daystrom Sites",
+   "id": "7259bbf314ea5ac6",
+   "span": "18 Aug"
+  },
+  {
+   "subject": "Fwd: FW: June Billing",
+   "id": "1ae736eb88cb8274",
+   "span": "18 Aug",
+   "note": "delivery date for the file"
+  },
+  {
+   "subject": "Notes: Daystrom WarRoom, 17 Aug",
+   "id": "ad2b29c1bc7c9fde"
+  },
+  {
+   "subject": "Notes: Catch up in Daystrom billing, 18 Aug",
+   "id": "506c9e1982e05e9c"
+  }
+ ],
+ "sourceNotes": [
+  {
+   "title": "Avatars",
+   "items": [
+    "Faces from Comms. Geordi's is under his pre-rebrand @starfleet-legacy.fed address.",
+    "Daystrom and Utopia Planitia people are not in the Comms workspace, and Beverly's account has no photo set, so those keep initials."
+   ]
+  },
+  {
+   "title": "Caveats",
+   "items": [
+    "Bruce Maddox and Orfil Quinteros appear only inside quoted text — they never sent a message in this mailbox, so no address is recoverable for either.",
+    "Every source email was re-read at full size (no byte cap), so the chains end where the senders' clients truncated them, not where a read limit did.",
+    "Pass 1 was built before the spec was embedded in the page; its baseline was recovered by parsing that page and verified byte-identical on rebuild across all 57 entries.",
+    "Reginald Barclay, Miles, Alyssa and Ro are Daystrom-internal and appear only in quoted To/cc headers — most as first names only — so no address is recoverable for any of them."
+   ]
+  }
+ ],
+ "runs": [
+  "pass 2, 20 Aug 2026"
+ ],
+ "specVersion": 1,
+ "messages": [
+  {
+   "id": "m-20251125-1329-jlp",
+   "date": "Tue 25 Nov 2025",
+   "sender": "Jean-Luc Picard",
+   "org": "Starfleet",
+   "to": "Noonien Soong, Reginald Barclay",
+   "body": "<p>Thanks for jumping on a call this morning. It was really helpful to get a better understanding of your processes and requirements.</p><p><b>Firstly</b>, Soong, below is a summary of the data format that we are planning to share with Daystrom. I've listed the columns that Vulcan Freight is currently providing, and the Columns that we intend to provide, plus a note about any changes between the two. <b>If there are any changes you require then please let me know.</b></p><div class='scroll'><table><tr><th>Original (Vulcan Freight)</th><th>New (Starfleet)</th><th>Comment</th><th>SOONG (Daystrom)</th></tr><tr><td>Registry Code</td><td>Fellow Number</td><td>Change of column name, representing the same data</td><td><b>Is there a reason for this change? Can't we keep the same column as that of Vulcan Freight?</b></td></tr><tr><td>Name</td><td>Account Name</td><td>Change of column name, representing the same data</td><td><b>Is there a reason for this change? Can't we keep the same column as that of Vulcan Freight?</b></td></tr><tr><td>Statement Date</td><td>Statement Date</td><td>No change</td><td>OK</td></tr><tr><td>Account Number</td><td>Account Number</td><td>No change</td><td>OK</td></tr><tr><td>Total Amt (Incl Duty)</td><td>Total Amt (Incl Duty)</td><td>No change</td><td>OK</td></tr><tr><td>Duty Amt</td><td>Duty Amt</td><td>No change</td><td>OK</td></tr><tr><td>sensor ID</td><td>sensor ID</td><td>No change</td><td>OK</td></tr><tr><td>Commission</td><td>Commission</td><td>No change</td><td>OK</td></tr><tr><td>Amount (incl Duty) after Commission</td><td>Amount (incl Duty) after Commission</td><td>No change</td><td>OK</td></tr><tr><td>TOU Energy Charges</td><td><i>Deleted; Starfleet will not include this column</i></td><td></td><td>OK</td></tr><tr><td>Last Billed Actual Read for this Consumer</td><td><i>Deleted; Starfleet will not include this column</i></td><td></td><td>OK</td></tr><tr><td>Estimate Read Type</td><td>Read Type</td><td><i>actual</i> or <i>estimated</i></td><td>OK (Is the column name being changed from Starfleet as compared to the Vulcan Freight?)</td></tr><tr><td>Berth Name</td><td>Alias</td><td>No change</td><td>OK (Is the column name being changed from Starfleet as compared to the Vulcan Freight?)</td></tr><tr><td>sensor ID Address</td><td>Supply Address</td><td>No change</td><td>OK (Is the column name being changed from Starfleet as compared to the Vulcan Freight?)</td></tr><tr><td>Discount</td><td>Discount</td><td>No change</td><td>OK</td></tr><tr><td>Billing Type</td><td><i>Deleted; Starfleet will not include this column</i></td><td></td><td>OK</td></tr></table></div><p><b>Additionally</b>, below are the questions we discussed on call which would be great to confirm.</p><ul><li><b>Registry Code</b>: Confirming that this represents the membership number that each member has with Daystrom — <i>Soong: Correct, this is the unique membership number that each Daystrom member has. Some examples are: R20486, 3684, 1010002051, M10732 and 0158</i></li><li><b>Name</b>: Confirming that this represents an account name — <i>Soong: Correct. This is the Account name that has been registered with Daystrom.</i></li><li><b>Discount</b>: Confirming that this is the discount which the <i>end customer</i> incurs by using Daystrom for their energy — <i>Soong: This is the Rebates that is printed on the member statement as it is when we receive from Vulcan Freight.</i></li><li><b>Amount (incl Duty) after Commission</b>: Confirming that this is the amount that members must pay to Daystrom — <i>Soong: <b>No</b>, This amount from this field “Amount (incl Duty) after Commission” is stored as extras in the invoice Database tables. This is not shown on the member statement.</i></li><li><b>Total Amt (Incl Duty)</b>: Confirming that this is the amount that Daystrom must pay to the energy retailer — <i>Soong: <b>No</b>, this is the amount that members will pay to Daystrom. This is the same amount that will be present on the member's statement.</i></li></ul><p><b>Finally</b>, could you please share a copy of the following:</p><ul><li>The consolidated statement that you send to customers — <i>Soong: Attached is the member statement.</i></li><li>A copy of the PDF bill that Vulcan Freight sends to the end users — <i>Soong: Attached is the same.</i></li><li>A copy of the onboarding form that you use to set up new accounts with Vulcan Freight — <i>Soong: We don't have the Onboarding form. Vulcan Freight deals with this.</i></li></ul><p class='ed'>The origin of the entire trail, nine months before anything else here, and the closest thing to a written spec for the CSV. Soong's answers in the fourth column and after each dash were added later, on 17 March. Two things matter: the <b>Registry Code → Fellow Number rename was queried and never answered</b> — it is still an open action nine months on — and Soong corrected both money columns here in November 2025, <b>Total Amt (Incl Duty) is what the member pays Daystrom</b>, not what Daystrom pays the retailer. That is the exact point re-argued from scratch over <a class=\"xref\" href=\"#m-20260706-2124-jlp\">6</a>–<a class=\"xref\" href=\"#m-20260716-1115-ns\">16 July 2026</a>.</p>",
+   "time": "13:29",
+   "source": "unspooled from the 8 Apr forward",
+   "quoted": true,
+   "subject": "Starfleet & Daystrom — Telemetry Sharing",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260317-0920-ns",
+   "date": "Tue 17 Mar 2026",
+   "sender": "Noonien Soong",
+   "org": "Daystrom",
+   "to": "himself (working draft)",
+   "body": "<p>Hello Jean-Luc,</p><p>I have added my responses in the additional column in the below table.</p><p class='ed'>A self-addressed draft, sent to himself, two and a half hours before <a class=\"xref\" href=\"#m-20260317-1158-ns\">he sent it on to Jean-Luc</a>. It survives in the quote chain of every later message and is why Soong's answers appear inline in Jean-Luc's original table rather than as a reply.</p>",
+   "time": "09:20",
+   "source": "unspooled from the 8 Apr forward",
+   "quoted": true,
+   "parent": "m-20251125-1329-jlp",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260317-1158-ns",
+   "date": "Tue 17 Mar 2026",
+   "sender": "Noonien Soong",
+   "org": "Daystrom",
+   "to": "Jean-Luc Picard",
+   "body": "<p>Please see my response in line with yours.</p><p class='ed'>Soong sends the annotated table back to Jean-Luc — his answers are the <b>SOONG (Daystrom)</b> column in <a class=\"xref\" href=\"#m-20251125-1329-jlp\">the 25 November spec above</a>, written into <a class=\"xref\" href=\"#m-20260317-0920-ns\">his own draft at 09:20</a> that morning.</p>",
+   "time": "11:58",
+   "source": "unspooled from the 2 Aug email",
+   "quoted": true,
+   "parent": "m-20260317-0920-ns",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260327-0650-bm",
+   "date": "Fri 27 Mar 2026",
+   "sender": "Bruce Maddox",
+   "org": "Daystrom",
+   "to": "Soong, Alyssa, Leah, Reg",
+   "body": "<p>I've followed up with Jean-Luc directly. Will let you know when I hear back.</p>",
+   "time": "06:50",
+   "source": "unspooled from the 14 Apr email",
+   "quoted": true,
+   "parent": "m-20260317-1158-ns",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260330-2347-jlp",
+   "date": "Mon 30 Mar 2026",
+   "sender": "Jean-Luc Picard",
+   "org": "Starfleet",
+   "to": "Bruce Maddox + Daystrom",
+   "body": "<p>Thanks for the detailed reply. Sorry it's taken a few days to get back to you.</p><p>I think it would be great to catch up via Teams/Subspace Link. I'm available any time tomorrow. Does 2.00 PM NZDT work for you?</p>",
+   "time": "23:47",
+   "source": "unspooled from the 2 Aug email",
+   "quoted": true,
+   "parent": "m-20260327-0650-bm",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260331-0638-bm",
+   "date": "Tue 31 Mar 2026",
+   "sender": "Bruce Maddox",
+   "org": "Daystrom",
+   "to": "Jean-Luc Picard",
+   "body": "<p>No problem. Do you have any availability at 4pm?</p>",
+   "time": "06:38",
+   "source": "unspooled from the 14 Apr email",
+   "quoted": true,
+   "parent": "m-20260330-2347-jlp",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260331-0945-jlp",
+   "date": "Tue 31 Mar 2026",
+   "sender": "Jean-Luc Picard",
+   "org": "Starfleet",
+   "to": "Bruce Maddox",
+   "body": "<p>4pm NZDT works well. I've sent a calendar invite. Speak soon.</p>",
+   "time": "09:45",
+   "source": "unspooled from the 2 Aug email",
+   "quoted": true,
+   "parent": "m-20260331-0638-bm",
+   "kind": "message"
+  },
+  {
+   "kind": "note",
+   "id": "m-20260331-note",
+   "date": "Tue 31 Mar 2026",
+   "label": "Starfleet ↔ Daystrom kickoff call, 16:00 NZDT",
+   "body": "<p class='ed'>Not an email — inferred from Soong's “following up from our meeting” on 8 Apr.</p>",
+   "parent": "m-20260331-0945-jlp"
+  },
+  {
+   "id": "m-20260408-0454-ns",
+   "date": "Wed 8 Apr 2026",
+   "sender": "Noonien Soong",
+   "org": "Daystrom",
+   "to": "Jean-Luc Picard, cc Maddox, Reg, Miles",
+   "body": "<p>Following up from our meeting, <b>would you be able to supply a test file for us?</b> We would like to set up the config and parse the file in our test region.</p>",
+   "time": "04:54",
+   "source": "unspooled from the 2 Aug email",
+   "quoted": true,
+   "parent": "m-20260331-note",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260408-1730-jlp",
+   "date": "Wed 8 Apr 2026",
+   "sender": "Jean-Luc Picard",
+   "org": "Starfleet",
+   "to": "Noonien Soong",
+   "body": "<p>Internal testing for this is on our own roadmap for early next week. I plan to share a file with you and your team once that is finalised.</p>",
+   "time": "17:30",
+   "source": "unspooled from the 2 Aug email",
+   "quoted": true,
+   "parent": "m-20260408-0454-ns",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260408-1100-jlp",
+   "date": "Wed 8 Apr 2026",
+   "sender": "Jean-Luc Picard",
+   "org": "Starfleet",
+   "to": "William Riker",
+   "body": "",
+   "time": "11:00",
+   "tz": "+0530",
+   "source": "msg 0c0e2ac4e9147f1f",
+   "gmailId": "0c0e2ac4e9147f1f",
+   "mentions": [
+    "William Riker"
+   ],
+   "parent": "m-20260408-1730-jlp",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260410-0344-ns",
+   "date": "Fri 10 Apr 2026",
+   "sender": "Noonien Soong",
+   "org": "Daystrom",
+   "to": "Jean-Luc Picard",
+   "body": "<p>If you can share a test file next week, that's fine with us. Assuming there are no changes to the file layout, we will start with the configuration from our end.</p>",
+   "time": "03:44",
+   "source": "unspooled from the 2 Aug email",
+   "quoted": true,
+   "parent": "m-20260408-1730-jlp",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260414-1635-jlp",
+   "date": "Tue 14 Apr 2026",
+   "sender": "Jean-Luc Picard",
+   "org": "Starfleet",
+   "to": "Noonien Soong, William Riker",
+   "body": "<p>Looping in @William Riker from our engineering team. Will has an example file ready to share and can help out with any questions or concerns.</p>",
+   "time": "16:35",
+   "source": "msg f37fd35d9753be71",
+   "gmailId": "f37fd35d9753be71",
+   "parent": "m-20260410-0344-ns",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260414-1659-wr",
+   "date": "Tue 14 Apr 2026",
+   "sender": "William Riker",
+   "org": "Starfleet",
+   "to": "Noonien Soong",
+   "body": "<p>I have attached an example file here. Let me know how it goes.</p>",
+   "time": "16:59",
+   "tz": "AEST",
+   "source": "msg 27e532f99b2321c9",
+   "gmailId": "27e532f99b2321c9",
+   "me": true,
+   "attachments": [
+    {
+     "name": "test.csv",
+     "kind": "CSV",
+     "size": "717 B",
+     "gmailId": "27e532f99b2321c9"
+    }
+   ],
+   "parent": "m-20260414-1635-jlp",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260415-0908-ns",
+   "date": "Wed 15 Apr 2026",
+   "sender": "Noonien Soong",
+   "org": "Daystrom",
+   "to": "William Riker, Jean-Luc Picard",
+   "body": "<p>Thanks for sending this through. We will test this at our end and let you know the outcome.</p>",
+   "time": "09:08",
+   "tz": "NZST",
+   "source": "msg 8bc8cfc0b332e20a",
+   "gmailId": "8bc8cfc0b332e20a",
+   "parent": "m-20260414-1659-wr",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260518-1343-jlp",
+   "date": "Mon 18 May 2026",
+   "sender": "Jean-Luc Picard",
+   "org": "Starfleet",
+   "to": "Soong, Maddox, cc Will",
+   "body": "<p>Wanted to check in on the last message. <b>How did your team go with ingesting this test file?</b> Let me know if we should discuss anything.</p><p class='ed'>The only message in the entire trail that says “ingesting” — and it survives only as quoted text.</p>",
+   "time": "13:43",
+   "source": "unspooled from the 2 Aug email",
+   "quoted": true,
+   "parent": "m-20260415-0908-ns",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260520-1338-ns",
+   "date": "Wed 20 May 2026",
+   "sender": "Noonien Soong",
+   "org": "Daystrom",
+   "to": "Jean-Luc Picard",
+   "body": "<p>We are in the process of testing with the test file. Will keep you posted with the test results.</p>",
+   "time": "13:38",
+   "tz": "NZST",
+   "source": "msg a65cd932d25514a6",
+   "gmailId": "a65cd932d25514a6",
+   "parent": "m-20260518-1343-jlp",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260525-1521-jlp",
+   "date": "Mon 25 May 2026",
+   "sender": "Jean-Luc Picard",
+   "org": "Starfleet",
+   "to": "Noonien Soong",
+   "body": "<p>No worries at all. I'll keep periodically checking in on this one.</p><p>If there are any problems, I'm keen to discover them as early as possible so we can have ample time to get a fix up quickly.</p>",
+   "time": "15:21",
+   "tz": "AEST",
+   "source": "msg de612a8cb12a8369",
+   "gmailId": "de612a8cb12a8369",
+   "parent": "m-20260520-1338-ns",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260610-1152-glf",
+   "date": "Wed 10 Jun 2026",
+   "sender": "Geordi La Forge",
+   "org": "Starfleet",
+   "to": "Noonien Soong, cc Jean-Luc Picard",
+   "body": "<p>Following up my call last week you mentioned you will be at or close to completion mid this wek.</p><p><b>How did the ingestion of the file Jean-Luc sent you go?</b></p><p>If it was successful what are the next steps for us to get started?</p><p class='ed'>Opens a second chain — <b>Starfleet x Daystrom Telemetry Migration</b> — running in parallel to <a class=\"xref\" href=\"#m-20251125-1329-jlp\">the Telemetry Sharing thread above</a>. Will is not on it, and nothing from it reached him until 19 August. Everything it contains was invisible in the mailbox until <a class=\"xref\" href=\"#m-20260819-0821-lb\">Leah forwarded it</a>.</p>",
+   "time": "11:52",
+   "tz": "NZST",
+   "source": "unspooled from the 19 Aug forward",
+   "quoted": true,
+   "subject": "Starfleet x Daystrom Telemetry Migration",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260611-1433-ns",
+   "date": "Thu 11 Jun 2026",
+   "sender": "Noonien Soong",
+   "org": "Daystrom",
+   "to": "Geordi La Forge",
+   "body": "<p><b>Yes, I can report back that the ingestion of the file was successful at our end.</b></p><ul><li>We are now progressing with integration testing / e2e testing with our downstream systems.</li><li>At this stage, we are looking at 2 weeks from now for us to complete our e2e testing.</li><li>During this testing, we generate a Starfleet Invoice PDF form our internal systems.</li><li>This Starfleet PDF invoice contains all the information that's consumed from the source file such as the Account number, sensor ID details, Property etc. Let me know If you would like a sample of the PDF Invoice.</li><li>Post e2e testing, we would be able to generate a Daystrom member statement with the Starfleet PDF Invoice attached to it.</li><li>We would then provide the walkthrough of this member statement to the wider business team</li><li>Providing the Approval at the walkthrough meeting, we then deploy this change to our Prod systems.</li></ul><p class='ed'>This is the answer to the question the other thread <a class=\"xref\" href=\"#m-20260518-1343-jlp\">asked on 18 May</a> and never got. Daystrom ingested the test file successfully on <b>11 June</b> — three weeks after Soong told Jean-Luc he was still <a class=\"xref\" href=\"#m-20260520-1338-ns\">“in the process of testing”</a>, and it was reported to Geordi, not to Jean-Luc or Will. It also lays out Daystrom's full internal gate: e2e → member statement → business-team walkthrough → prod deploy. No tz stated in the quoted attribution, so none is shown.</p>",
+   "time": "14:33",
+   "source": "unspooled from the 19 Aug forward",
+   "quoted": true,
+   "parent": "m-20260610-1152-glf",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260611-1626-glf",
+   "date": "Thu 11 Jun 2026",
+   "sender": "Geordi La Forge",
+   "org": "Starfleet",
+   "to": "Noonien Soong",
+   "body": "<p>Great, thanks for the update Soong. Much appreciated.</p>",
+   "time": "16:26",
+   "source": "unspooled from the 19 Aug forward",
+   "quoted": true,
+   "parent": "m-20260611-1433-ns",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260625-1300-glf",
+   "date": "Thu 25 Jun 2026",
+   "sender": "Geordi La Forge",
+   "org": "Starfleet",
+   "to": "Noonien Soong, cc Jean-Luc, Leah, Maddox, Reg, Miles, Deanna",
+   "body": "<p>How did you go with the e2e testing?</p><p>Is there anything else you need from us?</p><p>Looking forward to getting this off the ground.</p>",
+   "time": "13:00",
+   "tz": "NZST",
+   "source": "unspooled from the 19 Aug forward",
+   "quoted": true,
+   "parent": "m-20260611-1626-glf",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260625-1305-ns",
+   "date": "Thu 25 Jun 2026",
+   "sender": "Noonien Soong",
+   "org": "Daystrom",
+   "to": "Geordi La Forge, cc Jean-Luc, Leah, Maddox, Reg, Miles, Deanna",
+   "body": "<p>We had a blocker with our downstream systems which we have managed to resolve.</p><p>Following that, we have managed to resume our testing.</p><p>I will keep you posted early next week on how we get along.</p><p class='ed'>Five minutes' turnaround. The two-week e2e estimate from 11 June had already slipped by a fortnight at this point.</p>",
+   "time": "13:05",
+   "tz": "NZST",
+   "source": "unspooled from the 19 Aug forward",
+   "quoted": true,
+   "parent": "m-20260625-1300-glf",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260706-2124-jlp",
+   "date": "Mon 6 Jul 2026",
+   "sender": "Jean-Luc Picard",
+   "org": "Starfleet",
+   "to": "Noonien Soong, cc Maddox, Reg, Miles",
+   "body": "<p>Tasha mentioned a bit of confusion came up this week, so I wanted to do a quick sense check on how the money flows before we go live — just to be sure we're aligned.</p><p>Here's an illustrative example of a single site:</p><div class='scroll'><table><thead><tr><th>Description</th><th>Amount</th><th>Column in the feed</th></tr></thead><tbody><tr><td>Retailer bill amount</td><td>$100.00</td><td><i>(not in feed — Starfleet's cost)</i></td></tr><tr><td>Total charged to customer</td><td>$105.00</td><td><code>Total Amt (Incl Duty)</code></td></tr><tr><td>Commission (3% to Daystrom)</td><td>($3.00)</td><td><code>Commission</code></td></tr><tr><td>Net amount to Starfleet</td><td>$102.00</td><td><code>Amount (incl Duty) after Commission</code></td></tr></tbody></table></div><p>In other words: <code>Total Amt (Incl Duty)</code> is what the member pays Daystrom and appears on their statement. <code>Amount (incl Duty) after Commission</code> is what Daystrom remits to Starfleet after deducting Daystrom's commission. Could you confirm this matches your understanding?</p><p class='ed'>3% commission, Duty not addressed — both wrong, as the next two messages establish.</p>",
+   "time": "21:24",
+   "source": "unspooled from the 2 Aug email",
+   "quoted": true,
+   "parent": "m-20260525-1521-jlp",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260708-1458-ns",
+   "date": "Wed 8 Jul 2026",
+   "sender": "Noonien Soong",
+   "org": "Daystrom",
+   "to": "Alyssa, Ro, Leah, cc Maddox <i>(Daystrom internal)</i>",
+   "body": "<p>For Vulcan Freight / Starfleet invoices, we charge the member the <code>Total Amt (Incl Duty)</code> which is the NET INCL.Duty on the member statement.</p><p>What we pay Vulcan Freight / Starfleet is — <code>Amount (incl Duty) after Commission</code>?</p><p>Currently Vulcan Freight send us the above field and we store in the Database and not publish on the statements.</p>",
+   "time": "14:58",
+   "source": "unspooled from the 2 Aug email",
+   "quoted": true,
+   "mentions": [
+    "Alyssa Ogawa",
+    "Ro Solvig",
+    "Leah Brahms"
+   ],
+   "parent": "m-20260706-2124-jlp",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260709-1345-lb",
+   "date": "Thu 9 Jul 2026",
+   "sender": "Leah Brahms",
+   "org": "Daystrom",
+   "to": "Soong, Alyssa, Ro, cc Maddox",
+   "body": "<p><b>The Daystrom charge in the below table should be 2% + Duty (2.3% in total).</b> In that example, we would pay Starfleet the total charged to customer – 2.3% ($105 – 2.3% = $102.58).</p>",
+   "time": "13:45",
+   "source": "unspooled from the 2 Aug email",
+   "quoted": true,
+   "parent": "m-20260708-1458-ns",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260709-1352-ns",
+   "date": "Thu 9 Jul 2026",
+   "sender": "Noonien Soong",
+   "org": "Daystrom",
+   "to": "Geordi La Forge",
+   "body": "<p><b>I am pleased to say that we have completed the e2e testing and the results are looking good.</b></p><p><b>We are good to go with the changes in Production next week.</b></p><p class='ed'>The single most consequential message in the trail, and it exists only as quoted text. Daystrom signed off end-to-end on 9 July and committed to a production deploy the week of 13 July. Clock time here comes from a Gmail attribution line composed in AEST, so in NZST it lands around 15:52 — which is why it sits after <a class=\"xref\" href=\"#m-20260709-1452-ns\">Soong's 14:52 message above</a> rather than before it.</p>",
+   "time": "13:52",
+   "source": "unspooled from the 19 Aug forward",
+   "quoted": true,
+   "parent": "m-20260625-1305-ns",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260709-1452-ns",
+   "date": "Thu 9 Jul 2026",
+   "sender": "Noonien Soong",
+   "org": "Daystrom",
+   "to": "Jean-Luc Picard",
+   "body": "<p>Please see below response.</p><p class='ed'>Passes Leah's 2% + Duty correction back to Starfleet.</p>",
+   "time": "14:52",
+   "tz": "NZST",
+   "source": "unspooled from the 2 Aug email",
+   "quoted": true,
+   "parent": "m-20260709-1345-lb",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260709-1359-glf",
+   "date": "Thu 9 Jul 2026",
+   "sender": "Geordi La Forge",
+   "org": "Starfleet",
+   "to": "Noonien Soong",
+   "body": "<p>Great, thanks for the update Soong!</p><p class='ed'>Then the Telemetry Migration chain goes quiet for six weeks — through the whole Duty/commission argument, the Utopia Planitia negotiation and the 2 September planning, none of which was ever put back to Soong.</p>",
+   "time": "13:59",
+   "tz": "AEST",
+   "source": "unspooled from the 19 Aug forward",
+   "quoted": true,
+   "parent": "m-20260709-1352-ns",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260714-1238-jlp",
+   "date": "Tue 14 Jul 2026",
+   "sender": "Jean-Luc Picard",
+   "org": "Starfleet",
+   "to": "Soong, cc Leah, Maddox",
+   "body": "<p>Thanks a lot for the clarification. I now realise that the illustrative example I sent was unclear about Duty. Your response was very helpful.</p><p>Here's an updated example that aligns with Leah's expectations.</p><div class='scroll'><table><thead><tr><th>Description</th><th>Ex-Duty</th><th>Inc-Duty</th><th>Column in the feed</th></tr></thead><tbody><tr><td>Retailer bill amount</td><td>$100.00</td><td>115</td><td><i>(not in feed — Starfleet's cost)</i></td></tr><tr><td>Total charged to customer</td><td>$105.00</td><td>120.75</td><td><code>Total Amt (Incl Duty)</code></td></tr><tr><td>Commission (2% to Daystrom)</td><td>($2.00)</td><td>2.3</td><td><code>Commission</code></td></tr><tr><td>Net amount to Starfleet</td><td>$103.00</td><td>118.45</td><td><code>Amount (incl Duty) after Commission</code></td></tr></tbody></table></div><p>I have one remaining question about the CSV file: Should the ‘Commission’ column report on the Ex-Duty or Inc-Duty figure?</p>",
+   "time": "12:38",
+   "tz": "NZST",
+   "source": "unspooled from the 2 Aug email",
+   "quoted": true,
+   "parent": "m-20260709-1452-ns",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260715-0902-bc",
+   "date": "Wed 15 Jul 2026",
+   "sender": "Beverly Crusher",
+   "org": "Starfleet",
+   "to": "Utopia Planitia Ops, cc Deanna Troi",
+   "body": "<p>We request that the billing periods for the Daystrom sites attached below be realigned so that each billing period ends on the <b>28th of each month</b>, effective in <b>August</b>.</p><p>Additionally, could you please provide us with a monthly payment file for these sites after the invoices are issued? This will enable us to prepare Daystrom's billing file and process payments on the <b>1st of each month</b>.</p><p class='ed'>Opens a parallel front nobody on the Daystrom side ever sees: Starfleet asking Utopia Planitia to move its billing calendar so the Daystrom file can be produced on time.</p>",
+   "time": "09:02",
+   "tz": "NZST",
+   "source": "unspooled from the 18 Aug Utopia Planitia forward",
+   "quoted": true,
+   "subject": "Request to Realign Billing Periods for Daystrom Sites",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260715-1045-oq",
+   "date": "Wed 15 Jul 2026",
+   "sender": "Orfil Quinteros",
+   "org": "Utopia Planitia",
+   "to": "Beverly Crusher, cc Deanna",
+   "body": "<p>I mentioned in an email to Deanna yesterday that this is not something Utopia Planitia would be able to accommodate as <b>our billing system invoices by calendar month</b>, so we aren't able to set a specific date for accounts to be billed to.</p><p>What we can do is set these accounts up on <b>summary billing</b>. This would consolidate all invoices for each customer into a single summary invoice rather than generating separate invoices for each sensor ID. We can also provide a billing file alongside the summary invoice to assist with payment processing and reconciliation.</p><p>Summary invoices and billing files are generally issued after the 5th working day of each month, once the previous month's billing has been completed.</p>",
+   "time": "10:45",
+   "tz": "NZST",
+   "source": "unspooled from the 18 Aug Utopia Planitia forward",
+   "quoted": true,
+   "parent": "m-20260715-0902-bc",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260716-1045-ns",
+   "date": "Thu 16 Jul 2026",
+   "sender": "Noonien Soong",
+   "org": "Daystrom",
+   "to": "Leah Brahms, cc Ro, Alyssa",
+   "body": "<p>Is the commission column that we receive from Vulcan Freight <b>(Ex-Duty or Inc-Duty figure)</b>?</p><p>They send us the file with the Commision details and we just don't show this anywhere on the statement but only save this column in extras column.</p>",
+   "time": "10:45",
+   "tz": "NZST",
+   "source": "unspooled from the 2 Aug email",
+   "quoted": true,
+   "mentions": [
+    "Leah Brahms"
+   ],
+   "parent": "m-20260714-1238-jlp",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260716-1135-lb",
+   "date": "Thu 16 Jul 2026",
+   "sender": "Leah Brahms",
+   "org": "Daystrom",
+   "to": "Noonien Soong",
+   "body": "<p><b>I would say it includes Duty as the amount in column H is calculated from column E and I which includes Duty.</b></p><p class='ed'>Settles it — the Commission column is Inc-Duty.</p>",
+   "time": "11:35",
+   "tz": "NZST",
+   "source": "unspooled from the 2 Aug email",
+   "quoted": true,
+   "parent": "m-20260716-1045-ns",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260716-1115-ns",
+   "date": "Thu 16 Jul 2026",
+   "sender": "Noonien Soong",
+   "org": "Daystrom",
+   "to": "Jean-Luc Picard",
+   "body": "<p>Please see below reply from Leah on the Commission field Duty caculation</p><p class='ed'>The message that actually carried Leah's Inc-Duty ruling across to Starfleet — everything above it on 16 July was internal to Daystrom. Clock is 11:15 AEST from Jean-Luc's Gmail attribution, so 13:15 NZST, which puts it after <a class=\"xref\" href=\"#m-20260716-1135-lb\">Leah's 11:35 reply</a>.</p>",
+   "time": "11:15",
+   "tz": "AEST",
+   "source": "unspooled from the 2 Aug email",
+   "quoted": true,
+   "parent": "m-20260716-1135-lb",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260722-1008-dt",
+   "date": "Wed 22 Jul 2026",
+   "sender": "Deanna Troi",
+   "org": "Starfleet",
+   "to": "Orfil Quinteros, cc Beverly",
+   "body": "<p>Also on the summary billing, can we get this on the 1st of the month? <b>We need to send through a billing file to Daystrom no later than the 2nd of each month, any sites after this date wont get paid until the next month.</b> Any help on this would be greatly appreciated, and lets see if we can get on a call</p><p class='ed'>First statement anywhere in the trail of the hard 2nd-of-the-month deadline and what missing it costs.</p>",
+   "time": "10:08",
+   "tz": "NZST",
+   "source": "unspooled from the 18 Aug Utopia Planitia forward",
+   "quoted": true,
+   "parent": "m-20260715-1045-oq",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260722-1031-oq",
+   "date": "Wed 22 Jul 2026",
+   "sender": "Orfil Quinteros",
+   "org": "Utopia Planitia",
+   "to": "Deanna Troi, cc Beverly",
+   "body": "<p>We wouldn't be able to generate and send out a summary invoice and file on the 1st of the month — the summary invoicing is done on the 4th or 5th working day of the month to allow time to ensure we have the metering data for all accounts.</p><p>What I was going to suggest is to set up a summary invoice for <b>Keplers and Denobula Yard</b> (separate summaries and billing files for each customer) to generate on the 5th working day of each month, but <b>set the payment due date for all accounts to the 20th of the following month</b> — i.e. an invoice sent on the 6th of August would not be due until the 20th of September. This would allow you to process the invoices for payment on or before the 1st, before they are due on the 20th.</p><p>If you require each account to be invoiced individually as they are now, we can still set the payment due dates to the 20th of the following month, but we wouldn't be able to send a billing file as such. We could, however, send a billing <i>report</i> each month. The difference is that the report does not include any open balances — so if a network discount was applied to the accounts, this would not show on the report but it would show in a summary invoice file.</p><p class='ed'>The workaround the whole schedule now rests on: Utopia Planitia can't move <i>when</i> it invoices, only <i>when payment falls due</i>.</p>",
+   "time": "10:31",
+   "tz": "NZST",
+   "source": "unspooled from the 18 Aug Utopia Planitia forward",
+   "quoted": true,
+   "parent": "m-20260722-1008-dt",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260723-1225-dt",
+   "date": "Thu 23 Jul 2026",
+   "sender": "Deanna Troi",
+   "org": "Starfleet",
+   "to": "Orfil Quinteros, cc Beverly",
+   "body": "<p>That suggestion sounds good. I think it would be great to action this from August if we can.</p><p>I cant make the time today are you happy for me to send through an invite for Monday at 1030am so i dont get booked out?</p>",
+   "time": "12:25",
+   "tz": "NZST",
+   "source": "unspooled from the 18 Aug Utopia Planitia forward",
+   "quoted": true,
+   "parent": "m-20260722-1031-oq",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260727-0759-lb",
+   "date": "Mon 27 Jul 2026",
+   "sender": "Leah Brahms",
+   "org": "Daystrom",
+   "to": "Deanna Troi",
+   "body": "<p>Morning Deanna — are we to expect a billing file for June? Or are we wating until next month?</p>",
+   "time": "07:59",
+   "tz": "NZST",
+   "source": "unspooled from the 18 Aug forward",
+   "quoted": true,
+   "subject": "June Billing",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260727-0916-dt",
+   "date": "Mon 27 Jul 2026",
+   "sender": "Deanna Troi",
+   "org": "Starfleet",
+   "to": "Leah Brahms",
+   "body": "<p>We are going to wait a month as I'm aligning all the retailers to suit at the moment so we can send you the file on the 2nd.</p><p class='ed'>“Aligning all the retailers” is the Utopia Planitia chain running two threads away.</p>",
+   "time": "09:16",
+   "tz": "NZST",
+   "source": "unspooled from the 18 Aug forward",
+   "quoted": true,
+   "parent": "m-20260727-0759-lb",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260727-0929-lb",
+   "date": "Mon 27 Jul 2026",
+   "sender": "Leah Brahms",
+   "org": "Daystrom",
+   "to": "Deanna Troi",
+   "body": "<p>So the first file will be Wednesday 2nd September?</p>",
+   "time": "09:29",
+   "tz": "NZST",
+   "source": "unspooled from the 18 Aug forward",
+   "quoted": true,
+   "parent": "m-20260727-0916-dt",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260727-1236-bc",
+   "date": "Mon 27 Jul 2026",
+   "sender": "Beverly Crusher",
+   "org": "Starfleet",
+   "to": "Orfil Quinteros, cc Deanna",
+   "body": "<p>We agree with this option and want to proceed.</p><p>Could you please ensure that all sites under the <b>Kepler Station</b> account are billed using <b>actual meter readings only</b>. The client specifically requested that <b>no estimated bills</b> be issued for these sites.</p>",
+   "time": "12:36",
+   "tz": "NZST",
+   "source": "unspooled from the 18 Aug Utopia Planitia forward",
+   "quoted": true,
+   "parent": "m-20260723-1225-dt",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260729-1808-oq",
+   "date": "Wed 29 Jul 2026",
+   "sender": "Orfil Quinteros",
+   "org": "Utopia Planitia",
+   "to": "Beverly Crusher, cc Deanna",
+   "body": "<p>I've arranged for the accounts to be set up on summary invoicing going forward, and <b>all accounts have been changed so that payment is due on the 20th of the following month</b>.</p><p>Regarding the estimated bill request, I don't believe this is something we can accommodate. If a site has a legacy meter or a non-communicating smart meter where we attempt to manually read the meter every second month, all invoices for these sites are essentially estimated.</p><p>The recent issue which resulted in large credits was due to only having one or less actual readings over a period of time, so the system overestimated the consumption. I will work with our team to ensure we are capturing regular actual readings for all accounts.</p><p class='ed'>Half the ask granted, half refused: the schedule change is live, but “actual reads only” is not something Utopia Planitia will commit to.</p>",
+   "time": "18:08",
+   "tz": "NZST",
+   "source": "unspooled from the 18 Aug Utopia Planitia forward",
+   "quoted": true,
+   "parent": "m-20260727-1236-bc",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260802-1306-jlp",
+   "date": "Sun 2 Aug 2026",
+   "sender": "Jean-Luc Picard",
+   "org": "Starfleet",
+   "to": "William Riker",
+   "body": "<p>First priority this week is to update Daystrom's telemetry CSV export in-line with this. This <i>also</i> means updating <code>bill_amount_fee</code> we calculate, as it doesn't match this.</p><p>We'll chat about it first thing Monday</p><p class='ed'>This is the email carrying the entire 17 Mar – 16 Jul Daystrom history above.</p>",
+   "time": "13:06",
+   "tz": "AEST",
+   "source": "msg 8472aa12ee15c41b · thread 0c0e2ac4e9147f1f",
+   "mentions": [
+    "William Riker"
+   ],
+   "attachments": [
+    {
+     "name": "image001.png",
+     "kind": "inline image",
+     "size": "17 KB"
+    },
+    {
+     "name": "image002.jpg",
+     "kind": "inline image",
+     "size": "823 B"
+    }
+   ],
+   "parent": "m-20260716-1115-ns",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260814-1206-lb",
+   "date": "Fri 14 Aug 2026",
+   "sender": "Leah Brahms",
+   "org": "Daystrom",
+   "to": "Deanna Troi",
+   "body": "<p>Just checking we are still on track for the 2nd of September for the billing file? If so, we need to advise the members. Let me know.</p>",
+   "time": "12:06",
+   "tz": "NZST",
+   "source": "unspooled from the 18 Aug forward",
+   "quoted": true,
+   "parent": "m-20260727-0929-lb",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260817-1017-bc",
+   "date": "Mon 17 Aug 2026",
+   "sender": "Beverly Crusher",
+   "org": "Starfleet",
+   "to": "Orfil Quinteros, cc Deanna",
+   "body": "<p>I'm just following up on the billing arrangements we discussed previously. Could you please confirm that everything is in place on your side and that the agreed billing changes have been set up successfully going forward?</p>",
+   "time": "10:17",
+   "tz": "NZST",
+   "source": "unspooled from the 18 Aug Utopia Planitia forward",
+   "quoted": true,
+   "parent": "m-20260729-1808-oq",
+   "kind": "message"
+  },
+  {
+   "kind": "note",
+   "id": "m-20260817-note",
+   "date": "Mon 17 Aug 2026",
+   "label": "Daystrom WarRoom — meeting held, ~11:00–11:59 AEST",
+   "body": "<p><b>Data accuracy</b> — incorrect dashboard entries and unreliable SLA-breach alerts flagged as significant data-integrity issues; account managers will now oversee review processes.<br><b>Billing</b> — 12-month billing requirement maintained for leads; the team <b>initiated coordination for a formal handover of the billing file generation process</b>.<br><b>Leads</b> — time-of-use sites can't be reviewed against standard rate cards.<br><b>Next steps</b> — Tasha: reattach the 14 misaligned sensor IDs in the Sentinel dashboard, verify the SLA breach with Geordi La Forge tagged. Deanna: daily tender review with Christian. Geordi La Forge: draft retailer questions.</p><p class='ed'>Gemini auto-notes, generated 11:59, emailed 12:01 — msg ad2b29c1bc7c9fde.</p>"
+  },
+  {
+   "id": "m-20260817-1230-dt",
+   "date": "Mon 17 Aug 2026",
+   "sender": "Deanna Troi",
+   "org": "Starfleet",
+   "to": "William Riker, Jean-Luc Picard",
+   "body": "<p><b>Invitation: Catch up in Daystrom billing</b> — Tue 18 Aug, 13:00–13:30 AEST, Subspace Link.</p>",
+   "time": "12:30",
+   "tz": "AEST",
+   "source": "msg c56e2fceeef36f04",
+   "gmailId": "c56e2fceeef36f04",
+   "attachments": [
+    {
+     "name": "invite.ics",
+     "kind": "calendar",
+     "size": "1.9 KB",
+     "gmailId": "c56e2fceeef36f04"
+    }
+   ],
+   "subject": "Catch up in Daystrom billing (invitation)",
+   "kind": "message"
+  },
+  {
+   "kind": "note",
+   "id": "m-20260818-note",
+   "date": "Tue 18 Aug 2026",
+   "label": "Catch up in Daystrom billing — meeting held, 13:00 AEST · Deanna, Will, Jean-Luc",
+   "body": "<p><b>The 2 September rollout is postponed.</b> Instead: a pilot with a single Vulcan Freight-only client — <b>Rigel Station</b>, pending verification that all its sites are Vulcan Freight — running one payment file for Vulcan Freight bills only, to validate the end-to-end process before a full rollout.</p><p><b>Why:</b> the retailers' terms don't line up. <b>Vulcan Freight</b> aligns invoice dates to the payment-file deadline (invoices ~5 days after the 20th, leaving a 2–3 day buffer). <b>Utopia Planitia</b> keeps standard invoice dates of the 5th–7th, so its invoices arrive too late for that month's file — mitigated only because its 6-week terms let them ride into the next file. <b>Andorian Power</b>'s terms are still unknown, and that is the open risk for a full rollout.</p><p><b>Hard constraint restated:</b> the payment file must be sent by the 2nd of each month for payment on the 20th. Miss it and payment slips a full month. The file must match the existing template <i>exactly</i> — Daystrom's system strips data from modified cells.</p><p><b>Ownership split:</b> Jean-Luc's team owns the technical process (file generation, data sync), Deanna owns the supplier relationships; Will owns file generation. The <b>Registry code, currently in a master sheet, must be added to the database</b>. Internal late-payment reminders are to be disabled for Daystrom clients, since Daystrom assumes the payment risk and collects directly.</p><p><b>Actions</b> — Jean-Luc: verify Rigel Station is Vulcan Freight-only; introduce Will to Leah so Will owns pilot comms; email Daystrom IT to confirm the file submission method; sync Registry codes into the DB; coordinate with Emil/Julie on disabling reminders. Deanna: keep pursuing Andorian Power.</p><p class='ed'>Two auto-recaps of the same 30 minutes: Gemini notes at 13:16 (msg 506c9e1982e05e9c) and the fuller Fathom recap Jean-Luc shared at 13:33 (msg 4d648e7a282c51d7). The detail above is Fathom's; Gemini's is a shorter paraphrase of the same decisions.</p>",
+   "parent": "m-20260817-1230-dt"
+  },
+  {
+   "id": "m-20260818-1509-dt",
+   "date": "Tue 18 Aug 2026",
+   "sender": "Deanna Troi",
+   "org": "Starfleet",
+   "to": "William Riker, Jean-Luc Picard",
+   "body": "<p>FYI</p><p class='ed'>Nine minutes after <a class=\"xref\" href=\"#m-20260818-note\">the billing catch-up</a> decided to postpone 2 September, Deanna forwards Leah's “are we still on track for the 2nd of September” across to engineering — without answering it.</p>",
+   "time": "15:09",
+   "tz": "NZST",
+   "source": "msg 1ae736eb88cb8274",
+   "gmailId": "1ae736eb88cb8274",
+   "mentions": [
+    "William Riker",
+    "Jean-Luc Picard"
+   ],
+   "parent": "m-20260814-1206-lb",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260818-1647-jlp",
+   "date": "Tue 18 Aug 2026",
+   "sender": "Jean-Luc Picard",
+   "org": "Starfleet",
+   "to": "Geordi La Forge, cc Soong, Leah, Maddox, Reg, Miles, Deanna",
+   "body": "<p><b>We've got the green light to send a billing file through on-or-before September 2nd. This will be for a real customer and therefore not a test file.</b></p><p><b>Can you confirm how you expect to receive the CSV export?</b></p><p>We can of course keep sending it via email if that's easiest, but let me know if there's an automated ingestion process we can hook into.</p><p class='ed'>Sent 1h47m after <a class=\"xref\" href=\"#m-20260818-note\">the billing catch-up</a> ended, and it reframes what that meeting decided: 2 September is <b>not</b> off. Daystrom is told the date holds and that the file will carry a real customer — the pilot. Jean-Luc also finally asks Daystrom IT, in writing, how the file should be delivered. Note this lands 29 minutes <i>before</i> Deanna's <a class=\"xref\" href=\"#m-20260818-1716-dt\">“maybe use utopia planitia as the test case”</a> below.</p>",
+   "time": "16:47",
+   "tz": "NZST",
+   "source": "unspooled from the 19 Aug forward",
+   "quoted": true,
+   "parent": "m-20260709-1359-glf",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260818-1714-oq",
+   "date": "Tue 18 Aug 2026",
+   "sender": "Orfil Quinteros",
+   "org": "Utopia Planitia",
+   "to": "Beverly Crusher, cc Deanna",
+   "body": "<p>Yes, I can confirm the agreed billing arrangement is in place.</p><p><b>The August invoices have been sent as a summary invoice with a summary file, with the accounts having a payment due date of 20 September 2026</b>, giving time for Starfleet to arrange payment before the invoices are due.</p>",
+   "time": "17:14",
+   "tz": "NZST",
+   "source": "unspooled from the 18 Aug Utopia Planitia forward",
+   "quoted": true,
+   "parent": "m-20260817-1017-bc",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260818-1716-dt",
+   "date": "Tue 18 Aug 2026",
+   "sender": "Deanna Troi",
+   "org": "Starfleet",
+   "to": "Jean-Luc Picard, William Riker",
+   "body": "<p>See from utopia planitia</p><p><b>Maybe use utopia planitia as the test case</b></p><p class='ed'>Two minutes after Reg's confirmation, and four hours after the meeting settled on a Vulcan Freight-only pilot with Rigel Station, Deanna proposes the opposite retailer. Latest message in the trail — nobody has replied.</p>",
+   "time": "17:16",
+   "tz": "NZST",
+   "source": "msg 7259bbf314ea5ac6",
+   "gmailId": "7259bbf314ea5ac6",
+   "mentions": [
+    "Jean-Luc Picard",
+    "William Riker"
+   ],
+   "parent": "m-20260818-1714-oq",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260819-0821-lb",
+   "date": "Wed 19 Aug 2026",
+   "sender": "Leah Brahms",
+   "org": "Daystrom",
+   "to": "Deanna Troi",
+   "body": "<p>Just confirming we will have the below members on the first billing file (I think I have them all):</p><ul><li>Vega Relay</li><li>Kepler's</li><li>Denobula Yard</li><li>Ferrix Dock</li><li>Lumen Direct</li></ul><p><b>If so, Jo and I will need to let the members know. Can you tell me when the last payment from them direct Starfleet will be and confirm the first Daystrom bill for be for August consumption.</b></p><p class='ed'>Leah reads “real customer, 2 September” as <b>five</b> members. <a class=\"xref\" href=\"#m-20260818-note\">The 18 August meeting</a> scoped it to <b>one</b>. He is also asking two questions nobody has answered — the cutover date for direct-to-Starfleet payments, and whether the first Daystrom bill covers August consumption — and he and Jo are blocked on telling members until they land.</p>",
+   "time": "08:21",
+   "tz": "NZST",
+   "source": "unspooled from the 19 Aug forward",
+   "quoted": true,
+   "parent": "m-20260818-1647-jlp",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260819-0842-dt",
+   "date": "Wed 19 Aug 2026",
+   "sender": "Deanna Troi",
+   "org": "Starfleet",
+   "to": "William Riker",
+   "body": "<p>Hi mate,</p><p><b>Can you reachout to Leah this morning</b></p><p class='ed'>Twenty-one minutes after Leah's email, and it hands the whole thing to engineering with no answer attached — the same pattern as <a class=\"xref\" href=\"#m-20260818-1509-dt\">18 August at 15:09</a>. This forward is what makes <a class=\"xref\" href=\"#m-20260610-1152-glf\">the entire Telemetry Migration chain above</a> visible for the first time.</p>",
+   "time": "08:42",
+   "tz": "NZST",
+   "source": "msg 3221d4ee530aaec1",
+   "gmailId": "3221d4ee530aaec1",
+   "mentions": [
+    "William Riker"
+   ],
+   "parent": "m-20260819-0821-lb",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260819-0951-dt",
+   "date": "Wed 19 Aug 2026",
+   "sender": "Deanna Troi",
+   "org": "Starfleet",
+   "to": "Leah Brahms, Tasha Yar, William Riker",
+   "body": "<p>Those were the larger ones but we have recently switched, or are about to switch, a few smaller ones. I'll have Tasha follow up with more details.</p><p><b>Will from our development team (who works with Jean-Luc) will reach out to you directly this morning to confirm the individual client we will process in September as discussed</b>, rather than me acting as the intermediary. <b>I'm keen to do just one to 100% confirm all is working well, and this will also give me time to align Andorian Power, as many sites are with them.</b></p><p class='ed'>Deanna corrects Leah's five-member assumption to a single client, names Will as the direct contact, and — for the first time in writing — gives the reason for the one-client pilot: Andorian Power isn't aligned and holds many of the sites. He does not name the client, and does not say which retailer, leaving <a class=\"xref\" href=\"#m-20260818-note\">yesterday's Rigel Station / Vulcan Freight vs Utopia Planitia split</a> unresolved.</p>",
+   "time": "09:51",
+   "tz": "NZST",
+   "source": "msg d0c4464a890371ae",
+   "gmailId": "d0c4464a890371ae",
+   "parent": "m-20260819-0821-lb",
+   "kind": "message"
+  },
+  {
+   "id": "m-20260819-0920-ty",
+   "date": "Wed 19 Aug 2026",
+   "sender": "Tasha Yar",
+   "org": "Starfleet",
+   "to": "Deanna Troi",
+   "body": "<p>Hi Leah,</p><p>Yes we also have</p><ul><li>Bajor Depot (switched last week)</li></ul><p>Pending (to switch this week)</p><ul><li>Selar Outpost</li><li>Corvan Depot</li></ul><p>Once these are all confirmed (ie new accounts for sensor IDs finished) I can let you know</p><p class='ed'>Latest message in the trail. 09:20 AEST is 11:20 NZST, so it follows <a class=\"xref\" href=\"#m-20260819-0951-dt\">Deanna's 09:51 NZST message</a> despite the earlier clock. Addressed “Hi Leah” but sent only to Deanna — <b>Leah has not received this list</b>, which means the member count for the first file is still open on both sides.</p>",
+   "time": "09:20",
+   "tz": "AEST",
+   "source": "msg 1827c4ecb1b6824e",
+   "gmailId": "1827c4ecb1b6824e",
+   "parent": "m-20260819-0951-dt",
+   "kind": "message"
+  },
+  {
+   "date": "Thu 20 Aug 2026",
+   "time": "14:40",
+   "tz": "AEST",
+   "sender": "William Riker",
+   "org": "Starfleet",
+   "to": "Leah Brahms",
+   "me": true,
+   "fromEmail": "riker@starfleet.fed",
+   "gmailId": "c042a997bd0eccf0",
+   "threadId": "c042a997bd0eccf0",
+   "subject": "Starfleet x Daystrom Billing Pilot",
+   "source": "msg c042a997bd0eccf0",
+   "body": "<p>Hi Leah, sorry for the delay.</p><p><b>I want to confirm that we will use Kepler Station as the individual client we will process as the pilot.</b></p><p>I still have a few outstanding questions.</p><ul><li>Earlier in our communications we confirmed that Registry Code was the same as “Billing Agent Membership Number” column in this sheet. <b>Is there a particular value your system expects in the Berth Name column, and is that contained in that same spreadsheet?</b></li><li>For the initial test we can send the full Kepler Station CSV over email, but following that <b>what is your preferred way for us to communicate the CSV to you?</b></li><li>Once we are using the CSV, <b>do you still want us to send out our Starfleet branded invoices directly to the members</b> or will you handle those communications through your system?</li></ul><p>Once these questions are resolved I can put together the CSV for all Kepler invoices.</p><p>I have attached another example CSV built from 2 real Kepler invoices from August, barring the above questions (and any feedback from your team) this will be the format that we provide.</p><p class='ed'>Settles the pilot client, which had been unresolved since the <a class='xref' href='#m-20260818-1716-dt'>18 Aug Utopia Planitia-vs-Vulcan Freight exchange</a> — but re-asks the delivery question <a class='xref' href='#m-20260818-1647-jlp'>Jean-Luc put to Soong on 18 Aug</a> and never got an answer to, and raises Berth Name, the column the report currently emits as <code>PLACEHOLDER TBD</code>. No reply as at this build.</p>",
+   "attachments": [
+    {
+     "name": "kepler_daystrom.csv",
+     "kind": "CSV",
+     "size": "518 B",
+     "gmailId": "c042a997bd0eccf0"
+    }
+   ],
+   "kind": "message",
+   "id": "m-20260820-1440-wr"
+  }
+ ]
 }
