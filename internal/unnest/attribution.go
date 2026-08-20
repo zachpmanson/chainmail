@@ -72,6 +72,7 @@ var (
 		"Jan 2, 2006", "January 2, 2006",
 		"Mon 2 Jan 2006", "Mon 2 January 2006",
 	}
+	reDateJoiner = regexp.MustCompile(`(?i)[\s,]+(at|kl|à|um|alle|as)$`)
 	clockLayouts = []string{"15:04:05", "15:04", "3:04:05 PM", "3:04 PM", "3:04PM"}
 )
 
@@ -82,28 +83,38 @@ func ParseAttribution(sentinel string) Attribution {
 	s = trimClosers(s)
 	s = reOpenerHead.ReplaceAllString(s, "")
 
-	loc := reClock.FindStringIndex(s)
-	if loc == nil {
+	sent, tz, rest, ok := SplitWhen(s)
+	a := Attribution{TZ: tz, Sent: sent}
+	if !ok {
 		// No clock, so the pivot is gone. The person may still be recoverable.
-		a := Attribution{}
 		a.Sender, a.Address = parsePerson(s)
 		return a
 	}
+	a.Sender, a.Address = parsePerson(rest)
+	return a
+}
 
+// SplitWhen finds the date and time at the head of s, returning them plus
+// whatever followed. Shared with header-block parsing, where a Date: value is
+// the same text in the same dialects with no person after it.
+//
+// The clock is the pivot: the date precedes it and anything else follows.
+func SplitWhen(s string) (sent time.Time, tz, rest string, ok bool) {
+	loc := reClock.FindStringIndex(s)
+	if loc == nil {
+		return time.Time{}, "", s, false
+	}
 	datePart := strings.TrimRight(strings.TrimSpace(s[:loc[0]]), " ,")
 	// "at" / "kl" / "à" sit between the date and the clock in most dialects.
-	datePart = regexp.MustCompile(`(?i)[\s,]+(at|kl|à|um|alle|as)$`).ReplaceAllString(datePart, "")
+	datePart = reDateJoiner.ReplaceAllString(datePart, "")
 	datePart = strings.TrimRight(strings.TrimSpace(datePart), " ,")
 
-	rest := s[loc[1]:]
-	a := Attribution{}
+	rest = s[loc[1]:]
 	if z := reZone.FindStringSubmatch(rest); z != nil {
-		a.TZ = z[1]
+		tz = z[1]
 		rest = rest[len(z[0]):]
 	}
-	a.Sender, a.Address = parsePerson(rest)
-	a.Sent = combine(datePart, s[loc[0]:loc[1]])
-	return a
+	return combine(datePart, s[loc[0]:loc[1]]), tz, rest, true
 }
 
 // combine parses the date and clock halves and merges them. The result carries

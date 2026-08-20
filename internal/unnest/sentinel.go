@@ -151,6 +151,18 @@ func FindHeaderBlock(lines []Line, i int) (Boundary, bool) {
 			break
 		}
 		if !reHeaderKey.MatchString(t) {
+			// A long recipient list wraps, and the quoted rendering usually loses
+			// the leading whitespace RFC 5322 folding would have left. Treat the
+			// line as a continuation only when a header key resumes right after it:
+			// that is what separates a folded Cc: from the start of the body.
+			//
+			// Stopping here instead cost real data — the remaining keys were
+			// orphaned outside the block, so Subject: landed in the body text and
+			// every recipient past the wrap was lost. 10 of 28 recovered entries
+			// on one real trail.
+			if n > 0 && continuesHeader(lines, j) {
+				continue
+			}
 			break
 		}
 		n++
@@ -166,4 +178,28 @@ func FindHeaderBlock(lines []Line, i int) (Boundary, bool) {
 		Kind: KindHeaderBlock, Start: i, End: j,
 		Depth: lines[i].Depth, Text: strings.Join(parts, "\n"),
 	}, true
+}
+
+// maxFoldLines is how far a folded value may run before the next key.
+//
+// A long recipient list wraps repeatedly — one real Cc: here spans three lines —
+// so tolerating a single continuation is not enough. The bound is what keeps the
+// rule safe: prose is only mistaken for a folded value if a header key appears
+// within this many lines of it, which body text does not do.
+const maxFoldLines = 6
+
+// continuesHeader reports whether line j is a folded continuation rather than
+// the start of the body, judged by whether a header key resumes within
+// maxFoldLines. A blank line ends the search: a header block never contains one.
+func continuesHeader(lines []Line, j int) bool {
+	for k := j + 1; k < len(lines) && k <= j+maxFoldLines; k++ {
+		t := unbold(strings.TrimSpace(lines[k].Text))
+		if t == "" {
+			return false
+		}
+		if reHeaderKey.MatchString(t) {
+			return true
+		}
+	}
+	return false
 }

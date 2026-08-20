@@ -154,7 +154,14 @@ func TestFindsEveryHeaderBlockRun(t *testing.T) {
 			for i := 0; i < len(lines); {
 				if b, ok := FindHeaderBlock(lines, i); ok {
 					blocks++
-					keys += b.End - b.Start
+					// Count key lines, not the block's span: a block may now
+					// legitimately cover a folded continuation line, which is
+					// inside the block but is not itself a header key.
+					for _, l := range strings.Split(b.Text, "\n") {
+						if reHeaderKey.MatchString(unbold(strings.TrimSpace(l))) {
+							keys++
+						}
+					}
 					i = b.End
 					continue
 				}

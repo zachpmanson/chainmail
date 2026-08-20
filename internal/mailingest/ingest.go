@@ -172,6 +172,14 @@ func Put(store *corpus.Store, msg Message) (corpus.PutResult, error) {
 			return res, fmt.Errorf("%s header of %s: %w", h.role, ext, err)
 		}
 	}
+
+	// The quoted history is the larger half of the conversation, so extraction is
+	// part of ingest rather than a later pass: a corpus holding only mailbox
+	// messages is a corpus of a different, smaller thing.
+	e.ID = res.ID
+	if _, err := ExtractQuoted(store, res.ID, e, msg.Body); err != nil {
+		return res, fmt.Errorf("extracting quoted history of %s: %w", ext, err)
+	}
 	return res, nil
 }
 

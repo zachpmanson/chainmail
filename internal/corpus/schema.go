@@ -184,4 +184,16 @@ var migrations = []string{
 	  added_at    integer not null
 	);
 	`,
+
+	// 6: mark entries recovered from quoted text.
+	//
+	// Derivable from the 'quote:' ext_id prefix, but only by a LIKE scan, and this
+	// flag is in the hot path of every search that wants to weight real messages
+	// above recovered ones. A quoted block whose Message-ID matches a real message
+	// merges into that entry and stays quoted=0: it is the same message, and the
+	// mailbox copy is the better one.
+	`
+	alter table entries add column quoted integer not null default 0;
+	create index entries_quoted on entries(quoted, ts);
+	`,
 }
