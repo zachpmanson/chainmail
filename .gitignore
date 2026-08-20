@@ -2,6 +2,11 @@ node_modules/
 .direnv/
 dist/
 out/
+corpus.db
+corpus.db-*
+*.db
+*.db-wal
+*.db-shm
 *.local
 .DS_Store
 

@@ -20,6 +20,10 @@
             # with it; there is no second package manager on purpose.
             pkgs.nodejs_22
             pkgs.typescript-language-server
+            # the backend (corpus, ingest, later the server) is Go
+            pkgs.go
+            pkgs.gopls
+            pkgs.sqlite            # for poking at a corpus by hand
           ];
 
           shellHook = ''
@@ -30,6 +34,8 @@
             echo "  npm run typecheck  tsc --noEmit"
             echo "  npm run render -- <spec.json> -o out/page.html [--since prev.html]"
             echo "  npm run gen:types  regenerate src/lib/spec.d.ts from the schema"
+            echo "  go test ./...      corpus + ingest"
+            echo "  go run ./cmd/corpus init | stats | ingest mail -q <query>"
           '';
         };
       });
