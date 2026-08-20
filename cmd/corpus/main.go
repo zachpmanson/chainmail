@@ -7,17 +7,22 @@
 //	corpus merge -keep <a> -drop <b>  same human, two addresses
 //	corpus alias -from <d> -to <d>    a rebrand: fold one domain into another
 //	corpus candidates                 pairs that may be one human, for review
+//	corpus search -q <text>           which chains are about this
+//	corpus spec -q <text> -o f.json   a timeline spec for those chains
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/zachpmanson/chainmail/internal/corpus"
 	"github.com/zachpmanson/chainmail/internal/mailingest"
+	"github.com/zachpmanson/chainmail/internal/spec"
 )
 
 func defaultPath() string {
@@ -70,6 +75,111 @@ func run(args []string) error {
 				p.PersonID, trunc(p.DisplayName, 28), p.Sent, p.Received, ids)
 		}
 		fmt.Printf("\n%d people\n", len(ps))
+		return nil
+
+	case "search":
+		fs := flag.NewFlagSet("search", flag.ContinueOnError)
+		q := fs.String("q", "", "text query")
+		since := fs.String("since", "", "only entries on or after YYYY-MM-DD")
+		person := fs.String("person", "", "involving this address, name or slack uid")
+		limit := fs.Int("limit", 10, "chains to return")
+		entries := fs.Bool("entries", false, "list matching entries instead of chains")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		s, err := corpus.Open(path)
+		if err != nil {
+			return err
+		}
+		defer s.Close()
+		query, err := buildQuery(*q, *since, *person, *limit)
+		if err != nil {
+			return err
+		}
+		if *entries {
+			hits, err := s.SearchEntries(query)
+			if err != nil {
+				return err
+			}
+			for _, h := range hits {
+				fmt.Printf("%-28s %s\n    %s\n", h.ExtID,
+					h.TS.Format("2006-01-02 15:04"), oneLine(h.Snippet, 100))
+			}
+			fmt.Printf("\n%d entries\n", len(hits))
+			return nil
+		}
+		chains, err := s.SearchChains(query)
+		if err != nil {
+			return err
+		}
+		for _, c := range chains {
+			fmt.Printf("%-46s  %2d/%-3d matched  %s -> %s\n",
+				trunc(orElse(c.Subject, c.RootExtID), 46), c.Matched, c.Entries,
+				c.First.Format("2006-01-02"), c.Last.Format("2006-01-02"))
+			fmt.Printf("    root %s\n", c.RootExtID)
+		}
+		fmt.Printf("\n%d chains\n", len(chains))
+		return nil
+
+	case "spec":
+		fs := flag.NewFlagSet("spec", flag.ContinueOnError)
+		q := fs.String("q", "", "text query; the matching chains become the spec")
+		since := fs.String("since", "", "only entries on or after YYYY-MM-DD")
+		person := fs.String("person", "", "involving this address, name or slack uid")
+		limit := fs.Int("limit", 10, "chains to include")
+		out := fs.String("o", "", "write the spec here (default stdout)")
+		title := fs.String("title", "", "page title")
+		me := fs.String("me", "", "comma-separated addresses that are yours")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *q == "" {
+			return fmt.Errorf("usage: corpus spec -q <query> [-o spec.json]")
+		}
+		s, err := corpus.Open(path)
+		if err != nil {
+			return err
+		}
+		defer s.Close()
+		query, err := buildQuery(*q, *since, *person, *limit)
+		if err != nil {
+			return err
+		}
+		chains, err := s.SearchChains(query)
+		if err != nil {
+			return err
+		}
+		if len(chains) == 0 {
+			return fmt.Errorf("no chains matched %q", *q)
+		}
+		// Select by chain root, not by matching entry: a trail is the whole
+		// conversation, not only the messages that happened to contain the words.
+		var roots []string
+		for _, c := range chains {
+			roots = append(roots, c.RootExtID)
+		}
+		sp, err := spec.Generate(s, spec.Options{
+			ExtIDs:   roots,
+			Title:    *title,
+			Queries:  []spec.Query{{Q: *q, Note: "corpus search"}},
+			Me:       splitList(*me),
+			RunLabel: time.Now().Format("2 Jan 2006"),
+		})
+		if err != nil {
+			return err
+		}
+		blob, err := json.MarshalIndent(sp, "", " ")
+		if err != nil {
+			return err
+		}
+		if *out == "" {
+			fmt.Println(string(blob))
+			return nil
+		}
+		if err := os.WriteFile(*out, append(blob, '\n'), 0o600); err != nil {
+			return err
+		}
+		fmt.Printf("wrote %s — %d entries from %d chains\n", *out, len(sp.Messages), len(chains))
 		return nil
 
 	case "alias":
@@ -221,6 +331,47 @@ func run(args []string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown command %q", args[0])
+}
+
+// buildQuery turns CLI flags into a corpus query.
+func buildQuery(text, since, person string, limit int) (corpus.Query, error) {
+	q := corpus.Query{Text: text, Limit: limit}
+	if since != "" {
+		t, err := time.Parse("2006-01-02", since)
+		if err != nil {
+			return q, fmt.Errorf("-since %q: want YYYY-MM-DD", since)
+		}
+		q.Since = t
+	}
+	if person != "" {
+		// Involving, not People: a cc-only participant is invisible to an
+		// author-only filter, and they are often the point.
+		q.Involving = []string{person}
+	}
+	return q, nil
+}
+
+func splitList(s string) []string {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	for i := range parts {
+		parts[i] = strings.TrimSpace(parts[i])
+	}
+	return parts
+}
+
+func oneLine(s string, n int) string {
+	s = strings.Join(strings.Fields(s), " ")
+	return trunc(s, n)
+}
+
+func orElse(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
 }
 
 func plural(n int, one, many string) string {
