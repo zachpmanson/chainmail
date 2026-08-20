@@ -107,7 +107,7 @@ func Put(store *corpus.Store, msg Message) (corpus.PutResult, error) {
 		ext = "gmail:" + msg.ID
 	}
 
-	person, err := resolvePerson(store, msg.From)
+	person, err := resolveSender(store, msg.From)
 	if err != nil {
 		return corpus.PutResult{}, err
 	}
@@ -155,56 +155,44 @@ func Put(store *corpus.Store, msg Message) (corpus.PutResult, error) {
 	if err := store.Sight(res.ID, 0, "direct", ""); err != nil {
 		return res, err
 	}
+	// Recipients, not just the author. Someone who only ever appears in To:/Cc:
+	// used to be absent from the corpus entirely, which turned "routed to four
+	// cc'd people" into "sent to nobody".
+	if person != 0 {
+		if err := corpus.Participate(store, res.ID, person, corpus.RoleFrom); err != nil {
+			return res, err
+		}
+	}
+	for _, h := range []struct{ role, header string }{
+		{corpus.RoleTo, msg.To},
+		{corpus.RoleCc, msg.Cc},
+	} {
+		if _, err := corpus.RecordHeader(store, res.ID, h.role, h.header); err != nil {
+			return res, fmt.Errorf("%s header of %s: %w", h.role, ext, err)
+		}
+	}
 	return res, nil
 }
 
-// resolvePerson finds or creates the person behind a From header, keyed on the
-// address. Display names vary ("Tom", "Bo Vantel", "tom"); the address does
-// not, so it is the identity that gets stored.
-func resolvePerson(store *corpus.Store, from string) (int64, error) {
-	addr, name := splitAddress(from)
-	if addr == "" {
+// resolveSender finds or creates the person behind a From header. Display names
+// vary ("Tom", "Bo Vantel", "tom"); the address does not, so the address is
+// the identity that gets stored — with the name carried along, since a corpus of
+// bare addresses is unreadable. A From header with no parseable address still
+// yields a person, keyed on the display name.
+func resolveSender(store *corpus.Store, from string) (int64, error) {
+	addrs := corpus.ParseAddresses(from)
+	if len(addrs) == 0 {
 		return 0, nil
 	}
-	db := store.DB()
-
-	var id int64
-	err := db.QueryRow(
-		`select person_id from identities where kind='email' and value=?`, addr).Scan(&id)
-	if err == nil {
-		return id, nil
-	}
-
-	res, err := db.Exec(`insert into people (display_name) values (?)`, orElse(name, addr))
+	// A From header holding several addresses is malformed; treat the first as
+	// the author rather than inventing co-authors.
+	id, err := corpus.ResolveAddress(store, addrs[0], "mail:from-header")
 	if err != nil {
-		return 0, fmt.Errorf("creating person for %s: %w", addr, err)
-	}
-	id, err = res.LastInsertId()
-	if err != nil {
-		return 0, err
-	}
-	if _, err := db.Exec(
-		`insert into identities (person_id, kind, value, rule) values (?,?,?,?)`,
-		id, "email", addr, "from-header"); err != nil {
-		return 0, fmt.Errorf("recording identity %s: %w", addr, err)
+		// An unusable From is a message with no known author, not a failed
+		// ingest: the body is still evidence.
+		return 0, nil
 	}
 	return id, nil
-}
-
-// splitAddress pulls the address and display name out of a From/To header.
-func splitAddress(s string) (addr, name string) {
-	if a, err := mail.ParseAddress(strings.TrimSpace(s)); err == nil {
-		return strings.ToLower(a.Address), a.Name
-	}
-	// Headers in the wild are not always parseable; fall back to the bracketed
-	// form, then to the whole string if it looks like a bare address.
-	if i, j := strings.Index(s, "<"), strings.LastIndex(s, ">"); i >= 0 && j > i {
-		return strings.ToLower(strings.TrimSpace(s[i+1 : j])), strings.TrimSpace(s[:i])
-	}
-	if strings.Contains(s, "@") {
-		return strings.ToLower(strings.TrimSpace(s)), ""
-	}
-	return "", strings.TrimSpace(s)
 }
 
 var rePrefix = regexp.MustCompile(`(?i)^((re|fw|fwd|aw|sv|vs)\s*:\s*)+`)
@@ -230,11 +218,4 @@ func parseDate(s string) (time.Time, string) {
 		name = t.Format("-0700")
 	}
 	return t, name
-}
-
-func orElse(a, b string) string {
-	if a != "" {
-		return a
-	}
-	return b
 }
