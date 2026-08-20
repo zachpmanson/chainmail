@@ -92,3 +92,64 @@ export function layout(entries: Entry[], idOf: (e: Entry) => string): Layout {
 
   return { row, chainOf, chains, laneCount: laneEnd.length };
 }
+
+export interface GraphNode {
+  id: string;
+  lane: number;
+  row: number;
+  parent?: string;
+  isFork: boolean;
+  isRoot: boolean;
+  isLeaf: boolean;
+}
+
+/**
+ * Per-entry lanes for the reply graph, which is a different question from the
+ * column view's per-chain lanes: here a fork must get a lane of its own, so the
+ * branch is visible. An entry inherits its parent's lane if it is that parent's
+ * first child; a later child takes the lowest free lane. A lane is released once
+ * its occupant has no descendants left to place.
+ */
+export function graphLanes(entries: Entry[], idOf: (e: Entry) => string): {
+  nodes: GraphNode[];
+  laneCount: number;
+  forks: number;
+  roots: number;
+  leaves: number;
+} {
+  const byId = new Map(entries.map((e) => [idOf(e), e]));
+  const childCount = new Map<string, number>();
+  for (const e of entries) {
+    if (e.parent && byId.has(e.parent)) {
+      childCount.set(e.parent, (childCount.get(e.parent) ?? 0) + 1);
+    }
+  }
+
+  const holder: (string | null)[] = [];
+  const nodes: GraphNode[] = [];
+  entries.forEach((e, i) => {
+    const id = idOf(e);
+    const parent = e.parent && byId.has(e.parent) ? e.parent : undefined;
+    let lane = parent ? holder.indexOf(parent) : -1;
+    if (lane === -1) {
+      lane = holder.indexOf(null);
+      if (lane === -1) { holder.push(null); lane = holder.length - 1; }
+    }
+    // hold the lane only while descendants are still to come
+    holder[lane] = childCount.get(id) ? id : null;
+    nodes.push({
+      id, lane, row: i, parent,
+      isFork: parent ? (childCount.get(parent) ?? 0) > 1 : false,
+      isRoot: !parent,
+      isLeaf: !childCount.get(id),
+    });
+  });
+
+  return {
+    nodes,
+    laneCount: Math.max(holder.length, 1),
+    forks: [...childCount.values()].filter((n) => n > 1).length,
+    roots: nodes.filter((n) => n.isRoot).length,
+    leaves: nodes.filter((n) => n.isLeaf).length,
+  };
+}

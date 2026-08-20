@@ -173,3 +173,53 @@ describe("spec url resolution", () => {
     expect(got.every((c) => !c.includes("~"))).toBe(true);
   });
 });
+
+describe("diff", () => {
+  it("marks entries absent from the previous pass as new", async () => {
+    const { diff } = await import("../src/lib/diff");
+    const prev = normalise({ title: "t", messages: [{ id: "a", date: "Tue 1 Jul 2025", body: "<p>one</p>" }] });
+    const next = normalise({
+      title: "t",
+      messages: [
+        { id: "a", date: "Tue 1 Jul 2025", body: "<p>one</p>" },
+        { id: "b", date: "Wed 2 Jul 2025", body: "<p>two</p>" },
+      ],
+    });
+    const m = diff(prev, next);
+    expect(m.get("b")).toBe("new");
+    expect(m.has("a")).toBe(false);
+  });
+
+  it("marks an edited body as revised, not new", async () => {
+    const { diff } = await import("../src/lib/diff");
+    const prev = normalise({ title: "t", messages: [{ id: "a", date: "d", body: "<p>one</p>" }] });
+    const next = normalise({ title: "t", messages: [{ id: "a", date: "d", body: "<p>one, edited</p>" }] });
+    expect(diff(prev, next).get("a")).toBe("revised");
+  });
+
+  it("treats the same words at a new timestamp as revised, not deleted+new", async () => {
+    const { diff } = await import("../src/lib/diff");
+    const body = "<p>same words</p>";
+    const prev = normalise({ title: "t", messages: [{ date: "Tue 1 Jul 2025", time: "09:00", sender: "A B", body }] });
+    const next = normalise({ title: "t", messages: [{ date: "Tue 1 Jul 2025", time: "10:00", sender: "A B", body }] });
+    expect([...diff(prev, next).values()]).toEqual(["revised"]);
+  });
+
+  it("is idempotent against itself", async () => {
+    const { diff } = await import("../src/lib/diff");
+    const t = load("synthetic");
+    expect(diff(t, t).size).toBe(0);
+  });
+
+  it("refuses a page with no embedded spec", async () => {
+    const { extractSpec } = await import("../src/lib/diff");
+    expect(() => extractSpec("<html><body>nope</body></html>")).toThrow(/no embedded spec/);
+  });
+
+  it("round-trips a rendered page's spec", async () => {
+    const { extractSpec } = await import("../src/lib/diff");
+    const t = load("synthetic");
+    const page = `<script type="application/json" id="chainmail-spec">${JSON.stringify(t).replace(/<\//g, "<\\/")}</script>`;
+    expect(extractSpec(page).messages).toHaveLength(t.messages.length);
+  });
+});

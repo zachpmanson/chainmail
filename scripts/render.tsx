@@ -8,18 +8,25 @@
  * Interactivity is layered on top, not required to see the content.
  */
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { buildSync } from "esbuild";
 import { dirname, resolve } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import Ajv from "ajv";
 import { Timeline } from "../src/components/Timeline";
 import { normalise } from "../src/lib/normalise";
+import { diff, extractSpec, type Mark } from "../src/lib/diff";
 
 const args = process.argv.slice(2);
-const outIx = args.findIndex((a) => a === "-o" || a === "--out");
-const specPath = args.find((a) => !a.startsWith("-") && args.indexOf(a) !== outIx + 1);
-const outPath = outIx >= 0 ? args[outIx + 1] : undefined;
+const flag = (name: string) => {
+  const i = args.indexOf(name);
+  return i >= 0 ? args[i + 1] : undefined;
+};
+const outPath = flag("-o") ?? flag("--out");
+const sincePath = flag("--since");
+const consumed = new Set([outPath, sincePath, "-o", "--out", "--since"]);
+const specPath = args.find((a) => !a.startsWith("-") && !consumed.has(a));
 if (!specPath || !outPath) {
-  console.error("usage: render <spec.json> -o <out.html>");
+  console.error("usage: render <spec.json> -o <out.html> [--since <previous.html>]");
   process.exit(2);
 }
 
@@ -37,8 +44,38 @@ if (!ajv.validate(schema, spec)) {
   process.exit(1);
 }
 
+// --since: recover the previous run's spec from the page it produced, and mark
+// what this pass added. Diffing is a spec-level operation; the renderer only
+// honours the marks.
+let marks: Map<string, Mark> | undefined;
+let prevLabel: string | undefined;
+if (sincePath) {
+  try {
+    const prev = extractSpec(readFileSync(sincePath, "utf8"));
+    marks = diff(prev, spec);
+    prevLabel = prev.runLabel ?? sincePath.split("/").pop();
+  } catch (e) {
+    // a missing baseline is a usage problem, not a crash
+    console.error(`--since ${sincePath}: ${e instanceof Error ? e.message : e}`);
+    process.exit(1);
+  }
+}
+
 const css = readFileSync(resolve(root, "src/styles.css"), "utf8");
-const body = renderToStaticMarkup(<Timeline spec={spec} />);
+
+// Bundle the same behaviour module the dev app uses, so interactivity has one
+// implementation rather than a copy that drifts.
+const behaviour = buildSync({
+  entryPoints: [resolve(root, "src/client/behaviour.ts")],
+  bundle: true,
+  format: "iife",
+  target: "es2020",
+  minify: true,
+  write: false,
+  footer: { js: "chainmail.attach(document);document.body.classList.add('hasmap');" },
+  globalName: "chainmail",
+}).outputFiles[0]!.text;
+const body = renderToStaticMarkup(<Timeline spec={spec} marks={marks} prevLabel={prevLabel} />);
 const theme = spec.theme ?? "light";
 const title = (spec.title ?? "Timeline").replace(/^#+/, "");
 
@@ -54,13 +91,18 @@ const page = `<!doctype html>
 <style>${css}</style></head>
 <body>${body}
 <script type="application/json" id="chainmail-spec">${embedded}</script>
+<script>${behaviour}</script>
 </body></html>
 `;
 
 mkdirSync(dirname(resolve(outPath)), { recursive: true });
 writeFileSync(outPath, page);
 const notes = spec.messages.filter((m) => m.kind === "note").length;
+const changed = marks
+  ? `, ${[...marks.values()].filter((m) => m === "new").length} new, ` +
+    `${[...marks.values()].filter((m) => m === "revised").length} revised vs ${sincePath}`
+  : "";
 console.log(
   `wrote ${outPath} — ${spec.messages.length - notes} messages, ${notes} notices, ` +
-    `${Math.round(page.length / 1024)} KB`,
+    `${Math.round(page.length / 1024)} KB${changed}`,
 );

@@ -1,19 +1,17 @@
 import type { Entry } from "../lib/spec";
 import { derive, initials, type Row, type View } from "../lib/derive";
 import type { Timeline as Spec } from "../lib/spec";
+import { DiffPanel, Legend, ParticipantsPanel, SourcesPanel } from "./Panels";
+import { Minimap } from "./Minimap";
 
 const html = (s: string) => ({ __html: s });
 
 function Avatar({ row, v }: { row: Row; v: View }) {
   const name = row.entry.sender ?? "";
-  const cls = `av ${row.orgSlot}${row.avatar ? " pic" : ""}`;
+  const pic = row.avatarClass;
   return (
-    <div
-      className={cls}
-      style={row.avatar ? { backgroundImage: `url(${row.avatar})` } : undefined}
-      title={v.whoTitle(name)}
-    >
-      {row.avatar ? null : <span className="ini">{initials(name)}</span>}
+    <div className={`av ${row.orgSlot}${pic ? ` pic ${pic}` : ""}`} title={v.whoTitle(name)}>
+      {pic ? null : <span className="ini">{initials(name)}</span>}
     </div>
   );
 }
@@ -89,14 +87,19 @@ function Attachments({ e }: { e: Entry }) {
   );
 }
 
-function EntryBlock({ row, v }: { row: Row; v: View }) {
+function EntryBlock({ row, v, mark }: { row: Row; v: View; mark?: "new" | "revised" }) {
   const e = row.entry;
   const grid = { gridColumn: row.lane + 1, gridRow: row.row };
   const start = row.isChainStart ? " chstart" : "";
 
   if (e.kind === "note") {
     return (
-      <div className={`sys${start}`} id={row.id} data-ch={row.lane} style={grid}>
+      <div
+        className={`sys${start}${mark === "new" ? " isnew" : ""}`}
+        id={row.id}
+        data-ch={row.lane}
+        style={grid}
+      >
         <div className="sysday">
           <a className="pl" href={`#${row.id}`} title="Link to this note">
             {e.date}
@@ -109,7 +112,8 @@ function EntryBlock({ row, v }: { row: Row; v: View }) {
     );
   }
 
-  const cls = ["msg", e.me && "me", e.quoted && "q", row.isChainStart && "chstart"]
+  const cls = ["msg", e.me && "me", e.quoted && "q", row.isChainStart && "chstart",
+    mark === "new" && "isnew"]
     .filter(Boolean)
     .join(" ");
   return (
@@ -122,6 +126,8 @@ function EntryBlock({ row, v }: { row: Row; v: View }) {
           </span>
           <span className="org">{e.org}</span>
           <Stamp row={row} />
+          {mark === "new" ? <span className="newpill">new</span> : null}
+          {mark === "revised" ? <span className="revpill">revised</span> : null}
         </div>
         <div className="bub">
           {e.mentions?.length ? (
@@ -175,11 +181,26 @@ function Chains({ v }: { v: View }) {
   );
 }
 
-export function Timeline({ spec }: { spec: Spec }) {
+export interface TimelineProps {
+  spec: Spec;
+  /** entry id -> what changed since a previous render, from `--since` */
+  marks?: Map<string, "new" | "revised">;
+  prevLabel?: string;
+}
+
+export function Timeline({ spec, marks, prevLabel }: TimelineProps) {
   const v = derive(spec);
   const s = v.spec;
   return (
-    <div className="wrap">
+    <>
+      {v.avatarCss ? <style dangerouslySetInnerHTML={html(v.avatarCss)} /> : null}
+      <div className="toolbar">
+        <button className="tbtn" id="viewtog" type="button" aria-pressed="false"
+                aria-label="Chain columns view">columns</button>
+        <button className="tbtn" id="maptog" type="button" aria-pressed="true"
+                aria-label="Reply tree panel">tree</button>
+      </div>
+      <div className="wrap">
       <header className="top">
         <h1>
           {v.hashed ? <span className="hash">#</span> : null}
@@ -197,11 +218,15 @@ export function Timeline({ spec }: { spec: Spec }) {
             </span>
           ))}
         </p>
+        <Legend />
+        <ParticipantsPanel v={v} />
+        {marks ? <DiffPanel v={v} marks={marks} prevLabel={prevLabel ?? "the previous run"} /> : null}
+        <SourcesPanel v={v} />
       </header>
       <div className="stream" id="stream" style={{ ["--nch" as string]: v.layout.laneCount }}>
         <Chains v={v} />
         {v.rows.map((r) => (
-          <EntryBlock key={r.id} row={r} v={v} />
+          <EntryBlock key={r.id} row={r} v={v} mark={marks?.get(r.id)} />
         ))}
       </div>
       {s.openItems?.length ? (
@@ -214,6 +239,8 @@ export function Timeline({ spec }: { spec: Spec }) {
           </ul>
         </footer>
       ) : null}
-    </div>
+      </div>
+      <Minimap v={v} />
+    </>
   );
 }

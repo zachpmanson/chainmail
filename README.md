@@ -18,10 +18,43 @@ which was CSS and JS trapped in string literals) into real files with real tests
 - [x] `schema/timeline.schema.json` — the spec contract, versioned
 - [x] Generated TypeScript types + a normaliser that still accepts legacy specs
 - [x] Ordering, lane allocation and chain/meta classification, with tests
-- [ ] View components + stylesheet
-- [ ] `chainmail render spec.json -o page.html` — one self-contained file
-- [ ] App shell: load a spec, switch views
-- [ ] Later: persistence and semantic search across trails
+- [x] View: transcript, chain columns, reply-tree minimap, participants and
+      sources panels, reply links, permalinks
+- [x] `render <spec> -o page.html [--since prev.html]` — one self-contained file
+- [x] Dev app: load a spec by path, URL or drag-and-drop
+- [ ] Persistence and semantic search across trails
+
+Structural parity with the original Python renderer is verified against a real
+58-entry trail: 25 of 25 counted properties match (entries, chains, spines, reply
+links, permalinks, timezone labels, minimap nodes, participants, panels, diff
+marks), with no dangling internal links.
+
+## Views
+
+**Timeline** — one chronological column. **Columns** — one lane per reply chain,
+where the grid row is still the chronological index, so reading down stays in time
+order while each chain keeps its own lane. Lanes are recycled once a chain ends, so
+a dead chain does not hold a column open.
+
+The **reply tree** panel indexes the whole trail by structure: down is time, across
+is only lane allocation. It scroll-spies the entry you are reading and lights its
+ancestry back to the chain start, which is the one thing a chronological transcript
+cannot show.
+
+## Re-running
+
+Every rendered page embeds the spec that produced it, so a later pass reloads exact
+structured input instead of scraping HTML:
+
+```bash
+render new.json -o page.html --since previous.html
+```
+
+That reports what is **new** (no counterpart in the previous pass) and what is
+**revised** (same anchor, changed words — or the same words at a corrected
+timestamp, which would otherwise read as one deleted plus one new). Diffing a page
+against itself reports nothing, so a re-run that claims changes means the input
+really changed.
 
 ## The contract
 

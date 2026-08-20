@@ -11,12 +11,16 @@ export interface Row {
   chain: string;
   isChainStart: boolean;
   orgSlot: string;
-  avatar?: string;
+  /** class suffix for this sender's avatar image, e.g. "p0"; absent = initials */
+  avatarClass?: string;
   stamp: { date: string; time?: string; tz?: string; inferred: boolean };
 }
 
 export interface View {
   spec: Timeline;
+  /** one rule per avatar, so a data: URI is emitted once however many messages
+   *  that person sent. Inlining it per element multiplied a 19 KB face by 27. */
+  avatarCss: string;
   rows: Row[];
   layout: Layout;
   zones: Zones;
@@ -43,6 +47,12 @@ export function derive(input: Timeline): View {
   for (const e of ordered) if (e.org && !orgs.includes(e.org)) orgs.push(e.org);
   const slot = (org?: string) => (org ? `o${Math.min(orgs.indexOf(org) + 1, 5)}` : "o5");
 
+  const avatarNames = Object.keys(input.avatars ?? {}).sort();
+  const avatarClass = new Map(avatarNames.map((n, i) => [n, `p${i}`]));
+  const avatarCss = avatarNames
+    .map((n) => `.av.${avatarClass.get(n)}{background-image:url(${input.avatars![n]})}`)
+    .join("");
+
   const emails = new Map<string, string>();
   for (const e of ordered) if (e.sender && e.fromEmail && !emails.has(e.sender)) emails.set(e.sender, e.fromEmail);
   for (const p of spec.participants ?? []) if (p.email) emails.set(p.name, p.email);
@@ -60,14 +70,14 @@ export function derive(input: Timeline): View {
       lane: laneOf.get(chain)!,
       isChainStart: lay.row.get(id) === firstRow.get(chain),
       orgSlot: slot(entry.org),
-      avatar: entry.sender ? spec.avatars?.[entry.sender] : undefined,
+      avatarClass: entry.sender ? avatarClass.get(entry.sender) : undefined,
       stamp: { date: entry.date, time: entry.time, tz: lbl.tz, inferred: lbl.inferred },
     };
   });
 
   const title = (input.title ?? "Timeline").replace(/^#+/, (m) => (m ? "#" : ""));
   return {
-    spec, rows, layout: lay, zones: z, orgs, title,
+    spec, rows, layout: lay, zones: z, orgs, title, avatarCss,
     hashed: title.startsWith("#"),
     whoTitle: (name) => (emails.has(name) ? `${name} <${emails.get(name)}>` : name),
   };

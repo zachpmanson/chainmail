@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { StrictMode, useEffect, useState } from "react";
 import { Timeline } from "./components/Timeline";
+import { attach } from "./client/behaviour";
 import { loadSpec } from "./lib/loadSpec";
 import { normalise } from "./lib/normalise";
 import type { Timeline as Spec } from "./lib/spec";
@@ -41,6 +42,18 @@ function App() {
       </pre>
     );
   if (!spec) return <p style={{ padding: "2rem", opacity: 0.6 }}>Loading spec…</p>;
+  return <Rendered spec={spec} />;
+}
+
+/** Attach the shared behaviour module once the transcript is in the DOM. */
+function Rendered({ spec }: { spec: Spec }) {
+  useEffect(() => {
+    // React 18 StrictMode double-invokes effects in dev; attach() returns a
+    // cleanup so the second pass does not stack duplicate listeners
+    const detach = attach(document);
+    document.body.classList.add("hasmap");
+    return detach;
+  }, [spec]);
   return <Timeline spec={spec} />;
 }
 
