@@ -1,0 +1,400 @@
+package corpus
+
+import (
+	"strings"
+	"testing"
+)
+
+// All names, addresses and domains here are invented. The real cases they stand
+// in for are described in words only.
+
+func TestResolveIsFindOrCreateAndRecordsWhichRuleMatched(t *testing.T) {
+	s := open(t)
+
+	first, err := Resolve(s, KindEmail, "Alice@Example.com", "Alice A")
+	if err != nil {
+		t.Fatalf("first resolve: %v", err)
+	}
+	// case and surrounding angle brackets are not identity
+	again, err := ResolveWithRule(s, KindEmail, "<alice@example.com>", "", "mail:to-header")
+	if err != nil {
+		t.Fatalf("second resolve: %v", err)
+	}
+	if again != first {
+		t.Fatalf("same address resolved to %d then %d", first, again)
+	}
+
+	var n int
+	if err := s.DB().QueryRow(`select count(*) from people`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("people: got %d, want 1", n)
+	}
+	// the rule of the FIRST match is what is kept: it is the step that created
+	// the identity, and therefore the step a bad merge has to be traced to
+	var rule string
+	if err := s.DB().QueryRow(
+		`select rule from identities where kind='email' and value='alice@example.com'`,
+	).Scan(&rule); err != nil {
+		t.Fatal(err)
+	}
+	if rule != "auto:email" {
+		t.Fatalf("rule: got %q, want auto:email", rule)
+	}
+}
+
+func TestResolveUpgradesAnAddressOnlyNameButNeverDowngradesAName(t *testing.T) {
+	s := open(t)
+
+	// first sighting had no display name at all, so the address is the name
+	id, err := Resolve(s, KindEmail, "bob@example.com", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := nameOf(t, s, id); got != "bob@example.com" {
+		t.Fatalf("placeholder name: got %q", got)
+	}
+	if _, err := Resolve(s, KindEmail, "bob@example.com", "Bob B"); err != nil {
+		t.Fatal(err)
+	}
+	if got := nameOf(t, s, id); got != "Bob B" {
+		t.Fatalf("after a named sighting: got %q, want Bob B", got)
+	}
+	// a later address-shaped "name" must not undo that
+	if _, err := Resolve(s, KindEmail, "bob@example.com", "bob@example.com"); err != nil {
+		t.Fatal(err)
+	}
+	if got := nameOf(t, s, id); got != "Bob B" {
+		t.Fatalf("name was downgraded to %q", got)
+	}
+}
+
+func TestParseAddressesSurvivesQuotedCommasAndJunk(t *testing.T) {
+	// a display name with a comma inside quotes is one recipient, not two
+	got := ParseAddresses(`"Example, Alice" <alice@example.com>, bob@example.com`)
+	if len(got) != 2 {
+		t.Fatalf("quoted comma: got %d addresses, want 2: %+v", len(got), got)
+	}
+	if got[0].Addr != "alice@example.com" || got[0].Name != "Example, Alice" {
+		t.Fatalf("first: %+v", got[0])
+	}
+
+	// one malformed fragment fails net/mail's all-or-nothing list parse; the
+	// fallback must still surface the good ones AND the name-only participant,
+	// because a recipient we cannot parse is still a recipient
+	got = ParseAddresses(`Ben, Johan <johan@example.com>, not-an-address-at-all`)
+	var names, addrs []string
+	for _, a := range got {
+		if a.Addr != "" {
+			addrs = append(addrs, a.Addr)
+		} else {
+			names = append(names, a.Name)
+		}
+	}
+	if len(addrs) != 1 || addrs[0] != "johan@example.com" {
+		t.Fatalf("addresses from junk header: %v", addrs)
+	}
+	if len(names) != 2 || names[0] != "Ben" {
+		t.Fatalf("name-only participants: %v, want Ben and the junk fragment", names)
+	}
+
+	if ParseAddresses("   ") != nil {
+		t.Fatal("an empty header should yield nothing, not a phantom participant")
+	}
+}
+
+func TestRecipientOnlyParticipantsAreVisible(t *testing.T) {
+	s := open(t)
+	sender, err := Resolve(s, KindEmail, "alice@example.com", "Alice A")
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := entry("mail:<decision@x>", "going with option two")
+	e.PersonID = sender
+	r, err := s.Put(e, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Participate(s, r.ID, sender, RoleFrom); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RecordHeader(s, r.ID, RoleTo, `Bob B <bob@example.com>`); err != nil {
+		t.Fatal(err)
+	}
+	// the case that motivated this: people who never send anything, one of them
+	// a first name only in someone else's quoted header
+	if _, err := RecordHeader(s, r.ID, RoleCc,
+		`carol@example.com, "Dev, Dana" <dana@example.com>, Ben`); err != nil {
+		t.Fatal(err)
+	}
+
+	people, err := People(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(people) != 5 {
+		t.Fatalf("people: got %d, want 5 (1 sender + 4 recipients)", len(people))
+	}
+	var silent int
+	for _, p := range people {
+		if p.Sent == 0 && p.Received > 0 {
+			silent++
+		}
+	}
+	if silent != 4 {
+		t.Fatalf("recipient-only participants: got %d, want 4", silent)
+	}
+	// the name-only participant is a person with a display_name identity, so a
+	// human can later say who they are
+	if _, err := PersonByIdentity(s, KindDisplayName, "ben"); err != nil {
+		t.Fatalf("name-only participant not resolvable: %v", err)
+	}
+
+	parts, err := Participants(s, r.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(parts) != 5 || parts[0].Role != RoleFrom {
+		t.Fatalf("participants: %+v", parts)
+	}
+}
+
+func TestRecordHeaderReplacesThatRoleWholesale(t *testing.T) {
+	s := open(t)
+	r, err := s.Put(entry("mail:<a@x>", "hello"), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RecordHeader(s, r.ID, RoleCc, `bob@example.com, carol@example.com`); err != nil {
+		t.Fatal(err)
+	}
+	// a corrected header must not leave the dropped recipient attached
+	if _, err := RecordHeader(s, r.ID, RoleCc, `bob@example.com`); err != nil {
+		t.Fatal(err)
+	}
+	if n := countRole(t, s, r.ID, RoleCc); n != 1 {
+		t.Fatalf("cc participants after re-ingest: got %d, want 1", n)
+	}
+	// but the person themselves survives: identities are never discarded
+	if _, err := PersonByIdentity(s, KindEmail, "carol@example.com"); err != nil {
+		t.Fatalf("person deleted with their participation: %v", err)
+	}
+}
+
+// The real case: one colleague's Slack account sits under a pre-rebrand company
+// domain while his mail is under the current one. No address rule ties them
+// together, so the merge is the fix — and it must not lose either identity.
+func TestMergeFoldsEveryIdentityAndReferenceIntoTheSurvivor(t *testing.T) {
+	s := open(t)
+	keep, err := Resolve(s, KindEmail, "dan@current.example", "Dan D")
+	if err != nil {
+		t.Fatal(err)
+	}
+	drop, err := Resolve(s, KindEmail, "dan@old.example", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := AddAlias(s, drop, KindSlackUID, "<@U0123>", "slack:profile"); err != nil {
+		t.Fatal(err)
+	}
+
+	// the dropped half authored an entry and was cc'd on another, on which the
+	// surviving half was ALSO cc'd — the primary-key collision case
+	auth := entry("mail:<from-old@x>", "sent from the old domain")
+	auth.PersonID = drop
+	a, err := s.Put(auth, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.Put(entry("mail:<both-cc@x>", "cc'd twice"), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []int64{keep, drop} {
+		if err := Participate(s, b.ID, id, RoleCc); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := Merge(s, keep, drop); err != nil {
+		t.Fatalf("Merge: %v", err)
+	}
+
+	// no identity lost: all three still resolve, and all to the survivor
+	for _, id := range [][2]string{
+		{KindEmail, "dan@current.example"},
+		{KindEmail, "dan@old.example"},
+		{KindSlackUID, "U0123"},
+	} {
+		got, err := PersonByIdentity(s, id[0], id[1])
+		if err != nil {
+			t.Fatalf("%s %s lost by the merge: %v", id[0], id[1], err)
+		}
+		if got != keep {
+			t.Fatalf("%s %s points at %d, want %d", id[0], id[1], got, keep)
+		}
+	}
+	// authorship followed
+	var author int64
+	if err := s.DB().QueryRow(`select person_id from entries where id=?`, a.ID).
+		Scan(&author); err != nil {
+		t.Fatal(err)
+	}
+	if author != keep {
+		t.Fatalf("entry author: got %d, want %d", author, keep)
+	}
+	// the doubled cc collapsed to one row rather than failing the merge
+	if n := countRole(t, s, b.ID, RoleCc); n != 1 {
+		t.Fatalf("cc rows after merge: got %d, want 1", n)
+	}
+	// the orphan is gone, and the merge is on the record
+	var n int
+	if err := s.DB().QueryRow(`select count(*) from people where id=?`, drop).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatal("dropped person still present")
+	}
+	if err := s.DB().QueryRow(
+		`select count(*) from person_merges where kept_id=? and dropped_id=?`, keep, drop,
+	).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("person_merges rows: got %d, want 1", n)
+	}
+}
+
+func TestMergeByEmailAndItsRefusals(t *testing.T) {
+	s := open(t)
+	keep, err := Resolve(s, KindEmail, "erin@current.example", "Erin E")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// the old-domain half was only ever seen as a bare address, so the surviving
+	// display name should become the human one
+	if _, err := Resolve(s, KindEmail, "erin@old.example", ""); err != nil {
+		t.Fatal(err)
+	}
+	got, err := MergeByEmail(s, "erin@current.example", "erin@old.example")
+	if err != nil {
+		t.Fatalf("MergeByEmail: %v", err)
+	}
+	if got != keep {
+		t.Fatalf("survivor: got %d, want %d", got, keep)
+	}
+	if name := nameOf(t, s, keep); name != "Erin E" {
+		t.Fatalf("survivor name: %q", name)
+	}
+	// merging an already-merged pair is a no-op, not a second record
+	if _, err := MergeByEmail(s, "erin@current.example", "erin@old.example"); err != nil {
+		t.Fatalf("re-merge: %v", err)
+	}
+	var n int
+	if err := s.DB().QueryRow(`select count(*) from person_merges`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("person_merges rows after re-merge: got %d, want 1", n)
+	}
+	if _, err := MergeByEmail(s, "erin@current.example", "nobody@example.com"); err == nil {
+		t.Fatal("merging an unknown address should fail loudly")
+	}
+	if err := Merge(s, keep, keep); err == nil {
+		t.Fatal("merging a person into themselves should fail")
+	}
+}
+
+// A display-name-only participant ("Ben") cannot be resolved by any rule; a
+// human has to say who they are. That is an alias, and it must not silently
+// steal an identity that already belongs to someone else.
+func TestAddAliasIsTheManualEscapeHatch(t *testing.T) {
+	s := open(t)
+	ben, err := Resolve(s, KindDisplayName, "Ben", "Ben")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := AddAlias(s, ben, KindEmail, "BEN@example.com", ""); err != nil {
+		t.Fatalf("AddAlias: %v", err)
+	}
+	got, err := PersonByIdentity(s, KindEmail, "ben@example.com")
+	if err != nil || got != ben {
+		t.Fatalf("alias did not resolve: %d %v", got, err)
+	}
+	var rule string
+	if err := s.DB().QueryRow(
+		`select rule from identities where kind='email' and value='ben@example.com'`,
+	).Scan(&rule); err != nil {
+		t.Fatal(err)
+	}
+	if rule != "manual:alias" {
+		t.Fatalf("rule: got %q, want manual:alias", rule)
+	}
+
+	other, err := Resolve(s, KindEmail, "frank@example.com", "Frank F")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = AddAlias(s, other, KindEmail, "ben@example.com", "")
+	if err == nil || !strings.Contains(err.Error(), "merge instead") {
+		t.Fatalf("stealing an identity should be refused as a merge: %v", err)
+	}
+	if err := AddAlias(s, 999, KindEmail, "ghost@example.com", ""); err == nil {
+		t.Fatal("aliasing onto a non-existent person should fail")
+	}
+}
+
+func TestFailedMergeLeavesNothingHalfDone(t *testing.T) {
+	s := open(t)
+	keep, err := Resolve(s, KindEmail, "gail@example.com", "Gail G")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Merge(s, keep, 4242); err == nil {
+		t.Fatal("merging a non-existent person should fail")
+	}
+	// the transaction rolled back: no merge recorded, keep untouched
+	var n int
+	if err := s.DB().QueryRow(`select count(*) from person_merges`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("person_merges rows: got %d, want 0", n)
+	}
+	if got, err := PersonByIdentity(s, KindEmail, "gail@example.com"); err != nil || got != keep {
+		t.Fatalf("survivor damaged: %d %v", got, err)
+	}
+}
+
+func TestUnknownKindsAndRolesAreRejected(t *testing.T) {
+	s := open(t)
+	if _, err := Resolve(s, "phone", "0400000000", ""); err == nil {
+		t.Fatal("an unknown identity kind should be rejected, not stored")
+	}
+	if _, err := Resolve(s, KindEmail, "   ", ""); err == nil {
+		t.Fatal("an empty identity should be rejected")
+	}
+	if err := Participate(s, 1, 1, "bcc"); err == nil {
+		t.Fatal("an unknown role should be rejected")
+	}
+}
+
+func nameOf(t *testing.T, s *Store, id int64) string {
+	t.Helper()
+	var name string
+	if err := s.DB().QueryRow(`select display_name from people where id=?`, id).Scan(&name); err != nil {
+		t.Fatal(err)
+	}
+	return name
+}
+
+func countRole(t *testing.T, s *Store, entryID int64, role string) int {
+	t.Helper()
+	var n int
+	if err := s.DB().QueryRow(
+		`select count(*) from participants where entry_id=? and role=?`, entryID, role).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}

@@ -120,4 +120,35 @@ var migrations = []string{
 	  tokenize='trigram'
 	);
 	`,
+
+	// 3: participation, and an audit trail for merges.
+	//
+	// entries.person_id names the author only, so anyone who never sent anything
+	// was invisible: on a real 58-entry trail, 4 of 15 participants appear solely
+	// in To:/Cc:. "Routed to four cc'd people" is a different fact from "sent to
+	// nobody", so recipients get rows of their own. The author is recorded here
+	// too, as role='from', so one query answers "who was involved" without
+	// unioning two shapes; entries.person_id stays as the authoritative author.
+	//
+	// person_merges keeps merges traceable. identities.rule records how an
+	// identity was first matched and is deliberately left intact by a merge — the
+	// merge itself is the thing that needs its own record, since it is the step a
+	// human can get wrong.
+	`
+	create table participants (
+	  entry_id  integer not null references entries(id),
+	  person_id integer not null references people(id),
+	  role      text not null,          -- from | to | cc
+	  primary key (entry_id, person_id, role)
+	);
+	create index participants_person on participants(person_id, role);
+
+	create table person_merges (
+	  kept_id      integer not null references people(id),
+	  dropped_id   integer not null,    -- the row is gone, so no foreign key
+	  dropped_name text,
+	  reason       text,
+	  merged_at    integer not null
+	);
+	`,
 }
