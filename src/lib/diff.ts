@@ -10,12 +10,16 @@ export type Mark = "new" | "revised";
  * run back in is a clean round-trip rather than a scrape.
  */
 export function extractSpec(pageHtml: string): Timeline {
-  const m = /<script type="application\/json" id="chainmail-spec">([\s\S]*?)<\/script>/.exec(
-    pageHtml,
-  );
+  // `mt-spec` is the id used by the Python renderer this replaced; pages built
+  // by it are still worth reloading, and normalise() handles their snake_case.
+  const m =
+    /<script type="application\/json" id="(?:chainmail-spec|mt-spec)">([\s\S]*?)<\/script>/.exec(
+      pageHtml,
+    );
   if (!m) {
     throw new Error(
-      "no embedded spec in that page — it was not produced by chainmail, so there is nothing to diff against",
+      "no embedded spec in that page — it was not produced by chainmail or its predecessor, " +
+        "so there is nothing to reload",
     );
   }
   return normalise(JSON.parse(m[1]!.replace(/<\\\//g, "</")));

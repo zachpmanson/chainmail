@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# chainmail — render a timeline spec, or recover the spec from a rendered page.
+#
+# A thin wrapper so callers (the mail-timeline skill, cron jobs) do not need to
+# know that this is a node project, or be in its directory.
+#
+#   chainmail render <spec.json> -o <page.html> [--since <previous.html>]
+#   chainmail extract <page.html>            # spec JSON to stdout
+#
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+if [[ ! -d "$root/node_modules" ]]; then
+  echo "chainmail: dependencies missing — run 'npm install' in $root" >&2
+  exit 1
+fi
+
+cmd="${1:-}"
+shift || true
+
+case "$cmd" in
+  render)  exec npx --prefix "$root" tsx "$root/scripts/render.tsx" "$@" ;;
+  extract) exec npx --prefix "$root" tsx "$root/scripts/extract.ts" "$@" ;;
+  ""|-h|--help|help)
+    cat >&2 <<'USAGE'
+usage:
+  chainmail render <spec.json> -o <page.html> [--since <previous.html>]
+      Render a timeline spec to one self-contained HTML file. With --since,
+      mark what changed relative to a page rendered earlier.
+
+  chainmail extract <page.html>
+      Print the spec embedded in a rendered page, to stdout. Use this to
+      reload a previous run instead of rebuilding a trail from scratch.
+USAGE
+    exit 2 ;;
+  *) echo "chainmail: unknown command '$cmd' (try --help)" >&2; exit 2 ;;
+esac
