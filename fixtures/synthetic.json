@@ -1,0 +1,46 @@
+{
+ "specVersion": 1,
+ "title": "#synthetic-trail",
+ "subtitle": "Covers the cases that are easy to get wrong: a cross-timezone reply whose clock reads earlier than its parent, and a meeting that never existed as an email.",
+ "messages": [
+  {
+   "kind": "message", "id": "a",
+   "date": "Tue 25 Nov 2025", "time": "13:29", "tz": "AEST",
+   "sender": "Ada Kessler", "org": "Northwind", "fromEmail": "ada@northwind.example",
+   "to": "Bo Tran", "subject": "Column mapping",
+   "body": "<p>First draft of the column mapping.</p>"
+  },
+  {
+   "kind": "message", "id": "b",
+   "date": "Wed 19 Aug 2026", "time": "09:51", "tz": "NZST",
+   "sender": "Bo Tran", "org": "Harrow Co", "fromEmail": "bo@harrow.example",
+   "to": "Ada Kessler", "parent": "a", "quoted": true,
+   "source": "unspooled from the 20 Aug forward",
+   "body": "<p>Sent at 09:51 NZST, which is <b>earlier in absolute time</b> than the 09:20 AEST reply below.</p>"
+  },
+  {
+   "kind": "message", "id": "c",
+   "date": "Wed 19 Aug 2026", "time": "09:20", "tz": "AEST",
+   "sender": "Cy Ferris", "org": "Northwind", "fromEmail": "cy@northwind.example",
+   "to": "Bo Tran", "parent": "b", "me": true,
+   "body": "<p>Replying the same morning; the clock reads earlier but this is later.</p>",
+   "attachments": [{ "name": "sample.csv", "kind": "CSV", "size": "717 B" }]
+  },
+  {
+   "kind": "note", "id": "n",
+   "date": "Mon 17 Aug 2026",
+   "label": "Kickoff call, 11:00 AEST",
+   "body": "<p class='ed'>Not an email — inferred from a later reference.</p>"
+  }
+ ],
+ "participants": [
+  { "name": "Ada Kessler", "org": "Northwind", "email": "ada@northwind.example", "role": "wrote the mapping" },
+  { "name": "Bo Tran", "org": "Harrow Co", "email": "bo@harrow.example" },
+  { "name": "Cy Ferris", "org": "Northwind", "email": "cy@northwind.example" },
+  { "name": "Dee", "org": "Harrow Co", "note": "cc only — never sent; first name only" }
+ ],
+ "queries": [{ "q": "mapping after:2025/11/01", "note": "the core trail" }],
+ "threads": [{ "subject": "Column mapping", "count": 3, "span": "25 Nov → 19 Aug" }],
+ "sourceNotes": [{ "title": "Caveats", "items": ["Dee appears only in quoted cc headers, so no address is recoverable."] }],
+ "openItems": ["Whether the mapping includes the tax column."]
+}

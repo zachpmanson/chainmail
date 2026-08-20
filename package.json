@@ -1,0 +1,32 @@
+{
+  "name": "chainmail",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Read an email chain as one chronological transcript, with its reply structure made visible.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "gen:types": "json2ts -i schema/timeline.schema.json -o src/lib/spec.d.ts --additionalProperties false",
+    "render": "tsx scripts/render.tsx"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "ajv": "^8.17.1",
+    "esbuild": "^0.24.2",
+    "json-schema-to-typescript": "^15.0.4",
+    "tsx": "^4.19.2",
+    "typescript": "^5.9.3",
+    "vite": "^6.0.7",
+    "vitest": "^2.1.8"
+  }
+}

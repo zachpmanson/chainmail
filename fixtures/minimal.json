@@ -1,0 +1,14 @@
+{
+ "specVersion": 1,
+ "title": "one",
+ "messages": [
+  {
+   "kind": "message",
+   "date": "Tue 1 Jul 2025",
+   "time": "09:00",
+   "sender": "A B",
+   "org": "O",
+   "body": "<p>hi</p>"
+  }
+ ]
+}

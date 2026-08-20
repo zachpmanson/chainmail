@@ -1,0 +1,331 @@
+/* Ported verbatim from the original build.py CSS constant.
+   It lived inside a Python string literal, where `content:"\\25B8"` was
+   parsed as an octal escape and shipped a control character. In a real .css
+   file that class of bug cannot happen. */
+
+:root {
+    --bg:#f6f4f1; --fg:#1e1c1a; --muted:#6f6963; --line:#e3ded7; --card:#fff;
+    --accent:#8a5a2b; --mine:#ece1d2; --quote:#faf8f5; --dash:#eae5dc;
+    --o1:#2f6f5f; --o2:#4a5b9c; --o3:#8a5a2b; --o4:#8c4a6b; --o5:#77716a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#141317; --fg:#ece9e4; --muted:#9d968e; --line:#2d2a31; --card:#1d1c21;
+      --accent:#d3a06a; --mine:#33291f; --quote:#232127; --dash:#26232c;
+      --o1:#3d8d78; --o2:#5f74c4; --o3:#a9713a; --o4:#b8688c; --o5:#4d4a52;
+    }
+  }
+  :root[data-theme="dark"] {
+      --bg:#141317; --fg:#ece9e4; --muted:#9d968e; --line:#2d2a31; --card:#1d1c21;
+      --accent:#d3a06a; --mine:#33291f; --quote:#232127; --dash:#26232c;
+      --o1:#3d8d78; --o2:#5f74c4; --o3:#a9713a; --o4:#b8688c; --o5:#4d4a52;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+    font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; }
+  .wrap { max-width:76rem; margin:0 auto; padding:1.75rem 1.25rem 3.5rem; }
+  header.top { border-bottom:1px solid var(--line); padding-bottom:.7rem; margin-bottom:.25rem; }
+  h1 { font-size:1.3rem; margin:0 0 .2rem; letter-spacing:-.01em; }
+  h1 .hash { color:var(--muted); font-weight:400; }
+  .sub { color:var(--muted); font-size:.86rem; margin:0 0 .5rem; }
+  .roster { font-size:.78rem; color:var(--muted); }
+  .roster b { color:var(--fg); font-weight:600; }
+  .pan { border:1px solid var(--line); border-radius:9px; background:var(--card);
+    margin:.7rem 0 0; }
+  .pan > summary { cursor:pointer; padding:.4rem .7rem; font-size:.72rem; font-weight:700;
+    text-transform:uppercase; letter-spacing:.08em; color:var(--muted); list-style:none; }
+  .pan > summary::-webkit-details-marker { display:none; }
+  .pan > summary::before { content:""; display:inline-block; width:0; height:0;
+    border:.3em solid transparent; border-left-color:currentColor;
+    margin-right:.4em; vertical-align:.04em;
+    transition:transform .12s; }
+  .pan[open] > summary::before { transform:rotate(90deg); }
+  .pan > summary:hover { color:var(--accent); }
+  .pan .pbody { padding:.1rem .7rem .6rem; border-top:1px solid var(--line); }
+  .who { display:grid; grid-template-columns:repeat(auto-fill,minmax(15.5rem,1fr));
+    gap:.3rem .9rem; }
+  .p1 { padding:.2rem 0; min-width:0; }
+  .p1 .av { font-size:.78rem; }   /* matches .pn, so 1em tracks that text */
+  .p1 .pd { min-width:0; line-height:1.3; }
+  .p1 .pn { display:flex; align-items:center; gap:.35rem; font-size:.78rem;
+    font-weight:650; }
+  .p1 .pn span { min-width:0; overflow-wrap:anywhere; }
+  .p1 .pr { font-size:.66rem; color:var(--muted); }
+  .p1 a.pe { font-size:.68rem; color:var(--muted); text-decoration:none;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    overflow-wrap:anywhere; }
+  .p1 a.pe:hover { color:var(--accent); text-decoration:underline; }
+  .ogh { grid-column:1/-1; font-size:.66rem; text-transform:uppercase; letter-spacing:.09em;
+    color:var(--muted); font-weight:700; margin:.45rem 0 .05rem; }
+  .ogh:first-child { margin-top:.15rem; }
+  .srcgrp { margin:.45rem 0 0; }
+  .srcgrp:first-child { margin-top:.15rem; }
+  .srch { font-size:.66rem; text-transform:uppercase; letter-spacing:.09em; color:var(--muted);
+    font-weight:700; margin:0 0 .2rem; }
+  .srcgrp ul { margin:0; padding-left:1.1rem; }
+  .srcgrp li { font-size:.78rem; margin:.12rem 0; }
+  .srcgrp li .qy { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.9em; }
+  .srcgrp li .note { color:var(--muted); font-size:.92em; }
+  .srcgrp a { color:inherit; text-decoration-color:var(--accent); text-underline-offset:2px; }
+  .srcgrp a:hover { color:var(--accent); }
+  .newpill { font-size:.6rem; font-weight:800; text-transform:uppercase; letter-spacing:.09em;
+    color:#fff; background:var(--o1); border-radius:4px; padding:.05rem .3rem; }
+  .revpill { font-size:.6rem; font-weight:800; text-transform:uppercase; letter-spacing:.09em;
+    color:var(--fg); background:var(--dash); border:1px solid var(--muted);
+    border-radius:4px; padding:.02rem .28rem; }
+  .msg.isnew .bub, .sys.isnew { border-left:3px solid var(--o1); }
+  .states { display:grid; grid-template-columns:repeat(auto-fit,minmax(17rem,1fr));
+    gap:.35rem .9rem; margin:.6rem 0 0; font-size:.73rem; color:var(--muted); }
+  .st { display:flex; align-items:flex-start; gap:.45rem; line-height:1.4; }
+  .st b { color:var(--fg); font-weight:650; }
+  .sw { flex:0 0 1.15rem; height:1.15rem; border-radius:5px; border:1px solid var(--line);
+    margin-top:.05rem; }
+  .sw.plain { background:var(--card); }
+  .sw.dash { background:var(--dash); border-style:dashed;
+    border-color:color-mix(in srgb, var(--muted) 55%, transparent); }
+  .sw.mine { background:var(--mine); border-color:var(--o3); }
+  .sw.clipsw { border:none; display:grid; place-items:center; font-size:.8rem; }
+  .msg { margin:0 0 .5rem; }
+  .av { font-size:.83rem; flex:0 0 1em; width:1em; height:1em; border-radius:50%;
+    color:#fff; display:grid; place-items:center; align-self:center;
+    line-height:1; overflow:hidden; }
+  .av .ini { font-size:.62em; font-weight:700; line-height:1; letter-spacing:.01em; }
+  .av.o1{background:var(--o1);--ring:var(--o1)} .av.o2{background:var(--o2);--ring:var(--o2)}
+  .av.o3{background:var(--o3);--ring:var(--o3)} .av.o4{background:var(--o4);--ring:var(--o4)}
+  .av.o5{background:var(--o5);--ring:var(--o5)}
+  .av.pic { background-size:cover; background-position:center;
+    box-shadow:0 0 0 1.5px var(--ring,var(--muted)), 0 0 0 2.5px var(--bg); }
+  .col { min-width:0; }
+  .hdr { display:flex; flex-wrap:wrap; align-items:baseline; gap:.3rem;
+    margin:0 0 .14rem; padding:0 .1rem; }
+  .nm { font-size:.83rem; font-weight:650; }
+  .org { font-size:.68rem; color:var(--muted); text-transform:uppercase; letter-spacing:.07em; }
+  .tm { font-size:.71rem; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .tz { font-size:.9em; opacity:.75; }
+  /* an inferred zone must not read as a stated one */
+  .tz.tzi { opacity:.55; border-bottom:1px dotted currentColor; cursor:help; }
+  .bub { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:.45rem .7rem; }
+  .msg.q .bub { background:var(--dash); border-style:dashed;
+    border-color:color-mix(in srgb, var(--muted) 55%, transparent); }
+  .msg.me .bub { background:var(--mine); border-color:var(--o3); }
+  .ment { margin:0 0 .3rem; display:flex; flex-wrap:wrap; gap:.25rem; }
+  .at { font-size:.74rem; font-weight:650; color:var(--o3); background:var(--mine);
+    border-radius:5px; padding:.02rem .35rem; }
+  .bub p { margin:.2rem 0; }
+  .bub p:first-of-type { margin-top:0; }
+  .bub ul { margin:.25rem 0; padding-left:1rem; }
+  .bub li { margin:.08rem 0; font-size:.9rem; }
+  .ed { font-size:.8rem; color:var(--muted); font-style:italic; }
+  .atts { display:flex; flex-wrap:wrap; align-items:center; gap:.3rem; margin:.4rem 0 .1rem; }
+  .clip { font-size:.64rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted);
+    font-weight:700; }
+  .clip::before { content:"\1F4CE  "; }
+  .att { display:inline-flex; align-items:baseline; gap:.35rem; text-decoration:none;
+    border:1px solid var(--line); border-radius:6px; padding:.1rem .45rem;
+    background:var(--quote); color:var(--fg); }
+  .att:hover { border-color:var(--accent); }
+  .att.nolink { opacity:.6; }
+  .afn { font-size:.74rem; font-weight:650; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .ameta { font-size:.64rem; color:var(--muted); }
+  .foot { display:flex; flex-wrap:wrap; align-items:baseline; gap:.2rem .7rem;
+    margin-top:.35rem; padding-top:.25rem; border-top:1px solid var(--line); }
+  .to { font-size:.66rem; color:var(--muted); }
+  .src { font-size:.64rem; color:var(--muted); margin-left:auto;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .sys { text-align:center; margin:.7rem auto; max-width:44rem; padding:.55rem .9rem;
+    border:1px dashed var(--line); border-radius:10px; background:var(--quote); }
+  .sysday { font-size:.68rem; color:var(--muted); font-variant-numeric:tabular-nums;
+    margin-bottom:.15rem; }
+  .syslabel { font-size:.75rem; font-weight:700; text-transform:uppercase;
+    letter-spacing:.08em; color:var(--muted); margin-bottom:.3rem; }
+  .sys ul { text-align:left; margin:.4rem 0 0; padding-left:1.1rem; }
+  .sys li { font-size:.85rem; margin:.12rem 0; }
+  .sys p { margin:.18rem 0; font-size:.86rem; text-align:left; }
+  code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.86em; }
+  .scroll { overflow-x:auto; margin:.35rem 0; }
+  table { border-collapse:collapse; font-size:.78rem; min-width:24rem; }
+  th,td { text-align:left; padding:.18rem .6rem .18rem 0; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-weight:600; }
+  .msg, .sys { scroll-margin-top:1.5rem; }
+  a.pl { color:inherit; text-decoration:none; text-underline-offset:2px;
+    text-decoration-color:var(--accent); border-radius:3px; }
+  a.pl:hover { color:var(--accent); text-decoration:underline dotted; }
+  a.pl:focus-visible { outline:1.5px solid var(--accent); outline-offset:1px; }
+  .sysday a.pl:hover { color:var(--accent); }
+  .par { display:inline-flex; align-items:center; gap:.28rem; font-size:.66rem;
+    color:var(--muted); text-decoration:none; }
+  .sys .par { margin-top:.3rem; }
+  .par:hover { color:var(--accent); }
+  .par .arw { font-size:.8rem; line-height:1; display:block;
+    transform:translateY(.045em); }
+  .par b { font-weight:650; color:inherit; }
+  .tstart { font-size:.6rem; font-weight:700; text-transform:uppercase;
+    letter-spacing:.09em; color:var(--muted); border:1px solid var(--line);
+    border-radius:4px; padding:.02rem .3rem; }
+  a.xref { color:inherit; text-decoration:underline; text-decoration-style:dotted;
+    text-underline-offset:2px; text-decoration-color:var(--accent); }
+  a.xref:hover { color:var(--accent); text-decoration-style:solid; }
+  @keyframes flash { from { box-shadow:0 0 0 3px var(--accent); }
+                     to   { box-shadow:0 0 0 3px transparent; } }
+  .msg:target .bub, .sys:target { animation:flash 1.4s ease-out 1;
+    border-color:var(--accent); }
+  /* --- reply-tree minimap: sticky structural index of the reply graph --- */
+  .mini { position:fixed; top:0; right:0; bottom:0; width:16.5rem; z-index:30;
+    background:var(--card); border-left:1px solid var(--line);
+    display:flex; flex-direction:column; }
+  .mini h3 { margin:0; padding:.55rem .7rem .4rem; font-size:.66rem; font-weight:700;
+    text-transform:uppercase; letter-spacing:.09em; color:var(--muted);
+    border-bottom:1px solid var(--line); display:flex; align-items:center; gap:.4rem; }
+  .mini h3 span.ct { margin-left:auto; font-weight:600; opacity:.75; }
+  .mini .mbody { overflow:auto; padding:.45rem .3rem .8rem; flex:1 1 auto; }
+  .mini svg { display:block; }
+  .mini .lk { fill:none; stroke:var(--line); stroke-width:1.3; }
+  .mini .lk.fk { stroke:var(--o4); stroke-width:1.6; }
+  .mini .nd circle { stroke:var(--card); stroke-width:1.4; cursor:pointer; }
+  .mini .nd.o1 circle{fill:var(--o1)} .mini .nd.o2 circle{fill:var(--o2)}
+  .mini .nd.o3 circle{fill:var(--o3)} .mini .nd.o4 circle{fill:var(--o4)}
+  .mini .nd.o5 circle{fill:var(--o5)}
+  .mini .nd.qd circle { fill:var(--card); stroke-width:1.9; }
+  .mini .nd.o1.qd circle{stroke:var(--o1)} .mini .nd.o2.qd circle{stroke:var(--o2)}
+  .mini .nd.o3.qd circle{stroke:var(--o3)} .mini .nd.o4.qd circle{stroke:var(--o4)}
+  .mini .nd.o5.qd circle{stroke:var(--o5)}
+  .mini .nd.sysn rect { fill:var(--muted); stroke:var(--card); stroke-width:1.4;
+    cursor:pointer; }
+  /* a chain start has no parent by design; the cap distinguishes that from a
+     node whose parent edge is simply absent */
+  .mini .rtcap { stroke:var(--muted); stroke-width:1.6; opacity:.85; }
+  .mini .hit { fill:transparent; cursor:pointer; }
+  .mini .hit:hover { fill:var(--quote); }
+  /* the strip is the only pointer target, so the band below it still receives
+     hover when the cursor is directly over a dot or a connector */
+  .mini .nd, .mini .lk, .mini .rtcap { pointer-events:none; }
+  .mini .nd:hover circle, .mini .nd:hover rect { stroke:var(--fg); }
+  /* the active message and its ancestry stay lit; everything else recedes */
+  .mini.spy .nd { opacity:.3; }
+  .mini.spy .nd.anc { opacity:.85; }
+  .mini.spy .nd.cur { opacity:1; }
+  .mini.spy .nd.cur circle { r:5.4; stroke:var(--fg); stroke-width:1.8; }
+  .mini.spy .lk { opacity:.35; }
+  .mini.spy .lk.anc { opacity:1; stroke:var(--accent); stroke-width:1.8; }
+  /* hover takes over the highlight; the accent ring says it is pointer-driven
+     rather than scroll-driven */
+  .mini.spy .nd.hov { opacity:1; }
+  .mini.spy .nd.hov circle { r:5.4; stroke:var(--accent); stroke-width:2.2; }
+  .mini.spy .nd.hov rect { stroke:var(--accent); stroke-width:2.2; }
+  /* reciprocal: hovering a row marks the message it points at. A ring rather
+     than a border colour, so it is unmistakable against both bubble states
+     (solid card and dashed quote) without shifting layout. */
+  .msg.mhov .bub, .sys.mhov { border-color:var(--accent);
+    box-shadow:0 0 0 2.5px var(--accent), 0 1px 8px -2px var(--accent); }
+  .mini .foot2 { border-top:1px solid var(--line); padding:.4rem .7rem .5rem;
+    font-size:.62rem; color:var(--muted); line-height:1.35; }
+  .mini .foot2 b { color:var(--fg); font-weight:650; }
+  /* Panel width lives in one variable; the toolbar and the content margin both
+     derive from it, so hiding the tree cannot leave a button stranded over it. */
+  body { --panel:0rem; padding-right:var(--panel); }
+  body.hasmap { --panel:16.5rem; }
+  body.hasmap.mapoff { --panel:0rem; }
+  .toolbar { position:fixed; top:.5rem; right:calc(var(--panel) + .6rem); z-index:31;
+    display:flex; gap:.35rem; }
+  .tbtn { font:inherit; font-size:.66rem; font-weight:700; text-transform:uppercase;
+    letter-spacing:.08em; color:var(--muted); background:var(--card);
+    border:1px solid var(--line); border-radius:6px; padding:.2rem .45rem;
+    cursor:pointer; }
+  .tbtn:hover { color:var(--accent); border-color:var(--accent); }
+  /* a toggle shows its state, rather than renaming itself each click */
+  .tbtn[aria-pressed="true"] { color:var(--accent); border-color:var(--accent);
+    background:var(--mine); }
+  body.mapoff .mini { display:none; }
+  /* the overlay costs width; below this the page is better off without it */
+  /* below this the panel costs more width than it returns; drop it and its toggle */
+  @media (max-width:1180px) {
+    body.hasmap { --panel:0rem; }
+    .mini { display:none; } #maptog { display:none; }
+  }
+  @media print { .mini, .toolbar { display:none; } body.hasmap { --panel:0rem; } }
+  /* --- chain columns: one column per reply chain, grid row = chronological
+     position, so reading down stays in time order while each chain keeps a lane --- */
+  .colhd, .spine, .chsec { display:none; }
+  body.chains .spine, body.chains .chsec { display:block; }
+  /* the spine sits under the bubbles and shows through the gaps between them, so a
+     chain reads as continuous even where other chains own the intervening rows */
+  /* align-self:stretch is load-bearing: .stream sets align-items:start, which
+     shrinks an empty grid item to zero height and leaves nothing for the line
+     to span. */
+  body.chains .spine { position:relative; align-self:stretch; pointer-events:none;
+    z-index:0; }
+  body.chains .spine::before { content:""; position:absolute; left:50%;
+    transform:translateX(-50%); top:0; bottom:0; width:2px; border-radius:1px;
+    background:color-mix(in srgb, var(--muted) 45%, transparent); }
+  /* The header is scoped to its chain's row span, which is what makes one chain's
+     header push the previous chain's out when a lane is reused — sticky is clamped
+     to its containing block, so a header spanning only its own chain cannot follow
+     the next one. */
+  body.chains .chsec { pointer-events:none; z-index:5; align-self:stretch; }
+  /* Header height is pinned rather than left to content: the clearance below it
+     is derived from the same variable, so the two cannot drift apart. Both lines
+     are single-line with explicit line-height, which is what makes it predictable. */
+  body.chains { --chdr-h:2.5rem; }
+  body.chains .chdr { position:sticky; top:0; pointer-events:auto; box-sizing:border-box;
+    height:var(--chdr-h); padding:.32rem .6rem .3rem .15rem; margin-right:1rem;
+    background:var(--bg); box-shadow:0 1px 0 var(--line), 0 6px 10px -8px var(--fg); }
+  body.chains .chdr b { display:block; font-size:.74rem; font-weight:700;
+    line-height:1.3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  body.chains .chdr span { display:block; font-size:.64rem; color:var(--muted);
+    line-height:1.3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  /* bubbles paint over the spine, and clear the floating header at a chain's start */
+  body.chains .msg, body.chains .sys { position:relative; z-index:1; }
+  /* clear the floating header, plus a gap so the first bubble is not flush to it */
+  body.chains .msg.chstart, body.chains .sys.chstart {
+    padding-top:calc(var(--chdr-h) + .75rem); }
+  /* Column mode is a workspace, not a document: drop the 76rem reading measure so
+     the scrollable grid gets the whole window (less the minimap), and keep the
+     prose blocks at a readable width. */
+  body.chains .wrap { max-width:none; padding-right:0; }
+  body.chains header.top > *, body.chains footer.end { max-width:76rem; }
+  body.chains .stream { margin-right:0; }
+  body.chains .stream {
+    display:grid; grid-template-columns:repeat(var(--nch,1), var(--cw,25rem));
+    align-items:start; gap:0 0; overflow:visible; width:max-content;
+    padding-bottom:.6rem;
+    /* alternate column tint; tied to --cw so it tracks the column width.
+       background-attachment:local so the stripes scroll with the columns rather
+       than staying pinned to the scrollport. */
+    background-attachment:local;
+    background-image:repeating-linear-gradient(to right,
+      color-mix(in srgb, var(--quote) 70%, transparent) 0 var(--cw,25rem),
+      transparent var(--cw,25rem) calc(var(--cw,25rem) * 2)); }
+  body.chains .stream > * { padding-right:1rem; }
+  body.chains .colhd { display:block; position:sticky; top:0; z-index:2;
+    padding:.35rem 1rem .4rem .15rem; margin-bottom:.35rem;
+    /* opaque: message bubbles scroll underneath it */
+    background:var(--bg); box-shadow:0 1px 0 var(--line), 0 6px 8px -8px var(--fg); }
+  body.chains .colhd b { display:block; font-size:.76rem; font-weight:700;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  body.chains .colhd span { font-size:.66rem; color:var(--muted); }
+  body.chains .sys { max-width:none; margin:.15rem 0; }
+  /* Reply arrows stay in column mode: a lane shows which CHAIN an entry belongs
+     to, never which message it answers — and inside a 27-message chain that is the
+     more useful question. What is redundant here is the thread-start chip, since
+     the chain header already names the opener. */
+  body.chains .tstart { display:none; }
+  /* Columns are narrow, so the reply link collapses to its icon; the anchor's
+     title still carries "in reply to <who>, <when>". */
+  body.chains .parlbl { display:none; }
+  body.chains .par { padding:.05rem .18rem; border:1px solid var(--line);
+    border-radius:4px; line-height:1; }
+  body.chains .par:hover { border-color:var(--accent); }
+  /* --- view transitions for the timeline <-> columns switch --- */
+  @media (prefers-reduced-motion: no-preference) {
+    ::view-transition-group(*) { animation-duration:.42s;
+      animation-timing-function:cubic-bezier(.22,.7,.2,1); }
+    ::view-transition-old(root), ::view-transition-new(root) {
+      animation-duration:.3s; }
+  }
+  /* a message that only moves should slide, not cross-fade through itself */
+  ::view-transition-old(root) { mix-blend-mode:normal; }
+  footer.end { margin-top:2rem; border-top:1px solid var(--line); padding-top:.9rem; }
+  footer.end h2 { font-size:.8rem; text-transform:uppercase; letter-spacing:.1em;
+    color:var(--muted); margin:0 0 .6rem; }
+  footer.end ul { margin:0; padding-left:1.15rem; }
+  footer.end li { margin:.2rem 0; font-size:.89rem; }

@@ -1,0 +1,11 @@
+node_modules/
+dist/
+out/
+*.local
+.DS_Store
+
+# Real mail trails are sensitive: only synthetic fixtures are ever committed.
+# Drop real specs at fixtures/local.json (or any other name) — untracked by default.
+fixtures/*
+!fixtures/synthetic.json
+!fixtures/minimal.json

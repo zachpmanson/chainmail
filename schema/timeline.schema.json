@@ -1,0 +1,142 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/zachpmanson/chainmail/schema/timeline.schema.json",
+  "title": "Timeline",
+  "description": "One email trail, unspooled out of its threads and forwards into a single chronological transcript. Produced by a collector (e.g. the mail-timeline skill); consumed by the chainmail renderer.",
+  "type": "object",
+  "required": ["title", "messages"],
+  "additionalProperties": false,
+  "properties": {
+    "specVersion": {
+      "type": "integer",
+      "description": "Contract version. Absent means 1.",
+      "default": 1
+    },
+    "title": {
+      "type": "string",
+      "description": "Page title. A leading # renders as a channel-style hash."
+    },
+    "subtitle": { "type": "string", "description": "One or two sentences. Provenance belongs in queries/threads/sourceNotes, not here." },
+    "runLabel": { "type": "string", "description": "Names this collection pass, e.g. 'pass 2, 20 Aug 2026'." },
+    "runs": { "type": "array", "items": { "type": "string" }, "description": "Labels of every pass so far, oldest first." },
+    "theme": { "enum": ["light", "dark", "auto"], "default": "light" },
+    "openItemsTitle": { "type": "string", "default": "Still open" },
+    "openItems": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Unresolved questions, commitments and ownerless decisions. HTML permitted; cross-links encouraged."
+    },
+    "avatars": {
+      "type": "object",
+      "description": "Sender name -> image (data: URI or URL). Keys must match Message.sender exactly.",
+      "additionalProperties": { "type": "string" }
+    },
+    "participants": {
+      "type": "array",
+      "description": "The full cast, including people who only ever appear as recipients.",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "org": { "type": "string" },
+          "email": { "type": "string", "description": "Omit when no address appears anywhere in the trail. Never guess one." },
+          "role": { "type": "string" },
+          "note": { "type": "string", "description": "Use instead of role for cc-only people and aliases." }
+        }
+      }
+    },
+    "queries": {
+      "type": "array",
+      "description": "Searches run, so a null result is interpretable.",
+      "items": {
+        "oneOf": [
+          { "type": "string" },
+          {
+            "type": "object",
+            "required": ["q"],
+            "additionalProperties": false,
+            "properties": { "q": { "type": "string" }, "note": { "type": "string" } }
+          }
+        ]
+      }
+    },
+    "threads": {
+      "type": "array",
+      "description": "Mail threads the transcript was assembled from.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "subject": { "type": "string" },
+          "id": { "type": "string", "description": "Gmail thread or message id; links out." },
+          "count": { "type": "integer" },
+          "span": { "type": "string" },
+          "note": { "type": "string" }
+        }
+      }
+    },
+    "sourceNotes": {
+      "type": "array",
+      "description": "Provenance caveats: avatar sources, unrecoverable addresses, truncation.",
+      "items": {
+        "type": "object",
+        "required": ["title", "items"],
+        "additionalProperties": false,
+        "properties": {
+          "title": { "type": "string" },
+          "items": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "messages": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/Entry" }
+    }
+  },
+  "definitions": {
+    "Entry": {
+      "type": "object",
+      "required": ["date", "body"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "enum": ["message", "note"], "default": "message", "description": "'note' is a meeting or event that never existed as an email." },
+        "id": { "type": "string", "description": "Stable anchor. Omit to derive from date+time+sender; content-derived ids survive inserting entries mid-trail." },
+        "date": { "type": "string", "description": "As displayed, e.g. 'Thu 16 Jul 2026'. Not normalised." },
+        "time": { "type": "string", "description": "As displayed, e.g. '11:35'. Absent for undated notes." },
+        "tz": { "type": "string", "description": "Zone the source stated, e.g. 'NZST', '+0530'. Drives absolute-time ordering; omit rather than guess." },
+        "sender": { "type": "string" },
+        "org": { "type": "string", "description": "Drives colour, assigned in first-appearance order." },
+        "fromEmail": { "type": "string" },
+        "to": { "type": "string", "description": "Free text as it appeared, including 'cc ...'." },
+        "subject": { "type": "string", "description": "Names the chain when this entry opens one. Capture it during collection." },
+        "label": { "type": "string", "description": "Notes only: what the meeting was." },
+        "body": { "type": "string", "description": "Trusted HTML. <p>, <ul>, <b>, <code>, <p class=\"ed\"> for editorial gloss, <a class=\"xref\"> for cross-links." },
+        "quoted": { "type": "boolean", "description": "Reconstructed from quoted text; never existed as a standalone message here." },
+        "me": { "type": "boolean", "description": "The reader's own outbound." },
+        "source": { "type": "string", "description": "Where it came from: a Gmail id, or 'unspooled from the 2 Aug email'." },
+        "gmailId": { "type": "string" },
+        "threadId": { "type": "string" },
+        "parent": { "type": "string", "description": "Id of the entry this replies to. Absent means it opens a chain. Coverage here drives ordering, lanes and the reply tree." },
+        "meta": { "type": "boolean", "description": "Meeting scheduling exhaust (invitation, notes, accept/decline). Forces the classification the renderer would otherwise infer." },
+        "mentions": { "type": "array", "items": { "type": "string" } },
+        "attachments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string" },
+              "kind": { "type": "string" },
+              "size": { "type": "string" },
+              "gmailId": { "type": "string", "description": "Links to the message in Gmail. Only ever present on real messages." }
+            }
+          }
+        }
+      }
+    }
+  }
+}
