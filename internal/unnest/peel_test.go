@@ -147,9 +147,21 @@ func TestPeelRecoversAtLeastTheCensusCount(t *testing.T) {
 				t.Errorf("recovered %d attribution boundaries, census floor is %d",
 					attributions, f.Stats.Attr)
 			}
-			// A body with any quoting at all must yield more than one block.
-			if f.Stats.Attr+f.Stats.Fwd+f.Stats.Begin > 0 && len(blocks) < 2 {
-				t.Errorf("body has sentinels but produced %d block(s)", len(blocks))
+			// A body with any quoting at all must yield at least one block that
+			// carries a sentinel. NOT "more than one block": a bare forward — hit
+			// Forward, add no comment, send — has no visible part above the
+			// boundary, so one sentinel-bearing block is the whole message and the
+			// right answer. 15 of 866 fixtures are that shape, almost all outgoing.
+			if f.Stats.Attr+f.Stats.Fwd+f.Stats.Begin > 0 {
+				var withSentinel int
+				for _, b := range blocks {
+					if b.Sentinel != "" {
+						withSentinel++
+					}
+				}
+				if withSentinel == 0 {
+					t.Errorf("body has sentinels but no block carries one (%d blocks)", len(blocks))
+				}
 			}
 		})
 	}
