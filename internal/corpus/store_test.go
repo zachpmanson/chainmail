@@ -250,3 +250,48 @@ func TestSightingsRecordEveryPlaceSeen(t *testing.T) {
 		t.Fatalf("sightings: got %d, want 2", n)
 	}
 }
+
+// FTS5 external-content indexes corrupt on a DOUBLE retraction: deleting terms
+// that were already deleted fails with "database disk image is malformed". Put's
+// delete is therefore guarded on the row having existed. This walks many edits
+// and checks the index stays sound, since the failure only shows up later.
+func TestRepeatedEditsKeepTheIndexSound(t *testing.T) {
+	s := open(t)
+	bodies := []string{
+		"Confirming the levy on invoice CINV-00066864",
+		"Rescheduled the site visit",
+		"Confirming the levy again on CINV-00066864",
+		"Nothing further",
+		"Confirming the levy a third time",
+	}
+	for i, b := range bodies {
+		e := entry("mail:<a@x>", b)
+		e.Subject = "June billing"
+		if _, err := s.Put(e, nil, nil); err != nil {
+			t.Fatalf("edit %d: %v", i, err)
+		}
+		for _, tbl := range []string{"entries_fts", "entries_ident"} {
+			if _, err := s.DB().Exec(
+				`insert into ` + tbl + `(` + tbl + `) values ('integrity-check')`); err != nil {
+				t.Fatalf("edit %d left %s corrupt: %v", i, tbl, err)
+			}
+		}
+	}
+
+	// only the final body should be findable
+	var n int
+	if err := s.DB().QueryRow(
+		`select count(*) from entries_fts where entries_fts match 'levy'`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("match 'levy' after final edit: got %d, want 1", n)
+	}
+	if err := s.DB().QueryRow(
+		`select count(*) from entries_ident where entries_ident match '00066864'`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("removed identifier still indexed: %d hits", n)
+	}
+}
