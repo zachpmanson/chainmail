@@ -1,0 +1,17 @@
+{
+ "fixtures": [
+  "wrapped-attribution-deep",
+  "wrapped-attribution-deep-2",
+  "wrapped-attribution-deep-3",
+  "apple-begin-forwarded",
+  "apple-begin-forwarded-2",
+  "outlook-original-message",
+  "outlook-original-message-2",
+  "multiple-forward-rules",
+  "multiple-forward-rules-2",
+  "many-header-blocks",
+  "several-attributions",
+  "several-attributions-2",
+  "flat-no-quoting-control"
+ ]
+}

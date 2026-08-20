@@ -1,0 +1,145 @@
+"""Anonymise harvested mail into committable fixtures.
+
+Structure is preserved exactly — quote markers and their depth, sentinel lines,
+where an attribution wraps, header-block shape, blank lines, CRLF. Only identities
+and prose are replaced, because structure is what the extractor is tested on and
+prose is what carries the confidential content.
+"""
+import json, re, hashlib, random
+
+S = "/private/tmp/claude-501/-Users-zach-projects-monorepo/07f4cc2a-4553-490d-a795-03cef6faed4a/scratchpad"
+picked = json.load(open(f"{S}/harvest/picked.json"))
+
+CAST = ["Jean-Luc Picard","William Riker","Beverly Crusher","Geordi La Forge",
+        "Deanna Troi","Tasha Yar","Noonien Soong","Bruce Maddox","Leah Brahms",
+        "Orfil Quinteros","Reginald Barclay","Miles OBrien","Alyssa Ogawa",
+        "Ro Laren","Katherine Pulaski","Selar Vex","Tam Elbrun","Nella Daren"]
+DOMAINS = ["starfleet.fed","daystrom.fed","utopia-planitia.fed","vulcan.fed"]
+FILLER = ("the telemetry export the berth registry the levy column the sensor "
+          "readings the statement run the fellow number the settlement window "
+          "the reconciliation the manifest the shipment record the audit trail").split()
+
+people, domains, locals_ = {}, {}, {}
+def person(raw):
+    key = raw.strip().lower()
+    if key not in people:
+        people[key] = CAST[len(people) % len(CAST)] + ("" if len(people) < len(CAST) else str(len(people)))
+    return people[key]
+def domain(raw):
+    key = raw.lower()
+    if key not in domains: domains[key] = DOMAINS[len(domains) % len(DOMAINS)]
+    return domains[key]
+def addr(raw):
+    key = raw.strip().lower()
+    if key not in locals_:
+        name = person(key).lower().replace(" ", ".").replace("-", "")
+        at = key.rsplit("@", 1)
+        locals_[key] = f"{name}@{domain(at[1]) if len(at)>1 else DOMAINS[0]}"
+    return locals_[key]
+
+reEmail = re.compile(r'[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}')
+reMailto = re.compile(r'<mailto:[^>]*>')
+reURL = re.compile(r'https?://[^\s>\]]+')
+rePhone = re.compile(r'(?<!\d)(?:\+?\d[\d\s\-()]{7,}\d)(?!\d)')
+reMoney = re.compile(r'[$£€]\s?\d[\d,]*(?:\.\d+)?')
+reLongNum = re.compile(r'\b\d{6,}\b')
+
+# lines whose SHAPE must survive verbatim (minus identities)
+reHdrKey = re.compile(r'(?i)^\*?(from|sent|to|subject|cc|bcc|date|reply-to)\*?\s*:')
+reAttrLine = re.compile(r'(?i)(?:^(?:on|le|el|il|em|am|op|den)\b|\bwrote:\s*$)')
+reRule = re.compile(r'^([-_*]{4,}|-{2,}\s?forwarded message\s?-{2,}|-{3,}\s?original message\s?-{3,}|begin forwarded message\s*:)', re.I)
+reSig = re.compile(r'^-- $')
+reSubjectLine = re.compile(r'(?i)^(\*?subject\*?\s*:\s*(?:(?:re|fw|fwd|aw|sv|tr)\s*:\s*)*)(\*?)(.*)$')
+reDepth = re.compile(r'^([ \t]*(?:>[ \t]*)*)(.*)$')
+
+rePair = re.compile(r'([^<>@\n,;0-9]{2,45}?)\s*<\s*([A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,})\s*>')
+
+def _pair(m):
+    lead = m.group(1)
+    keep = lead[: len(lead) - len(lead.lstrip())]   # preserve leading whitespace
+    return f"{keep}{person(m.group(2))} <{addr(m.group(2))}>"
+
+def scrub_identities(s):
+    s = reMailto.sub("", s)
+    s = rePair.sub(_pair, s)          # pairs first, so name and address agree
+    s = reEmail.sub(lambda m: addr(m.group(0)), s)
+    s = reURL.sub("https://example.fed/x", s)
+    s = rePhone.sub("+61 4 0000 0000", s)
+    s = reMoney.sub("$0.00", s)
+    s = reLongNum.sub(lambda m: "9"*len(m.group(0)), s)
+    return s
+
+def names_in(s):
+    # "Firstname Lastname" runs, so display names in sentinel lines get mapped too
+    return re.findall(r'\b[A-Z][a-z]{1,15}(?:\s+[A-Z][a-z\'\-]{1,15}){1,2}\b', s)
+
+def scrub_names(s, keep_words):
+    for n in names_in(s):
+        if n.split()[0].lower() in keep_words: continue
+        s = s.replace(n, person(n))
+    return s
+
+KEEP = {"on","le","el","il","em","am","op","den","from","sent","to","subject","cc",
+        "date","begin","original","forwarded","message","mon","tue","wed","thu",
+        "fri","sat","sun","jan","feb","mar","apr","may","jun","jul","aug","sep",
+        "sept","oct","nov","dec","monday","tuesday","wednesday","thursday",
+        "friday","saturday","sunday","january","february","march","april","june",
+        "july","august","september","october","november","december","get","sent"}
+
+def filler_like(text, seed):
+    rnd = random.Random(seed)
+    words = text.split()
+    if not words: return text
+    out = [rnd.choice(FILLER) for _ in words]
+    s = " ".join(out)
+    if text.rstrip().endswith((".", ":", "?", "!")): s += text.rstrip()[-1]
+    return s
+
+def anonymise_body(body):
+    crlf = "\r\n" in body
+    lines = body.replace("\r\n", "\n").split("\n")
+    out = []
+    for i, raw in enumerate(lines):
+        m = reDepth.match(raw)
+        prefix, text = m.group(1), m.group(2)
+        stripped = text.strip()
+        if stripped == "":
+            out.append(prefix.rstrip() if prefix.strip() else "")
+            continue
+        structural = bool(reHdrKey.match(stripped) or reAttrLine.search(stripped)
+                          or reRule.match(stripped) or reSig.match(text))
+        if structural:
+            # keep the shape; replace only identities and display names
+            t = scrub_identities(text)
+            t = scrub_names(t, KEEP)
+            # A Subject: line is structural — the key and its Re:/FW: prefix chain
+            # are what the parser tests — but the subject TEXT is content and
+            # routinely names companies, so it is replaced like any prose.
+            ms = reSubjectLine.match(t)
+            if ms:
+                t = ms.group(1) + filler_like(ms.group(3), f"subj{i}")
+            out.append(prefix + t)
+        else:
+            t = scrub_identities(text)
+            t = filler_like(t, f"{i}:{hashlib.sha1(text.encode()).hexdigest()[:8]}")
+            out.append(prefix + t)
+    body = "\n".join(out)
+    return body.replace("\n", "\r\n") if crlf else body
+
+fixtures = []
+for p in picked:
+    m = p["msg"]
+    fx = {
+        "role": p["role"],
+        "from": scrub_names(scrub_identities(m.get("from","")), KEEP),
+        "to": scrub_names(scrub_identities(m.get("to","")), KEEP),
+        "cc": scrub_names(scrub_identities(m.get("cc","")), KEEP),
+        "subject": filler_like(scrub_identities(m.get("subject","")), "subj"+p["id"]),
+        "date": m.get("date",""),
+        "body": anonymise_body(m["body"]),
+        "stats": {k: p[k] for k in ("attr","wrapped","hdr","fwd","begin","orig","max_depth")},
+    }
+    fixtures.append(fx)
+json.dump(fixtures, open(f"{S}/harvest/anon.json","w"), indent=1)
+print(f"anonymised {len(fixtures)} fixtures")
+print(f"identities mapped: {len(people)} people, {len(locals_)} addresses, {len(domains)} domains")
