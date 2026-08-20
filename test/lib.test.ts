@@ -152,3 +152,24 @@ describe.skipIf(!existsSync(LOCAL))("a real trail (local only)", () => {
     }
   });
 });
+
+describe("spec url resolution", () => {
+  it("tries the served path before the /@fs route", async () => {
+    const { candidates } = await import("../src/lib/loadSpec");
+    expect(candidates("/synthetic.json")).toEqual(["/synthetic.json", "/@fs/synthetic.json"]);
+    expect(candidates("synthetic.json")).toEqual(["/synthetic.json", "/@fs/synthetic.json"]);
+  });
+
+  it("passes through absolute urls and /@fs paths untouched", async () => {
+    const { candidates } = await import("../src/lib/loadSpec");
+    expect(candidates("https://x.test/s.json")).toEqual(["https://x.test/s.json"]);
+    expect(candidates("/@fs/tmp/s.json")).toEqual(["/@fs/tmp/s.json"]);
+  });
+
+  it("expands a leading ~", async () => {
+    const { candidates } = await import("../src/lib/loadSpec");
+    const got = candidates("~/Downloads/s.json");
+    expect(got.some((c) => c.endsWith("/Downloads/s.json"))).toBe(true);
+    expect(got.every((c) => !c.includes("~"))).toBe(true);
+  });
+});

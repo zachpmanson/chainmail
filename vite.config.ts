@@ -1,11 +1,24 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { homedir } from "node:os";
 
-// The dev server is for iterating on the view against a fixture spec.
-// Shipping artifacts are produced by `npm run render` (see scripts/render.tsx),
-// which server-renders a spec to one self-contained HTML file.
+// The dev server is for iterating on the view against a spec on disk.
+// Shipping artifacts come from `npm run render` (scripts/render.tsx), which
+// server-renders a spec to one self-contained HTML file.
 export default defineConfig({
   plugins: [react()],
-  server: { open: "/?spec=/synthetic.json" },
   publicDir: "fixtures",
+  define: {
+    // lets the client expand a leading ~ in ?spec=
+    __HOME__: JSON.stringify(homedir()),
+  },
+  server: {
+    open: "/?spec=/synthetic.json",
+    fs: {
+      // Absolute paths passed as ?spec= are fetched through Vite's /@fs/ route,
+      // which refuses anything outside this allow-list. Scoped to the home
+      // directory: specs are personal files, and this server is localhost-only.
+      allow: [process.cwd(), homedir()],
+    },
+  },
 });

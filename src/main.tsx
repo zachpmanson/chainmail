@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { StrictMode, useEffect, useState } from "react";
 import { Timeline } from "./components/Timeline";
+import { loadSpec } from "./lib/loadSpec";
 import { normalise } from "./lib/normalise";
 import type { Timeline as Spec } from "./lib/spec";
 import "./styles.css";
@@ -11,11 +12,10 @@ function App() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const url = new URLSearchParams(location.search).get("spec") ?? "/synthetic.json";
-    fetch(url)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`${r.status} ${url}`))))
-      .then((j) => setSpec(normalise(j)))
-      .catch((e) => setError(String(e)));
+    const param = new URLSearchParams(location.search).get("spec") ?? "synthetic.json";
+    loadSpec(param)
+      .then(setSpec)
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   }, []);
 
   useEffect(() => {
@@ -33,7 +33,13 @@ function App() {
     return () => { removeEventListener("drop", onDrop); removeEventListener("dragover", stop); };
   }, []);
 
-  if (error) return <pre style={{ padding: "2rem", color: "crimson" }}>{error}{"\n\nDrop a spec JSON onto the page."}</pre>;
+  if (error)
+    return (
+      <pre style={{ padding: "2rem", whiteSpace: "pre-wrap", color: "crimson" }}>
+        {error}
+        {"\n\nOr drop a spec JSON onto the page."}
+      </pre>
+    );
   if (!spec) return <p style={{ padding: "2rem", opacity: 0.6 }}>Loading spec…</p>;
   return <Timeline spec={spec} />;
 }
