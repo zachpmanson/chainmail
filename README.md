@@ -76,6 +76,17 @@ The two fields that carry the most weight:
 
 ## Development
 
+A flake provides the toolchain, pinned to the same nixpkgs channel as the machine
+config so it does not drift a release ahead of the system:
+
+```bash
+nix develop          # node 22, npm, typescript-language-server
+direnv allow         # or enter it automatically on cd
+```
+
+Nix supplies the toolchain only; JS dependencies still come from `npm install`
+against the committed lockfile.
+
 ```bash
 npm install
 npm run dev        # vite, against fixtures/synthetic.json
