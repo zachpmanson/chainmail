@@ -36,15 +36,25 @@ export function attach(doc: Document = document): () => void {
     return { btn, set, isOn: () => body.classList.contains(cls) };
   };
 
-  // the tree is shown by default, so its class marks the *hidden* state
-  const treeCtl = toggle("maptog", "mapoff", "cm-tree", false);
-  if (treeCtl) {
-    treeCtl.btn.setAttribute("aria-pressed", body.classList.contains("mapoff") ? "false" : "true");
-    on(treeCtl.btn, "click", () => {
-      const hidden = body.classList.toggle("mapoff");
-      treeCtl.btn.setAttribute("aria-pressed", hidden ? "false" : "true");
-      try { localStorage.setItem("cm-tree", hidden ? "1" : "0"); } catch { /* ignore */ }
-    });
+  /**
+   * Panels are shown by default, so the body class marks the HIDDEN state and the
+   * button's pressed state is its inverse. One table rather than three near-copies.
+   */
+  const HIDEABLE: Array<[btn: string, cls: string, key: string]> = [
+    ["maptog", "mapoff", "cm-tree"],
+  ];
+  for (const [id, cls, key] of HIDEABLE) {
+    const btn = doc.getElementById(id) as HTMLButtonElement | null;
+    if (!btn) continue;
+    const apply = (hidden: boolean) => {
+      body.classList.toggle(cls, hidden);
+      btn.setAttribute("aria-pressed", hidden ? "false" : "true");
+      try { localStorage.setItem(key, hidden ? "1" : "0"); } catch { /* private mode */ }
+    };
+    let stored: string | null = null;
+    try { stored = localStorage.getItem(key); } catch { /* ignore */ }
+    apply(stored === "1");
+    on(btn, "click", () => apply(!body.classList.contains(cls)));
   }
 
   const viewCtl = toggle("viewtog", "chains", "cm-view", false);
@@ -71,6 +81,44 @@ export function attach(doc: Document = document): () => void {
 
   let spyId: string | null = null;
   let hovId: string | null = null;
+  let hovChain: string | null = null;
+
+  /** Chain root of a node, by walking the reply graph the minimap already carries. */
+  const rootCache = new Map<string, string>();
+  const rootOf = (id: string): string => {
+    const hit = rootCache.get(id);
+    if (hit) return hit;
+    let cur = id;
+    const seen = new Set<string>();
+    for (;;) {
+      const p = parentOf.get(cur);
+      if (!p || seen.has(cur)) break;
+      seen.add(cur);
+      cur = p;
+    }
+    rootCache.set(id, cur);
+    return cur;
+  };
+
+  const lightChain = (root: string) => {
+    if (!mini) return;
+    const members = new Set(nodes.filter((n) => rootOf(n.dataset.id!) === root)
+      .map((n) => n.dataset.id!));
+    for (const n of nodes) {
+      n.classList.remove("cur", "hov", "anc");
+      n.classList.toggle("chn", members.has(n.dataset.id!));
+    }
+    for (const l of links) {
+      l.classList.remove("anc");
+      l.classList.toggle("chn", members.has(l.dataset.c!));
+    }
+    mini.classList.add("spy");
+  };
+
+  const clearChain = () => {
+    for (const n of nodes) n.classList.remove("chn");
+    for (const l of links) l.classList.remove("chn");
+  };
 
   const light = (id: string, hover: boolean) => {
     if (!mini) return;
@@ -94,7 +142,11 @@ export function attach(doc: Document = document): () => void {
       }
     }
   };
+  // hovering a chain in the sources panel outranks both the pointer and the
+  // scroll position, since it is the most explicit thing the reader asked for
   const refresh = () => {
+    if (hovChain) { lightChain(hovChain); return; }
+    clearChain();
     const id = hovId ?? spyId;
     if (id) light(id, hovId !== null);
   };
@@ -114,6 +166,15 @@ export function attach(doc: Document = document): () => void {
         if (hovId === id) { hovId = null; refresh(); }
       });
     }
+  }
+
+  /* ---------- hovering a chain row in the sources panel ---------- */
+  for (const row of doc.querySelectorAll<HTMLElement>("[data-chain]")) {
+    const root = row.dataset.chain!;
+    on(row, "mouseenter", () => { hovChain = root; refresh(); });
+    on(row, "mouseleave", () => {
+      if (hovChain === root) { hovChain = null; refresh(); }
+    });
   }
 
   /* ---------- scroll-spy + hovering a message ---------- */

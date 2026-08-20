@@ -48,7 +48,7 @@ export function ParticipantsPanel({ v }: { v: View }) {
   }
 
   return (
-    <details className="pan" open>
+    <details className="pan people" open>
       <summary>Participants ({people.length})</summary>
       <div className="pbody">
         <div className="who">
@@ -89,10 +89,78 @@ export function ParticipantsPanel({ v }: { v: View }) {
   );
 }
 
-/** Everything the page was built from: searches, threads, attachments, caveats. */
-export function SourcesPanel({ v }: { v: View }) {
+export interface ChainFilter {
+  /** every chain in the unfiltered trail, so excluded ones stay listed */
+  chains: {
+    root: string;
+    subject?: string;
+    opener: string;
+    date: string;
+    count: number;
+    /** mailbox id of the chain's thread, where any entry in it names one */
+    gmailId?: string;
+    /** anchor of the chain's first entry, for jumping to it in the page */
+    anchor: string;
+  }[];
+  /** chain roots currently excluded from the view */
+  excluded: Set<string>;
+  onToggle: (root: string) => void;
+}
+
+/**
+ * Everything the page was built from: chains, searches, threads, attachments,
+ * caveats. When a filter is supplied, each chain gets a checkbox — a trail often
+ * picks up a thread that turns out not to belong, and dropping it should re-lay
+ * the page rather than just blank out rows.
+ */
+export function SourcesPanel({ v, filter }: { v: View; filter?: ChainFilter }) {
   const s: Spec = v.spec;
   const groups: { title: string; items: React.ReactNode[] }[] = [];
+
+  if (filter) {
+    groups.push({
+      title: `Chains (${filter.chains.length})`,
+      items: filter.chains.map((c) => (
+        <label className="chk" key={c.root} data-chain={c.root}>
+          <input
+            type="checkbox"
+            checked={!filter.excluded.has(c.root)}
+            onChange={() => filter.onToggle(c.root)}
+          />
+          <span>
+            {c.subject ?? c.opener}
+            {c.gmailId ? (
+              <>
+                {" "}
+                <a
+                  className="srclink"
+                  href={`https://mail.google.com/mail/u/0/#all/${c.gmailId}`}
+                  target="_blank"
+                  rel="noopener"
+                  title="Open this thread in Gmail"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  mail
+                </a>
+              </>
+            ) : null}{" "}
+            <a
+              className="srclink"
+              href={`#${c.anchor}`}
+              title="Jump to the start of this chain"
+              onClick={(e) => e.stopPropagation()}
+            >
+              start
+            </a>
+            <span className="note">
+              {" "}
+              — {c.opener}, {c.date} · {c.count} message{c.count === 1 ? "" : "s"}
+            </span>
+          </span>
+        </label>
+      )),
+    });
+  }
 
   if (s.queries?.length) {
     groups.push({
@@ -166,18 +234,22 @@ export function SourcesPanel({ v }: { v: View }) {
 
   if (!groups.length) return null;
   return (
-    <details className="pan">
+    <details className="pan sources">
       <summary>Sources &amp; provenance</summary>
       <div className="pbody">
         {groups.map((g) => (
-          <div className="srcgrp" key={g.title}>
-            <div className="srch">{g.title}</div>
+          // each group collapses on its own: the titles carry counts, so a closed
+          // group still tells you what is in it
+          <details className="srcgrp" key={g.title} open>
+            <summary>
+              <span className="srch">{g.title}</span>
+            </summary>
             <ul>
               {g.items.map((it, i) => (
                 <li key={i}>{it}</li>
               ))}
             </ul>
-          </div>
+          </details>
         ))}
       </div>
     </details>

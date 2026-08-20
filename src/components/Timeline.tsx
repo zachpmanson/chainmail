@@ -1,7 +1,7 @@
 import type { Entry } from "../lib/spec";
 import { derive, initials, type Row, type View } from "../lib/derive";
 import type { Timeline as Spec } from "../lib/spec";
-import { DiffPanel, Legend, ParticipantsPanel, SourcesPanel } from "./Panels";
+import { DiffPanel, Legend, ParticipantsPanel, SourcesPanel, type ChainFilter } from "./Panels";
 import { Minimap } from "./Minimap";
 
 const html = (s: string) => ({ __html: s });
@@ -186,9 +186,13 @@ export interface TimelineProps {
   /** entry id -> what changed since a previous render, from `--since` */
   marks?: Map<string, "new" | "revised">;
   prevLabel?: string;
+  /** supplied by the app; absent in the static export, which cannot re-derive */
+  filter?: ChainFilter;
+  /** app-only: the static export has no place to put an interactive panel */
+  onShowSpec?: () => void;
 }
 
-export function Timeline({ spec, marks, prevLabel }: TimelineProps) {
+export function Timeline({ spec, marks, prevLabel, filter, onShowSpec }: TimelineProps) {
   const v = derive(spec);
   const s = v.spec;
   return (
@@ -197,6 +201,10 @@ export function Timeline({ spec, marks, prevLabel }: TimelineProps) {
       <div className="toolbar">
         <button className="tbtn" id="viewtog" type="button" aria-pressed="false"
                 aria-label="Chain columns view">columns</button>
+        {onShowSpec ? (
+          <button className="tbtn" id="spectog" type="button" onClick={onShowSpec}
+                  aria-label="Show the spec as JSON">json</button>
+        ) : null}
         <button className="tbtn" id="maptog" type="button" aria-pressed="true"
                 aria-label="Reply tree panel">tree</button>
       </div>
@@ -221,7 +229,7 @@ export function Timeline({ spec, marks, prevLabel }: TimelineProps) {
         <Legend />
         <ParticipantsPanel v={v} />
         {marks ? <DiffPanel v={v} marks={marks} prevLabel={prevLabel ?? "the previous run"} /> : null}
-        <SourcesPanel v={v} />
+        <SourcesPanel v={v} filter={filter} />
       </header>
       <div className="stream" id="stream" style={{ ["--nch" as string]: v.layout.laneCount }}>
         <Chains v={v} />

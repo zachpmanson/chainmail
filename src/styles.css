@@ -62,10 +62,38 @@
   .srcgrp:first-child { margin-top:.15rem; }
   .srch { font-size:.66rem; text-transform:uppercase; letter-spacing:.09em; color:var(--muted);
     font-weight:700; margin:0 0 .2rem; }
+  .srcgrp > summary { cursor:pointer; list-style:none; display:flex;
+    align-items:center; gap:.3rem; margin:0 0 .2rem; }
+  .srcgrp > summary::-webkit-details-marker { display:none; }
+  .srcgrp > summary::before { content:""; display:inline-block; width:0; height:0;
+    border:.25em solid transparent; border-left-color:currentColor;
+    transition:transform .12s; }
+  .srcgrp[open] > summary::before { transform:rotate(90deg); }
+  .srcgrp > summary:hover { color:var(--accent); }
+  .srcgrp > summary .srch { margin:0; }
   .srcgrp ul { margin:0; padding-left:1.1rem; }
   .srcgrp li { font-size:.78rem; margin:.12rem 0; }
   .srcgrp li .qy { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.9em; }
   .srcgrp li .note { color:var(--muted); font-size:.92em; }
+  .chk { display:flex; align-items:flex-start; gap:.4rem; cursor:pointer; }
+  .chk input { margin:.15rem 0 0; accent-color:var(--accent); flex:0 0 auto; }
+  .chk:hover { color:var(--accent); }
+  a.srclink { font-size:.66rem; text-transform:uppercase; letter-spacing:.06em;
+    font-weight:700; color:var(--muted); text-decoration:none;
+    border:1px solid var(--line); border-radius:4px; padding:0 .25rem;
+    white-space:nowrap; }
+  a.srclink:hover { color:var(--accent); border-color:var(--accent); }
+  /* spec viewer: sits above everything, including the fixed minimap and toolbar */
+  .specview { position:fixed; inset:0; z-index:60; background:var(--bg);
+    display:flex; flex-direction:column; }
+  .specbar { display:flex; align-items:center; gap:.6rem; padding:.5rem .8rem;
+    border-bottom:1px solid var(--line); background:var(--card); }
+  .specbar b { font-size:.72rem; font-weight:700; text-transform:uppercase;
+    letter-spacing:.09em; color:var(--muted); }
+  .specbar .note { font-size:.7rem; color:var(--muted); margin-right:auto; }
+  .specpre { margin:0; flex:1 1 auto; overflow:auto; padding:.9rem 1rem 2rem;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.72rem;
+    line-height:1.5; tab-size:2; white-space:pre; color:var(--fg); }
   .srcgrp a { color:inherit; text-decoration-color:var(--accent); text-underline-offset:2px; }
   .srcgrp a:hover { color:var(--accent); }
   .newpill { font-size:.6rem; font-weight:800; text-transform:uppercase; letter-spacing:.09em;
@@ -205,6 +233,11 @@
   .mini.spy .nd.anc { opacity:.85; }
   .mini.spy .nd.cur { opacity:1; }
   .mini.spy .nd.cur circle { r:5.4; stroke:var(--fg); stroke-width:1.8; }
+  /* a whole chain lit from the sources panel, distinct from an ancestry trace */
+  .mini.spy .nd.chn { opacity:1; }
+  .mini.spy .nd.chn circle, .mini.spy .nd.chn rect { stroke:var(--accent);
+    stroke-width:2; }
+  .mini.spy .lk.chn { opacity:1; stroke:var(--accent); stroke-width:1.8; }
   .mini.spy .lk { opacity:.35; }
   .mini.spy .lk.anc { opacity:1; stroke:var(--accent); stroke-width:1.8; }
   /* hover takes over the highlight; the accent ring says it is pointer-driven

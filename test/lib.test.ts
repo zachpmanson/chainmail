@@ -171,3 +171,38 @@ describe("interlinking", () => {
     expect(parents.filter((p) => !ids.has(p))).toEqual([]);
   });
 });
+
+describe("chain filtering", () => {
+  it("re-derives lanes after a chain is excluded", () => {
+    const t = load("synthetic");
+    const idOf0 = withIds(t.messages);
+    const full = layout(order(t.messages, idOf0), idOf0);
+    expect(full.chains).toHaveLength(7);
+    expect(full.laneCount).toBe(4);
+
+    // drop the largest chain and re-derive from scratch
+    const biggest = full.chains.reduce((a, b) => (a.entries.length > b.entries.length ? a : b));
+    const kept = t.messages.filter((e) => full.chainOf.get(idOf0(e)) !== biggest.root);
+    expect(kept).toHaveLength(t.messages.length - biggest.entries.length);
+
+    const idOf1 = withIds(kept);
+    const after = layout(order(kept, idOf1), idOf1);
+    expect(after.chains).toHaveLength(6);
+    expect(after.laneCount).toBeLessThanOrEqual(full.laneCount);
+    // rows must still be a contiguous run, not the old numbering with gaps
+    const rows = [...after.row.values()].sort((a, b) => a - b);
+    expect(rows).toEqual(rows.map((_, i) => i + 2));
+  });
+
+  it("keeps every remaining entry's parent inside the kept set", () => {
+    const t = load("synthetic");
+    const idOf0 = withIds(t.messages);
+    const full = layout(order(t.messages, idOf0), idOf0);
+    for (const drop of full.chains) {
+      const kept = t.messages.filter((e) => full.chainOf.get(idOf0(e)) !== drop.root);
+      const ids = new Set(kept.map((e) => idOf0(e)));
+      // excluding whole chains can never orphan a parent
+      expect(kept.filter((e) => e.parent && !ids.has(e.parent))).toEqual([]);
+    }
+  });
+});

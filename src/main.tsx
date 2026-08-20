@@ -1,7 +1,9 @@
 import { createRoot } from "react-dom/client";
-import { StrictMode, useEffect, useState } from "react";
+import { StrictMode, useEffect, useMemo, useState } from "react";
 import { Timeline } from "./components/Timeline";
 import { attach } from "./client/behaviour";
+import { derive } from "./lib/derive";
+import { SpecView } from "./components/SpecView";
 import { loadSpec } from "./lib/loadSpec";
 import { normalise } from "./lib/normalise";
 import type { Timeline as Spec } from "./lib/spec";
@@ -45,16 +47,86 @@ function App() {
   return <Rendered spec={spec} />;
 }
 
-/** Attach the shared behaviour module once the transcript is in the DOM. */
+/**
+ * Holds the chain filter and re-attaches behaviour whenever the transcript is
+ * rebuilt. Excluding a chain re-derives ordering, lanes, spines, the minimap and
+ * every count — hiding rows would leave holes in the grid and mis-drawn lanes.
+ */
 function Rendered({ spec }: { spec: Spec }) {
+  const [excluded, setExcluded] = useState<Set<string>>(new Set());
+  const [showSpec, setShowSpec] = useState(false);
+
+  // chains of the UNFILTERED trail, so an excluded one stays listed and checkable
+  const all = useMemo(() => derive(spec), [spec]);
+  const chains = useMemo(
+    () =>
+      all.layout.chains.map((c) => {
+        // link to whichever entry in the chain names a mailbox id; a fully
+        // unspooled chain may have none, in which case only the anchor is offered
+        const withId = c.entries
+          .map((id) => all.rows.find((r) => r.id === id)!)
+          .find((r) => r.entry.threadId ?? r.entry.gmailId);
+        return {
+          root: c.root,
+          subject: c.subject,
+          opener: c.opener,
+          date: c.date,
+          count: c.entries.length,
+          gmailId: withId?.entry.threadId ?? withId?.entry.gmailId,
+          anchor: c.root,
+        };
+      }),
+    [all],
+  );
+
+  const filtered = useMemo<Spec>(() => {
+    if (excluded.size === 0) return spec;
+    const keep = all.rows
+      .filter((r) => !excluded.has(r.chain))
+      .map((r) => r.entry);
+    return { ...spec, messages: keep as Spec["messages"] };
+  }, [spec, all, excluded]);
+
+  const onToggle = (root: string) =>
+    setExcluded((prev) => {
+      const next = new Set(prev);
+      if (next.has(root)) next.delete(root);
+      else next.add(root);
+      return next;
+    });
+
+  const empty = filtered.messages.length === 0;
+
   useEffect(() => {
-    // React 18 StrictMode double-invokes effects in dev; attach() returns a
-    // cleanup so the second pass does not stack duplicate listeners
+    if (empty) return;
+    // StrictMode double-invokes effects in dev; attach() returns a cleanup so the
+    // second pass does not stack duplicate listeners
     const detach = attach(document);
     document.body.classList.add("hasmap");
     return detach;
-  }, [spec]);
-  return <Timeline spec={spec} />;
+  }, [filtered, empty]);
+
+  if (empty) {
+    return (
+      <div className="wrap">
+        <p style={{ padding: "2rem", color: "var(--muted)" }}>
+          Every chain is excluded. Re-enable one from Sources &amp; provenance —
+          reload to reset.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <Timeline
+        spec={filtered}
+        filter={{ chains, excluded, onToggle }}
+        onShowSpec={() => setShowSpec(true)}
+      />
+      {showSpec ? <SpecView spec={filtered} onClose={() => setShowSpec(false)} /> : null}
+    </>
+  );
 }
 
 createRoot(document.getElementById("root")!).render(
