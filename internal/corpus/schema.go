@@ -168,4 +168,20 @@ var migrations = []string{
 	alter table entries add column tz_offset integer;   -- minutes east of UTC
 	alter table people  add column org text;
 	`,
+
+	// 5: domain aliases, so a rebrand does not split people in two.
+	//
+	// Accounts predating a rename keep the old domain while later ones use the
+	// new: the same human is zach@old and zach@new, and address-keyed resolution
+	// creates two people and splits their entries. This is data rather than code
+	// because the mapping is a fact about an organisation, not about the parser,
+	// and because adding one must be able to repair the rows already ingested.
+	`
+	create table domain_aliases (
+	  from_domain text primary key,
+	  to_domain   text not null,
+	  note        text,
+	  added_at    integer not null
+	);
+	`,
 }

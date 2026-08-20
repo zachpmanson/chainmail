@@ -231,7 +231,18 @@ func ResolveWithRule(s *Store, kind, value, displayName, rule string) (int64, er
 // participant, and leaving them out is what made recipients invisible before.
 func ResolveAddress(s *Store, a Address, rule string) (int64, error) {
 	if a.Addr != "" {
-		return ResolveWithRule(s, KindEmail, a.Addr, a.Name, rule)
+		// Apply any configured domain alias first, so an account on a pre-rebrand
+		// domain resolves to the same person as the current one rather than
+		// creating a second. The alias, where one applied, replaces the rule so the
+		// reason stays traceable.
+		canon, aliasRule, err := CanonicalAddress(s, a.Addr)
+		if err != nil {
+			return 0, err
+		}
+		if aliasRule != "" {
+			rule = aliasRule
+		}
+		return ResolveWithRule(s, KindEmail, canon, a.Name, rule)
 	}
 	if strings.TrimSpace(a.Name) != "" {
 		return ResolveWithRule(s, KindDisplayName, a.Name, a.Name, rule+":name-only")

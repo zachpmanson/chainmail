@@ -5,6 +5,8 @@
 //	corpus stats                      what is in it, and what is missing
 //	corpus people                     everyone involved, senders and recipients
 //	corpus merge -keep <a> -drop <b>  same human, two addresses
+//	corpus alias -from <d> -to <d>    a rebrand: fold one domain into another
+//	corpus candidates                 pairs that may be one human, for review
 package main
 
 import (
@@ -68,6 +70,62 @@ func run(args []string) error {
 				p.PersonID, trunc(p.DisplayName, 28), p.Sent, p.Received, ids)
 		}
 		fmt.Printf("\n%d people\n", len(ps))
+		return nil
+
+	case "alias":
+		fs := flag.NewFlagSet("alias", flag.ContinueOnError)
+		from := fs.String("from", "", "old domain, e.g. old.example")
+		to := fs.String("to", "", "current domain, e.g. new.example")
+		note := fs.String("note", "", "why")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		s, err := corpus.Open(path)
+		if err != nil {
+			return err
+		}
+		defer s.Close()
+		if *from == "" && *to == "" {
+			existing, err := corpus.DomainAliases(s)
+			if err != nil {
+				return err
+			}
+			if len(existing) == 0 {
+				fmt.Println("no domain aliases configured")
+			}
+			for f, t := range existing {
+				fmt.Printf("%s -> %s\n", f, t)
+			}
+			return nil
+		}
+		if *from == "" || *to == "" {
+			return fmt.Errorf("usage: corpus alias -from <old.domain> -to <new.domain> [-note why]")
+		}
+		merged, err := corpus.AddDomainAlias(s, *from, *to, *note)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("alias %s -> %s recorded; merged %d already-split %s\n",
+			*from, *to, merged, plural(merged, "person", "people"))
+		return nil
+
+	case "candidates":
+		s, err := corpus.Open(path)
+		if err != nil {
+			return err
+		}
+		defer s.Close()
+		cs, err := corpus.MergeCandidates(s)
+		if err != nil {
+			return err
+		}
+		for _, c := range cs {
+			fmt.Printf("%4d %-24s  ~  %4d %-24s  (%s)\n     %v  |  %v\n",
+				c.AID, trunc(c.AName, 24), c.BID, trunc(c.BName, 24), c.Reason,
+				c.AAddresses, c.BAddresses)
+		}
+		fmt.Printf("\n%d candidate %s — review, then `corpus merge -keep <a> -drop <b>`\n",
+			len(cs), plural(len(cs), "pair", "pairs"))
 		return nil
 
 	case "merge":
@@ -163,6 +221,13 @@ func run(args []string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown command %q", args[0])
+}
+
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
 }
 
 func trunc(s string, n int) string {
