@@ -1,0 +1,19 @@
+{
+ "name": "sent-begin-forwarded-message-header-block-attribution-d1-002",
+ "role": "sent, begin forwarded message, header block, attribution, depth 1",
+ "from": "Miles Burnham2153 <miles.stamets2154@andoria.fed>",
+ "to": "Neelix Picard2520 <neelix.riker2521@andoria.fed65.fed>",
+ "cc": "",
+ "subject": "Re: jett leonard sensor berth",
+ "date": "Thu, 26 Sep 2024 16:33:06 +1000",
+ "body": "shipment the settlement the trail the the sensor audit audit the berth the the audit the:\r\n\r\ntrail\r\n\r\n> On 26 Sep 2024, at 15:51, Harry Sulu2509 <harry.mccoy2511@bajor.fed61.fed> wrote:\r\n>\r\n> the audit window the column the the levy telemetry the statement the.\r\n>\r\n> the run the audit number shipment the settlement the berth audit the column the trail registry settlement statement fellow?\r\n> fellow\r\n> number\r\n> column the the the\r\n> On Thu, Sep 26, 2024 at 09:49 AM, Selar Culber2275 <selar.booker2276@trill.fed Rhys2117 <mailto:selar.rhys2277@ferenginar.fed>> wrote:\r\n> the trail levy reconciliation\r\n>\r\n> levy levy record the column the column the the fellow the manifest berth readings sensor record readings run fellow the the the levy audit the the number audit audit shipment the the sensor the the sensor the record the shipment reconciliation the the the statement?\r\n>\r\n> shipment number the manifest number statement.\r\n>\r\n>\r\n>\r\n> Begin forwarded message:\r\n>\r\n> From: Harry Booker2516 <harry.booker2516@bajor.fed61.fed>\r\n> Subject: the run shipment\r\n> Date: 26 September 2024 at 09:39:19 AEST\r\n> To: Harry Rhys2517 <harry.rhys2517@earth.fed27.fed>\r\n>\r\n>\r\n> export record\r\n> the sensor audit manifest the run record sensor shipment fellow berth window berth readings export the window settlement record number the levy the registry manifest the the the the sensor berth the the export the the.\r\n> the\r\n> number telemetry manifest the number the shipment the the levy the run.\r\n\r\n",
+ "stats": {
+  "attr": 2,
+  "wrapped": 0,
+  "hdr": 4,
+  "fwd": 0,
+  "begin": 1,
+  "orig": 0,
+  "max_depth": 1
+ }
+}

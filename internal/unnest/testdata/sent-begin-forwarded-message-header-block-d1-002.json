@@ -1,0 +1,19 @@
+{
+ "name": "sent-begin-forwarded-message-header-block-d1-002",
+ "role": "sent, begin forwarded message, header block, depth 1",
+ "from": "Miles Burnham2153 <miles.stamets2154@andoria.fed>",
+ "to": "Jake Barclay2809 <jake.obrien2810@andoria.fed>",
+ "cc": "",
+ "subject": "Fwd: sylvia hikaru jett sylvia jett berth export jett export jett telemetry export fellow manifest.",
+ "date": "Mon, 13 Oct 2025 10:49:20 +1100",
+ "body": "the the\r\n\r\n> Begin forwarded message:\r\n>\r\n> From: Odo Pulaski2733 <odo.pulaski2733@vulcan.fed129.fed>\r\n> Subject: berth audit telemetry number shipment the settlement fellow reconciliation telemetry window sensor manifest reconciliation.\r\n> Date: 13 October 2025 at 10:18:14 AEDT\r\n> To: nella.paris2339@tellar.fed26.fed\r\n>\r\n>\r\n>\r\n> the berth export the the the trail the the the statement record number.\r\n>\r\n> readings the berth fellow reconciliation shipment export shipment the shipment export the readings the reconciliation the the.\r\n>\r\n> window statement export the levy export window berth the.\r\n> export the the shipment run the the statement run sensor\r\n> shipment settlement number\r\n> audit trail the\r\n> the export record reconciliation registry the sensor.\r\n>\r\n> the sensor column the the reconciliation the the the the number the the audit the.\r\n>\r\n> run the telemetry the shipment the the record reconciliation window.\r\n>\r\n> reconciliation the settlement record window the\r\n>  levy\r\n>  the\r\n>  the\r\n>  statement\r\n>  the\r\n>\r\n\r\n",
+ "stats": {
+  "attr": 0,
+  "wrapped": 0,
+  "hdr": 4,
+  "fwd": 0,
+  "begin": 1,
+  "orig": 0,
+  "max_depth": 1
+ }
+}

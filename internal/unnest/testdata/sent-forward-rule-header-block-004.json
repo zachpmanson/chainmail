@@ -1,0 +1,19 @@
+{
+ "name": "sent-forward-rule-header-block-004",
+ "role": "sent, forward rule, header block",
+ "from": "Miles Burnham2153 <miles.stamets2154@andoria.fed>",
+ "to": "Quark Daren2776 <quark.janeway2777@starfleet.fed126.fed>",
+ "cc": "",
+ "subject": "Fwd: jett orfil manifest berth trail record telemetry settlement sensor jett",
+ "date": "Wed, 5 Nov 2025 10:09:30 +1100",
+ "body": "---------- Forwarded message ---------\r\nFrom: Jake Laren2812 <jake.laren2812@andoria.fed163.fed>\r\nDate: Fri, 31 Oct 2025 at 11:59\r\nSubject: export trail the the the the number statement the shipment\r\nTo: Miles Burnham2153 <miles.burnham2153@ferenginar.fed>\r\n\r\n\r\ntelemetry berth levy the!\r\nexport the\r\n\r\nexport audit column the audit audit the shipment window number levy settlement column\r\nexport levy shipment manifest.\r\n\r\nexport the the window export window registry window shipment fellow the window the settlement statement.\r\nsensor fellow the readings the the the export manifest the number the settlement\r\nsensor.\r\n",
+ "stats": {
+  "attr": 0,
+  "wrapped": 0,
+  "hdr": 4,
+  "fwd": 1,
+  "begin": 0,
+  "orig": 0,
+  "max_depth": 0
+ }
+}

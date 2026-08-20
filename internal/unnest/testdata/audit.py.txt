@@ -1,0 +1,119 @@
+"""Leak audit and census self-check over the committed fixtures.
+
+Both run over the whole JSON blob of every fixture, not just the body field, and
+case-insensitively: an address or a company name is just as much a leak in a
+`to:` or `subject:` as in quoted prose.
+"""
+import json, glob, os, re, sys, collections
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from census import census
+import anon2
+
+S = "/private/tmp/claude-501/-Users-zach-projects-monorepo/07f4cc2a-4553-490d-a795-03cef6faed4a/scratchpad"
+OUT = "/tmp/cm-corpus/internal/unnest/testdata"
+
+name_to_id = json.load(open(f"{os.path.dirname(os.path.abspath(__file__))}/name_to_id.json"))
+sources = {}
+for pat in ("bodies", "bodies_sent", "bodies_rare"):
+    for f in glob.glob(f"{S}/{pat}/*.json"):
+        d = json.load(open(f))
+        if d.get("ok"):
+            sources[d["data"]["id"]] = d["data"]
+for r in json.load(open(f"{S}/harvest/raw.json")):
+    sources.setdefault(r["id"], r["msg"])
+
+fixtures = {}
+blob_parts = []
+for p in sorted(glob.glob(f"{OUT}/*.json")):
+    if os.path.basename(p) == "index.json":
+        continue
+    fx = json.load(open(p))
+    fixtures[fx["name"]] = fx
+    blob_parts.append(open(p, encoding="utf-8").read())
+BLOB = "\n".join(blob_parts)
+BLOB_L = BLOB.lower()
+
+reEmail = anon2.reEmail
+CAST_OK = {a.split("@")[1] for a in anon2.locals_.values()} | set(anon2.DOMAINS)
+
+def source_text(mid):
+    m = sources[mid]
+    return "\n".join(str(m.get(k) or "") for k in ("from", "to", "cc", "subject", "body"))
+
+used_ids = [name_to_id[n] for n in fixtures if n in name_to_id]
+src_all = "\n".join(source_text(i) for i in used_ids)
+
+# ---- probe 1: source email addresses, local parts and domains ---------------
+addrs = {a.lower() for a in reEmail.findall(src_all)}
+locals_ = {a.split("@")[0] for a in addrs if len(a.split("@")[0]) >= 4}
+doms = {a.split("@")[1] for a in addrs}
+hit_addr = sorted(a for a in addrs if a in BLOB_L)
+hit_local = sorted(l for l in locals_ if re.search(r'\b' + re.escape(l) + r'\b', BLOB_L))
+hit_dom = sorted(d for d in doms if d in BLOB_L and d not in CAST_OK)
+
+# ---- probe 2: source person / company names ---------------------------------
+reRun = re.compile(r"\b[A-Z][A-Za-z'&\-]*(?:[ \t]+(?:of|and|the|&)?[ \t]*[A-Z][A-Za-z'&\-]*){1,3}\b")
+def keepable(tok):
+    return anon2._keepable(tok)
+runs = collections.Counter()
+for r in reRun.findall(src_all):
+    ws = r.split()
+    if all(keepable(w) for w in ws):
+        continue
+    if r in anon2.cast_used:
+        continue
+    runs[r] += 1
+hit_run = sorted(r for r in runs
+            if re.search(r'\b' + re.escape(r.lower()) + r'\b', BLOB_L))
+
+# ---- probe 3: single-token org names harvested from the source domains ------
+orgs = {d.split(".")[0] for d in doms if len(d.split(".")[0]) >= 4}
+hit_org = sorted(o for o in orgs if re.search(r'\b' + re.escape(o) + r'\b', BLOB_L)
+                 and o not in {d.split(".")[0] for d in CAST_OK})
+
+# ---- probe 4: shape probes on the output -----------------------------------
+hit_url = sorted(set(re.findall(r'(?:https?://|www\.)[^\s>\]\)"\\]+', BLOB))
+                 - {"https://example.fed/x"})
+hit_money = sorted(set(re.findall(r'[$£€]\s?\d[\d,]*(?:\.\d+)?', BLOB)) - {"$0.00"})
+hit_phone = sorted(set(re.findall(r'(?<!\d)(?:\+?\d[\d\s\-()]{7,}\d)(?!\d)', BLOB))
+                   - {"+61 4 0000 0000"})
+hit_digits = sorted({d for d in re.findall(r'\b\d{6,}\b', BLOB) if set(d) != {"9"}})
+# Fifteen known-real literals: the mailbox owner's employer and its former
+# name, three of its clients, four SaaS vendors it corresponds with, the three
+# consumer mail domains that dominate the mailbox, the two national TLD suffixes
+# and two local business-number acronyms. The list itself is NOT committed — it
+# is real company names, which is precisely what must not enter the repository —
+# so it is loaded from the scratch harness at audit time.
+KNOWN = [l.strip() for l in open(os.environ["CHAINMAIL_LEAK_PROBES"]) if l.strip()]
+hit_known = sorted(k for k in KNOWN if k in BLOB_L)
+
+# ---- census self-check, all seven fields -----------------------------------
+drift = []
+for n, fx in fixtures.items():
+    c = census(fx["body"])
+    for k in ("attr", "wrapped", "hdr", "fwd", "begin", "orig", "max_depth"):
+        if c[k] != fx["stats"][k]:
+            drift.append((n, k, c[k], fx["stats"][k]))
+    src = census(sources[name_to_id[n]].get("body") or "") if n in name_to_id else None
+    if src:
+        for k in ("attr", "wrapped", "hdr", "fwd", "begin", "orig", "max_depth"):
+            if src[k] != fx["stats"][k]:
+                drift.append((n, "SRC:" + k, src[k], fx["stats"][k]))
+
+report = {
+    "fixtures": len(fixtures),
+    "blob_bytes": len(BLOB.encode()),
+    "probe_source_addresses": {"probed": len(addrs), "hits": hit_addr[:20], "n": len(hit_addr)},
+    "probe_source_local_parts": {"probed": len(locals_), "hits": hit_local[:20], "n": len(hit_local)},
+    "probe_source_domains": {"probed": len(doms), "hits": hit_dom[:20], "n": len(hit_dom)},
+    "probe_source_name_runs": {"probed": len(runs), "hits": hit_run[:20], "n": len(hit_run)},
+    "probe_source_org_tokens": {"probed": len(orgs), "hits": hit_org[:20], "n": len(hit_org)},
+    "probe_urls": {"hits": hit_url[:10], "n": len(hit_url)},
+    "probe_money": {"hits": hit_money[:10], "n": len(hit_money)},
+    "probe_phones": {"hits": hit_phone[:10], "n": len(hit_phone)},
+    "probe_long_digit_runs": {"hits": hit_digits[:10], "n": len(hit_digits)},
+    "probe_known_strings": {"probed": len(KNOWN), "hits": hit_known, "n": len(hit_known)},
+    "census_drift": drift[:40],
+    "census_drift_n": len(drift),
+}
+print(json.dumps(report, indent=1, ensure_ascii=False))

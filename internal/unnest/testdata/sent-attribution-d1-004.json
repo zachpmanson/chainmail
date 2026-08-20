@@ -1,0 +1,19 @@
+{
+ "name": "sent-attribution-d1-004",
+ "role": "sent, attribution, depth 1",
+ "from": "Miles Burnham2153 <miles.stamets2154@andoria.fed>",
+ "to": "Ezri Barclay2849 <ezri.obrien2850@betazed.fed178.fed>",
+ "cc": "",
+ "subject": "Re: jett jett telemetry",
+ "date": "Fri, 12 Jul 2024 14:52:57 +1000",
+ "body": "the audit the the registry settlement the trail the run statement the shipment run window settlement the the statement sensor the the trail.\r\n\r\n> On 12 Jul 2024, at 14:45, Ezri Maddox2846 <ezri.quinteros2848@andoria.fed177.fed> wrote:\r\n>\r\n> the\r\n\r\n",
+ "stats": {
+  "attr": 1,
+  "wrapped": 0,
+  "hdr": 0,
+  "fwd": 0,
+  "begin": 0,
+  "orig": 0,
+  "max_depth": 1
+ }
+}

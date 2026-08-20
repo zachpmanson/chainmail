@@ -1,0 +1,19 @@
+{
+ "name": "sent-forward-rule-header-block-attribution-d1-003",
+ "role": "sent, forward rule, header block, attribution, depth 1",
+ "from": "Miles Burnham2153 <miles.stamets2154@andoria.fed>",
+ "to": "Jadzia Detmer2718 <odo.riker2721@daystrom.fed29.fed>",
+ "cc": "",
+ "subject": "Re: berth jett export manifest trail fellow jett",
+ "date": "Mon, 29 Jul 2024 15:20:56 +1000",
+ "body": "berth reconciliation run audit statement telemetry sensor manifest shipment reconciliation the settlement run telemetry the record shipment levy the the.\r\n\r\n> On 29 Jul 2024, at 15:19, Jadzia Sulu2709 <jadzia.mccoy2711@earth.fed27.fed> wrote:\r\n>\r\n> the berth the the audit window registry?\r\n>\r\n> statement the\r\n> export the statement shipment the\r\n> registry the export the\r\n> the column the\r\n> fellow number\r\n>\r\n>\r\n>\r\n>\r\n> ---------- Forwarded message ---------\r\n> From: Jadzia Booker2716, Jadzia Rhys2717 <jadzia.rhys2717@betazed.fed122.fed>\r\n> Date: Mon, 29 Jul 2024 at 15:02\r\n> Subject: berth levy the the sensor the settlement\r\n> To: Jadzia Detmer2718 <jadzia.detmer2718@earth.fed27.fed>\r\n>\r\n>\r\n>\r\n>\r\n>  berth readings the\r\n>\r\n>\r\n>  \tlevy trail run manifest the the berth\r\n> settlement telemetry fellow levy registry shipment the berth statement levy shipment berth run the the the readings run levy registry the sensor the the.\r\n> the export statement\r\n>  the\r\n>\r\n>\r\n> trail the fellow the the run the\r\n>\r\n>\r\n>\r\n> levy record trail shipment sensor window readings the the registry\r\n>\r\n\r\n",
+ "stats": {
+  "attr": 1,
+  "wrapped": 0,
+  "hdr": 4,
+  "fwd": 1,
+  "begin": 0,
+  "orig": 0,
+  "max_depth": 1
+ }
+}

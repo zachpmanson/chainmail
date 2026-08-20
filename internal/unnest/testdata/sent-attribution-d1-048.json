@@ -1,0 +1,19 @@
+{
+ "name": "sent-attribution-d1-048",
+ "role": "sent, attribution, depth 1",
+ "from": "Miles Burnham2153 <miles.stamets2154@andoria.fed>",
+ "to": "Tuvok Crusher2442 <tuvok.troi2443@andoria.fed>",
+ "cc": "Selar Crusher2242 <selar.maddox2246@andoria.fed>",
+ "subject": "Re: jett jett record jett window hikaru jett",
+ "date": "Fri, 14 Aug 2026 11:10:29 +1000",
+ "body": "the sensor the run the berth the the readings.\r\n\r\n> On 14 Aug 2026, at 5:31 am, Miles Chekov2150Riley2147 <miles.scott2152@ferenginar.fed> wrote:\r\n>\r\n> reconciliation\r\n\r\n",
+ "stats": {
+  "attr": 1,
+  "wrapped": 0,
+  "hdr": 0,
+  "fwd": 0,
+  "begin": 0,
+  "orig": 0,
+  "max_depth": 1
+ }
+}

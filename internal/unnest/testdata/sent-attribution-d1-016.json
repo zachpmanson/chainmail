@@ -1,0 +1,19 @@
+{
+ "name": "sent-attribution-d1-016",
+ "role": "sent, attribution, depth 1",
+ "from": "Miles Burnham2153 <miles.stamets2154@andoria.fed>",
+ "to": "Ezri Dax2863 <ezri.bashir2864@vulcan.fed185.fed>",
+ "cc": "",
+ "subject": "Re: settlement jett kira jett jett jett jett jett",
+ "date": "Thu, 19 Dec 2024 11:47:09 +1100",
+ "body": "the fellow trail the sensor the run.\r\n\r\n> On 19 Dec 2024, at 11:44, Ezri Tuvix2860 <ezri.nerys2862@utopia-planitia.fed184.fed> wrote:\r\n>\r\n> the telemetry\r\n\r\n",
+ "stats": {
+  "attr": 1,
+  "wrapped": 0,
+  "hdr": 0,
+  "fwd": 0,
+  "begin": 0,
+  "orig": 0,
+  "max_depth": 1
+ }
+}
