@@ -79,6 +79,30 @@ func TestProseOpenerIsNotSwallowed(t *testing.T) {
 	}
 }
 
+// The tempering rule proper: a second opener on the IMMEDIATELY following line,
+// with no blank line to stop the scan. Without "never cross a second opener" the
+// join runs from the prose line to the real attribution's closer and captures a
+// sender belonging to neither — the `greedy_on` bug.
+//
+// The earlier prose test passes even without the rule, because a blank line ends
+// the scan first; this one isolates the rule itself.
+func TestScanRefusesToCrossASecondOpener(t *testing.T) {
+	lines := Normalise("On the whole I agree.\nOn Mon, 15 Sep, Bob <b@ex.com> wrote:\ntext\n")
+	if b, ok := FindAttribution(lines, 0); ok {
+		t.Fatalf("crossed into the next attribution: %q", b.Text)
+	}
+	b, ok := FindAttribution(lines, 1)
+	if !ok {
+		t.Fatal("missed the real attribution on line 1")
+	}
+	if contains(b.Text, "the whole") {
+		t.Fatalf("prose leaked into the attribution: %q", b.Text)
+	}
+	if !contains(b.Text, "Bob") {
+		t.Fatalf("wrong sender captured: %q", b.Text)
+	}
+}
+
 func TestAttributionDoesNotStraddleABlankLine(t *testing.T) {
 	lines := Normalise("On Wed, Alice <a@ex.com>\n\nwrote:\n")
 	if _, ok := FindAttribution(lines, 0); ok {

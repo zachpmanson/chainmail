@@ -60,7 +60,8 @@ var (
 	// is a Teams meeting-invite decoration sitting mid-message, and splitting there
 	// fabricates an entry.
 	reBareRule = regexp.MustCompile(`^([-_]{10,}|\*{8,})$`)
-	reSigDelim = regexp.MustCompile(`^-- $`)
+	// Normalise right-trims lines, so the RFC 3676 delimiter arrives as "--".
+	reSigDelim = regexp.MustCompile(`^--$`)
 )
 
 func hasClosum(s string) bool {
