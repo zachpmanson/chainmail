@@ -1,0 +1,346 @@
+package spec
+
+import (
+	"errors"
+	"fmt"
+	"sort"
+	"strings"
+
+	"github.com/zachpmanson/chainmail/internal/corpus"
+)
+
+// Options says what to render and supplies the few facts the corpus cannot
+// know. Nothing here ranks or searches: a caller (the search-driven selector)
+// decides which entries matter and hands them over.
+type Options struct {
+	// Containers are mail thread ids (entries.container); every entry in them is
+	// selected.
+	Containers []string
+	// EntryIDs are corpus row ids, as an FTS or vector query returns them.
+	EntryIDs []int64
+	// ExtIDs are corpus natural keys ("mail:<message-id>"), the identity that
+	// survives a rebuild — prefer these when the selection is persisted.
+	ExtIDs []string
+
+	// Title is the page title. Defaults to the subject of the earliest selected
+	// entry, since the schema requires one.
+	Title string
+	// RunLabel names this collection pass, e.g. "pass 2, 20 Aug 2026".
+	RunLabel string
+	// Queries record the searches the selection came from, so that a hole in the
+	// timeline is interpretable.
+	Queries []Query
+
+	// Me lists the reader's own addresses, so their outbound messages can be
+	// marked. Nothing in the corpus knows which mailbox it was collected from.
+	Me []string
+	// Orgs maps a mail domain to an organisation label, overriding the label
+	// derived from the domain itself.
+	Orgs map[string]string
+}
+
+// Generate builds a timeline spec from the corpus.
+//
+// It fills every field that follows mechanically from what was ingested, and
+// leaves the interpretive ones — body prose, openItems, cross-links, subtitle —
+// empty for a later pass. `body` is emitted as the empty string because the
+// schema requires the key: an empty body is a visible gap, an invented one is
+// not.
+func Generate(store *corpus.Store, opts Options) (Spec, error) {
+	if store == nil {
+		return Spec{}, errors.New("spec: nil store")
+	}
+	db := store.DB()
+
+	seedIDs, err := seeds(db, opts)
+	if err != nil {
+		return Spec{}, err
+	}
+	if len(seedIDs) == 0 {
+		return Spec{}, errors.New("spec: nothing selected — pass containers, entry ids or ext ids")
+	}
+	ids, err := closure(db, seedIDs)
+	if err != nil {
+		return Spec{}, err
+	}
+	rows, err := load(store, ids)
+	if err != nil {
+		return Spec{}, err
+	}
+	if len(rows) == 0 {
+		// The schema requires at least one message, so an empty timeline is an
+		// error rather than a spec nothing will load.
+		return Spec{}, errors.New("spec: selection resolved to no entries")
+	}
+
+	me := map[string]bool{}
+	for _, a := range opts.Me {
+		me[strings.ToLower(strings.TrimSpace(a))] = true
+	}
+
+	b := &builder{
+		opts:     opts,
+		me:       me,
+		ids:      newIDAllocator(),
+		idOf:     map[int64]string{},
+		subjOf:   map[int64]string{},
+		rowByID:  map[int64]*entryRow{},
+		people:   map[string]Participant{},
+		badZones: map[string]int{},
+	}
+	for _, r := range rows {
+		b.rowByID[r.ID] = r
+	}
+	for _, r := range rows {
+		b.add(r)
+	}
+
+	spec := Spec{
+		SpecVersion:  1,
+		Title:        opts.Title,
+		RunLabel:     opts.RunLabel,
+		Queries:      opts.Queries,
+		Participants: b.cast(),
+		Threads:      b.threads(rows),
+		SourceNotes:  b.notes(rows),
+		Messages:     b.messages,
+	}
+	if spec.Title == "" {
+		spec.Title = rows[0].Subject
+	}
+	if spec.Title == "" {
+		return Spec{}, fmt.Errorf("spec: no title given and entry %s has no subject to borrow", rows[0].ExtID)
+	}
+	return spec, nil
+}
+
+// builder accumulates the spec as entries are visited in chronological order,
+// which is also first-appearance order for the cast and for org colour slots.
+type builder struct {
+	opts     Options
+	me       map[string]bool
+	ids      *idAllocator
+	idOf     map[int64]string    // corpus id -> spec id, for parent edges
+	rowByID  map[int64]*entryRow // every selected entry, for sighting lookups
+	subjOf   map[int64]string    // corpus id -> subject, to spot a new chain
+	messages []Entry
+
+	castOrder []string
+	people    map[string]Participant
+
+	badZones map[string]int // unresolvable zone label -> entries affected
+	orphans  int            // entries naming a parent that is not in this spec
+}
+
+func (b *builder) add(r *entryRow) {
+	from := parseAddr(r.From)
+	to := parseAddrList(r.To)
+	cc := parseAddrList(r.Cc)
+
+	date, clock, zoneOK := stamp(r.TS, r.TZ)
+	if r.TZ != "" && !zoneOK {
+		b.badZones[r.TZ]++
+	}
+
+	e := Entry{
+		Date:      date,
+		Time:      clock,
+		Sender:    firstNonEmpty(r.Person, from.Who()),
+		Org:       orgOf(from.Address, b.opts.Orgs),
+		FromEmail: from.Address,
+		To:        recipientLine(to, cc),
+		Body:      "", // left for the pass that writes prose; never invented here
+		// tz is passed through only when the source stated one; empty hands the
+		// inference to the renderer, which labels an inferred zone as inferred.
+		TZ:      r.TZ,
+		Quoted:  !r.Direct,
+		Me:      b.me[from.Address],
+		Source:  b.source(r),
+		GmailID: r.GmailID,
+		// A mail entry's container *is* its thread id; mail_detail has no column
+		// of its own for it.
+		ThreadID: r.Container,
+	}
+	if r.Kind == "note" {
+		e.Kind = "note"
+	}
+
+	if p, ok := b.idOf[r.ParentID]; ok {
+		e.Parent = p
+	} else if r.ParentID != 0 || r.ParentRef != "" {
+		b.orphans++
+	}
+	// A subject names a chain where it starts one: at an entry with no parent
+	// here, or where the subject changed from the parent's.
+	if e.Parent == "" || b.subjOf[r.ParentID] != r.Subject {
+		e.Subject = r.Subject
+	}
+
+	for _, a := range r.Atts {
+		att := Attachment{Name: a.Name, Kind: attachmentKind(a.Mime, a.Name), Size: humanSize(a.Size)}
+		if r.Direct {
+			// Only a real message can be opened in Gmail.
+			att.GmailID = r.GmailID
+		}
+		if !hasAttachment(e.Attachments, att) {
+			e.Attachments = append(e.Attachments, att)
+		}
+	}
+
+	e.ID = b.ids.take(entryID(e))
+	b.idOf[r.ID] = e.ID
+	b.subjOf[r.ID] = r.Subject
+	b.messages = append(b.messages, e)
+
+	b.meet(from, e.Org)
+	for _, a := range append(append([]addr{}, to...), cc...) {
+		b.meet(a, orgOf(a.Address, b.opts.Orgs))
+	}
+}
+
+// source records where an entry was found: the mailbox, or someone's quoted
+// history. It is provenance, not prose — a later pass may make it read better.
+func (b *builder) source(r *entryRow) string {
+	if r.Direct {
+		if r.GmailID != "" {
+			return "msg " + r.GmailID
+		}
+		return r.ExtID
+	}
+	// The message that quoted this one is later in the trail, so it is named by
+	// its own source identity rather than by a spec id that may not exist yet.
+	var in []string
+	for _, id := range r.SeenIn {
+		host, ok := b.rowByID[id]
+		if !ok {
+			continue
+		}
+		if host.GmailID != "" {
+			in = append(in, "msg "+host.GmailID)
+		} else {
+			in = append(in, host.ExtID)
+		}
+	}
+	if len(in) > 0 {
+		return "unspooled from " + strings.Join(in, ", ")
+	}
+	return "unspooled from quoted text"
+}
+
+// meet records a person the moment they first appear, as sender or recipient.
+// An address is never invented: someone seen only as a display name is listed
+// without one.
+func (b *builder) meet(a addr, org string) {
+	if a.Who() == "" {
+		return
+	}
+	k := a.key()
+	if _, seen := b.people[k]; seen {
+		return
+	}
+	b.castOrder = append(b.castOrder, k)
+	b.people[k] = Participant{Name: a.Who(), Org: org, Email: a.Address}
+}
+
+func (b *builder) cast() []Participant {
+	out := make([]Participant, 0, len(b.castOrder))
+	for _, k := range b.castOrder {
+		out = append(out, b.people[k])
+	}
+	return out
+}
+
+// threads summarises the containers the transcript was assembled from.
+func (b *builder) threads(rows []*entryRow) []Thread {
+	type acc struct {
+		subject string
+		count   int
+		first   int
+		last    int
+	}
+	byContainer := map[string]*acc{}
+	var order []string
+	for i, r := range rows {
+		if r.Container == "" {
+			continue
+		}
+		a, ok := byContainer[r.Container]
+		if !ok {
+			a = &acc{subject: r.Subject, first: i, last: i}
+			byContainer[r.Container] = a
+			order = append(order, r.Container)
+		}
+		a.count++
+		a.last = i
+	}
+	out := make([]Thread, 0, len(order))
+	for _, c := range order {
+		a := byContainer[c]
+		out = append(out, Thread{
+			Subject: a.subject,
+			ID:      c,
+			Count:   a.count,
+			Span:    spanOf(b.messages[a.first].Date, b.messages[a.last].Date),
+		})
+	}
+	return out
+}
+
+// notes reports what the corpus could not supply, so that a gap in the page is
+// legible as a gap rather than read as the whole story.
+func (b *builder) notes(rows []*entryRow) []SourceNote {
+	var items []string
+	if b.orphans > 0 {
+		items = append(items, fmt.Sprintf(
+			"%d of %d entries reply to a message that is not in this timeline — "+
+				"their chain starts above what was collected.", b.orphans, len(rows)))
+	}
+	if quoted := countQuoted(rows); quoted > 0 {
+		items = append(items, fmt.Sprintf(
+			"%d of %d entries were recovered from quoted text and never existed as "+
+				"standalone messages here.", quoted, len(rows)))
+	}
+	labels := make([]string, 0, len(b.badZones))
+	for tz := range b.badZones {
+		labels = append(labels, tz)
+	}
+	sort.Strings(labels)
+	for _, tz := range labels {
+		items = append(items, fmt.Sprintf(
+			"Zone %q is not one this tool can turn into an offset, so the %d entries "+
+				"stating it are shown at UTC. The label is reproduced as stated.",
+			tz, b.badZones[tz]))
+	}
+	if len(items) == 0 {
+		return nil
+	}
+	return []SourceNote{{Title: "Coverage", Items: items}}
+}
+
+func countQuoted(rows []*entryRow) int {
+	n := 0
+	for _, r := range rows {
+		if !r.Direct {
+			n++
+		}
+	}
+	return n
+}
+
+func hasAttachment(as []Attachment, a Attachment) bool {
+	for _, x := range as {
+		if x.Name == a.Name && x.Size == a.Size {
+			return true
+		}
+	}
+	return false
+}
+
+func firstNonEmpty(vs ...string) string {
+	for _, v := range vs {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
