@@ -554,3 +554,30 @@ func identitiesOf(s *Store, personID int64) ([]string, error) {
 	}
 	return out, rows.Err()
 }
+
+// AddHeader records participants from a header WITHOUT clearing the role first.
+//
+// RecordHeader replaces a role wholesale, which is right for a real message: its
+// header is complete, so a re-ingest should mirror it exactly. It is wrong for a
+// message recovered from quoted text, where each forward shows a different
+// subset of the recipients — replacing would let the narrowest copy seen last
+// decide who was involved. Here the union across sightings is the better answer.
+func AddHeader(s *Store, entryID int64, role, header string) ([]int64, error) {
+	switch role {
+	case RoleFrom, RoleTo, RoleCc:
+	default:
+		return nil, fmt.Errorf("unknown participation role %q", role)
+	}
+	var ids []int64
+	for _, a := range ParseAddresses(header) {
+		id, err := ResolveAddress(s, a, "quote:"+role+"-header")
+		if err != nil {
+			continue
+		}
+		if err := Participate(s, entryID, id, role); err != nil {
+			return ids, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}

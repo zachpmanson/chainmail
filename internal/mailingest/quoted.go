@@ -13,6 +13,7 @@ type QuotedResult struct {
 	Distinct int // after dedup within this body
 	Created  int // new entries
 	Merged   int // matched an entry already present
+	Enriched int // merged entries that gained a field from this sighting
 	Edges    int // reply edges linked from positional nesting
 	Undated  int // blocks whose time had to be inferred from the host
 }
@@ -83,7 +84,15 @@ func ExtractQuoted(store *corpus.Store, hostID int64, host corpus.Entry, body st
 		if created {
 			r.Created++
 		} else {
+			// A later sighting of the same message may know things the first did
+			// not: one client quotes a full header block with Subject and
+			// recipients, the next re-quotes it as a bare "On ... wrote:" with
+			// neither. Whichever arrived first must not decide what is known.
+			if err := store.EnrichQuoted(id, e); err != nil {
+				return r, fmt.Errorf("enriching %s: %w", rec.Key, err)
+			}
 			r.Merged++
+			r.Enriched++
 		}
 
 		detail := fmt.Sprintf("depth %d", rec.Block.Depth)
@@ -106,7 +115,10 @@ func ExtractQuoted(store *corpus.Store, hostID int64, host corpus.Entry, body st
 			if h.header == "" {
 				continue
 			}
-			if _, err := corpus.RecordHeader(store, id, h.role, h.header); err != nil {
+			// Additive, not wholesale: each forward shows a different subset of
+			// the recipients, so replacing the role would let the narrowest copy
+			// seen last decide who was involved. The union is the better answer.
+			if _, err := corpus.AddHeader(store, id, h.role, h.header); err != nil {
 				return r, err
 			}
 		}

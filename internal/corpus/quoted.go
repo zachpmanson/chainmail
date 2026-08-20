@@ -34,7 +34,13 @@ func (s *Store) PutQuoted(e Entry) (int64, bool, error) {
 		return 0, false, err
 	}
 
-	res, err := s.db.Exec(`
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, false, err
+	}
+	defer tx.Rollback()
+
+	res, err := tx.Exec(`
 		insert into entries (source, ext_id, kind, ts, tz, tz_offset, person_id,
 		                     container, parent_ref, subject, body_text, permalink,
 		                     body_sha, quoted, ingested_at)
@@ -50,18 +56,12 @@ func (s *Store) PutQuoted(e Entry) (int64, bool, error) {
 	if err != nil {
 		return 0, false, err
 	}
-	// The FTS indexes are external-content, so they need an explicit insert.
-	if _, err := s.db.Exec(
-		`insert into entries_fts(rowid, subject, body_text) values (?,?,?)`,
-		id, e.Subject, e.BodyText); err != nil {
+	// created=true, so no retraction is attempted: a double retraction against a
+	// fresh rowid corrupts an external-content index.
+	if err := s.reindex(tx, id, true, "", ""); err != nil {
 		return 0, false, err
 	}
-	if _, err := s.db.Exec(
-		`insert into entries_ident(rowid, body_text) values (?,?)`,
-		id, e.BodyText); err != nil {
-		return 0, false, err
-	}
-	return id, true, nil
+	return id, true, tx.Commit()
 }
 
 // SetParent records a reply edge directly.
@@ -105,4 +105,58 @@ func nullInt64(v int64) any {
 		return nil
 	}
 	return v
+}
+
+// EnrichQuoted fills gaps on an already-stored quoted entry from a later
+// sighting of the same message.
+//
+// Each client quotes a different subset: one writes a full header block with
+// Subject and recipients, the next re-quotes it as a bare "On ... wrote:" with
+// neither. Whichever arrives first should not decide what is known, so a later
+// sighting may fill what is missing — but never overwrite what is present, and
+// never touch a real mailbox message, whose own headers are authoritative.
+//
+// Body text is replaced only when the new copy is longer, on the reasoning that
+// quoting elides rather than invents.
+func (s *Store) EnrichQuoted(id int64, e Entry) error {
+	var quoted int
+	if err := s.db.QueryRow(`select quoted from entries where id=?`, id).Scan(&quoted); err != nil {
+		return err
+	}
+	if quoted == 0 {
+		// A real message. Its own headers beat anything a forward said about it.
+		return nil
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// The FTS retraction needs the values the index currently holds, so they are
+	// read BEFORE the update. Retracting with the new text would leave the old
+	// terms in the index permanently, matching text the entry no longer contains.
+	var oldSubject, oldBody string
+	if err := tx.QueryRow(
+		`select coalesce(subject,''), coalesce(body_text,'') from entries where id=?`,
+		id).Scan(&oldSubject, &oldBody); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`
+		update entries set
+		  subject   = coalesce(nullif(subject,''), ?),
+		  tz        = coalesce(nullif(tz,''), ?),
+		  person_id = coalesce(person_id, ?),
+		  body_text = case when length(?) > length(coalesce(body_text,''))
+		                   then ? else body_text end
+		where id = ?`,
+		nullStr(e.Subject), nullStr(e.TZ), nullInt64(e.PersonID),
+		e.BodyText, e.BodyText, id); err != nil {
+		return err
+	}
+	if err := s.reindex(tx, id, false, oldSubject, oldBody); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
