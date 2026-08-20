@@ -1,0 +1,19 @@
+{
+ "name": "sent-begin-forwarded-message-forward-rule-header-block-d1-001",
+ "role": "sent, begin forwarded message, forward rule, header block, depth 1",
+ "from": "Miles Burnham2153 <miles.stamets2154@andoria.fed>",
+ "to": "Katherine Brahms2207 <katherine.quinteros2208@andoria.fed>",
+ "cc": "",
+ "subject": "Fwd: berth jett orfil hikaru berth ezri window sylvia jett orfil window trail.",
+ "date": "Thu, 20 Feb 2025 14:49:13 +1100",
+ "body": "the reconciliation registry column\r\n\r\n> Begin forwarded message:\r\n>\r\n> From: Ro Crusher2162 <ro.crusher2162@ferenginar.fed>\r\n> Subject: Fwd: berth audit telemetry number shipment the settlement fellow reconciliation telemetry window sensor.\r\n> Date: 19 February 2025 at 17:20:21 AEDT\r\n> To: Miles Burnham2153 <miles.burnham2153@ferenginar.fed>\r\n>\r\n> number\r\n> the registry readings the\r\n>\r\n> ---------- Forwarded message ---------\r\n> From: Odo Burnham2753 <odo.burnham2753@daystrom.fed141.fed>\r\n> Date: Wed, 19 Feb 2025 at 17:10\r\n> Subject: the export sensor reconciliation berth the berth the the trail telemetry telemetry.\r\n> To: Nella Barclay2329 <nella.barclay2329@earth.fed27.fed>, Ro Crusher2162 <ro.crusher2162@ferenginar.fed>\r\n>\r\n>\r\n> the the settlement telemetry record the column audit readings the the run shipment.\r\n>\r\n>\r\n> telemetry statement the the audit registry sensor statement number the the the the trail\r\n> statement\r\n> reconciliation manifest levy the telemetry the manifest statement the telemetry record record levy reconciliation the window the the the levy reconciliation manifest telemetry the berth reconciliation.\r\n> levy the run the the the the the window reconciliation audit trail the sensor statement the.\r\n> the export telemetry sensor the the the.\r\n>\r\n> ------------------\r\n> statement telemetry export\r\n>\r\n>\r\n>\r\n>  export\r\n> the the\r\n>  the\r\n>\r\n> shipment the the settlement\r\n> the\r\n>  \tberth sensor\r\n> the\r\n> reconciliation\r\n> number reconciliation\r\n> the number\r\n> record the\r\n> sensor settlement\r\n> shipment the\r\n> the trail\r\n> shipment the manifest number\r\n> the levy\r\n> the reconciliation the reconciliation statement run sensor record fellow the the levy the export\r\n> window\r\n\r\n",
+ "stats": {
+  "attr": 0,
+  "wrapped": 0,
+  "hdr": 8,
+  "fwd": 1,
+  "begin": 1,
+  "orig": 0,
+  "max_depth": 1
+ }
+}

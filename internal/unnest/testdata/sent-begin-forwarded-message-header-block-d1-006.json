@@ -1,0 +1,19 @@
+{
+ "name": "sent-begin-forwarded-message-header-block-d1-006",
+ "role": "sent, begin forwarded message, header block, depth 1",
+ "from": "Miles Burnham2153 <miles.stamets2154@andoria.fed>",
+ "to": "Jake Barclay2809 <jake.obrien2810@andoria.fed>",
+ "cc": "",
+ "subject": "Fwd: window jett shipment jett",
+ "date": "Fri, 22 May 2026 13:15:36 +1000",
+ "body": "\r\n\r\n> Begin forwarded message:\r\n>\r\n> From: Selar Crusher2242 <selar.crusher2242@ferenginar.fed>\r\n> Subject: berth audit telemetry number\r\n> Date: 16 May 2026 at 17:46:48 AEST\r\n> To: Jake Burnham2833;\r\n>\r\n> trail the\r\n>\r\n>\r\n> trail record export export shipment trail the audit the run the number window registry the the the the reconciliation.\r\n>\r\n>\r\n>\r\n> column:\r\n>\r\n>\r\n> the the record registry the the the the statement number the the statement berth number.\r\n>\r\n>\r\n> the trail fellow:\r\n>\r\n> column telemetry statement the number statement record levy the\r\n> the record column window manifest column\r\n> the the run shipment registry trail audit the export\r\n> export the fellow the settlement record levy\r\n> settlement the export record the trail the number trail the audit\r\n>\r\n> fellow:\r\n>\r\n> the reconciliation record window\r\n> the the the sensor number telemetry trail berth the the the registry run readings trail number telemetry run reconciliation registry the reconciliation\r\n> trail the the the fellow registry column export levy the the number the sensor the window\r\n>\r\n>\r\n> registry:\r\n>\r\n> statement the the readings telemetry the the trail record readings the sensor readings record column the levy readings readings the trail export the the fellow reconciliation number sensor trail record the settlement record.\r\n> fellow audit registry the the the reconciliation the the manifest the the column export the the readings\r\n>\r\n> reconciliation the the the the:\r\n>\r\n>\r\n> audit the the readings statement the the reconciliation run the the number the telemetry record the the the the record the telemetry the fellow the trail the the.\r\n> the manifest record the the berth audit settlement manifest:\r\n>\r\n>\r\n> telemetry sensor trail the levy window window shipment number statement telemetry the column the telemetry the sensor window the telemetry the:\r\n>\r\n> run the the export the the window number reconciliation berth window settlement.\r\n> audit record the record the the the the berth statement levy column the the settlement the levy statement manifest trail berth record record the the.\r\n> record telemetry fellow the column export the the telemetry the manifest audit the the sensor fellow audit the registry number berth manifest the window shipment column levy audit berth.\r\n> the the the fellow record export the the statement the record the reconciliation the export the berth levy shipment sensor trail.\r\n>\r\n> export the levy readings the the window fellow the the window audit the.\r\n>\r\n> levy\r\n> trail record\r\n> audit the record\r\n> the sensor the window\r\n> the run reconciliation\r\n> record export\r\n>\r\n>\r\n> settlement readings\r\n\r\n",
+ "stats": {
+  "attr": 0,
+  "wrapped": 0,
+  "hdr": 4,
+  "fwd": 0,
+  "begin": 1,
+  "orig": 0,
+  "max_depth": 1
+ }
+}

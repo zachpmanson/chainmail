@@ -1,0 +1,68 @@
+"""Census of sentinel lines over RAW harvested bodies.
+
+Mirrors internal/unnest/corpus_test.go's regexes exactly (attr/wrapped/fwd/
+begin/orig) and mirrors line.go splitDepth + sentinel.go reHeaderKey/unbold for
+max_depth and hdr. Independent of any parser: pure regex/scan.
+
+Bodies are CRLF. Every anchored pattern uses \r?$ — an earlier census anchored on
+bare $ reported zero attributions across the whole mailbox.
+"""
+import re
+
+ATTR    = re.compile(r'(?m)^[ \t]*(?:>[ \t]*)*On[ \t].{4,300}wrote:[ \t]*\r?$')
+WRAPPED = re.compile(r'(?m)^[ \t]*(?:>[ \t]*)*wrote:[ \t]*\r?$')
+FWD     = re.compile(r'(?mi)^[ \t]*(?:>[ \t]*)*-{2,}[ \t]?forwarded message[ \t]?-{2,}[ \t]*\r?$')
+BEGIN   = re.compile(r'(?mi)^[ \t]*(?:>[ \t]*)*begin forwarded message[ \t]*:[ \t]*\r?$')
+ORIG    = re.compile(r'(?mi)^[ \t]*(?:>[ \t]*)*-{3,}[ \t]?original message[ \t]?-{3,}[ \t]*\r?$')
+
+ODD = re.compile('[\xa0   ]')
+
+# sentinel.go reHeaderKey, verbatim
+HDRKEY = re.compile(r'(?i)^\*?(from|sent|to|subject|cc|bcc|date|reply-to|'
+                    r'von|gesendet|an|betreff|de|enviado|para|asunto|objet|envoyé|'
+                    r'van|verzonden|aan|da|inviato|oggetto|fra|sendt|skickat|till|ämne|assunto)'
+                    r'\*?\s*:\s')
+# sentinel.go reBoldKey, verbatim
+BOLDKEY = re.compile(r'^\*([A-Za-z-]+)\*?\s*:\s*\*?\s*')
+
+def unbold(s):
+    m = BOLDKEY.match(s)
+    return m.group(1) + ": " + s[m.end():].strip() if m else s
+
+def split_depth(raw):
+    """line.go splitDepth: TrimLeft ' \\t', then count '>' each eating one space."""
+    s = raw.lstrip(" \t")
+    d = 0
+    while s.startswith(">"):
+        d += 1
+        s = s[1:]
+        if s.startswith(" "):
+            s = s[1:]
+    return s, d
+
+def normalise(body):
+    """line.go Normalise."""
+    body = body.replace("\r\n", "\n").replace("\r", "\n")
+    body = ODD.sub(" ", body)
+    out = []
+    for r in body.split("\n"):
+        t, d = split_depth(r)
+        t = re.sub(r'(?i)\[(?:image|cid):[^\]]*\]', '', t)
+        out.append((t.rstrip(" \t"), d))
+    return out
+
+def census(body):
+    lines = normalise(body)
+    hdr = sum(1 for t, _ in lines if HDRKEY.match(unbold(t.strip())))
+    return {
+        "attr":      len(ATTR.findall(body)),
+        "wrapped":   len(WRAPPED.findall(body)),
+        "hdr":       hdr,
+        "fwd":       len(FWD.findall(body)),
+        "begin":     len(BEGIN.findall(body)),
+        "orig":      len(ORIG.findall(body)),
+        "max_depth": max((d for _, d in lines), default=0),
+    }
+
+def sentinel_total(c):
+    return c["attr"] + c["wrapped"] + c["fwd"] + c["begin"] + c["orig"] + (1 if c["hdr"] >= 2 else 0)

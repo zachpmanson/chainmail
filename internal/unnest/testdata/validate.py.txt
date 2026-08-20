@@ -1,0 +1,90 @@
+"""Python ports of sentinel.go's finders, used to predict every assertion in
+corpus_test.go before a fixture is committed.
+
+The point is not to re-test the parser — it is to refuse to commit a fixture the
+suite would go red on, without touching a single .go file.
+"""
+import re
+from census import normalise, HDRKEY, unbold, ATTR, WRAPPED, FWD, census
+
+OPENERS = ["on","le","el","il","em","am","op","den","på","pe","w dniu","dnia","vào","在"]
+CLOSERS = ["wrote:","sent:","a écrit :","a écrit:","écrit:","escribió:","ha scritto:",
+           "scritto:","escreveu:","schrieb:","schreef:","napisał:","napisała:","pisze:",
+           "skrev:","kirjoitti:","đã viết:","写道：","작성:"]
+MAXWRAP = 5
+
+def starts_with_opener(t):
+    l = t.strip().lower()
+    return any(l == o or l.startswith(o + " ") or l.startswith(o + " ") for o in OPENERS)
+
+def has_closer(t):
+    l = t.lower()
+    return any(c in l for c in CLOSERS)
+
+def find_attribution(lines, i):
+    if i >= len(lines) or not starts_with_opener(lines[i][0]):
+        return None
+    parts = []
+    for j in range(i, min(len(lines), i + MAXWRAP + 1)):
+        t = lines[j][0].strip()
+        if t == "" and j > i:
+            break
+        if j > i and starts_with_opener(t):
+            break
+        parts.append(t)
+        if has_closer(" ".join(parts)):
+            return (i, j + 1, lines[i][1])
+    return None
+
+def find_header_block(lines, i):
+    j = i
+    n = 0
+    while j < len(lines):
+        t = unbold(lines[j][0].strip())
+        if t == "" or not HDRKEY.match(t):
+            break
+        n += 1
+        j += 1
+    return (i, j) if n >= 2 else None
+
+def problems(body, stats):
+    """Every corpus_test.go assertion, as a list of human-readable failures."""
+    bad = []
+    c = census(body)
+    for k in ("attr", "wrapped", "fwd"):
+        if c[k] != stats[k]:
+            bad.append(f"{k} census drift: body {c[k]} vs stats {stats[k]}")
+    lines = normalise(body)
+    md = max((d for _, d in lines), default=0)
+    if md != stats["max_depth"]:
+        bad.append(f"max_depth {md} vs stats {stats['max_depth']}")
+    found = nested = 0
+    for i in range(len(lines)):
+        b = find_attribution(lines, i)
+        if b:
+            found += 1
+            if b[2] > 0:
+                nested += 1
+    if found < stats["attr"]:
+        bad.append(f"found {found} attributions below floor {stats['attr']}")
+    if stats["wrapped"] > 0 and found <= stats["attr"]:
+        bad.append(f"wrapped {stats['wrapped']} but found {found} <= floor {stats['attr']}")
+    blocks = keys = 0
+    i = 0
+    while i < len(lines):
+        b = find_header_block(lines, i)
+        if b:
+            blocks += 1
+            keys += b[1] - b[0]
+            i = b[1]
+            continue
+        i += 1
+    if stats["hdr"] >= 4 and blocks == 0:
+        bad.append(f"hdr {stats['hdr']} but no header block found")
+    if keys > stats["hdr"]:
+        bad.append(f"claimed {keys} header lines, census counted {stats['hdr']}")
+    for i, (t, _) in enumerate(lines):
+        if "\r" in t:
+            bad.append(f"line {i} carries a CR")
+            break
+    return bad, nested

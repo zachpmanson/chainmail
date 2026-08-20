@@ -1,0 +1,219 @@
+"""Select, anonymise and write the fixture corpus.
+
+Selection: every harvested message carrying at least one sentinel, plus a handful
+of quoting-free controls. Received mail is the bulk (it carries the client
+diversity); sent mail is a tagged arm that characterises the *sending* client,
+which a received-only corpus cannot show.
+"""
+import json, glob, os, re, sys, collections
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from census import census, sentinel_total
+from validate import problems
+import anon2
+
+S = "/private/tmp/claude-501/-Users-zach-projects-monorepo/07f4cc2a-4553-490d-a795-03cef6faed4a/scratchpad"
+OUT = "/tmp/cm-corpus/internal/unnest/testdata"
+BUDGET = 7_900_000
+
+# The thirteen already committed, kept by name and role, regenerated because the
+# original anonymiser's pair regex ate their From:/To:/Cc: header keys.
+legacy = {p["id"]: p for p in json.load(open(f"{S}/harvest/picked.json"))}
+legacy_name = {}
+for p in legacy.values():
+    slug = re.sub(r'[^a-z0-9]+', '-', p["role"].lower()).strip('-')
+    legacy_name[p["id"]] = slug
+existing = {os.path.basename(f)[:-5] for f in glob.glob(f"{OUT}/*.json")} - {"index.json"}
+# map legacy ids onto the exact committed filenames, by role slug with the -2/-3 suffixes
+committed = sorted(existing)
+by_slug = collections.defaultdict(list)
+for n in committed:
+    by_slug[re.sub(r'-\d+$', '', n)].append(n)
+used = set()
+for pid, slug in sorted(legacy_name.items(), key=lambda kv: legacy[kv[0]]["role"]):
+    for cand in sorted(by_slug.get(slug, []), key=lambda n: (len(n), n)):
+        if cand not in used:
+            legacy_name[pid] = cand
+            used.add(cand)
+            break
+
+# The mailbox owner's own address, used only to tag a targeted-sweep message as
+# sent or received. Read from the environment rather than committed.
+ME = os.environ["CHAINMAIL_OWNER_ADDR"].lower()
+
+def load(pattern, sent=None):
+    out = []
+    for f in sorted(glob.glob(pattern)):
+        d = json.load(open(f))
+        if not d.get("ok"):
+            continue
+        m = d["data"]
+        if sent is None:
+            sent = None  # decided per message below
+        b = m.get("body") or ""
+        if not b.strip():
+            continue
+        c = census(b)
+        snt = ME in (m.get("from") or "").lower() if sent is None else sent
+        out.append({"id": m["id"], "sent": snt, "msg": m, "c": c,
+                    "st": sentinel_total(c), "bytes": len(b.encode())})
+    return out
+
+recv = load(f"{S}/bodies/*.json", False)
+sent = load(f"{S}/bodies_sent/*.json", True)
+# A targeted sweep for the two families the date-partitioned harvest barely holds:
+# `-----Original Message-----` appears 0 times in 2027 date-partitioned messages.
+rare = load(f"{S}/bodies_rare/*.json")
+# Three of the original thirteen predate the harvest window; their sources survive
+# only in the 80-message sample, and they must be regenerated because the old
+# anonymiser ate their From:/To:/Cc: keys.
+old = []
+for r in json.load(open(f"{S}/harvest/raw.json")):
+    if r["id"] in legacy:
+        b = r["msg"].get("body") or ""
+        c = census(b)
+        old.append({"id": r["id"], "sent": False, "msg": r["msg"], "c": c,
+                    "st": sentinel_total(c), "bytes": len(b.encode())})
+seen = {x["id"] for x in recv + sent + rare}
+old = [x for x in old if x["id"] not in seen]
+pool = recv + sent + rare + old
+
+def role_for(r):
+    c = r["c"]
+    bits = []
+    if r["sent"]:
+        bits.append("sent")
+    if c["wrapped"]:
+        bits.append("wrapped attribution")
+    if c["begin"]:
+        bits.append("begin forwarded message")
+    if c["orig"]:
+        bits.append("original message rule")
+    if c["fwd"] > 1:
+        bits.append("multiple forward rules")
+    elif c["fwd"]:
+        bits.append("forward rule")
+    if c["hdr"] >= 12:
+        bits.append("many header blocks")
+    elif c["hdr"] >= 2:
+        bits.append("header block")
+    if c["attr"] >= 6:
+        bits.append("several attributions")
+    elif c["attr"]:
+        bits.append("attribution")
+    if not bits or bits == ["sent"]:
+        bits.append("no quoting control")
+    d = c["max_depth"]
+    if d >= 25:
+        bits.append(f"very deep depth {d}")
+    elif d >= 10:
+        bits.append(f"deep depth {d}")
+    elif d:
+        bits.append(f"depth {d}")
+    return ", ".join(bits)
+
+def coverage_key(r):
+    """Rarity signature used to keep curation from dropping an only-example."""
+    c = r["c"]
+    return (r["sent"], c["begin"] > 0, c["orig"] > 0, c["wrapped"] > 0,
+            c["fwd"] > 1, c["hdr"] >= 12, min(c["max_depth"] // 5, 11))
+
+# ---- selection ------------------------------------------------------------
+quoting_recv = [r for r in recv + rare + old if r["st"] > 0 and not r["sent"]]
+quoting_sent = [r for r in sent + rare if r["st"] > 0 and r["sent"]]
+controls = ([r for r in recv if r["st"] == 0 and 200 < r["bytes"] < 1500][:2] +
+            [r for r in sent if r["st"] == 0 and 200 < r["bytes"] < 1500][:1])
+
+# Rarity first, then largest-structure-per-byte, so a budget cut removes the most
+# redundant messages rather than the most interesting ones.
+groups = collections.defaultdict(list)
+for r in quoting_recv + quoting_sent:
+    groups[coverage_key(r)].append(r)
+for g in groups.values():
+    g.sort(key=lambda r: (-r["st"], r["bytes"]))
+
+order = []
+rr = sorted(groups.items(), key=lambda kv: len(kv[1]))
+i = 0
+while any(rr[k][1][i:] for k in range(len(rr))):
+    for _, g in rr:
+        if i < len(g):
+            order.append(g[i])
+    i += 1
+
+selected, total = [], 0
+forced = {r["id"] for r in controls} | set(legacy) | {r["id"] for r in rare if r["st"] > 0}
+for r in order:
+    if r["id"] in forced:
+        continue
+    est = r["bytes"] + 1200
+    if total + est > BUDGET:
+        continue
+    selected.append(r)
+    total += est
+for r in controls + [x for x in rare if x["st"] > 0] + [x for x in pool if x["id"] in legacy]:
+    if r["id"] not in {s["id"] for s in selected}:
+        selected.append(r)
+        total += r["bytes"] + 1200
+
+dropped = [r for r in order if r["id"] not in {s["id"] for s in selected}]
+print(f"received quoting {len(quoting_recv)}, sent quoting {len(quoting_sent)}, "
+      f"controls {len(controls)}; selected {len(selected)}, dropped {len(dropped)}, "
+      f"est bytes {total}")
+json.dump([{"id": r["id"], "bytes": r["bytes"], "c": r["c"], "sent": r["sent"]}
+           for r in dropped], open(f"{os.path.dirname(os.path.abspath(__file__))}/dropped.json", "w"))
+
+# The denylist must see the whole corpus before a single fixture is written: a
+# token leaked on one fixture's structural line is usually introduced by another
+# fixture's address.
+anon2.build_denylist([str(r["msg"].get(k) or "")
+                      for r in selected for k in ("from", "to", "cc", "subject", "body")])
+print(f"denylist: {len(anon2.deny)} tokens")
+
+# ---- anonymise and write --------------------------------------------------
+names, out_files, rejected = {}, [], []
+counter = collections.Counter()
+for r in sorted(selected, key=lambda r: (not r["sent"], -r["st"], r["id"])):
+    role = legacy[r["id"]]["role"] if r["id"] in legacy else role_for(r)
+    if r["id"] in legacy_name and r["id"] in legacy:
+        name = legacy_name[r["id"]]
+    else:
+        slug = re.sub(r'[^a-z0-9]+', '-', role.lower()).strip('-')
+        slug = re.sub(r'-(depth)-(\d+)', r'-d\2', slug)
+        counter[slug] += 1
+        name = f"{slug}-{counter[slug]:03d}"
+        while name in existing:
+            counter[slug] += 1
+            name = f"{slug}-{counter[slug]:03d}"
+    m = r["msg"]
+    body = anon2.anonymise_body(m.get("body") or "")
+    bad, nested = problems(body, r["c"])
+    if bad and r["id"] not in legacy:
+        rejected.append({"id": r["id"], "role": role, "why": bad, "bytes": r["bytes"]})
+        continue
+    if bad:
+        rejected.append({"id": r["id"], "role": role, "why": bad, "bytes": r["bytes"],
+                         "legacy": True})
+    fx = {
+        "name": name,
+        "role": role,
+        "from": anon2.apply_denylist(anon2.anonymise_headerfield("from", m.get("from", "")) or ""),
+        "to": anon2.apply_denylist(anon2.anonymise_headerfield("to", m.get("to", "")) or ""),
+        "cc": anon2.apply_denylist(anon2.anonymise_headerfield("cc", m.get("cc", "")) or ""),
+        "subject": anon2.apply_denylist(anon2.anonymise_headerfield("subject", m.get("subject", ""), r["id"]) or ""),
+        "date": m.get("date", ""),
+        "body": body,
+        "stats": r["c"],
+    }
+    with open(f"{OUT}/{name}.json", "w") as fh:
+        json.dump(fx, fh, indent=1, ensure_ascii=False)
+    out_files.append(name)
+    names[name] = r["id"]
+
+json.dump({"fixtures": sorted(out_files)}, open(f"{OUT}/index.json", "w"), indent=1)
+json.dump(names, open(f"{os.path.dirname(os.path.abspath(__file__))}/name_to_id.json", "w"), indent=1)
+json.dump(rejected, open(f"{os.path.dirname(os.path.abspath(__file__))}/rejected.json", "w"), indent=1)
+print(f"wrote {len(out_files)} fixtures; rejected {len(rejected)}")
+for r in rejected[:20]:
+    print("  reject", r["id"], r["role"], r["why"])
+print(f"identities mapped: {len(anon2.people)} people, {len(anon2.locals_)} addresses, "
+      f"{len(anon2.domains)} domains")

@@ -4,142 +4,393 @@ Structure is preserved exactly — quote markers and their depth, sentinel lines
 where an attribution wraps, header-block shape, blank lines, CRLF. Only identities
 and prose are replaced, because structure is what the extractor is tested on and
 prose is what carries the confidential content.
+
+Three bugs this version exists to avoid:
+
+1. The `Name <addr>` pair regex must not cross a comma and must not contain
+   digits, or `On Tue, 3 Feb 2026 at 07:36, Alice <a@x> wrote:` matches from "On"
+   and the whole date is replaced as a display name.
+2. It must also not cross a COLON, or `From: Jane <j@x>` matches from "From" and
+   the header KEY is eaten — which silently destroyed 11 of the 20 header lines in
+   the first `many-header-blocks` fixture.
+3. `Subject:` is structural but its text is content: keep the key and its
+   Re:/FW:/Fwd: prefix chain, replace the subject text like any prose.
 """
-import json, re, hashlib, random
+import json, re, hashlib, random, unicodedata
 
-S = "/private/tmp/claude-501/-Users-zach-projects-monorepo/07f4cc2a-4553-490d-a795-03cef6faed4a/scratchpad"
-picked = json.load(open(f"{S}/harvest/picked.json"))
-
-CAST = ["Jean-Luc Picard","William Riker","Beverly Crusher","Geordi La Forge",
-        "Deanna Troi","Tasha Yar","Noonien Soong","Bruce Maddox","Leah Brahms",
-        "Orfil Quinteros","Reginald Barclay","Miles OBrien","Alyssa Ogawa",
-        "Ro Laren","Katherine Pulaski","Selar Vex","Tam Elbrun","Nella Daren"]
-DOMAINS = ["starfleet.fed","daystrom.fed","utopia-planitia.fed","vulcan.fed"]
+FIRST = ["Jean-Luc","William","Beverly","Geordi","Deanna","Tasha","Noonien","Bruce",
+         "Leah","Orfil","Reginald","Miles","Alyssa","Ro","Katherine","Selar","Tam",
+         "Nella","Kathryn","Chakotay","Tuvok","Harry","Neelix","Seven","Kes",
+         "Benjamin","Kira","Jadzia","Julian","Odo","Quark","Jake","Ezri","Worf",
+         "Christopher","Una","Spock","Nyota","Hikaru","Pavel","Leonard","Montgomery",
+         "Michael","Saru","Sylvia","Paul","Hugh","Cleveland","Jett","Zora"]
+LAST  = ["Picard","Riker","Crusher","Forge","Troi","Yar","Soong","Maddox","Brahms",
+         "Quinteros","Barclay","OBrien","Ogawa","Laren","Pulaski","Vex","Elbrun",
+         "Daren","Janeway","Torres","Kim","Paris","Tuvix","Sisko","Nerys","Dax",
+         "Bashir","Ishka","Pike","Chin-Riley","Uhura","Sulu","Chekov","McCoy",
+         "Scott","Burnham","Stamets","Culber","Booker","Rhys","Detmer","Owosekun"]
+CAST = [f"{f} {l}" for f in FIRST for l in LAST]
+DOMAINS = ["starfleet.fed","daystrom.fed","utopia-planitia.fed","vulcan.fed",
+           "risa.fed","bajor.fed","cardassia.fed","ferenginar.fed","trill.fed",
+           "andoria.fed","betazed.fed","qonos.fed","tellar.fed","earth.fed"]
 FILLER = ("the telemetry export the berth registry the levy column the sensor "
           "readings the statement run the fellow number the settlement window "
           "the reconciliation the manifest the shipment record the audit trail").split()
 
 people, domains, locals_ = {}, {}, {}
+cast_used = set()
+# Every token the cast can be made of. The single-token name pass must never
+# rewrite a name it just invented, or "Jean-Luc Picard" becomes "Deanna Deanna".
+CAST_TOKENS = {t for n in CAST for t in re.split(r'[\s\-]+', n)} | set(FIRST) | set(LAST)
+
 def person(raw):
     key = raw.strip().lower()
     if key not in people:
-        people[key] = CAST[len(people) % len(CAST)] + ("" if len(people) < len(CAST) else str(len(people)))
+        n = len(people)
+        people[key] = CAST[n % len(CAST)] + ("" if n < len(CAST) else str(n))
+        cast_used.add(people[key])
     return people[key]
+
 def domain(raw):
     key = raw.lower()
-    if key not in domains: domains[key] = DOMAINS[len(domains) % len(DOMAINS)]
+    if key not in domains:
+        n = len(domains)
+        domains[key] = DOMAINS[n % len(DOMAINS)] + ("" if n < len(DOMAINS) else str(n) + ".fed")
     return domains[key]
+
 def addr(raw):
     key = raw.strip().lower()
     if key not in locals_:
         name = person(key).lower().replace(" ", ".").replace("-", "")
         at = key.rsplit("@", 1)
-        locals_[key] = f"{name}@{domain(at[1]) if len(at)>1 else DOMAINS[0]}"
+        locals_[key] = f"{name}@{domain(at[1]) if len(at) > 1 else DOMAINS[0]}"
     return locals_[key]
 
-reEmail = re.compile(r'[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}')
-reMailto = re.compile(r'<mailto:[^>]*>')
-reURL = re.compile(r'https?://[^\s>\]]+')
-rePhone = re.compile(r'(?<!\d)(?:\+?\d[\d\s\-()]{7,}\d)(?!\d)')
-reMoney = re.compile(r'[$£€]\s?\d[\d,]*(?:\.\d+)?')
+# ---------------------------------------------------------------- identity masks
+reEmail   = re.compile(r'[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}')
+reURL     = re.compile(r'(?:https?://|www\.)[^\s>\]\)]+')
+rePhone   = re.compile(r'(?<!\d)(?:\+?\d[\d\s\-()]{7,}\d)(?!\d)')
+reMoney   = re.compile(r'[$£€]\s?\d[\d,]*(?:\.\d+)?')
 reLongNum = re.compile(r'\b\d{6,}\b')
-
-# lines whose SHAPE must survive verbatim (minus identities)
-reHdrKey = re.compile(r'(?i)^\*?(from|sent|to|subject|cc|bcc|date|reply-to)\*?\s*:')
-reAttrLine = re.compile(r'(?i)(?:^(?:on|le|el|il|em|am|op|den)\b|\bwrote:\s*$)')
-reRule = re.compile(r'^([-_*]{4,}|-{2,}\s?forwarded message\s?-{2,}|-{3,}\s?original message\s?-{3,}|begin forwarded message\s*:)', re.I)
-reSig = re.compile(r'^-- $')
-reSubjectLine = re.compile(r'(?i)^(\*?subject\*?\s*:\s*(?:(?:re|fw|fwd|aw|sv|tr)\s*:\s*)*)(\*?)(.*)$')
-reDepth = re.compile(r'^([ \t]*(?:>[ \t]*)*)(.*)$')
-
-rePair = re.compile(r'([^<>@\n,;0-9]{2,45}?)\s*<\s*([A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,})\s*>')
+# Bug 1 + bug 2: no comma, no semicolon, no digit, no COLON in the display-name
+# lead. Also no asterisk, or Outlook's bold chrome in "*From:* Jane <j@x>" is
+# swallowed into the display name and the flattened-bold key shape is lost.
+rePair    = re.compile(r'([^<>@\n,;:*0-9]{2,45}?)\s*<\s*'
+                       r'((?:mailto:)?[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,})\s*>')
 
 def _pair(m):
-    lead = m.group(1)
-    keep = lead[: len(lead) - len(lead.lstrip())]   # preserve leading whitespace
-    return f"{keep}{person(m.group(2))} <{addr(m.group(2))}>"
+    lead, target = m.group(1), m.group(2)
+    keep = lead[: len(lead) - len(lead.lstrip())]          # preserve leading whitespace
+    quoted = lead.strip().startswith('"') and lead.strip().endswith('"')
+    bare = target[7:] if target.startswith("mailto:") else target
+    nm = person(bare)
+    if quoted:
+        nm = f'"{nm}"'
+    pre = "mailto:" if target.startswith("mailto:") else ""
+    return f"{keep}{nm} <{pre}{addr(bare)}>"
 
 def scrub_identities(s):
-    s = reMailto.sub("", s)
     s = rePair.sub(_pair, s)          # pairs first, so name and address agree
     s = reEmail.sub(lambda m: addr(m.group(0)), s)
     s = reURL.sub("https://example.fed/x", s)
     s = rePhone.sub("+61 4 0000 0000", s)
     s = reMoney.sub("$0.00", s)
-    s = reLongNum.sub(lambda m: "9"*len(m.group(0)), s)
+    s = reLongNum.sub(lambda m: "9" * len(m.group(0)), s)
     return s
 
-def names_in(s):
-    # "Firstname Lastname" runs, so display names in sentinel lines get mapped too
-    return re.findall(r'\b[A-Z][a-z]{1,15}(?:\s+[A-Z][a-z\'\-]{1,15}){1,2}\b', s)
+# Words that must survive on a structural line, because the parser tests them:
+# openers, header keys, rule words, and every weekday / month / meridiem /
+# timezone token that can appear in a date we are deliberately keeping verbatim.
+KEEP = set("""on le el il em am op den pa pe w dnia dniu vao from sent to subject cc bcc
+date reply begin original forwarded message importance priority attachments
+mon tue tues wed weds thu thur thurs fri sat sun monday tuesday wednesday thursday
+friday saturday sunday jan feb mar apr may jun jul aug sep sept oct nov dec
+january february march april june july august september october november december
+pm gmt utc bst est edt cst cdt mst mdt pst pdt aest aedt acst acdt awst nzst nzdt
+ist cet cest sgt hkt jst wib at wrote von gesendet an betreff de enviado para
+asunto objet envoye van verzonden aan da inviato oggetto fra sendt skickat till
+amne assunto re fw fwd aw sv tr t z""".split())
 
-def scrub_names(s, keep_words):
-    for n in names_in(s):
-        if n.split()[0].lower() in keep_words: continue
-        s = s.replace(n, person(n))
-    return s
+reWordRun   = re.compile(r"\b[A-Z][A-Za-z'\-]*(?:\s+[A-Z][A-Za-z'\-]*){1,3}\b")
+reWordOne   = re.compile(r"\b[A-Z][A-Za-z'\-]{1,}\b")
+reHasDigit  = re.compile(r'\d')
 
-KEEP = {"on","le","el","il","em","am","op","den","from","sent","to","subject","cc",
-        "date","begin","original","forwarded","message","mon","tue","wed","thu",
-        "fri","sat","sun","jan","feb","mar","apr","may","jun","jul","aug","sep",
-        "sept","oct","nov","dec","monday","tuesday","wednesday","thursday",
-        "friday","saturday","sunday","january","february","march","april","june",
-        "july","august","september","october","november","december","get","sent"}
+def _keepable(tok):
+    return unicodedata.normalize("NFKD", tok).encode("ascii", "ignore").decode().lower().strip("'-") in KEEP
+
+def scrub_names(s):
+    """Map every human-looking name run, then every leftover capitalised token.
+
+    The second pass is what stops a one-word company or a first-name-only
+    attribution ("... , Jane wrote:") from surviving verbatim.
+    """
+    def run(m):
+        t = m.group(0)
+        if t in cast_used or reHasDigit.search(t):
+            return t
+        if all(w in CAST_TOKENS for w in re.split(r'[\s]+', t)):
+            return t
+        if all(_keepable(w) for w in t.split()):
+            return t
+        return person(t)
+    s = reWordRun.sub(run, s)
+
+    def one(m):
+        t = m.group(0)
+        if t in cast_used or _keepable(t) or reHasDigit.search(t):
+            return t
+        if t in CAST_TOKENS or all(w in CAST_TOKENS for w in t.split('-')):
+            return t
+        return person(t).split()[0]
+    return reWordOne.sub(one, s)
+
+# ---------------------------------------------------------------- structure
+# Group 1 is the whole key including Outlook's bold-flattening chrome, re-emitted
+# verbatim so *From:* / *From: * / From: all survive as themselves — unbold() in
+# the parser is tested against exactly those four dialects.
+reHdrKey     = re.compile(r'(?i)^(\*?(from|sent|to|subject|cc|bcc|date|reply-to|'
+                          r'von|gesendet|an|betreff|de|enviado|para|asunto|objet|envoyé|'
+                          r'van|verzonden|aan|da|inviato|oggetto|fra|sendt|skickat|till|ämne|assunto)'
+                          r'\*?[ \t]*:[ \t]*\*?[ \t]*)(.*)$')
+IDENTITY_KEYS = {"from","to","cc","bcc","reply-to","von","an","de","para","van","aan","fra","till"}
+reRule       = re.compile(r'^([-_*]{4,}|-{2,}\s?forwarded message\s?-{2,}|'
+                          r'-{3,}\s?original message\s?-{3,}|begin forwarded message\s*:)', re.I)
+reSig        = re.compile(r'^-- $')
+reSubject    = re.compile(r'(?i)^(\*?(?:subject|betreff|asunto|objet|oggetto|ämne|assunto)\*?[ \t]*:'
+                          r'[ \t]*\*?[ \t]*(?:(?:re|fw|fwd|aw|sv|tr)[ \t]*:[ \t]*)*)(.*)$')
+reDepth      = re.compile(r'^([ \t]*(?:>[ \t]*)*)(.*)$')
+reSep        = re.compile(r'(\r\n|\r|\n)')
+
+OPENERS = ["on","le","el","il","em","am","op","den","på","pe","w dniu","dnia","vào","在"]
+CLOSERS = ["wrote:","sent:","a écrit :","a écrit:","écrit:","escribió:","ha scritto:",
+           "scritto:","escreveu:","schrieb:","schreef:","napisał:","napisała:","pisze:",
+           "skrev:","kirjoitti:","đã viết:","写道：","작성:"]
+MAXWRAP = 5
+
+def starts_with_opener(t):
+    l = t.strip().lower()
+    return any(l == o or l.startswith(o + " ") or l.startswith(o + " ") for o in OPENERS)
+
+def has_closer(t):
+    l = t.lower()
+    return any(c in l for c in CLOSERS)
+
+def attribution_index(texts):
+    """Indexes of every line that is part of an attribution.
+
+    Mirrors sentinel.go FindAttribution's join, so an opener whose `wrote:` sits on
+    a continuation line is recognised as structural and kept verbatim. Getting this
+    wrong turns a wrapped attribution's first line into filler and destroys the
+    exact case the corpus exists to cover.
+    """
+    marked = set()
+    for i, t in enumerate(texts):
+        if has_closer(t):
+            marked.add(i)
+        if not starts_with_opener(t):
+            continue
+        parts = []
+        for j in range(i, min(len(texts), i + MAXWRAP + 1)):
+            tj = texts[j].strip()
+            if tj == "" and j > i:
+                break
+            if j > i and starts_with_opener(tj):
+                break
+            parts.append(tj)
+            if has_closer(" ".join(parts)):
+                marked.update(range(i, j + 1))
+                break
+    return marked
 
 def filler_like(text, seed):
     rnd = random.Random(seed)
     words = text.split()
-    if not words: return text
-    out = [rnd.choice(FILLER) for _ in words]
-    s = " ".join(out)
-    if text.rstrip().endswith((".", ":", "?", "!")): s += text.rstrip()[-1]
+    if not words:
+        return text
+    s = " ".join(rnd.choice(FILLER) for _ in words)
+    if text.rstrip().endswith((".", ":", "?", "!")):
+        s += text.rstrip()[-1]
     return s
 
-def anonymise_body(body):
-    crlf = "\r\n" in body
-    lines = body.replace("\r\n", "\n").split("\n")
-    out = []
-    for i, raw in enumerate(lines):
-        m = reDepth.match(raw)
-        prefix, text = m.group(1), m.group(2)
-        stripped = text.strip()
-        if stripped == "":
-            out.append(prefix.rstrip() if prefix.strip() else "")
-            continue
-        structural = bool(reHdrKey.match(stripped) or reAttrLine.search(stripped)
-                          or reRule.match(stripped) or reSig.match(text))
-        if structural:
-            # keep the shape; replace only identities and display names
-            t = scrub_identities(text)
-            t = scrub_names(t, KEEP)
-            # A Subject: line is structural — the key and its Re:/FW: prefix chain
-            # are what the parser tests — but the subject TEXT is content and
-            # routinely names companies, so it is replaced like any prose.
-            ms = reSubjectLine.match(t)
-            if ms:
-                t = ms.group(1) + filler_like(ms.group(3), f"subj{i}")
-            out.append(prefix + t)
-        else:
-            t = scrub_identities(text)
-            t = filler_like(t, f"{i}:{hashlib.sha1(text.encode()).hexdigest()[:8]}")
-            out.append(prefix + t)
-    body = "\n".join(out)
-    return body.replace("\n", "\r\n") if crlf else body
+def rewrite_header_value(key, value):
+    """Rebuild an identity header's value from the cast, part by part.
 
-fixtures = []
-for p in picked:
-    m = p["msg"]
-    fx = {
-        "role": p["role"],
-        "from": scrub_names(scrub_identities(m.get("from","")), KEEP),
-        "to": scrub_names(scrub_identities(m.get("to","")), KEEP),
-        "cc": scrub_names(scrub_identities(m.get("cc","")), KEEP),
-        "subject": filler_like(scrub_identities(m.get("subject","")), "subj"+p["id"]),
-        "date": m.get("date",""),
-        "body": anonymise_body(m["body"]),
-        "stats": {k: p[k] for k in ("attr","wrapped","hdr","fwd","begin","orig","max_depth")},
-    }
-    fixtures.append(fx)
-json.dump(fixtures, open(f"{S}/harvest/anon.json","w"), indent=1)
-print(f"anonymised {len(fixtures)} fixtures")
-print(f"identities mapped: {len(people)} people, {len(locals_)} addresses, {len(domains)} domains")
+    Preserves the recipient count, the separators and whether each part carried an
+    angle-bracketed address — the shape a header-block parser reads — while
+    guaranteeing no source name survives even when a part is a bare one-word
+    company with no address at all.
+    """
+    if key.lower() not in IDENTITY_KEYS:
+        return None
+    out, buf = [], ""
+    for part in re.split(r'(,|;)', value):
+        if part in (",", ";"):
+            out.append(part)
+            continue
+        lead = part[: len(part) - len(part.lstrip())]
+        core = part.strip()
+        if not core:
+            out.append(part)
+            continue
+        em = reEmail.search(core)
+        if em and "<" in core:
+            out.append(f"{lead}{person(em.group(0))} <{addr(em.group(0))}>")
+        elif em:
+            out.append(f"{lead}{addr(em.group(0))}")
+        elif core.lower() in ("undisclosed-recipients:;", "undisclosed recipients"):
+            out.append(part)
+        else:
+            out.append(f"{lead}{person(core)}")
+    return "".join(out)
+
+def structural_line(text, attr_marked):
+    stripped = text.strip()
+    return bool(reHdrKey.match(stripped) or reRule.match(stripped)
+                or reSig.match(text) or attr_marked)
+
+def anonymise_line(raw_text, i, attr_marked):
+    """One depth-stripped line. Returns the replacement text."""
+    stripped = raw_text.strip()
+    if structural_line(raw_text, attr_marked):
+        t = scrub_identities(raw_text)
+        mh = reHdrKey.match(t.strip())
+        ms = reSubject.match(t.strip())
+        if ms:
+            # Subject: the key and its Re:/FW: chain are structural, the text is not.
+            lead = t[: len(t) - len(t.lstrip())]
+            return lead + ms.group(1) + filler_like(ms.group(2), f"subj{i}")
+        if mh and mh.group(2).lower() in IDENTITY_KEYS:
+            lead = t[: len(t) - len(t.lstrip())]
+            rv = rewrite_header_value(mh.group(2), mh.group(3))
+            if rv is not None:
+                return lead + mh.group(1) + rv
+        return apply_denylist(scrub_names(t))
+    return scrub_identities(raw_text) if False else filler_like(
+        scrub_identities(raw_text), f"{i}:{hashlib.sha1(raw_text.encode()).hexdigest()[:8]}")
+
+def anonymise_body(body):
+    """Rewrite a body in place, leaving every line separator exactly as it was.
+
+    Separators are split out and re-emitted verbatim rather than normalised to
+    CRLF: one message in this mailbox is CR CR LF throughout and 45 more mix bare
+    LF into CRLF, and rewriting those would move the line boundaries the parser
+    sees — and would change a census taken on the source.
+    """
+    parts = reSep.split(body)
+    texts = parts[0::2]
+    split = [reDepth.match(t).groups() for t in texts]
+    attr_marked = attribution_index([t for _, t in split])
+    out = []
+    for i, (prefix, text) in enumerate(split):
+        if text.strip() == "":
+            out.append(prefix.rstrip() if prefix.strip() else "")
+        else:
+            out.append(prefix + anonymise_line(text, i, i in attr_marked))
+    res = []
+    for i, t in enumerate(out):
+        res.append(t)
+        if 2 * i + 1 < len(parts):
+            res.append(parts[2 * i + 1])
+    return "".join(res)
+
+
+def anonymise_headerfield(key, value, seed=""):
+    if not value:
+        return value
+    v = scrub_identities(value)
+    if key.lower() in IDENTITY_KEYS:
+        return rewrite_header_value(key, v)
+    if key.lower() == "subject":
+        m = re.match(r'(?i)^((?:(?:re|fw|fwd|aw|sv|tr)\s*:\s*)*)(.*)$', v)
+        return m.group(1) + filler_like(m.group(2), "subj" + seed)
+    return scrub_names(v)
+
+
+# ---------------------------------------------------------------- denylist pass
+# A final safety net over structural lines, which are the only lines kept
+# verbatim. Two leak classes got through everything above and were caught by the
+# audit's probes:
+#
+#   1. an address split across a soft line break — "... jane.doe@" on one
+#      line and "acmeco.com" on the next — matches no email pattern on either
+#      line, so the local part survived intact;
+#   2. a lowercase organisation inside a display name ("Jane Doe from acmeco"),
+#      which neither the name-run nor the capitalised-token pass can see.
+#
+# So every token that appears anywhere in the source as an address label or as
+# part of a name is denied outright and mapped to a cast-derived token.
+reFragLocal  = re.compile(r'[A-Za-z0-9._%+\-]{2,}@')
+reFragDomain = re.compile(r'@[A-Za-z0-9.\-]{2,}')
+reBareDomain = re.compile(r'\b[A-Za-z][A-Za-z\-]{1,}(?:\.[A-Za-z][A-Za-z\-]{1,})+\b')
+reToken      = re.compile(r"[A-Za-z][A-Za-z'\-]{2,}")
+
+deny = {}          # lowercased source token -> replacement token
+SAFE = {t.lower() for t in CAST_TOKENS} | {"example", "fed", "mailto", "https", "http"}
+SAFE |= {lab for d in DOMAINS for lab in d.split(".")}
+
+def prune_cast(source_tokens):
+    """Drop any invented name that collides with a real token from the source.
+
+    Without this, a cast member called Michael makes the leak audit unfalsifiable
+    for every real Michael in the mailbox: the probe cannot tell an invented name
+    from a surviving one.
+    """
+    global CAST, CAST_TOKENS, FIRST, LAST
+    low = {t.lower() for t in source_tokens}
+    FIRST = [f for f in FIRST if not any(p.lower() in low for p in re.split(r'[\s\-]+', f))]
+    LAST = [l for l in LAST if not any(p.lower() in low for p in re.split(r'[\s\-]+', l))]
+    CAST = [f"{f} {l}" for f in FIRST for l in LAST]
+    CAST_TOKENS = {t for n in CAST for t in re.split(r'[\s\-]+', n)} | set(FIRST) | set(LAST)
+    if not CAST:
+        raise SystemExit("every cast name collided with the source")
+
+
+def source_tokens(texts):
+    toks = set()
+    for s in texts:
+        for a in reEmail.findall(s):
+            local, _, dom = a.partition("@")
+            toks |= set(re.split(r'[._%+\-]+', local))
+            toks |= set(dom.split("."))
+        for r in reWordRun.findall(s):
+            toks |= set(re.split(r"[\s\-']+", r))
+        for m in reFragLocal.finditer(s):
+            toks |= set(re.split(r'[._%+\-]+', m.group(0)[:-1]))
+        for m in reBareDomain.finditer(s):
+            toks |= set(m.group(0).split("."))
+    return toks
+
+
+def build_denylist(texts):
+    """Collect every token the source uses as an address label or in a name, prune
+    the cast of anything that collides with it, then map each denied token."""
+    global SAFE
+    toks = source_tokens(texts)
+    prune_cast(toks)
+    SAFE = {t.lower() for t in CAST_TOKENS} | {"example", "fed", "mailto", "https", "http"}
+    SAFE |= {lab for d in DOMAINS for lab in d.split(".")}
+    for t in sorted(toks):
+        tl = t.lower()
+        if len(tl) < 3 or tl in SAFE or _keepable(t) or tl in deny:
+            continue
+        deny[tl] = person("token:" + tl).split()[0]
+
+def _match_case(src, repl):
+    if src.isupper():
+        return repl.upper()
+    if src.islower():
+        return repl.lower()
+    return repl
+
+def apply_denylist(s):
+    def one(m):
+        t = m.group(0)
+        r = deny.get(t.lower())
+        return _match_case(t, r) if r else t
+    s = reToken.sub(one, s)
+    # An address fragment left dangling by a soft line break keeps its shape —
+    # "local@" stays "local@" and "@domain" stays "@domain" — so the wrap point
+    # the parser sees does not move.
+    s = reFragLocal.sub(lambda m: addr(m.group(0) + "x.fed").split("@")[0] + "@", s)
+    s = reFragDomain.sub(lambda m: "@" + domain(m.group(0)[1:]), s)
+    return s

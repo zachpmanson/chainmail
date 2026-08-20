@@ -1,0 +1,19 @@
+{
+ "name": "sent-begin-forwarded-message-forward-rule-header-block-d1-002",
+ "role": "sent, begin forwarded message, forward rule, header block, depth 1",
+ "from": "Miles Burnham2153 <miles.stamets2154@andoria.fed>",
+ "to": "neelix.scott2552@ferenginar.fed",
+ "cc": "",
+ "subject": "ezri ezri record telemetry",
+ "date": "Mon, 29 Sep 2025 12:59:07 +1000",
+ "body": "the the the\r\nmanifest the registry telemetry manifest sensor the sensor the export window berth shipment trail reconciliation record the record the reconciliation the the record.\r\nthe number number the fellow record the levy the the the berth audit sensor the export telemetry window statement the fellow berth settlement statement export the levy the fellow shipment.\r\n\r\n> Begin forwarded message:\r\n>\r\n> From: Neelix Chekov2550 <neelix.chekov2550@ferenginar.fed>\r\n> Subject: Fwd: telemetry the reconciliation registry the the the registry export sensor statement sensor the telemetry record levy the the\r\n> Date: 23 September 2025 at 16:39:04 AEST\r\n> To: Miles Burnham2153 <miles.burnham2153@ferenginar.fed>\r\n>\r\n>\r\n>\r\n> sensor manifest\r\n> fellow window record\r\n> export berth the berth\r\n> the\r\n> the\r\n>\r\n> ---------- Forwarded message ---------\r\n> From: Quark Soong2765 <quark.soong2765@betazed.fed150.fed>\r\n> Date: Tue, 23 Sep 2025 at 3:40 pm\r\n> Subject: number the record audit run manifest column the export statement readings number berth the the the the the\r\n> To: Kira Stamets2674 <kira.stamets2674@bajor.fed>\r\n>\r\n>\r\n> trail\r\n> the column the the audit audit column the run the the trail the sensor window the statement the window reconciliation the reconciliation the.\r\n> fellow trail fellow the reconciliation the reconciliation run fellow:\r\n> number\r\n> the\r\n>\r\n>\r\n> -- \r\n> the statement levy column settlement export window levy the the the the settlement audit the.\r\n> trail trail trail audit the column statement the export the readings telemetry run the berth audit.\r\n> the the readings the the record\r\n",
+ "stats": {
+  "attr": 0,
+  "wrapped": 0,
+  "hdr": 8,
+  "fwd": 1,
+  "begin": 1,
+  "orig": 0,
+  "max_depth": 1
+ }
+}

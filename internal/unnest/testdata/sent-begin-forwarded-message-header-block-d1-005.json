@@ -1,0 +1,19 @@
+{
+ "name": "sent-begin-forwarded-message-header-block-d1-005",
+ "role": "sent, begin forwarded message, header block, depth 1",
+ "from": "Miles Burnham2153 <miles.stamets2154@andoria.fed>",
+ "to": "Jake Barclay2809 <jake.obrien2810@andoria.fed>",
+ "cc": "",
+ "subject": "Fwd: jett trail window jett",
+ "date": "Fri, 22 May 2026 13:15:06 +1000",
+ "body": "\r\n\r\n> Begin forwarded message:\r\n>\r\n> From: Selar Crusher2242 <selar.crusher2242@ferenginar.fed>\r\n> Subject: berth audit telemetry number\r\n> Date: 16 May 2026 at 17:46:48 AEST\r\n> To: Jake Burnham2833;\r\n>\r\n> window run column run telemetry the the\r\n>\r\n\r\n",
+ "stats": {
+  "attr": 0,
+  "wrapped": 0,
+  "hdr": 4,
+  "fwd": 0,
+  "begin": 1,
+  "orig": 0,
+  "max_depth": 1
+ }
+}

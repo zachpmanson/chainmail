@@ -1,0 +1,19 @@
+{
+ "name": "sent-begin-forwarded-message-header-block-d1-007",
+ "role": "sent, begin forwarded message, header block, depth 1",
+ "from": "Miles Burnham2153 <miles.stamets2154@andoria.fed>",
+ "to": "Quark Daren2776 <quark.janeway2777@starfleet.fed126.fed>",
+ "cc": "",
+ "subject": "Fwd: trail audit sylvia jett jett jett fellow",
+ "date": "Tue, 30 Jun 2026 14:47:04 +1000",
+ "body": "\r\n\r\n> Begin forwarded message:\r\n>\r\n> From: jake.laren2812@andoria.fed163.fed\r\n> Subject: berth audit telemetry number shipment the settlement\r\n> Date: 30 June 2026 at 12:04:34 AEST\r\n> To: Miles Burnham2153 <miles.burnham2153@ferenginar.fed>\r\n> Reply-To: Jake Rhys2837 <jake.rhys2837@earth.fed27.fed>\r\n>\r\n> the the manifest export!\r\n>\r\n>\r\n> the the\r\n> shipment the the trail levy reconciliation export the column the window the levy levy sensor export manifest.\r\n>\r\n> manifest the the registry registry sensor export column sensor the column reconciliation the settlement manifest.\r\n>\r\n> levy statement the the reconciliation the registry number registry window reconciliation the the the.\r\nrun\r\n",
+ "stats": {
+  "attr": 0,
+  "wrapped": 0,
+  "hdr": 5,
+  "fwd": 0,
+  "begin": 1,
+  "orig": 0,
+  "max_depth": 1
+ }
+}

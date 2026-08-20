@@ -1,0 +1,19 @@
+{
+ "name": "sent-begin-forwarded-message-forward-rule-header-block-d1-003",
+ "role": "sent, begin forwarded message, forward rule, header block, depth 1",
+ "from": "Miles Burnham2153 <miles.stamets2154@andoria.fed>",
+ "to": "quark.obrien2770@earth.fed27.fed",
+ "cc": "",
+ "subject": "Fwd: export berth window settlement jett jett jett jett jett hikaru leonard berth jett",
+ "date": "Wed, 26 Nov 2025 16:25:25 +1100",
+ "body": "\r\n\r\n> Begin forwarded message:\r\n>\r\n> From: Ro Crusher2162 <ro.crusher2162@ferenginar.fed>\r\n> Subject: Fwd: berth audit telemetry number shipment the settlement fellow reconciliation telemetry window sensor manifest\r\n> Date: 26 November 2025 at 16:22:19 AEDT\r\n> To: Miles Burnham2153 <miles.burnham2153@ferenginar.fed>\r\n>\r\n>\r\n> column\r\n> trail\r\n>\r\n> record manifest\r\n>\r\n> settlement registry\r\n>\r\n> the berth the manifest\r\n>\r\n> statement window levy\r\n>\r\n> number the\r\n>\r\n>\r\n>\r\n>\r\n>\r\n> ---------- Forwarded message ---------\r\n> From: Quark Brahms2767 <quark.brahms2767@ferenginar.fed>\r\n> Date: Tue, 25 Nov 2025 at 11:35\r\n> Subject: registry reconciliation manifest the sensor the the statement registry the sensor the the\r\n> To: Ro Crusher2162 <ro.crusher2162@ferenginar.fed>\r\n> Cc: Ro Maddox2166 <ro.maddox2166@ferenginar.fed>\r\n>\r\n>\r\n> audit the\r\n>\r\n> the window the reconciliation manifest the the registry sensor sensor statement the registry levy.\r\n>\r\n> the berth settlement the the the manifest the.\r\n>\r\n> the!\r\n>\r\n>\r\n>\r\n>\r\n>\r\n> the telemetry\r\n>\r\n> reconciliation audit run\r\n>\r\n>\r\n> the registry the\r\n>\r\n> statement the\r\n>\r\n>\r\nfellow\r\n",
+ "stats": {
+  "attr": 0,
+  "wrapped": 0,
+  "hdr": 9,
+  "fwd": 1,
+  "begin": 1,
+  "orig": 0,
+  "max_depth": 1
+ }
+}

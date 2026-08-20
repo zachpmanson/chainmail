@@ -1,0 +1,19 @@
+{
+ "name": "sent-wrapped-attribution-d1-003",
+ "role": "sent, wrapped attribution, depth 1",
+ "from": "Miles Burnham2153 <miles.stamets2154@andoria.fed>",
+ "to": "Worf Elbrun2895 <worf.daren2896@starfleet.fed126.fed>",
+ "cc": "",
+ "subject": "Re: hikaru export jett.",
+ "date": "Fri, 26 Jun 2026 08:50:23 +1000",
+ "body": "sensor sensor trail shipment column shipment berth berth shipment run the the the settlement window\r\nsettlement the the trail the\r\n\r\nOn Fri, 26 June 2026, 08:42 Worf Laren2892, <worf.pulaski2893@ferenginar.fed35.fed>\r\nwrote:\r\n\r\n> levy\r\n>\r\n> shipment shipment manifest the number the sensor run trail export shipment shipment number statement\r\n> levy the readings the the manifest levy settlement record levy the settlement the trail the\r\n> window column run reconciliation readings export the export reconciliation audit the the statement readings\r\n> the the export registry manifest audit registry the readings the fellow\r\n> levy window berth sensor.\r\n>\r\n> the\r\n>\r\n",
+ "stats": {
+  "attr": 0,
+  "wrapped": 1,
+  "hdr": 0,
+  "fwd": 0,
+  "begin": 0,
+  "orig": 0,
+  "max_depth": 1
+ }
+}

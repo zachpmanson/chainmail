@@ -1,0 +1,19 @@
+{
+ "name": "sent-attribution-d1-047",
+ "role": "sent, attribution, depth 1",
+ "from": "Miles Burnham2153 <miles.stamets2154@andoria.fed>",
+ "to": "Tuvok Crusher2442 <tuvok.troi2443@andoria.fed>",
+ "cc": "",
+ "subject": "Re: jett record telemetry",
+ "date": "Wed, 12 Aug 2026 09:49:09 +1000",
+ "body": "window export sensor berth the the the.\r\n\r\n> On 11 Aug 2026, at 9:35 am, Miles Chekov2150Riley2147 <miles.scott2152@ferenginar.fed> wrote:\r\n>\r\n>\r\n\r\n",
+ "stats": {
+  "attr": 1,
+  "wrapped": 0,
+  "hdr": 0,
+  "fwd": 0,
+  "begin": 0,
+  "orig": 0,
+  "max_depth": 1
+ }
+}

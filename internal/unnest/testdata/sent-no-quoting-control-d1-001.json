@@ -1,0 +1,19 @@
+{
+ "name": "sent-no-quoting-control-d1-001",
+ "role": "sent, no quoting control, depth 1",
+ "from": "Miles Burnham2153 <miles.stamets2154@andoria.fed>",
+ "to": "worf.sisko2901@andoria.fed177.fed",
+ "cc": "",
+ "subject": "settlement jett jett export jett",
+ "date": "Tue, 6 Aug 2024 10:58:30 +1000",
+ "body": "the the the\r\n\r\ntrail telemetry telemetry the readings the audit number registry the the shipment the export manifest statement the levy settlement levy trail trail the shipment the window the trail settlement the readings the the audit export manifest levy manifest audit the?\r\n\r\nthe the run reconciliation window sensor\r\nthe\r\n  trail trail\r\n  statement record\r\n  audit\r\n  the\r\n  window the the run the export\r\n>\r\nthe\r\nberth record the reconciliation the\r\ntelemetry\r\n  run\r\n  the\r\n  registry\r\n  export\r\n  sensor record the the shipment the\r\n>\r\ntrail\r\n\r\n\r\nnumber shipment reconciliation shipment telemetry:\r\n\r\nthe\r\n\r\nstatement\r\nreadings",
+ "stats": {
+  "attr": 0,
+  "wrapped": 0,
+  "hdr": 0,
+  "fwd": 0,
+  "begin": 0,
+  "orig": 0,
+  "max_depth": 1
+ }
+}
