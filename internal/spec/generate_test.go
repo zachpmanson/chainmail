@@ -644,3 +644,59 @@ func TestAnUnspooledEntryTakesItsMarkupFromTheHostItWasFoundIn(t *testing.T) {
 		t.Errorf("body = %q, want the entry's own block and not its host's text", body)
 	}
 }
+
+// TestSourceNamesEachHostAsMsgID pins the format the renderer recognises when it
+// collapses a long provenance line: "msg <id>" per host, ", " between them. The
+// renderer shows anything else verbatim, so a change here loses the collapse and
+// the per-id links silently rather than failing.
+func TestSourceNamesEachHostAsMsgID(t *testing.T) {
+	s := trail(t)
+	var hosts []int64
+	for _, ext := range []string{"mail:<a@loomworks>", "mail:<b@fjordline>", "mail:<c@loomworks>"} {
+		var id int64
+		if err := s.DB().QueryRow(`select id from entries where ext_id = ?`, ext).Scan(&id); err != nil {
+			t.Fatalf("lookup %s: %v", ext, err)
+		}
+		hosts = append(hosts, id)
+	}
+	q := put(t, s, msg{
+		ext: "quote:sha-many", ts: "2026-03-01T08:00:00+11:00", tz: "AEDT",
+		container: "T1", subject: "Loom cutover",
+		from: "Cy Okafor <cy@loomworks.example>",
+	})
+	for _, h := range hosts {
+		if err := s.Sight(q, h, "quoted", ""); err != nil {
+			t.Fatalf("Sight: %v", err)
+		}
+	}
+	sp := generate(t, s, Options{Containers: []string{"T1"}})
+	got := sp.Messages[0].Source
+	if want := "unspooled from msg g-a, msg g-b, msg g-c"; got != want {
+		t.Errorf("source = %q, want %q", got, want)
+	}
+}
+
+func TestSourceNamesOneHostOnceHoweverManyWaysItQuoted(t *testing.T) {
+	s := trail(t)
+	var host int64
+	if err := s.DB().QueryRow(
+		`select id from entries where ext_id = 'mail:<a@loomworks>'`).Scan(&host); err != nil {
+		t.Fatalf("lookup: %v", err)
+	}
+	q := put(t, s, msg{
+		ext: "quote:sha-twice", ts: "2026-03-01T08:00:00+11:00", tz: "AEDT",
+		container: "T1", subject: "Loom cutover",
+		from: "Cy Okafor <cy@loomworks.example>",
+	})
+	// One message that both quoted and forwarded this entry: two sightings, one
+	// message to open.
+	for _, kind := range []string{"quoted", "forwarded"} {
+		if err := s.Sight(q, host, kind, ""); err != nil {
+			t.Fatalf("Sight %s: %v", kind, err)
+		}
+	}
+	sp := generate(t, s, Options{Containers: []string{"T1"}})
+	if got, want := sp.Messages[0].Source, "unspooled from msg g-a"; got != want {
+		t.Errorf("source = %q, want %q", got, want)
+	}
+}

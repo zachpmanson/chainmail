@@ -1,6 +1,8 @@
+import { Fragment } from "react";
 import type { Entry } from "../lib/spec";
 import { derive, initials, type Row, type View } from "../lib/derive";
 import type { Timeline as Spec } from "../lib/spec";
+import { COLLAPSE_FROM, msgCount, provenance, type SourceId } from "../lib/sources";
 import { DiffPanel, Legend, ParticipantsPanel, SourcesPanel, type ChainFilter } from "./Panels";
 import { Minimap } from "./Minimap";
 
@@ -100,6 +102,73 @@ function Attachments({ e }: { e: Entry }) {
   );
 }
 
+/**
+ * The ids on a provenance line, comma-run, each openable where it can be.
+ *
+ * The separator sits outside .sid so that the only place the line may break is
+ * after a comma: inside .sid, "msg" and its handle are one token to the reader
+ * and splitting them across lines reads as two truncated ids.
+ */
+function SourceIds({ ids }: { ids: SourceId[] }) {
+  return (
+    <>
+      {ids.map((s, i) => (
+        <Fragment key={i}>
+          {i ? ", " : ""}
+          <span className="sid">
+            {s.gmailId ? (
+              <a
+                href={`https://mail.google.com/mail/u/0/#all/${s.gmailId}`}
+                target="_blank"
+                rel="noopener"
+              >
+                {s.text}
+              </a>
+            ) : (
+              s.text
+            )}
+          </span>
+        </Fragment>
+      ))}
+    </>
+  );
+}
+
+/**
+ * Where an entry was found. The ids are the useful part of the line — each names
+ * a message the reader can open — so a collapsed line says how many there are
+ * and keeps every id in the document, rather than summarising them away.
+ *
+ * A native <details>, matching the panels above, and not a scripted toggle: the
+ * exported page is meant to be readable with scripting disabled, and <details>
+ * is keyboard-operable and reachable by find-in-page without any of ours. A
+ * folding mechanism elsewhere on the page can be the same element.
+ */
+function Source({ e }: { e: Entry }) {
+  if (!e.source) return null;
+  const p = provenance(e.source);
+  if (p.kind === "prose") return <span className="src">{p.text}</span>;
+  if (p.ids.length < COLLAPSE_FROM) {
+    return (
+      <span className="src">
+        {p.prefix}
+        <SourceIds ids={p.ids} />
+      </span>
+    );
+  }
+  return (
+    <details className="src srcx">
+      <summary>
+        {p.prefix}
+        {msgCount(p.ids.length)}
+      </summary>
+      <div className="srcids">
+        <SourceIds ids={p.ids} />
+      </div>
+    </details>
+  );
+}
+
 function EntryBlock({ row, v, mark }: { row: Row; v: View; mark?: "new" | "revised" }) {
   const e = row.entry;
   const grid = { gridColumn: row.lane + 1, gridRow: row.row };
@@ -157,7 +226,7 @@ function EntryBlock({ row, v, mark }: { row: Row; v: View; mark?: "new" | "revis
           <div className="foot">
             <span className="to">to {e.to ?? "—"}</span>
             <ReplyLink row={row} v={v} />
-            {e.source ? <span className="src">{e.source}</span> : null}
+            <Source e={e} />
           </div>
         </div>
       </div>

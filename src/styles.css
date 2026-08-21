@@ -186,6 +186,26 @@
   .to { font-size:.66rem; color:var(--muted); }
   .src { font-size:.64rem; color:var(--muted); margin-left:auto;
     font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .src a { color:inherit; text-decoration:none; border-bottom:1px dotted currentColor; }
+  .src a:hover { color:var(--accent); }
+  /* The same caret and hit area as the panels' own disclosures, so one page has
+     one way of opening things. */
+  details.src > summary { cursor:pointer; list-style:none; }
+  details.src > summary::-webkit-details-marker { display:none; }
+  details.src > summary::before { content:""; display:inline-block; width:0; height:0;
+    border:.25em solid transparent; border-left-color:currentColor;
+    margin-right:.3em; transition:transform .12s; }
+  details.src[open] > summary::before { transform:rotate(90deg); }
+  details.src > summary:hover { color:var(--accent); }
+  details.src > summary:focus-visible { outline:1px solid var(--accent); outline-offset:2px; }
+  /* Open, the ids need the footer's whole width or they wrap a handle per line.
+     Right-aligned so the summary does not move under the reader when it opens;
+     closed, the line is one flex item as before and the bubble is no taller. */
+  details.src[open] { flex-basis:100%; text-align:right; }
+  .srcids { padding-top:.15rem; line-height:1.5; }
+  /* An id and its "msg" are one token to the reader, so the space between them is
+     not a break opportunity; the commas outside .sid are. */
+  .srcids .sid { white-space:nowrap; }
   .sys { text-align:center; margin:.7rem auto; max-width:44rem; padding:.55rem .9rem;
     border:1px dashed var(--line); border-radius:10px; background:var(--quote); }
   .sysday { font-size:.68rem; color:var(--muted); font-variant-numeric:tabular-nums;
