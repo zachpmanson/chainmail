@@ -147,6 +147,10 @@ walk:
 			}
 			msg, err := c.Read(env.ID)
 			if err != nil {
+				// The cursor still names the page this envelope came from, so a
+				// resume re-reads it. Deliberately: a per-message cursor would
+				// have to be a position within a page docket does not expose,
+				// and a page redone costs reads that body_sha makes free.
 				return r, fmt.Errorf("reading %s: %w", env.ID, err)
 			}
 			r.Seen++
