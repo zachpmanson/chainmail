@@ -133,7 +133,17 @@ func (s *Store) EnrichQuoted(id int64, e Entry) error {
 		return err
 	}
 	defer tx.Rollback()
+	if err := s.enrich(tx, id, e); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
 
+// enrich is EnrichQuoted's write, inside a transaction the caller owns. Twin
+// collapse needs the same fill-the-gaps update in the middle of a transaction
+// that is also moving rows, and one connection cannot hold two write
+// transactions at once.
+func (s *Store) enrich(tx *sql.Tx, id int64, e Entry) error {
 	// The FTS retraction needs the values the index currently holds, so they are
 	// read BEFORE the update. Retracting with the new text would leave the old
 	// terms in the index permanently, matching text the entry no longer contains.
@@ -155,8 +165,5 @@ func (s *Store) EnrichQuoted(id int64, e Entry) error {
 		e.BodyText, e.BodyText, id); err != nil {
 		return err
 	}
-	if err := s.reindex(tx, id, false, oldSubject, oldBody); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return s.reindex(tx, id, false, oldSubject, oldBody)
 }

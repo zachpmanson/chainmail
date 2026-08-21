@@ -144,3 +144,62 @@ func TestPositionalNestingBecomesReplyEdges(t *testing.T) {
 			edges[1][0], edges[1][1])
 	}
 }
+
+// A message already in the mailbox must not be stored a second time because
+// somebody quoted it. The sentinel states the clock the QUOTER rendered — ten
+// hours ahead of the true instant here — so the two never meet on a key, and
+// extraction has to reconcile them by that offset or create the duplicate.
+func TestQuotingAMailboxMessageCreatesNoSecondEntry(t *testing.T) {
+	s := openTest(t)
+	sent := time.Date(2026, 5, 20, 1, 38, 14, 0, time.UTC)
+	original := "Can you confirm the meter number for the Rothwell depot before the " +
+		"tender pack goes out this afternoon? The retailer wants it on the cover " +
+		"sheet and I do not want to guess at it."
+	if _, err := Put(s, Message{
+		Envelope: Envelope{
+			ID: "orig", MessageID: "<orig@quarry.fed>", ThreadID: "t1",
+			From: "Deniz Aslan <deniz.aslan@quarry.fed>", Subject: "Rothwell tender pack",
+			Date: sent.Format(time.RFC1123Z),
+		},
+		Body: original,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Put(s, Message{
+		Envelope: Envelope{
+			ID: "reply", MessageID: "<reply@moana.fed>", ThreadID: "t1",
+			From: "Tui Walker <tui.walker@moana.fed>", Subject: "Re: Rothwell tender pack",
+			Date: sent.Add(3 * time.Hour).Format(time.RFC1123Z),
+		},
+		// The reply's client rewrapped the quote and rendered the clock at +1200.
+		Body: "Meter number is on the way.\n\n" +
+			"On Wed, 20 May 2026 at 11:38, Deniz Aslan <deniz.aslan@quarry.fed> wrote:\n" +
+			"Can you confirm the meter number for the Rothwell depot before the tender\n" +
+			"pack goes out this afternoon? The retailer wants it on the cover sheet and\n" +
+			"I do not want to guess at it.",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	real, q, err := s.QuotedCount()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if real != 2 || q != 0 {
+		t.Fatalf("entries = %d real and %d recovered, want the two mailbox messages "+
+			"and no recovered copy of one of them", real, q)
+	}
+	// The quote is still recorded as a sighting of the original, which is the
+	// evidence that would otherwise have become an entry of its own.
+	var seenIn, host int64
+	if err := s.DB().QueryRow(`
+		select g.seen_in, (select id from entries where ext_id='mail:<reply@moana.fed>')
+		from sightings g join entries e on e.id = g.entry_id
+		where e.ext_id = 'mail:<orig@quarry.fed>' and g.kind = 'quoted'`).
+		Scan(&seenIn, &host); err != nil {
+		t.Fatalf("the quote left no sighting on the original: %v", err)
+	}
+	if seenIn != host {
+		t.Fatalf("sighting names host %d, want the reply %d", seenIn, host)
+	}
+}

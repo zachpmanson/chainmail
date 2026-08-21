@@ -265,4 +265,37 @@ var migrations = []string{
 	create index entry_embeddings_model on entry_embeddings(model, dim)
 	  where vec is not null;
 	`,
+
+	// 9: the offsets a quoting client was measured at.
+	//
+	// A message stored both in the mailbox and as a quote of itself states its own
+	// send time twice: once as the true instant, once as the wall clock the
+	// quoting client rendered. The difference is that client's UTC offset exactly,
+	// which is otherwise the quantity tzinfer has to infer from where the quoter's
+	// own mail says they are — and it is the only evidence that reaches an
+	// Exchange sender stamping +0000 on its own mail while rendering everyone
+	// else's at +1200.
+	//
+	// Stored rather than derived, unlike Places(): collapsing the twin deletes the
+	// quoted row, and that row is the only place the wall clock ever existed. A
+	// measurement nobody wrote down at that moment cannot be recovered afterwards.
+	//
+	// Keyed on (person, entry, off) so re-running the pass is a no-op while two
+	// contradictory offsets from one host both survive — a client rendering two
+	// clocks at two offsets in one message is a fact about the client, not a row
+	// to overwrite. `measured_from` names the quoted entry the measurement came
+	// from and carries no foreign key, for the same reason person_merges.dropped_id
+	// does not: the row it names is gone.
+	`
+	create table render_offsets (
+	  person_id     integer not null references people(id),
+	  entry_id      integer not null references entries(id),  -- rendered in this message
+	  at            integer not null,   -- when it rendered, so a zone fit reads the right side of DST
+	  off           integer not null,   -- minutes east of UTC
+	  measured_from integer not null,
+	  measured_at   integer not null,
+	  primary key (person_id, entry_id, off)
+	);
+	create index render_offsets_person on render_offsets(person_id, at);
+	`,
 }

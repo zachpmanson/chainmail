@@ -13,6 +13,7 @@ type QuotedResult struct {
 	Distinct int // after dedup within this body
 	Created  int // new entries
 	Merged   int // matched an entry already present
+	Twinned  int // matched a stored copy of the same message under a different clock
 	Enriched int // merged entries that gained a field from this sighting
 	Edges    int // reply edges linked from positional nesting
 	Undated  int // blocks whose time had to be inferred from the host
@@ -76,9 +77,30 @@ func ExtractQuoted(store *corpus.Store, hostID int64, host corpus.Entry, body st
 			// permalink belongs to the host, and reusing it would send a reader to
 			// the wrong message.
 		}
-		id, created, err := store.PutQuoted(e)
-		if err != nil {
-			return r, fmt.Errorf("storing quoted block %d of %s: %w", i, host.ExtID, err)
+		// A message already in the corpus is not stored again. Its ext_id only
+		// collapses onto this block's key when the quoting client wrote a
+		// Message-ID into the sentinel, which almost none do, so the copies are
+		// reconciled by their clocks instead — see corpus.FindTwin. Only a stated
+		// clock qualifies: an inferred one is the host's instant, and the gap to
+		// the copy would be an artefact of that substitution.
+		var twin int64
+		if !inferred {
+			t, ok, err := corpus.FindTwin(store, person, ts, rec.Block.Text)
+			if err != nil {
+				return r, err
+			}
+			if ok {
+				twin = t
+			}
+		}
+		id, created := twin, false
+		if twin == 0 {
+			id, created, err = store.PutQuoted(e)
+			if err != nil {
+				return r, fmt.Errorf("storing quoted block %d of %s: %w", i, host.ExtID, err)
+			}
+		} else {
+			r.Twinned++
 		}
 		ids[i] = id
 		if created {
