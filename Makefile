@@ -8,10 +8,14 @@
 CORPUS      ?= $(HOME)/.local/state/chainmail/corpus.db
 SLACK       ?= $(HOME)/.local/state/chainmail/slack
 BIN         ?= $(HOME)/.local/bin/corpus
-# Mail is paged by week: docket caps a search at 500 results and `ingest mail`
-# takes a single page, so one wide query truncates silently. A week is well
-# under the cap on this mailbox — see the `saw 500` warning in slurp-mail.
+# SINCE bounds the mail query, and nothing else does: `ingest mail` follows
+# docket's page token to the end of a query and reports whether it got there, so
+# the window is a choice about how much to fetch rather than a way to stay under
+# a cap.
 SINCE       ?= 2026-08-01
+# The address the spec treats as "me". No default: a mailbox owner is personal
+# data and this repository is public.
+ME          ?= $(CHAINMAIL_ME)
 export CHAINMAIL_CORPUS = $(CORPUS)
 
 .PHONY: help install test check slurp slurp-mail slurp-slack settle embed \
@@ -20,7 +24,7 @@ export CHAINMAIL_CORPUS = $(CORPUS)
 help:
 	@printf 'Corpus\n'
 	@printf '  make slurp          everything: slack, mail, settle, embed\n'
-	@printf '  make slurp-mail     mail only, paged by week from SINCE=%s\n' '$(SINCE)'
+	@printf '  make slurp-mail     mail since SINCE=%s, paged to the end of the query\n' '$(SINCE)'
 	@printf '  make slurp-slack    refresh the slackdump archive, then ingest it\n'
 	@printf '  make settle         twins, repair, then dedupe (dry run)\n'
 	@printf '  make embed          vectors for entries that have none\n'
@@ -61,16 +65,15 @@ slurp-slack:
 	slackdump resume $(SLACK)
 	$(BIN) ingest slack -archive $(SLACK)/slackdump.sqlite
 
-# A window reporting exactly `saw 500` hit docket's cap and is INCOMPLETE —
-# split it and re-run. Nothing here detects that for you; issue #11 is the fix.
+# One query, paged to its end. `ingest mail` prints "complete" when it reached
+# the end and writes INCOMPLETE to stderr when a bound stopped it, so a short
+# run is visible instead of being inferred from a count.
+#
+# Re-running is cheap, not just harmless: the cursor for this query holds the
+# frontier the last completed run reached, and the walk stops there rather than
+# reading back to SINCE.
 slurp-mail:
-	@python3 -c "import datetime; a=datetime.date.fromisoformat('$(SINCE)'); \
-b=datetime.date.today()+datetime.timedelta(days=1); \
-[print(a.strftime('%Y/%m/%d'),(a:=min(a+datetime.timedelta(days=7),b)).strftime('%Y/%m/%d')) \
-for _ in iter(lambda: a<b, False)]" | while read -r from to; do \
-	  printf '%s..%s  ' "$$from" "$$to"; \
-	  $(BIN) ingest mail -q "after:$$from before:$$to" -limit 500 | head -1; \
-	done
+	$(BIN) ingest mail -q "after:$(subst -,/,$(SINCE))"
 
 # twins and repair are idempotent and refuse rather than guess. dedupe is a dry
 # run on purpose: its merges weigh evidence and CANNOT be undone —
@@ -97,11 +100,12 @@ doctor:
 	@echo
 	@$(BIN) sigs -domains | head -4
 
-# make page Q="ruralco billing csv"
+# make page Q="billing csv" ME=you@example.com
 page:
 	@test -n "$(Q)" || { echo 'usage: make page Q="<query>" [T="<title>"]'; exit 2; }
+	@test -n "$(ME)" || { echo 'set ME=<your address> or CHAINMAIL_ME'; exit 2; }
 	$(BIN) spec -q "$(Q)" -limit $(or $(LIMIT),6) -title "$(or $(T),$(Q))" \
-	  -me $(or $(ME),zach@termina.io) -o $(HOME)/Downloads/spec.json
+	  -me $(ME) -o $(HOME)/Downloads/spec.json
 	npm run render -- $(HOME)/Downloads/spec.json -o $(HOME)/Downloads/page.html
 	@echo
 	@echo "http://localhost:5173/?spec=/@fs$(HOME)/Downloads/spec.json"

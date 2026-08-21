@@ -134,7 +134,7 @@ const usage = `usage: corpus <command> [flags]
 // that flags exist, which is the same as telling them nothing.
 const ingestUsage = `usage: corpus ingest <mail|slack> [flags]
 
-  ingest mail   -q <gmail query> | -id <id,...>   [-limit N]
+  ingest mail   -q <gmail query> | -id <id,...>   [-limit N] [-page-size N]
   ingest slack  [-archive <path to slackdump.sqlite>]
 `
 
@@ -794,6 +794,23 @@ func run(args []string) error {
 		fmt.Printf("people       %d\n", st.People)
 		fmt.Printf("chain roots  %d\n", st.Roots)
 		fmt.Printf("unresolved   %d  (parent named but not present: known holes)\n", st.Unresolved)
+
+		// Cursors are printed for the same reason they are stored: a count of
+		// entries says how much is in the corpus, never how much of what was
+		// asked for. A container left mid-walk is the one thing a reader of
+		// these numbers most needs to know.
+		curs, err := corpus.Cursors(s)
+		if err != nil {
+			return err
+		}
+		for _, c := range curs {
+			state := "covered  " + c.SucceededAt.Local().Format("2006-01-02 15:04")
+			if !c.Complete {
+				state = fmt.Sprintf("MID-WALK, %d in so far — re-run to finish", c.Walked)
+			}
+			fmt.Printf("cursor       %s %q: %s\n", c.Source, c.Container, state)
+		}
+
 		es, err := s.EmbedStats()
 		if err != nil {
 			return err
@@ -830,13 +847,17 @@ func run(args []string) error {
 		}
 		fs := flag.NewFlagSet("ingest mail", flag.ContinueOnError)
 		query := fs.String("q", "", "Gmail search query")
-		limit := fs.Int("limit", 50, "maximum messages to walk")
+		limit := fs.Int("limit", 0,
+			"stop after N messages; 0 walks every page of the query")
+		pageSize := fs.Int("page-size", 0,
+			"messages per docket request; 0 uses docket's cap")
 		ids := fs.String("id", "", "comma-separated message ids, instead of a query")
 		if err := fs.Parse(args[2:]); err != nil {
 			return err
 		}
 		if *query == "" && *ids == "" {
-			return errors.New("usage: corpus ingest mail -q <gmail query> | -id <id,...>  [-limit N]")
+			return errors.New("usage: corpus ingest mail -q <gmail query> | -id <id,...>  " +
+				"[-limit N] [-page-size N]")
 		}
 
 		c := mailingest.Client{}
@@ -860,13 +881,30 @@ func run(args []string) error {
 		if *ids != "" {
 			r, err = mailingest.IngestIDs(s, c, strings.Split(*ids, ","))
 		} else {
-			r, err = mailingest.Ingest(s, c, *query, *limit)
+			r, err = mailingest.Ingest(s, c, *query,
+				mailingest.Bound{Max: *limit, PageSize: *pageSize})
 		}
 		if err != nil {
 			return err
 		}
-		fmt.Printf("saw %d, created %d, changed %d, resolved %d parent edges\n",
-			r.Seen, r.Created, r.Changed, r.Resolved)
+		fmt.Printf("saw %d over %d page(s), created %d, changed %d, resolved %d parent edges\n",
+			r.Seen, r.Pages, r.Created, r.Changed, r.Resolved)
+		switch r.Stop {
+		case mailingest.StopExhausted:
+			fmt.Println("complete: docket had no further page")
+		case mailingest.StopFrontier:
+			fmt.Println("complete: reached the frontier an earlier walk left, " +
+				"so the mail below it is already in")
+		default:
+			// The point of the cursor: an incomplete walk says so, on stderr,
+			// with the command that finishes it. A count alone reads as coverage.
+			fmt.Fprintf(os.Stderr,
+				"INCOMPLETE: stopped at the -limit of %d with more matching mail unread; "+
+					"re-run the same -q to continue from the cursor\n", *limit)
+		}
+		if r.Resumed {
+			fmt.Println("resumed from a cursor left by an earlier run")
+		}
 		if r.Truncated > 0 {
 			fmt.Fprintf(os.Stderr,
 				"warning: %d bodies came back truncated — quoted history was lost\n", r.Truncated)
