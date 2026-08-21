@@ -26,7 +26,7 @@ func source(t *testing.T) string {
 
 var (
 	reCase = regexp.MustCompile(`(?m)^\tcase "([a-z-]+)":`)
-	reFlag = regexp.MustCompile(`fs\.(?:String|Int|Int64|Bool)\("([a-z-]+)"`)
+	reFlag = regexp.MustCompile(`fs\.(?:String|Int|Int64|Bool|Float64)\("([a-z-]+)"`)
 )
 
 func TestEverySubcommandIsListedInUsage(t *testing.T) {
