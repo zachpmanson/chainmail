@@ -689,3 +689,366 @@ func candidatePair(t *testing.T, s *Store, a, b int64) bool {
 	}
 	return false
 }
+
+// The case this exists for: one Gmail mailbox arrived under twenty-two different
+// +tags, each tag its own identity value and so its own person, each holding a
+// share of the counts. Fixing the parse cannot undo that — identities are keyed
+// on the value — so the stored rows are folded, and the tag itself is kept.
+func TestRepairFoldsTaggedAddressesIntoTheirBaseMailbox(t *testing.T) {
+	s := open(t)
+	base := person(t, s, "dai@post.fed", "Dai Rhys")
+	tags := []string{"dai+salsa@post.fed", "dai+books@post.fed", "dai+gst@post.fed"}
+	var split []int64
+	for _, tag := range tags {
+		split = append(split, taggedPerson(t, s, tag, ""))
+	}
+	e := entry("mail:<ask@x>", "the invoice for the salsa order")
+	rec, err := s.Put(e, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Participate(s, rec.ID, split[0], RoleTo); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := RepairPlusAddresses(s)
+	if err != nil {
+		t.Fatalf("RepairPlusAddresses: %v", err)
+	}
+	if r.Merged != 3 || r.Anchored != 0 || len(r.Left) != 0 {
+		t.Fatalf("repair = %+v, want 3 merged and nothing left", r)
+	}
+
+	var n int
+	if err := s.DB().QueryRow(`select count(*) from people`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("people: got %d, want 1", n)
+	}
+	// the base mailbox's person survives, and the tags are still on the record
+	for _, tag := range tags {
+		got, err := PersonByIdentity(s, KindEmail, tag)
+		if err != nil {
+			t.Fatalf("the tag %s was not kept: %v", tag, err)
+		}
+		if got != base {
+			t.Fatalf("%s belongs to %d, want the base mailbox's person %d", tag, got, base)
+		}
+	}
+	if err := s.DB().QueryRow(
+		`select count(*) from participants where person_id=? and role='to'`, base).
+		Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("the folded person's participation did not move: %d rows", n)
+	}
+	var reason string
+	if err := s.DB().QueryRow(
+		`select reason from person_merges where dropped_id=?`, split[0]).Scan(&reason); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(reason, "repair:plus-address") ||
+		!strings.Contains(reason, "dai+salsa@post.fed") {
+		t.Errorf("merge reason %q names neither the rule nor the value", reason)
+	}
+}
+
+// A tag whose base mailbox nobody holds: there is nobody to fold into, so the
+// mailbox is recorded on the person who holds the tag and the next tag lands on
+// them instead of minting another.
+func TestRepairRecordsABaseMailboxNobodyHolds(t *testing.T) {
+	s := open(t)
+	taggedPerson(t, s, "dai+salsa@post.fed", "Dai Rhys")
+	taggedPerson(t, s, "dai+books@post.fed", "")
+
+	r, err := RepairPlusAddresses(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Anchored != 1 || r.Merged != 1 {
+		t.Fatalf("repair = %+v, want one mailbox recorded and one person folded", r)
+	}
+	base, err := PersonByIdentity(s, KindEmail, "dai@post.fed")
+	if err != nil {
+		t.Fatalf("the base mailbox was not recorded: %v", err)
+	}
+	// both tags and the mailbox are one person, whichever tag was reached first
+	for _, tag := range []string{"dai+salsa@post.fed", "dai+books@post.fed"} {
+		got, err := PersonByIdentity(s, KindEmail, tag)
+		if err != nil {
+			t.Fatalf("the tag %s was not kept: %v", tag, err)
+		}
+		if got != base {
+			t.Fatalf("%s belongs to %d, want the mailbox's person %d", tag, got, base)
+		}
+	}
+	var n int
+	if err := s.DB().QueryRow(`select count(*) from people`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("people: got %d, want 1", n)
+	}
+}
+
+// A person named by the tag they arrived as is renamed to the mailbox: the tag
+// describes one signup, and the person is all of them.
+func TestRepairNamesATaggedPersonForTheirMailbox(t *testing.T) {
+	s := open(t)
+	id := taggedPerson(t, s, "dai+salsa@post.fed", "")
+	r, err := RepairPlusAddresses(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Renamed != 1 {
+		t.Fatalf("repair = %+v, want one person renamed", r)
+	}
+	var name string
+	if err := s.DB().QueryRow(`select display_name from people where id=?`, id).
+		Scan(&name); err != nil {
+		t.Fatal(err)
+	}
+	if name != "dai@post.fed" {
+		t.Errorf("display name = %q, want the base mailbox", name)
+	}
+}
+
+// A forwarding artefact's tag names a different mailbox, so folding it would file
+// somebody else's mail under the address it is written on. Refused and reported.
+func TestRepairRefusesAForwardingArtefact(t *testing.T) {
+	s := open(t)
+	dai := person(t, s, "dai@post.fed", "Dai Rhys")
+	fwd, err := ResolveWithRule(s, KindEmail, "dai+caf_=bram=post.fed@post.fed", "", "mail:to-header")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// a plus in the DOMAIN is not a subaddress and is not even a refusal
+	inDomain := person(t, s, "cleo@post+west.fed", "Cleo Fenwick")
+
+	r, err := RepairPlusAddresses(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Merged != 0 || len(r.Left) != 1 {
+		t.Fatalf("repair = %+v, want nothing merged and one value left", r)
+	}
+	if got, err := PersonByIdentity(s, KindEmail, "dai+caf_=bram=post.fed@post.fed"); err != nil ||
+		got != fwd || got == dai {
+		t.Fatalf("the artefact resolved to %d (%v), want its own person %d", got, err, fwd)
+	}
+	if got, err := PersonByIdentity(s, KindEmail, "cleo@post+west.fed"); err != nil || got != inDomain {
+		t.Fatalf("the domain plus resolved to %d (%v), want %d untouched", got, err, inDomain)
+	}
+}
+
+// The other half of the fold: cut inside the bracket, the address survives welded
+// into the display name. Unlike the truncated shape the address is recoverable,
+// so the fragment splits and folds into the person holding it.
+func TestRepairSplitsAWeldedAddressAndFoldsItIntoTheAddressHolder(t *testing.T) {
+	s := open(t)
+	real := person(t, s, "dai@post.fed", "Dai Rhys")
+	welded, err := ResolveWithRule(s, KindDisplayName,
+		"Dai Rhys <dai@post.fed", "Dai Rhys <dai@post.fed", "quote:to-header:name-only")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if welded == real {
+		t.Fatal("expected two people before the repair")
+	}
+
+	r, err := RepairTruncatedNames(s)
+	if err != nil {
+		t.Fatalf("RepairTruncatedNames: %v", err)
+	}
+	if r.Merged != 1 || r.Welded != 1 || len(r.Declined) != 0 {
+		t.Fatalf("repair = %+v, want one welded address split and folded", r)
+	}
+	var n int
+	if err := s.DB().QueryRow(`select count(*) from people`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("people: got %d, want 1", n)
+	}
+	// the name half is kept as an identity of the survivor, without the address
+	got, err := PersonByIdentity(s, KindDisplayName, "dai rhys")
+	if err != nil {
+		t.Fatalf("the name half was not kept: %v", err)
+	}
+	if got != real {
+		t.Fatalf("the name half belongs to %d, want %d", got, real)
+	}
+	var reason string
+	if err := s.DB().QueryRow(
+		`select reason from person_merges where dropped_id=?`, welded).Scan(&reason); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(reason, "repair:welded-address") {
+		t.Errorf("merge reason %q does not name the rule", reason)
+	}
+}
+
+// Nobody holds the welded address, so there is nothing to fold into — but the
+// address is right there, so the person becomes reachable by it.
+func TestRepairGivesAWeldedAddressToThePersonCarryingIt(t *testing.T) {
+	s := open(t)
+	id, err := ResolveWithRule(s, KindDisplayName,
+		"Bram Fenwick <bram@post.fed", "Bram Fenwick <bram@post.fed", "quote:cc-header:name-only")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := RepairTruncatedNames(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Merged != 0 || r.Welded != 1 {
+		t.Fatalf("repair = %+v, want the address recovered and nothing merged", r)
+	}
+	got, err := PersonByIdentity(s, KindEmail, "bram@post.fed")
+	if err != nil {
+		t.Fatalf("the welded address was not recovered: %v", err)
+	}
+	if got != id {
+		t.Fatalf("the address went to %d, want %d", got, id)
+	}
+}
+
+// `Cy Marrow <ellen@…>` is a real header — a person writing from somebody
+// else's mailbox — so a welded address on a differently-named person is two
+// humans, not one. Refused, left visible, and reported as a candidate.
+func TestRepairRefusesAWeldedAddressHeldByADifferentlyNamedPerson(t *testing.T) {
+	s := open(t)
+	owner := person(t, s, "ellen@post.fed", "Ellen Sowerby")
+	welded, err := ResolveWithRule(s, KindDisplayName,
+		"Bram Fenwick <ellen@post.fed", "Bram Fenwick <ellen@post.fed", "quote:from-header:name-only")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := RepairTruncatedNames(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Merged != 0 || len(r.Declined) != 1 {
+		t.Fatalf("repair = %+v, want nothing merged and one refusal", r)
+	}
+	if !strings.Contains(r.Declined[0].Reason, "different surname") {
+		t.Errorf("refusal reason = %q", r.Declined[0].Reason)
+	}
+	var n int
+	if err := s.DB().QueryRow(`select count(*) from people`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Fatalf("people: got %d, want the two the repair refused to fold", n)
+	}
+	// left as it was, so the pair is still there to be reviewed
+	cs, err := MergeCandidates(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, c := range cs {
+		if (c.AID == welded && c.BID == owner) || (c.AID == owner && c.BID == welded) {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("the refused pair is not in %d candidates", len(cs))
+	}
+}
+
+// A display name holding a bracket and no address is that person's whole
+// evidence: neither repair may touch it.
+func TestRepairLeavesANameWithABracketAndNoAddressAlone(t *testing.T) {
+	s := open(t)
+	id, err := ResolveWithRule(s, KindDisplayName,
+		"nights < weekends roster", "nights < weekends roster", "quote:to-header:name-only")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other := person(t, s, "roster@post.fed", "nights < weekends roster")
+	r, err := RepairTruncatedNames(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Merged != 0 || r.Welded != 0 || r.Cleaned != 0 || r.Renamed != 0 {
+		t.Fatalf("repair = %+v, want nothing touched", r)
+	}
+	if got, err := PersonByIdentity(s, KindDisplayName, "nights < weekends roster"); err != nil ||
+		got != id || id == other {
+		t.Fatalf("the name became %d (%v), want %d untouched", got, err, id)
+	}
+}
+
+// Both repairs are run again over what they already fixed: a corpus that is
+// repaired twice must be the corpus that was repaired once.
+func TestBothRepairsAreIdempotent(t *testing.T) {
+	s := open(t)
+	person(t, s, "dai@post.fed", "Dai Rhys")
+	for _, tag := range []string{"dai+salsa@post.fed", "dai+books@post.fed"} {
+		taggedPerson(t, s, tag, "")
+	}
+	if _, err := ResolveWithRule(s, KindDisplayName,
+		"Dai Rhys <dai@post.fed", "Dai Rhys <dai@post.fed", "quote:to-header:name-only"); err != nil {
+		t.Fatal(err)
+	}
+	person(t, s, "ellen@post.fed", "Ellen Sowerby")
+	if _, err := ResolveWithRule(s, KindDisplayName,
+		"Bram Fenwick <ellen@post.fed", "Bram Fenwick <ellen@post.fed", "quote:from-header:name-only"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := RepairPlusAddresses(s); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RepairTruncatedNames(s); err != nil {
+		t.Fatal(err)
+	}
+	before := snapshot(t, s)
+
+	pr, err := RepairPlusAddresses(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr, err := RepairTruncatedNames(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pr.Merged != 0 || pr.Anchored != 0 || pr.Renamed != 0 {
+		t.Errorf("the second plus-address pass did work: %+v", pr)
+	}
+	if tr.Merged != 0 || tr.Cleaned != 0 || tr.Renamed != 0 {
+		t.Errorf("the second name pass did work: %+v", tr)
+	}
+	if after := snapshot(t, s); after != before {
+		t.Errorf("the second pass changed the corpus:\n%s\nwant:\n%s", after, before)
+	}
+}
+
+// taggedPerson stores a tagged address the way an ingest before the parse fix
+// stored it: its own person, keyed on the tag. Written directly, because
+// resolution now files a tag under its base mailbox and so cannot produce the
+// corpus this repair exists for.
+func taggedPerson(t *testing.T, s *Store, addr, name string) int64 {
+	t.Helper()
+	if name == "" {
+		name = addr
+	}
+	res, err := s.DB().Exec(`insert into people (display_name) values (?)`, name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB().Exec(
+		`insert into identities (person_id, kind, value, rule) values (?,?,?,?)`,
+		id, KindEmail, addr, "mail:to-header"); err != nil {
+		t.Fatal(err)
+	}
+	return id
+}

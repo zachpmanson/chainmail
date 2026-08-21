@@ -487,3 +487,155 @@ func TestParseAddressesReducesHyperlinkedEntriesAlongsidePlainOnes(t *testing.T)
 		t.Errorf("names: %q, %q", got[0].Name, got[1].Name)
 	}
 }
+
+// The case these exist for: one human held twenty-two identity rows because
+// every signup got its own +tag and every tag was its own person.
+func TestPlusBaseAddressReducesEveryTagShapeAndRefusesTheRest(t *testing.T) {
+	for _, c := range []struct {
+		addr, base, tag string
+		ok              bool
+	}{
+		{"dai+salsa@quarry.fed", "dai@quarry.fed", "salsa", true},
+		// everything from the FIRST plus is the tag, however many follow
+		{"dai+books+2025@quarry.fed", "dai@quarry.fed", "books+2025", true},
+		{"dai+@quarry.fed", "dai@quarry.fed", "", true},
+		{"dai.rhys+gst@sub.quarry.fed", "dai.rhys@sub.quarry.fed", "gst", true},
+		// a plus in the domain is not a subaddress and must survive untouched
+		{"dai@quarry+west.fed", "", "", false},
+		{"dai@quarry.fed", "", "", false},
+		// nothing in front of the tag leaves no mailbox to reduce to
+		{"+salsa@quarry.fed", "", "", false},
+		// a forwarder's artefact: the tag names somebody else's mailbox
+		{"dai+caf_=bram=quarry.fed@quarry.fed", "", "", false},
+		{"dai+bram=quarry.fed@quarry.fed", "", "", false},
+	} {
+		base, tag, ok := plusBaseAddress(c.addr)
+		if ok != c.ok || base != c.base || tag != c.tag {
+			t.Errorf("plusBaseAddress(%q) = %q, %q, %v; want %q, %q, %v",
+				c.addr, base, tag, ok, c.base, c.tag, c.ok)
+		}
+	}
+}
+
+// The tag is kept as an identity of the same person rather than normalised away:
+// it says which signup produced the mail, and the corpus is asked that.
+func TestResolveFilesATaggedAddressUnderTheBaseMailboxAndKeepsTheTag(t *testing.T) {
+	s := open(t)
+	base := person(t, s, "dai@quarry.fed", "Dai Rhys")
+
+	tagged, err := ResolveWithRule(s, KindEmail, "dai+salsa@quarry.fed", "", "mail:to-header")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tagged != base {
+		t.Fatalf("tagged address resolved to %d, want the base mailbox's person %d", tagged, base)
+	}
+	again, err := ResolveWithRule(s, KindEmail, "DAI+salsa@Quarry.fed", "", "mail:to-header")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again != base {
+		t.Fatalf("second sighting resolved to %d, want %d", again, base)
+	}
+
+	var n int
+	if err := s.DB().QueryRow(`select count(*) from people`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("people: got %d, want 1", n)
+	}
+	var rule string
+	if err := s.DB().QueryRow(
+		`select rule from identities where kind=? and value=?`,
+		KindEmail, "dai+salsa@quarry.fed").Scan(&rule); err != nil {
+		t.Fatalf("the tag was not kept: %v", err)
+	}
+	if !strings.Contains(rule, "subaddress") {
+		t.Errorf("rule = %q, want it to name the subaddress", rule)
+	}
+}
+
+// A tagged address seen before its base mailbox: the base is recorded too, so
+// the next tag lands on this person instead of minting another.
+func TestResolveRecordsTheBaseMailboxOfATagSeenFirst(t *testing.T) {
+	s := open(t)
+	first, err := ResolveWithRule(s, KindEmail, "dai+books@quarry.fed", "Dai Rhys", "mail:to-header")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := ResolveWithRule(s, KindEmail, "dai+gst@quarry.fed", "", "mail:to-header")
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain, err := ResolveWithRule(s, KindEmail, "dai@quarry.fed", "", "mail:from-header")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second != first || plain != first {
+		t.Fatalf("one mailbox resolved to %d, %d and %d", first, second, plain)
+	}
+	var name string
+	if err := s.DB().QueryRow(`select display_name from people where id=?`, first).
+		Scan(&name); err != nil {
+		t.Fatal(err)
+	}
+	if name != "Dai Rhys" {
+		t.Errorf("display name = %q, want the name the header gave", name)
+	}
+}
+
+// A forwarding artefact is not a subaddress of the mailbox it is written on: the
+// tag encodes a different mailbox entirely, so it stays its own row.
+func TestResolveKeepsAForwardingArtefactApartFromTheMailboxItNames(t *testing.T) {
+	s := open(t)
+	dai := person(t, s, "dai@quarry.fed", "Dai Rhys")
+	fwd, err := ResolveWithRule(s, KindEmail,
+		"dai+caf_=bram=quarry.fed@quarry.fed", "", "mail:to-header")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fwd == dai {
+		t.Fatal("the forwarding artefact was folded into the mailbox it is written on")
+	}
+}
+
+// The other half of one fold: cut at the bracket the address is lost, cut inside
+// it the address survives welded to the name — and must be read, not stored whole.
+func TestParseAddressReadsAnAddressWeldedIntoTheName(t *testing.T) {
+	got, ok := ParseAddress("Dai Rhys <dai@quarry.fed")
+	if !ok {
+		t.Fatal("the fragment names somebody and must not be dropped")
+	}
+	if got.Addr != "dai@quarry.fed" || got.Name != "Dai Rhys" {
+		t.Fatalf("got %+v, want the name and the address apart", got)
+	}
+}
+
+// A recipient list flattened through the middle of an address, where the second
+// half lost its closing bracket too: both halves are one recipient.
+func TestParseAddressesRejoinsAFoldWhoseClosingBracketWentMissing(t *testing.T) {
+	got := ParseAddresses("Bram Fenwick <, bram@quarry.fed, cleo@quarry.fed")
+	if len(got) != 2 {
+		t.Fatalf("got %d addresses, want 2: %+v", len(got), got)
+	}
+	if got[0].Addr != "bram@quarry.fed" || got[0].Name != "Bram Fenwick" {
+		t.Errorf("first = %+v, want the rejoined recipient", got[0])
+	}
+}
+
+// A display name that legitimately holds a bracket is that person's whole
+// evidence, so nothing may be taken off it.
+func TestParseAddressKeepsABracketThatIntroducesNoAddress(t *testing.T) {
+	got, ok := ParseAddress("Dai <site lead")
+	if !ok {
+		t.Fatal("dropped a named participant")
+	}
+	if got.Addr != "" || got.Name != "Dai <site lead" {
+		t.Fatalf("got %+v, want a name-only participant", got)
+	}
+	got, ok = ParseAddress("nights < weekends roster")
+	if !ok || got.Addr != "" || got.Name != "nights < weekends roster" {
+		t.Fatalf("got %+v (%v), want the name untouched", got, ok)
+	}
+}
