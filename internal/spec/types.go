@@ -71,6 +71,7 @@ type Entry struct {
 	Date        string       `json:"date"`
 	Time        string       `json:"time,omitempty"`
 	TZ          string       `json:"tz,omitempty"`
+	TZSource    string       `json:"tzSource,omitempty"`
 	Sender      string       `json:"sender,omitempty"`
 	Org         string       `json:"org,omitempty"`
 	FromEmail   string       `json:"fromEmail,omitempty"`

@@ -19,7 +19,8 @@ type entryRow struct {
 	Source    string // "mail" or "slack"; decides how far a body may be reshaped
 	TS        time.Time
 	TZ        string
-	TZOffset  *int // minutes east of UTC; nil when the source stated none
+	TZOffset  *int  // minutes east of UTC; nil when the source stated none
+	PersonID  int64 // corpus person id; the key zone inference is per-person on
 	Person    string
 	Container string
 	Subject   string
@@ -132,7 +133,8 @@ func load(store *corpus.Store, ids []int64) ([]*entryRow, error) {
 	rows, err := db.Query(`
 		select e.id, coalesce(e.parent_id, 0), coalesce(e.parent_ref, ''), e.kind,
 		       e.source, e.ts,
-		       coalesce(e.tz, ''), e.tz_offset, coalesce(p.display_name, ''),
+		       coalesce(e.tz, ''), e.tz_offset, coalesce(e.person_id, 0),
+		       coalesce(p.display_name, ''),
 		       coalesce(e.container, ''),
 		       coalesce(e.subject, ''), e.ext_id, coalesce(d.gmail_id, ''),
 		       coalesce(d.from_addr, ''), coalesce(d.to_addr, ''), coalesce(d.cc_addr, ''),
@@ -153,7 +155,7 @@ func load(store *corpus.Store, ids []int64) ([]*entryRow, error) {
 		var r entryRow
 		var ts int64
 		if err := rows.Scan(&r.ID, &r.ParentID, &r.ParentRef, &r.Kind, &r.Source, &ts, &r.TZ,
-			&r.TZOffset, &r.Person, &r.Container, &r.Subject, &r.ExtID, &r.GmailID, &r.From, &r.To, &r.Cc,
+			&r.TZOffset, &r.PersonID, &r.Person, &r.Container, &r.Subject, &r.ExtID, &r.GmailID, &r.From, &r.To, &r.Cc,
 			&r.BodyText, &r.BodyHTML); err != nil {
 			return nil, err
 		}

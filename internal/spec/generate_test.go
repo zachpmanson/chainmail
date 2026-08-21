@@ -446,7 +446,7 @@ func zoneItems(sp Spec) []string {
 	var out []string
 	for _, n := range sp.SourceNotes {
 		for _, it := range n.Items {
-			if strings.Contains(it, "UTC") || strings.Contains(it, "Zone") {
+			if strings.Contains(strings.ToLower(it), "zone") {
 				out = append(out, it)
 			}
 		}
@@ -549,9 +549,10 @@ func TestNullOffsetFallsBackToTheLabelNotToUTC(t *testing.T) {
 	}
 }
 
-// Neither an offset nor a readable label leaves UTC as the only defensible
-// clock, so the entries it happens to are counted in the coverage notes rather
-// than read as local time.
+// Neither an offset nor a readable label, and no quoting client to borrow one
+// from, leaves the clock as a bare wall clock. No label is emitted for it and
+// the entries it happens to are counted in the coverage notes, so a reader can
+// see that those times are not comparable with the rest.
 func TestNoZoneAndNoOffsetIsDeclared(t *testing.T) {
 	sp := one(t, msg{
 		ext: "mail:<blind@loomworks>", ts: "2026-08-16T21:30:00Z",

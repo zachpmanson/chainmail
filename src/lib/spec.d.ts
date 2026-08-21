@@ -110,9 +110,13 @@ export interface Entry {
    */
   time?: string;
   /**
-   * Zone the source stated, e.g. 'NZST', '+0530'. Drives absolute-time ordering; omit rather than guess.
+   * The zone this entry's clock is in, e.g. 'NZST', '+0530'. Drives absolute-time ordering. Omit rather than guess: absent means the zone is unknown and the renderer shows it as unknown.
    */
   tz?: string;
+  /**
+   * Where tz came from. 'stated' is the source's own Date header or zone label. 'inferred' was worked out from other evidence and must be presented as a claim, not a fact. Omit when tz is absent.
+   */
+  tzSource?: "stated" | "inferred";
   sender?: string;
   /**
    * Drives colour, assigned in first-appearance order.

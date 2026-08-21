@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/zachpmanson/chainmail/internal/corpus"
+	"github.com/zachpmanson/chainmail/internal/tzinfer"
 )
 
 // Options says what to render and supplies the few facts the corpus cannot
@@ -73,20 +74,28 @@ func Generate(store *corpus.Store, opts Options) (Spec, error) {
 		return Spec{}, errors.New("spec: selection resolved to no entries")
 	}
 
+	inferred, zoneStats, err := inferZones(store, rows)
+	if err != nil {
+		return Spec{}, err
+	}
+
 	me := map[string]bool{}
 	for _, a := range opts.Me {
 		me[strings.ToLower(strings.TrimSpace(a))] = true
 	}
 
 	b := &builder{
-		opts:     opts,
-		me:       me,
-		ids:      newIDAllocator(),
-		idOf:     map[int64]string{},
-		subjOf:   map[int64]string{},
-		rowByID:  map[int64]*entryRow{},
-		people:   map[string]Participant{},
-		badZones: map[string]int{},
+		opts:      opts,
+		me:        me,
+		zones:     inferred,
+		zoneStats: zoneStats,
+		ids:       newIDAllocator(),
+		idOf:      map[int64]string{},
+		subjOf:    map[int64]string{},
+		rowByID:   map[int64]*entryRow{},
+		people:    map[string]Participant{},
+		badZones:  map[string]int{},
+		zoneWhy:   map[string]string{},
 	}
 	for _, r := range rows {
 		b.rowByID[r.ID] = r
@@ -128,9 +137,18 @@ type builder struct {
 	castOrder []string
 	people    map[string]Participant
 
-	badZones   map[string]int // unresolvable zone label -> entries affected
-	blindZones int            // entries with neither an offset nor a readable label
-	orphans    int            // entries naming a parent that is not in this spec
+	badZones map[string]int // unresolvable zone label -> entries affected
+	orphans  int            // entries naming a parent that is not in this spec
+
+	// zones is what each entry's clock turned out to mean, keyed by corpus id;
+	// zoneStats is the distribution, which is what the source notes report. A
+	// distribution and not a score: there is no ground truth here to measure an
+	// accuracy against, and a percentage would only invite tuning towards it.
+	zones     map[int64]tzinfer.Resolution
+	zoneStats tzinfer.Stats
+	// zoneWhy collects one line of evidence per inferred entry, deduplicated by
+	// sender, so the page can be argued with rather than merely believed.
+	zoneWhy map[string]string
 }
 
 func (b *builder) add(r *entryRow) {
@@ -139,11 +157,26 @@ func (b *builder) add(r *entryRow) {
 	cc := parseAddrList(r.Cc)
 
 	date, clock, tz, zoneOK := stamp(r.TS, r.TZ, r.TZOffset)
-	if !zoneOK {
-		if r.TZ != "" {
+	tzSource := ""
+	switch {
+	case tz != "":
+		// A label the source wrote is a stated zone even where no table can turn
+		// it into an offset: the clock beside it is still the sender's own.
+		tzSource = tzStated
+		if !zoneOK {
 			b.badZones[r.TZ]++
-		} else {
-			b.blindZones++
+		}
+	case b.zones[r.ID].State == tzinfer.Inferred:
+		// The clock is NOT moved. For a recovered entry r.TS holds the sentinel's
+		// wall clock as written, and the offset inferred for it is the zone that
+		// clock was written IN, so the pair already agrees. Converting it to the
+		// sender's local time would need a second inference about the sender and
+		// would replace a figure the reader can check against the quoted text
+		// with one they cannot.
+		tz, tzSource = tzinfer.FormatOffset(b.zones[r.ID].Off), tzInferred
+		who := firstNonEmpty(r.Person, parseAddr(r.From).Who())
+		if _, seen := b.zoneWhy[who]; !seen {
+			b.zoneWhy[who] = b.zones[r.ID].Evidence
 		}
 	}
 
@@ -155,13 +188,15 @@ func (b *builder) add(r *entryRow) {
 		FromEmail: from.Address,
 		To:        recipientLine(to, cc),
 		Body:      bodyHTML(r),
-		// Empty hands the inference to the renderer, which labels an inferred zone
-		// as inferred.
-		TZ:      tz,
-		Quoted:  !r.Direct,
-		Me:      b.me[from.Address],
-		Source:  b.source(r),
-		GmailID: r.GmailID,
+		// Empty means unknown, and the renderer shows it as unknown. Nothing
+		// downstream may fill it in: a zone invented at render time is a claim
+		// with no evidence attached and no way for a reader to audit it.
+		TZ:       tz,
+		TZSource: tzSource,
+		Quoted:   !r.Direct,
+		Me:       b.me[from.Address],
+		Source:   b.source(r),
+		GmailID:  r.GmailID,
 		// A mail entry's container *is* its thread id; mail_detail has no column
 		// of its own for it.
 		ThreadID: r.Container,
@@ -305,13 +340,7 @@ func (b *builder) notes(rows []*entryRow) []SourceNote {
 			"%d of %d entries were recovered from quoted text and never existed as "+
 				"standalone messages here.", quoted, len(rows)))
 	}
-	if b.blindZones > 0 {
-		items = append(items, fmt.Sprintf(
-			"%d of %d entries state no zone and carry no offset, so their clocks are "+
-				"shown at UTC. The renderer infers a zone label for them from the "+
-				"sender's other messages, but the clock itself cannot be moved.",
-			b.blindZones, len(rows)))
-	}
+	items = append(items, b.zoneNotes(len(rows))...)
 	labels := make([]string, 0, len(b.badZones))
 	for tz := range b.badZones {
 		labels = append(labels, tz)
