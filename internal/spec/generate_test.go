@@ -644,3 +644,61 @@ func TestAnUnspooledEntryTakesItsMarkupFromTheHostItWasFoundIn(t *testing.T) {
 		t.Errorf("body = %q, want the entry's own block and not its host's text", body)
 	}
 }
+
+// An org is inferred from a sender's mail domain, and a quote-recovered entry
+// has no address to infer one from — so a page showed the same person with an
+// org on their direct messages and none on their recovered ones, which made a
+// per-org colour meaningless on three quarters of a real page.
+func TestOrgCarriesAcrossAPersonsQuotedEntries(t *testing.T) {
+	s := open(t)
+	base := time.Date(2026, 3, 4, 9, 0, 0, 0, time.UTC)
+
+	// A direct message, which carries the address the org comes from.
+	direct := corpus.Entry{
+		Source: corpus.SourceMail, ExtID: "mail:<a@fjord.example>", Kind: "message",
+		TS: base, BodyText: "the levy question", Subject: "levies",
+	}
+	who, err := corpus.Resolve(s, "email", "bo@fjord.example", "Bo Vantel")
+	if err != nil {
+		t.Fatal(err)
+	}
+	direct.PersonID = who
+	if _, err := s.Put(direct, &corpus.Mail{
+		MessageID: "<a@fjord.example>", From: "Bo Vantel <bo@fjord.example>",
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// The same person, recovered from quoted text: no mail_detail row at all.
+	q := corpus.Entry{
+		Source: corpus.SourceMail, ExtID: "quote:deadbeef", Kind: "message",
+		TS: base.Add(-time.Hour), BodyText: "the earlier levy question",
+		PersonID: who,
+	}
+	if _, _, err := s.PutQuoted(q); err != nil {
+		t.Fatal(err)
+	}
+
+	spec, err := Generate(s, Options{ExtIDs: []string{"mail:<a@fjord.example>", "quote:deadbeef"}, Title: "T"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Discriminated on the address, not on Quoted: the entry that HAS an address
+	// is where the org is derivable, and the one without is the case under test.
+	var withAddr, withoutAddr string
+	for _, e := range spec.Messages {
+		if e.FromEmail != "" {
+			withAddr = e.Org
+		} else {
+			withoutAddr = e.Org
+		}
+	}
+	if withAddr == "" {
+		t.Fatal("the entry with an address has no org, so there is nothing to carry")
+	}
+	if withoutAddr != withAddr {
+		t.Errorf("the addressless entry's org = %q, want %q carried from the same person",
+			withoutAddr, withAddr)
+	}
+}

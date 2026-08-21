@@ -90,22 +90,35 @@ func Generate(store *corpus.Store, opts Options) (Spec, error) {
 	}
 
 	b := &builder{
-		opts:      opts,
-		me:        me,
-		zones:     inferred,
-		zoneStats: zoneStats,
-		ids:       newIDAllocator(),
-		idOf:      map[int64]string{},
-		subjOf:    map[int64]string{},
-		rowByID:   map[int64]*entryRow{},
-		cast:      newCast(),
-		part:      part,
-		addrs:     addrs,
-		badZones:  map[string]int{},
-		zoneWhy:   map[string]string{},
+		opts:        opts,
+		me:          me,
+		zones:       inferred,
+		zoneStats:   zoneStats,
+		ids:         newIDAllocator(),
+		idOf:        map[int64]string{},
+		subjOf:      map[int64]string{},
+		rowByID:     map[int64]*entryRow{},
+		cast:        newCast(),
+		part:        part,
+		addrs:       addrs,
+		badZones:    map[string]int{},
+		zoneWhy:     map[string]string{},
+		orgByPerson: map[int64]string{},
 	}
 	for _, r := range rows {
 		b.rowByID[r.ID] = r
+		// An org is inferred from a sender's mail domain, and a quote-recovered
+		// entry has no mail_detail row to take an address from — so 41 of 57
+		// entries on a real page had no org at all, while the same people's
+		// direct entries did. The person is known either way, so their org is
+		// carried across from wherever it was resolvable.
+		if r.PersonID != 0 {
+			if _, ok := b.orgByPerson[r.PersonID]; !ok {
+				if org := orgOf(parseAddr(r.From).Address, opts.Orgs); org != "" {
+					b.orgByPerson[r.PersonID] = org
+				}
+			}
+		}
 	}
 	for _, r := range rows {
 		b.add(r)
@@ -152,7 +165,11 @@ type builder struct {
 	addrs map[int64][]string
 
 	badZones map[string]int // unresolvable zone label -> entries affected
-	orphans  int            // entries naming a parent that is not in this spec
+	// orgByPerson carries an org across a person's entries: their direct mail
+	// says which organisation they are at, and their quote-recovered entries
+	// have no address to say it again.
+	orgByPerson map[int64]string
+	orphans     int // entries naming a parent that is not in this spec
 
 	// zones is what each entry's clock turned out to mean, keyed by corpus id;
 	// zoneStats is the distribution, which is what the source notes report. A
@@ -198,7 +215,7 @@ func (b *builder) add(r *entryRow) {
 		Date:      date,
 		Time:      clock,
 		Sender:    firstNonEmpty(r.Person, from.Who()),
-		Org:       orgOf(from.Address, b.opts.Orgs),
+		Org:       b.orgFor(r, from),
 		FromEmail: from.Address,
 		To:        recipientLine(to, cc),
 		Body:      bodyHTML(r),
@@ -438,4 +455,17 @@ func firstNonEmpty(vs ...string) string {
 		}
 	}
 	return ""
+}
+
+// orgFor names the sender's organisation, preferring what their own address
+// says and falling back to what the same person's other messages established.
+//
+// The fallback never invents: it only reuses an org already derived from a real
+// address belonging to that person. A sender with no resolvable address anywhere
+// stays without an org, which the renderer shows as the unknown slot.
+func (b *builder) orgFor(r *entryRow, from addr) string {
+	if org := orgOf(from.Address, b.opts.Orgs); org != "" {
+		return org
+	}
+	return b.orgByPerson[r.PersonID]
 }
