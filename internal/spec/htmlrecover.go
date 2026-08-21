@@ -5,6 +5,8 @@ import (
 
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
+
+	"github.com/zachpmanson/chainmail/internal/textsim"
 )
 
 // Most of this corpus is messages that exist only inside someone's quote: on a
@@ -47,14 +49,10 @@ const (
 	// rejects a block that holds this entry *and* the trail beneath it, which
 	// would otherwise score a perfect recall.
 	minPrecision = 0.7
-	// A message's opening words are what identify it; its closing words are a
-	// signature and a legal disclaimer, identical across everything that person
-	// ever sent. On a short message the boilerplate is most of the tokens, so
-	// overall recall alone matched one person's two-line question to a different
-	// two-line question of theirs a fortnight earlier — the same block scored
-	// well for both, on the strength of the signature they shared. The opening
-	// has to line up too, and in order: a bag of words is exactly what the
-	// boilerplate defeats.
+	// The opening has to line up too, and in order, because a bag of words is
+	// exactly what shared boilerplate defeats — see textsim.HeadSimilarity for
+	// the case that establishes it. The run is the entry's first tokens and the
+	// window is how far into the block they are looked for.
 	headRun    = 8
 	headWindow = 48
 	minHeadRun = 0.75
@@ -71,7 +69,7 @@ const (
 // recoverHTML returns the sender's markup for a quoted entry, or "" when no host
 // offers a confident match.
 func recoverHTML(text string, hosts []string) string {
-	needle := tokens(text)
+	needle := textsim.Tokens(text)
 	if len(needle) < minNeedleTokens {
 		return ""
 	}
@@ -94,7 +92,7 @@ func recoverHTML(text string, hosts []string) string {
 		return ""
 	}
 	if rival != nil && best.f1-rival.f1 < ambiguityMargin &&
-		similarity(best.tokens, rival.tokens) < sameContent {
+		textsim.Similarity(best.tokens, rival.tokens) < sameContent {
 		// Two blocks of the trail fit this entry and they do not say the same
 		// thing, so one of them is a different message. Which one cannot be told
 		// from here, and guessing is the one outcome worse than plain text.
@@ -124,9 +122,9 @@ type candidate struct {
 }
 
 func (c *candidate) score(needle []string) {
-	c.headMatch = headSimilarity(needle, c.tokens)
+	c.headMatch = textsim.HeadSimilarity(needle, c.tokens, headRun, headWindow)
 
-	inter := float64(overlap(needle, c.tokens))
+	inter := float64(textsim.Overlap(needle, c.tokens))
 	c.recall = inter / float64(len(needle))
 	if len(c.tokens) > 0 {
 		c.precision = inter / float64(len(c.tokens))
@@ -193,7 +191,7 @@ func runs(n *html.Node, spans []span) []*candidate {
 			return
 		}
 		c := &candidate{parent: n, first: first, end: end}
-		c.tokens = tokens(textUntilBoundary(first, end))
+		c.tokens = textsim.Tokens(textUntilBoundary(first, end))
 		if len(c.tokens) > 0 {
 			out = append(out, c)
 		}
@@ -238,92 +236,4 @@ func textUntilBoundary(first, end *html.Node) string {
 		}
 	}
 	return b.String()
-}
-
-// tokens reduces text to the words in it, lower-cased, in order. Order is kept
-// because a token list is cheap to compare as a multiset and useful to eyeball;
-// case and punctuation go because the text rendition and the markup disagree
-// about both.
-func tokens(s string) []string {
-	var out []string
-	var cur strings.Builder
-	flush := func() {
-		if cur.Len() > 0 {
-			out = append(out, cur.String())
-			cur.Reset()
-		}
-	}
-	for _, r := range strings.ToLower(s) {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
-			cur.WriteRune(r)
-		default:
-			flush()
-		}
-	}
-	flush()
-	return out
-}
-
-// overlap is the size of the multiset intersection: how many of a's tokens are
-// present in b, counting repeats once each.
-func overlap(a, b []string) int {
-	have := make(map[string]int, len(b))
-	for _, t := range b {
-		have[t]++
-	}
-	n := 0
-	for _, t := range a {
-		if have[t] > 0 {
-			have[t]--
-			n++
-		}
-	}
-	return n
-}
-
-// similarity is the symmetric overlap of two token multisets: 0 for disjoint, 1
-// for identical.
-func similarity(a, b []string) float64 {
-	if len(a) == 0 || len(b) == 0 {
-		return 0
-	}
-	return 2 * float64(overlap(a, b)) / float64(len(a)+len(b))
-}
-
-// headSimilarity reports how much of a message's opening survives, in order, at
-// the start of a block: the longest common subsequence of the first few tokens
-// of each, as a fraction of the shorter opening.
-//
-// In order, and only the opening, because that is the part a signature cannot
-// forge. The window on the block's side is wider than the run on the entry's
-// because the text rendition and the markup do not agree token for token — a
-// link flattens to "text <url>", an image to a placeholder — so the same
-// sentence starts at a different offset in each.
-func headSimilarity(needle, cand []string) float64 {
-	head := needle[:min(headRun, len(needle))]
-	if len(head) == 0 {
-		return 0
-	}
-	return float64(lcs(head, cand[:min(headWindow, len(cand))])) / float64(len(head))
-}
-
-// lcs is the length of the longest common subsequence of two short token runs.
-func lcs(a, b []string) int {
-	prev := make([]int, len(b)+1)
-	cur := make([]int, len(b)+1)
-	for i := 1; i <= len(a); i++ {
-		for j := 1; j <= len(b); j++ {
-			if a[i-1] == b[j-1] {
-				cur[j] = prev[j-1] + 1
-				continue
-			}
-			cur[j] = max(prev[j], cur[j-1])
-		}
-		prev, cur = cur, prev
-		for j := range cur {
-			cur[j] = 0
-		}
-	}
-	return prev[len(b)]
 }
