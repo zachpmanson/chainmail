@@ -2,6 +2,7 @@ package corpus
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -292,4 +293,399 @@ func snapshot(t *testing.T, s *Store) string {
 		t.Fatal(err)
 	}
 	return out
+}
+
+// The shape the repair below exists for. Every recipient in a real trail was
+// written as a hyperlinked address and the recipient list wrapped, so the fold
+// fell between a display name and the bracket introducing its address.
+var foldedCc = []string{
+	`Ada Fenwick <ada.fenwick@quarry.fed <mailto:ada.fenwick@quarry.fed>>; Bram Teale <`,
+	`bram.teale@quarry.fed <mailto:bram.teale@quarry.fed>>; Cleo Ward <`,
+	`cleo.ward@quarry.fed <mailto:cleo.ward@quarry.fed>>`,
+}
+
+// A folded value is flattened by joining its lines with the same comma that
+// separates two recipients, which is what puts a delimiter in the middle of an
+// address.
+func flatten(lines []string) string { return strings.Join(lines, ", ") }
+
+// Cutting a recipient at the bracket loses the address outright: the leading
+// half becomes a name-only person and the address behind the fold is credited to
+// nobody. Both halves are the same human, and no later sighting can supply what
+// was dropped, so the parse must not make the cut in the first place.
+func TestParsingAFoldedRecipientListKeepsEveryAddress(t *testing.T) {
+	got := ParseAddresses(flatten(foldedCc))
+	want := []Address{
+		{Name: "Ada Fenwick", Addr: "ada.fenwick@quarry.fed"},
+		{Name: "Bram Teale", Addr: "bram.teale@quarry.fed"},
+		{Name: "Cleo Ward", Addr: "cleo.ward@quarry.fed"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("parsed %d addresses, want %d: %+v", len(got), len(want), got)
+	}
+	for i, w := range want {
+		if got[i].Addr != w.Addr || got[i].Name != w.Name {
+			t.Errorf("address %d = %q %q, want %q %q",
+				i, got[i].Name, got[i].Addr, w.Name, w.Addr)
+		}
+	}
+}
+
+// And recording that header stores three addresses and no placeholder, which is
+// the property that keeps the repair below from having anything to do.
+func TestRecordingAFoldedHeaderCreatesNoPlaceholder(t *testing.T) {
+	s := open(t)
+	e := entry("mail:<folded@x>", "confirming the meter numbers")
+	rec, err := s.Put(e, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids, err := RecordHeader(s, rec.ID, RoleCc, flatten(foldedCc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 3 {
+		t.Fatalf("recorded %d participants, want 3", len(ids))
+	}
+	var n int
+	if err := s.DB().QueryRow(
+		`select count(*) from identities where kind=? and value like '%<'`,
+		KindDisplayName).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("%d name-only identities were cut off at a bracket", n)
+	}
+	if err := s.DB().QueryRow(`select count(*) from people`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 3 {
+		t.Fatalf("people: got %d, want 3 — one per recipient", n)
+	}
+}
+
+// Each shape seen in the corpus, including a mailbox address that is a role
+// rather than a person, is recognised as corrupt: no display name legitimately
+// ends in a bracket.
+func TestTruncatedNamesAreRecognisedWhateverTheyName(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{"ada fenwick <", "ada fenwick"},
+		{"bram mcteale <", "bram mcteale"},
+		{"review <", "review"},
+		{"cleo ward-hunt <", "cleo ward-hunt"},
+		{`"Dai Rhys" <`, "Dai Rhys"},
+		{"ada fenwick  <  ", "ada fenwick"},
+	} {
+		if got := CleanDisplayName(tc.in); got != tc.want {
+			t.Errorf("CleanDisplayName(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+// A bracket anywhere but the end is part of the name as written. A name is the
+// whole of a placeholder's evidence, so trimming inside it would leave a
+// different person's name behind.
+func TestABracketInsideANameIsNotTruncation(t *testing.T) {
+	for _, name := range []string{
+		"pipe < valve co",
+		"ada <the second> fenwick",
+		"<no reply> desk",
+	} {
+		if got := CleanDisplayName(name); got != name {
+			t.Errorf("CleanDisplayName(%q) = %q, want it untouched", name, got)
+		}
+	}
+	s := open(t)
+	id := placeholder(t, s, "pipe < valve co")
+	if _, err := RepairTruncatedNames(s); err != nil {
+		t.Fatal(err)
+	}
+	if got := nameOf(t, s, id); got != "pipe < valve co" {
+		t.Fatalf("display name = %q, want it untouched", got)
+	}
+	if _, err := PersonByIdentity(s, KindDisplayName, "pipe < valve co"); err != nil {
+		t.Fatalf("the identity was rewritten: %v", err)
+	}
+}
+
+// The merge this repair is for: a placeholder whose name belongs to somebody who
+// holds an address and who is on every conversation the placeholder is on. That
+// is the fingerprint of the cut — one sighting of a header lost the address, the
+// other carried it — and folding them is what puts the messages back on one
+// person.
+func TestRepairMergesAPlaceholderIntoTheAddressBackedPersonOfThatName(t *testing.T) {
+	s := open(t)
+	ada := person(t, s, "ada.fenwick@quarry.fed", "Ada Fenwick")
+	ghost := placeholder(t, s, "Ada Fenwick <")
+	onEntry(t, s, "mail:<one@x>", ada, ghost)
+	onEntry(t, s, "mail:<two@x>", ada, ghost)
+
+	r, err := RepairTruncatedNames(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Merged != 1 || len(r.Declined) != 0 {
+		t.Fatalf("repair = %+v, want one merge and nothing declined", r)
+	}
+	var n int
+	if err := s.DB().QueryRow(`select count(*) from people`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("people: got %d, want 1", n)
+	}
+	// the survivor is the address-backed half, and the name now resolves to them
+	if got, err := PersonByIdentity(s, KindDisplayName, "ada fenwick"); err != nil {
+		t.Fatalf("the cleaned name resolves to nobody: %v", err)
+	} else if got != ada {
+		t.Fatalf("the name resolves to %d, want %d", got, ada)
+	}
+	if got := nameOf(t, s, ada); got != "Ada Fenwick" {
+		t.Fatalf("display name = %q, want the bracket gone", got)
+	}
+	// and the merge is recorded, naming the value that caused it, so it is both
+	// auditable and reversible
+	var kept, dropped int64
+	var reason string
+	if err := s.DB().QueryRow(
+		`select kept_id, dropped_id, reason from person_merges`).
+		Scan(&kept, &dropped, &reason); err != nil {
+		t.Fatal(err)
+	}
+	if kept != ada || dropped != ghost {
+		t.Fatalf("merge recorded %d <- %d, want %d <- %d", kept, dropped, ada, ghost)
+	}
+	if !strings.HasPrefix(reason, "repair:truncated-name (") {
+		t.Fatalf("merge reason = %q, want it attributed to the repair", reason)
+	}
+}
+
+// Two placeholders are not evidence of anything. Neither holds an address, so
+// folding one into the other only guesses which of two same-named people the
+// mail belongs to — and it is reported instead, where a human can see both.
+func TestRepairWillNotFoldOnePlaceholderIntoAnother(t *testing.T) {
+	s := open(t)
+	named := placeholder(t, s, "Ada Fenwick")
+	ghost := placeholder(t, s, "Ada Fenwick <")
+	onEntry(t, s, "mail:<one@x>", named, ghost)
+
+	r, err := RepairTruncatedNames(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Merged != 0 || len(r.Declined) != 1 {
+		t.Fatalf("repair = %+v, want no merge and one decline", r)
+	}
+	if r.Declined[0].Reason != "no address-backed person of that name" {
+		t.Fatalf("decline reason = %q", r.Declined[0].Reason)
+	}
+	var n int
+	if err := s.DB().QueryRow(`select count(*) from people`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Fatalf("people: got %d, want both left alone", n)
+	}
+	if !candidatePair(t, s, named, ghost) {
+		t.Fatal("the declined pair is invisible: it is in no candidate")
+	}
+}
+
+// Two people of one name that the evidence cannot separate is the case
+// RepairMailtoIdentities refuses on too, for the same reason: the wrong choice
+// hands one human's mail to another, and Merge is deliberately hard to undo.
+func TestRepairRefusesWhenTwoPeopleFitTheNameEquallyWell(t *testing.T) {
+	s := open(t)
+	one := person(t, s, "ada.fenwick@quarry.fed", "Ada Fenwick")
+	two := person(t, s, "a.fenwick@millrace.example", "Ada Fenwick")
+	ghost := placeholder(t, s, "Ada Fenwick <")
+	onEntry(t, s, "mail:<one@x>", one, two, ghost)
+
+	r, err := RepairTruncatedNames(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Merged != 0 || len(r.Declined) != 1 {
+		t.Fatalf("repair = %+v, want no merge and one decline", r)
+	}
+	if r.Declined[0].Reason != "2 people of that name fit equally well" {
+		t.Fatalf("decline reason = %q", r.Declined[0].Reason)
+	}
+	if len(r.Declined[0].Candidates) != 2 {
+		t.Fatalf("declined names %v, want both people it could be",
+			r.Declined[0].Candidates)
+	}
+	var n int
+	if err := s.DB().QueryRow(`select count(*) from people`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 3 {
+		t.Fatalf("people: got %d, want all three left alone", n)
+	}
+	// both readings are on the review list, so the refusal is visible
+	if !candidatePair(t, s, one, ghost) || !candidatePair(t, s, two, ghost) {
+		t.Fatal("a refused reading is in no candidate")
+	}
+}
+
+// A namesake who shares no conversation with the placeholder is a namesake, not
+// the same human. The name is still cleaned — the next correctly-parsed sighting
+// should land on this person rather than mint a third — but nothing is folded.
+func TestRepairDeclinesANamesakeFromAnotherConversation(t *testing.T) {
+	s := open(t)
+	ada := person(t, s, "ada.fenwick@quarry.fed", "Ada Fenwick")
+	ghost := placeholder(t, s, "Ada Fenwick <")
+	onEntry(t, s, "mail:<hers@x>", ada)
+	onEntry(t, s, "mail:<theirs@x>", ghost)
+
+	r, err := RepairTruncatedNames(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Merged != 0 || r.Cleaned != 1 || len(r.Declined) != 1 {
+		t.Fatalf("repair = %+v, want the name cleaned and the merge declined", r)
+	}
+	if r.Declined[0].Reason != "shares no conversation with the person of that name" {
+		t.Fatalf("decline reason = %q", r.Declined[0].Reason)
+	}
+	got, err := PersonByIdentity(s, KindDisplayName, "ada fenwick")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != ghost {
+		t.Fatalf("the cleaned name moved to %d, want the person who held it, %d",
+			got, ghost)
+	}
+	if !candidatePair(t, s, ada, ghost) {
+		t.Fatal("the declined pair is in no candidate")
+	}
+}
+
+// Nobody of that name at all: the placeholder keeps every message it is on and
+// only loses the bracket, so a later sighting of the name resolves here instead
+// of creating yet another person.
+func TestRepairCleansALonePlaceholder(t *testing.T) {
+	s := open(t)
+	ghost := placeholder(t, s, "Bram Teale <")
+	onEntry(t, s, "mail:<one@x>", ghost)
+
+	r, err := RepairTruncatedNames(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Merged != 0 || r.Cleaned != 1 || r.Renamed != 1 {
+		t.Fatalf("repair = %+v, want the one name cleaned and renamed", r)
+	}
+	if r.Declined[0].Reason != "no other person of that name" {
+		t.Fatalf("decline reason = %q", r.Declined[0].Reason)
+	}
+	got, err := PersonByIdentity(s, KindDisplayName, "bram teale")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != ghost {
+		t.Fatalf("the cleaned name resolves to %d, want %d", got, ghost)
+	}
+	if name := nameOf(t, s, ghost); name != "Bram Teale" {
+		t.Fatalf("display name = %q, want the bracket gone", name)
+	}
+}
+
+// Whatever the repair decided, deciding it again must change nothing: it is a
+// pass to run after every ingest, not a one-shot script.
+func TestRepairTruncatedNamesIsIdempotent(t *testing.T) {
+	s := open(t)
+	ada := person(t, s, "ada.fenwick@quarry.fed", "Ada Fenwick")
+	merged := placeholder(t, s, "Ada Fenwick <")
+	onEntry(t, s, "mail:<one@x>", ada, merged)
+	// a decline as well as a merge, since the two leave different rows behind
+	declined := placeholder(t, s, "Cleo Ward <")
+	sameName := placeholder(t, s, "Cleo Ward")
+	onEntry(t, s, "mail:<two@x>", declined, sameName)
+
+	if _, err := RepairTruncatedNames(s); err != nil {
+		t.Fatal(err)
+	}
+	before := snapshot(t, s)
+
+	again, err := RepairTruncatedNames(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Merged != 0 || again.Cleaned != 0 || again.Renamed != 0 {
+		t.Fatalf("second run = %+v, want nothing changed", again)
+	}
+	if after := snapshot(t, s); after != before {
+		t.Fatalf("second run changed the corpus:\n%s\nwas\n%s", after, before)
+	}
+}
+
+// Two humans who share nothing but a corpus must come out the other side as two
+// humans, whichever of them the truncated name resembles.
+func TestRepairTruncatedNamesDoesNotMergeDifferentPeople(t *testing.T) {
+	s := open(t)
+	ada := person(t, s, "ada.fenwick@quarry.fed", "Ada Fenwick")
+	bram := person(t, s, "bram.teale@quarry.fed", "Bram Teale")
+	ghost := placeholder(t, s, "Cleo Ward <")
+	onEntry(t, s, "mail:<one@x>", ada, bram, ghost)
+
+	r, err := RepairTruncatedNames(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Merged != 0 {
+		t.Fatalf("merged %d pairs of unrelated people", r.Merged)
+	}
+	for _, addr := range []string{"ada.fenwick@quarry.fed", "bram.teale@quarry.fed"} {
+		if _, err := PersonByIdentity(s, KindEmail, addr); err != nil {
+			t.Fatalf("%s: %v", addr, err)
+		}
+	}
+	if got := nameOf(t, s, ghost); got != "Cleo Ward" {
+		t.Fatalf("the placeholder is now %q", got)
+	}
+	if ada == bram || ada == ghost {
+		t.Fatal("distinct people collapsed")
+	}
+}
+
+// placeholder is what a cut recipient leaves behind: a person known by a name and
+// nothing else, exactly as the quoted-header path records one.
+func placeholder(t *testing.T, s *Store, name string) int64 {
+	t.Helper()
+	id, err := ResolveWithRule(s, KindDisplayName, name, name, "quote:cc-header:name-only")
+	if err != nil {
+		t.Fatalf("resolving %q: %v", name, err)
+	}
+	return id
+}
+
+// onEntry puts an entry and cc's everyone named on it, which is the corroboration
+// the repair weighs.
+func onEntry(t *testing.T, s *Store, ext string, people ...int64) int64 {
+	t.Helper()
+	rec, err := s.Put(entry(ext, "about the meter numbers"), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range people {
+		if err := Participate(s, rec.ID, p, RoleCc); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return rec.ID
+}
+
+func candidatePair(t *testing.T, s *Store, a, b int64) bool {
+	t.Helper()
+	cs, err := MergeCandidates(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range cs {
+		if (c.AID == a && c.BID == b) || (c.AID == b && c.BID == a) {
+			return true
+		}
+	}
+	return false
 }

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -131,7 +132,25 @@ type MergeCandidate struct {
 // Automatic matching gets some of these wrong — two colleagues can share a
 // surname, and a local part can coincide across unrelated domains — so this
 // surfaces evidence and leaves the decision alone.
+//
+// Two rules feed it. A shared local part across domains is the rebrand shape an
+// alias would close. A shared display name is the placeholder shape: a
+// participant seen only as a name is a person until someone says which person,
+// and RepairTruncatedNames deliberately leaves here every pair its evidence does
+// not settle, so a declined merge is visible rather than quietly broken.
 func MergeCandidates(s *Store) ([]MergeCandidate, error) {
+	var out []MergeCandidate
+	at := map[[2]int64]int{}
+	add := func(c MergeCandidate) {
+		key := [2]int64{c.AID, c.BID}
+		if i, seen := at[key]; seen {
+			out[i].Reason += "; " + c.Reason
+			return
+		}
+		at[key] = len(out)
+		out = append(out, c)
+	}
+
 	rows, err := s.db.Query(`
 		select a.person_id, b.person_id, a.value, b.value
 		  from identities a join identities b
@@ -142,13 +161,11 @@ func MergeCandidates(s *Store) ([]MergeCandidate, error) {
 	if err != nil {
 		return nil, fmt.Errorf("finding merge candidates: %w", err)
 	}
-	defer rows.Close()
-
-	var out []MergeCandidate
 	for rows.Next() {
 		var c MergeCandidate
 		var aAddr, bAddr string
 		if err := rows.Scan(&c.AID, &c.BID, &aAddr, &bAddr); err != nil {
+			rows.Close()
 			return nil, err
 		}
 		c.AAddresses = []string{aAddr}
@@ -156,7 +173,116 @@ func MergeCandidates(s *Store) ([]MergeCandidate, error) {
 		c.Reason = "same local part, different domain"
 		_ = s.db.QueryRow(`select display_name from people where id=?`, c.AID).Scan(&c.AName)
 		_ = s.db.QueryRow(`select display_name from people where id=?`, c.BID).Scan(&c.BName)
-		out = append(out, c)
+		add(c)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	named, err := sameNamedPeople(s)
+	if err != nil {
+		return nil, err
+	}
+	for _, group := range named {
+		for i := 0; i < len(group); i++ {
+			for j := i + 1; j < len(group); j++ {
+				c := MergeCandidate{
+					AID: group[i].id, BID: group[j].id,
+					AName: group[i].name, BName: group[j].name,
+					Reason: "same display name",
+				}
+				if c.AAddresses, err = emailsOf(s, c.AID); err != nil {
+					return nil, err
+				}
+				if c.BAddresses, err = emailsOf(s, c.BID); err != nil {
+					return nil, err
+				}
+				add(c)
+			}
+		}
+	}
+	return out, nil
+}
+
+type namedPerson struct {
+	id   int64
+	name string
+}
+
+// sameNamedPeople groups people who share a name, by their display name or by a
+// name-only identity, ordered by name and then by id. Names are compared after
+// normalisation rather than in SQL so that the grouping matches what resolution
+// would key on.
+func sameNamedPeople(s *Store) ([][]namedPerson, error) {
+	rows, err := s.db.Query(`
+		select p.id, p.display_name, p.display_name from people p
+		union
+		select i.person_id, p.display_name, i.value from identities i
+		  join people p on p.id = i.person_id
+		 where i.kind = ?
+		order by 1`, KindDisplayName)
+	if err != nil {
+		return nil, fmt.Errorf("finding people who share a name: %w", err)
+	}
+	defer rows.Close()
+	groups := map[string][]namedPerson{}
+	seen := map[string]bool{}
+	for rows.Next() {
+		var p namedPerson
+		var value string
+		if err := rows.Scan(&p.id, &p.name, &value); err != nil {
+			return nil, err
+		}
+		// An address is nobody's name: a person still known only by the address
+		// they were first seen as would otherwise group with every other sighting
+		// of it, which the local-part rule already reports far better.
+		if strings.Contains(value, "@") {
+			continue
+		}
+		norm, err := NormaliseIdentity(KindDisplayName, value)
+		if err != nil {
+			continue // a person with no usable name groups with nobody
+		}
+		key := fmt.Sprintf("%s\x00%d", norm, p.id)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		groups[norm] = append(groups[norm], p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(groups))
+	for name, g := range groups {
+		if len(g) > 1 {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	out := make([][]namedPerson, 0, len(names))
+	for _, name := range names {
+		out = append(out, groups[name])
+	}
+	return out, nil
+}
+
+func emailsOf(s *Store, person int64) ([]string, error) {
+	rows, err := s.db.Query(
+		`select value from identities where person_id=? and kind=? order by value`,
+		person, KindEmail)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var v string
+		if err := rows.Scan(&v); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
 	}
 	return out, rows.Err()
 }
