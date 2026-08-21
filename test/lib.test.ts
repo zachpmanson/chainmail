@@ -34,22 +34,35 @@ describe("timezones", () => {
     expect(seq.indexOf(idOf(nz))).toBeLessThan(seq.indexOf(idOf(au)));
   });
 
-  it("infers a zone where none was stated, and says so", () => {
+  it("shows no zone at all where the spec states none", () => {
     const t = load("minimal");
     const z = zones(t.messages);
     const e = t.messages[0]!;
     expect(e.tz).toBeUndefined();
-    expect(z.label(e).inferred).toBe(true);
+    expect(z.label(e)).toEqual({ tz: undefined, state: "unknown" });
   });
 
-  it("marks every unstated zone as inferred, notes included", () => {
+  it("calls every unstated zone unknown, notes included, and invents none", () => {
     const t = load("synthetic");
     const z = zones(t.messages);
     const msgs = t.messages.filter((e) => e.kind !== "note");
     expect(msgs.filter((e) => e.tz)).toHaveLength(37);
     expect(msgs.filter((e) => !e.tz)).toHaveLength(18);
     expect(t.messages.filter((e) => !e.tz)).toHaveLength(21);
-    expect(t.messages.filter((e) => !e.tz).every((e) => z.label(e).inferred)).toBe(true);
+    const unstated = t.messages.filter((e) => !e.tz);
+    expect(unstated.every((e) => z.label(e).state === "unknown")).toBe(true);
+    expect(unstated.every((e) => z.label(e).tz === undefined)).toBe(true);
+  });
+
+  it("distinguishes an inferred zone from a stated one", () => {
+    const stated = { date: "Mon 2 Mar 2026", body: "", tz: "AEST" } as const;
+    const guessed = { date: "Mon 2 Mar 2026", body: "", tz: "+1000", tzSource: "inferred" } as const;
+    const z = zones([stated, guessed]);
+    expect(z.label(stated).state).toBe("stated");
+    expect(z.label(guessed).state).toBe("inferred");
+    // the same clock either way: a source note is the place for the caveat, not
+    // a different absolute time
+    expect(z.absolute(stated)).toBe(z.absolute(guessed));
   });
 });
 

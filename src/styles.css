@@ -132,6 +132,9 @@
   .tz { font-size:.9em; opacity:.75; }
   /* an inferred zone must not read as a stated one */
   .tz.tzi { opacity:.55; border-bottom:1px dotted currentColor; cursor:help; }
+  /* an unknown zone is a statement, not an omission: italic and quieter still,
+     so a page that is mostly unknown does not look like a page of facts */
+  .tz.tzu { opacity:.45; font-style:italic; letter-spacing:.02em; cursor:help; }
   .bub { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:.45rem .7rem; }
   .msg.q .bub { background:var(--dash); border-style:dashed;
     border-color:color-mix(in srgb, var(--muted) 55%, transparent); }

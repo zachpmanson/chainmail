@@ -26,54 +26,45 @@ const mode = (xs: number[]): number | null => {
   return [...c.entries()].sort((a, b) => b[1] - a[1])[0]![0];
 };
 
+/** How much the page is entitled to claim about one entry's zone. */
+export type ZoneState = "stated" | "inferred" | "unknown";
+
 export interface Zones {
-  /** The zone used for an entry, and whether it was stated or inferred. */
-  label: (e: Entry) => { tz: string | undefined; inferred: boolean };
+  /** The zone to show for an entry, and how much it is worth. */
+  label: (e: Entry) => { tz: string | undefined; state: ZoneState };
   absolute: (e: Entry) => number;
 }
 
 /**
- * Zone evidence, most specific first: what this sender stated elsewhere, then
- * their org, then the trail. Per-org alone is too coarse — it read an AU company
- * as NZ because most of its traffic quoted NZ send times.
+ * The zone on an entry is the spec's to state, not the renderer's to invent.
+ *
+ * This used to fill a missing `tz` from the mode of what the sender, then their
+ * org, then the whole trail had stated. On a 57-entry page where 41 entries
+ * carried no zone that produced a label for every one of them, and the labels
+ * were wrong in the way a mode is always wrong: the busiest sender in the trail
+ * has stated both +0530 and +1000 over the years, and the mode handed his
+ * November message the offset from the wrong continent. It was marked inferred,
+ * so it was honest, and it was still eight hours and a hemisphere out.
+ *
+ * Absent `tz` therefore now means unknown and renders as unknown. The inference
+ * belongs upstream (internal/tzinfer), where the evidence is the whole corpus
+ * rather than one page, where a candidate can be tested against the order the
+ * quotes establish, and where the reasoning can be published beside the claim.
  */
 export function zones(entries: Entry[]): Zones {
-  const bySender = new Map<string, number[]>();
-  const byOrg = new Map<string, number[]>();
-  const all: number[] = [];
-  const nameFor = new Map<number, string[]>();
+  const label = (e: Entry): { tz: string | undefined; state: ZoneState } => {
+    if (!e.tz) return { tz: undefined, state: "unknown" };
+    return { tz: e.tz, state: e.tzSource === "inferred" ? "inferred" : "stated" };
+  };
 
-  for (const e of entries) {
-    const off = tzMinutes(e.tz);
-    if (off === null) continue;
-    const push = (m: Map<string, number[]>, k: string) => m.set(k, [...(m.get(k) ?? []), off]);
-    push(bySender, e.sender ?? "");
-    push(byOrg, e.org ?? "");
-    all.push(off);
-    nameFor.set(off, [...(nameFor.get(off) ?? []), e.tz!.trim()]);
-  }
+  // Ordering still needs a number for every entry, and an unplaceable clock is
+  // read at the trail's prevailing offset for that purpose alone. It cannot
+  // mislead the way a displayed label can: ordering is topological, so a
+  // misplaced clock reorders same-day siblings and never inverts a reply chain
+  // (see order()), and nothing about this number reaches the page.
+  const stated = entries.map((e) => tzMinutes(e.tz)).filter((o): o is number => o !== null);
+  const prevailing = mode(stated) ?? 0;
 
-  const senderTz = new Map([...bySender].map(([k, v]) => [k, mode(v)!]));
-  const orgTz = new Map([...byOrg].map(([k, v]) => [k, mode(v)!]));
-  const trailTz = mode(all);
-  const offsetName = new Map(
-    [...nameFor].map(([off, names]) => {
-      const c = new Map<string, number>();
-      for (const n of names) c.set(n, (c.get(n) ?? 0) + 1);
-      return [off, [...c.entries()].sort((a, b) => b[1] - a[1])[0]![0]];
-    }),
-  );
-
-  const fallback = (e: Entry): number =>
-    senderTz.get(e.sender ?? "") ?? orgTz.get(e.org ?? "") ?? trailTz ?? 0;
-
-  const label = (e: Entry) =>
-    e.tz ? { tz: e.tz, inferred: false } : { tz: offsetName.get(fallback(e)), inferred: true };
-
-  /**
-   * Absolute time in minutes. A guessed zone can reorder same-day siblings but
-   * never inverts a reply chain, because ordering is topological (see order()).
-   */
   const absolute = (e: Entry): number => {
     const d = parseDate(e.date);
     if (!d) return 0;
@@ -86,7 +77,7 @@ export function zones(entries: Entry[]): Zones {
     }
     const hm = hhmm.replace(/\D/g, "").slice(0, 4);
     const mins = hm.length === 4 ? Number(hm.slice(0, 2)) * 60 + Number(hm.slice(2)) : 12 * 60;
-    const off = tzMinutes(tz) ?? fallback(e);
+    const off = tzMinutes(tz) ?? prevailing;
     return days * 1440 + mins - off;
   };
 

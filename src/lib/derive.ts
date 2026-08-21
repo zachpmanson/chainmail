@@ -1,6 +1,6 @@
 import type { Entry, Timeline } from "./spec";
 import { entryId, initials } from "./anchors";
-import { order, zones, type Zones } from "./chronological";
+import { order, zones, type ZoneState, type Zones } from "./chronological";
 import { layout, type Layout } from "./lanes";
 
 export interface Row {
@@ -13,7 +13,7 @@ export interface Row {
   orgSlot: string;
   /** class suffix for this sender's avatar image, e.g. "p0"; absent = initials */
   avatarClass?: string;
-  stamp: { date: string; time?: string; tz?: string; inferred: boolean };
+  stamp: { date: string; time?: string; tz?: string; zone: ZoneState };
 }
 
 export interface View {
@@ -71,7 +71,7 @@ export function derive(input: Timeline): View {
       isChainStart: lay.row.get(id) === firstRow.get(chain),
       orgSlot: slot(entry.org),
       avatarClass: entry.sender ? avatarClass.get(entry.sender) : undefined,
-      stamp: { date: entry.date, time: entry.time, tz: lbl.tz, inferred: lbl.inferred },
+      stamp: { date: entry.date, time: entry.time, tz: lbl.tz, zone: lbl.state },
     };
   });
 

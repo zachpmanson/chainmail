@@ -16,21 +16,34 @@ function Avatar({ row, v }: { row: Row; v: View }) {
   );
 }
 
+/**
+ * A zone is shown three ways, because the reader's next move differs in each.
+ * Stated is a fact and reads as one. Inferred is a claim and is dotted, dimmed
+ * and suffixed so it cannot be mistaken for the source's own words. Unknown is
+ * neither, and is said out loud rather than left as whitespace — an unlabelled
+ * clock beside a labelled one silently invites the reader to compare them, and
+ * on this page most clocks are unlabelled.
+ */
 function Stamp({ row }: { row: Row }) {
-  const { date, time, tz, inferred } = row.stamp;
+  const { date, time, tz, zone } = row.stamp;
   return (
     <a className="tm pl" href={`#${row.id}`} title="Link to this message">
       {date}
       {time ? ` · ${time}` : ""}
-      {tz ? (
-        inferred ? (
-          <span
-            className="tz tzi"
-            title="Inferred — this source stated no timezone. Ordering and this label come from the zones this sender stated elsewhere."
-          >{` ${tz}?`}</span>
-        ) : (
-          <span className="tz">{tz}</span>
-        )
+      {zone === "stated" ? <span className="tz">{tz}</span> : null}
+      {zone === "inferred" ? (
+        <span
+          className="tz tzi"
+          title="Inferred — this source stated no zone. The offset was worked out from the client that quoted this message; see the source notes."
+        >{` ${tz}?`}</span>
+      ) : null}
+      {zone === "unknown" ? (
+        <span
+          className="tz tzu"
+          title="Zone unknown — this source stated none and nothing available places it. The clock is a wall clock as quoted, so it cannot be compared with the times above and below it."
+        >
+          {" zone unknown"}
+        </span>
       ) : null}
     </a>
   );
