@@ -1,0 +1,227 @@
+# Provisional contract for the localhost API service, written so the client's
+# codegen has an input before the service publishes `api/openapi.yaml`. Field
+# names and shapes are taken from the Go structs the handlers marshal
+# (corpus.ChainHit, corpus.EntryHit, corpus.Stats, corpus.PersonSummary), keyed
+# in camelCase because that is the convention `schema/timeline.schema.json`
+# already sets for this repo's JSON.
+#
+# Delete this file once `api/openapi.yaml` exists: two documents describing one
+# service is how a client drifts from a server while both look correct. Until
+# then `npm run gen:api:provisional` is what regenerates `src/lib/api.d.ts`.
+openapi: 3.1.0
+info:
+  title: chainmail corpus API (provisional)
+  version: 0.0.0
+  description: >-
+    Read-only search over the local corpus, plus spec construction from a
+    curated set of chains. Localhost-only: responses carry unsanitised sender
+    HTML.
+servers:
+  - url: /
+paths:
+  /v1/search:
+    get:
+      operationId: search
+      summary: Ranked chains matching a query — the selection candidates.
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: person, in: query, schema: { type: string } }
+        - name: since
+          in: query
+          description: ISO date; entries older than this are excluded.
+          schema: { type: string }
+        - name: mode
+          in: query
+          description: >-
+            semantic and hybrid need the embedding daemon; a search asking for
+            either fails with 503 when it is not running.
+          schema: { type: string, enum: [lexical, semantic, hybrid] }
+        - { name: limit, in: query, schema: { type: integer } }
+        - name: entries
+          in: query
+          description: Also return the matching entries, not only their chains.
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: Ranked results, best first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SearchResult" }
+        "400": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /v1/spec:
+    post:
+      operationId: buildSpec
+      summary: Build a timeline spec from a chosen set of chains.
+      description: >-
+        Seconds for a large selection: it recovers HTML from host messages and
+        detects boilerplate across the whole set.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SpecRequest" }
+      responses:
+        "200":
+          description: >-
+            A timeline spec. Left unmodelled on purpose — the spec's shape is
+            generated from schema/timeline.schema.json into src/lib/spec.d.ts,
+            and a second declaration of it here would be a second source of
+            truth.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/entries/{extId}:
+    get:
+      operationId: getEntry
+      summary: One entry with its provenance.
+      parameters:
+        - { name: extId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The entry.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EntryHit" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/chains/{rootExtId}:
+    get:
+      operationId: getChain
+      summary: A chain's entries in time order.
+      parameters:
+        - { name: rootExtId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The chain's entries, oldest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rootExtId: { type: string }
+                  subject: { type: string }
+                  entries:
+                    type: array
+                    items: { $ref: "#/components/schemas/EntryHit" }
+                required: [rootExtId, entries]
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/stats:
+    get:
+      operationId: getStats
+      summary: Corpus overview.
+      responses:
+        "200":
+          description: Counts.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Stats" }
+  /v1/people:
+    get:
+      operationId: getPeople
+      summary: Everyone in the corpus, most-involved first.
+      responses:
+        "200":
+          description: People.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Person" }
+components:
+  responses:
+    Error:
+      description: The service declined, and says why.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+      required: [error]
+    SearchResult:
+      type: object
+      properties:
+        chains:
+          type: array
+          items: { $ref: "#/components/schemas/ChainHit" }
+        entries:
+          type: array
+          items: { $ref: "#/components/schemas/EntryHit" }
+    ChainHit:
+      type: object
+      description: A conversation, ranked by the aggregate relevance of its entries.
+      properties:
+        rootExtId:
+          type: string
+          description: The chain's durable name, and the id a selection is made of.
+        subject: { type: string }
+        container: { type: string }
+        sources:
+          type: array
+          items: { type: string }
+        entries:
+          type: integer
+          description: Size of the whole chain.
+        matched:
+          type: integer
+          description: How much of the chain the query hit.
+        first: { type: string }
+        last: { type: string }
+        score: { type: number }
+        best:
+          type: array
+          items: { $ref: "#/components/schemas/EntryHit" }
+      required: [rootExtId, entries, matched]
+    EntryHit:
+      type: object
+      properties:
+        extId: { type: string }
+        source: { type: string }
+        ts: { type: string }
+        person: { type: string }
+        container: { type: string }
+        subject: { type: string }
+        permalink: { type: string }
+        snippet:
+          type: string
+          description: FTS excerpt, matched terms wrapped in [ ].
+        score: { type: number }
+        proseRank: { type: integer }
+        identRank: { type: integer }
+        semRank: { type: integer }
+        similarity: { type: number }
+      required: [extId]
+    SpecRequest:
+      type: object
+      properties:
+        chains:
+          type: array
+          items: { type: string }
+          description: Chain root ext ids, as chosen by a person.
+        title: { type: string }
+        me: { type: string }
+      required: [chains]
+    Stats:
+      type: object
+      properties:
+        entries: { type: integer }
+        bySource:
+          type: object
+          additionalProperties: { type: integer }
+        unresolved: { type: integer }
+        roots: { type: integer }
+        people: { type: integer }
+    Person:
+      type: object
+      properties:
+        personId: { type: integer }
+        displayName: { type: string }
+        identities:
+          type: array
+          items: { type: string }
+        sent: { type: integer }
+        received: { type: integer }
