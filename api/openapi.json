@@ -318,6 +318,7 @@
         "required": [
           "mode"
         ],
+        "additionalProperties": false,
         "properties": {
           "mode": {
             "type": "string",
@@ -355,6 +356,7 @@
           "last",
           "score"
         ],
+        "additionalProperties": false,
         "properties": {
           "rootExtId": {
             "type": "string",
@@ -425,6 +427,7 @@
           "identRank",
           "semRank"
         ],
+        "additionalProperties": false,
         "properties": {
           "extId": {
             "type": "string",
@@ -499,6 +502,7 @@
           "quoted",
           "ts"
         ],
+        "additionalProperties": false,
         "properties": {
           "extId": {
             "type": "string",
@@ -581,6 +585,7 @@
           "rootExtId",
           "entries"
         ],
+        "additionalProperties": false,
         "properties": {
           "rootExtId": {
             "type": "string",
@@ -601,6 +606,7 @@
         "required": [
           "kind"
         ],
+        "additionalProperties": false,
         "properties": {
           "kind": {
             "type": "string",
@@ -629,6 +635,7 @@
           "name",
           "role"
         ],
+        "additionalProperties": false,
         "properties": {
           "personId": {
             "type": "integer",
@@ -655,6 +662,7 @@
         "required": [
           "chains"
         ],
+        "additionalProperties": false,
         "properties": {
           "chains": {
             "type": "array",
@@ -700,6 +708,7 @@
         "required": [
           "q"
         ],
+        "additionalProperties": false,
         "properties": {
           "q": {
             "type": "string",
@@ -723,6 +732,7 @@
           "unresolved",
           "embeddings"
         ],
+        "additionalProperties": false,
         "properties": {
           "entries": {
             "type": "integer",
@@ -768,6 +778,7 @@
           "stale",
           "eligible"
         ],
+        "additionalProperties": false,
         "properties": {
           "model": {
             "type": "string",
@@ -802,6 +813,7 @@
         "required": [
           "people"
         ],
+        "additionalProperties": false,
         "properties": {
           "people": {
             "type": "array",
@@ -821,6 +833,7 @@
           "sent",
           "received"
         ],
+        "additionalProperties": false,
         "properties": {
           "personId": {
             "type": "integer",
@@ -855,6 +868,7 @@
         "required": [
           "error"
         ],
+        "additionalProperties": false,
         "properties": {
           "error": {
             "type": "string",
