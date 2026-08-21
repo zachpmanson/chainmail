@@ -92,6 +92,10 @@ type Place struct {
 	// Obs is how many observations the verdict rests on, after the ones that say
 	// nothing about place have been dropped.
 	Obs int
+	// Bare is how many observations were dropped for stating +0000 and nothing
+	// else. It is the whole of the evidence when Verdict is UTCOnly, so the
+	// caveat can say how much UTC was seen rather than how much was believed.
+	Bare int
 }
 
 // Candidates returns the offsets this person's clock could have shown over the
@@ -135,7 +139,7 @@ func (p Place) Why() string {
 		return fmt.Sprintf("has stated %s, which no single zone explains", offsetList(p.Seen))
 	case UTCOnly:
 		return fmt.Sprintf("has only ever stated +0000, across %s, which is what a client "+
-			"emits when it does not know its zone", plural(p.Obs, "message"))
+			"emits when it does not know its zone", plural(p.Bare, "message"))
 	}
 	return "has never stated an offset"
 }
@@ -174,12 +178,13 @@ func Fit(obs []Observation) Place {
 	if len(obs) == 0 {
 		return p
 	}
-	obs = withoutBareUTC(obs)
-	p.Obs = len(obs)
-	if len(obs) == 0 {
+	kept := withoutBareUTC(obs)
+	p.Obs, p.Bare = len(kept), len(obs)-len(kept)
+	if len(kept) == 0 {
 		p.Verdict = UTCOnly
 		return p
 	}
+	obs = kept
 	for _, o := range obs {
 		p.Seen = appendUnique(p.Seen, o.Off)
 	}
