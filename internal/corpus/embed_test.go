@@ -136,7 +136,7 @@ func TestQuotedHistoryIsNotEmbeddedTwice(t *testing.T) {
 	// every message in the thread — and make every reply in the thread
 	// near-identical to every other.
 	body := strings.Join([]string{
-		"Confirming the meter read for the Kaiapoi site.",
+		"Confirming the meter read for the Fernhollow site.",
 		"",
 		"On Mon, 12 May 2025 at 09:14, Dana Ruiz <dana@example.com> wrote:",
 		"> Can you send the solar export figures as well, and the",
@@ -146,7 +146,7 @@ func TestQuotedHistoryIsNotEmbeddedTwice(t *testing.T) {
 	if reason != "" {
 		t.Fatalf("unexpected skip: %s", reason)
 	}
-	if !strings.Contains(text, "Kaiapoi") {
+	if !strings.Contains(text, "Fernhollow") {
 		t.Errorf("dropped the sender's own text: %q", text)
 	}
 	for _, quoted := range []string{"solar export", "reconciliation", "Dana Ruiz"} {
@@ -174,14 +174,14 @@ func TestABareRelayContributesNoWordsOfItsOwn(t *testing.T) {
 			// A long subject, so the fixture fails the gate for the reason under
 			// test rather than for want of a few words.
 			text, reason := EmbedTextFor(SourceMail,
-				"Meter read for the two Kaiapoi sites, April", c.body)
+				"Meter read for the two Fernhollow sites, April", c.body)
 			if reason != "" {
 				t.Fatalf("unexpected skip: %s", reason)
 			}
 			if strings.Contains(text, "readings") {
 				t.Errorf("relayed text was embedded as this entry's own: %q", text)
 			}
-			if !strings.Contains(text, "Kaiapoi") {
+			if !strings.Contains(text, "Fernhollow") {
 				t.Errorf("subject lost: %q", text)
 			}
 		})
@@ -306,7 +306,7 @@ func TestChangedTextIsReembeddedAndUnchangedTextIsNot(t *testing.T) {
 	stable := msg{id: "stable@example.com", subject: "Contract dates",
 		body: "The contract start date on the schedule is a month out."}
 	revised := msg{id: "revised@example.com", subject: "Meter read",
-		body: "The Kaiapoi read is 4471 as at the end of the month."}
+		body: "The Fernhollow read is 4471 as at the end of the month."}
 	stableID := put(t, s, stable)
 	revisedID := put(t, s, revised)
 
@@ -321,7 +321,7 @@ func TestChangedTextIsReembeddedAndUnchangedTextIsNot(t *testing.T) {
 
 	// A re-ingest with identical content, and one whose body actually moved.
 	put(t, s, stable)
-	revised.body = "Correction: the Kaiapoi read is 4517, not 4471."
+	revised.body = "Correction: the Fernhollow read is 4517, not 4471."
 	put(t, s, revised)
 
 	f.Calls, f.Seen = 0, nil
