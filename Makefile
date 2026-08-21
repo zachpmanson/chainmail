@@ -31,6 +31,7 @@ help:
 	@printf '  make test           go + frontend tests\n'
 	@printf '  make check          test, vet, gofmt, typecheck\n'
 	@printf '  make page Q=...     generate a spec and render it\n'
+	@printf '  make repage P=...   refresh that page and re-render it, marking what changed\n'
 	@printf '  make serve          vite dev server\n'
 	@printf '\nOverride CORPUS, SLACK, SINCE, BIN on the command line.\n'
 
@@ -105,6 +106,18 @@ page:
 	npm run render -- $(HOME)/Downloads/spec.json -o $(HOME)/Downloads/page.html
 	@echo
 	@echo "http://localhost:5173/?spec=/@fs$(HOME)/Downloads/spec.json"
+
+# make repage P=$(HOME)/Downloads/page.html
+#
+# Takes the page rather than a spec, since a page carries the spec that made it:
+# one file to name instead of two that have to be kept in step. It is copied
+# aside first, because it is both the input and the diff base and the render
+# would otherwise overwrite what it is being compared against.
+repage:
+	@test -n "$(P)" || { echo 'usage: make repage P="<page.html>" [FETCH=1]'; exit 2; }
+	cp "$(P)" "$(P).prev"
+	$(BIN) refresh "$(P).prev" $(if $(FETCH),-fetch,) -o $(HOME)/Downloads/spec.json
+	npm run render -- $(HOME)/Downloads/spec.json -o "$(P)" --since "$(P).prev"
 
 serve:
 	npm run dev
