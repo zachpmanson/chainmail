@@ -69,11 +69,12 @@ const (
 )
 
 // recoverHTML returns the sender's markup for a quoted entry, or "" when no host
-// offers a confident match.
-func recoverHTML(text string, hosts []string) string {
+// offers a confident match. The second return says whether a signature or a
+// disclaimer was folded out of it.
+func recoverHTML(text string, hosts []string, bf bodyFold) (string, bool) {
 	needle := tokens(text)
 	if len(needle) < minNeedleTokens {
-		return ""
+		return "", false
 	}
 	var best, rival *candidate
 	for _, h := range hosts {
@@ -91,16 +92,16 @@ func recoverHTML(text string, hosts []string) string {
 		}
 	}
 	if best == nil {
-		return ""
+		return "", false
 	}
 	if rival != nil && best.f1-rival.f1 < ambiguityMargin &&
 		similarity(best.tokens, rival.tokens) < sameContent {
 		// Two blocks of the trail fit this entry and they do not say the same
 		// thing, so one of them is a different message. Which one cannot be told
 		// from here, and guessing is the one outcome worse than plain text.
-		return ""
+		return "", false
 	}
-	return renderBody(best.extract())
+	return renderBody(best.extract(), bf)
 }
 
 // candidate is one block of a host's markup: a run of sibling nodes bounded by

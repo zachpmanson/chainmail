@@ -340,6 +340,7 @@ func (b *builder) notes(rows []*entryRow) []SourceNote {
 			"%d of %d entries were recovered from quoted text and never existed as "+
 				"standalone messages here.", quoted, len(rows)))
 	}
+	items = append(items, foldNotes(rows)...)
 	items = append(items, b.zoneNotes(len(rows))...)
 	labels := make([]string, 0, len(b.badZones))
 	for tz := range b.badZones {

@@ -36,22 +36,25 @@ import (
 // that survives truncation as markup with no words in it, and one the parser
 // makes nothing of are all cases where the text rendition is the better source
 // and is still available.
-func htmlBody(raw string, st bodyStyle) string {
+//
+// The second return says whether a signature or a disclaimer was folded, for the
+// source note; see bodyHTML for why it is reported from here.
+func htmlBody(raw string, st bodyStyle, bf bodyFold) (string, bool) {
 	doc, err := html.Parse(strings.NewReader(raw))
 	if err != nil {
 		// Only a read error, which a strings.Reader does not produce. Parsing
 		// itself never fails: malformed and truncated markup is recovered per the
 		// HTML5 tree construction rules.
-		return ""
+		return "", false
 	}
 	body := findBody(doc)
 	if body == nil {
-		return ""
+		return "", false
 	}
 	if st.peel {
 		peelQuoted(body)
 	}
-	return renderBody(body)
+	return renderBody(body, bf)
 }
 
 // renderBody strips, tidies and serialises a body subtree.
@@ -60,25 +63,36 @@ func htmlBody(raw string, st bodyStyle) string {
 // sliced out of the source. That is what makes a truncated part safe to render:
 // the parser closes what the truncation left open, so the output cannot leak an
 // unclosed <div> or <table> that would swallow the rest of the timeline.
-func renderBody(body *html.Node) string {
-	sig := dropSignatures(body)
+//
+// The fold is applied between the two passes on purpose. The blocks a client
+// marked are found before stripChrome, which drops the class that marks them,
+// and moved after it, so the disclosure's own class is not dropped with the
+// sender's.
+func renderBody(body *html.Node, bf bodyFold) (string, bool) {
+	marked := markedSignatures(body)
 	stripChrome(body)
 	trimTrailingChrome(body)
 	if !hasContent(body) {
-		return ""
+		return "", false
+	}
+	folded := false
+	for _, n := range marked {
+		if foldNodes(body, []*html.Node{n}, markedNote) {
+			folded = true
+		}
+	}
+	if !folded {
+		// A client that marked its signature has already said where the block is,
+		// and folding a second time would fold the first disclosure inside another.
+		folded = foldRepeatedTail(body, bf)
 	}
 	var b strings.Builder
 	for c := body.FirstChild; c != nil; c = c.NextSibling {
 		if err := html.Render(&b, c); err != nil {
-			return ""
+			return "", false
 		}
 	}
-	if sig {
-		// Same declaration the text path makes: a trimmed signature is still the
-		// sender's text, so the page says it was there.
-		b.WriteString(`<p class="ed">[signature trimmed]</p>`)
-	}
-	return b.String()
+	return b.String(), folded
 }
 
 func findBody(n *html.Node) *html.Node {
@@ -409,31 +423,6 @@ func cutFrom(stop, n *html.Node) {
 	if n.Parent != nil {
 		n.Parent.RemoveChild(n)
 	}
-}
-
-// dropSignatures removes the blocks a client marked as a signature, and reports
-// whether it removed any.
-//
-// Only the marked ones: gmail_signature is a fact the sending client stated,
-// while the delimiter the text path looks for is usually gone by the time a
-// signature has been marked up. So a signature from a client that marks nothing
-// stays on the page — over-trimming would eat the sender's last paragraph, and
-// under-trimming only leaves a disclaimer in view.
-func dropSignatures(n *html.Node) bool {
-	dropped := false
-	var next *html.Node
-	for c := n.FirstChild; c != nil; c = next {
-		next = c.NextSibling
-		if c.Type == html.ElementNode && hasClass(c, "gmail_signature") {
-			n.RemoveChild(c)
-			dropped = true
-			continue
-		}
-		if dropSignatures(c) {
-			dropped = true
-		}
-	}
-	return dropped
 }
 
 // Tags that act on the document rather than say anything in it. A <style> or a

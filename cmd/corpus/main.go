@@ -85,6 +85,10 @@ const usage = `usage: corpus <command> [flags]
                            a similarity floor has to separate
   show          <ext-id>   one entry in full, or -chain for the whole thread
   spec          -q <text>  write a timeline spec for the renderer
+  sigs          [-people -domains]
+                           which trailing blocks repeat enough to be a signature
+                           or an organisation's notice, and how many lines that
+                           takes off screen
   zones         [-people -chain <ext-id>]
                            where the stated offsets place people, and what that
                            settles about the clocks nobody labelled: stated,
@@ -389,6 +393,20 @@ func run(args []string) error {
 			}
 		}
 		return nil
+
+	case "sigs":
+		fs := flag.NewFlagSet("sigs", flag.ContinueOnError)
+		people := fs.Bool("people", false, "list the senders with a repeated block")
+		domains := fs.Bool("domains", false, "list the domains with a repeated notice")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		s, err := corpus.Open(path)
+		if err != nil {
+			return err
+		}
+		defer s.Close()
+		return sigsReport(os.Stdout, s, *people, *domains)
 
 	case "zones":
 		fs := flag.NewFlagSet("zones", flag.ContinueOnError)

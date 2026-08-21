@@ -5,6 +5,13 @@ import (
 	"testing"
 )
 
+// renderMarkup is htmlBody for a part with no boilerplate detected. The fold
+// tests call htmlBody directly with the block they are about.
+func renderMarkup(raw string, st bodyStyle) string {
+	s, _ := htmlBody(raw, st, bodyFold{})
+	return s
+}
+
 // Every part in this file is invented. The shapes are the ones real clients
 // emit — a Gmail blockquote, an Outlook header block written one paragraph per
 // key, a Word stylesheet in the middle of the body — but no line of real
@@ -65,7 +72,7 @@ func TestGmailQuoteIsPeeled(t *testing.T) {
 		`<div class="gmail_attr">On Thu, 7 May 2026 at 04:38, Ada Byron &lt;ada@loomworks.example&gt; wrote:</div>` +
 		`<blockquote class="gmail_quote"><div>Has the review finished?</div></blockquote>` +
 		`</div>`
-	got := htmlBody(part, mailBody)
+	got := renderMarkup(part, mailBody)
 	if !strings.Contains(got, "Looking into it now.") {
 		t.Errorf("body = %q, want the sender's own text", got)
 	}
@@ -80,7 +87,7 @@ func TestAppleCiteQuoteIsPeeled(t *testing.T) {
 	part := `<div>Agreed.</div><div><br></div>` +
 		`<div>On 7 May 2026, at 04:38, Ada Byron &lt;ada@loomworks.example&gt; wrote:</div>` +
 		`<blockquote type="cite"><div>Has the review finished?</div></blockquote>`
-	got := htmlBody(part, mailBody)
+	got := renderMarkup(part, mailBody)
 	if !strings.Contains(got, "Agreed.") {
 		t.Errorf("body = %q, want the sender's own text", got)
 	}
@@ -100,7 +107,7 @@ func TestOutlookHeaderBlockIsPeeledEvenSpreadAcrossSiblings(t *testing.T) {
 		`<p><b>To:</b> ops@loomworks.example</p>` +
 		`<p><b>Subject:</b> Re: cutover</p>` +
 		`<p>Has the review finished?</p></div>`
-	got := htmlBody(part, mailBody)
+	got := renderMarkup(part, mailBody)
 	if !strings.Contains(got, "Approved, thanks.") {
 		t.Errorf("body = %q, want the sender's own text", got)
 	}
@@ -118,7 +125,7 @@ func TestOutlookHeaderBlockWithoutAContainerIsPeeled(t *testing.T) {
 		`<p><b>From:</b> Ada Byron &lt;ada@loomworks.example&gt;</p>` +
 		`<p><b>Sent:</b> Thursday, 7 May 2026 04:38</p>` +
 		`<p>Has the review finished?</p></div>`
-	got := htmlBody(part, mailBody)
+	got := renderMarkup(part, mailBody)
 	if !strings.Contains(got, "Approved.") || strings.Contains(got, "Has the review") {
 		t.Errorf("body = %q, want everything from the header block onward peeled", got)
 	}
@@ -133,7 +140,7 @@ func TestNestedQuotesGoWithTheOuterOne(t *testing.T) {
 		`<div class="gmail_quote"><div class="gmail_attr">On Wed, 6 May 2026 at 09:00, Grace wrote:</div>` +
 		`<blockquote class="gmail_quote"><div>Opened the ticket.</div></blockquote></div>` +
 		`</blockquote></div>`
-	got := htmlBody(part, mailBody)
+	got := renderMarkup(part, mailBody)
 	if got != "<div>Chasing this.</div>" {
 		t.Errorf("body = %q, want only the sender's own text", got)
 	}
@@ -160,7 +167,7 @@ func TestAnInlinePullQuoteStaysOnThePage(t *testing.T) {
 	part := `<div>Root cause from the pull request:</div>` +
 		`<blockquote style="margin:0 0 0 40px"><div>the unit is converted twice</div></blockquote>` +
 		`<div>Fixed on the branch.</div>`
-	got := htmlBody(part, mailBody)
+	got := renderMarkup(part, mailBody)
 	for _, want := range []string{"Root cause", "converted twice", "Fixed on the branch."} {
 		if !strings.Contains(got, want) {
 			t.Errorf("body = %q, want %q kept", got, want)
@@ -175,7 +182,7 @@ func TestDocumentChromeIsDropped(t *testing.T) {
 		`<style>.msg{display:none}</style><link rel="stylesheet" href="https://loomworks.example/m.css">` +
 		`</head><body><!--[if mso]><p>Word chrome</p><![endif]-->` +
 		`<script>alert(1)</script><p>Rates attached.</p></body></html>`
-	got := htmlBody(part, mailBody)
+	got := renderMarkup(part, mailBody)
 	if got != "<p>Rates attached.</p>" {
 		t.Errorf("body = %q, want only the sender's paragraph", got)
 	}
@@ -185,7 +192,7 @@ func TestPresentationIsDroppedAndEmphasisIsKept(t *testing.T) {
 	part := `<table width="600" bgcolor="#ffffff"><tr>` +
 		`<td style="color:#000000;width:300px;font-weight:bold" class="MsoNormal" id="c1">Peak</td>` +
 		`<td><font color="#ff0000" face="Calibri">12.40 c/kWh</font></td></tr></table>`
-	got := htmlBody(part, mailBody)
+	got := renderMarkup(part, mailBody)
 	for _, gone := range []string{"color:#000000", "width:300px", `width="600"`, "bgcolor", "MsoNormal", `id="c1"`, "Calibri"} {
 		if strings.Contains(got, gone) {
 			t.Errorf("body = %q, want %q dropped: it asserts a colour or a size", got, gone)
@@ -202,7 +209,7 @@ func TestPresentationIsDroppedAndEmphasisIsKept(t *testing.T) {
 func TestRemoteImagesAreKeptAndUnfetchableOnesAreNot(t *testing.T) {
 	part := `<div><img src="https://loomworks.example/screenshot.png" width="480" alt="the offersheet">` +
 		`<img src="cid:image001.png@01D9" alt="logo">Attached above.</div>`
-	got := htmlBody(part, mailBody)
+	got := renderMarkup(part, mailBody)
 	if !strings.Contains(got, `src="https://loomworks.example/screenshot.png"`) {
 		t.Errorf("body = %q, want the remote image: it is content", got)
 	}
@@ -214,21 +221,24 @@ func TestRemoteImagesAreKeptAndUnfetchableOnesAreNot(t *testing.T) {
 	}
 }
 
-func TestAMarkedSignatureIsTrimmedButSaidSo(t *testing.T) {
+func TestAClientMarkedSignatureBlockIsFoldedAndStillPresent(t *testing.T) {
 	part := `<div>Numbers attached.</div>` +
 		`<div class="gmail_signature"><div>Ada Byron<br>Loomworks</div></div>`
-	got := htmlBody(part, mailBody)
-	if strings.Contains(got, "Ada Byron") {
-		t.Errorf("body = %q, want the signature trimmed", got)
+	got := renderMarkup(part, mailBody)
+	if !strings.Contains(got, `<details class="sig">`) {
+		t.Errorf("body = %q, want the signature behind a disclosure", got)
 	}
-	if !strings.Contains(got, `<p class="ed">[signature trimmed]</p>`) {
-		t.Errorf("body = %q, want the trim declared rather than silent", got)
+	if !strings.Contains(got, "Ada Byron") {
+		t.Errorf("body = %q, want the signature folded, not removed", got)
+	}
+	if !strings.Contains(got, "Numbers attached.") {
+		t.Errorf("body = %q, want the sender's own text outside the fold", got)
 	}
 }
 
 func TestTrailingSeparatorGoesWithTheQuoteItSeparated(t *testing.T) {
 	part := `<div><p>Approved.</p><hr><div id="divRplyFwdMsg"><p>From: Ada</p><p>Sent: Thursday</p></div><p>Original question.</p></div>`
-	got := htmlBody(part, mailBody)
+	got := renderMarkup(part, mailBody)
 	if strings.Contains(got, "<hr") {
 		t.Errorf("body = %q, want the rule dropped: it now separates nothing", got)
 	}
@@ -247,7 +257,7 @@ func TestMalformedMarkupNeitherPanicsNorLeaksAnOpenTag(t *testing.T) {
 		`<div>Rates attached.</div><style>.msg{display:none`,
 		strings.Repeat("<div>", 200) + "Rates attached.",
 	} {
-		got := htmlBody(part, mailBody)
+		got := renderMarkup(part, mailBody)
 		if !strings.Contains(got, "Rates attached.") && !strings.Contains(got, "Peak") &&
 			!strings.Contains(got, "unclosed") {
 			t.Errorf("part %q -> %q, want the words that were in it", part, got)
@@ -263,7 +273,7 @@ func TestMalformedMarkupNeitherPanicsNorLeaksAnOpenTag(t *testing.T) {
 
 func TestAnEmptyPartIsNotABubble(t *testing.T) {
 	for _, part := range []string{"", "   ", `<html><body></body></html>`, `<div>&nbsp;</div>`, `<div><br><br></div>`} {
-		if got := htmlBody(part, mailBody); got != "" {
+		if got := renderMarkup(part, mailBody); got != "" {
 			t.Errorf("htmlBody(%q) = %q, want the empty string", part, got)
 		}
 	}
@@ -274,7 +284,7 @@ func TestAReplyThatOnlyQuotesHasNoBody(t *testing.T) {
 	// as its own entry.
 	part := `<div class="gmail_quote"><div class="gmail_attr">On Thu, 7 May 2026 at 04:38, Ada wrote:</div>` +
 		`<blockquote class="gmail_quote"><div>Has the review finished?</div></blockquote></div>`
-	if got := htmlBody(part, mailBody); got != "" {
+	if got := renderMarkup(part, mailBody); got != "" {
 		t.Errorf("body = %q, want empty", got)
 	}
 }

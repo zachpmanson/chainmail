@@ -32,7 +32,7 @@ func TestOnlyOurOwnTagsSurviveHostileInput(t *testing.T) {
 		`<form action=x><input name=p></form>`,
 	}
 	for _, a := range attacks {
-		got := textToHTML(a, bodyStyle{reflow: true})
+		got := renderText(a, bodyStyle{reflow: true})
 		for _, m := range reAnyTag.FindAllStringSubmatch(got, -1) {
 			tag, attrs := strings.ToLower(m[1]), strings.ToLower(m[2])
 			if !allowed[tag] {
