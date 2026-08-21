@@ -215,7 +215,7 @@ func (b *builder) add(r *entryRow) {
 		Date:      date,
 		Time:      clock,
 		Sender:    firstNonEmpty(r.Person, from.Who()),
-		Org:       b.orgFor(r, from),
+		Org:       b.orgFor(r.PersonID, from.Address),
 		FromEmail: from.Address,
 		To:        recipientLine(to, cc),
 		Body:      bodyHTML(r),
@@ -263,15 +263,19 @@ func (b *builder) add(r *entryRow) {
 	b.subjOf[r.ID] = r.Subject
 	b.messages = append(b.messages, e)
 
-	b.meet(r, e.Sender, from, to, cc)
+	b.meet(r, e.Sender, e.Org, from, to, cc)
 }
 
 // meet records everyone this entry involves, in the order the page reads: its
 // author, then the people the corpus says were addressed on it, then anyone
 // named in a header the corpus did not resolve to a person.
-func (b *builder) meet(r *entryRow, sender string, from addr, to, cc []addr) {
+func (b *builder) meet(r *entryRow, sender, org string, from addr, to, cc []addr) {
 	ref := b.ref(r.PersonID, sender, from.Address)
-	b.cast.sender(ref, orgOf(ref.address, b.opts.Orgs), r.Direct)
+	// The sender's row is handed the org their own bubbles carry, rather than
+	// resolving it a second time from the address the corpus happens to list
+	// first: the panel is read as the key to the transcript's colours, so the two
+	// must be the same value and not merely two attempts at the same answer.
+	b.cast.sender(ref, org, r.Direct)
 	for _, p := range b.part[r.ID] {
 		if p.Role == corpus.RoleFrom {
 			// Already recorded, under the name the transcript shows beside their
@@ -279,7 +283,7 @@ func (b *builder) meet(r *entryRow, sender string, from addr, to, cc []addr) {
 			continue
 		}
 		ref := b.ref(p.Person, p.Name, "")
-		b.cast.recipient(ref, orgOf(ref.address, b.opts.Orgs), r.Direct)
+		b.cast.recipient(ref, b.orgFor(p.Person, ref.address), r.Direct)
 	}
 	// A header the ingest never turned into a person still names someone. It is
 	// rare — 16 entries of 31k on the corpus this was measured against carry a To:
@@ -287,7 +291,7 @@ func (b *builder) meet(r *entryRow, sender string, from addr, to, cc []addr) {
 	// lose them.
 	for _, a := range append(append([]addr{}, to...), cc...) {
 		ref := b.ref(0, a.Who(), a.Address)
-		b.cast.recipient(ref, orgOf(ref.address, b.opts.Orgs), r.Direct)
+		b.cast.recipient(ref, b.orgFor(0, ref.address), r.Direct)
 	}
 }
 
@@ -295,9 +299,11 @@ func (b *builder) meet(r *entryRow, sender string, from addr, to, cc []addr) {
 // from the header where there is one and from the corpus otherwise, which is what
 // gives a Slack author a mailbox to be reached at and an org to be grouped under.
 //
-// Only the panel is grouped that way. An entry's own `org` — and so its colour —
-// still comes from its From header, because a Slack author's colour slot would
-// otherwise depend on whether their mailbox happened to be in this selection.
+// The address is what the org is resolved from where a header supplied none, so a
+// Slack author and a quote-recovered sender are coloured by the mailbox the
+// corpus knows them by. That set is every identity the person holds, not the
+// subset of their mail in this selection, so their colour does not move when the
+// selection does.
 func (b *builder) ref(person int64, name, address string) castRef {
 	known := b.addrs[person]
 	if address == "" && len(known) > 0 {
@@ -457,15 +463,37 @@ func firstNonEmpty(vs ...string) string {
 	return ""
 }
 
-// orgFor names the sender's organisation, preferring what their own address
-// says and falling back to what the same person's other messages established.
+// orgFor names the organisation behind one appearance of a person, taking the
+// strongest evidence available: the address on this appearance, then an address
+// the same person used on another entry here, then any address the corpus holds
+// for them.
 //
-// The fallback never invents: it only reuses an org already derived from a real
-// address belonging to that person. A sender with no resolvable address anywhere
-// stays without an org, which the renderer shows as the unknown slot.
-func (b *builder) orgFor(r *entryRow, from addr) string {
-	if org := orgOf(from.Address, b.opts.Orgs); org != "" {
+// It is the only resolver, and both the entry's colour and their participants row
+// go through it. Resolving a person's org twice is what drifts: the panel read
+// the corpus and a bubble read the header, so on the reference trail two people
+// were named at an org in the panel and left uncoloured in the transcript, and a
+// panel that disagrees with the page it is a key to is worse than no colour.
+//
+// The corpus step is what a quote-recovered entry needs, having no header of its
+// own. It never invents an org: every step reads a real address belonging to that
+// same person. Someone with no resolvable address anywhere stays without one,
+// which the renderer shows as the unknown slot.
+//
+// One person therefore has one org for the whole page. Someone who changed
+// employer mid-trail is shown at whichever of the two their mail resolved to
+// first, rather than switching colour partway down — an ordering artefact, and
+// the cost of being able to read the panel as the key to the transcript.
+func (b *builder) orgFor(person int64, address string) string {
+	if org := orgOf(address, b.opts.Orgs); org != "" {
 		return org
 	}
-	return b.orgByPerson[r.PersonID]
+	if org := b.orgByPerson[person]; org != "" {
+		return org
+	}
+	for _, a := range b.addrs[person] {
+		if org := orgOf(a, b.opts.Orgs); org != "" {
+			return org
+		}
+	}
+	return ""
 }

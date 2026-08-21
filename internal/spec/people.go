@@ -288,12 +288,16 @@ func (c *cast) see(ref castRef, org string, named, direct bool) {
 	if named || row.Name == "" {
 		row.Name = firstNonEmpty(ref.name, ref.address)
 	}
-	// An address and an org are only ever added, never overwritten: a later
-	// sighting knowing less than an earlier one must not take knowledge away.
+	// An address is only ever added, never overwritten: a later sighting knowing
+	// less than an earlier one must not take knowledge away.
 	if row.Email == "" {
 		row.Email = ref.address
 	}
-	if row.Org == "" {
+	// A sender's org outranks the same person's org as a recipient, and only a
+	// sender's: it is the value their bubbles are painted with, and a row coloured
+	// otherwise would make the panel disagree with the transcript it is a key to.
+	// An empty org never displaces a known one, whoever offers it.
+	if org != "" && (named || row.Org == "") {
 		row.Org = org
 	}
 	if direct {
