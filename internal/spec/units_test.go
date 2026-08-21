@@ -64,26 +64,35 @@ func TestTZMinutes(t *testing.T) {
 }
 
 // A stated zone is displayed, never converted: the same instant reads
-// differently depending on what the sender's mail client said.
+// differently depending on what the sender's mail client said. Where an offset
+// was captured it decides, and the label follows it.
 func TestStampRendersTheStatedZone(t *testing.T) {
 	ts := time.Date(2026, 8, 17, 2, 30, 0, 0, time.UTC)
 	cases := []struct {
 		tz          string
+		off         *int
 		date, clock string
+		label       string
 		resolved    bool
 	}{
-		{"AEST", "Mon 17 Aug 2026", "12:30", true},
-		{"+1200", "Mon 17 Aug 2026", "14:30", true},
-		{"+0000", "Mon 17 Aug 2026", "02:30", true},
-		{"-0700", "Sun 16 Aug 2026", "19:30", true},
-		{"", "Mon 17 Aug 2026", "02:30", false},
-		{"XYZ", "Mon 17 Aug 2026", "02:30", false},
+		{tz: "AEST", date: "Mon 17 Aug 2026", clock: "12:30", label: "AEST", resolved: true},
+		{tz: "+1200", date: "Mon 17 Aug 2026", clock: "14:30", label: "+1200", resolved: true},
+		{tz: "+0000", date: "Mon 17 Aug 2026", clock: "02:30", label: "+0000", resolved: true},
+		{tz: "-0700", date: "Sun 16 Aug 2026", clock: "19:30", label: "-0700", resolved: true},
+		{tz: "", date: "Mon 17 Aug 2026", clock: "02:30", resolved: false},
+		{tz: "XYZ", date: "Mon 17 Aug 2026", clock: "02:30", label: "XYZ", resolved: false},
+		// An offset with no label at all is still enough to place the clock.
+		{off: mins(-420), date: "Sun 16 Aug 2026", clock: "19:30", label: "-0700", resolved: true},
+		// A zero offset is a fact the source stated, unlike a missing one.
+		{off: mins(0), date: "Mon 17 Aug 2026", clock: "02:30", label: "+0000", resolved: true},
+		{tz: "Asia/Kolkata", off: mins(330), date: "Mon 17 Aug 2026", clock: "08:00", label: "+0530", resolved: true},
+		{tz: "IST", off: mins(330), date: "Mon 17 Aug 2026", clock: "08:00", label: "IST", resolved: true},
 	}
 	for _, c := range cases {
-		date, clock, resolved := stamp(ts, c.tz)
-		if date != c.date || clock != c.clock || resolved != c.resolved {
-			t.Errorf("stamp(%q) = %q %q %v, want %q %q %v",
-				c.tz, date, clock, resolved, c.date, c.clock, c.resolved)
+		date, clock, label, resolved := stamp(ts, c.tz, c.off)
+		if date != c.date || clock != c.clock || label != c.label || resolved != c.resolved {
+			t.Errorf("stamp(%q, %v) = %q %q %q %v, want %q %q %q %v",
+				c.tz, c.off, date, clock, label, resolved, c.date, c.clock, c.label, c.resolved)
 		}
 	}
 }

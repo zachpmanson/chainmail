@@ -128,8 +128,9 @@ type builder struct {
 	castOrder []string
 	people    map[string]Participant
 
-	badZones map[string]int // unresolvable zone label -> entries affected
-	orphans  int            // entries naming a parent that is not in this spec
+	badZones   map[string]int // unresolvable zone label -> entries affected
+	blindZones int            // entries with neither an offset nor a readable label
+	orphans    int            // entries naming a parent that is not in this spec
 }
 
 func (b *builder) add(r *entryRow) {
@@ -137,9 +138,13 @@ func (b *builder) add(r *entryRow) {
 	to := parseAddrList(r.To)
 	cc := parseAddrList(r.Cc)
 
-	date, clock, zoneOK := stamp(r.TS, r.TZ)
-	if r.TZ != "" && !zoneOK {
-		b.badZones[r.TZ]++
+	date, clock, tz, zoneOK := stamp(r.TS, r.TZ, r.TZOffset)
+	if !zoneOK {
+		if r.TZ != "" {
+			b.badZones[r.TZ]++
+		} else {
+			b.blindZones++
+		}
 	}
 
 	e := Entry{
@@ -150,9 +155,9 @@ func (b *builder) add(r *entryRow) {
 		FromEmail: from.Address,
 		To:        recipientLine(to, cc),
 		Body:      "", // left for the pass that writes prose; never invented here
-		// tz is passed through only when the source stated one; empty hands the
-		// inference to the renderer, which labels an inferred zone as inferred.
-		TZ:      r.TZ,
+		// Empty hands the inference to the renderer, which labels an inferred zone
+		// as inferred.
+		TZ:      tz,
 		Quoted:  !r.Direct,
 		Me:      b.me[from.Address],
 		Source:  b.source(r),
@@ -299,6 +304,13 @@ func (b *builder) notes(rows []*entryRow) []SourceNote {
 		items = append(items, fmt.Sprintf(
 			"%d of %d entries were recovered from quoted text and never existed as "+
 				"standalone messages here.", quoted, len(rows)))
+	}
+	if b.blindZones > 0 {
+		items = append(items, fmt.Sprintf(
+			"%d of %d entries state no zone and carry no offset, so their clocks are "+
+				"shown at UTC. The renderer infers a zone label for them from the "+
+				"sender's other messages, but the clock itself cannot be moved.",
+			b.blindZones, len(rows)))
 	}
 	labels := make([]string, 0, len(b.badZones))
 	for tz := range b.badZones {

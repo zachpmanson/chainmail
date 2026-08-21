@@ -18,6 +18,7 @@ type entryRow struct {
 	Kind      string
 	TS        time.Time
 	TZ        string
+	TZOffset  *int // minutes east of UTC; nil when the source stated none
 	Person    string
 	Container string
 	Subject   string
@@ -127,7 +128,8 @@ func load(store *corpus.Store, ids []int64) ([]*entryRow, error) {
 	ph, args := placeholders(ids)
 	rows, err := db.Query(`
 		select e.id, coalesce(e.parent_id, 0), coalesce(e.parent_ref, ''), e.kind, e.ts,
-		       coalesce(e.tz, ''), coalesce(p.display_name, ''), coalesce(e.container, ''),
+		       coalesce(e.tz, ''), e.tz_offset, coalesce(p.display_name, ''),
+		       coalesce(e.container, ''),
 		       coalesce(e.subject, ''), e.ext_id, coalesce(d.gmail_id, ''),
 		       coalesce(d.from_addr, ''), coalesce(d.to_addr, ''), coalesce(d.cc_addr, '')
 		from entries e
@@ -145,8 +147,8 @@ func load(store *corpus.Store, ids []int64) ([]*entryRow, error) {
 	for rows.Next() {
 		var r entryRow
 		var ts int64
-		if err := rows.Scan(&r.ID, &r.ParentID, &r.ParentRef, &r.Kind, &ts, &r.TZ, &r.Person,
-			&r.Container, &r.Subject, &r.ExtID, &r.GmailID, &r.From, &r.To, &r.Cc); err != nil {
+		if err := rows.Scan(&r.ID, &r.ParentID, &r.ParentRef, &r.Kind, &ts, &r.TZ,
+			&r.TZOffset, &r.Person, &r.Container, &r.Subject, &r.ExtID, &r.GmailID, &r.From, &r.To, &r.Cc); err != nil {
 			return nil, err
 		}
 		r.TS = time.Unix(ts, 0).UTC()

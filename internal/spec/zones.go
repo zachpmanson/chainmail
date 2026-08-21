@@ -16,15 +16,20 @@ import (
 // sender's own clock, and the renderer marks a zone it inferred differently from
 // one that was stated. So:
 //
-//   - date/time are rendered at the stated zone's offset, never converted to
-//     local, UTC, or the reader's zone;
-//   - tz is copied through verbatim when the store has one, and omitted when it
-//     does not, rather than guessed. The renderer then infers a zone from the
-//     sender's other messages and labels it as inferred, which is honest;
-//   - a stated label we cannot turn into an offset (an ambiguous or unknown
-//     abbreviation) is still emitted as stated, but the clock can only be
-//     rendered in UTC — so those entries are listed in sourceNotes instead of
-//     being passed off as the sender's local time.
+//   - date/time are rendered at the offset the source recorded, never converted
+//     to local, UTC, or the reader's zone;
+//   - entries.tz_offset is that offset, taken from the Date header itself, so it
+//     is preferred over the label. A label is an abbreviation someone's mail
+//     client chose: it can be absent from every table, ambiguous between two
+//     zones, or simply wrong about daylight saving;
+//   - the label is copied through verbatim only where it agrees with the offset
+//     being displayed, and is otherwise emitted in numeric form. tz is the
+//     renderer's ordering key (schema/timeline.schema.json), so a label it
+//     cannot resolve, or one implying different minutes, would order an entry by
+//     an inferred zone while the clock beside it read correctly;
+//   - with neither an offset nor a readable label there is nothing to render but
+//     UTC, so those entries are listed in sourceNotes rather than being passed
+//     off as the sender's local time.
 //
 // tzOffsets mirrors TZ_OFFSETS in src/lib/chronological.ts so that the offset a
 // label implies here is the same one the renderer will use for ordering.
@@ -56,17 +61,43 @@ func tzMinutes(tz string) (int, bool) {
 	return off, ok
 }
 
-// stamp renders an instant for display in the zone the source stated. resolved
-// reports whether the label could be turned into an offset; when it could not,
+// stamp renders an instant for display at the offset the source recorded, and
+// returns the label to publish alongside it.
+//
+// off is entries.tz_offset and wins where it is present; a nil off means the
+// source stated no offset, which is not the same fact as an offset of zero.
+// resolved reports whether either input placed the instant; when neither did,
 // the clock shown is UTC and the caller records that as a caveat.
-func stamp(ts time.Time, tz string) (date, clock string, resolved bool) {
-	off, ok := tzMinutes(tz)
+func stamp(ts time.Time, tz string, off *int) (date, clock, label string, resolved bool) {
+	stated, statedOK := tzMinutes(tz)
+	label = strings.TrimSpace(tz)
+
+	var mins int
+	switch {
+	case off != nil:
+		mins, resolved = *off, true
+		if !statedOK || stated != mins {
+			label = formatOffset(mins)
+		}
+	case statedOK:
+		mins, resolved = stated, true
+	}
+
 	loc := time.UTC
-	if ok {
-		loc = time.FixedZone(zoneName(tz), off*60)
+	if resolved {
+		loc = time.FixedZone(zoneName(label), mins*60)
 	}
 	t := ts.In(loc)
-	return t.Format("Mon 2 Jan 2006"), t.Format("15:04"), ok
+	return t.Format("Mon 2 Jan 2006"), t.Format("15:04"), label, resolved
+}
+
+// formatOffset writes minutes east of UTC as a Date-header zone, e.g. "+0545".
+func formatOffset(mins int) string {
+	sign := "+"
+	if mins < 0 {
+		sign, mins = "-", -mins
+	}
+	return fmt.Sprintf("%s%02d%02d", sign, mins/60, mins%60)
 }
 
 // zoneName keeps the stated label on the synthetic location, so a formatted

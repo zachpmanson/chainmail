@@ -1,6 +1,7 @@
 package spec
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -40,6 +41,7 @@ type msg struct {
 	ext       string
 	ts        string // RFC3339, with the offset the sender stated
 	tz        string
+	offset    *int // minutes east of UTC, as the Date header carried it
 	person    int64
 	container string
 	subject   string
@@ -59,7 +61,7 @@ func put(t *testing.T, s *corpus.Store, m msg) int64 {
 		t.Fatalf("bad ts %q: %v", m.ts, err)
 	}
 	res, err := s.Put(corpus.Entry{
-		Source: corpus.SourceMail, ExtID: m.ext, TS: ts, TZ: m.tz,
+		Source: corpus.SourceMail, ExtID: m.ext, TS: ts, TZ: m.tz, TZOffset: m.offset,
 		PersonID: m.person, Container: m.container, Subject: m.subject,
 		ParentRef: m.inReplyTo, BodyText: "invented body",
 	}, &corpus.Mail{
@@ -389,6 +391,148 @@ func TestUnresolvableZoneIsStatedAndFlagged(t *testing.T) {
 	}
 	if len(sp.SourceNotes) == 0 {
 		t.Fatal("an unrenderable zone must be declared, not hidden")
+	}
+}
+
+// mins is minutes east of UTC, as a nullable offset column holds it.
+func mins(n int) *int { return &n }
+
+// one stores a single entry, sights it as a real message, and generates the
+// spec its container renders to.
+func one(t *testing.T, m msg) Spec {
+	t.Helper()
+	s := open(t)
+	id := put(t, s, m)
+	if err := s.Sight(id, 0, "direct", ""); err != nil {
+		t.Fatalf("Sight: %v", err)
+	}
+	return generate(t, s, Options{Containers: []string{m.container}})
+}
+
+// zoneItems returns the coverage items that talk about zones, which is where a
+// clock the tool could not place has to be declared.
+func zoneItems(sp Spec) []string {
+	var out []string
+	for _, n := range sp.SourceNotes {
+		for _, it := range n.Items {
+			if strings.Contains(it, "UTC") || strings.Contains(it, "Zone") {
+				out = append(out, it)
+			}
+		}
+	}
+	return out
+}
+
+// The stored offset came off the source's own Date header, so it outranks the
+// label: an entry whose label no table knows must still render the sender's
+// clock. A label is also emitted in the numeric form of the offset displayed,
+// because schema/timeline.schema.json makes tz the renderer's ordering key — a
+// label the renderer cannot resolve, or one implying a different offset, would
+// order the entry by an inferred zone while the clock beside it read correctly.
+func TestStoredOffsetRendersTheClockWhenTheLabelCannot(t *testing.T) {
+	cases := []struct {
+		name        string
+		tz          string
+		offset      *int
+		ts          string
+		date, clock string
+		wantTZ      string
+	}{{
+		name: "an IANA name, which no abbreviation table holds",
+		tz:   "Pacific/Auckland", offset: mins(720), ts: "2026-08-16T21:30:00Z",
+		date: "Mon 17 Aug 2026", clock: "09:30", wantTZ: "+1200",
+	}, {
+		name: "a three-quarter-hour offset",
+		tz:   "Asia/Kathmandu", offset: mins(345), ts: "2026-08-16T21:30:00Z",
+		date: "Mon 17 Aug 2026", clock: "03:15", wantTZ: "+0545",
+	}, {
+		name: "a half-hour offset",
+		tz:   "Australia/Adelaide", offset: mins(570), ts: "2026-08-16T21:30:00Z",
+		date: "Mon 17 Aug 2026", clock: "07:00", wantTZ: "+0930",
+	}, {
+		name: "a negative offset, which lands on the previous day",
+		tz:   "America/Los_Angeles", offset: mins(-420), ts: "2026-08-16T21:30:00Z",
+		date: "Sun 16 Aug 2026", clock: "14:30", wantTZ: "-0700",
+	}, {
+		// A label that agrees with the offset carries more for a reader than
+		// "+1200" does, and the renderer resolves it to the same minutes.
+		name: "a label agreeing with the offset, kept as stated",
+		tz:   "NZST", offset: mins(720), ts: "2026-08-16T21:30:00Z",
+		date: "Mon 17 Aug 2026", clock: "09:30", wantTZ: "NZST",
+	}, {
+		// Daylight saving mislabelled by the sender's client. Displaying "NZST"
+		// beside a 10:30 clock would have the renderer order the entry an hour
+		// early, so the label yields to the offset it disagrees with.
+		name: "a label an hour out from the offset",
+		tz:   "NZST", offset: mins(780), ts: "2026-08-16T21:30:00Z",
+		date: "Mon 17 Aug 2026", clock: "10:30", wantTZ: "+1300",
+	}}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			sp := one(t, msg{
+				ext: "mail:<off@loomworks>", ts: c.ts, tz: c.tz, offset: c.offset,
+				container: "T6", subject: "Stored offset",
+				from: "Ada Byron <ada@loomworks.example>", gmail: "g-off",
+			})
+			got := sp.Messages[0]
+			if got.Date != c.date || got.Time != c.clock || got.TZ != c.wantTZ {
+				t.Errorf("stamp = %q %q %q, want %q %q %q",
+					got.Date, got.Time, got.TZ, c.date, c.clock, c.wantTZ)
+			}
+			if items := zoneItems(sp); len(items) > 0 {
+				t.Errorf("zone caveat on a renderable clock: %v", items)
+			}
+		})
+	}
+}
+
+// The offset column is nullable, and a null means "the source stated none" —
+// never zero, which would pass a UTC clock off as the sender's own.
+func TestNullOffsetFallsBackToTheLabelNotToUTC(t *testing.T) {
+	for _, tz := range []string{"NZST", "+0545"} {
+		sp := one(t, msg{
+			ext: "mail:<nulloff@loomworks>", ts: "2026-08-16T21:30:00Z", tz: tz,
+			container: "T7", subject: "No offset stored",
+			from: "Ada Byron <ada@loomworks.example>", gmail: "g-nul",
+		})
+		got := sp.Messages[0]
+		if got.Time == "21:30" {
+			t.Fatalf("tz %q with a null offset rendered at UTC", tz)
+		}
+		if got.TZ != tz {
+			t.Errorf("tz = %q, want the label as stated", got.TZ)
+		}
+	}
+	// The same two entries, checked against the clock the label implies.
+	cases := map[string]string{"NZST": "09:30", "+0545": "03:15"}
+	for tz, clock := range cases {
+		sp := one(t, msg{
+			ext: "mail:<nulloff@loomworks>", ts: "2026-08-16T21:30:00Z", tz: tz,
+			container: "T7", subject: "No offset stored",
+			from: "Ada Byron <ada@loomworks.example>", gmail: "g-nul",
+		})
+		if got := sp.Messages[0].Time; got != clock {
+			t.Errorf("tz %q rendered %q, want %q", tz, got, clock)
+		}
+	}
+}
+
+// Neither an offset nor a readable label leaves UTC as the only defensible
+// clock, so the entries it happens to are counted in the coverage notes rather
+// than read as local time.
+func TestNoZoneAndNoOffsetIsDeclared(t *testing.T) {
+	sp := one(t, msg{
+		ext: "mail:<blind@loomworks>", ts: "2026-08-16T21:30:00Z",
+		container: "T8", subject: "Nothing stated",
+		from: "Ada Byron <ada@loomworks.example>", gmail: "g-bl",
+	})
+	got := sp.Messages[0]
+	if got.Time != "21:30" || got.TZ != "" {
+		t.Errorf("stamp = %q %q, want a UTC clock and no label", got.Time, got.TZ)
+	}
+	if items := zoneItems(sp); len(items) == 0 {
+		t.Fatalf("a UTC clock nothing supports must be declared: %+v", sp.SourceNotes)
 	}
 }
 

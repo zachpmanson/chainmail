@@ -212,9 +212,6 @@ func cleanSubject(s string) string {
 	return strings.TrimSpace(rePrefix.ReplaceAllString(strings.TrimSpace(s), ""))
 }
 
-// parseDate reads an RFC5322 Date header, returning the instant and the zone
-// label as stated. The label is kept because the renderer shows the sender's own
-// zone and marks inferred ones differently; the instant is what ordering uses.
 // parseDate reads an RFC5322 Date header, returning the instant, the zone label
 // as stated, and the offset in minutes east of UTC. The label is kept because the
 // renderer shows the sender's own zone and marks inferred ones differently; the
