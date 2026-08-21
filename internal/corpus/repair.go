@@ -505,6 +505,10 @@ func repairWeldedName(s *Store, r *TruncatedNameRepair, value, name, addr string
 		addr = base
 	}
 
+	// Set where this wrote something, so a second pass over a corpus it already
+	// took apart reports the nothing it did.
+	var changed bool
+
 	var owner int64
 	err = s.db.QueryRow(`select person_id from identities where kind=? and value=?`,
 		KindEmail, addr).Scan(&owner)
@@ -518,11 +522,11 @@ func repairWeldedName(s *Store, r *TruncatedNameRepair, value, name, addr string
 			holder, KindEmail, addr, "repair:welded-address"); err != nil {
 			return fmt.Errorf("recording welded address %s: %w", addr, err)
 		}
-		r.Welded++
+		changed = true
 	case err != nil:
 		return fmt.Errorf("looking up %s: %w", addr, err)
 	case owner == holder:
-		r.Welded++
+		// Already one person, so only the name half is left to take apart.
 	default:
 		ownerName, err := displayNameOf(s, owner)
 		if err != nil {
@@ -540,15 +544,22 @@ func repairWeldedName(s *Store, r *TruncatedNameRepair, value, name, addr string
 			return err
 		}
 		r.Merged++
-		r.Welded++
+		changed = true
 	}
 
 	if name == "" {
+		if changed {
+			r.Welded++
+		}
 		return nil
 	}
 	clean, err := NormaliseIdentity(KindDisplayName, name)
 	if err != nil {
-		return nil // nothing usable to rename it to; the address carried the person
+		// Nothing usable to rename it to; the address carried the person.
+		if changed {
+			r.Welded++
+		}
+		return nil
 	}
 	// As in the truncated path: the bracket goes unless the clean name is already
 	// somebody's identity, in which case rewriting would collide and the pair is a
@@ -558,13 +569,16 @@ func repairWeldedName(s *Store, r *TruncatedNameRepair, value, name, addr string
 		KindDisplayName, clean).Scan(&taken); err != nil {
 		return err
 	}
-	if taken > 0 {
-		return nil
+	if taken == 0 {
+		if _, err := s.db.Exec(
+			`update identities set value=?, rule=? where kind=? and value=?`,
+			clean, "repair:welded-address", KindDisplayName, value); err != nil {
+			return fmt.Errorf("splitting identity %q: %w", value, err)
+		}
+		changed = true
 	}
-	if _, err := s.db.Exec(
-		`update identities set value=?, rule=? where kind=? and value=?`,
-		clean, "repair:welded-address", KindDisplayName, value); err != nil {
-		return fmt.Errorf("splitting identity %q: %w", value, err)
+	if changed {
+		r.Welded++
 	}
 	return nil
 }

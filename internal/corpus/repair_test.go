@@ -995,6 +995,12 @@ func TestBothRepairsAreIdempotent(t *testing.T) {
 		"Dai Rhys <dai@post.fed", "Dai Rhys <dai@post.fed", "quote:to-header:name-only"); err != nil {
 		t.Fatal(err)
 	}
+	// somebody else already holds the clean name, so the welded value cannot be
+	// rewritten and stays for every later pass to see
+	if _, err := ResolveWithRule(s, KindDisplayName,
+		"Dai Rhys", "Dai Rhys", "quote:cc-header:name-only"); err != nil {
+		t.Fatal(err)
+	}
 	person(t, s, "ellen@post.fed", "Ellen Sowerby")
 	if _, err := ResolveWithRule(s, KindDisplayName,
 		"Bram Fenwick <ellen@post.fed", "Bram Fenwick <ellen@post.fed", "quote:from-header:name-only"); err != nil {
@@ -1020,7 +1026,7 @@ func TestBothRepairsAreIdempotent(t *testing.T) {
 	if pr.Merged != 0 || pr.Anchored != 0 || pr.Renamed != 0 {
 		t.Errorf("the second plus-address pass did work: %+v", pr)
 	}
-	if tr.Merged != 0 || tr.Cleaned != 0 || tr.Renamed != 0 {
+	if tr.Merged != 0 || tr.Cleaned != 0 || tr.Renamed != 0 || tr.Welded != 0 {
 		t.Errorf("the second name pass did work: %+v", tr)
 	}
 	if after := snapshot(t, s); after != before {
