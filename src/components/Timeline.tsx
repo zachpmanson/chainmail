@@ -228,17 +228,6 @@ export function Timeline({ spec, marks, prevLabel, filter, onShowSpec }: Timelin
           {v.hashed ? v.title.slice(1) : v.title}
         </h1>
         <p className="sub" dangerouslySetInnerHTML={html(s.subtitle ?? `${s.messages.length} messages.`)} />
-        <p className="roster">
-          {v.orgs.map((o) => (
-            <span key={o}>
-              <b>{o}</b>{" "}
-              {[...new Set(s.messages.filter((m) => m.org === o).map((m) => m.sender))]
-                .filter(Boolean)
-                .join(" · ")}
-              {"  "}
-            </span>
-          ))}
-        </p>
         <Legend />
         <ParticipantsPanel v={v} />
         {marks ? <DiffPanel v={v} marks={marks} prevLabel={prevLabel ?? "the previous run"} /> : null}

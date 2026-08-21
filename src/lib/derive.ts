@@ -26,6 +26,9 @@ export interface View {
   zones: Zones;
   /** name -> "Name <address>" for hover titles; address omitted when unknown */
   whoTitle: (name: string) => string;
+  /** orgs in first-appearance order. This is the colour-slot order: a message's
+   *  and an avatar's slot is this array's index, so the order is load-bearing
+   *  even though nothing renders the list itself. */
   orgs: string[];
   title: string;
   hashed: boolean;
