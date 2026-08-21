@@ -52,6 +52,14 @@ type attRow struct {
 	Name string
 	Mime string
 	Size int64
+	// Permalink is where the attachment can be opened at its source. Slack
+	// records one; mail does not, and a mail attachment is reached through its
+	// message instead.
+	Permalink string
+	// SourceRef is the archive's own handle on the file — a Slack file id, or a
+	// MIME part number for mail. It is what locates the bytes on disk where the
+	// archive kept them.
+	SourceRef string
 }
 
 // seeds resolves Options into the set of entry ids to start from, before the
@@ -296,7 +304,8 @@ func loadSightings(db *sql.DB, ph string, args []any, byID map[int64]*entryRow) 
 
 func loadAttachments(db *sql.DB, ph string, args []any, byID map[int64]*entryRow) error {
 	rows, err := db.Query(`
-		select entry_id, name, coalesce(mime, ''), coalesce(size, 0) from attachments
+		select entry_id, name, coalesce(mime, ''), coalesce(size, 0),
+		       coalesce(permalink, ''), coalesce(source_ref, '') from attachments
 		where entry_id in (`+ph+`) order by rowid`, args...)
 	if err != nil {
 		return fmt.Errorf("loading attachments: %w", err)
@@ -305,7 +314,7 @@ func loadAttachments(db *sql.DB, ph string, args []any, byID map[int64]*entryRow
 	for rows.Next() {
 		var id int64
 		var a attRow
-		if err := rows.Scan(&id, &a.Name, &a.Mime, &a.Size); err != nil {
+		if err := rows.Scan(&id, &a.Name, &a.Mime, &a.Size, &a.Permalink, &a.SourceRef); err != nil {
 			return err
 		}
 		if r, ok := byID[id]; ok {

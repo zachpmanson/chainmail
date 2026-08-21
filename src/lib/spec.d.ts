@@ -170,5 +170,15 @@ export interface Entry {
      * Links to the message in Gmail. Only ever present on real messages.
      */
     gmailId?: string;
+    /**
+     * Opens the attachment at its source, for attachments not reached through Gmail.
+     */
+    link?: string;
+    /**
+     * Thumbnail as a data: URI. Never a URL — the page renders without a network.
+     */
+    preview?: string;
+    previewW?: number;
+    previewH?: number;
   }[];
 }
