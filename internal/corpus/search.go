@@ -9,10 +9,17 @@ import (
 	"unicode"
 )
 
-// Search is lexical only, and deliberately so. FTS5 wins decisively on the
-// tokens this corpus is dense with — invoice numbers, ICPs, Message-IDs — and
-// the structural half of a real question ("everything Alice sent about X after
-// June") is a WHERE clause, not something to hope a similarity score encodes.
+// Search is lexical by default, and deliberately so. FTS5 wins decisively on
+// the tokens this corpus is dense with — invoice numbers, ICPs, Message-IDs —
+// and the structural half of a real question ("everything Alice sent about X
+// after June") is a WHERE clause, not something to hope a similarity score
+// encodes.
+//
+// A vector ranking joins in when Query.Semantic is set, for the question the
+// lexical half cannot answer: the same subject discussed under words nobody
+// wrote down. It enters as a third voter in the existing rank fusion rather
+// than as a parallel search path, which is what keeps the two halves
+// comparable — see candidates.
 
 // Tunables. The only number with a literature behind it is rrfK; the rest are
 // pool sizes and presentation defaults.
@@ -42,6 +49,11 @@ const (
 	snippetOpen  = "["
 	snippetClose = "]"
 	snippetElide = "…"
+
+	// leadExcerptBytes is how much of a body is read to stand in for a snippet
+	// on a hit no keyword explains. Bytes, not runes: it is a substr() bound, and
+	// a multi-byte rune clipped in half is repaired by oneLineExcerpt.
+	leadExcerptBytes = 400
 )
 
 // NoiseFilter names the entries that are indexed but should not be allowed to
@@ -118,6 +130,12 @@ type Query struct {
 	IncludeNoise bool
 	Noise        *NoiseFilter
 
+	// Semantic, when set, adds a vector ranking over stored embeddings. Its
+	// Only field makes it the sole ranking; otherwise it is fused with the
+	// lexical indexes. Nil leaves search lexical, and is the default because
+	// semantic retrieval needs a model process that may not be installed.
+	Semantic *SemanticQuery
+
 	// Limit is the number of results returned (entries, or chains).
 	Limit int
 	// CandidateLimit is how deep each index is read before fusion. Chain
@@ -166,12 +184,19 @@ type EntryHit struct {
 	// a structural-only query, which has nothing to highlight.
 	Snippet string
 
-	// Score is the fused RRF score. ProseRank and IdentRank are the 1-based
-	// positions in each index's ranking, or 0 for "that index did not find it" —
-	// kept because they are how you tell a prose match from an id match.
+	// Score is the fused RRF score. ProseRank, IdentRank and SemRank are the
+	// 1-based positions in each ranking, or 0 for "that one did not find it" —
+	// kept because they are how you tell a prose match from an id match from a
+	// match no keyword explains.
 	Score     float64
 	ProseRank int
 	IdentRank int
+	SemRank   int
+
+	// Similarity is the cosine to the query vector, in [-1, 1], and is
+	// meaningful only when SemRank is non-zero. It is reported but not fused:
+	// see candidates for why the fusion uses ranks.
+	Similarity float64
 }
 
 // ChainHit is a conversation, ranked by the aggregate relevance of its entries.
@@ -368,28 +393,42 @@ func (s *Store) SearchChains(q Query) ([]ChainHit, error) {
 
 // candidate is a fused, un-hydrated hit.
 type candidate struct {
-	id        int64
-	score     float64
-	snippet   string
-	proseRank int
-	identRank int
+	id         int64
+	score      float64
+	snippet    string
+	proseRank  int
+	identRank  int
+	semRank    int
+	similarity float64
 }
 
-// candidates runs the structural filter, then each text index, then fuses.
+// candidates runs the structural filter, then each ranking, then fuses.
 func (s *Store) candidates(q Query) ([]candidate, error) {
 	where, args := q.filters()
 
-	prose, ident := MatchExpressions(q.Text)
-	if prose == "" && ident == "" {
+	var prose, ident string
+	if q.Semantic == nil || !q.Semantic.Only {
+		prose, ident = MatchExpressions(q.Text)
+	}
+	if prose == "" && ident == "" && q.Semantic == nil {
 		return s.byRecency(q, where, args)
 	}
 
-	// Reciprocal Rank Fusion: each index votes with 1/(k + rank) and the votes
-	// are summed. Ranks, not scores, so the two bm25 scales — one over stemmed
-	// words, one over trigrams — never have to be made commensurable, and there
-	// is no weight to tune. If one index finds nothing its votes are simply
-	// absent, which is why an all-prose or all-identifier query needs no special
-	// case.
+	// Reciprocal Rank Fusion: each ranking votes with 1/(k + rank) and the votes
+	// are summed. Ranks, not scores, so the bm25 scales — one over stemmed
+	// words, one over trigrams — and cosine similarity never have to be made
+	// commensurable. That is not a convenience: bm25 is unbounded and negative
+	// while cosine sits in [-1, 1], so any weighted sum of the two is a constant
+	// somebody has to tune per query length, and a corpus-wide constant is
+	// exactly what fails on the outlier queries. If one ranking finds nothing its
+	// votes are simply absent, which is why an all-prose, an all-identifier and a
+	// semantic-only query all need no special case.
+	//
+	// The vector ranking votes with the same weight as each lexical index, which
+	// is a stance rather than a default: an entry that both a keyword index and
+	// the vectors agree on outranks one only the vectors like, so the recall
+	// semantic search adds arrives underneath the precision the identifiers give
+	// rather than on top of it.
 	fused := map[int64]*candidate{}
 	get := func(id int64) *candidate {
 		c, ok := fused[id]
@@ -426,6 +465,18 @@ func (s *Store) candidates(q Query) ([]candidate, error) {
 			if c.snippet == "" {
 				c.snippet = r.snippet
 			}
+		}
+	}
+	if q.Semantic != nil {
+		rows, err := s.semanticRank(q, *q.Semantic, where, args)
+		if err != nil {
+			return nil, err
+		}
+		for i, r := range rows {
+			c := get(r.id)
+			c.semRank = i + 1
+			c.similarity = r.sim
+			c.score += 1 / (rrfK + float64(i+1))
 		}
 	}
 
@@ -579,19 +630,32 @@ func (q Query) filters() (string, []any) {
 		preds = append(preds, p)
 	}
 	if !q.IncludeNoise && q.Noise != nil && len(q.Noise.Predicates) > 0 {
-		// coalesce is load-bearing, not defensive. mail_detail and slack_detail
-		// are outer-joined, so a Slack predicate evaluates to NULL on a mail row;
-		// `not (NULL or NULL)` is NULL, which WHERE treats as false, and every
-		// mail entry would silently vanish from every search. Unknown means
-		// "not known to be noise".
-		preds = append(preds,
-			"not coalesce("+strings.Join(q.Noise.Predicates, " or ")+", 0)")
+		preds = append(preds, notNoiseSQL(*q.Noise))
 	}
 
 	if len(preds) == 0 {
 		return "1", nil
 	}
 	return strings.Join(preds, " and "), args
+}
+
+// notNoiseSQL renders "this entry is not noise" for a filter.
+//
+// The coalesce is load-bearing, not defensive. mail_detail and slack_detail are
+// outer-joined, so a Slack predicate evaluates to NULL on a mail row;
+// `not (NULL or NULL)` is NULL, which WHERE treats as false, and every mail
+// entry would silently vanish from every query built this way. Unknown means
+// "not known to be noise".
+//
+// It is a function with one caller-per-query rather than inline SQL because
+// there is now more than one query that needs it — search's filters and the
+// embedding backfill's selection — and the failure it prevents is invisible in
+// the results: the rows do not come back wrong, they do not come back.
+func notNoiseSQL(f NoiseFilter) string {
+	if len(f.Predicates) == 0 {
+		return "1"
+	}
+	return "not coalesce(" + strings.Join(f.Predicates, " or ") + ", 0)"
 }
 
 // personSetSQL renders a subquery selecting the person ids named by names.
@@ -741,23 +805,27 @@ func (s *Store) hydrate(cs []candidate) ([]EntryHit, error) {
 	rows, err := s.db.Query(`
 		select e.id, e.ext_id, e.source, e.ts, coalesce(e.person_id, 0),
 		       coalesce(p.display_name, ''), coalesce(e.container, ''),
-		       coalesce(e.subject, ''), coalesce(e.permalink, '')
+		       coalesce(e.subject, ''), coalesce(e.permalink, ''),
+		       substr(coalesce(e.body_text, ''), 1, ?)
 		from entries e left join people p on p.id = e.person_id
-		where e.id in (`+ph+`)`, args...)
+		where e.id in (`+ph+`)`, append([]any{leadExcerptBytes}, args...)...)
 	if err != nil {
 		return nil, fmt.Errorf("loading hits: %w", err)
 	}
 	defer rows.Close()
 	byID := map[int64]EntryHit{}
+	lead := map[int64]string{}
 	for rows.Next() {
 		var h EntryHit
 		var ts int64
+		var head string
 		if err := rows.Scan(&h.ID, &h.ExtID, &h.Source, &ts, &h.PersonID,
-			&h.Person, &h.Container, &h.Subject, &h.Permalink); err != nil {
+			&h.Person, &h.Container, &h.Subject, &h.Permalink, &head); err != nil {
 			return nil, err
 		}
 		h.TS = time.Unix(ts, 0).UTC()
 		byID[h.ID] = h
+		lead[h.ID] = head
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -770,6 +838,14 @@ func (s *Store) hydrate(cs []candidate) ([]EntryHit, error) {
 		}
 		h.Score, h.Snippet = c.score, c.snippet
 		h.ProseRank, h.IdentRank = c.proseRank, c.identRank
+		h.SemRank, h.Similarity = c.semRank, c.similarity
+		// A purely semantic hit has no matched term to highlight, so FTS5 offers
+		// no excerpt. The opening of the body is the honest substitute: it says
+		// what the entry is, which is the only question left once the reason it
+		// matched is "nothing you typed appears in it".
+		if h.Snippet == "" && c.semRank > 0 {
+			h.Snippet = oneLineExcerpt(lead[c.id])
+		}
 		out = append(out, h)
 	}
 	return out, nil
@@ -868,6 +944,13 @@ func isAlnum(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) }
 // parsed as one.
 func quoteFTS(term string) string {
 	return `"` + strings.ReplaceAll(term, `"`, `""`) + `"`
+}
+
+// oneLineExcerpt flattens a body opening into a single line, dropping any
+// trailing partial rune that a byte-bounded substr() left behind.
+func oneLineExcerpt(s string) string {
+	s = strings.ToValidUTF8(s, "")
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // placeholders renders `?,?,?` and the matching args for a slice.
