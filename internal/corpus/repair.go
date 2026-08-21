@@ -478,7 +478,7 @@ func weldedAddress(value string) (name, addr string, ok bool) {
 // is right there, so the person is whoever holds that address, which is exactly
 // what a correctly-parsed header would have decided.
 //
-// One gate, and it is the surname gate the dedupe rules use. `Cy Marrow
+// One gate, and it is the surname gate the dedupe rules use. `Bo Vantel
 // <ellen@…>` is a real header — a person writing from somebody else's mailbox —
 // and where the address is demonstrably somebody else's the fragment names a
 // second human whose own address was lost, not a duplicate of the first. That

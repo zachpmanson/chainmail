@@ -915,7 +915,7 @@ func TestRepairGivesAWeldedAddressToThePersonCarryingIt(t *testing.T) {
 	}
 }
 
-// `Cy Marrow <ellen@…>` is a real header — a person writing from somebody
+// `Michael Vantel <ellen@…>` is a real header — a person writing from somebody
 // else's mailbox — so a welded address on a differently-named person is two
 // humans, not one. Refused, left visible, and reported as a candidate.
 func TestRepairRefusesAWeldedAddressHeldByADifferentlyNamedPerson(t *testing.T) {

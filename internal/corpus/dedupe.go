@@ -266,7 +266,7 @@ func placeholderPeople(s *Store) ([]nameOnlyPerson, error) {
 //   - the local part must not be a role mailbox (see genericLocalPart), which is
 //     what makes info@a and info@b stay two things.
 //   - the local part must be consistent with the display name (see
-//     addressNamesPerson). Without it, ellen@ carrying "Cy Marrow" in a
+//     addressNamesPerson). Without it, ellen@ carrying "Bo Vantel" in a
 //     From header folds an assistant's mailbox into her employer, and sales@
 //     carrying the name of whoever last sent from it folds a team into a person.
 //   - no two members may carry different surnames. This is the third gate, added
@@ -352,7 +352,7 @@ func planFirstNameAndOrg(s *Store) ([]PlannedMerge, []Refusal, error) {
 //
 // Getting the direction right is the whole point of consulting standing. The
 // previous phrasing took the domains in the order they sorted, which on this
-// corpus printed `-from termina.io -to threadlet.com.au`: the live domain folded
+// corpus printed `-from new.example -to old.example`: the live domain folded
 // into the dead one. That command is not merely untidy — the surviving person is
 // chosen by it, and CanonicalAddress then sends every later sighting to the
 // domain nobody uses.
@@ -790,7 +790,7 @@ func nameTokens(name string) []string {
 // addressNamesPerson reports whether a local part is consistent with a display
 // name. It is the gate that keeps a person's name on somebody else's mailbox
 // from being read as that person's second address: a From header saying
-// `Cy Marrow <ellen@…>` is a real thing mail does, and the name in it is
+// `Bo Vantel <ellen@…>` is a real thing mail does, and the name in it is
 // no evidence at all about whose mailbox that is.
 //
 // Two forms count. A name word of three letters or more appearing anywhere in the

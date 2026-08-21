@@ -125,13 +125,13 @@ func TestHeaderBlockRecoversRecipientsAcrossCorpus(t *testing.T) {
 // orphaned every key after it: Subject: landed in the body text and the
 // recipients past the wrap vanished. 10 of 28 recovered entries on a real trail.
 func TestFoldedRecipientListDoesNotTruncateTheBlock(t *testing.T) {
-	body := "*From:* Bo Vantel <tom@fjord.co.nz>\r\n" +
+	body := "*From:* Bo Vantel <bo@fjord.co.nz>\r\n" +
 		"*Sent:* Tuesday, 25 November 2025 1:29 pm\r\n" +
-		"*To:* Ro Laren <charles@ex.fed>; Ana Quill <\r\n" +
+		"*To:* Ro Laren <ro@ex.fed>; Ana Quill <\r\n" +
 		"ana.quill@ex.fed>\r\n" +
 		"*Subject:* Fjord & Acme - Data Sharing\r\n" +
 		"\r\n" +
-		"Hi Charles and Ben,\r\n"
+		"Hi Ro and Ana,\r\n"
 	blocks := Peel(body)
 	if len(blocks) != 1 {
 		t.Fatalf("got %d blocks, want 1", len(blocks))
@@ -148,7 +148,7 @@ func TestFoldedRecipientListDoesNotTruncateTheBlock(t *testing.T) {
 	if strings.Contains(blocks[0].Text, "Subject:") || strings.Contains(blocks[0].Text, "ana.quill@") {
 		t.Errorf("header tail leaked into the body: %q", blocks[0].Text)
 	}
-	if !strings.HasPrefix(blocks[0].Text, "Hi Charles and Ben,") {
+	if !strings.HasPrefix(blocks[0].Text, "Hi Ro and Ana,") {
 		t.Errorf("body = %q", blocks[0].Text)
 	}
 }

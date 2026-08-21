@@ -564,7 +564,7 @@ func TestDedupeRefusesAWebmailAccountWithNoSurname(t *testing.T) {
 }
 
 // An initialled webmail address is the shape a stranger's account also has:
-// `tdempst@` fits Bo Vantel and Tim Dempster equally. Refused rather than
+// `tdempst@` fits Tom Vantel and Tim Vantel equally. Refused rather than
 // guessed, and reported so a human can settle it.
 func TestDedupeRefusesAWebmailAccountThatSpellsOnlyPartOfTheName(t *testing.T) {
 	s := open(t)

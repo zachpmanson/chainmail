@@ -43,7 +43,7 @@ type Address struct {
 // to fix.
 //
 // net/mail.ParseAddressList is tried first — it is the only thing that handles
-// quoted display names containing commas ("Dempster, Tom" <t@x>) correctly. It
+// quoted display names containing commas ("Vantel, Bo" <b@x>) correctly. It
 // is all-or-nothing, though: one malformed entry fails the whole list, so the
 // fallback re-splits on commas outside quotes and parses each fragment alone.
 func ParseAddresses(header string) []Address {
