@@ -58,7 +58,9 @@ const usage = `usage: corpus <command> [flags]
   show          <ext-id>   one entry in full, or -chain for the whole thread
   spec          -q <text>  write a timeline spec for the renderer
   unnest        <ext-id>   show the blocks one body contains, from the corpus;
-                           -id <gmail-id> reads one from the mailbox instead
+                           -id <gmail-id> reads one from the mailbox instead;
+                           -full prints each block whole; -chrono orders them by
+                           the date each states and names what cannot be true
   stats                    counts, coverage and what is missing
   people                   everyone in the corpus, with their identities
   candidates               probable duplicate identities, unmerged
@@ -239,6 +241,7 @@ func run(args []string) error {
 		fs := flag.NewFlagSet("unnest", flag.ContinueOnError)
 		id := fs.String("id", "", "the entry to peel; also accepted positionally")
 		full := fs.Bool("full", false, "print each block's text in full")
+		chrono := fs.Bool("chrono", false, "order blocks by the date each states, and name the orderings that cannot be true")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
@@ -247,7 +250,7 @@ func run(args []string) error {
 			target = fs.Arg(0)
 		}
 		if target == "" {
-			return errors.New("usage: corpus unnest <ext-id> [-full]\n" +
+			return errors.New("usage: corpus unnest <ext-id> [-full] [-chrono]\n" +
 				"       ids are the ones search prints, e.g. mail:<...>, slack:C1:1.2, quote:<sha>;\n" +
 				"       -id also takes a raw Gmail id, read live, for a message not yet ingested")
 		}
@@ -259,7 +262,7 @@ func run(args []string) error {
 		return runUnnest(os.Stdout, unnestSource{
 			show: s.Show,
 			read: mailingest.Client{}.Read,
-		}, target, *full)
+		}, target, unnestOpts{Full: *full, Chrono: *chrono})
 
 	case "alias":
 		fs := flag.NewFlagSet("alias", flag.ContinueOnError)

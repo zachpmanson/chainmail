@@ -2,10 +2,10 @@ package spec
 
 import (
 	"fmt"
-	"regexp"
-	"strconv"
 	"strings"
 	"time"
+
+	"github.com/zachpmanson/chainmail/internal/zone"
 )
 
 // Zone handling is the one place where a careless join would produce a wrong
@@ -31,35 +31,12 @@ import (
 //     UTC, so those entries are listed in sourceNotes rather than being passed
 //     off as the sender's local time.
 //
-// tzOffsets mirrors TZ_OFFSETS in src/lib/chronological.ts so that the offset a
-// label implies here is the same one the renderer will use for ordering.
-var tzOffsets = map[string]int{
-	"AEST": 600, "AEDT": 660, "NZST": 720, "NZDT": 780, "AWST": 480,
-	"ACST": 570, "ACDT": 630, "GMT": 0, "UTC": 0, "BST": 60, "CET": 60,
-	"CEST": 120, "IST": 330, "PST": -480, "PDT": -420, "EST": -300, "EDT": -240,
-}
-
-var reNumericZone = regexp.MustCompile(`^([+-])(\d{2}):?(\d{2})$`)
+// The label-to-offset table lives in internal/zone, which the renderer's
+// ordering reads too.
 
 // tzMinutes returns minutes east of UTC for a zone label, and whether the label
 // was recognised at all.
-func tzMinutes(tz string) (int, bool) {
-	t := strings.TrimSpace(tz)
-	if t == "" {
-		return 0, false
-	}
-	if m := reNumericZone.FindStringSubmatch(t); m != nil {
-		h, _ := strconv.Atoi(m[2])
-		mm, _ := strconv.Atoi(m[3])
-		v := h*60 + mm
-		if m[1] == "-" {
-			v = -v
-		}
-		return v, true
-	}
-	off, ok := tzOffsets[strings.ToUpper(t)]
-	return off, ok
-}
+func tzMinutes(tz string) (int, bool) { return zone.Minutes(tz) }
 
 // stamp renders an instant for display at the offset the source recorded, and
 // returns the label to publish alongside it.
