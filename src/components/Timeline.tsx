@@ -220,6 +220,8 @@ export function Timeline({ spec, marks, prevLabel, filter, onShowSpec }: Timelin
         ) : null}
         <button className="tbtn" id="maptog" type="button" aria-pressed="true"
                 aria-label="Reply tree panel">tree</button>
+        <button className="tbtn" id="plaintog" type="button" aria-pressed="false"
+                aria-label="Ignore the sender's own formatting">plain</button>
       </div>
       <div className="wrap">
       <header className="top">

@@ -57,6 +57,14 @@ export function attach(doc: Document = document): () => void {
     on(btn, "click", () => apply(!body.classList.contains(cls)));
   }
 
+  // A body is the sender's markup, so its emphasis and alignment are theirs, not
+  // the page's. "plain" neutralises what is left of that presentation without
+  // touching structure: a table stays a table because its columns carry the
+  // meaning, and a list stays a list. Off by default — the sender's formatting is
+  // usually what they meant.
+  const plainCtl = toggle("plaintog", "plain", "cm-plain", false);
+  if (plainCtl) on(plainCtl.btn, "click", () => plainCtl.set(!plainCtl.isOn()));
+
   const viewCtl = toggle("viewtog", "chains", "cm-view", false);
   if (viewCtl) {
     on(viewCtl.btn, "click", () => {

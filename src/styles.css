@@ -155,6 +155,23 @@
   .bd img { max-width:100%; height:auto; }
   .bd table { min-width:0; max-width:100%; }
   .bd td, .bd th { vertical-align:top; }
+  /* "plain" mode. The Go side already drops what would break a theme — colours,
+     pixel widths, stylesheets — so what survives into a body is the emphasis and
+     alignment the sender chose. This turns that off without removing structure:
+     a table keeps being a table because its columns are the meaning (a recovered
+     column-mapping table is exactly what this page exists to show), and a list
+     keeps being a list. !important is required because these declarations arrive
+     inline, where a cascade rule cannot reach them. */
+  body.plain .bd [style] { text-decoration:none !important; text-align:inherit !important;
+    font-weight:inherit !important; font-style:inherit !important; }
+  body.plain .bd [align], body.plain .bd [valign] { text-align:inherit !important;
+    vertical-align:top !important; }
+  body.plain .bd font { font:inherit !important; }
+  body.plain .bd center { text-align:inherit !important; }
+  body.plain .bd img { width:auto !important; height:auto !important; }
+  /* b/i/u/strong/em are left alone on purpose: an element the sender reached for
+     to stress a word says something a style attribute does not, and dropping it
+     flattens a deliberately emphasised line into prose. */
   .atts { display:flex; flex-wrap:wrap; align-items:center; gap:.3rem; margin:.4rem 0 .1rem; }
   .clip { font-size:.64rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted);
     font-weight:700; }
