@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/mail"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -78,6 +79,14 @@ func ParseAddress(frag string) (Address, bool) {
 	if frag == "" {
 		return Address{}, false
 	}
+	// Bracket matching is wrong for the hyperlinked form and must not see it: see
+	// mailtoAddress. A fragment it cannot reduce falls through and degrades as any
+	// other unparseable one does.
+	if hasMailtoLink(frag) {
+		if name, addr, ok := mailtoAddress(frag); ok {
+			return Address{Addr: addr, Name: name, Raw: frag}, true
+		}
+	}
 	if a, err := mail.ParseAddress(frag); err == nil {
 		return Address{
 			Addr: strings.ToLower(strings.TrimSpace(a.Address)),
@@ -100,6 +109,58 @@ func ParseAddress(frag string) (Address, bool) {
 		return Address{Addr: strings.ToLower(frag), Raw: frag}, true
 	}
 	return Address{Name: strings.Trim(frag, `"'`), Raw: frag}, true
+}
+
+// reHeaderEmail matches an address-shaped run inside a header fragment. Only the
+// hyperlinked path uses it, so a domain with no dot (an intranet address) staying
+// unmatched costs nothing: such a fragment is left to bracket matching.
+var reHeaderEmail = regexp.MustCompile(`[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}`)
+
+// hasMailtoLink reports whether a fragment carries a mailto: link. The colon is
+// required, so a display name containing the word "mailto" is not diverted into
+// mailtoAddress and keeps its brackets parsed normally.
+func hasMailtoLink(frag string) bool {
+	return strings.Contains(strings.ToLower(frag), "mailto:")
+}
+
+// mailtoAddress reduces Outlook's hyperlinked rendering of an address to the
+// address itself and the name in front of it. In plain-text mail Outlook writes
+// a linked address as `Name <addr <mailto:addr>>` — sometimes with no space
+// before the inner bracket, and sometimes with the closers lost to a line wrap —
+// so the FIRST address in the fragment is the real one. Bracket matching takes
+// the span between the first `<` and the last `>` instead, which makes the
+// address `addr <mailto:addr>`: one human then arrives as several people, and
+// none of the malformed halves can ever match a Slack profile email.
+//
+// ok is false when the fragment holds no address, or holds two that differ. A
+// fragment that does not reduce to exactly one address is left alone and
+// reported rather than guessed at, because the wrong guess here is a merge of
+// two humans and merges are what this file exists to keep honest.
+//
+// internal/unnest.parsePerson makes the same reduction for attribution
+// sentinels. The duplication is deliberate: that side parses free prose and this
+// side parses a header, the two share no types, and a package holding one regex
+// in common would tie the extraction half of the pipeline to the storage half
+// for the sake of four lines.
+func mailtoAddress(frag string) (name, addr string, ok bool) {
+	ms := reHeaderEmail.FindAllStringIndex(frag, -1)
+	if len(ms) == 0 {
+		return "", "", false
+	}
+	addr = strings.ToLower(frag[ms[0][0]:ms[0][1]])
+	for _, m := range ms[1:] {
+		if !strings.EqualFold(frag[m[0]:m[1]], addr) {
+			return "", "", false
+		}
+	}
+	// Whatever precedes the address is the display name, minus the punctuation
+	// that introduced the address and minus the scheme itself when the fragment
+	// began with the link.
+	name = strings.Trim(strings.TrimSpace(frag[:ms[0][0]]), ` <>([,:"'`)
+	if strings.EqualFold(name, "mailto") || strings.EqualFold(name, addr) {
+		name = ""
+	}
+	return strings.TrimSpace(name), addr, true
 }
 
 // splitOutsideQuotes splits on commas and semicolons that are not inside a

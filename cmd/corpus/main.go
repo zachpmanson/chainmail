@@ -54,6 +54,7 @@ const usage = `usage: corpus <command> [flags]
   ingest mail   -q <query> ingest Gmail results, with their quoted history
   ingest slack  [-archive] ingest a slackdump archive
   search        -q <text>  ranked chains across every source
+  show          <ext-id>   one entry in full, or -chain for the whole thread
   spec          -q <text>  write a timeline spec for the renderer
   unnest        -id <id>   show the blocks one mail body contains
   stats                    counts, coverage and what is missing
@@ -335,6 +336,46 @@ func run(args []string) error {
 		fmt.Printf("merged into person %d\n", id)
 		return nil
 
+	case "show":
+		fs := flag.NewFlagSet("show", flag.ContinueOnError)
+		chain := fs.Bool("chain", false, "show every entry in the thread, in time order")
+		full := fs.Bool("full", false, "print bodies whole rather than clipped")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		// The id is positional: it is what search prints, and requiring a flag to
+		// paste it back in is friction for the one thing this command is for.
+		id := fs.Arg(0)
+		if id == "" {
+			return errors.New("usage: corpus show <ext-id> [-chain] [-full]\n" +
+				"       ids are the ones search prints, e.g. mail:<...>, slack:C1:1.2, quote:<sha>")
+		}
+		s, err := corpus.Open(path)
+		if err != nil {
+			return err
+		}
+		defer s.Close()
+		if *chain {
+			items, err := s.Chain(id)
+			if err != nil {
+				return err
+			}
+			for i, it := range items {
+				if i > 0 {
+					fmt.Println()
+				}
+				printShown(it, *full)
+			}
+			fmt.Printf("\n%d entries in the thread\n", len(items))
+			return nil
+		}
+		it, err := s.Show(id)
+		if err != nil {
+			return err
+		}
+		printShown(it, *full)
+		return nil
+
 	case "stats":
 		s, err := corpus.Open(path)
 		if err != nil {
@@ -534,4 +575,81 @@ func trunc(s string, n int) string {
 		return s
 	}
 	return s[:n-1] + "…"
+}
+
+// printShown renders one entry for reading.
+//
+// Bodies are clipped by default: a chain of thirty forwarded messages is
+// thousands of lines, and the point of the default view is to see the shape of a
+// conversation. -full is there for when the text itself is the question.
+func printShown(e corpus.Shown, full bool) {
+	kind := "message"
+	if e.Quoted {
+		kind = "recovered from quoted text"
+	}
+	fmt.Printf("%s  [%s, %s]\n", e.ExtID, e.Source, kind)
+	when := e.TS.Format("Mon 2 Jan 2006 15:04")
+	if e.TZ != "" {
+		when += " " + e.TZ
+	}
+	fmt.Printf("  when    %s\n", when)
+	if e.Author != "" {
+		fmt.Printf("  from    %s\n", e.Author)
+	}
+	if e.Subject != "" {
+		fmt.Printf("  subject %s\n", e.Subject)
+	}
+	if e.Container != "" {
+		fmt.Printf("  in      %s\n", e.Container)
+	}
+	if e.Parent != "" {
+		fmt.Printf("  replies %s\n", e.Parent)
+	} else if e.ParentRef != "" {
+		// A named parent that is not present is a known hole, not a root.
+		fmt.Printf("  replies %s  (not in the corpus)\n", e.ParentRef)
+	}
+	for _, g := range e.Sightings {
+		line := "  seen    " + g.Kind
+		if g.SeenIn != "" {
+			line += " in " + g.SeenIn
+		}
+		if g.Detail != "" {
+			line += "  (" + g.Detail + ")"
+		}
+		fmt.Println(line)
+	}
+	if len(e.Participants) > 0 {
+		var to, cc []string
+		for _, p := range e.Participants {
+			switch p.Role {
+			case corpus.RoleTo:
+				to = append(to, p.DisplayName)
+			case corpus.RoleCc:
+				cc = append(cc, p.DisplayName)
+			}
+		}
+		if len(to) > 0 {
+			fmt.Printf("  to      %s\n", strings.Join(to, ", "))
+		}
+		if len(cc) > 0 {
+			fmt.Printf("  cc      %s\n", strings.Join(cc, ", "))
+		}
+	}
+	if e.Permalink != "" {
+		fmt.Printf("  link    %s\n", e.Permalink)
+	}
+	body := strings.TrimSpace(e.Body)
+	if body == "" {
+		return
+	}
+	if !full {
+		if lines := strings.Split(body, "\n"); len(lines) > 12 {
+			body = strings.Join(lines[:12], "\n") +
+				fmt.Sprintf("\n... %d more lines (-full)", len(lines)-12)
+		}
+	}
+	fmt.Println()
+	for _, l := range strings.Split(body, "\n") {
+		fmt.Println("  " + l)
+	}
 }

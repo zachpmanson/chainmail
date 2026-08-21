@@ -398,3 +398,92 @@ func countRole(t *testing.T, s *Store, entryID int64, role string) int {
 	}
 	return n
 }
+
+// Outlook renders a hyperlinked address in plain-text mail as
+// `Name <addr <mailto:addr>>`. Bracket matching reads that as the address
+// `addr <mailto:addr>`, which is a second identity for a human who already has
+// one — and one that can never match a Slack profile email, so cross-source
+// resolution silently fails for exactly the people who use Outlook.
+func TestParseAddressHandlesOutlooksHyperlinkedForm(t *testing.T) {
+	for _, c := range []struct {
+		frag, name, addr string
+	}{
+		// the fully-formed rendering: both halves must come back
+		{`Ada Fenwick <ada.fenwick@quarry.fed <mailto:ada.fenwick@quarry.fed>>`,
+			"Ada Fenwick", "ada.fenwick@quarry.fed"},
+		// no display name, space before the bracket
+		{`ada.fenwick@quarry.fed <mailto:ada.fenwick@quarry.fed>`,
+			"", "ada.fenwick@quarry.fed"},
+		// no display name, no space — Outlook emits both
+		{`ada.fenwick@quarry.fed<mailto:ada.fenwick@quarry.fed>`,
+			"", "ada.fenwick@quarry.fed"},
+		// the closers lost to a line wrap, which is how these reached the corpus
+		{`ada.fenwick@quarry.fed <mailto:ada.fenwick@quarry.fed`,
+			"", "ada.fenwick@quarry.fed"},
+		// the link doubled ahead of the name, seen in a forwarded header block
+		{`<mailto:ada.fenwick@quarry.fed> <ada.fenwick@quarry.fed <mailto:ada.fenwick@quarry.fed>>`,
+			"", "ada.fenwick@quarry.fed"},
+		// the scheme alone, with nothing bracketing it
+		{`mailto:ada.fenwick@quarry.fed`, "", "ada.fenwick@quarry.fed"},
+		// a + tag and a subdomain must survive the reduction unaltered
+		{`Ada <ada+billing@mail.quarry.fed <mailto:ada+billing@mail.quarry.fed>>`,
+			"Ada", "ada+billing@mail.quarry.fed"},
+	} {
+		got, ok := ParseAddress(c.frag)
+		if !ok {
+			t.Fatalf("ParseAddress(%q) found nothing usable", c.frag)
+		}
+		if got.Addr != c.addr || got.Name != c.name {
+			t.Errorf("ParseAddress(%q) = name %q addr %q, want name %q addr %q",
+				c.frag, got.Name, got.Addr, c.name, c.addr)
+		}
+	}
+}
+
+// The reduction keys on "mailto:", not on the word, so a name that happens to
+// contain it is parsed as any other name is.
+func TestParseAddressDoesNotMangleAMailtoDisplayName(t *testing.T) {
+	got, ok := ParseAddress(`"Mailto Fanclub" <fan@quarry.fed>`)
+	if !ok || got.Addr != "fan@quarry.fed" || got.Name != "Mailto Fanclub" {
+		t.Fatalf("got %+v", got)
+	}
+	// and even with the colon present, the name in front of the address survives
+	got, ok = ParseAddress(`Mailto: Help Desk <help@quarry.fed>`)
+	if !ok || got.Addr != "help@quarry.fed" || got.Name != "Mailto: Help Desk" {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+// Two different addresses in one fragment are not reducible: whichever one were
+// chosen would attribute a message to someone who did not send or receive it, so
+// the fragment degrades to the old bracket-matched result instead.
+func TestParseAddressRefusesToGuessBetweenTwoAddresses(t *testing.T) {
+	got, ok := ParseAddress(`Ada <ada@quarry.fed <mailto:bram@quarry.fed>>`)
+	if !ok {
+		t.Fatal("an ambiguous fragment is still evidence and must not be dropped")
+	}
+	if got.Addr == "ada@quarry.fed" || got.Addr == "bram@quarry.fed" {
+		t.Fatalf("picked %q from a fragment naming two people", got.Addr)
+	}
+}
+
+// A header mixing the hyperlinked form with ordinary entries: net/mail's
+// all-or-nothing list parse fails on it, and the fallback must still return
+// everyone, hyperlinked or not.
+func TestParseAddressesReducesHyperlinkedEntriesAlongsidePlainOnes(t *testing.T) {
+	got := ParseAddresses(
+		`Ada Fenwick <ada@quarry.fed <mailto:ada@quarry.fed>>, ` +
+			`"Fenwick, Bram" <bram@quarry.fed>, cleo@quarry.fed<mailto:cleo@quarry.fed>`)
+	if len(got) != 3 {
+		t.Fatalf("got %d addresses, want 3: %+v", len(got), got)
+	}
+	want := []string{"ada@quarry.fed", "bram@quarry.fed", "cleo@quarry.fed"}
+	for i, w := range want {
+		if got[i].Addr != w {
+			t.Errorf("address %d = %q, want %q", i, got[i].Addr, w)
+		}
+	}
+	if got[0].Name != "Ada Fenwick" || got[1].Name != "Fenwick, Bram" {
+		t.Errorf("names: %q, %q", got[0].Name, got[1].Name)
+	}
+}
