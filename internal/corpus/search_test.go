@@ -745,3 +745,62 @@ func TestMatchExpressionsRouteTermsToTheRightIndexes(t *testing.T) {
 		t.Errorf("quoteFTS = %q", got)
 	}
 }
+
+// Slack entries carry no subject by design, so a chain rooted in one had nothing
+// to show but its ext_id — "slack:C08JDEG2C83:1784618363.054409" tells a reader
+// nothing about which conversation matched.
+func TestSlackChainsAreLabelledByConversation(t *testing.T) {
+	s := open(t)
+
+	put := func(ext, channel, chanName, ts, body string) {
+		e := Entry{
+			Source: SourceSlack, ExtID: ext, Kind: "message",
+			TS: time.Unix(1_700_000_000, 0), Container: channel, BodyText: body,
+		}
+		if _, err := s.PutSlack(e, Slack{
+			ChannelID: channel, ChannelName: chanName, TS: ts,
+		}, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	put("slack:C1:1.1", "C1", "rate-reviews", "1.1", "the unbundled tariff question")
+	put("slack:D1:2.1", "D1", "@U0ABC", "2.1", "the unbundled tariff question")
+
+	// The DM's stored name is the other party's raw uid; it should resolve.
+	who, err := Resolve(s, "slack_uid", "U0ABC", "Bo Vantel")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if who == 0 {
+		t.Fatal("no person created")
+	}
+
+	hits, err := s.SearchChains(Query{Text: "unbundled", Limit: 10, PerChain: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, h := range hits {
+		got[h.Subject] = true
+	}
+	if !got["#rate-reviews"] {
+		t.Errorf("channel chain not labelled #rate-reviews: %v", keysOf(got))
+	}
+	if !got["@Bo Vantel"] {
+		t.Errorf("DM chain not labelled by the person: %v", keysOf(got))
+	}
+	// And never a bare ext_id where a label exists.
+	for k := range got {
+		if strings.HasPrefix(k, "slack:") {
+			t.Errorf("chain still labelled by ext_id: %q", k)
+		}
+	}
+}
+
+func keysOf(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}

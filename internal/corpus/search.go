@@ -350,6 +350,17 @@ func (s *Store) SearchChains(q Query) ([]ChainHit, error) {
 		if ch.Subject == "" && len(ch.Best) > 0 {
 			ch.Subject = ch.Best[0].Subject
 		}
+		// Slack entries carry no subject at all, deliberately: a synthesised one
+		// would put the channel's name in the 4x-weighted FTS subject column on
+		// every message in it, so searching the channel name would rank the whole
+		// channel above a real mention. The channel is still what a reader
+		// recognises the conversation by, so it is supplied here, at display time,
+		// where it reaches no index.
+		if ch.Subject == "" {
+			if label := s.conversationLabel(ch.Container); label != "" {
+				ch.Subject = label
+			}
+		}
 		out = append(out, ch)
 	}
 	return out, nil
@@ -866,4 +877,43 @@ func placeholders[T any](vs []T) (string, []any) {
 		args[i] = v
 	}
 	return strings.TrimSuffix(strings.Repeat("?,", len(vs)), ","), args
+}
+
+// conversationLabel names a Slack conversation for display: "#channel" for a
+// channel, "@Someone" for a DM.
+//
+// A DM's stored name is the other party's raw user id, so it is resolved through
+// the people table. Left as "@U04DDAU2GDP" if that lookup fails, because a
+// visible id at least identifies the conversation, whereas dropping the label
+// entirely sends the caller back to printing the whole ext_id.
+func (s *Store) conversationLabel(container string) string {
+	if container == "" {
+		return ""
+	}
+	var name string
+	if err := s.db.QueryRow(
+		`select channel_name from slack_detail
+		 where channel_id = ? and channel_name is not null and channel_name != ''
+		 limit 1`, container).Scan(&name); err != nil {
+		return ""
+	}
+	if uid, ok := strings.CutPrefix(name, "@"); ok {
+		if who := s.personByUID(uid); who != "" {
+			return "@" + who
+		}
+		return name
+	}
+	return "#" + name
+}
+
+// personByUID resolves a Slack user id to a display name.
+func (s *Store) personByUID(uid string) string {
+	var name string
+	if err := s.db.QueryRow(
+		`select p.display_name from people p
+		 join identities i on i.person_id = p.id
+		 where i.kind = 'slack_uid' and i.value = ?`, uid).Scan(&name); err != nil {
+		return ""
+	}
+	return name
 }
