@@ -28,7 +28,20 @@ export function isAnswer(err: unknown): boolean {
   return err instanceof ApiError;
 }
 
-const client = createClient<paths>({ baseUrl: "/" });
+/**
+ * Same origin: the dev server proxies /v1 to the service, so no request here is
+ * cross-origin and the service needs no CORS allowance widened to serve it.
+ *
+ * fetch is looked up per call rather than captured, so a test that replaces the
+ * global is observed by a client built at import time.
+ */
+const client = createClient<paths>({
+  // The page's own origin, spelled out: the joined path becomes a Request, and
+  // outside a browser that constructor rejects a relative URL. Under the dev
+  // server this origin is the one whose /v1 is proxied to the service.
+  baseUrl: typeof location === "undefined" ? "http://127.0.0.1/" : location.origin,
+  fetch: (request) => globalThis.fetch(request),
+});
 
 /** The `{error: string}` body the service uses; falls back to whatever arrived. */
 function messageOf(body: unknown, status: number, statusText: string): string {
