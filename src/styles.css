@@ -147,6 +147,14 @@
   .bub ul { margin:.25rem 0; padding-left:1rem; }
   .bub li { margin:.08rem 0; font-size:.9rem; }
   .ed { font-size:.8rem; color:var(--muted); font-style:italic; }
+  /* A body is often the sender's own markup, laid out for a fixed-width white
+     page. These rules hold it inside the bubble: an image scales down instead of
+     pushing the column out, and a table that cannot shrink any further scrolls
+     in its own strip rather than widening the whole timeline. */
+  .bd { overflow-x:auto; }
+  .bd img { max-width:100%; height:auto; }
+  .bd table { min-width:0; max-width:100%; }
+  .bd td, .bd th { vertical-align:top; }
   .atts { display:flex; flex-wrap:wrap; align-items:center; gap:.3rem; margin:.4rem 0 .1rem; }
   .clip { font-size:.64rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted);
     font-weight:700; }

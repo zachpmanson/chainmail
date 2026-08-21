@@ -30,10 +30,14 @@ type entryRow struct {
 	To        string
 	Cc        string
 	BodyText  string
-	BodyHTML  string  // empty for every entry docket collected; see bodyHTML
+	BodyHTML  string  // the sender's own text/html part, "" for an unspooled entry
 	Direct    bool    // seen in the mailbox itself, not only inside a quote
 	SeenIn    []int64 // entries this one was found quoted or forwarded inside
-	Atts      []attRow
+	// HostHTML is the markup of those entries, loaded only when this entry has
+	// none of its own: an unspooled message's formatting survives inside the
+	// reply that quoted it. See recoverHTML.
+	HostHTML []string
+	Atts     []attRow
 }
 
 type attRow struct {
@@ -173,13 +177,71 @@ func load(store *corpus.Store, ids []int64) ([]*entryRow, error) {
 	if err := loadAttachments(db, ph, args, byID); err != nil {
 		return nil, err
 	}
+	if err := loadHostHTML(db, out); err != nil {
+		return nil, err
+	}
 	return out, nil
+}
+
+// loadHostHTML fetches the markup of the messages each unspooled entry was found
+// inside. A host is usually outside the selection — the page shows a trail, not
+// every message that ever quoted it — so this is its own query rather than a
+// join, and it asks only for hosts that have markup to give.
+//
+// Nothing is loaded for an entry the mailbox itself holds: see bodyHTML for why
+// its own part, or its own text, is the authority on how it was written.
+func loadHostHTML(db *sql.DB, rows []*entryRow) error {
+	want := map[int64]bool{}
+	for _, r := range rows {
+		if r.BodyHTML != "" || r.Direct {
+			continue
+		}
+		for _, id := range r.SeenIn {
+			want[id] = true
+		}
+	}
+	if len(want) == 0 {
+		return nil
+	}
+	ph, args := placeholders(keys(want))
+	q, err := db.Query(`select id, body_html from entries
+		where id in (`+ph+`) and body_html is not null and body_html != ''`, args...)
+	if err != nil {
+		return fmt.Errorf("loading host markup: %w", err)
+	}
+	defer q.Close()
+	byHost := map[int64]string{}
+	for q.Next() {
+		var id int64
+		var h string
+		if err := q.Scan(&id, &h); err != nil {
+			return err
+		}
+		byHost[id] = h
+	}
+	if err := q.Err(); err != nil {
+		return err
+	}
+	for _, r := range rows {
+		if r.BodyHTML != "" || r.Direct {
+			continue
+		}
+		for _, id := range r.SeenIn {
+			if h, ok := byHost[id]; ok {
+				r.HostHTML = append(r.HostHTML, h)
+			}
+		}
+	}
+	return nil
 }
 
 func loadSightings(db *sql.DB, ph string, args []any, byID map[int64]*entryRow) error {
 	rows, err := db.Query(`
 		select entry_id, kind, coalesce(seen_in, 0) from sightings
-		where entry_id in (`+ph+`)`, args...)
+		where entry_id in (`+ph+`)
+		-- ordered so that a body recovered from one of several hosts, and the
+		-- provenance line naming them, are the same on every run.
+		order by entry_id, seen_in`, args...)
 	if err != nil {
 		return fmt.Errorf("loading sightings: %w", err)
 	}

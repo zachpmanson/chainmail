@@ -1,0 +1,191 @@
+package spec
+
+import (
+	"strings"
+	"testing"
+)
+
+// The hosts here are invented, in the two shapes real clients quote in: Gmail
+// nests the quoted message inside a blockquote, Outlook states a header block
+// and writes the message as the siblings after it.
+
+// gmailHost quotes one message, with a table in it, under a reply.
+const gmailHost = `<div dir="ltr">Numbers look right, thanks.</div>` +
+	`<div class="gmail_quote">` +
+	`<div class="gmail_attr">On Thu, 7 May 2026 at 04:38, Ada Byron &lt;ada@loomworks.example&gt; wrote:</div>` +
+	`<blockquote class="gmail_quote">` +
+	`<div>Here is the column mapping we agreed:</div>` +
+	`<table><tr><th>Original column</th><th>New column</th></tr>` +
+	`<tr><td>Site ref</td><td>NMI</td></tr>` +
+	`<tr><td>Read date</td><td>Meter read</td></tr></table>` +
+	`<div>Shout if the second column is wrong for the Fjordvik sites.</div>` +
+	`</blockquote></div>`
+
+const gmailQuotedText = "Here is the column mapping we agreed:\n" +
+	"Original column\tNew column\n" +
+	"Site ref\tNMI\n" +
+	"Read date\tMeter read\n" +
+	"Shout if the second column is wrong for the Fjordvik sites.\n"
+
+func TestAQuotedEntryRecoversItsMarkupFromAHost(t *testing.T) {
+	// The point of the whole file: this entry has no markup of its own, and its
+	// table exists only inside the reply that quoted it.
+	r := &entryRow{Source: "mail", BodyText: gmailQuotedText, HostHTML: []string{gmailHost}}
+	got := bodyHTML(r)
+	if !strings.Contains(got, "<table>") {
+		t.Fatalf("body = %q, want the table recovered from the host", got)
+	}
+	if !strings.Contains(got, "Original column") || !strings.Contains(got, "Meter read") {
+		t.Errorf("body = %q, want the table's cells", got)
+	}
+	if strings.Contains(got, "Numbers look right") || strings.Contains(got, "wrote:") {
+		t.Errorf("body = %q, want only the quoted message, not its host", got)
+	}
+}
+
+func TestAnOutlookHostWithNoContainerStillYieldsTheBlock(t *testing.T) {
+	// Outlook's history is a run of siblings after a header block, so the block
+	// is delimited by the next header block and by nothing else.
+	host := `<div><p>Approved.</p>` +
+		`<p><b>From:</b> Ada Byron</p><p><b>Sent:</b> Thursday, 7 May 2026 04:38</p>` +
+		`<p><b>Subject:</b> Re: column mapping</p>` +
+		`<p>Here is the column mapping we agreed on the call, with the second column renamed so that the ` +
+		`import will match what the retailer sends us each month:</p>` +
+		`<table><tr><td>Site ref</td><td>NMI</td></tr></table>` +
+		`<p><b>From:</b> Grace Hopper</p><p><b>Sent:</b> Wednesday, 6 May 2026 09:00</p>` +
+		`<p>Opened the ticket for the cutover this morning.</p></div>`
+	r := &entryRow{
+		Source: "mail",
+		BodyText: "Here is the column mapping we agreed on the call, with the second column renamed so that\n" +
+			"the import will match what the retailer sends us each month:\nSite ref\tNMI\n",
+		HostHTML: []string{host},
+	}
+	got := bodyHTML(r)
+	if !strings.Contains(got, "<table>") {
+		t.Fatalf("body = %q, want the block between the two header blocks", got)
+	}
+	if strings.Contains(got, "Opened the ticket") || strings.Contains(got, "Approved.") {
+		t.Errorf("body = %q, want neither the host's own text nor the message below", got)
+	}
+}
+
+func TestADeeperQuoteInsideARecoveredBlockIsPeeled(t *testing.T) {
+	// The block the entry quoted is on the page as its own entry, exactly as for
+	// an entry with markup of its own.
+	host := `<div class="gmail_quote"><div class="gmail_attr">On Thu, 7 May 2026 at 04:38, Ada wrote:</div>` +
+		`<blockquote class="gmail_quote"><div>Here is the column mapping we agreed, with the second column renamed.</div>` +
+		`<div class="gmail_quote"><div class="gmail_attr">On Wed, 6 May 2026 at 09:00, Grace wrote:</div>` +
+		`<blockquote class="gmail_quote"><div>Which column did you want renamed for the Fjordvik sites?</div></blockquote>` +
+		`</div></blockquote></div>`
+	r := &entryRow{
+		Source:   "mail",
+		BodyText: "Here is the column mapping we agreed, with the second column renamed.\n",
+		HostHTML: []string{host},
+	}
+	got := bodyHTML(r)
+	if !strings.Contains(got, "second column renamed") {
+		t.Fatalf("body = %q, want the entry's own words", got)
+	}
+	if strings.Contains(got, "Which column did you want") {
+		t.Errorf("body = %q, want the deeper quote peeled", got)
+	}
+}
+
+func TestAShortBodyIsNeverCorrelated(t *testing.T) {
+	// "Thanks, will do" matches every second message in a mailbox, and there is
+	// no test here that would catch having matched the wrong one.
+	r := &entryRow{
+		Source:   "mail",
+		BodyText: "Thanks Ada, will do.",
+		HostHTML: []string{`<div class="gmail_quote"><blockquote class="gmail_quote"><div>Thanks Ada, will do.</div></blockquote></div>`},
+	}
+	if got := bodyHTML(r); got != "<p>Thanks Ada, will do.</p>" {
+		t.Errorf("body = %q, want the text path", got)
+	}
+}
+
+func TestBoilerplateAloneDoesNotIdentifyAMessage(t *testing.T) {
+	// Two short messages from one person share a signature and a disclaimer,
+	// which is most of both. The host holds only the first one; the second must
+	// not take it. Matching on a bag of words does exactly that, which is why
+	// the opening is compared in order.
+	const sig = "\nKind regards\nAda Byron | Loomworks Pty Ltd\nThis email and any attachments are confidential. " +
+		"If you are not the intended recipient please delete it and tell us. The views expressed are the " +
+		"sender's own and not necessarily those of Loomworks Pty Ltd, which accepts no liability for anything " +
+		"arising from this message or its attachments.\n"
+	host := `<div class="gmail_quote"><div class="gmail_attr">On Thu, 7 May 2026 at 04:38, Ada wrote:</div>` +
+		`<blockquote class="gmail_quote"><div>Can you confirm the meter read landed inside the billing period?</div>` +
+		`<div>` + strings.ReplaceAll(sig, "\n", "<br>") + `</div></blockquote></div>`
+
+	mine := &entryRow{Source: "mail",
+		BodyText: "Can you confirm the meter read landed inside the billing period?" + sig,
+		HostHTML: []string{host}}
+	if got := bodyHTML(mine); !strings.Contains(got, "meter read landed") || strings.Contains(got, "<p>") {
+		t.Errorf("body = %q, want the recovered markup for the message that is in the host", got)
+	}
+
+	other := &entryRow{Source: "mail",
+		BodyText: "Did the second invoice for Fjordvik ever go out?" + sig,
+		HostHTML: []string{host}}
+	got := bodyHTML(other)
+	if strings.Contains(got, "meter read landed") {
+		t.Fatalf("body = %q, want no recovery: this message is not in that host", got)
+	}
+	if !strings.Contains(got, "second invoice for Fjordvik") {
+		t.Errorf("body = %q, want the text path", got)
+	}
+}
+
+func TestTwoBlocksThatBothFitAndDisagreeAreDeclined(t *testing.T) {
+	// Someone sent nearly the same request twice, and both are in this host's
+	// trail. Each fits the entry about equally and they end differently, so which
+	// one this entry is cannot be told from here — and guessing is the one
+	// outcome worse than plain text.
+	const shared = "Could you reissue the offersheet for the sites we went through on the call, with the demand " +
+		"class corrected and the discount applied before GST rather than after, and copy the account manager " +
+		"when it goes out so that she can send it on to the client the same day. "
+	host := `<div class="gmail_quote"><div class="gmail_attr">On Thu, 7 May 2026 at 04:38, Ada wrote:</div>` +
+		`<blockquote class="gmail_quote"><div>` + shared + `The Fjordvik sites are the urgent ones this week.</div>` +
+		`<div class="gmail_quote"><div class="gmail_attr">On Wed, 6 May 2026 at 09:00, Ada wrote:</div>` +
+		`<blockquote class="gmail_quote"><div>` + shared + `Anvil Lane can wait until the meter reads land.</div>` +
+		`</blockquote></div></blockquote></div>`
+	r := &entryRow{
+		Source:   "mail",
+		BodyText: shared + "Loomworks Two is the one I need first.",
+		HostHTML: []string{host},
+	}
+	got := bodyHTML(r)
+	if strings.Contains(got, "Fjordvik") || strings.Contains(got, "Anvil Lane") {
+		t.Errorf("body = %q, want no recovery: two blocks fit and they disagree", got)
+	}
+	if !strings.Contains(got, "Loomworks Two is the one I need first.") {
+		t.Errorf("body = %q, want the entry's own text", got)
+	}
+}
+
+func TestOneMessageQuotedBySeveralPeopleIsNotAmbiguous(t *testing.T) {
+	// Three hosts offering the same block is agreement, not ambiguity.
+	r := &entryRow{Source: "mail", BodyText: gmailQuotedText,
+		HostHTML: []string{gmailHost, gmailHost, gmailHost}}
+	if got := bodyHTML(r); !strings.Contains(got, "<table>") {
+		t.Errorf("body = %q, want the block three hosts agree on", got)
+	}
+}
+
+func TestNoHostMarkupLeavesTheTextPathAlone(t *testing.T) {
+	r := &entryRow{Source: "mail", BodyText: gmailQuotedText}
+	if got := bodyHTML(r); !strings.Contains(got, "<p>Here is the column mapping we agreed:") {
+		t.Errorf("body = %q, want the text path", got)
+	}
+}
+
+func TestAMalformedHostIsJustAHostWithNothingToOffer(t *testing.T) {
+	for _, host := range []string{
+		"", "<<<>>>", `<div class="gmail_quote"><blockquote class="gmail_quote"><table><tr><td>Here is the col`,
+	} {
+		r := &entryRow{Source: "mail", BodyText: gmailQuotedText, HostHTML: []string{host}}
+		if got := bodyHTML(r); got == "" {
+			t.Errorf("host %q: body is empty, want at least the text path", host)
+		}
+	}
+}

@@ -119,7 +119,7 @@ function EntryBlock({ row, v, mark }: { row: Row; v: View; mark?: "new" | "revis
           </a>
         </div>
         <div className="syslabel">{e.label}</div>
-        <div dangerouslySetInnerHTML={html(e.body)} />
+        <div className="bd" dangerouslySetInnerHTML={html(e.body)} />
         <ReplyLink row={row} v={v} />
       </div>
     );
@@ -152,7 +152,7 @@ function EntryBlock({ row, v, mark }: { row: Row; v: View; mark?: "new" | "revis
               ))}
             </div>
           ) : null}
-          <div dangerouslySetInnerHTML={html(e.body)} />
+          <div className="bd" dangerouslySetInnerHTML={html(e.body)} />
           <Attachments e={e} />
           <div className="foot">
             <span className="to">to {e.to ?? "—"}</span>

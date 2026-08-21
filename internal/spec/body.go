@@ -8,20 +8,15 @@ import (
 	"github.com/zachpmanson/chainmail/internal/unnest"
 )
 
-// Bodies are the one field where the corpus holds text and the schema wants
-// markup, so the conversion lives here rather than being pushed onto the
-// renderer.
+// Bodies are the one field where the corpus holds a message in one form and the
+// schema wants another, so the conversion lives here rather than being pushed
+// onto the renderer.
 //
-// `body` is documented as trusted HTML and the renderer injects it without
-// sanitising (dangerouslySetInnerHTML, src/components/Timeline.tsx). "Trusted"
-// therefore means trusted *because this file produced it*: every character that
-// came from a message is escaped before any markup is added, and the only tags
-// emitted are the ones written here. A body is never assembled by interpolating
-// message text into a template.
-//
-// The shaping applied on top of escaping differs by where the text came from,
+// The shaping applied to a text body differs by where the text came from,
 // because the same newline means different things in mail and in Slack. See
-// bodyStyle.
+// bodyStyle. Text is escaped before any markup is added and the only tags
+// emitted are the ones written in this file; markup taken from a sender's own
+// html part is a separate matter, and htmlbody.go says what is done with it.
 
 // bodyHTML renders one entry's stored body as the HTML the schema expects, or
 // "" when the entry genuinely has no text — a Slack file-only post, a forward
@@ -29,13 +24,30 @@ import (
 // the message and is emitted as an empty string rather than an empty <p>, which
 // would render as a bubble claiming content that does not exist.
 //
-// entries.body_html is deliberately not consulted. It is the sender's own markup
-// and would be the better source, but it is arbitrary remote HTML reaching an
-// unsanitised injection point: preferring it needs a sanitiser in front of it,
-// not just a different branch here. Nothing populates it today (docket exposes
-// only the text part), so this is the single place that would change.
+// Three sources, in order of how close each is to what the sender actually sent:
+// their own text/html part; the same message quoted inside somebody else's part,
+// where the markup survives even though this entry has none of its own; and last
+// the text rendition, shaped by textToHTML. Every markup path can decline —
+// see htmlbody.go and htmlrecover.go for what makes it decline — and declining
+// lands here, on the text, which is plain but never wrong.
+//
+// The markup is emitted unsanitised. That is stated where the choice is made,
+// at the top of htmlbody.go, and tracked as issue #14.
 func bodyHTML(r *entryRow) string {
-	return textToHTML(r.BodyText, styleFor(r))
+	st := styleFor(r)
+	if r.BodyHTML != "" {
+		if s := htmlBody(r.BodyHTML, st); s != "" {
+			return s
+		}
+	} else if !r.Direct {
+		// Only for an entry that was never in the mailbox. A message that was
+		// there and has no html part was sent as plain text, and the markup a
+		// quoting client wrapped it in later is that client's, not the sender's.
+		if s := recoverHTML(r.BodyText, r.HostHTML); s != "" {
+			return s
+		}
+	}
+	return textToHTML(r.BodyText, st)
 }
 
 // bodyStyle says how far a body's text may be reshaped. Both switches are off
