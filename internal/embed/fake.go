@@ -53,6 +53,12 @@ func (f *Fake) Model() string {
 
 func (f *Fake) Dim() int { return f.Dimension }
 
+// Prefix reads the same per-model table the real client does, keyed on the
+// fake's name. A fake called "nomic-embed-text" therefore exercises the
+// prefixed path with no daemon, and one called anything else exercises the
+// unprefixed path, which is what makes both branches testable.
+func (f *Fake) Prefix(t Task) string { return TraitsFor(f.Model()).Prefix(t) }
+
 func (f *Fake) Embed(_ context.Context, texts []string) ([][]float32, error) {
 	if f.Fail != nil {
 		return nil, f.Fail

@@ -37,11 +37,13 @@ import (
 // so a chain_embeddings table can sit beside it later rather than replace it.
 
 const (
-	// prepVersion versions the text handed to the model. Bumping it re-embeds
-	// the corpus, which is the point: the preparation drops quoted history and
-	// rewrites URLs, so a change to it changes every vector while leaving every
-	// body_sha identical.
-	prepVersion = 1
+	// prepVersion versions everything the model is shown, end to end: the text
+	// EmbedTextFor derives, and the task prefix embed.Vectors puts in front of
+	// it. Bumping it re-embeds the corpus, which is the point — the preparation
+	// drops quoted history, rewrites URLs and frames the text for the model, so
+	// a change anywhere along that path changes every vector while leaving every
+	// body_sha identical. body_sha alone cannot see any of it.
+	prepVersion = 2
 
 	// minEmbedWords is the floor for embedding an entry at all. "thanks, will
 	// do" carries no topic, embeds to whatever direction those three tokens
@@ -97,13 +99,13 @@ type SemanticQuery struct {
 	// all, including no floor on anti-correlated entries; write a tiny positive
 	// value to exclude those.
 	//
-	// It is deliberately not defaulted to a number. The cosine at which a real
-	// model stops being relevant is a property of that model — an embedding
-	// model puts two unrelated English sentences well above zero — so a
-	// corpus-wide constant here would be a guess wearing a threshold's clothes,
-	// and it would silently cut recall on the queries semantic search exists
-	// for. TopK is the model-independent cut; this is for a caller who has
-	// calibrated against their own model.
+	// There is deliberately no default here. The cosine at which a model stops
+	// being relevant is a property of that model — an embedding model puts two
+	// unrelated English sentences well above zero — so a corpus-wide constant
+	// would be a guess wearing a threshold's clothes, and would silently cut
+	// recall on exactly the queries semantic search exists for. The calibrated
+	// floor lives with the model, in embed.Traits, and the caller that chose the
+	// model passes it in. TopK is the model-independent cut.
 	MinSimilarity float64
 }
 
@@ -436,7 +438,11 @@ func (s *Store) embedBatch(ctx context.Context, e embed.Embedder, sel string, se
 
 	var vecs [][]float32
 	if len(texts) > 0 {
-		vecs, err = e.Embed(ctx, texts)
+		// Document, not Query: these are the bodies being indexed. Getting this
+		// backwards on an asymmetric model is not an error anywhere — it just
+		// quietly ranks worse, which is why the task is stated rather than
+		// defaulted.
+		vecs, err = embed.Vectors(ctx, e, embed.Document, texts)
 		if err != nil {
 			return res, err
 		}
