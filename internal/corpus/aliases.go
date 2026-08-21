@@ -260,6 +260,7 @@ type MergeCandidate struct {
 	AName      string
 	BName      string
 	Reason     string
+	Suggest    string // the command that would settle it
 	AAddresses []string
 	BAddresses []string
 }
@@ -274,7 +275,13 @@ type MergeCandidate struct {
 // participant seen only as a name is a person until someone says which person,
 // and RepairTruncatedNames deliberately leaves here every pair its evidence does
 // not settle, so a declined merge is visible rather than quietly broken.
-func MergeCandidates(s *Store) ([]MergeCandidate, error) {
+//
+// Each pair carries the command that would settle it, because a report a reader
+// has to translate into a command is a report they skim. The count returned
+// beside them is the pairs deliberately left out — see roleMailboxPair — and it
+// is returned rather than swallowed so that "nothing was hidden" and "88 things
+// were hidden" cannot print the same.
+func MergeCandidates(s *Store) ([]MergeCandidate, int, error) {
 	var out []MergeCandidate
 	at := map[[2]int64]int{}
 	add := func(c MergeCandidate) {
@@ -286,6 +293,10 @@ func MergeCandidates(s *Store) ([]MergeCandidate, error) {
 		at[key] = len(out)
 		out = append(out, c)
 	}
+	standing, err := domainStanding(s)
+	if err != nil {
+		return nil, 0, err
+	}
 
 	rows, err := s.db.Query(`
 		select a.person_id, b.person_id, a.value, b.value
@@ -295,30 +306,36 @@ func MergeCandidates(s *Store) ([]MergeCandidate, error) {
 		   and substr(a.value, 1, instr(a.value,'@')) = substr(b.value, 1, instr(b.value,'@'))
 		   and substr(a.value, instr(a.value,'@')) <> substr(b.value, instr(b.value,'@'))`)
 	if err != nil {
-		return nil, fmt.Errorf("finding merge candidates: %w", err)
+		return nil, 0, fmt.Errorf("finding merge candidates: %w", err)
 	}
+	suppressed := 0
 	for rows.Next() {
 		var c MergeCandidate
 		var aAddr, bAddr string
 		if err := rows.Scan(&c.AID, &c.BID, &aAddr, &bAddr); err != nil {
 			rows.Close()
-			return nil, err
+			return nil, 0, err
+		}
+		if roleMailboxPair(aAddr, bAddr) {
+			suppressed++
+			continue
 		}
 		c.AAddresses = []string{aAddr}
 		c.BAddresses = []string{bAddr}
 		c.Reason = "same local part, different domain"
+		c.Suggest = aliasOrMergeCommand(standing, aAddr, bAddr)
 		_ = s.db.QueryRow(`select display_name from people where id=?`, c.AID).Scan(&c.AName)
 		_ = s.db.QueryRow(`select display_name from people where id=?`, c.BID).Scan(&c.BName)
 		add(c)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	welded, err := WeldedNameCandidates(s)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	for _, c := range welded {
 		add(c)
@@ -326,7 +343,7 @@ func MergeCandidates(s *Store) ([]MergeCandidate, error) {
 
 	named, err := sameNamedPeople(s)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	for _, group := range named {
 		for i := 0; i < len(group); i++ {
@@ -337,16 +354,49 @@ func MergeCandidates(s *Store) ([]MergeCandidate, error) {
 					Reason: "same display name",
 				}
 				if c.AAddresses, err = emailsOf(s, c.AID); err != nil {
-					return nil, err
+					return nil, 0, err
 				}
 				if c.BAddresses, err = emailsOf(s, c.BID); err != nil {
-					return nil, err
+					return nil, 0, err
 				}
+				c.Suggest = fmt.Sprintf("corpus merge -keep-id %d -drop-id %d", c.AID, c.BID)
 				add(c)
 			}
 		}
 	}
-	return out, nil
+	return out, suppressed, nil
+}
+
+// roleMailboxPair reports whether two addresses are the same role mailbox at two
+// domains — info@ here and info@ there.
+//
+// Left out of the report entirely, on genericLocalPart's reasoning: a mailbox an
+// organisation owns is not a person, so two of them at two organisations are two
+// mailboxes and there is no merge to consider. They were 88 of 205 pairs on this
+// corpus — noreply, support, info, accounts — and a report where nine in twenty
+// lines can never be acted on is a report that trains its reader to stop looking.
+// Where the two domains really are one organisation, an alias says so and folds
+// them by its own deliberate exception, and they never reach here.
+func roleMailboxPair(a, b string) bool {
+	al, _, aok := strings.Cut(a, "@")
+	bl, _, bok := strings.Cut(b, "@")
+	return aok && bok && genericLocalPart(al) && genericLocalPart(bl)
+}
+
+// aliasOrMergeCommand names what would settle a pair sharing a local part across
+// two domains: an alias where the domains are one organisation, since that folds
+// every other person the rebrand split as well, and a merge of just these two
+// where they are not.
+func aliasOrMergeCommand(standing map[string]domainWeight, a, b string) string {
+	_, ad, _ := strings.Cut(a, "@")
+	_, bd, _ := strings.Cut(b, "@")
+	current := currentDomain(standing, []string{ad, bd})
+	old, keep, drop := ad, b, a
+	if ad == current {
+		old, keep, drop = bd, a, b
+	}
+	return fmt.Sprintf("corpus alias -from %s -to %s (one organisation), or corpus merge "+
+		"-keep %s -drop %s (one human at two)", old, current, keep, drop)
 }
 
 type namedPerson struct {

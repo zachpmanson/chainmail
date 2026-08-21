@@ -5,10 +5,10 @@
 //	corpus ingest slack               slurp a slackdump archive
 //	corpus stats                      what is in it, and what is missing
 //	corpus people                     everyone involved, senders and recipients
-//	corpus merge -keep <a> -drop <b>  same human, two addresses
+//	corpus merge -keep <a> -drop <b>  same human, two addresses (or -keep-id/-drop-id)
 //	corpus alias -from <d> -to <d>    a rebrand: fold one domain into another
 //	corpus candidates                 pairs that may be one human, for review
-//	corpus dedupe [-apply]            merge the duplicates two rules can prove
+//	corpus dedupe [-apply]            merge the duplicates three rules can prove
 //	corpus repair                     rejoin the people one mailbox split into
 //	corpus search -q <text>           which chains are about this
 //	corpus embed                      fill in the vectors semantic search needs
@@ -91,12 +91,17 @@ const usage = `usage: corpus <command> [flags]
                            the date each states and names what cannot be true
   stats                    counts, coverage and what is missing
   people                   everyone in the corpus, with their identities
-  candidates               probable duplicate identities, unmerged
-  dedupe        [-apply]   merge the duplicates two rules can prove — a name-only
-                           person into the human they name, and one first name at
-                           one organisation — and report every group it refuses;
-                           reports only until -apply
-  merge         -keep -drop  fold one identity into another
+  candidates               probable duplicate identities, unmerged, each with the
+                           command that would settle it; role mailboxes shared by
+                           two domains are counted rather than listed
+  dedupe        [-apply]   merge the duplicates three rules can prove — a name-only
+                           person into the human they name, one first name at one
+                           organisation, and a webmail account spelling the whole
+                           name of one work account — and report every group it
+                           refuses; reports only until -apply
+  merge         -keep -drop | -keep-id -drop-id
+                           fold one identity into another, by address or by person
+                           id where one side has no address
   alias         [-from -to]  list or add a domain alias, folding the people that
                            domain split in two and naming every pair it will not
                            fold; -dry-run decides all that and writes nothing
@@ -587,17 +592,22 @@ func run(args []string) error {
 			return err
 		}
 		defer s.Close()
-		cs, err := corpus.MergeCandidates(s)
+		cs, suppressed, err := corpus.MergeCandidates(s)
 		if err != nil {
 			return err
 		}
 		for _, c := range cs {
-			fmt.Printf("%4d %-24s  ~  %4d %-24s  (%s)\n     %v  |  %v\n",
+			fmt.Printf("%4d %-24s  ~  %4d %-24s  (%s)\n     %v  |  %v\n     %s\n",
 				c.AID, trunc(c.AName, 24), c.BID, trunc(c.BName, 24), c.Reason,
-				c.AAddresses, c.BAddresses)
+				c.AAddresses, c.BAddresses, c.Suggest)
 		}
-		fmt.Printf("\n%d candidate %s — review, then `corpus merge -keep <a> -drop <b>`\n",
+		fmt.Printf("\n%d candidate %s — review, then run the command each line names\n",
 			len(cs), plural(len(cs), "pair", "pairs"))
+		if suppressed > 0 {
+			fmt.Printf("%d role-mailbox %s not listed: one organisation's info@ and "+
+				"another's are two mailboxes, never one human\n",
+				suppressed, plural(suppressed, "pair", "pairs"))
+		}
 		return nil
 
 	case "dedupe":
@@ -622,17 +632,33 @@ func run(args []string) error {
 		fs := flag.NewFlagSet("merge", flag.ContinueOnError)
 		keep := fs.String("keep", "", "email address of the person to keep")
 		drop := fs.String("drop", "", "email address of the person to merge away")
+		// By id as well as by address, because the duplicates that most need a
+		// human are the ones with no address to name: a participant known only as
+		// a name has no identity this command could take, so before these flags
+		// existed every refusal about a placeholder named no way to settle it.
+		keepID := fs.Int64("keep-id", 0, "person id to keep, for a person with no address")
+		dropID := fs.Int64("drop-id", 0, "person id to merge away")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		if *keep == "" || *drop == "" {
-			return fmt.Errorf("usage: corpus merge -keep <email> -drop <email>")
+		byAddr := *keep != "" && *drop != ""
+		byID := *keepID != 0 && *dropID != 0
+		if byAddr == byID {
+			return fmt.Errorf("usage: corpus merge -keep <email> -drop <email> | " +
+				"-keep-id <n> -drop-id <n>")
 		}
 		s, err := corpus.Open(path)
 		if err != nil {
 			return err
 		}
 		defer s.Close()
+		if byID {
+			if err := corpus.Merge(s, *keepID, *dropID); err != nil {
+				return err
+			}
+			fmt.Printf("merged into person %d\n", *keepID)
+			return nil
+		}
 		id, err := corpus.MergeByEmail(s, *keep, *drop)
 		if err != nil {
 			return err

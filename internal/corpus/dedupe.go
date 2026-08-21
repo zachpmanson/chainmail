@@ -10,8 +10,10 @@ import (
 // person_merges.reason, so `corpus dedupe` output and the audit trail name the
 // same rule.
 const (
-	RuleSameName     = "dedupe:same-display-name"
-	RuleFirstNameOrg = "dedupe:first-name-and-org"
+	RuleSameName        = "dedupe:same-display-name"
+	RuleNameInThread    = "dedupe:same-display-name-in-thread"
+	RuleFirstNameOrg    = "dedupe:first-name-and-org"
+	RulePersonalMailbox = "dedupe:webmail-and-work-mailbox"
 )
 
 // PlannedMerge is one merge Dedupe would make, with everything a human needs to
@@ -54,8 +56,8 @@ type DedupePlan struct {
 // reads state an earlier merge in the same pass would have changed. That is the
 // property that makes reviewing dry-run output worth anything.
 //
-// The two rules are deliberately asymmetric about what counts as proof, because
-// the two shapes of duplicate are not alike:
+// The rules are deliberately asymmetric about what counts as proof, because the
+// shapes of duplicate are not alike:
 //
 //   - A name-only person is corruption. Someone cc'd as "Johan" with no address
 //     is a placeholder for a human the corpus already knows by address, so the
@@ -63,8 +65,16 @@ type DedupePlan struct {
 //   - Two people who both hold addresses are two confirmed humans. A shared name
 //     is not proof they are one — two colleagues can share a name, and this
 //     corpus holds two people whose addresses differ only by the domain of one
-//     organisation and who are nonetheless different humans. So the second rule
-//     asks for an organisation to be the same, not a name.
+//     organisation and who are nonetheless different humans. So that rule asks
+//     for an organisation to be the same, not a name.
+//   - A webmail account is neither. It is a confirmed human at no organisation,
+//     so no domain can corroborate it and the only evidence available is the
+//     name the account spells out.
+//
+// Order within the plan is load-bearing where two rules touch one person: the
+// placeholder rules can keep a webmail person the third rule then drops, and
+// applying a merge whose survivor has already been merged away fails. Planning
+// placeholders first makes the pair fold as ghost -> webmail -> work.
 func Dedupe(s *Store, apply bool) (DedupePlan, error) {
 	var plan DedupePlan
 	if err := s.db.QueryRow(`select count(*) from people`).Scan(&plan.Before); err != nil {
@@ -79,8 +89,14 @@ func Dedupe(s *Store, apply bool) (DedupePlan, error) {
 	if err != nil {
 		return plan, err
 	}
+	webMerges, webRefusals, err := planPersonalMailboxes(s)
+	if err != nil {
+		return plan, err
+	}
 	plan.Merges = append(nameMerges, orgMerges...)
+	plan.Merges = append(plan.Merges, webMerges...)
 	plan.Refusals = append(nameRefusals, orgRefusals...)
+	plan.Refusals = append(plan.Refusals, webRefusals...)
 	plan.After = plan.Before - len(plan.Merges)
 	if !apply {
 		return plan, nil
@@ -115,7 +131,26 @@ func Dedupe(s *Store, apply bool) (DedupePlan, error) {
 // Nothing here corroborates the target's address against the name, and that is
 // on purpose: a header reading `Ainslee Portlock <manager.easterncreek@…>` names
 // a shared mailbox that really is hers, and demanding the address look like the
-// name would refuse exactly the merges this rule exists for.
+// name would refuse exactly the merges this rule exists for. The one address the
+// target may not hold is an unattended mailbox — see anchorsAHuman.
+//
+// A second, weaker tier follows, because on this corpus the strict one settles
+// only a third of the placeholders: most of them appear on an entry the human
+// they name is not a participant of at all. That is the ordinary way the
+// corruption arrives — the name was read off an attribution line inside a
+// forwarded body, where the address was never written — so requiring the human on
+// the same *entry* asks for evidence the shape of the damage removed. The thread
+// is the unit that survives it: the placeholder's sighting sits in a conversation
+// the human is in, and the corpus is asked to find exactly one same-named human
+// there.
+//
+// What that gives up is the case of two same-named colleagues in one thread,
+// where the strict tier would have separated them by entry. It is given up
+// knowingly: two candidates in the thread is a refusal, so the merge only lands
+// where the thread holds one, and a same-named colleague reading the same thread
+// is the one shape this cannot see past. The alternative — leaving the tier out —
+// keeps fourteen placeholders on this corpus that every other piece of evidence
+// agrees about.
 func planPlaceholders(s *Store) ([]PlannedMerge, []Refusal, error) {
 	holders, err := placeholderPeople(s)
 	if err != nil {
@@ -132,20 +167,36 @@ func planPlaceholders(s *Store) ([]PlannedMerge, []Refusal, error) {
 		if err != nil {
 			return nil, nil, err
 		}
+		rule := RuleSameName
+		evidence := "name-only person, and the kept person is on every entry they are"
+		if strong == 0 {
+			inThread, why, err := threadTarget(s, h.id, cands)
+			if err != nil {
+				return nil, nil, err
+			}
+			if why != "" {
+				reason = why // the looser tier found an ambiguity worth naming over the strict tier's silence
+			}
+			if inThread != 0 {
+				strong, rule = inThread, RuleNameInThread
+				evidence = "name-only person, and the only human of that name in " +
+					"every thread they appear in"
+			}
+		}
 		if strong == 0 {
 			// Nobody else of that name is not a refusal: there is no duplicate to
 			// decide about, only a participant the corpus knows by name. Reporting
 			// it would bury the groups that do need a decision.
 			if len(cands) > 0 {
 				refusals = append(refusals, Refusal{
-					Rule: RuleSameName, Subject: h.name, Reason: reason,
+					Rule: RuleSameName, Subject: h.name,
+					Reason: reason + "; `corpus merge -keep-id <a> -drop-id <b>` if a human can tell",
 					People: append([]int64{h.id}, cands...)})
 			}
 			continue
 		}
 		m := PlannedMerge{
-			Rule: RuleSameName, KeepID: strong, DropID: h.id,
-			Evidence: "name-only person, and the kept person is on every entry they are",
+			Rule: rule, KeepID: strong, DropID: h.id, Evidence: evidence,
 		}
 		if err := describe(s, &m); err != nil {
 			return nil, nil, err
@@ -267,26 +318,118 @@ func planFirstNameAndOrg(s *Store) ([]PlannedMerge, []Refusal, error) {
 
 	// A first name that matches across two organisations is the case this rule
 	// was asked for and the one it cannot settle, so it is reported with the
-	// command that would settle it. Reported and not merged: nothing here says
+	// commands that would settle it. Reported and not merged: nothing here says
 	// the two domains belong to one employer, and this is exactly where guessing
 	// fuses two people's correspondence.
+	standing, err := domainStanding(s)
+	if err != nil {
+		return nil, nil, err
+	}
 	for _, first := range sortedKeys(byFirst) {
 		group := byFirst[first]
 		orgs := distinctOrgs(group)
 		if len(orgs) < 2 || len(distinctSurnames(group)) > 1 {
 			continue
 		}
-		reason := "one first name at " + strings.Join(orgs, " and ") +
-			"; if those are one organisation, say so with `corpus alias` and this rule folds them"
-		if len(orgs) == 2 {
-			reason = fmt.Sprintf("one first name at %s and %s; if those are one "+
-				"organisation, `corpus alias -from %s -to %s` says so and this rule folds them",
-				orgs[0], orgs[1], orgs[0], orgs[1])
+		reason := "one first name at " + strings.Join(orgs, " and ") + "; " +
+			aliasAdvice(standing, orgs)
+		// Two people at two domains is also the shape of one human who changed
+		// employer, which no alias should describe: aliasing there would rewrite
+		// every other address on the old domain too. So where the group is a pair,
+		// the merge that settles just those two is offered alongside.
+		if len(group) == 2 {
+			reason += fmt.Sprintf("; if instead it is one human at two employers, "+
+				"`corpus merge -keep %s -drop %s`", group[0].addr, group[1].addr)
 		}
 		refusals = append(refusals, Refusal{
 			Rule: RuleFirstNameOrg, Subject: first, Reason: reason, People: idsOf(group)})
 	}
 	return merges, refusals, nil
+}
+
+// aliasAdvice names the `corpus alias` commands that would fold a set of domains
+// into one organisation, pointing every other domain at the one still in use.
+//
+// Getting the direction right is the whole point of consulting standing. The
+// previous phrasing took the domains in the order they sorted, which on this
+// corpus printed `-from termina.io -to threadlet.com.au`: the live domain folded
+// into the dead one. That command is not merely untidy — the surviving person is
+// chosen by it, and CanonicalAddress then sends every later sighting to the
+// domain nobody uses.
+func aliasAdvice(standing map[string]domainWeight, orgs []string) string {
+	current := currentDomain(standing, orgs)
+	var cmds []string
+	for _, o := range orgs {
+		if o != current {
+			cmds = append(cmds, fmt.Sprintf("`corpus alias -from %s -to %s`", o, current))
+		}
+	}
+	return "if those are one organisation, " + strings.Join(cmds, " and ") +
+		" says so and this rule folds them"
+}
+
+// domainWeight is what the corpus can say about how live a domain is.
+type domainWeight struct {
+	people int
+	lastTS int64
+}
+
+// currentDomain picks the domain an organisation is reachable at now: the one
+// most of its people are on, and where that ties, the one seen most recently.
+//
+// People before recency because recency alone is misleading here — a Slack
+// account registered under a pre-rebrand address keeps that domain's last-seen
+// date level with the current one for as long as the workspace is in use, so on
+// this corpus the dead domain and the live one are a day apart. How many
+// distinct humans hold an address there is the question actually being asked.
+//
+// It is a suggestion in a refusal, never a merge: a human reads the command
+// before running it, which is the only reason a heuristic is allowed to choose
+// here at all.
+func currentDomain(standing map[string]domainWeight, orgs []string) string {
+	best := orgs[0]
+	for _, o := range orgs[1:] {
+		a, b := standing[o], standing[best]
+		switch {
+		case a.people != b.people:
+			if a.people > b.people {
+				best = o
+			}
+		case a.lastTS != b.lastTS:
+			if a.lastTS > b.lastTS {
+				best = o
+			}
+		case o < best:
+			best = o
+		}
+	}
+	return best
+}
+
+func domainStanding(s *Store) (map[string]domainWeight, error) {
+	rows, err := s.db.Query(`
+		select substr(i.value, instr(i.value,'@')+1) domain,
+		       count(distinct i.person_id),
+		       coalesce(max(e.ts), 0)
+		  from identities i
+		  left join participants pa on pa.person_id = i.person_id
+		  left join entries e on e.id = pa.entry_id
+		 where i.kind = ?
+		 group by domain`, KindEmail)
+	if err != nil {
+		return nil, fmt.Errorf("weighing domains: %w", err)
+	}
+	defer rows.Close()
+	out := map[string]domainWeight{}
+	for rows.Next() {
+		var d string
+		var w domainWeight
+		if err := rows.Scan(&d, &w.people, &w.lastTS); err != nil {
+			return nil, err
+		}
+		out[d] = w
+	}
+	return out, rows.Err()
 }
 
 // orgPerson is a person reduced to what this rule keys on. A person who does not
@@ -298,7 +441,8 @@ type orgPerson struct {
 	first   string
 	surname string // the rest of the name, normalised; empty when there is only one token
 	org     string
-	weight  int // participation count, for choosing a survivor
+	addr    string // the work address that decided the org, so a refusal can name a command
+	weight  int    // participation count, for choosing a survivor
 }
 
 func orgPeople(s *Store) ([]orgPerson, error) {
@@ -361,6 +505,7 @@ func orgPeople(s *Store) ([]orgPerson, error) {
 				break
 			}
 			org, ok = domain, true
+			p.addr = canon
 		}
 		if !ok {
 			continue
@@ -522,7 +667,8 @@ var genericLocalParts = map[string]bool{
 	"pricing": true, "quotes": true, "reply": true, "rfp": true, "root": true,
 	"sales": true, "security": true, "service": true, "staff": true,
 	"subscriptions": true, "support": true, "system": true, "team": true,
-	"tender": true, "tenders": true, "webmaster": true,
+	"tender": true, "tenders": true, "updates": true, "webmaster": true,
+	"weekly": true, "digest": true, "digests": true,
 }
 
 // genericLocalPart reports whether a local part names a role rather than a
@@ -542,6 +688,41 @@ func genericLocalPart(local string) bool {
 		return r == '.' || r == '-' || r == '_'
 	}) {
 		if len(w) >= 3 && genericLocalParts[w] {
+			return true
+		}
+	}
+	return false
+}
+
+// unattendedMailboxes are the local parts of mailboxes that exist in order not to
+// be a person: mail leaves them because a machine sent it, and nobody reads what
+// comes back. They are a strict subset of genericLocalParts, and the distinction
+// carries weight — a shared inbox (manager@, accounts@, support@) is answered by
+// a human and can legitimately be the mailbox one person is known by, whereas
+// nothing a human does makes them noreply@.
+var unattendedMailboxes = map[string]bool{
+	"alerts": true, "automation": true, "automations": true, "bot": true,
+	"bounce": true, "bounces": true, "devnull": true, "digest": true,
+	"donotreply": true, "do-not-reply": true, "mailer": true,
+	"mailer-daemon": true, "no-reply": true, "noreply": true,
+	"notification": true, "notifications": true, "postmaster": true,
+	"system": true, "updates": true,
+}
+
+// unattendedMailbox reports whether a local part names a machine sender. Read the
+// same way as genericLocalPart, so `noreply+123` and `alerts.eu` land.
+func unattendedMailbox(local string) bool {
+	local = strings.ToLower(strings.TrimSpace(local))
+	if i := strings.Index(local, "+"); i > 0 {
+		local = local[:i]
+	}
+	if unattendedMailboxes[local] {
+		return true
+	}
+	for _, w := range strings.FieldsFunc(local, func(r rune) bool {
+		return r == '.' || r == '-' || r == '_'
+	}) {
+		if len(w) >= 3 && unattendedMailboxes[w] {
 			return true
 		}
 	}
@@ -654,4 +835,197 @@ func addressNamesPerson(local, name string) bool {
 		}
 	}
 	return false
+}
+
+// planPersonalMailboxes folds a webmail account into the work account of the same
+// human: the shape where one person is zach@company and zachpmanson@gmail, two
+// addresses with no domain in common and no local part in common either.
+//
+// Neither of the other rules can reach it. A webmail host is not an employer, so
+// there is no organisation to key on, and the alias table has nothing to say
+// about gmail.com. What is left is the name — and a name alone merged two
+// colleagues in the one place this corpus already proves that goes wrong, so the
+// name has to be corroborated by the address it is claimed to belong to:
+//
+//   - the display names must match, after normalisation, and carry a surname.
+//     One first name is refused outright: `clin01673388437@gmail.com` against a
+//     colleague called "Clin" is a name spelt in a local part and nothing more,
+//     and a first name is exactly what two people share.
+//   - every word of the name must appear in the webmail local part, so
+//     bovantelau@gmail carries both names and a stranger's initials do not
+//     qualify. Containment and not addressNamesPerson: that gate answers "not
+//     contradicted" on one name word, which is far too little to be the whole of
+//     the evidence for a merge.
+//   - exactly one work-anchored person of that name may exist. Where a rebrand
+//     has left three, this refuses and names the alias that collapses them, since
+//     merging into one of three would pick an arbitrary third of one human.
+//
+// The work account survives: it holds the Slack profile and the domain still in
+// use, so it is what every later sighting goes on matching.
+func planPersonalMailboxes(s *Store) ([]PlannedMerge, []Refusal, error) {
+	work, err := orgPeople(s)
+	if err != nil {
+		return nil, nil, err
+	}
+	byName := map[string][]orgPerson{}
+	for _, p := range work {
+		byName[p.name] = append(byName[p.name], p)
+	}
+	held, err := webmailPeople(s)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var merges []PlannedMerge
+	var refusals []Refusal
+	for _, w := range held {
+		peers := byName[w.name]
+		if len(peers) == 0 {
+			continue // nobody of that name at any organisation: not a duplicate at all
+		}
+		switch {
+		case len(nameTokens(w.name)) < 2:
+			refusals = append(refusals, Refusal{
+				Rule: RulePersonalMailbox, Subject: w.addr,
+				Reason: "one name and no surname, so the webmail local part corroborates " +
+					"nothing; `corpus merge -keep " + peers[0].addr + " -drop " + w.addr +
+					"` if a human knows",
+				People: append([]int64{w.id}, idsOf(peers)...)})
+		case !localPartSpellsName(w.addr, w.name):
+			refusals = append(refusals, Refusal{
+				Rule: RulePersonalMailbox, Subject: w.addr,
+				Reason: "the webmail local part does not spell the whole name; `corpus merge -keep " +
+					peers[0].addr + " -drop " + w.addr + "` if a human knows",
+				People: append([]int64{w.id}, idsOf(peers)...)})
+		case len(peers) > 1:
+			standing, err := domainStanding(s)
+			if err != nil {
+				return nil, nil, err
+			}
+			orgs := distinctOrgs(peers)
+			reason := fmt.Sprintf("%d work accounts of that name, at %s, so picking one "+
+				"would file a whole human under a fraction of themselves",
+				len(peers), strings.Join(orgs, " and "))
+			if len(orgs) > 1 {
+				reason += "; " + aliasAdvice(standing, orgs) + ", and this rule then folds it"
+			}
+			refusals = append(refusals, Refusal{
+				Rule: RulePersonalMailbox, Subject: w.addr, Reason: reason,
+				People: append([]int64{w.id}, idsOf(peers)...)})
+		default:
+			m := PlannedMerge{
+				Rule: RulePersonalMailbox, KeepID: peers[0].id, DropID: w.id,
+				Evidence: "webmail local part " + w.addr + " spells the whole name of " +
+					peers[0].addr,
+			}
+			if err := describe(s, &m); err != nil {
+				return nil, nil, err
+			}
+			merges = append(merges, m)
+		}
+	}
+	return merges, refusals, nil
+}
+
+// webmailPerson is a person the corpus knows only at a webmail host.
+type webmailPerson struct {
+	id   int64
+	name string // normalised display name
+	addr string // the webmail address, one of possibly several
+}
+
+// webmailPeople lists everyone whose every address is at a webmail host.
+//
+// "Every", so a person already holding a work address is left to the
+// organisation rule: they are anchored somewhere, and a webmail address beside a
+// work one is one person's two mailboxes rather than the split this rule repairs.
+// A person with a Slack uid is left out for the same reason — a Slack profile is
+// an anchor, and one that a workspace ties to a work account.
+func webmailPeople(s *Store) ([]webmailPerson, error) {
+	rows, err := s.db.Query(`
+		select distinct p.id, p.display_name
+		  from people p join identities i on i.person_id = p.id and i.kind = ?
+		 where not exists (select 1 from identities x
+		                    where x.person_id = p.id and x.kind = ?)
+		 order by p.id`, KindEmail, KindSlackUID)
+	if err != nil {
+		return nil, fmt.Errorf("finding webmail-only people: %w", err)
+	}
+	defer rows.Close()
+	type row struct {
+		id   int64
+		name string
+	}
+	var all []row
+	for rows.Next() {
+		var r row
+		if err := rows.Scan(&r.id, &r.name); err != nil {
+			return nil, err
+		}
+		all = append(all, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	var out []webmailPerson
+	for _, r := range all {
+		p, named := personNameParts(r.name)
+		if !named {
+			continue // a person named by their own address has no name to corroborate
+		}
+		addrs, err := emailsOf(s, r.id)
+		if err != nil {
+			return nil, err
+		}
+		webmail := ""
+		for _, addr := range addrs {
+			at := strings.LastIndex(addr, "@")
+			if at < 0 || !freeMailDomain(addr[at+1:]) {
+				webmail = ""
+				break
+			}
+			if webmail == "" || len(addr) < len(webmail) {
+				webmail = addr // the shortest is the untagged mailbox, where there is one
+			}
+		}
+		if webmail == "" {
+			continue
+		}
+		out = append(out, webmailPerson{id: r.id, name: p.name, addr: webmail})
+	}
+	return out, nil
+}
+
+// localPartSpellsName reports whether an address's local part contains every word
+// of a name. Two-letter words are ignored, as nameTokens already drops them, and
+// a plus tag is read too — a tag is the account holder's own note and spells
+// nothing about anybody else.
+func localPartSpellsName(addr, name string) bool {
+	local, _, found := strings.Cut(addr, "@")
+	if !found {
+		return false
+	}
+	squashed := strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
+			return r
+		}
+		if r >= 'A' && r <= 'Z' {
+			return r + ('a' - 'A')
+		}
+		return -1
+	}, local)
+	toks := nameTokens(name)
+	if len(toks) == 0 {
+		return false
+	}
+	for _, t := range toks {
+		if len(t) < 3 {
+			continue
+		}
+		if !strings.Contains(squashed, t) {
+			return false
+		}
+	}
+	return true
 }

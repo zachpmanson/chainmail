@@ -411,3 +411,348 @@ func TestAddressNamesPerson(t *testing.T) {
 		}
 	}
 }
+
+// inThread puts an entry inside a named conversation and cc's everyone on it,
+// which is the corroboration the second placeholder tier weighs.
+func inThread(t *testing.T, s *Store, container, ext string, people ...int64) int64 {
+	t.Helper()
+	e := entry(ext, "about the meter numbers")
+	e.Container = container
+	rec, err := s.Put(e, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range people {
+		if err := Participate(s, rec.ID, p, RoleCc); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return rec.ID
+}
+
+// The cause the second tier exists for. A name read off an attribution line
+// inside a forwarded body never shared an entry with the human it names — the
+// address was not in that body at all — so the strict tier has nothing to weigh.
+// The conversation around it does: the human is in the thread the sighting sits
+// in, and is the only one of that name there.
+func TestDedupeFoldsANameOnlyPersonFoundInTheSameThread(t *testing.T) {
+	s := open(t)
+	real := person(t, s, "dai.rhys@quarry.fed", "Dai Rhys")
+	ghost := placeholder(t, s, "Dai Rhys")
+	inThread(t, s, "thread-1", "mail:<one@x>", real)
+	inThread(t, s, "thread-1", "mail:<two@x>", ghost)
+
+	plan := dedupe(t, s, true)
+	if len(plan.Merges) != 1 {
+		t.Fatalf("merges = %d, want 1: %+v", len(plan.Merges), plan.Merges)
+	}
+	m := plan.Merges[0]
+	if m.Rule != RuleNameInThread {
+		t.Fatalf("rule = %q, want %q", m.Rule, RuleNameInThread)
+	}
+	if m.KeepID != real || m.DropID != ghost {
+		t.Fatalf("kept %d dropped %d, want the address-holder %d to survive",
+			m.KeepID, m.DropID, real)
+	}
+	var reason string
+	if err := s.DB().QueryRow(`select reason from person_merges`).Scan(&reason); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(reason, RuleNameInThread) {
+		t.Fatalf("reason = %q, want the tier that decided it, so causes stay separable", reason)
+	}
+}
+
+// The cost of the looser tier, and the limit on it: where two humans of one name
+// read the same thread, the thread says nothing about which one the placeholder
+// is. Refused, and the refusal names the command a human can use, because these
+// two have no address between them that `corpus merge -keep` could take.
+func TestDedupeRefusesTwoNamesakesInOneThread(t *testing.T) {
+	s := open(t)
+	one := person(t, s, "dai.rhys@quarry.fed", "Dai Rhys")
+	two := person(t, s, "d.rhys@millrace.fed", "Dai Rhys")
+	ghost := placeholder(t, s, "Dai Rhys")
+	inThread(t, s, "thread-1", "mail:<one@x>", one, two)
+	inThread(t, s, "thread-1", "mail:<two@x>", ghost)
+
+	plan := dedupe(t, s, true)
+	if len(plan.Merges) != 0 {
+		t.Fatalf("merged %+v; the thread holds two of that name", plan.Merges)
+	}
+	r := refusalFor(plan, "dai rhys")
+	if r == nil {
+		t.Fatalf("no refusal for the group: %+v", plan.Refusals)
+	}
+	if !strings.Contains(r.Reason, "-keep-id") {
+		t.Fatalf("reason = %q, want the command that would settle it", r.Reason)
+	}
+	if countPeople(t, s) != 3 {
+		t.Fatalf("people = %d, want 3 untouched", countPeople(t, s))
+	}
+	_ = ghost
+}
+
+// A notification mailbox carries the name of whoever it last wrote to, so the
+// name on it is evidence about nothing. Folding a placeholder into one would file
+// a whole notification stream under a person, and the result reads as an ordinary
+// busy human forever after.
+func TestDedupeNeverFoldsAPlaceholderIntoANotificationMailbox(t *testing.T) {
+	s := open(t)
+	bot := person(t, s, "notifications@forge.fed", "Dai Rhys")
+	ghost := placeholder(t, s, "Dai Rhys")
+	onEntry(t, s, "mail:<one@x>", bot, ghost)
+
+	plan := dedupe(t, s, true)
+	if len(plan.Merges) != 0 {
+		t.Fatalf("merged %+v; notifications@ is not Dai", plan.Merges)
+	}
+	if countPeople(t, s) != 2 {
+		t.Fatalf("people = %d, want 2", countPeople(t, s))
+	}
+}
+
+// The other side of that line, held deliberately: a shared inbox a human answers
+// is still the mailbox one person is known by. `manager.easterncreek@` really is
+// hers, and a rule that refused it would refuse the merges the placeholder rule
+// exists to make.
+func TestDedupeStillFoldsAPlaceholderIntoASharedInboxAHumanAnswers(t *testing.T) {
+	s := open(t)
+	real := person(t, s, "manager.eastreach@trellishotels.fed", "Ainsley Portleigh")
+	ghost := placeholder(t, s, "Ainsley Portleigh")
+	onEntry(t, s, "mail:<one@x>", real, ghost)
+
+	plan := dedupe(t, s, true)
+	if len(plan.Merges) != 1 || plan.Merges[0].KeepID != real {
+		t.Fatalf("plan = %+v, want the shared inbox kept", plan.Merges)
+	}
+}
+
+// The third cause: one human with a work account and a webmail account, no domain
+// and no local part in common. The webmail local part spelling both names is the
+// whole of the evidence, and the work account survives because it is what a Slack
+// profile and every later header will go on matching.
+func TestDedupeFoldsAWebmailAccountIntoTheWorkAccountItSpells(t *testing.T) {
+	s := open(t)
+	work := person(t, s, "bryn@quarry.fed", "Bryn Lowther")
+	home := person(t, s, "brynlowther@gmail.com", "Bryn Lowther")
+
+	plan := dedupe(t, s, true)
+	if len(plan.Merges) != 1 {
+		t.Fatalf("merges = %d, want 1: %+v", len(plan.Merges), plan.Merges)
+	}
+	m := plan.Merges[0]
+	if m.Rule != RulePersonalMailbox || m.KeepID != work || m.DropID != home {
+		t.Fatalf("plan = %+v, want the work account %d to keep %d", m, work, home)
+	}
+}
+
+// A first name in a webmail local part is what two colleagues share, so it is not
+// evidence. Refused, with the merge that settles it if a human knows better.
+func TestDedupeRefusesAWebmailAccountWithNoSurname(t *testing.T) {
+	s := open(t)
+	person(t, s, "bryn@quarry.fed", "Bryn")
+	person(t, s, "bryn0198773@gmail.com", "Bryn")
+
+	plan := dedupe(t, s, true)
+	if len(plan.Merges) != 0 {
+		t.Fatalf("merged %+v; one first name proves nothing", plan.Merges)
+	}
+	r := refusalFor(plan, "bryn0198773@gmail.com")
+	if r == nil || !strings.Contains(r.Reason, "corpus merge -keep bryn@quarry.fed") {
+		t.Fatalf("refusal = %+v, want the command that would settle it", r)
+	}
+}
+
+// An initialled webmail address is the shape a stranger's account also has:
+// `tdempst@` fits Bo Vantel and Tim Dempster equally. Refused rather than
+// guessed, and reported so a human can settle it.
+func TestDedupeRefusesAWebmailAccountThatSpellsOnlyPartOfTheName(t *testing.T) {
+	s := open(t)
+	person(t, s, "bryn@quarry.fed", "Bryn Lowther")
+	person(t, s, "blowth@gmail.com", "Bryn Lowther")
+
+	plan := dedupe(t, s, true)
+	if len(plan.Merges) != 0 {
+		t.Fatalf("merged %+v; blowth@ spells one name of two", plan.Merges)
+	}
+	if r := refusalFor(plan, "blowth@gmail.com"); r == nil {
+		t.Fatalf("no refusal reported: %+v", plan.Refusals)
+	}
+}
+
+// Two humans of one name at two organisations, which nothing says are one
+// organisation: two people really do share a name, and a webmail account spelling
+// it belongs to at most one of them. Whichever were chosen, the other's mail would
+// be filed under a person who reads as entirely ordinary afterwards, so neither
+// is.
+func TestDedupeRefusesAWebmailAccountWhenTwoOrganisationsHoldTheName(t *testing.T) {
+	s := open(t)
+	person(t, s, "bryn.lowther@quarry.fed", "Bryn Lowther")
+	person(t, s, "bryn.lowther@millrace.fed", "Bryn Lowther")
+	home := person(t, s, "brynlowther@gmail.com", "Bryn Lowther")
+
+	plan := dedupe(t, s, true)
+	for _, m := range plan.Merges {
+		if m.DropID == home || m.KeepID == home {
+			t.Fatalf("folded %+v; two organisations hold that name", m)
+		}
+	}
+	if countPeople(t, s) != 3 {
+		t.Fatalf("people = %d, want 3", countPeople(t, s))
+	}
+}
+
+// A rebrand hides the webmail rule's evidence as well as the organisation rule's:
+// until the alias is declared, one human's work account is three, and folding a
+// webmail account into one of them files them under a third of themselves. So it
+// is refused with the alias that collapses the three, and lands once that exists.
+func TestDedupeFoldsAWebmailAccountOnlyOnceTheRebrandIsDeclared(t *testing.T) {
+	s := open(t)
+	person(t, s, "bryn@quarry.fed", "Bryn Lowther")
+	person(t, s, "bryn@millrace.fed", "Bryn Lowther")
+	home := person(t, s, "brynlowther@gmail.com", "Bryn Lowther")
+	onEntry(t, s, "mail:<one@x>", home)
+
+	before := dedupe(t, s, false)
+	for _, m := range before.Merges {
+		if m.DropID == home {
+			t.Fatalf("folded %+v while the work account was two people", m)
+		}
+	}
+	r := refusalFor(before, "brynlowther@gmail.com")
+	if r == nil || !strings.Contains(r.Reason, "corpus alias -from") {
+		t.Fatalf("refusal = %+v, want the alias that collapses the work accounts", r)
+	}
+
+	if _, err := AddDomainAlias(s, "quarry.fed", "millrace.fed", "rebrand"); err != nil {
+		t.Fatal(err)
+	}
+	after := dedupe(t, s, true)
+	if len(after.Merges) != 1 || after.Merges[0].DropID != home {
+		t.Fatalf("plan = %+v, want the webmail account folded once the work account is one",
+			after.Merges)
+	}
+}
+
+// A refusal that names the wrong direction is worse than one that names none: the
+// command reads as authoritative, and running it points the live domain at the
+// dead one, which decides the survivor and sends every later sighting there.
+func TestDedupeSuggestsTheAliasTowardTheLiveDomain(t *testing.T) {
+	s := open(t)
+	// millrace is where the organisation is now: more of its people are there.
+	person(t, s, "bryn@quarry.fed", "Bryn Lowther")
+	person(t, s, "bryn.lowther@millrace.fed", "Bryn Lowther")
+	person(t, s, "cass.enright@millrace.fed", "Cass Enright")
+	person(t, s, "dai.rhys@millrace.fed", "Dai Rhys")
+
+	plan := dedupe(t, s, false)
+	r := refusalFor(plan, "bryn")
+	if r == nil {
+		t.Fatalf("no refusal for the split first name: %+v", plan.Refusals)
+	}
+	if !strings.Contains(r.Reason, "-from quarry.fed -to millrace.fed") {
+		t.Fatalf("reason = %q, want the dead domain folded into the live one", r.Reason)
+	}
+}
+
+// Applying the new rules twice must find nothing the second time. A rule that
+// feeds on its own output would merge until the corpus was one person.
+func TestDedupeAppliedTwiceIsANoOpForEveryRule(t *testing.T) {
+	s := open(t)
+	real := person(t, s, "dai.rhys@quarry.fed", "Dai Rhys")
+	ghost := placeholder(t, s, "Dai Rhys")
+	inThread(t, s, "thread-1", "mail:<one@x>", real)
+	inThread(t, s, "thread-1", "mail:<two@x>", ghost)
+	person(t, s, "bryn@quarry.fed", "Bryn Lowther")
+	person(t, s, "brynlowther@gmail.com", "Bryn Lowther")
+
+	first := dedupe(t, s, true)
+	if len(first.Merges) != 2 {
+		t.Fatalf("first pass merged %d, want 2: %+v", len(first.Merges), first.Merges)
+	}
+	people := countPeople(t, s)
+	second := dedupe(t, s, true)
+	if len(second.Merges) != 0 {
+		t.Fatalf("second pass merged %+v", second.Merges)
+	}
+	if countPeople(t, s) != people {
+		t.Fatalf("people went %d -> %d on a second pass", people, countPeople(t, s))
+	}
+}
+
+// The same inertness the older rules are held to, asserted over the new ones:
+// unchanged to the byte, not "changed only where it does not matter".
+func TestDedupeDryRunWritesNothingForTheNewRules(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "corpus.db")
+	func() {
+		s, err := Open(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer s.Close()
+		real := person(t, s, "dai.rhys@quarry.fed", "Dai Rhys")
+		ghost := placeholder(t, s, "Dai Rhys")
+		inThread(t, s, "thread-1", "mail:<one@x>", real)
+		inThread(t, s, "thread-1", "mail:<two@x>", ghost)
+		person(t, s, "bryn@quarry.fed", "Bryn Lowther")
+		person(t, s, "brynlowther@gmail.com", "Bryn Lowther")
+	}()
+	before := digest(t, path)
+
+	var plan DedupePlan
+	func() {
+		s, err := Open(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer s.Close()
+		plan = dedupe(t, s, false)
+	}()
+	if len(plan.Merges) != 2 {
+		t.Fatalf("merges = %d, want the two it would make", len(plan.Merges))
+	}
+	if after := digest(t, path); after != before {
+		t.Fatalf("the corpus changed under a dry run: %s -> %s", before, after)
+	}
+}
+
+func TestUnattendedMailbox(t *testing.T) {
+	for _, c := range []struct {
+		local string
+		want  bool
+	}{
+		{"noreply", true},
+		{"notifications", true},
+		{"no-reply+42", true},
+		{"alerts.eu", true},
+		{"manager.eastreach", false}, // a shared inbox is answered by a human
+		{"accounts", false},
+		{"support", false},
+		{"bryn", false},
+	} {
+		if got := unattendedMailbox(c.local); got != c.want {
+			t.Errorf("unattendedMailbox(%q) = %v, want %v", c.local, got, c.want)
+		}
+	}
+}
+
+func TestLocalPartSpellsName(t *testing.T) {
+	for _, c := range []struct {
+		addr, name string
+		want       bool
+	}{
+		{"brynlowther@gmail.com", "Bryn Lowther", true},
+		{"bryn.lowther88@gmail.com", "Bryn Lowther", true},
+		{"brynlowther+salsa@gmail.com", "Bryn Lowther", true},
+		{"blowther@gmail.com", "Bryn Lowther", false}, // an initial spells nothing
+		{"bryn@gmail.com", "Bryn Lowther", false},
+		{"lowther@gmail.com", "Bryn Lowther", false},
+		{"levpony@gmail.com", "Bryn Lowther", false},
+		{"brynlowther", "Bryn Lowther", false}, // not an address
+	} {
+		if got := localPartSpellsName(c.addr, c.name); got != c.want {
+			t.Errorf("localPartSpellsName(%q, %q) = %v, want %v",
+				c.addr, c.name, got, c.want)
+		}
+	}
+}

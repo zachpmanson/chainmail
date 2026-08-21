@@ -316,7 +316,7 @@ func TestMergeCandidatesReportsWithoutMerging(t *testing.T) {
 	person(t, s, "alice@two.example", "A. Smith")
 	person(t, s, "bob@one.example", "Bob")
 
-	cands, err := MergeCandidates(s)
+	cands, _, err := MergeCandidates(s)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -333,4 +333,124 @@ func TestMergeCandidatesReportsWithoutMerging(t *testing.T) {
 	if n != 3 {
 		t.Fatalf("people: got %d, want 3 — reporting must not merge", n)
 	}
+}
+
+// The trap an alias sets when it refuses. Two humans hold the same local part at
+// two domains of one organisation, so the alias declines to fold them — and then
+// canonicalisation would send every later sighting of the old address to the
+// OTHER person, which is worse than the split it was asked to repair: the split
+// was visible and this is not.
+func TestAliasedAddressStillResolvesToItsOwnPersonWhenTheAliasRefusedIt(t *testing.T) {
+	s := open(t)
+	old := person(t, s, "alys@quarry.fed", "Alys Salado")
+	cur := person(t, s, "alys@millrace.fed", "Alys Nguyen")
+	r, err := AddDomainAlias(s, "quarry.fed", "millrace.fed", "rebrand")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Refused) != 1 {
+		t.Fatalf("refused %d pairs, want the one with two surnames", len(r.Refused))
+	}
+
+	got, err := ResolveAddress(s, Address{Addr: "alys@quarry.fed", Name: "Alys Salado"},
+		"mail:from-header")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != old {
+		t.Fatalf("a later sighting of alys@quarry.fed resolved to %d, want %d; "+
+			"the alias must not hand one human's mail to another", got, old)
+	}
+	_ = cur
+}
+
+// The other half of that: an address the corpus has never seen still follows the
+// alias, which is the whole point of declaring one.
+func TestAnUnseenAddressOnTheOldDomainStillFollowsTheAlias(t *testing.T) {
+	s := open(t)
+	cur := person(t, s, "cass@millrace.fed", "Cass Enright")
+	if _, err := AddDomainAlias(s, "quarry.fed", "millrace.fed", "rebrand"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ResolveAddress(s, Address{Addr: "cass@quarry.fed", Name: "Cass Enright"},
+		"mail:from-header")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != cur {
+		t.Fatalf("cass@quarry.fed resolved to %d, want the current account %d", got, cur)
+	}
+}
+
+// A role mailbox at two organisations is two mailboxes, so the pair is not a
+// merge to consider and listing it only teaches the reader to skim. It is counted
+// instead, because "nothing was left out" and "eighty-eight things were left out"
+// must not print the same.
+func TestCandidatesLeavesOutRoleMailboxesAtTwoDomains(t *testing.T) {
+	s := open(t)
+	a := person(t, s, "info@quarry.fed", "Trellis Support")
+	b := person(t, s, "info@millrace.fed", "Bramble Support")
+	person(t, s, "noreply@quarry.fed", "Quarry")
+	person(t, s, "noreply@millrace.fed", "Millrace")
+
+	cs, suppressed, err := MergeCandidates(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if suppressed != 2 {
+		t.Fatalf("suppressed = %d, want the two role-mailbox pairs", suppressed)
+	}
+	for _, c := range cs {
+		if c.AID == a && c.BID == b {
+			t.Fatalf("info@ at two firms was listed as a candidate: %+v", c)
+		}
+	}
+}
+
+// A pair a human is asked to judge needs the command that would settle it beside
+// it, and for a shared local part across domains there are two honest answers: an
+// alias where the domains are one organisation, a merge where one human moved
+// employer. The alias must point at the domain still in use.
+func TestCandidatesNameTheCommandThatWouldSettleThem(t *testing.T) {
+	s := open(t)
+	person(t, s, "bryn@quarry.fed", "Bryn Lowther")
+	person(t, s, "bryn@millrace.fed", "Bryn Lowther")
+	person(t, s, "cass@millrace.fed", "Cass Enright")
+	person(t, s, "dai@millrace.fed", "Dai Rhys")
+
+	cs, _, err := MergeCandidates(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cs) != 1 {
+		t.Fatalf("candidates = %d, want the one split pair: %+v", len(cs), cs)
+	}
+	if !strings.Contains(cs[0].Suggest, "-from quarry.fed -to millrace.fed") {
+		t.Fatalf("suggestion = %q, want the alias toward the live domain", cs[0].Suggest)
+	}
+	if !strings.Contains(cs[0].Suggest, "corpus merge -keep bryn@millrace.fed") {
+		t.Fatalf("suggestion = %q, want the merge that keeps the live account", cs[0].Suggest)
+	}
+}
+
+// A placeholder has no address, so `corpus merge -keep <email>` cannot name it.
+// The suggestion has to be the id form or the refusal names nothing runnable.
+func TestCandidatesSuggestIdsForAPersonWithNoAddress(t *testing.T) {
+	s := open(t)
+	real := person(t, s, "dai.rhys@quarry.fed", "Dai Rhys")
+	ghost := placeholder(t, s, "Dai Rhys")
+
+	cs, _, err := MergeCandidates(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cs) != 1 {
+		t.Fatalf("candidates = %d, want the one name pair: %+v", len(cs), cs)
+	}
+	want := "-keep-id"
+	if !strings.Contains(cs[0].Suggest, want) {
+		t.Fatalf("suggestion = %q, want %s: neither side can be named by address",
+			cs[0].Suggest, want)
+	}
+	_, _ = real, ghost
 }

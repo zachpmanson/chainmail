@@ -476,7 +476,7 @@ func TestRepairWillNotFoldOnePlaceholderIntoAnother(t *testing.T) {
 	if r.Merged != 0 || len(r.Declined) != 1 {
 		t.Fatalf("repair = %+v, want no merge and one decline", r)
 	}
-	if r.Declined[0].Reason != "no address-backed person of that name" {
+	if r.Declined[0].Reason != "no person of that name holds a mailbox a human answers" {
 		t.Fatalf("decline reason = %q", r.Declined[0].Reason)
 	}
 	var n int
@@ -545,7 +545,7 @@ func TestRepairDeclinesANamesakeFromAnotherConversation(t *testing.T) {
 	if r.Merged != 0 || r.Cleaned != 1 || len(r.Declined) != 1 {
 		t.Fatalf("repair = %+v, want the name cleaned and the merge declined", r)
 	}
-	if r.Declined[0].Reason != "shares no conversation with the person of that name" {
+	if r.Declined[0].Reason != "shares no entry with the person of that name" {
 		t.Fatalf("decline reason = %q", r.Declined[0].Reason)
 	}
 	got, err := PersonByIdentity(s, KindDisplayName, "ada fenwick")
@@ -678,7 +678,7 @@ func onEntry(t *testing.T, s *Store, ext string, people ...int64) int64 {
 
 func candidatePair(t *testing.T, s *Store, a, b int64) bool {
 	t.Helper()
-	cs, err := MergeCandidates(s)
+	cs, _, err := MergeCandidates(s)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -945,7 +945,7 @@ func TestRepairRefusesAWeldedAddressHeldByADifferentlyNamedPerson(t *testing.T) 
 		t.Fatalf("people: got %d, want the two the repair refused to fold", n)
 	}
 	// left as it was, so the pair is still there to be reviewed
-	cs, err := MergeCandidates(s)
+	cs, _, err := MergeCandidates(s)
 	if err != nil {
 		t.Fatal(err)
 	}

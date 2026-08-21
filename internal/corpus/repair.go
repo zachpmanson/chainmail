@@ -678,44 +678,100 @@ func strongestTarget(s *Store, holder int64, cands []int64) (int64, string, erro
 	if len(cands) == 0 {
 		return 0, "no other person of that name", nil
 	}
-	var withIdentity, strong []int64
-	for _, c := range cands {
-		ok, err := hasMachineIdentity(s, c)
-		if err != nil {
-			return 0, "", err
-		}
-		if !ok {
-			continue
-		}
-		withIdentity = append(withIdentity, c)
-		ok, err = sharesEveryEntry(s, holder, c)
-		if err != nil {
-			return 0, "", err
-		}
-		if ok {
-			strong = append(strong, c)
-		}
+	anchored, strong, err := weighCandidates(s, holder, cands, sharesEveryEntry)
+	if err != nil {
+		return 0, "", err
 	}
 	switch {
 	case len(strong) == 1:
 		return strong[0], "", nil
 	case len(strong) > 1:
 		return 0, fmt.Sprintf("%d people of that name fit equally well", len(strong)), nil
-	case len(withIdentity) == 0:
-		return 0, "no address-backed person of that name", nil
+	case len(anchored) == 0:
+		return 0, "no person of that name holds a mailbox a human answers", nil
 	default:
-		return 0, "shares no conversation with the person of that name", nil
+		return 0, "shares no entry with the person of that name", nil
 	}
 }
 
-// hasMachineIdentity reports whether a person is anchored to something derivable
-// — an address or a Slack uid — rather than being a display name and nothing else.
-func hasMachineIdentity(s *Store, person int64) (bool, error) {
-	var n int
-	err := s.db.QueryRow(`
-		select count(*) from identities
-		 where person_id=? and kind in (?,?)`, person, KindEmail, KindSlackUID).Scan(&n)
-	return n > 0, err
+// threadTarget is strongestTarget's question asked of the thread rather than the
+// entry: which one human of this name is in every conversation the placeholder
+// was seen in. An empty reason means it found nothing to add — the caller's
+// strict tier has already said why — and a reason with no id means the looser
+// evidence fits more than one person, which is worth saying over the strict
+// tier's silence because it names a group a human could still settle.
+func threadTarget(s *Store, holder int64, cands []int64) (int64, string, error) {
+	_, strong, err := weighCandidates(s, holder, cands, sharesEveryThread)
+	if err != nil {
+		return 0, "", err
+	}
+	switch {
+	case len(strong) == 1:
+		return strong[0], "", nil
+	case len(strong) > 1:
+		return 0, fmt.Sprintf("%d people of that name share every thread with them",
+			len(strong)), nil
+	}
+	return 0, "", nil
+}
+
+// weighCandidates splits the candidates into those anchored to a human at all and
+// those a corroboration test also agrees with.
+func weighCandidates(s *Store, holder int64, cands []int64,
+	shares func(*Store, int64, int64) (bool, error)) (anchored, strong []int64, err error) {
+	for _, c := range cands {
+		ok, err := anchorsAHuman(s, c)
+		if err != nil {
+			return nil, nil, err
+		}
+		if !ok {
+			continue
+		}
+		anchored = append(anchored, c)
+		ok, err = shares(s, holder, c)
+		if err != nil {
+			return nil, nil, err
+		}
+		if ok {
+			strong = append(strong, c)
+		}
+	}
+	return anchored, strong, nil
+}
+
+// anchorsAHuman reports whether a person is anchored to something derivable — an
+// address or a Slack uid — that a human could be behind, rather than being a
+// display name and nothing else, or a machine.
+//
+// The machine clause is why this is not a bare identity count. A display name is
+// whatever a header put there, and a notification mailbox carries the name of
+// whoever it notified: this corpus has `notifications@github.com` named for the
+// human it mails. Folding a placeholder into that would attribute a repository's
+// whole notification stream to a person, and no later reading of the corpus would
+// show anything odd about it. A shared inbox a human answers — manager@,
+// accounts@, support@ — is deliberately still a target: those really do stand for
+// one person here, and refusing them would refuse the merges this whole rule
+// exists to make.
+func anchorsAHuman(s *Store, person int64) (bool, error) {
+	rows, err := s.db.Query(`
+		select kind, value from identities
+		 where person_id=? and kind in (?,?)`, person, KindEmail, KindSlackUID)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	attended := false
+	for rows.Next() {
+		var kind, value string
+		if err := rows.Scan(&kind, &value); err != nil {
+			return false, err
+		}
+		local, _, found := strings.Cut(value, "@")
+		if kind != KindEmail || !found || !unattendedMailbox(local) {
+			attended = true
+		}
+	}
+	return attended, rows.Err()
 }
 
 // sharesEveryEntry reports whether other took part in every entry person did.
@@ -735,6 +791,37 @@ func sharesEveryEntry(s *Store, person, other int64) (bool, error) {
 		 where a.person_id = ?
 		   and not exists (select 1 from participants b
 		                    where b.entry_id = a.entry_id and b.person_id = ?)`,
+		person, other).Scan(&alone); err != nil {
+		return false, err
+	}
+	return alone == 0, nil
+}
+
+// sharesEveryThread reports whether other took part in the same mail thread as
+// every entry person took part in. It is sharesEveryEntry widened by one hop, so
+// anything the strict test accepts this accepts too — an entry shares a thread
+// with itself.
+//
+// A person on no entry at all fails, for sharesEveryEntry's reason: there is
+// nothing there to corroborate. An entry in no thread fails as well, and that is
+// the honest answer rather than an oversight — a message with no container has no
+// conversation to look in, so this test has nothing to say about it.
+func sharesEveryThread(s *Store, person, other int64) (bool, error) {
+	var total, alone int
+	if err := s.db.QueryRow(
+		`select count(*) from participants where person_id=?`, person).Scan(&total); err != nil {
+		return false, err
+	}
+	if total == 0 {
+		return false, nil
+	}
+	if err := s.db.QueryRow(`
+		select count(*) from participants a
+		  join entries ea on ea.id = a.entry_id
+		 where a.person_id = ?
+		   and not exists (select 1 from entries eb
+		                     join participants b on b.entry_id = eb.id
+		                    where eb.container = ea.container and b.person_id = ?)`,
 		person, other).Scan(&alone); err != nil {
 		return false, err
 	}

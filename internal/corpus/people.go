@@ -454,10 +454,30 @@ func resolveSubaddressed(s *Store, tagged, base, displayName, rule string) (int6
 // participant, and leaving them out is what made recipients invisible before.
 func ResolveAddress(s *Store, a Address, rule string) (int64, error) {
 	if a.Addr != "" {
-		// Apply any configured domain alias first, so an account on a pre-rebrand
-		// domain resolves to the same person as the current one rather than
-		// creating a second. The alias, where one applied, replaces the rule so the
-		// reason stays traceable.
+		// An address the corpus already holds as an identity resolves on that
+		// identity, alias or no alias. Almost always this is the same answer the
+		// alias would give — a folded pair leaves the old address pointing at the
+		// survivor — but it differs in the one case that matters: where an alias
+		// matched two people and refused to fold them, because their names say
+		// they are two humans. Canonicalising there would send every later sighting
+		// of the old address to the OTHER person and quietly orphan this one, so
+		// the refusal would repair nothing and corrupt attribution from then on.
+		literal, err := NormaliseIdentity(KindEmail, a.Addr)
+		if err != nil {
+			return 0, err
+		}
+		var known int64
+		switch err := s.db.QueryRow(`select person_id from identities where kind=? and value=?`,
+			KindEmail, literal).Scan(&known); {
+		case err == nil:
+			return ResolveWithRule(s, KindEmail, literal, a.Name, rule)
+		case err != sql.ErrNoRows:
+			return 0, fmt.Errorf("looking up %s: %w", literal, err)
+		}
+		// Otherwise apply any configured domain alias, so an account on a
+		// pre-rebrand domain resolves to the same person as the current one rather
+		// than creating a second. The alias, where one applied, replaces the rule so
+		// the reason stays traceable.
 		canon, aliasRule, err := CanonicalAddress(s, a.Addr)
 		if err != nil {
 			return 0, err
