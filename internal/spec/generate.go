@@ -42,10 +42,10 @@ type Options struct {
 // Generate builds a timeline spec from the corpus.
 //
 // It fills every field that follows mechanically from what was ingested, and
-// leaves the interpretive ones — body prose, openItems, cross-links, subtitle —
-// empty for a later pass. `body` is emitted as the empty string because the
-// schema requires the key: an empty body is a visible gap, an invented one is
-// not.
+// leaves the interpretive ones — openItems, cross-links, subtitle, the editorial
+// gloss — empty for a later pass. `body` carries the message's own text
+// converted to presentation HTML (see body.go), never a summary of it: nothing
+// here writes a word the sender did not.
 func Generate(store *corpus.Store, opts Options) (Spec, error) {
 	if store == nil {
 		return Spec{}, errors.New("spec: nil store")
@@ -154,7 +154,7 @@ func (b *builder) add(r *entryRow) {
 		Org:       orgOf(from.Address, b.opts.Orgs),
 		FromEmail: from.Address,
 		To:        recipientLine(to, cc),
-		Body:      "", // left for the pass that writes prose; never invented here
+		Body:      bodyHTML(r),
 		// Empty hands the inference to the renderer, which labels an inferred zone
 		// as inferred.
 		TZ:      tz,

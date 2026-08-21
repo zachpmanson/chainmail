@@ -193,12 +193,43 @@ func TestGenerateLeavesInterpretationEmpty(t *testing.T) {
 		t.Errorf("subtitle/openItems must be left for a human: %q %v", sp.Subtitle, sp.OpenItems)
 	}
 	for _, m := range sp.Messages {
-		if m.Body != "" {
-			t.Errorf("body = %q, want empty — prose is never invented here", m.Body)
+		// A body carries the message's own words, rendered — never a gloss written
+		// about it.
+		if m.Body != "<p>invented body</p>" {
+			t.Errorf("body = %q, want the stored text rendered and nothing added", m.Body)
 		}
 		if m.Mentions != nil || m.Label != "" || m.Meta {
 			t.Errorf("interpretive field set on %s", m.ID)
 		}
+	}
+}
+
+func TestGenerateCarriesTheStoredTextIntoTheBody(t *testing.T) {
+	s := open(t)
+	id := person(t, s, "Ada Byron", "ada@loomworks.example")
+	// A hard-wrapped paragraph with an address in angle brackets under it: raw,
+	// the address is an unknown tag and disappears from the page.
+	body := "Confirming that the meter reads for both of the sites landed inside\n" +
+		"the billing period we agreed.\n\nAda <ada@loomworks.example>"
+	res, err := s.Put(corpus.Entry{
+		Source: corpus.SourceMail, ExtID: "mail:<w@loomworks>",
+		TS: time.Date(2026, 5, 4, 9, 0, 0, 0, time.UTC), TZ: "AEST",
+		PersonID: id, Container: "T3", Subject: "Meter reads", BodyText: body,
+	}, &corpus.Mail{
+		GmailID: "g-w", MessageID: "<w@loomworks>",
+		From: "Ada Byron <ada@loomworks.example>", To: "bo@fjordline.example",
+	}, nil)
+	if err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	if err := s.Sight(res.ID, 0, "direct", ""); err != nil {
+		t.Fatalf("Sight: %v", err)
+	}
+	sp := generate(t, s, Options{Containers: []string{"T3"}})
+	want := "<p>Confirming that the meter reads for both of the sites landed inside " +
+		"the billing period we agreed.</p><p>Ada &lt;ada@loomworks.example&gt;</p>"
+	if sp.Messages[0].Body != want {
+		t.Errorf("body = %q,\nwant %q", sp.Messages[0].Body, want)
 	}
 }
 

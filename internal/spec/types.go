@@ -4,10 +4,12 @@
 // The division of labour is deliberate: everything here is a join, not a
 // judgement. Dates, zones, senders, recipients, subjects, reply edges,
 // attachments and the participant cast all follow mechanically from what was
-// ingested, so they are produced here. The fields that need a human or a model —
-// the prose gloss in `body`, `openItems`, cross-links, the editorial `subtitle`
-// — are left empty on purpose, so that a later pass has a narrow, well-defined
-// job rather than a blank page.
+// ingested, so they are produced here, and so is `body` — the message's own text
+// rendered as presentation HTML (body.go), which is a conversion rather than a
+// judgement. The fields that need a human or a model — `openItems`, cross-links,
+// the editorial `subtitle`, any gloss written *about* a message — are left empty
+// on purpose, so that a later pass has a narrow, well-defined job rather than a
+// blank page.
 //
 // Selection is also out of scope: Generate is told which entries to render (see
 // Options) and expands only the reply-graph closure of that set.

@@ -16,6 +16,7 @@ type entryRow struct {
 	ParentID  int64 // 0 when unset or unresolved
 	ParentRef string
 	Kind      string
+	Source    string // "mail" or "slack"; decides how far a body may be reshaped
 	TS        time.Time
 	TZ        string
 	TZOffset  *int // minutes east of UTC; nil when the source stated none
@@ -27,6 +28,8 @@ type entryRow struct {
 	From      string
 	To        string
 	Cc        string
+	BodyText  string
+	BodyHTML  string  // empty for every entry docket collected; see bodyHTML
 	Direct    bool    // seen in the mailbox itself, not only inside a quote
 	SeenIn    []int64 // entries this one was found quoted or forwarded inside
 	Atts      []attRow
@@ -127,11 +130,13 @@ func load(store *corpus.Store, ids []int64) ([]*entryRow, error) {
 	db := store.DB()
 	ph, args := placeholders(ids)
 	rows, err := db.Query(`
-		select e.id, coalesce(e.parent_id, 0), coalesce(e.parent_ref, ''), e.kind, e.ts,
+		select e.id, coalesce(e.parent_id, 0), coalesce(e.parent_ref, ''), e.kind,
+		       e.source, e.ts,
 		       coalesce(e.tz, ''), e.tz_offset, coalesce(p.display_name, ''),
 		       coalesce(e.container, ''),
 		       coalesce(e.subject, ''), e.ext_id, coalesce(d.gmail_id, ''),
-		       coalesce(d.from_addr, ''), coalesce(d.to_addr, ''), coalesce(d.cc_addr, '')
+		       coalesce(d.from_addr, ''), coalesce(d.to_addr, ''), coalesce(d.cc_addr, ''),
+		       coalesce(e.body_text, ''), coalesce(e.body_html, '')
 		from entries e
 		left join people p      on p.id = e.person_id
 		left join mail_detail d on d.entry_id = e.id
@@ -147,8 +152,9 @@ func load(store *corpus.Store, ids []int64) ([]*entryRow, error) {
 	for rows.Next() {
 		var r entryRow
 		var ts int64
-		if err := rows.Scan(&r.ID, &r.ParentID, &r.ParentRef, &r.Kind, &ts, &r.TZ,
-			&r.TZOffset, &r.Person, &r.Container, &r.Subject, &r.ExtID, &r.GmailID, &r.From, &r.To, &r.Cc); err != nil {
+		if err := rows.Scan(&r.ID, &r.ParentID, &r.ParentRef, &r.Kind, &r.Source, &ts, &r.TZ,
+			&r.TZOffset, &r.Person, &r.Container, &r.Subject, &r.ExtID, &r.GmailID, &r.From, &r.To, &r.Cc,
+			&r.BodyText, &r.BodyHTML); err != nil {
 			return nil, err
 		}
 		r.TS = time.Unix(ts, 0).UTC()
