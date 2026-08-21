@@ -22,7 +22,12 @@ which was CSS and JS trapped in string literals) into real files with real tests
       sources panels, reply links, permalinks
 - [x] `render <spec> -o page.html [--since prev.html]` — one self-contained file
 - [x] Dev app: load a spec by path, URL or drag-and-drop
-- [ ] Persistence and semantic search across trails
+- [x] Corpus persistence: every message from every source, with the reply graph
+      materialised, and lexical search over two FTS5 tokenizers
+- [x] Semantic search: one vector per entry via a local model, fused into the
+      lexical ranking. `corpus embed` fills them in; `corpus search -mode
+      semantic|hybrid` uses them. Needs `ollama pull nomic-embed-text` — the
+      corpus is personal mail, so nothing is sent anywhere
 
 Structural parity with the original Python renderer is verified against a real
 58-entry trail: 25 of 25 counted properties match (entries, chains, spines, reply

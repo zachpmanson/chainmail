@@ -156,6 +156,44 @@ func TestQuotedHistoryIsNotEmbeddedTwice(t *testing.T) {
 	}
 }
 
+// A body that opens straight into a forward or an attribution relayed somebody
+// else's words and added none of its own. Embedding the relayed text would give
+// this entry a vector of a message that is already in the corpus under its own
+// id — the same double-counting quoted history causes, arriving by a different
+// route.
+func TestABareRelayContributesNoWordsOfItsOwn(t *testing.T) {
+	cases := []struct{ name, body string }{
+		{"bare forward", "---------- Forwarded message ---------\n" +
+			"From: Dana Ruiz <dana@example.com>\nSubject: Meter read\n\n" +
+			"Please find the April readings attached for both of the sites.\n"},
+		{"empty reply", "On Mon, 12 May 2025 at 09:14, Dana Ruiz <dana@example.com> wrote:\n" +
+			"> the readings are attached and the totals look right to me\n"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			// A long subject, so the fixture fails the gate for the reason under
+			// test rather than for want of a few words.
+			text, reason := EmbedTextFor(SourceMail,
+				"Meter read for the two Kaiapoi sites, April", c.body)
+			if reason != "" {
+				t.Fatalf("unexpected skip: %s", reason)
+			}
+			if strings.Contains(text, "readings") {
+				t.Errorf("relayed text was embedded as this entry's own: %q", text)
+			}
+			if !strings.Contains(text, "Kaiapoi") {
+				t.Errorf("subject lost: %q", text)
+			}
+		})
+	}
+	// With nothing but a short subject, such an entry has no topic at all.
+	if _, reason := EmbedTextFor(SourceMail, "Meter read",
+		"---------- Forwarded message ---------\nFrom: Dana Ruiz <dana@example.com>\n\n"+
+			"Please find the April readings attached for both of the sites.\n"); reason != skipShort {
+		t.Errorf("reason = %q, want %q", reason, skipShort)
+	}
+}
+
 func TestSlackBodiesAreEmbeddedWhole(t *testing.T) {
 	// A Slack message is already atomic, and its ">" lines are someone quoting
 	// for emphasis rather than a client nesting a forward. Peeling them would

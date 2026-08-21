@@ -134,9 +134,7 @@ type SemanticQuery struct {
 func EmbedTextFor(source, subject, bodyText string) (text, reason string) {
 	body := bodyText
 	if source == SourceMail {
-		if blocks := unnest.Peel(bodyText); len(blocks) > 0 {
-			body = blocks[0].Text
-		}
+		body = ownWords(bodyText)
 	}
 	body = reduceURLs(body)
 	subject = stripReplyPrefixes(subject)
@@ -156,6 +154,29 @@ func EmbedTextFor(source, subject, bodyText string) (text, reason string) {
 		return "", skipShort
 	}
 	return clipRunes(text, maxEmbedRunes), ""
+}
+
+// ownWords is the part of a mail body its sender wrote, and nothing else.
+//
+// It is the first peeled block, but only when that block is the sender's own:
+// unquoted, at depth zero and introduced by no boundary. A body that opens
+// straight into "---------- Forwarded message ---------", or into an
+// attribution, is a bare forward or an empty reply — its first block is already
+// somebody else's text, stored as an entry of its own, and taking it here would
+// give this entry a vector of a message it merely relayed. The honest answer is
+// that such an entry contributed no words, so it falls back on its subject and
+// usually fails the content gate, which is correct: there is nothing here to
+// find that is not findable at the original.
+func ownWords(bodyText string) string {
+	blocks := unnest.Peel(bodyText)
+	if len(blocks) == 0 {
+		return ""
+	}
+	first := blocks[0]
+	if first.Depth != 0 || first.Kind != unnest.KindNone || first.Sentinel != "" {
+		return ""
+	}
+	return first.Text
 }
 
 var (
@@ -509,6 +530,8 @@ type EmbedModelStats struct {
 // EmbedStats reports coverage per model, so a half-finished migration is
 // visible as such rather than as a corpus that mysteriously lost recall.
 func (s *Store) EmbedStats() ([]EmbedModelStats, error) {
+	// max(dim) is a group-by formality: a model's rows all share its width,
+	// because a response of any other width is refused before it is stored.
 	rows, err := s.db.Query(`
 		select model, max(dim),
 		       sum(vec is not null), sum(vec is null),
@@ -530,13 +553,16 @@ func (s *Store) EmbedStats() ([]EmbedModelStats, error) {
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	// Eligible is a second query per model rather than part of the aggregate,
+	// because it counts entries that have no row in this table at all — which is
+	// the number that says how much of a backfill is left.
 	for i := range out {
 		sel, args := embedSelection(out[i].Model, out[i].Dim)
 		if err := s.db.QueryRow(`select count(*) `+sel, args...).Scan(&out[i].Eligible); err != nil {
 			return nil, err
 		}
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 // PruneEmbeddings drops every vector not produced by keep, and reports how many
