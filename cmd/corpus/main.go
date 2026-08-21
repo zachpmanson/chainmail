@@ -63,7 +63,14 @@ const usage = `usage: corpus <command> [flags]
   search        -q <text>  ranked chains across every source; -mode chooses
                            lexical, semantic or hybrid retrieval, -topk how deep
                            the vector ranking votes, -dim -model -url -timeout
-                           the model it asks
+                           the model it asks; -entries lists what matched instead
+                           of the chains it matched in
+                -expand N  print the whole membership of the N best chains that
+                           qualify, not only the entries that matched, marking
+                           each entry match or chain. A chain qualifies on
+                           -expand-min matched entries (default 2) and, if set,
+                           an -expand-ratio of matched to total; -expand-cap
+                           bounds how many entries all of it prints
   embed         [-model -url -dim -batch -limit -timeout -prune]
                            embed the entries that have no current vector, so
                            semantic search has something to search; resumable,
@@ -141,6 +148,14 @@ func run(args []string) error {
 		person := fs.String("person", "", "involving this address, name or slack uid")
 		limit := fs.Int("limit", 10, "chains to return")
 		entries := fs.Bool("entries", false, "list matching entries instead of chains")
+		expand := fs.Int("expand", 0,
+			"expand this many of the best qualifying chains to their whole membership")
+		expandMin := fs.Int("expand-min", 2,
+			"matched entries a chain needs before it qualifies to be expanded")
+		expandRatio := fs.Float64("expand-ratio", 0,
+			"matched/total a chain needs to qualify; 0 applies no ratio gate")
+		expandCap := fs.Int("expand-cap", 300,
+			"stop expanding once this many entries have been printed; 0 is unbounded")
 		mode := fs.String("mode", modeLexical,
 			"retrieval: lexical | semantic | hybrid (the last two need `corpus embed`)")
 		topk := fs.Int("topk", 0, "how deep the vector ranking votes (default 100)")
@@ -163,6 +178,7 @@ func run(args []string) error {
 			return errors.New("usage: corpus search -q <text> [-person X] [-since YYYY-MM-DD]\n" +
 				"       [-limit N] [-entries] [-mode lexical|semantic|hybrid] [-topk N]\n" +
 				"       [-model M] [-dim N] [-url U] [-timeout D]\n" +
+				"       [-expand N] [-expand-min N] [-expand-ratio F] [-expand-cap N]\n" +
 				"       (-q may be empty only when -person or -since narrows it)")
 		}
 		query, err := buildQuery(*q, *since, *person, *limit)
@@ -185,18 +201,17 @@ func run(args []string) error {
 			fmt.Printf("\n%d entries\n", len(hits))
 			return nil
 		}
+		if *expand > 0 {
+			query.PerChain = expandPerChain
+		}
 		chains, err := s.SearchChains(query)
 		if err != nil {
 			return err
 		}
-		for _, c := range chains {
-			fmt.Printf("%-46s  %2d/%-3d matched  %s -> %s\n",
-				trunc(orElse(c.Subject, c.RootExtID), 46), c.Matched, c.Entries,
-				c.First.Format("2006-01-02"), c.Last.Format("2006-01-02"))
-			fmt.Printf("    root %s\n", c.RootExtID)
-		}
-		fmt.Printf("\n%d chains\n", len(chains))
-		return nil
+		return printChains(os.Stdout, s.Chain, chains, expandOpts{
+			Top: *expand, MinMatched: *expandMin,
+			MinRatio: *expandRatio, Cap: *expandCap,
+		})
 
 	case "embed":
 		// Backfill. Long-running and interruptible on purpose: this is minutes of
