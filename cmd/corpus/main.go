@@ -11,7 +11,7 @@
 //	corpus repair                     undo what a folded header did to identities
 //	corpus search -q <text>           which chains are about this
 //	corpus spec -q <text> -o f.json   a timeline spec for those chains
-//	corpus unnest -id <gmail-id>      what extraction recovers from one message
+//	corpus unnest <ext-id>            what extraction recovers from one message
 package main
 
 import (
@@ -57,7 +57,8 @@ const usage = `usage: corpus <command> [flags]
   search        -q <text>  ranked chains across every source
   show          <ext-id>   one entry in full, or -chain for the whole thread
   spec          -q <text>  write a timeline spec for the renderer
-  unnest        -id <id>   show the blocks one mail body contains
+  unnest        <ext-id>   show the blocks one body contains, from the corpus;
+                           -id <gmail-id> reads one from the mailbox instead
   stats                    counts, coverage and what is missing
   people                   everyone in the corpus, with their identities
   candidates               probable duplicate identities, unmerged
@@ -232,44 +233,33 @@ func run(args []string) error {
 		return nil
 
 	case "unnest":
-		// Inspect what quoted-block extraction recovers from one message, before
-		// it is wired into ingest.
+		// Which blocks a body contains, and where it splits. The id is the one
+		// search prints, and positional for the same reason `show` is: pasting a
+		// result straight back in is the whole point of the command.
 		fs := flag.NewFlagSet("unnest", flag.ContinueOnError)
-		id := fs.String("id", "", "gmail message id")
+		id := fs.String("id", "", "the entry to peel; also accepted positionally")
 		full := fs.Bool("full", false, "print each block's text in full")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		if *id == "" {
-			return fmt.Errorf("usage: corpus unnest -id <gmail-id> [-full]")
+		target := *id
+		if target == "" {
+			target = fs.Arg(0)
 		}
-		msg, err := mailingest.Client{}.Read(*id)
+		if target == "" {
+			return errors.New("usage: corpus unnest <ext-id> [-full]\n" +
+				"       ids are the ones search prints, e.g. mail:<...>, slack:C1:1.2, quote:<sha>;\n" +
+				"       -id also takes a raw Gmail id, read live, for a message not yet ingested")
+		}
+		s, err := corpus.Open(path)
 		if err != nil {
 			return err
 		}
-		blocks := unnest.Peel(msg.Body)
-		fmt.Printf("%s\n%s\n%d bytes -> %d blocks\n\n",
-			msg.Subject, msg.Date, len(msg.Body), len(blocks))
-		for i, b := range blocks {
-			fmt.Printf("── block %d  depth %d  %s  lines %d-%d\n",
-				i, b.Depth, kindName(b.Kind), b.Start, b.End)
-			if b.Sentinel != "" {
-				for _, l := range strings.Split(b.Sentinel, "\n") {
-					fmt.Printf("   ⌐ %s\n", trunc(l, 96))
-				}
-			}
-			text := b.Text
-			if !*full {
-				if lines := strings.Split(text, "\n"); len(lines) > 3 {
-					text = strings.Join(lines[:3], "\n") + fmt.Sprintf("\n   … %d more lines", len(lines)-3)
-				}
-			}
-			for _, l := range strings.Split(text, "\n") {
-				fmt.Printf("     %s\n", trunc(l, 96))
-			}
-			fmt.Println()
-		}
-		return nil
+		defer s.Close()
+		return runUnnest(os.Stdout, unnestSource{
+			show: s.Show,
+			read: mailingest.Client{}.Read,
+		}, target, *full)
 
 	case "alias":
 		fs := flag.NewFlagSet("alias", flag.ContinueOnError)
