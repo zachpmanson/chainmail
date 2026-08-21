@@ -14,12 +14,16 @@ import (
 // mailbox message or was recovered from someone's quoted history — are part of
 // the entry here rather than something the caller has to join for.
 type Shown struct {
-	ID        int64
-	ExtID     string
-	Source    string
-	Quoted    bool
-	TS        time.Time
-	TZ        string
+	ID     int64
+	ExtID  string
+	Source string
+	Quoted bool
+	TS     time.Time
+	TZ     string
+	// TZOffset is minutes east of UTC as the source stated it, nil when it stated
+	// none. Carried alongside TZ because a label does not determine an offset, so
+	// a caller placing this entry's wall clock has nothing else to place it with.
+	TZOffset  *int
 	Author    string
 	Subject   string
 	Body      string
@@ -53,16 +57,17 @@ var ErrNotFound = errors.New("no entry with that id")
 func (s *Store) Show(extID string) (Shown, error) {
 	var e Shown
 	var ts int64
+	var off sql.NullInt64
 	var tz, author, subject, body, container, permalink, parent, parentRef sql.NullString
 	err := s.db.QueryRow(`
-		select e.id, e.ext_id, e.source, e.quoted, e.ts, e.tz,
+		select e.id, e.ext_id, e.source, e.quoted, e.ts, e.tz, e.tz_offset,
 		       p.display_name, e.subject, e.body_text, e.container, e.permalink,
 		       par.ext_id, e.parent_ref
 		from entries e
 		left join people p   on p.id = e.person_id
 		left join entries par on par.id = e.parent_id
 		where e.ext_id = ?`, extID).
-		Scan(&e.ID, &e.ExtID, &e.Source, &e.Quoted, &ts, &tz,
+		Scan(&e.ID, &e.ExtID, &e.Source, &e.Quoted, &ts, &tz, &off,
 			&author, &subject, &body, &container, &permalink, &parent, &parentRef)
 	if errors.Is(err, sql.ErrNoRows) {
 		return e, fmt.Errorf("%q: %w", extID, ErrNotFound)
@@ -71,6 +76,10 @@ func (s *Store) Show(extID string) (Shown, error) {
 		return e, err
 	}
 	e.TS = time.Unix(ts, 0)
+	if off.Valid {
+		m := int(off.Int64)
+		e.TZOffset = &m
+	}
 	e.TZ, e.Author, e.Subject = tz.String, author.String, subject.String
 	e.Body, e.Container, e.Permalink = body.String, container.String, permalink.String
 	e.Parent, e.ParentRef = parent.String, parentRef.String
