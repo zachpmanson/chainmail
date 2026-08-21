@@ -31,9 +31,9 @@ func (f *fakeMailbox) add(m mailingest.Message) {
 	f.threads[m.ThreadID] = append(f.threads[m.ThreadID], m.ID)
 }
 
-func (f *fakeMailbox) Search(query string, limit int) ([]mailingest.Envelope, error) {
+func (f *fakeMailbox) Search(query string, limit int, _ string) ([]mailingest.Envelope, mailingest.Page, error) {
 	if f.fail != nil {
-		return nil, f.fail
+		return nil, mailingest.Page{}, f.fail
 	}
 	// Drop the date narrowing before matching: the fake has no clock, and every
 	// message it holds is meant to be in range.
@@ -60,7 +60,7 @@ func (f *fakeMailbox) Search(query string, limit int) ([]mailingest.Envelope, er
 			}
 		}
 	}
-	return out, nil
+	return out, mailingest.Page{}, nil
 }
 
 func (f *fakeMailbox) Read(id string) (mailingest.Message, error) {

@@ -40,7 +40,12 @@ import (
 // fake — everything else here is a query against a store a test can build in
 // memory.
 type Mailbox interface {
-	Search(query string, limit int) ([]mailingest.Envelope, error)
+	// Search takes a page token and returns the next one, matching the client's
+	// own signature: a refresh reads the first page of a narrowed query, so it
+	// passes an empty token and ignores the continuation rather than paging —
+	// finishing a walk is `ingest mail`'s job, and duplicating it here would give
+	// two commands a cursor over the same query.
+	Search(query string, limit int, pageToken string) ([]mailingest.Envelope, mailingest.Page, error)
 	Read(id string) (mailingest.Message, error)
 	Thread(id string) (mailingest.ThreadResult, error)
 }
@@ -342,7 +347,7 @@ func queryFetch(store *corpus.Store, mb Mailbox, q string, opts Options, known m
 	if opts.After != "" {
 		p.Sent = fmt.Sprintf("%s after:%s", q, opts.After)
 	}
-	envs, err := mb.Search(p.Sent, searchLimit(opts.Limit))
+	envs, _, err := mb.Search(p.Sent, searchLimit(opts.Limit), "")
 	if err != nil {
 		return p, fmt.Errorf("re-running query %q: %w", p.Sent, err)
 	}
