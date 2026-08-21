@@ -51,6 +51,8 @@ type msg struct {
 	to        string
 	cc        string
 	gmail     string
+	text      string // defaults to a placeholder; set it when the body matters
+	html      string
 	atts      []corpus.Attachment
 }
 
@@ -60,10 +62,14 @@ func put(t *testing.T, s *corpus.Store, m msg) int64 {
 	if err != nil {
 		t.Fatalf("bad ts %q: %v", m.ts, err)
 	}
+	text := m.text
+	if text == "" {
+		text = "invented body"
+	}
 	res, err := s.Put(corpus.Entry{
 		Source: corpus.SourceMail, ExtID: m.ext, TS: ts, TZ: m.tz, TZOffset: m.offset,
 		PersonID: m.person, Container: m.container, Subject: m.subject,
-		ParentRef: m.inReplyTo, BodyText: "invented body",
+		ParentRef: m.inReplyTo, BodyText: text, BodyHTML: m.html,
 	}, &corpus.Mail{
 		GmailID: m.gmail, MessageID: m.messageID, InReplyTo: m.inReplyTo,
 		From: m.from, To: m.to, Cc: m.cc,
@@ -595,5 +601,45 @@ func TestParentEdgeIsAbsentWhenTheParentIsNotInTheSpec(t *testing.T) {
 	sp := generate(t, s, Options{ExtIDs: []string{"mail:<z@loomworks>"}})
 	if sp.Messages[0].Parent != "" {
 		t.Errorf("parent = %q, want none", sp.Messages[0].Parent)
+	}
+}
+
+func TestAnUnspooledEntryTakesItsMarkupFromTheHostItWasFoundIn(t *testing.T) {
+	// The wiring, end to end: the host's markup is not in the selection and has
+	// to be fetched on its own, and it is the only place this entry's table
+	// exists. Everything about how a block is chosen is in htmlrecover_test.go.
+	s := trail(t)
+	host := put(t, s, msg{
+		ext: "mail:<h@fjordline>", ts: "2026-03-04T09:00:00+11:00", tz: "AEDT",
+		container: "T3", subject: "Column mapping",
+		from: "Bo Halvorsen <bo@fjordline.example>", gmail: "g-h",
+		text: "Numbers look right, thanks.\n",
+		html: gmailHost,
+	})
+	if err := s.Sight(host, 0, "direct", ""); err != nil {
+		t.Fatalf("Sight: %v", err)
+	}
+	q := put(t, s, msg{
+		ext: "quote:sha-3", ts: "2026-03-03T08:00:00+11:00", tz: "AEDT",
+		container: "T3", subject: "Column mapping",
+		from: "Ada Byron <ada@loomworks.example>",
+		text: gmailQuotedText,
+	})
+	if err := s.Sight(q, host, "quoted", ""); err != nil {
+		t.Fatalf("Sight: %v", err)
+	}
+
+	// The host is deliberately outside the selection: only the quoted entry is
+	// asked for, and its markup still has to be found.
+	sp := generate(t, s, Options{EntryIDs: []int64{q}})
+	if len(sp.Messages) != 1 {
+		t.Fatalf("messages = %d, want just the quoted entry", len(sp.Messages))
+	}
+	body := sp.Messages[0].Body
+	if !strings.Contains(body, "<table>") {
+		t.Errorf("body = %q, want the table from the host's markup", body)
+	}
+	if strings.Contains(body, "Numbers look right") {
+		t.Errorf("body = %q, want the entry's own block and not its host's text", body)
 	}
 }

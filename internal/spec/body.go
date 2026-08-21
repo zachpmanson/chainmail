@@ -24,10 +24,12 @@ import (
 // the message and is emitted as an empty string rather than an empty <p>, which
 // would render as a bubble claiming content that does not exist.
 //
-// Two sources: the sender's own text/html part, and failing that the text
-// rendition shaped by textToHTML. The markup path can decline — see htmlbody.go
-// for what makes it decline — and declining lands on the text, which is plain
-// but never wrong.
+// Three sources, in order of how close each is to what the sender actually sent:
+// their own text/html part; the same message quoted inside somebody else's part,
+// where the markup survives even though this entry has none of its own; and last
+// the text rendition, shaped by textToHTML. Every markup path can decline —
+// see htmlbody.go and htmlrecover.go for what makes it decline — and declining
+// lands here, on the text, which is plain but never wrong.
 //
 // The markup is emitted unsanitised. That is stated where the choice is made,
 // at the top of htmlbody.go, and tracked as issue #14.
@@ -35,6 +37,13 @@ func bodyHTML(r *entryRow) string {
 	st := styleFor(r)
 	if r.BodyHTML != "" {
 		if s := htmlBody(r.BodyHTML, st); s != "" {
+			return s
+		}
+	} else if !r.Direct {
+		// Only for an entry that was never in the mailbox. A message that was
+		// there and has no html part was sent as plain text, and the markup a
+		// quoting client wrapped it in later is that client's, not the sender's.
+		if s := recoverHTML(r.BodyText, r.HostHTML); s != "" {
 			return s
 		}
 	}
