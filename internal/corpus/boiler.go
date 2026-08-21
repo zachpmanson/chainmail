@@ -42,7 +42,9 @@ func (s *Store) Boilerplate() (map[int64]boiler.Fold, error) {
 // boiler.Detect.
 //
 // The reduction is boiler's own, not a second copy of it: a tail counted here
-// and folded in internal/spec has to be measured the same way at both ends.
+// and folded in internal/spec has to be measured the same way at both ends. What
+// is counted is Match rather than Visible, since the same appended block reaches
+// the corpus in as many spellings as there are clients that rendered it.
 // Whether the quoted history is peeled follows the entry's provenance, exactly
 // as it does at render time — a mailbox message's trail is elsewhere on the page
 // and comes off, while a message recovered from inside a quote is already one
@@ -78,7 +80,7 @@ func (s *Store) MailBodies() ([]boiler.Message, error) {
 		if !ok {
 			continue
 		}
-		m.Lines = boiler.Visible(lines)
+		m.Lines = boiler.Match(lines)
 		if len(m.Lines) == 0 {
 			continue
 		}

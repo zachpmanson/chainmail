@@ -115,14 +115,16 @@ func (r Rules) filled() Rules {
 	return r
 }
 
-// Message is one body offered as evidence, reduced to the lines a reader sees.
+// Message is one body offered as evidence, reduced to what a tail is compared
+// on.
 //
-// Lines holds the visible lines only, blanks dropped: clients disagree about how
-// much vertical space a signature gets, and a blank line more or less is not a
-// different signature. See Lines and Visible for the reduction, which the caller
-// must apply identically to the evidence and to the body it later folds — a
-// tail counted against one reduction and applied against another folds the
-// wrong number of lines.
+// Lines holds the visible lines only, blanks dropped and each one normalised for
+// comparison: clients disagree about how much vertical space a signature gets
+// and about how to spell a link inside it, and neither disagreement makes a
+// different signature. See Lines, Visible and Match for the reduction. One entry
+// per visible line, so a Fold's line count means the same thing to the caller
+// that folds the sender's own text — a tail counted against one reduction and
+// applied against another folds the wrong number of lines.
 type Message struct {
 	ID     int64
 	Author int64  // corpus person id; 0 where the sender is unidentified
@@ -199,7 +201,11 @@ func qualifies(t map[digest]*tally, group func(Message) (string, bool),
 	if !ok {
 		return Fold{}, false
 	}
-	e := t[tailKey(g, m.Lines, n)]
+	k, ok := tailKey(g, m.Lines, n)
+	if !ok {
+		return Fold{}, false
+	}
+	e := t[k]
 	if e == nil || e.n < repeats || len(e.who) < senders {
 		return Fold{}, false
 	}
@@ -222,7 +228,10 @@ func tallies(msgs []Message, window int, group func(Message) (string, bool)) map
 			continue
 		}
 		for n := 1; n <= window && n <= len(m.Lines); n++ {
-			k := tailKey(g, m.Lines, n)
+			k, ok := tailKey(g, m.Lines, n)
+			if !ok {
+				continue
+			}
 			e := out[k]
 			if e == nil {
 				e = &tally{who: map[int64]bool{}}
@@ -257,14 +266,41 @@ func domainGroup(m Message) (string, bool) {
 // person's prose as another's signature — a 10^-28 event.
 type digest [16]byte
 
-func tailKey(group string, lines []string, n int) digest {
+// tailKey is the identity of a message's last n lines, and false where those
+// lines carry no words to identify.
+//
+// The lines are joined on a space and not on a newline, which deliberately makes
+// the key blind to where the wrapping fell: one sender's notice arrives
+// hard-wrapped at one width in the mailbox copy and at another in somebody's
+// quote of it, and those are the same appended block seen twice, not two blocks.
+// A line-sensitive key splits them, and splitting them is what drops a sender to
+// their colleagues' shorter block. The cost is that a two-line tail can key the
+// same as the one-line tail that spells the same words — which is the intent,
+// since it is one block — so a tally counts messages and not line counts, and
+// Fold.Lines stays each message's own count.
+//
+// An empty key is not evidence. A tail of nothing but placeholders normalises
+// away, and every such tail in the corpus would otherwise agree with every
+// other and fold on a match about no words at all.
+func tailKey(group string, lines []string, n int) (digest, bool) {
+	var b strings.Builder
+	for _, l := range lines[len(lines)-n:] {
+		if l == "" {
+			continue
+		}
+		if b.Len() > 0 {
+			b.WriteByte(' ')
+		}
+		b.WriteString(l)
+	}
+	if b.Len() == 0 {
+		return digest{}, false
+	}
 	h := sha256.New()
 	h.Write([]byte(group))
 	h.Write([]byte{0})
-	// Newline cannot appear inside a line (they were split on it), so joining is
-	// unambiguous and two different tails cannot spell one key.
-	h.Write([]byte(strings.Join(lines[len(lines)-n:], "\n")))
+	h.Write([]byte(b.String()))
 	var d digest
 	copy(d[:], h.Sum(nil))
-	return d
+	return d, true
 }
