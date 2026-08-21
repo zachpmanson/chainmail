@@ -312,12 +312,17 @@ func (s *Store) Sight(entryID, seenIn int64, kind, detail string) error {
 // present. Re-runnable: a parent dangling today may arrive next week once a
 // forward containing it is extracted. Returns how many edges it resolved.
 func (s *Store) ResolveParents() (int64, error) {
+	// Scoped to mail. A parent_ref means a different thing in each source — a
+	// Message-ID here, a thread_ts in Slack — and without the scope a Slack entry
+	// whose thread_ts happened to equal some Message-ID would be given a mail
+	// parent, silently welding two conversations together. No real ts collides
+	// with a real Message-ID today, so this is a guard rather than a repair.
 	r, err := s.db.Exec(`
 		update entries set parent_id = (
 		  select p.id from mail_detail d join entries p on p.id = d.entry_id
 		  where d.message_id = entries.parent_ref
 		)
-		where parent_id is null and parent_ref is not null
+		where parent_id is null and parent_ref is not null and source = 'mail'
 		  and exists (select 1 from mail_detail d where d.message_id = entries.parent_ref)`)
 	if err != nil {
 		return 0, fmt.Errorf("resolving parents: %w", err)

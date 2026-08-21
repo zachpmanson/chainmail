@@ -160,3 +160,39 @@ func TestSlackParentResolutionIsScopedToTheChannel(t *testing.T) {
 		t.Fatalf("unresolved %d, want 1", st.Unresolved)
 	}
 }
+
+// parent_ref means a Message-ID in mail and a thread_ts in Slack. Each resolver
+// must stay inside its own source, or a coincidence between the two id spaces
+// welds two unrelated conversations into one chain.
+func TestParentResolutionStaysWithinItsSource(t *testing.T) {
+	s := open(t)
+	shared := "1780013450.965519" // a ts, planted as a mail Message-ID too
+
+	mailEntry := Entry{
+		Source: SourceMail, ExtID: "mail:<host@x>", Kind: "message",
+		TS: time.Unix(1780013400, 0), BodyText: "the mail one",
+	}
+	if _, err := s.Put(mailEntry, &Mail{MessageID: shared}, nil); err != nil {
+		t.Fatal(err)
+	}
+	// A Slack message whose thread_ts collides with that Message-ID.
+	if _, err := s.PutSlack(Entry{
+		Source: SourceSlack, ExtID: "slack:C1:1780013460.000100", Kind: "message",
+		TS: time.Unix(1780013460, 0), ParentRef: shared, BodyText: "the slack one",
+	}, Slack{ChannelID: "C1", TS: "1780013460.000100", ThreadTS: shared}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.ResolveParents(); err != nil {
+		t.Fatal(err)
+	}
+	var parent *int64
+	if err := s.DB().QueryRow(
+		`select parent_id from entries where ext_id='slack:C1:1780013460.000100'`).
+		Scan(&parent); err != nil {
+		t.Fatal(err)
+	}
+	if parent != nil {
+		t.Errorf("the mail resolver gave a Slack entry a mail parent (%d)", *parent)
+	}
+}
