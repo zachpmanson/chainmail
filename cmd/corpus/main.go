@@ -821,11 +821,47 @@ func plural(n int, one, many string) string {
 	return many
 }
 
+// trunc clips s to at most n runes, spending one of them on the ellipsis that
+// marks the cut rather than adding it past the budget.
+//
+// Runes, not bytes. A byte-bounded cut can land inside a multi-byte rune, and a
+// single invalid fragment makes the whole stream undecodable to whatever is
+// reading it — these are columns in a CLI, but the CLI is also an API. A byte
+// budget is the wrong width unit besides: fmt's own %-28s pads by runes, so
+// counting bytes gives accented and CJK text a third of the column Latin text
+// gets and the columns stop lining up.
+//
+// Runes, and not grapheme clusters. A cut inside a flag or a skin-toned emoji
+// renders the base character instead of the composed one: valid UTF-8, one
+// wrong glyph, in the final cell of a line that already says it is clipped.
+// Buying that back means a golang.org/x/text dependency and its Unicode tables,
+// which is a poor trade for a corpus whose multi-byte content is overwhelmingly
+// apostrophes and dashes. The one artefact worth stdlib-only handling is a
+// trailing joiner, which would otherwise sit between the text and the ellipsis
+// modifying nothing.
 func trunc(s string, n int) string {
-	if len(s) <= n {
+	if n <= 0 {
+		return ""
+	}
+	rs := []rune(s)
+	if len(rs) <= n {
 		return s
 	}
-	return s[:n-1] + "…"
+	return string(trimTrailingJoiners(rs[:n-1])) + "…"
+}
+
+// trimTrailingJoiners drops zero-width joiners and variation selectors from the
+// end of a clipped run. They only ever modify the rune that follows them, and
+// what followed them is what got cut.
+func trimTrailingJoiners(rs []rune) []rune {
+	for len(rs) > 0 {
+		r := rs[len(rs)-1]
+		if r != '\u200d' && !(r >= '\ufe00' && r <= '\ufe0f') {
+			break
+		}
+		rs = rs[:len(rs)-1]
+	}
+	return rs
 }
 
 // printShown renders one entry for reading.
