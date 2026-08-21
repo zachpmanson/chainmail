@@ -124,7 +124,7 @@ func Put(store *corpus.Store, msg Message) (corpus.PutResult, error) {
 		ParentRef: msg.InReplyTo,
 		Subject:   cleanSubject(msg.Subject),
 		BodyText:  msg.Body,
-		BodyHTML:  "", // filled by the spec generator, which owns presentation
+		BodyHTML:  msg.BodyHTML,
 		Permalink: "https://mail.google.com/mail/u/0/#all/" + msg.ID,
 	}
 

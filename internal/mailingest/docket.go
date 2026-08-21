@@ -40,9 +40,19 @@ type Envelope struct {
 // Message is docket's read shape: an envelope plus the body.
 type Message struct {
 	Envelope
-	Body        string `json:"body"`
-	Truncated   bool   `json:"truncated"`
-	Attachments []struct {
+	Body      string `json:"body"`
+	Truncated bool   `json:"truncated"`
+	// BodyHTML is the raw text/html part, exactly as the sender's client wrote
+	// it. Nothing sanitises it — see issue #14. It is stored but NOT yet
+	// preferred at render time, because the renderer injects with
+	// dangerouslySetInnerHTML and the plain-text path is safe only because it
+	// escapes everything.
+	BodyHTML string `json:"body_html"`
+	// HTMLStatus is "present" or "none", and empty from a docket too old to
+	// know the flag — which is why it is a string rather than a bool.
+	HTMLStatus    string `json:"html_status"`
+	HTMLTruncated bool   `json:"html_truncated"`
+	Attachments   []struct {
 		Filename string `json:"filename"`
 		MimeType string `json:"mime_type"`
 		Size     int64  `json:"size"`
@@ -100,9 +110,14 @@ func (c Client) Search(query string, limit int) ([]Envelope, error) {
 	return run[[]Envelope](c, "mail", "search", "--query", query, "--limit", fmt.Sprint(limit))
 }
 
-// Read fetches one message in full. Always at full size — see maxBytes.
+// Read fetches one message in full, with its HTML part. Always at full size —
+// see maxBytes.
+//
+// --html is unconditional. The HTML is the only place a link target survives:
+// docket's plain-text rendering drops href attributes, so a message whose text
+// reads "click here" loses the URL entirely and no later pass can recover it.
 func (c Client) Read(id string) (Message, error) {
-	return run[Message](c, "mail", "read", "--id", id, "--max-bytes", maxBytes)
+	return run[Message](c, "mail", "read", "--id", id, "--html", "--max-bytes", maxBytes)
 }
 
 // Thread returns every envelope in a thread.
