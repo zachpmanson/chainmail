@@ -15,6 +15,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -44,9 +45,32 @@ func main() {
 	}
 }
 
+// usage lists every subcommand the dispatch below accepts. Kept adjacent to it
+// on purpose: a subcommand that exists but is not listed here is unreachable for
+// anyone who did not read the source, which is how seven of these spent a while.
+const usage = `usage: corpus <command> [flags]
+
+  init                     create or migrate the corpus
+  ingest mail   -q <query> ingest Gmail results, with their quoted history
+  ingest slack  [-archive] ingest a slackdump archive
+  search        -q <text>  ranked chains across every source
+  spec          -q <text>  write a timeline spec for the renderer
+  unnest        -id <id>   show the blocks one mail body contains
+  stats                    counts, coverage and what is missing
+  people                   everyone in the corpus, with their identities
+  candidates               probable duplicate identities, unmerged
+  merge         -keep -drop  fold one identity into another
+  alias         [-from -to]  list or add a domain alias
+`
+
 func run(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: corpus <init|ingest|stats> [flags]")
+		return errors.New(usage)
+	}
+	switch args[0] {
+	case "-h", "--help", "help":
+		fmt.Print(usage)
+		return nil
 	}
 	path := defaultPath()
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
@@ -96,6 +120,13 @@ func run(args []string) error {
 			return err
 		}
 		defer s.Close()
+		// An empty -q is meaningful alongside -person or -since ("everything
+		// involving X"), but with no filters at all it silently returned an
+		// arbitrary slice of the whole corpus, which reads like a ranked answer.
+		if *q == "" && *person == "" && *since == "" {
+			return errors.New("usage: corpus search -q <text> [-person X] [-since YYYY-MM-DD] " +
+				"[-limit N] [-entries]\n       (-q may be empty only when -person or -since narrows it)")
+		}
 		query, err := buildQuery(*q, *since, *person, *limit)
 		if err != nil {
 			return err
