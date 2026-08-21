@@ -125,8 +125,11 @@ function EntryBlock({ row, v, mark }: { row: Row; v: View; mark?: "new" | "revis
     );
   }
 
-  const cls = ["msg", e.me && "me", e.quoted && "q", row.isChainStart && "chstart",
-    mark === "new" && "isnew"]
+  // The org slot rides on the row so a bubble can carry its sender's colour.
+  // Scanning a page happens in the body column, not the avatar column, so the
+  // avatar alone leaves the org unreadable exactly where the eye already is.
+  const cls = ["msg", row.orgSlot, e.me && "me", e.quoted && "q",
+    row.isChainStart && "chstart", mark === "new" && "isnew"]
     .filter(Boolean)
     .join(" ");
   return (

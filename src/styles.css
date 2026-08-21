@@ -125,7 +125,13 @@
   .hdr { display:flex; flex-wrap:wrap; align-items:baseline; gap:.3rem;
     margin:0 0 .14rem; padding:0 .1rem; }
   .nm { font-size:.83rem; font-weight:650; }
-  .org { font-size:.68rem; color:var(--muted); text-transform:uppercase; letter-spacing:.07em; }
+  /* Tinted to match the bubble strip, so the colour is self-describing and the
+     page needs no legend. Falls back to --muted for an entry with no org. */
+  .org { font-size:.68rem; color:var(--orgc,var(--muted)); text-transform:uppercase;
+    letter-spacing:.07em; font-weight:650; }
+  .msg.o1 .org { --orgc:var(--o1); } .msg.o2 .org { --orgc:var(--o2); }
+  .msg.o3 .org { --orgc:var(--o3); } .msg.o4 .org { --orgc:var(--o4); }
+  .msg.o5 .org { --orgc:var(--o5); }
   .tm { font-size:.71rem; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
   .tz { font-size:.9em; opacity:.75; }
   /* an inferred zone must not read as a stated one */
@@ -133,7 +139,24 @@
   /* an unknown zone is a statement, not an omission: italic and quieter still,
      so a page that is mostly unknown does not look like a page of facts */
   .tz.tzu { opacity:.45; font-style:italic; letter-spacing:.02em; cursor:help; }
-  .bub { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:.45rem .7rem; }
+  .bub { position:relative; background:var(--card); border:1px solid var(--line);
+    border-radius:10px; padding:.45rem .7rem; }
+  /* Org colour, as a strip down the bubble's inside edge. A page is scanned in
+     the body column, so the avatar's colour is in the wrong place to answer
+     "who is this from" while reading.
+
+     An absolutely positioned strip rather than a border, background or shadow:
+     .me and .q claim border-color and background, .mhov claims border-color,
+     and the :target flash claims box-shadow — an org indicator built on any of
+     those silently disappears on hover or when a permalink is followed, which
+     is worse than not having it, because the colour then means nothing rather
+     than something. This sits inside .isnew's border-left instead of fighting
+     it, so a new message shows both marks. */
+  .bub::before { content:""; position:absolute; left:0; top:0; bottom:0; width:3px;
+    border-radius:10px 0 0 10px; background:var(--orgc,transparent); }
+  .msg.o1 .bub { --orgc:var(--o1); } .msg.o2 .bub { --orgc:var(--o2); }
+  .msg.o3 .bub { --orgc:var(--o3); } .msg.o4 .bub { --orgc:var(--o4); }
+  .msg.o5 .bub { --orgc:var(--o5); }
   .msg.q .bub { background:var(--dash); border-style:dashed;
     border-color:color-mix(in srgb, var(--muted) 55%, transparent); }
   .msg.me .bub { background:var(--mine); border-color:var(--o3); }
