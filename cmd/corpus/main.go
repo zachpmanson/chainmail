@@ -8,6 +8,7 @@
 //	corpus merge -keep <a> -drop <b>  same human, two addresses
 //	corpus alias -from <d> -to <d>    a rebrand: fold one domain into another
 //	corpus candidates                 pairs that may be one human, for review
+//	corpus dedupe [-apply]            merge the duplicates two rules can prove
 //	corpus repair                     undo what a folded header did to identities
 //	corpus search -q <text>           which chains are about this
 //	corpus embed                      fill in the vectors semantic search needs
@@ -21,6 +22,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
@@ -84,8 +86,14 @@ const usage = `usage: corpus <command> [flags]
   stats                    counts, coverage and what is missing
   people                   everyone in the corpus, with their identities
   candidates               probable duplicate identities, unmerged
+  dedupe        [-apply]   merge the duplicates two rules can prove — a name-only
+                           person into the human they name, and one first name at
+                           one organisation — and report every group it refuses;
+                           reports only until -apply
   merge         -keep -drop  fold one identity into another
-  alias         [-from -to]  list or add a domain alias
+  alias         [-from -to]  list or add a domain alias, folding the people that
+                           domain split in two and naming every pair it will not
+                           fold; -dry-run decides all that and writes nothing
   repair                   reduce addresses stored with a mailto: link, clean
                            display names cut off at a bracket, and fold the
                            people that split apart
@@ -402,6 +410,8 @@ func run(args []string) error {
 		from := fs.String("from", "", "old domain, e.g. old.example")
 		to := fs.String("to", "", "current domain, e.g. new.example")
 		note := fs.String("note", "", "why")
+		dry := fs.Bool("dry-run", false,
+			"report what the alias would fold and refuse; records nothing")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
@@ -424,14 +434,19 @@ func run(args []string) error {
 			return nil
 		}
 		if *from == "" || *to == "" {
-			return fmt.Errorf("usage: corpus alias -from <old.domain> -to <new.domain> [-note why]")
+			return fmt.Errorf("usage: corpus alias -from <old.domain> -to <new.domain> " +
+				"[-note why] [-dry-run]")
 		}
-		merged, err := corpus.AddDomainAlias(s, *from, *to, *note)
+		var r corpus.AliasRepair
+		if *dry {
+			r, err = corpus.PreviewDomainAlias(s, *from, *to)
+		} else {
+			r, err = corpus.AddDomainAlias(s, *from, *to, *note)
+		}
 		if err != nil {
 			return err
 		}
-		fmt.Printf("alias %s -> %s recorded; merged %d already-split %s\n",
-			*from, *to, merged, plural(merged, "person", "people"))
+		printAlias(os.Stdout, r)
 		return nil
 
 	case "repair":
@@ -495,6 +510,24 @@ func run(args []string) error {
 		}
 		fmt.Printf("\n%d candidate %s — review, then `corpus merge -keep <a> -drop <b>`\n",
 			len(cs), plural(len(cs), "pair", "pairs"))
+		return nil
+
+	case "dedupe":
+		fs := flag.NewFlagSet("dedupe", flag.ContinueOnError)
+		apply := fs.Bool("apply", false, "carry the plan out; without it nothing is written")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		s, err := corpus.Open(path)
+		if err != nil {
+			return err
+		}
+		defer s.Close()
+		plan, err := corpus.Dedupe(s, *apply)
+		if err != nil {
+			return err
+		}
+		printDedupe(plan)
 		return nil
 
 	case "merge":
@@ -953,5 +986,62 @@ func printShown(e corpus.Shown, full bool) {
 	fmt.Println()
 	for _, l := range strings.Split(body, "\n") {
 		fmt.Println("  " + l)
+	}
+}
+
+// printDedupe renders a merge plan for approval. A merge is a change to identity
+// that everything else is read through, so both halves are printed whole — names
+// and every identity on each side — and the reason is printed next to them. A
+// line a reviewer has to go and look something up to judge is a line they will
+// wave through.
+// printAlias names every pair the alias declined, because a bare count of merges
+// reads the same whether the alias found nothing to do or refused everything it
+// found, and those want opposite responses from the reader.
+func printAlias(w io.Writer, r corpus.AliasRepair) {
+	for _, f := range r.Refused {
+		fmt.Fprintf(w, "refused  %s\n  keep %4d %-28s\n  drop %4d %-28s\n  why  %s\n",
+			f.Address,
+			f.KeepID, trunc(f.KeepName, 28),
+			f.DropID, trunc(f.DropName, 28),
+			f.Reason)
+	}
+	verb, merged := "recorded; merged", "already-split"
+	if !r.Applied {
+		verb, merged = "not recorded; would merge", "already-split"
+	}
+	fmt.Fprintf(w, "alias %s -> %s %s %d %s %s, refused %d %s\n",
+		r.From, r.To, verb, r.Merged, merged,
+		plural(r.Merged, "person", "people"),
+		len(r.Refused), plural(len(r.Refused), "pair", "pairs"))
+	if len(r.Refused) > 0 {
+		fmt.Fprintln(w, "refused pairs stay two people — `corpus candidates`, then "+
+			"`corpus merge -keep <email> -drop <email>` if they are one after all")
+	}
+	if !r.Applied {
+		fmt.Fprintln(w, "nothing was written; drop -dry-run to record the alias and fold these")
+	}
+}
+
+func printDedupe(plan corpus.DedupePlan) {
+	for _, m := range plan.Merges {
+		fmt.Printf("%s\n  keep %4d %-28s %s\n  drop %4d %-28s %s\n  why  %s\n",
+			m.Rule,
+			m.KeepID, trunc(m.KeepName, 28), strings.Join(m.KeepIDs, ", "),
+			m.DropID, trunc(m.DropName, 28), strings.Join(m.DropIDs, ", "),
+			m.Evidence)
+	}
+	for _, r := range plan.Refusals {
+		fmt.Printf("refused  %-28s %v\n  %s\n", trunc(r.Subject, 28), r.People, r.Reason)
+	}
+	verb := "would merge"
+	if plan.Applied {
+		verb = "merged"
+	}
+	fmt.Printf("\n%s %d %s, refused %d %s; %d people -> %d\n",
+		verb, len(plan.Merges), plural(len(plan.Merges), "person", "people"),
+		len(plan.Refusals), plural(len(plan.Refusals), "group", "groups"),
+		plan.Before, plan.After)
+	if !plan.Applied {
+		fmt.Println("nothing was written; `corpus dedupe -apply` carries this out")
 	}
 }
