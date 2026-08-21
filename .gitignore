@@ -15,3 +15,4 @@ corpus.db-*
 fixtures/*
 !fixtures/synthetic.json
 !fixtures/minimal.json
+!fixtures/eval.synthetic.json

@@ -62,6 +62,11 @@ func NewOllama() *Ollama {
 func (o *Ollama) Model() string { return o.Name }
 func (o *Ollama) Dim() int      { return o.Dimension }
 
+// Prefix is the task prefix for whatever model this client was pointed at, so
+// the daemon client and the model's traits cannot drift apart: there is one
+// name, and it decides both what is asked for and how the text is framed.
+func (o *Ollama) Prefix(t Task) string { return TraitsFor(o.Name).Prefix(t) }
+
 func (o *Ollama) batchSize() int {
 	if o.Batch > 0 {
 		return o.Batch

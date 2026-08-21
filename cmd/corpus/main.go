@@ -12,6 +12,7 @@
 //	corpus repair                     undo what a folded header did to identities
 //	corpus search -q <text>           which chains are about this
 //	corpus embed                      fill in the vectors semantic search needs
+//	corpus eval -set judged.json      score two retrieval configurations
 //	corpus spec -q <text> -o f.json   a timeline spec for those chains
 //	corpus unnest <ext-id>            what extraction recovers from one message
 package main
@@ -33,6 +34,7 @@ import (
 
 	"github.com/zachpmanson/chainmail/internal/corpus"
 	"github.com/zachpmanson/chainmail/internal/embed"
+	"github.com/zachpmanson/chainmail/internal/eval"
 	"github.com/zachpmanson/chainmail/internal/mailingest"
 	"github.com/zachpmanson/chainmail/internal/slackingest"
 	"github.com/zachpmanson/chainmail/internal/spec"
@@ -77,6 +79,10 @@ const usage = `usage: corpus <command> [flags]
                            embed the entries that have no current vector, so
                            semantic search has something to search; resumable,
                            so ^C is a pause
+  eval          -set F     score two retrieval configurations over one judged
+                           set of queries: -a and -b name them, -cases shows
+                           the per-query detail, -floor the cosine distributions
+                           a similarity floor has to separate
   show          <ext-id>   one entry in full, or -chain for the whole thread
   spec          -q <text>  write a timeline spec for the renderer
   unnest        <ext-id>   show the blocks one body contains, from the corpus;
@@ -171,6 +177,8 @@ func run(args []string) error {
 		dim := fs.Int("dim", embed.DefaultDim, "dimensions that model returns")
 		url := fs.String("url", embed.DefaultBaseURL, "ollama endpoint")
 		timeout := fs.String("timeout", "2m", "how long to wait for the model")
+		minSim := fs.Float64("minsim", noFloorSentinel,
+			"cosine floor; unset means the model's calibrated one, 0 means none")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
@@ -185,7 +193,7 @@ func run(args []string) error {
 		if *q == "" && *person == "" && *since == "" {
 			return errors.New("usage: corpus search -q <text> [-person X] [-since YYYY-MM-DD]\n" +
 				"       [-limit N] [-entries] [-mode lexical|semantic|hybrid] [-topk N]\n" +
-				"       [-model M] [-dim N] [-url U] [-timeout D]\n" +
+				"       [-model M] [-dim N] [-url U] [-timeout D] [-minsim C]\n" +
 				"       [-expand N] [-expand-min N] [-expand-ratio F] [-expand-cap N]\n" +
 				"       (-q may be empty only when -person or -since narrows it)")
 		}
@@ -193,7 +201,7 @@ func run(args []string) error {
 		if err != nil {
 			return err
 		}
-		query.Semantic, err = semanticFor(*mode, *q, *model, *url, *timeout, *dim, *topk)
+		query.Semantic, err = semanticFor(*mode, *q, *model, *url, *timeout, *dim, *topk, *minSim)
 		if err != nil {
 			return err
 		}
@@ -310,6 +318,65 @@ func run(args []string) error {
 			}
 			fmt.Printf("pruned %d %s from other models\n",
 				n, plural(int(n), "vector", "vectors"))
+		}
+		return nil
+
+	case "eval":
+		// The judged set names the corpus each configuration searches, because
+		// comparing prefixed against unprefixed documents means comparing two
+		// corpora; -db is only the fallback for a comparison that does not.
+		fs := flag.NewFlagSet("eval", flag.ContinueOnError)
+		set := fs.String("set", "", "judged query set (JSON)")
+		aSpec := fs.String("a", "mode=lexical", "first configuration: key=value,…")
+		bSpec := fs.String("b", "mode=hybrid", "second configuration: key=value,…")
+		timeout := fs.String("timeout", "2m", "how long to wait for the model")
+		cases := fs.Bool("cases", false, "print each query's outcome, not just the aggregate")
+		floor := fs.Bool("floor", false,
+			"print the cosine distributions a similarity floor has to separate")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *set == "" {
+			return errors.New("usage: corpus eval -set <judged.json> [-a spec] [-b spec] [-cases]\n" +
+				"       spec keys: name db mode model url dim topk minsim noprefix")
+		}
+		wait, err := time.ParseDuration(*timeout)
+		if err != nil {
+			return fmt.Errorf("-timeout %q: %w", *timeout, err)
+		}
+		judged, err := eval.LoadSet(*set)
+		if err != nil {
+			return err
+		}
+		reports := make([]eval.Report, 0, 2)
+		for _, spec := range []string{*aSpec, *bSpec} {
+			cfg, err := eval.ParseConfig(spec)
+			if err != nil {
+				return fmt.Errorf("configuration %q: %w", spec, err)
+			}
+			if cfg.DB == "" {
+				cfg.DB = path
+			}
+			t, err := eval.OpenTarget(cfg, wait)
+			if err != nil {
+				return err
+			}
+			rep, err := t.Run(context.Background(), judged, nil)
+			t.Close()
+			if err != nil {
+				return err
+			}
+			reports = append(reports, rep)
+		}
+		eval.Compare(os.Stdout, reports[0], reports[1])
+		if *cases {
+			eval.RenderCases(os.Stdout, reports[0], reports[1])
+		}
+		if *floor {
+			// Sweep with no floor applied, or the distribution is already cut.
+			for _, r := range reports {
+				eval.FloorSweep(os.Stdout, r, []float64{0.45, 0.50, 0.55, 0.575, 0.60, 0.65, 0.70})
+			}
 		}
 		return nil
 
@@ -768,15 +835,17 @@ const (
 	modeLexical  = "lexical"
 	modeSemantic = "semantic"
 	modeHybrid   = "hybrid"
+
+	// noFloorSentinel is below every possible cosine, so -minsim can tell
+	// "unset" from the entirely legitimate request for no floor at all.
+	noFloorSentinel = -2.0
 )
 
 // semanticFor embeds the query text, or returns nil for a lexical search.
 //
-// The embedding happens here, at the point the user typed the query, rather than
-// inside search. A down daemon then surfaces as "ollama is not running" against
-// the command that needed it, instead of as an empty result set from a function
-// whose entire job is to return few results.
-func semanticFor(mode, text, model, url, timeout string, dim, topK int) (*corpus.SemanticQuery, error) {
+// minSim below noFloorSentinel means "whatever the model was calibrated to";
+// anything at or above it, 0 included, is the user overruling that.
+func semanticFor(mode, text, model, url, timeout string, dim, topK int, minSim float64) (*corpus.SemanticQuery, error) {
 	switch mode {
 	case modeLexical, "":
 		return nil, nil
@@ -798,13 +867,15 @@ func semanticFor(mode, text, model, url, timeout string, dim, topK int) (*corpus
 		Client: &http.Client{Timeout: wait}}
 	ctx, cancel := context.WithTimeout(context.Background(), wait)
 	defer cancel()
-	vs, err := e.Embed(ctx, []string{text})
+	opt := corpus.SemanticOptions{Only: mode == modeSemantic, TopK: topK}
+	if minSim > noFloorSentinel {
+		opt.MinSimilarity = &minSim
+	}
+	sem, err := corpus.SemanticFor(ctx, e, text, opt)
 	if err != nil {
 		return nil, fmt.Errorf("embedding the query: %w", err)
 	}
-	return &corpus.SemanticQuery{
-		Vector: vs[0], Model: model, TopK: topK, Only: mode == modeSemantic,
-	}, nil
+	return sem, nil
 }
 
 // why names the rankings that found a hit, so a result with no visible keyword

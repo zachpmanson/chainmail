@@ -1,0 +1,21 @@
+{
+  "level": "entry",
+  "note": "A synthetic stand-in for the real judged set, matching the corpus internal/eval's tests build. Everything here is invented: the real set judges real correspondence and stays untracked at fixtures/eval.local.json.",
+  "cases": [
+    {
+      "query": "duplicate imports",
+      "relevant": ["mail:gap-on@example.com"],
+      "why": "the vocabulary gap: neither word appears in the entry that answers it"
+    },
+    {
+      "query": "the fee we add to their bills",
+      "relevant": ["mail:fee-a@example.com", "mail:fee-b@example.com"],
+      "why": "two answers, so the ordering metrics have something to disagree about"
+    },
+    {
+      "query": "medieval falconry techniques",
+      "expect_empty": true,
+      "why": "nothing in the corpus is about it, so any result is the floor failing"
+    }
+  ]
+}
