@@ -7,14 +7,18 @@ type Thread = NonNullable<Spec["threads"]>[number];
 
 const html = (s: string) => ({ __html: s });
 
-function Face({ name, v }: { name: string; v: View }) {
-  const row = v.rows.find((r) => r.entry.sender === name);
-  const slot = row?.orgSlot ?? "o5";
+function Face({ p, v }: { p: Person; v: View }) {
+  // The org comes from the participant's own row, not from a message they sent.
+  // Five of the fifteen people on the reference trail send nothing, so looking a
+  // colour up through the transcript left them on the unknown grey while the
+  // heading directly above them named their org and their colleagues in the same
+  // group were coloured.
+  const slot = v.orgSlot(p.org);
   // reuses the per-avatar CSS rule rather than inlining the image again
-  const pic = v.rows.find((r) => r.entry.sender === name)?.avatarClass;
+  const pic = v.rows.find((r) => r.entry.sender === p.name)?.avatarClass;
   return (
     <div className={`av ${slot}${pic ? ` pic ${pic}` : ""}`}>
-      {pic ? null : <span className="ini">{initials(name)}</span>}
+      {pic ? null : <span className="ini">{initials(p.name)}</span>}
     </div>
   );
 }
@@ -54,7 +58,13 @@ export function ParticipantsPanel({ v }: { v: View }) {
         <div className="who">
           {groups.map((g) => (
             <div key={g.org || "other"} style={{ display: "contents" }}>
-              <div className="ogh">{g.org || "Other"}</div>
+              {/* Tinted like the org label beside a sender's name, which is how
+                  the bubble strip decodes without a legend. One heading per org
+                  rather than a mark per row: the transcript is 57 bubbles where a
+                  strip reads as structure, and this is a dense list of a dozen
+                  rows where a dozen strips would read as noise. The avatars
+                  already carry the colour per person. */}
+              <div className={`ogh ${v.orgSlot(g.org || undefined)}`}>{g.org || "Other"}</div>
               {g.people.map((p, i) => {
                 const n = stats.get(p.name)?.n;
                 // The note is shown alongside the count, not only in its absence:
@@ -72,7 +82,7 @@ export function ParticipantsPanel({ v }: { v: View }) {
                   <div className="p1" key={i}>
                     <div className="pd">
                       <div className="pn">
-                        <Face name={p.name} v={v} />
+                        <Face p={p} v={v} />
                         <span title={v.whoTitle(p.name)}>{p.name}</span>
                       </div>
                       {p.email ? (

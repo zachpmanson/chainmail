@@ -30,6 +30,10 @@ export interface View {
    *  and an avatar's slot is this array's index, so the order is load-bearing
    *  even though nothing renders the list itself. */
   orgs: string[];
+  /** the slot class for an org, e.g. "o2". The panel and the transcript both go
+   *  through this, so a person's row and their bubbles cannot be coloured
+   *  differently. An unknown org takes "o5", which a fifth org also takes. */
+  orgSlot: (org?: string) => string;
   title: string;
   hashed: boolean;
 }
@@ -45,10 +49,25 @@ export function derive(input: Timeline): View {
   const lay = layout(ordered, idOf);
   const z = zones(ordered);
 
-  // colour slot per org, in first-appearance order
+  // Colour slot per org, in first-appearance order. The messages come first and
+  // the panel's orgs are appended after them, never interleaved: appending cannot
+  // move an org the transcript already placed, so adding a cc-only recipient
+  // cannot repaint the page. Deriving one order over both together would let the
+  // panel decide what colour a bubble is.
+  //
+  // The panel's orgs are here at all because a recipient who sent nothing can be
+  // at an org no message came from. Leaving them out would put a whole org on the
+  // unknown grey — indistinguishable from a person whose org nothing established.
   const orgs: string[] = [];
   for (const e of ordered) if (e.org && !orgs.includes(e.org)) orgs.push(e.org);
-  const slot = (org?: string) => (org ? `o${Math.min(orgs.indexOf(org) + 1, 5)}` : "o5");
+  for (const p of input.participants ?? []) if (p.org && !orgs.includes(p.org)) orgs.push(p.org);
+  // An org absent from the list indexes to -1 and would name the slot "o0", a
+  // class with no colour behind it, so it is folded into the unknown slot rather
+  // than rendering as nothing at all.
+  const slot = (org?: string) => {
+    const i = org ? orgs.indexOf(org) : -1;
+    return i < 0 ? "o5" : `o${Math.min(i + 1, 5)}`;
+  };
 
   const avatarNames = Object.keys(input.avatars ?? {}).sort();
   const avatarClass = new Map(avatarNames.map((n, i) => [n, `p${i}`]));
@@ -80,7 +99,7 @@ export function derive(input: Timeline): View {
 
   const title = (input.title ?? "Timeline").replace(/^#+/, (m) => (m ? "#" : ""));
   return {
-    spec, rows, layout: lay, zones: z, orgs, title, avatarCss,
+    spec, rows, layout: lay, zones: z, orgs, orgSlot: slot, title, avatarCss,
     hashed: title.startsWith("#"),
     whoTitle: (name) => (emails.has(name) ? `${name} <${emails.get(name)}>` : name),
   };
