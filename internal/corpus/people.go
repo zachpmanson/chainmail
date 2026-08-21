@@ -409,9 +409,18 @@ func AddAlias(s *Store, personID int64, kind, value, rule string) error {
 // half-merged person is worse than either an unmerged or a merged one — it is a
 // person with references to a row that no longer exists.
 //
-// No identity is lost. That is the property that makes a merge recoverable: the
-// dropped person's addresses still resolve, they just resolve to keep, and
-// person_merges says when and why they moved.
+// No identity is lost: the dropped person's addresses still resolve, they just
+// resolve to keep, and person_merges says when and why they moved.
+//
+// A merge is not reversible, and callers should not treat person_merges as
+// though it were. The row names the two people, the dropped display name and the
+// reason; it does not name which identities, entries or participant rows moved,
+// and the participant rows that collided with keep's own were deleted rather
+// than moved. Nothing left in the corpus distinguishes an identity keep always
+// had from one it inherited, so splitting them apart again is guesswork. What
+// the trail is for is telling a human that a merge happened and on what
+// evidence, so a wrong one can be found and fixed by hand — which is why the
+// callers that decide merges automatically are the ones that owe a preview.
 func Merge(s *Store, keep, drop int64) error {
 	return mergeWithReason(s, keep, drop, "manual:merge")
 }

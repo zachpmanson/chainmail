@@ -31,73 +31,209 @@ func CanonicalAddress(s *Store, addr string) (string, string, error) {
 	return local + "@" + to, "domain-alias:" + domain, nil
 }
 
-// AddDomainAlias records an alias and then repairs the split it was created to
-// fix: any two people whose only difference is that domain are merged.
+// AliasRepair is what an alias did to the people already ingested, or would do.
+type AliasRepair struct {
+	From    string
+	To      string
+	Merged  int
+	Refused []AliasRefusal
+	Applied bool // false from PreviewDomainAlias, which writes nothing at all
+}
+
+// AliasRefusal is a pair an alias matched and would not fold.
+//
+// Reported and not merely skipped, because an alias that quietly declined half
+// its work is indistinguishable from an alias that had none: both print a
+// number, and the difference is a duplicate still sitting in the corpus with
+// nothing pointing at it. The pair stays two people and `corpus candidates` goes
+// on offering it.
+type AliasRefusal struct {
+	Address  string // the address on the old domain that matched
+	KeepID   int64
+	KeepName string
+	DropID   int64
+	DropName string
+	Reason   string
+}
+
+// AddDomainAlias records an alias and repairs the split it was created to fix.
 //
 // Doing the repair here rather than leaving it to a separate pass matters,
 // because an alias added after ingest is the normal case — you discover the
 // rebrand by seeing the duplicate.
-func AddDomainAlias(s *Store, from, to, note string) (merged int, err error) {
-	from = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(from, "@")))
-	to = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(to, "@")))
-	if from == "" || to == "" {
-		return 0, errors.New("alias needs both a from-domain and a to-domain")
+func AddDomainAlias(s *Store, from, to, note string) (AliasRepair, error) {
+	from, to, err := aliasDomains(from, to)
+	if err != nil {
+		return AliasRepair{}, err
 	}
-	if from == to {
-		return 0, errors.New("an alias from a domain to itself does nothing")
-	}
-
 	if _, err := s.db.Exec(`
 		insert into domain_aliases (from_domain, to_domain, note, added_at) values (?,?,?,?)
 		on conflict(from_domain) do update set to_domain=excluded.to_domain, note=excluded.note`,
 		from, to, nullStr(note), time.Now().Unix()); err != nil {
-		return 0, fmt.Errorf("recording alias %s -> %s: %w", from, to, err)
+		return AliasRepair{}, fmt.Errorf("recording alias %s -> %s: %w", from, to, err)
 	}
 
-	// Find people holding an address on the old domain whose local part also
-	// exists on the new one, and fold the old into the new.
-	rows, err := s.db.Query(`
-		select old.person_id, new.person_id, old.value
-		  from identities old
-		  join identities new
-		    on new.kind='email'
-		   and new.value = substr(old.value, 1, instr(old.value,'@')) || ?
-		 where old.kind='email'
-		   and old.value like '%@' || ?
-		   and old.person_id <> new.person_id`, to, from)
+	r := AliasRepair{From: from, To: to, Applied: true}
+	merges, refusals, err := planDomainAlias(s, from, to)
 	if err != nil {
-		return 0, fmt.Errorf("finding people split by %s: %w", from, err)
+		return r, err
 	}
-	type pair struct {
-		keep, drop int64
-		addr       string
-	}
-	var pairs []pair
-	for rows.Next() {
-		var p pair
-		if err := rows.Scan(&p.drop, &p.keep, &p.addr); err != nil {
-			rows.Close()
-			return 0, err
-		}
-		pairs = append(pairs, p)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return 0, err
-	}
-
-	for _, p := range pairs {
+	r.Refused = refusals
+	for _, m := range merges {
 		// A previous iteration may already have folded one of these away.
-		if err := mergeWithReason(s, p.keep, p.drop,
-			"domain-alias:"+from+" ("+p.addr+")"); err != nil {
+		if err := mergeWithReason(s, m.keep, m.drop,
+			"domain-alias:"+from+" ("+m.addr+")"); err != nil {
 			if strings.Contains(err.Error(), "no person") {
 				continue
 			}
-			return merged, err
+			return r, err
 		}
-		merged++
+		r.Merged++
 	}
-	return merged, nil
+	return r, nil
+}
+
+// PreviewDomainAlias reports what AddDomainAlias would do without recording the
+// alias or touching a single person.
+//
+// A preview exists because this command is the one place a rebrand and an
+// identity edit happen in the same breath, and the identity edit cannot be taken
+// back: person_merges names the two people and the reason, but not which
+// identities, entries or participant rows moved, so nothing in the corpus can
+// put a wrongly folded person back. Given that, the only safety available is
+// looking first.
+//
+// It is a flag and not the default, unlike `corpus dedupe`. Dedupe surveys the
+// whole corpus on rules the user did not state and can plan dozens of merges
+// nobody asked for; an alias is a fact the user has just asserted about two
+// domains they named, and refusing to act on it until asked twice would make the
+// common case two commands. The cost of that choice is that a wrong -from lands
+// before it is seen, which is what the refusal list and this flag are for.
+func PreviewDomainAlias(s *Store, from, to string) (AliasRepair, error) {
+	from, to, err := aliasDomains(from, to)
+	if err != nil {
+		return AliasRepair{}, err
+	}
+	r := AliasRepair{From: from, To: to}
+	merges, refusals, err := planDomainAlias(s, from, to)
+	if err != nil {
+		return r, err
+	}
+	r.Merged, r.Refused = len(merges), refusals
+	return r, nil
+}
+
+func aliasDomains(from, to string) (string, string, error) {
+	from = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(from, "@")))
+	to = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(to, "@")))
+	if from == "" || to == "" {
+		return "", "", errors.New("alias needs both a from-domain and a to-domain")
+	}
+	if from == to {
+		return "", "", errors.New("an alias from a domain to itself does nothing")
+	}
+	return from, to, nil
+}
+
+type aliasMerge struct {
+	keep, drop int64
+	addr       string
+}
+
+// planDomainAlias decides which of the people an alias matches are one human.
+//
+// The match is a shared local part across the two domains, which is what the
+// alias is claimed to explain and usually does — but a shared local part is not
+// proof, and where it is wrong it is wrong in the worst available way: two
+// people's correspondence fuses into somebody who reads as entirely ordinary
+// afterwards, with no error and no way back. So the local part opens the
+// question and the names settle it, on the same evidence `corpus dedupe` uses,
+// so the two commands cannot come to opposite conclusions about one pair.
+//
+// The new domain's person survives. It is the domain still in use, so it is the
+// person every later sighting and every Slack profile will go on matching.
+//
+// A role mailbox is the deliberate exception: it merges without consulting names
+// at all. Under an alias the two domains are one organisation — that is the
+// whole content of the assertion — and one organisation's support@ is one inbox,
+// however many people have sent from it. Names cannot be asked here because a
+// role mailbox carries whoever last sent from it, so `support@old` reading
+// "Alyssa Salado" against `support@new` reading "Bo Nguyen" would be refused for
+// a contradiction between two names that were never claims about the same thing.
+// Refusing them instead would also strand them: CanonicalAddress already sends
+// every later sighting of support@old to the surviving support@new person, so the
+// unmerged half would keep its history and never gain another entry.
+func planDomainAlias(s *Store, from, to string) ([]aliasMerge, []AliasRefusal, error) {
+	rows, err := s.db.Query(`
+		select old.person_id, oldp.display_name, new.person_id, newp.display_name, old.value
+		  from identities old
+		  join people oldp on oldp.id = old.person_id
+		  join identities new
+		    on new.kind='email'
+		   and new.value = substr(old.value, 1, instr(old.value,'@')) || ?
+		  join people newp on newp.id = new.person_id
+		 where old.kind='email'
+		   and old.value like '%@' || ?
+		   and old.person_id <> new.person_id
+		 order by old.value`, to, from)
+	if err != nil {
+		return nil, nil, fmt.Errorf("finding people split by %s: %w", from, err)
+	}
+	defer rows.Close()
+
+	var merges []aliasMerge
+	var refusals []AliasRefusal
+	for rows.Next() {
+		var m aliasMerge
+		var dropName, keepName string
+		if err := rows.Scan(&m.drop, &dropName, &m.keep, &keepName, &m.addr); err != nil {
+			return nil, nil, err
+		}
+		local, _, _ := strings.Cut(m.addr, "@")
+		if !genericLocalPart(local) {
+			if why := namesContradict(keepName, dropName); why != "" {
+				refusals = append(refusals, AliasRefusal{
+					Address: m.addr, KeepID: m.keep, KeepName: keepName,
+					DropID: m.drop, DropName: dropName, Reason: why})
+				continue
+			}
+		}
+		merges = append(merges, m)
+	}
+	return merges, refusals, rows.Err()
+}
+
+// namesContradict reports why two display names cannot belong to one human, or
+// "" where nothing in them says they cannot.
+//
+// "Not contradicted" and not "confirmed", which is the only question worth
+// asking here: the addresses have already agreed on a local part and the user has
+// already asserted the domains are one organisation, so a name is being consulted
+// for a veto, not for the case. A name that is absent, or is the address itself,
+// vetoes nothing — those are people nobody ever gave a name to, and demanding a
+// name from them would leave every bare-address sighting split forever on a
+// corpus where names were never captured, which is the ordinary state of mail
+// harvested from headers.
+//
+// The surname test is dedupe's, unchanged and shared. The first-name test is
+// here because dedupe never needs it — it groups by first name, so its groups
+// agree on one by construction — while an alias groups by local part, and
+// `jsmith@old` held by "Jan Smith" against `jsmith@new` held by "Jo Smith" is
+// two humans whose surnames agree.
+func namesContradict(a, b string) string {
+	ap, aok := personNameParts(a)
+	bp, bok := personNameParts(b)
+	if !aok || !bok {
+		return ""
+	}
+	group := []orgPerson{ap, bp}
+	if firsts := distinctFirstNames(group); len(firsts) > 1 {
+		return "different first names: " + strings.Join(firsts, ", ")
+	}
+	if surnames := distinctSurnames(group); len(surnames) > 1 {
+		return "different surnames: " + strings.Join(surnames, ", ")
+	}
+	return ""
 }
 
 // DomainAliases lists the configured aliases.

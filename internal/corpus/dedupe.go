@@ -330,15 +330,8 @@ func orgPeople(s *Store) ([]orgPerson, error) {
 
 	var out []orgPerson
 	for _, r := range all {
-		if strings.Contains(r.name, "@") {
-			// A person named by their own address has no name to take a first name
-			// from, and tokenising the address yields words that are not anybody's:
-			// a plus-addressed forwarder splits into a first name and a "surname"
-			// assembled out of a domain.
-			continue
-		}
-		toks := nameTokens(r.name)
-		if len(toks) == 0 || len(toks[0]) < 2 {
+		p, named := personNameParts(r.name)
+		if !named {
 			continue
 		}
 		emails, err := emailsOf(s, r.id)
@@ -372,14 +365,48 @@ func orgPeople(s *Store) ([]orgPerson, error) {
 		if !ok {
 			continue
 		}
-		p := orgPerson{id: r.id, first: toks[0], org: org, weight: r.weight}
-		p.name = strings.Join(toks, " ")
-		if len(toks) > 1 {
-			p.surname = strings.Join(toks[1:], " ")
-		}
+		p.id, p.org, p.weight = r.id, org, r.weight
 		out = append(out, p)
 	}
 	return out, nil
+}
+
+// personNameParts splits a display name into the first name and surname the
+// rules below compare, reporting false where there is no name to split.
+//
+// A person named by their own address has no name to take a first name from, and
+// tokenising the address yields words that are not anybody's: a plus-addressed
+// forwarder splits into a first name and a "surname" assembled out of a domain.
+func personNameParts(name string) (orgPerson, bool) {
+	if strings.Contains(name, "@") {
+		return orgPerson{}, false
+	}
+	toks := nameTokens(name)
+	if len(toks) == 0 {
+		return orgPerson{}, false
+	}
+	p := orgPerson{name: strings.Join(toks, " "), first: toks[0]}
+	if len(toks) > 1 {
+		p.surname = strings.Join(toks[1:], " ")
+	}
+	return p, true
+}
+
+// distinctFirstNames lists the first names present in a group, sorted. Every
+// member has one — personNameParts admits nobody without — so unlike surnames
+// there is no silent member here, and two entries are always a contradiction.
+func distinctFirstNames(group []orgPerson) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, p := range group {
+		if seen[p.first] {
+			continue
+		}
+		seen[p.first] = true
+		out = append(out, p.first)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // distinctSurnames lists the surnames present in a group, sorted. Members with
