@@ -8,6 +8,8 @@
 CORPUS      ?= $(HOME)/.local/state/chainmail/corpus.db
 SLACK       ?= $(HOME)/.local/state/chainmail/slack
 BIN         ?= $(HOME)/.local/bin/corpus
+SERVER      ?= $(HOME)/.local/bin/chainmail-server
+PORT        ?= 8765
 # SINCE bounds the mail query, and nothing else does: `ingest mail` follows
 # docket's page token to the end of a query and reports whether it got there, so
 # the window is a choice about how much to fetch rather than a way to stay under
@@ -19,7 +21,7 @@ ME          ?= $(CHAINMAIL_ME)
 export CHAINMAIL_CORPUS = $(CORPUS)
 
 .PHONY: help install test check slurp slurp-mail slurp-slack settle embed \
-        backup page serve doctor
+        backup page serve api doctor
 
 help:
 	@printf 'Corpus\n'
@@ -37,10 +39,12 @@ help:
 	@printf '  make page Q=...     generate a spec and render it\n'
 	@printf '  make repage P=...   refresh that page and re-render it, marking what changed\n'
 	@printf '  make serve          vite dev server\n'
+	@printf '  make api            the read-only API on 127.0.0.1:%s\n' '$(PORT)'
 	@printf '\nOverride CORPUS, SLACK, SINCE, BIN on the command line.\n'
 
 install:
 	go build -o $(BIN) ./cmd/corpus
+	go build -o $(SERVER) ./cmd/server
 
 test:
 	go test ./...
@@ -125,3 +129,9 @@ repage:
 
 serve:
 	npm run dev
+
+# Loopback, and it refuses anything else without a flag that says why. There is
+# no authentication and spec bodies are unsanitised sender HTML (#14), so the
+# dev client reaches this through a Vite proxy rather than over CORS.
+api:
+	go run ./cmd/server -addr 127.0.0.1:$(PORT) -corpus $(CORPUS)
