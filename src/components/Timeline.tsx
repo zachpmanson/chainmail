@@ -3,6 +3,7 @@ import type { Entry } from "../lib/spec";
 import { derive, initials, type Row, type View } from "../lib/derive";
 import type { Timeline as Spec } from "../lib/spec";
 import { COLLAPSE_FROM, msgCount, provenance, type SourceId } from "../lib/sources";
+import { attHref, hasPreview } from "../lib/attachments";
 import { DiffPanel, Legend, ParticipantsPanel, SourcesPanel, type ChainFilter } from "./Panels";
 import { Minimap } from "./Minimap";
 
@@ -74,25 +75,50 @@ function Attachments({ e }: { e: Entry }) {
     <div className="atts">
       <span className="clip">attached</span>
       {e.attachments.map((a, i) => {
+        const href = attHref(a);
+        const thumb = hasPreview(a) ? (
+          <img
+            className="athumb"
+            src={a.preview}
+            width={a.previewW}
+            height={a.previewH}
+            /* Decorative here: the filename beside it already names the file, so
+               announcing it twice only makes the chip longer to listen to. */
+            alt=""
+          />
+        ) : null;
         const label = (
           <>
+            {thumb}
             <span className="afn">{a.name}</span>
             <span className="ameta">
               {a.kind ?? "file"} · {a.size ?? ""}
             </span>
           </>
         );
-        return a.gmailId ? (
+        // The chip stays the same link it always was, and the popover is layered
+        // onto it by script. That is deliberate: no new control appears, the
+        // trigger is already in the tab order, and with scripting unavailable
+        // the click still opens the attachment at its source rather than doing
+        // nothing. data-pop marks which chips script should intercept.
+        return href ? (
           <a
             key={i}
-            className="att"
-            href={`https://mail.google.com/mail/u/0/#all/${a.gmailId}`}
+            className={thumb ? "att haspop" : "att"}
+            href={href}
             target="_blank"
             rel="noopener"
+            {...(thumb
+              ? { "data-pop": a.name, "aria-haspopup": "dialog" as const }
+              : {})}
           >
             {label}
           </a>
         ) : (
+          // A thumbnail still earns its place on a chip with nowhere to go — it
+          // is the only thing here that says what the file actually is. It gets
+          // no popover, though: the only way to offer one would be a control
+          // that does nothing at all without scripting.
           <span key={i} className="att nolink">
             {label}
           </span>

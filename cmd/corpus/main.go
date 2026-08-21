@@ -442,12 +442,15 @@ func run(args []string) error {
 		out := fs.String("o", "", "write the spec here (default stdout)")
 		title := fs.String("title", "", "page title")
 		me := fs.String("me", "", "comma-separated addresses that are yours")
+		uploads := fs.String("uploads", defaultUploadDir(),
+			"archive upload root; image thumbnails are embedded from here (\"\" to embed none)")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
 		if *q == "" {
 			return errors.New("usage: corpus spec -q <query> [-person X] [-since YYYY-MM-DD]\n" +
-				"                  [-limit N] [-o spec.json] [-title T] [-me <address>]")
+				"                  [-limit N] [-o spec.json] [-title T] [-me <address>]\n" +
+				"                  [-uploads <dir>]")
 		}
 		s, err := corpus.Open(path)
 		if err != nil {
@@ -477,6 +480,8 @@ func run(args []string) error {
 			Queries:  []spec.Query{{Q: *q, Note: "corpus search"}},
 			Me:       splitList(*me),
 			RunLabel: time.Now().Format("2 Jan 2006"),
+
+			UploadDir: *uploads,
 		})
 		if err != nil {
 			return err
@@ -923,6 +928,13 @@ func defaultSlackArchive() string {
 	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".local", "state", "chainmail", "slack", "slackdump.sqlite")
+}
+
+// defaultUploadDir is where the Slack downloader keeps attachment bytes: a
+// sibling of the archive it wrote. Derived from the archive path so that
+// pointing CHAINMAIL_SLACK_ARCHIVE at another copy moves both together.
+func defaultUploadDir() string {
+	return filepath.Join(filepath.Dir(defaultSlackArchive()), "__uploads")
 }
 
 // buildQuery turns CLI flags into a corpus query.

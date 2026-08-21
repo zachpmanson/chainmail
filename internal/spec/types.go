@@ -96,4 +96,16 @@ type Attachment struct {
 	Kind    string `json:"kind,omitempty"`
 	Size    string `json:"size,omitempty"`
 	GmailID string `json:"gmailId,omitempty"`
+	// Link opens the attachment at its source, for attachments not reached
+	// through Gmail. Without it a Slack attachment is an unopenable label.
+	Link string `json:"link,omitempty"`
+	// Preview is a thumbnail as a data: URI, present only where the archive kept
+	// the bytes and the picture is content rather than decoration. Never a URL:
+	// the page must render without a network. See preview.go.
+	Preview string `json:"preview,omitempty"`
+	// PreviewW and PreviewH are the thumbnail's own pixel size, so the page
+	// reserves the right space before the image decodes and the transcript does
+	// not reflow as it reads.
+	PreviewW int `json:"previewW,omitempty"`
+	PreviewH int `json:"previewH,omitempty"`
 }

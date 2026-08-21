@@ -133,7 +133,11 @@
               "name": { "type": "string" },
               "kind": { "type": "string" },
               "size": { "type": "string" },
-              "gmailId": { "type": "string", "description": "Links to the message in Gmail. Only ever present on real messages." }
+              "gmailId": { "type": "string", "description": "Links to the message in Gmail. Only ever present on real messages." },
+              "link": { "type": "string", "description": "Opens the attachment at its source, for attachments not reached through Gmail." },
+              "preview": { "type": "string", "description": "Thumbnail as a data: URI. Never a URL — the page renders without a network.", "pattern": "^data:image/" },
+              "previewW": { "type": "integer", "minimum": 1 },
+              "previewH": { "type": "integer", "minimum": 1 }
             }
           }
         }

@@ -5,6 +5,9 @@
  * Deliberately not React: the same behaviour has to run inside the dev app and
  * inside the server-rendered single-file export. Two implementations would drift.
  */
+/** The listener registrar `attach` hands to the behaviours it delegates to. */
+type On = (el: EventTarget, type: string, fn: (ev: Event) => void, opts?: AddEventListenerOptions) => void;
+
 export function attach(doc: Document = document): () => void {
   const cleanups: Array<() => void> = [];
   const on = <K extends keyof HTMLElementEventMap>(
@@ -78,6 +81,9 @@ export function attach(doc: Document = document): () => void {
       });
     });
   }
+
+  /* ---------- enlarging a preview ---------- */
+  cleanups.push(attachPopover(doc, on));
 
   /* ---------- highlight: one state, two drivers ---------- */
   const nodes = mini ? [...mini.querySelectorAll<SVGGElement>(".nd")] : [];
@@ -233,4 +239,198 @@ function withTransition(doc: Document, apply: () => void) {
   }
   const clear = () => { for (const el of named) el.style.viewTransitionName = ""; };
   d.startViewTransition(apply).finished.then(clear, clear);
+}
+
+/**
+ * Click-to-enlarge for attachment thumbnails, and for pictures the sender put
+ * in the body.
+ *
+ * Not a `<details>`: a disclosure reveals content in place and leaves the
+ * document readable around it, which is right for the panels and the signature
+ * folds. An enlarged screenshot wants the opposite — it covers the transcript,
+ * takes the keyboard, and is dismissed rather than left open. Dressing that up
+ * as a disclosure would give it a summary marker that behaves like nothing else
+ * on the page.
+ *
+ * Nor a native `<dialog>`, which would give modality and the focus trap for
+ * free. Its `showModal` is absent from the DOM implementation the tests run in,
+ * so choosing it would mean the trap — the part most likely to be got wrong —
+ * could never be asserted. The cost of doing it by hand is one Tab handler.
+ */
+function attachPopover(doc: Document, on: On): () => void {
+  // Every trigger is an element that already navigates somewhere on its own, so
+  // the popover is strictly additive: with no script the click opens the file at
+  // its source, and body pictures stay the plain images the sender sent.
+  const triggers = [
+    ...doc.querySelectorAll<HTMLElement>(".att[data-pop]"),
+    ...doc.querySelectorAll<HTMLImageElement>(".bd img"),
+  ];
+  if (!triggers.length) return () => {};
+
+  let host: HTMLElement | null = null;
+  let shot: HTMLImageElement;
+  let cap: HTMLElement;
+  let closeBtn: HTMLButtonElement;
+  let opener: HTMLElement | null = null;
+
+  /** Built on first use, so a page nobody enlarges anything on carries no extra DOM. */
+  const build = () => {
+    if (host) return;
+    host = doc.createElement("div");
+    host.className = "pop";
+    host.setAttribute("role", "dialog");
+    host.setAttribute("aria-modal", "true");
+    host.setAttribute("aria-label", "Enlarged image");
+    host.hidden = true;
+    host.innerHTML =
+      '<div class="popbox"><img class="popimg" alt=""><div class="popbar">' +
+      '<span class="popcap"></span><button type="button" class="popx">Close</button>' +
+      "</div></div>";
+    shot = host.querySelector<HTMLImageElement>(".popimg")!;
+    cap = host.querySelector<HTMLElement>(".popcap")!;
+    closeBtn = host.querySelector<HTMLButtonElement>(".popx")!;
+    doc.body.appendChild(host);
+
+    on(closeBtn, "click", close);
+    // The backdrop is the host itself; a click that lands on the picture or the
+    // bar must not dismiss, or dragging to select the caption closes the popover.
+    on(host, "click", (ev: Event) => { if (ev.target === host) close(); });
+    on(host, "keydown", (ev: Event) => {
+      const k = ev as KeyboardEvent;
+      if (k.key === "Escape") { k.preventDefault(); close(); return; }
+      // Close is the only focusable thing inside, so the trap is Tab staying put
+      // rather than a cycle through a list. Written as a wrap anyway: it stays
+      // correct if the popover ever gains a second control.
+      if (k.key !== "Tab") return;
+      const stops = [...host!.querySelectorAll<HTMLElement>("button, [href]")];
+      if (!stops.length) return;
+      const edge = k.shiftKey ? stops[0]! : stops[stops.length - 1]!;
+      if (doc.activeElement === edge || !host!.contains(doc.activeElement)) {
+        k.preventDefault();
+        (k.shiftKey ? stops[stops.length - 1]! : stops[0]!).focus();
+      }
+    });
+  };
+
+  function close() {
+    if (!host || host.hidden) return;
+    host.hidden = true;
+    doc.body.classList.remove("popped");
+    doc.querySelector(".wrap")?.removeAttribute("inert");
+    // Returning the keyboard where it came from: a reader who enlarged a picture
+    // mid-transcript must not be dropped back at the top of the document.
+    opener?.focus();
+    opener = null;
+  }
+
+  const open = (src: string, caption: string, from: HTMLElement) => {
+    build();
+    shot.src = src;
+    cap.textContent = caption;
+    host!.hidden = false;
+    // The overlay covers the viewport, so a pointer cannot reach the transcript
+    // anyway; inert is what says the same thing to a screen reader and to the
+    // tab order, which the Tab handler alone could only enforce for the keyboard.
+    doc.querySelector(".wrap")?.setAttribute("inert", "");
+    doc.body.classList.add("popped");
+    opener = from;
+    closeBtn.focus();
+  };
+
+  /** Wire one picture up, once it is known to be worth enlarging. */
+  const arm = (t: HTMLElement, img: HTMLImageElement, isChip: boolean) => {
+    const label = isChip ? t.dataset.pop! : img.getAttribute("alt") || "";
+    // The keyboard has to reach whatever already takes focus. A chip is the link
+    // itself; a body picture may be wrapped in one, and the wrapper is the tab
+    // stop, so a listener on the picture would never see the Enter key.
+    const trig: HTMLElement = isChip ? t : (t.closest("a") ?? t);
+    if (trig === t && !isChip && !t.hasAttribute("tabindex")) t.tabIndex = 0;
+    trig.setAttribute("aria-haspopup", "dialog");
+
+    const show = () => open(img.currentSrc || img.src, label, trig);
+    on(trig, "click", (ev) => {
+      const m = ev as MouseEvent;
+      // A modified click is the reader asking for a new tab or a download, and
+      // the link underneath is the right answer to that. Leave it alone.
+      if (m.metaKey || m.ctrlKey || m.shiftKey || m.altKey || m.button !== 0) return;
+      ev.preventDefault();
+      show();
+    });
+    // An anchor already fires a click on Enter; a bare picture does not, and
+    // Space would otherwise scroll the page out from under it.
+    if (trig.tagName !== "A") {
+      on(trig, "keydown", (ev) => {
+        const k = ev as KeyboardEvent;
+        if (k.key !== "Enter" && k.key !== " ") return;
+        k.preventDefault();
+        show();
+      });
+    }
+  };
+
+  for (const t of triggers) {
+    const isChip = t.classList.contains("att");
+    const img = isChip ? t.querySelector<HTMLImageElement>(".athumb") : (t as HTMLImageElement);
+    if (!img) continue;
+    // A chip's thumbnail was already judged worth showing where the bytes were,
+    // so it is not judged again.
+    if (isChip) {
+      arm(t, img, true);
+      continue;
+    }
+    // A body picture has had no such filter: it is whatever the sender's markup
+    // contained, which on a real mail page is mostly letterhead, wordmarks and
+    // tracking pixels — 21 of 29 on one. Nothing is armed until the picture is
+    // known to be worth it, because arming adds a tab stop, and a tab stop that
+    // enlarges a 120×22 wordmark is worse than none.
+    if (!img.getAttribute("src")) continue;
+    switch (worthEnlarging(img)) {
+      case "yes":
+        arm(t, img, false);
+        break;
+      case "unknown":
+        // No declared size and not yet loaded, so nothing can be measured. Ask
+        // again when the bytes arrive, which is the first moment the picture's
+        // own dimensions exist.
+        on(img, "load", () => { if (worthEnlarging(img) === "yes") arm(t, img, false); },
+          { once: true });
+        break;
+    }
+  }
+
+  return () => { host?.remove(); host = null; };
+}
+
+/**
+ * The floor separating a picture worth enlarging from decoration, in pixels on
+ * both edges. Deliberately the same number the spec builder applies to decoded
+ * attachment bytes (minPreviewEdge in preview.go): one rule for "this is a
+ * picture and not furniture", so the page never offers to enlarge something the
+ * builder would have refused to embed.
+ */
+const MIN_ENLARGE_EDGE = 100;
+
+/**
+ * Whether a body picture is worth a popover, or whether that cannot be told yet.
+ *
+ * Two things disqualify one: being small enough to be furniture, and already
+ * being on screen at its full size, where enlarging shows nothing new. Both are
+ * measured where the measurement exists — a loaded picture knows its natural
+ * size, an unloaded one only has the width and height the sender declared, and a
+ * picture with neither cannot be judged at all until it loads.
+ */
+function worthEnlarging(img: HTMLImageElement): "yes" | "no" | "unknown" {
+  const box = img.clientWidth || Number(img.getAttribute("width")) || 0;
+  const boxH = img.clientHeight || Number(img.getAttribute("height")) || 0;
+  const nat = img.naturalWidth;
+  if (box && boxH && (box < MIN_ENLARGE_EDGE || boxH < MIN_ENLARGE_EDGE)) return "no";
+  if (nat) {
+    if (nat < MIN_ENLARGE_EDGE || img.naturalHeight < MIN_ENLARGE_EDGE) return "no";
+    // Shown at full size already. Compared against the box rather than the
+    // viewport: a picture the sender sized down is worth opening, one they did
+    // not is already as large as it gets.
+    if (box && nat <= box) return "no";
+    return "yes";
+  }
+  return box && boxH ? "yes" : "unknown";
 }

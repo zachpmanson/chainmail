@@ -38,6 +38,12 @@ type Options struct {
 	// Orgs maps a mail domain to an organisation label, overriding the label
 	// derived from the domain itself.
 	Orgs map[string]string
+
+	// UploadDir is the archive's upload root, where the downloader that fed the
+	// corpus kept attachment bytes. Set it to embed image thumbnails; leave it
+	// empty and every attachment stays a chip. Only the Slack archive keeps
+	// bytes today, so only Slack attachments can gain a preview.
+	UploadDir string
 }
 
 // Generate builds a timeline spec from the corpus.
@@ -104,6 +110,7 @@ func Generate(store *corpus.Store, opts Options) (Spec, error) {
 		badZones:    map[string]int{},
 		zoneWhy:     map[string]string{},
 		orgByPerson: map[int64]string{},
+		prev:        &previewer{dir: opts.UploadDir},
 	}
 	for _, r := range rows {
 		b.rowByID[r.ID] = r
@@ -180,6 +187,10 @@ type builder struct {
 	// zoneWhy collects one line of evidence per inferred entry, deduplicated by
 	// sender, so the page can be argued with rather than merely believed.
 	zoneWhy map[string]string
+
+	// prev encodes attachment thumbnails and holds the page's preview budget, so
+	// the cap is across the whole page rather than per entry.
+	prev *previewer
 }
 
 func (b *builder) add(r *entryRow) {
@@ -253,9 +264,20 @@ func (b *builder) add(r *entryRow) {
 			// Only a real message can be opened in Gmail.
 			att.GmailID = r.GmailID
 		}
-		if !hasAttachment(e.Attachments, att) {
-			e.Attachments = append(e.Attachments, att)
+		if att.GmailID == "" {
+			// A mail attachment's permalink is the same Gmail URL the id already
+			// builds, so carrying both would put the same target in the spec
+			// twice. This is what gives a Slack attachment somewhere to go.
+			att.Link = a.Permalink
 		}
+		// Dedup before encoding: hasAttachment identifies a file by name and
+		// size, so a duplicate would charge the page's preview budget for a
+		// thumbnail that is then thrown away.
+		if hasAttachment(e.Attachments, att) {
+			continue
+		}
+		att.Preview, att.PreviewW, att.PreviewH = b.prev.preview(a)
+		e.Attachments = append(e.Attachments, att)
 	}
 
 	e.ID = b.ids.take(entryID(e))

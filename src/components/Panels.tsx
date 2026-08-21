@@ -1,6 +1,7 @@
 import { initials, type View } from "../lib/derive";
 import type { Timeline as Spec } from "../lib/spec";
 import { msgCount } from "../lib/sources";
+import { attHref } from "../lib/attachments";
 
 /** A participant as the panel needs it, however the spec supplied them. */
 type Person = NonNullable<Spec["participants"]>[number];
@@ -229,8 +230,8 @@ export function SourcesPanel({ v, filter }: { v: View; filter?: ChainFilter }) {
       title: `Attachments (${atts.length})`,
       items: atts.map(({ a }, i) => (
         <span key={i}>
-          {a.gmailId ? (
-            <a href={`https://mail.google.com/mail/u/0/#all/${a.gmailId}`} target="_blank" rel="noopener">
+          {attHref(a) ? (
+            <a href={attHref(a)} target="_blank" rel="noopener">
               <code>{a.name}</code>
             </a>
           ) : (
