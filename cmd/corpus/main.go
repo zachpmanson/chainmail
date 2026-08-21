@@ -10,21 +10,27 @@
 //	corpus candidates                 pairs that may be one human, for review
 //	corpus repair                     undo what a folded header did to identities
 //	corpus search -q <text>           which chains are about this
+//	corpus embed                      fill in the vectors semantic search needs
 //	corpus spec -q <text> -o f.json   a timeline spec for those chains
 //	corpus unnest <ext-id>            what extraction recovers from one message
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/zachpmanson/chainmail/internal/corpus"
+	"github.com/zachpmanson/chainmail/internal/embed"
 	"github.com/zachpmanson/chainmail/internal/mailingest"
 	"github.com/zachpmanson/chainmail/internal/slackingest"
 	"github.com/zachpmanson/chainmail/internal/spec"
@@ -54,7 +60,14 @@ const usage = `usage: corpus <command> [flags]
   init                     create or migrate the corpus
   ingest mail   -q <query> ingest Gmail results, with their quoted history
   ingest slack  [-archive] ingest a slackdump archive
-  search        -q <text>  ranked chains across every source
+  search        -q <text>  ranked chains across every source; -mode chooses
+                           lexical, semantic or hybrid retrieval, -topk how deep
+                           the vector ranking votes, -dim -model -url -timeout
+                           the model it asks
+  embed         [-model -url -dim -batch -limit -timeout -prune]
+                           embed the entries that have no current vector, so
+                           semantic search has something to search; resumable,
+                           so ^C is a pause
   show          <ext-id>   one entry in full, or -chain for the whole thread
   spec          -q <text>  write a timeline spec for the renderer
   unnest        <ext-id>   show the blocks one body contains, from the corpus;
@@ -126,6 +139,13 @@ func run(args []string) error {
 		person := fs.String("person", "", "involving this address, name or slack uid")
 		limit := fs.Int("limit", 10, "chains to return")
 		entries := fs.Bool("entries", false, "list matching entries instead of chains")
+		mode := fs.String("mode", modeLexical,
+			"retrieval: lexical | semantic | hybrid (the last two need `corpus embed`)")
+		topk := fs.Int("topk", 0, "how deep the vector ranking votes (default 100)")
+		model := fs.String("model", embed.DefaultModel, "embedding model, for -mode semantic|hybrid")
+		dim := fs.Int("dim", embed.DefaultDim, "dimensions that model returns")
+		url := fs.String("url", embed.DefaultBaseURL, "ollama endpoint")
+		timeout := fs.String("timeout", "2m", "how long to wait for the model")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
@@ -138,10 +158,16 @@ func run(args []string) error {
 		// involving X"), but with no filters at all it silently returned an
 		// arbitrary slice of the whole corpus, which reads like a ranked answer.
 		if *q == "" && *person == "" && *since == "" {
-			return errors.New("usage: corpus search -q <text> [-person X] [-since YYYY-MM-DD] " +
-				"[-limit N] [-entries]\n       (-q may be empty only when -person or -since narrows it)")
+			return errors.New("usage: corpus search -q <text> [-person X] [-since YYYY-MM-DD]\n" +
+				"       [-limit N] [-entries] [-mode lexical|semantic|hybrid] [-topk N]\n" +
+				"       [-model M] [-dim N] [-url U] [-timeout D]\n" +
+				"       (-q may be empty only when -person or -since narrows it)")
 		}
 		query, err := buildQuery(*q, *since, *person, *limit)
+		if err != nil {
+			return err
+		}
+		query.Semantic, err = semanticFor(*mode, *q, *model, *url, *timeout, *dim, *topk)
 		if err != nil {
 			return err
 		}
@@ -151,8 +177,8 @@ func run(args []string) error {
 				return err
 			}
 			for _, h := range hits {
-				fmt.Printf("%-28s %s\n    %s\n", h.ExtID,
-					h.TS.Format("2006-01-02 15:04"), oneLine(h.Snippet, 100))
+				fmt.Printf("%-28s %s%s\n    %s\n", h.ExtID,
+					h.TS.Format("2006-01-02 15:04"), why(h), oneLine(h.Snippet, 100))
 			}
 			fmt.Printf("\n%d entries\n", len(hits))
 			return nil
@@ -168,6 +194,98 @@ func run(args []string) error {
 			fmt.Printf("    root %s\n", c.RootExtID)
 		}
 		fmt.Printf("\n%d chains\n", len(chains))
+		return nil
+
+	case "embed":
+		// Backfill. Long-running and interruptible on purpose: this is minutes of
+		// work against a local model, and ^C has to be a pause rather than a
+		// setback.
+		fs := flag.NewFlagSet("embed", flag.ContinueOnError)
+		model := fs.String("model", embed.DefaultModel, "embedding model to use")
+		url := fs.String("url", embed.DefaultBaseURL, "ollama endpoint")
+		dim := fs.Int("dim", embed.DefaultDim, "dimensions the model returns")
+		batch := fs.Int("batch", 0, "entries per request and per commit (default 32)")
+		limit := fs.Int("limit", 0, "stop after this many entries")
+		timeout := fs.String("timeout", "5m", "how long to wait for one batch")
+		prune := fs.Bool("prune", false,
+			"after the run, drop vectors from every other model")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		wait, err := time.ParseDuration(*timeout)
+		if err != nil {
+			return fmt.Errorf("-timeout %q: %w", *timeout, err)
+		}
+		s, err := corpus.Open(path)
+		if err != nil {
+			return err
+		}
+		defer s.Close()
+
+		e := &embed.Ollama{BaseURL: *url, Name: *model, Dimension: *dim,
+			Client: &http.Client{Timeout: wait}}
+
+		// Checked up front. The alternative is discovering a missing model on the
+		// first batch, which is the same failure reported later and with a
+		// partially-written table to explain.
+		ready, err := e.Available(context.Background())
+		if err != nil {
+			return err
+		}
+		if !ready {
+			return fmt.Errorf("%s is running but does not have %s: run `ollama pull %s`",
+				*url, *model, *model)
+		}
+
+		// ^C stops between batches, so the work already committed stays and the
+		// run resumes where it left off.
+		ctx, stop := signal.NotifyContext(context.Background(),
+			os.Interrupt, syscall.SIGTERM)
+		defer stop()
+
+		started := time.Now()
+		var progressed bool
+		rep, err := s.BackfillEmbeddings(ctx, e, corpus.BackfillOptions{
+			Batch: *batch, Limit: *limit,
+			Progress: func(p corpus.BackfillProgress) {
+				progressed = true
+				// Rate and remaining, not a percentage: what a reader wants after
+				// two minutes of this is whether to wait for it.
+				elapsed := time.Since(started)
+				var eta time.Duration
+				if p.Done > 0 {
+					eta = (elapsed / time.Duration(p.Done)) * time.Duration(p.Pending-p.Done)
+				}
+				fmt.Printf("\r%d/%d  %d embedded  %d without a topic  %s elapsed, ~%s left   ",
+					p.Done, p.Pending, p.Embedded, p.Skipped,
+					elapsed.Round(time.Second), eta.Round(time.Second))
+			},
+		})
+		if progressed {
+			fmt.Println()
+		}
+		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				fmt.Printf("stopped: %d embedded, %d without a topic, %d still to do — "+
+					"re-run to continue where this left off\n",
+					rep.Embedded, rep.Skipped, rep.Pending-rep.Embedded-rep.Skipped)
+				return nil
+			}
+			return err
+		}
+		fmt.Printf("%s at %dd: %d embedded, %d recorded as having no topic worth embedding\n",
+			rep.Model, rep.Dim, rep.Embedded, rep.Skipped)
+		if rep.Pending == 0 {
+			fmt.Println("everything was already current")
+		}
+		if *prune {
+			n, err := s.PruneEmbeddings(rep.Model)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("pruned %d %s from other models\n",
+				n, plural(int(n), "vector", "vectors"))
+		}
 		return nil
 
 	case "spec":
@@ -440,6 +558,26 @@ func run(args []string) error {
 		fmt.Printf("people       %d\n", st.People)
 		fmt.Printf("chain roots  %d\n", st.Roots)
 		fmt.Printf("unresolved   %d  (parent named but not present: known holes)\n", st.Unresolved)
+		es, err := s.EmbedStats()
+		if err != nil {
+			return err
+		}
+		if len(es) == 0 {
+			fmt.Println("embeddings   none  (`corpus embed` to enable semantic search)")
+		}
+		// Per model, because a half-finished model migration is a real state and
+		// looks from the results alone like a corpus that lost recall.
+		for _, m := range es {
+			fmt.Printf("embeddings   %s at %dd: %d vectors, %d skipped as having no topic",
+				m.Model, m.Dim, m.Vectors, m.Skipped)
+			if m.Eligible > 0 {
+				fmt.Printf(", %d to do", m.Eligible)
+			}
+			if m.Stale > 0 {
+				fmt.Printf(" (%d stale)", m.Stale)
+			}
+			fmt.Println()
+		}
 		return nil
 
 	case "ingest":
@@ -572,6 +710,69 @@ func buildQuery(text, since, person string, limit int) (corpus.Query, error) {
 		q.Involving = []string{person}
 	}
 	return q, nil
+}
+
+// Retrieval modes for `search -mode`.
+const (
+	modeLexical  = "lexical"
+	modeSemantic = "semantic"
+	modeHybrid   = "hybrid"
+)
+
+// semanticFor embeds the query text, or returns nil for a lexical search.
+//
+// The embedding happens here, at the point the user typed the query, rather than
+// inside search. A down daemon then surfaces as "ollama is not running" against
+// the command that needed it, instead of as an empty result set from a function
+// whose entire job is to return few results.
+func semanticFor(mode, text, model, url, timeout string, dim, topK int) (*corpus.SemanticQuery, error) {
+	switch mode {
+	case modeLexical, "":
+		return nil, nil
+	case modeSemantic, modeHybrid:
+	default:
+		return nil, fmt.Errorf("-mode %q: want lexical, semantic or hybrid", mode)
+	}
+	if strings.TrimSpace(text) == "" {
+		return nil, fmt.Errorf("-mode %s needs -q: there is nothing to be similar to", mode)
+	}
+	wait, err := time.ParseDuration(timeout)
+	if err != nil {
+		return nil, fmt.Errorf("-timeout %q: %w", timeout, err)
+	}
+	// The expected width is stated rather than inferred, so a model that is not
+	// the one whose vectors are stored fails here with a dimension mismatch
+	// instead of matching no rows and reading as an empty corpus.
+	e := &embed.Ollama{BaseURL: url, Name: model, Dimension: dim,
+		Client: &http.Client{Timeout: wait}}
+	ctx, cancel := context.WithTimeout(context.Background(), wait)
+	defer cancel()
+	vs, err := e.Embed(ctx, []string{text})
+	if err != nil {
+		return nil, fmt.Errorf("embedding the query: %w", err)
+	}
+	return &corpus.SemanticQuery{
+		Vector: vs[0], Model: model, TopK: topK, Only: mode == modeSemantic,
+	}, nil
+}
+
+// why names the rankings that found a hit, so a result with no visible keyword
+// in it is explicable rather than mysterious.
+func why(h corpus.EntryHit) string {
+	var parts []string
+	if h.ProseRank > 0 {
+		parts = append(parts, fmt.Sprintf("prose %d", h.ProseRank))
+	}
+	if h.IdentRank > 0 {
+		parts = append(parts, fmt.Sprintf("id %d", h.IdentRank))
+	}
+	if h.SemRank > 0 {
+		parts = append(parts, fmt.Sprintf("similar %d @ %.2f", h.SemRank, h.Similarity))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "  [" + strings.Join(parts, ", ") + "]"
 }
 
 func splitList(s string) []string {

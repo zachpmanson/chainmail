@@ -214,4 +214,55 @@ var migrations = []string{
 	alter table slack_detail add column channel_name text;
 	create index slack_channel on slack_detail(channel_id, ts);
 	`,
+
+	// 8: one vector per entry per model, for semantic retrieval.
+	//
+	// A vector is meaningless without knowing what produced it: two models, or
+	// two dimensions of one model, in one column returns confident nonsense and
+	// nothing in the numbers reveals it. So `model` and `dim` are stored beside
+	// every row and every read filters on both.
+	//
+	// `model` is in the primary key rather than a plain column so a model change
+	// is a background migration instead of an outage: the old vectors stay
+	// searchable while the new ones accumulate, and the switch happens when the
+	// backfill finishes. With entry_id alone as the key, re-embedding in place
+	// would leave search finding only the part of the corpus already converted,
+	// which looks like a corpus that lost half its mail. `corpus embed -prune`
+	// reclaims the superseded rows afterwards.
+	//
+	// Staleness is `body_sha` plus `prep`. body_sha already covers subject and
+	// body text, which is exactly the input to the embedded string — but only
+	// given a fixed way of deriving that string from them, and the derivation
+	// drops quoted history, so an improvement to it changes every vector without
+	// changing a single body_sha. `prep` is that derivation's version, and
+	// bumping it re-embeds the corpus. The alternative, hashing the prepared
+	// text itself, needs no constant to remember but cannot answer "what is
+	// stale" in SQL: it would peel 29k bodies on every run just to find out
+	// there was nothing to do.
+	//
+	// `vec` is NULL for an entry deliberately not embedded, with `skip` saying
+	// why. A row is still written, because otherwise every run reconsiders the
+	// same third of the corpus that has nothing worth embedding, and a
+	// zero-content entry is a fact about the mail worth being able to count.
+	//
+	// Vectors are stored L2-normalised, little-endian float32: 4 bytes a
+	// dimension, so similarity is a dot product and a query costs one pass. No
+	// vector index — modernc.org/sqlite cannot load native extensions, so
+	// sqlite-vec is unavailable, and a brute-force scan at this corpus's size is
+	// milliseconds. An index would start to matter around a million entries.
+	`
+	create table entry_embeddings (
+	  entry_id    integer not null references entries(id),
+	  model       text not null,
+	  dim         integer not null,
+	  body_sha    text not null,        -- as of embedding; a change means stale
+	  prep        integer not null,     -- text-preparation version
+	  vec         blob,                 -- NULL when skipped
+	  skip        text,                 -- why it was not embedded
+	  embedded_at integer not null,
+	  primary key (entry_id, model)
+	);
+	create index entry_embeddings_model on entry_embeddings(model, dim)
+	  where vec is not null;
+	`,
 }
