@@ -34,10 +34,18 @@ import (
 )
 
 // Observation is one instant at which a person's own client stated its offset.
-// At is the true instant, from a Date header; Off is minutes east of UTC.
+// At is the true instant and Off is minutes east of UTC.
+//
+// Measured distinguishes where the offset came from, and only for the caveat's
+// sake — the fit treats the two identically, because they are the same claim
+// made by the same client. A stated one is read off a Date header. A measured one
+// is the difference between a message's true instant and the wall clock this
+// person's client wrote when quoting it, which is the only evidence that reaches
+// an account stamping +0000 on its own mail.
 type Observation struct {
-	At  time.Time
-	Off int
+	At       time.Time
+	Off      int
+	Measured bool
 }
 
 // Verdict is how far the evidence about one person goes.
@@ -92,6 +100,9 @@ type Place struct {
 	// Obs is how many observations the verdict rests on, after the ones that say
 	// nothing about place have been dropped.
 	Obs int
+	// Measured is how many of Obs came from a message quoted twice rather than
+	// from a Date header, so a caveat can say which kind of evidence it rests on.
+	Measured int
 	// Bare is how many observations were dropped for stating +0000 and nothing
 	// else. It is the whole of the evidence when Verdict is UTCOnly, so the
 	// caveat can say how much UTC was seen rather than how much was believed.
@@ -134,7 +145,7 @@ func (p Place) Candidates(from, to time.Time) []int {
 func (p Place) Why() string {
 	switch p.Verdict {
 	case Placed:
-		return fmt.Sprintf("is placed in %s by %s", p.Zones[0], plural(p.Obs, "stated offset"))
+		return fmt.Sprintf("is placed in %s by %s", p.Zones[0], evidence(p.Obs-p.Measured, p.Measured))
 	case Moved:
 		return fmt.Sprintf("has stated %s, which no single zone explains", offsetList(p.Seen))
 	case UTCOnly:
@@ -180,6 +191,11 @@ func Fit(obs []Observation) Place {
 	}
 	kept := withoutBareUTC(obs)
 	p.Obs, p.Bare = len(kept), len(obs)-len(kept)
+	for _, o := range kept {
+		if o.Measured {
+			p.Measured++
+		}
+	}
 	if len(kept) == 0 {
 		p.Verdict = UTCOnly
 		return p
@@ -256,6 +272,20 @@ func FormatOffset(mins int) string {
 		sign, mins = "-", -mins
 	}
 	return fmt.Sprintf("%s%02d%02d", sign, mins/60, mins%60)
+}
+
+// evidence names the two kinds of observation a placement rests on, so a reader
+// can weigh a zone derived from one subtraction differently from one derived
+// from a year of headers.
+func evidence(stated, measured int) string {
+	switch {
+	case measured == 0:
+		return plural(stated, "stated offset")
+	case stated == 0:
+		return plural(measured, "offset") + " measured where a message was quoted twice"
+	}
+	return plural(stated, "stated offset") + " and " +
+		plural(measured, "offset") + " measured where a message was quoted twice"
 }
 
 func offsetList(mins []int) string {

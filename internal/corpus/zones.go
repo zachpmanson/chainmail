@@ -16,11 +16,24 @@ import (
 // state 3,000 across the corpus. Restricting the evidence to the selection would
 // make the same message resolve differently depending on what else was rendered
 // beside it.
+// Two kinds of evidence, and they are the same claim: a client stating the zone
+// it is in. A Date header states it about the message being sent; a sentinel
+// states it about a message being quoted, and render_offsets holds the ones a
+// twin collapse measured exactly. Neither is an inference.
+//
+// The rendered ones are the only evidence that reaches an Exchange account
+// stamping +0000 on its own mail: 7 of the people measured here have never
+// stated anything but UTC in a header, and 5 of them render at +1000, +1100 or
+// +1200. Without these they stay UTCOnly, which costs the inference every
+// message they ever quoted — and the two who really do render at +0000 are
+// dropped by withoutBareUTC exactly as their headers already were.
 func (s *Store) ZoneObservations() (map[int64][]tzinfer.Observation, error) {
 	rows, err := s.db.Query(`
-		select person_id, ts, tz_offset from entries
+		select person_id, ts, tz_offset, 0 as measured from entries
 		where tz_offset is not null and person_id is not null
-		order by person_id, ts`)
+		union all
+		select person_id, at, off, 1 from render_offsets
+		order by 1, 2`)
 	if err != nil {
 		return nil, fmt.Errorf("reading stated offsets: %w", err)
 	}
@@ -30,10 +43,12 @@ func (s *Store) ZoneObservations() (map[int64][]tzinfer.Observation, error) {
 		var person int64
 		var ts int64
 		var off int
-		if err := rows.Scan(&person, &ts, &off); err != nil {
+		var measured bool
+		if err := rows.Scan(&person, &ts, &off, &measured); err != nil {
 			return nil, err
 		}
-		out[person] = append(out[person], tzinfer.Observation{At: time.Unix(ts, 0).UTC(), Off: off})
+		out[person] = append(out[person], tzinfer.Observation{
+			At: time.Unix(ts, 0).UTC(), Off: off, Measured: measured})
 	}
 	return out, rows.Err()
 }
