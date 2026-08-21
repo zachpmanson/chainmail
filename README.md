@@ -28,6 +28,9 @@ which was CSS and JS trapped in string literals) into real files with real tests
       lexical ranking. `corpus embed` fills them in; `corpus search -mode
       semantic|hybrid` uses them. Needs `ollama pull nomic-embed-text` — the
       corpus is personal mail, so nothing is sent anywhere
+- [x] Retrieval evaluation: `corpus eval` scores two configurations over one
+      judged set of queries, so a change to indexing or ranking is measured
+      rather than argued about
 
 Structural parity with the original Python renderer is verified against a real
 58-entry trail: 25 of 25 counted properties match (entries, chains, spines, reply
@@ -110,3 +113,29 @@ commit. `fixtures/minimal.json` is the 1-entry degenerate case.
 
 Real mail trails are sensitive and are never committed. Keep them untracked at
 `fixtures/local.json` and load them with `?spec=`.
+
+### Measuring retrieval
+
+`corpus eval` scores two retrieval configurations over one set of judged queries
+and prints the delta, because a retrieval number on its own says nothing:
+
+```bash
+corpus eval -set fixtures/eval.local.json \
+  -a "name=lexical,mode=lexical" \
+  -b "name=hybrid,mode=hybrid" -cases
+```
+
+Each `-a`/`-b` spec takes `name db mode model url dim topk minsim noprefix`.
+`db` lets the two configurations search different corpora, which is what makes a
+change to *stored* vectors measurable: prefixed and unprefixed documents cannot
+coexist under one model name, so the comparison is between two copies. `-floor`
+prints the two cosine distributions a similarity floor has to separate — the
+scores of judged-correct results against the scores of queries the corpus cannot
+answer — which is how the floor in `embed.Traits` was chosen.
+
+The judged set that means anything is judgements about real correspondence, so it
+stays untracked at `fixtures/eval.local.json`; a query is a paraphrase of what a
+thread is about and an `ext_id` is a durable pointer into a real mailbox, so the
+pair is a labelled index of somebody's inbox even with no body text in it.
+`fixtures/eval.synthetic.json` is the committed example, judged against a corpus
+`internal/eval`'s tests build, and it carries the mechanical tests.
