@@ -316,6 +316,14 @@ func MergeCandidates(s *Store) ([]MergeCandidate, error) {
 		return nil, err
 	}
 
+	welded, err := WeldedNameCandidates(s)
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range welded {
+		add(c)
+	}
+
 	named, err := sameNamedPeople(s)
 	if err != nil {
 		return nil, err

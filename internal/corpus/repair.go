@@ -3,6 +3,7 @@ package corpus
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 )
 
 // MailtoRepair is what RepairMailtoIdentities did.
@@ -162,11 +163,160 @@ func repairMailtoNames(s *Store) (int, error) {
 	return n, nil
 }
 
+// PlusAddressRepair is what RepairPlusAddresses did.
+type PlusAddressRepair struct {
+	Merged   int           // people folded into the holder of their base mailbox
+	Anchored int           // base mailboxes nobody held, now recorded on the person
+	Renamed  int           // people whose name was the tagged address they arrived as
+	Left     []LeftAddress // tagged addresses this would not reduce
+}
+
+// LeftAddress is a subaddress the repair declined to reduce. It stays as it is
+// and is reported, so declining is visible rather than quiet.
+type LeftAddress struct {
+	Value  string
+	Reason string
+}
+
+// RepairPlusAddresses folds together the people one mailbox split into once it
+// was written with RFC 5233 tags (see plusBaseAddress). Twenty-two rows for one
+// human is the ordinary outcome: every signup gets its own tag, every tag is its
+// own identity value, and each one mints a person holding their own share of the
+// sent/received counts.
+//
+// The parse resolves tagged addresses to the base mailbox now, so no new corpus
+// grows these. That does nothing for the rows already stored — identities are
+// keyed on the value — which is why this exists alongside the parse fix rather
+// than instead of it, the same division as RepairMailtoIdentities.
+//
+// The base mailbox's person survives, for the reason the mailto repair keeps the
+// clean half: the base address is what a Slack profile and a correctly-quoted
+// header match, so keeping them means no later sighting needs repairing again.
+// Where nobody holds the base it is recorded on the person who holds the tag —
+// under RFC 5233 that mailbox is already theirs, and recording it is what makes
+// the next tag land on this person instead of minting another.
+//
+// A role mailbox is reduced like any other: `support+noreply@d` is delivered to
+// `support@d` whatever genericLocalPart thinks of the word. That gate is about
+// inferring a human across two domains, which is a different question from where
+// one domain delivers its mail.
+func RepairPlusAddresses(s *Store) (PlusAddressRepair, error) {
+	var r PlusAddressRepair
+
+	values, err := subaddressedValues(s)
+	if err != nil {
+		return r, err
+	}
+	for _, value := range values {
+		base, _, ok := plusBaseAddress(value)
+		if !ok {
+			r.Left = append(r.Left, LeftAddress{
+				Value: value, Reason: leftReason(value)})
+			continue
+		}
+		// Through the alias table, so the reduction lands where resolution would:
+		// on the current domain rather than one a rebrand has moved off.
+		base, _, err := CanonicalAddress(s, base)
+		if err != nil {
+			return r, err
+		}
+
+		// Re-read the holder rather than trusting the listing: a merge earlier in
+		// this pass may already have moved this value to somebody else.
+		var holder int64
+		err = s.db.QueryRow(`select person_id from identities where kind=? and value=?`,
+			KindEmail, value).Scan(&holder)
+		if err == sql.ErrNoRows {
+			continue
+		} else if err != nil {
+			return r, err
+		}
+
+		var owner int64
+		err = s.db.QueryRow(`select person_id from identities where kind=? and value=?`,
+			KindEmail, base).Scan(&owner)
+		switch {
+		case err == sql.ErrNoRows:
+			if _, err := s.db.Exec(
+				`insert into identities (person_id, kind, value, rule) values (?,?,?,?)`,
+				holder, KindEmail, base, "repair:plus-address"); err != nil {
+				return r, fmt.Errorf("recording base mailbox %s: %w", base, err)
+			}
+			r.Anchored++
+		case err != nil:
+			return r, fmt.Errorf("looking up %s: %w", base, err)
+		case owner != holder:
+			// The tagged identity moves with the merge rather than being deleted:
+			// which tag a message arrived under is the thing this repair is careful
+			// not to spend.
+			if err := mergeWithReason(s, owner, holder,
+				"repair:plus-address ("+value+")"); err != nil {
+				return r, err
+			}
+			r.Merged++
+		}
+
+		// A person first seen as a tagged address carries it as their display name.
+		// Named for the mailbox rather than the tag, because the tag describes one
+		// signup and the person is all of them.
+		res, err := s.db.Exec(`
+			update people set display_name = ?
+			 where display_name = ?
+			   and exists (select 1 from identities i
+			                where i.person_id = people.id and i.kind = ? and i.value = ?)`,
+			base, value, KindEmail, base)
+		if err != nil {
+			return r, fmt.Errorf("renaming the holder of %s: %w", value, err)
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return r, err
+		}
+		r.Renamed += int(n)
+	}
+	return r, nil
+}
+
+// leftReason names why plusBaseAddress refused a subaddressed value, for a report
+// a human has to act on.
+func leftReason(value string) string {
+	at := strings.LastIndex(value, "@")
+	if at >= 0 && strings.HasPrefix(value[:at], "+") {
+		return "no mailbox in front of the tag"
+	}
+	return "the tag names a different mailbox"
+}
+
+func subaddressedValues(s *Store) ([]string, error) {
+	rows, err := s.db.Query(`
+		select value from identities
+		 where kind = ? and value like '%+%'
+		 order by value`, KindEmail)
+	if err != nil {
+		return nil, fmt.Errorf("finding subaddressed identities: %w", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var v string
+		if err := rows.Scan(&v); err != nil {
+			return nil, err
+		}
+		// A `+` in the domain is not a tag, and a value holding one has nothing
+		// here to decide about — not even a refusal to report.
+		if hasSubaddress(v) {
+			out = append(out, v)
+		}
+	}
+	return out, rows.Err()
+}
+
 // TruncatedNameRepair is what RepairTruncatedNames did.
 type TruncatedNameRepair struct {
-	Merged   int            // placeholders folded into the person they name
+	Merged   int            // placeholders folded into the person the fragment names
 	Cleaned  int            // identities that lost the bracket with nobody to merge into
 	Renamed  int            // people carrying the bracket in their display name
+	Welded   int            // names split from the address written inside them
 	Declined []DeclinedName // pairs the evidence does not settle, left for review
 }
 
@@ -181,12 +331,21 @@ type DeclinedName struct {
 }
 
 // RepairTruncatedNames fixes name-only identities left where a folded recipient
-// list was split through the middle of an address (see rejoinFoldedAddresses):
-// the name survived, the address did not, and the fragment kept the `<` that
-// introduced it. A display name never legitimately ends in one, so these are
-// unambiguously corrupt.
+// list was split through the middle of an address (see rejoinFoldedAddresses).
+// One fold, two shapes, by where the cut fell:
 //
-// The address cannot be recovered — it was never stored — so unlike
+//   - cut at the bracket, `Name <`. The address is gone; the name survived and
+//     kept the `<` that introduced it. A display name never legitimately ends in
+//     one, so these are unambiguously corrupt.
+//   - cut inside the bracket, `Name <addr`. The address survived, welded into
+//     the name. Handled by repairWeldedName, which has real evidence to work
+//     from rather than the weighing this one has to do.
+//
+// A `<` anywhere else with no address behind it is left alone: a name is the
+// whole of a name-only participant's evidence, and one written with a bracket in
+// it is still that person.
+//
+// For the first shape the address cannot be recovered — it was never stored — so unlike
 // RepairMailtoIdentities this cannot reduce a value to the thing it always meant.
 // All it can do is decide who the name belongs to, and a name is weak evidence:
 // two colleagues can share one. So a merge is made only on two signals together:
@@ -214,6 +373,15 @@ func RepairTruncatedNames(s *Store) (TruncatedNameRepair, error) {
 		return r, err
 	}
 	for _, value := range values {
+		if name, addr, ok := weldedAddress(value); ok {
+			if err := repairWeldedName(s, &r, value, name, addr); err != nil {
+				return r, err
+			}
+			continue
+		}
+		if !strings.HasSuffix(value, "<") {
+			continue
+		}
 		clean := CleanDisplayName(value)
 		if clean == "" {
 			r.Declined = append(r.Declined, DeclinedName{
@@ -284,6 +452,210 @@ func RepairTruncatedNames(s *Store) (TruncatedNameRepair, error) {
 	}
 	r.Renamed = renamed
 	return r, nil
+}
+
+// weldedAddress splits a display-name identity that swallowed the address it was
+// introducing: `Name <addr`, the fold cut a few characters past the bracket. ok
+// is false where there is no address behind the bracket, which is the display
+// name that merely contains a `<` and is nobody's corruption.
+//
+// The name may come back empty (`<addr`): the address alone still names the
+// person, and there is no name left to contradict it.
+func weldedAddress(value string) (name, addr string, ok bool) {
+	i := strings.Index(value, "<")
+	if i < 0 {
+		return "", "", false
+	}
+	addr = strings.ToLower(reHeaderEmail.FindString(value[i+1:]))
+	if addr == "" {
+		return "", "", false
+	}
+	return CleanDisplayName(value[:i]), addr, true
+}
+
+// repairWeldedName resolves one welded identity into the name and the address it
+// holds. Unlike the truncated shape this needs no weighing of names: the address
+// is right there, so the person is whoever holds that address, which is exactly
+// what a correctly-parsed header would have decided.
+//
+// One gate, and it is the surname gate the dedupe rules use. `Cy Marrow
+// <ellen@…>` is a real header — a person writing from somebody else's mailbox —
+// and where the address is demonstrably somebody else's the fragment names a
+// second human whose own address was lost, not a duplicate of the first. That
+// pair is refused and left welded so `corpus candidates` can show it; a merge
+// cannot be undone, and a name that is merely absent or an address costs nothing
+// here because it contradicts nothing.
+func repairWeldedName(s *Store, r *TruncatedNameRepair, value, name, addr string) error {
+	var holder int64
+	err := s.db.QueryRow(`select person_id from identities where kind=? and value=?`,
+		KindDisplayName, value).Scan(&holder)
+	if err == sql.ErrNoRows {
+		return nil // an earlier merge in this pass already moved it
+	} else if err != nil {
+		return err
+	}
+	// Through both reductions, so this lands on the person resolution would have
+	// landed on rather than on a domain a rebrand moved off or a mailbox a tag
+	// split in two.
+	addr, _, err = CanonicalAddress(s, addr)
+	if err != nil {
+		return err
+	}
+	if base, _, ok := plusBaseAddress(addr); ok {
+		addr = base
+	}
+
+	var owner int64
+	err = s.db.QueryRow(`select person_id from identities where kind=? and value=?`,
+		KindEmail, addr).Scan(&owner)
+	switch {
+	case err == sql.ErrNoRows:
+		// Nobody holds the address, so there is nothing to merge into and no
+		// decision to make: this person simply becomes reachable by the address
+		// they were carrying, and the next sighting of it lands on them.
+		if _, err := s.db.Exec(
+			`insert into identities (person_id, kind, value, rule) values (?,?,?,?)`,
+			holder, KindEmail, addr, "repair:welded-address"); err != nil {
+			return fmt.Errorf("recording welded address %s: %w", addr, err)
+		}
+		r.Welded++
+	case err != nil:
+		return fmt.Errorf("looking up %s: %w", addr, err)
+	case owner == holder:
+		r.Welded++
+	default:
+		ownerName, err := displayNameOf(s, owner)
+		if err != nil {
+			return err
+		}
+		if disagreeOnSurname(name, ownerName) {
+			r.Declined = append(r.Declined, DeclinedName{
+				Value: value, Clean: name,
+				Reason:     "the welded address belongs to " + ownerName + ", a different surname",
+				Candidates: []int64{owner}})
+			return nil
+		}
+		if err := mergeWithReason(s, owner, holder,
+			"repair:welded-address ("+value+")"); err != nil {
+			return err
+		}
+		r.Merged++
+		r.Welded++
+	}
+
+	if name == "" {
+		return nil
+	}
+	clean, err := NormaliseIdentity(KindDisplayName, name)
+	if err != nil {
+		return nil // nothing usable to rename it to; the address carried the person
+	}
+	// As in the truncated path: the bracket goes unless the clean name is already
+	// somebody's identity, in which case rewriting would collide and the pair is a
+	// merge decision MergeCandidates reports rather than this deciding it.
+	var taken int
+	if err := s.db.QueryRow(`select count(*) from identities where kind=? and value=?`,
+		KindDisplayName, clean).Scan(&taken); err != nil {
+		return err
+	}
+	if taken > 0 {
+		return nil
+	}
+	if _, err := s.db.Exec(
+		`update identities set value=?, rule=? where kind=? and value=?`,
+		clean, "repair:welded-address", KindDisplayName, value); err != nil {
+		return fmt.Errorf("splitting identity %q: %w", value, err)
+	}
+	return nil
+}
+
+// disagreeOnSurname reports whether two display names carry surnames that
+// contradict each other. A name that is an address, a single first name or
+// nothing at all contradicts nobody: "Camille" does not disagree with "Camille
+// Cruz", where "Camille Nguyen" does.
+func disagreeOnSurname(a, b string) bool {
+	pa, aNamed := personNameParts(a)
+	pb, bNamed := personNameParts(b)
+	if !aNamed || !bNamed {
+		return false
+	}
+	return len(distinctSurnames([]orgPerson{pa, pb})) > 1
+}
+
+func displayNameOf(s *Store, person int64) (string, error) {
+	var name string
+	err := s.db.QueryRow(`select display_name from people where id=?`, person).Scan(&name)
+	return name, err
+}
+
+// WeldedNameCandidates pairs every display-name identity still holding an address
+// with the person that address belongs to. After a repair pass what is left here
+// is what the repair refused, which is the point: a refusal that nothing reports
+// is indistinguishable from a corpus with nothing wrong in it.
+func WeldedNameCandidates(s *Store) ([]MergeCandidate, error) {
+	rows, err := s.db.Query(`
+		select i.person_id, p.display_name, i.value from identities i
+		  join people p on p.id = i.person_id
+		 where i.kind = ? and i.value like '%<%'
+		 order by i.value`, KindDisplayName)
+	if err != nil {
+		return nil, fmt.Errorf("finding welded identities: %w", err)
+	}
+	type welded struct {
+		id    int64
+		name  string
+		value string
+	}
+	var todo []welded
+	for rows.Next() {
+		var w welded
+		if err := rows.Scan(&w.id, &w.name, &w.value); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		todo = append(todo, w)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	var out []MergeCandidate
+	for _, w := range todo {
+		_, addr, ok := weldedAddress(w.value)
+		if !ok {
+			continue
+		}
+		addr, _, err := CanonicalAddress(s, addr)
+		if err != nil {
+			return nil, err
+		}
+		if base, _, ok := plusBaseAddress(addr); ok {
+			addr = base
+		}
+		var owner int64
+		err = s.db.QueryRow(`select person_id from identities where kind=? and value=?`,
+			KindEmail, addr).Scan(&owner)
+		if err == sql.ErrNoRows || owner == w.id {
+			continue
+		} else if err != nil {
+			return nil, err
+		}
+		ownerName, err := displayNameOf(s, owner)
+		if err != nil {
+			return nil, err
+		}
+		addrs, err := emailsOf(s, owner)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, MergeCandidate{
+			AID: w.id, AName: w.name, AAddresses: []string{w.value},
+			BID: owner, BName: ownerName, BAddresses: addrs,
+			Reason: "display name holds an address somebody else owns",
+		})
+	}
+	return out, nil
 }
 
 // strongestTarget names the one candidate the evidence settles on, or reports why
@@ -388,10 +760,13 @@ func peopleNamed(s *Store, name string, exclude int64) ([]int64, error) {
 	return out, rows.Err()
 }
 
+// truncatedNameValues lists every display-name identity holding a `<`. Both
+// shapes of the fold are in here, and so are the names that legitimately contain
+// one; the caller tells them apart.
 func truncatedNameValues(s *Store) ([]string, error) {
 	rows, err := s.db.Query(`
 		select value from identities
-		 where kind = ? and value like '%<'
+		 where kind = ? and value like '%<%'
 		 order by value`, KindDisplayName)
 	if err != nil {
 		return nil, fmt.Errorf("finding truncated identities: %w", err)
@@ -414,7 +789,7 @@ func truncatedNameValues(s *Store) ([]string, error) {
 // identity that carried it.
 func repairTruncatedPeopleNames(s *Store) (int, error) {
 	rows, err := s.db.Query(
-		`select id, display_name from people where display_name like '%<'`)
+		`select id, display_name from people where display_name like '%<%'`)
 	if err != nil {
 		return 0, err
 	}
@@ -439,6 +814,11 @@ func repairTruncatedPeopleNames(s *Store) (int, error) {
 	var n int
 	for _, p := range todo {
 		clean := CleanDisplayName(p.name)
+		// A name with an address welded into it is cut at the bracket instead: the
+		// address is the person's, but it is not part of what they are called.
+		if name, _, ok := weldedAddress(p.name); ok && name != "" {
+			clean = name
+		}
 		if clean == "" || clean == p.name {
 			continue
 		}

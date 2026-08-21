@@ -9,7 +9,7 @@
 //	corpus alias -from <d> -to <d>    a rebrand: fold one domain into another
 //	corpus candidates                 pairs that may be one human, for review
 //	corpus dedupe [-apply]            merge the duplicates two rules can prove
-//	corpus repair                     undo what a folded header did to identities
+//	corpus repair                     rejoin the people one mailbox split into
 //	corpus search -q <text>           which chains are about this
 //	corpus embed                      fill in the vectors semantic search needs
 //	corpus eval -set judged.json      score two retrieval configurations
@@ -100,9 +100,10 @@ const usage = `usage: corpus <command> [flags]
   alias         [-from -to]  list or add a domain alias, folding the people that
                            domain split in two and naming every pair it will not
                            fold; -dry-run decides all that and writes nothing
-  repair                   reduce addresses stored with a mailto: link, clean
-                           display names cut off at a bracket, and fold the
-                           people that split apart
+  repair                   reduce addresses stored with a mailto: link or an
+                           RFC 5233 +tag, split the address out of a display name
+                           that swallowed it, clean display names cut off at a
+                           bracket, and fold the people that split apart
 `
 
 // ingestUsage names the flags each source takes. "[flags]" told a reader only
@@ -540,15 +541,35 @@ func run(args []string) error {
 				n, plural(n, "value", "values"))
 		}
 
+		// One mailbox written with RFC 5233 tags splits into a person per tag, which
+		// is the same kind of damage from a different cause, so it is repaired in the
+		// same pass rather than behind a flag of its own: every one of these passes
+		// is deterministic and refuses rather than guesses, and an operator who runs
+		// half of them keeps a corpus that is still split. `dedupe` is the one that
+		// weighs evidence, which is why that one waits for -apply.
+		pr, err := corpus.RepairPlusAddresses(s)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("recorded %d base %s, renamed %d %s, merged %d tagged %s\n",
+			pr.Anchored, plural(pr.Anchored, "mailbox", "mailboxes"),
+			pr.Renamed, plural(pr.Renamed, "person", "people"),
+			pr.Merged, plural(pr.Merged, "person", "people"))
+		for _, l := range pr.Left {
+			fmt.Printf("  left alone, %s: %s\n", l.Reason, l.Value)
+		}
+
 		// The same fold that doubled those addresses also cut some of them off
 		// entirely, so the two repairs run together: the mailto pass first, because
-		// the people it reunifies are the targets this one matches names against.
+		// the people it reunifies are the targets this one matches names against,
+		// and the tagged pass before both, so those targets are one person each.
 		tr, err := corpus.RepairTruncatedNames(s)
 		if err != nil {
 			return err
 		}
-		fmt.Printf("cleaned %d truncated %s, renamed %d %s, merged %d %s\n",
+		fmt.Printf("cleaned %d truncated %s, split %d welded %s, renamed %d %s, merged %d %s\n",
 			tr.Cleaned, plural(tr.Cleaned, "name", "names"),
+			tr.Welded, plural(tr.Welded, "address", "addresses"),
 			tr.Renamed, plural(tr.Renamed, "person", "people"),
 			tr.Merged, plural(tr.Merged, "person", "people"))
 		for _, d := range tr.Declined {

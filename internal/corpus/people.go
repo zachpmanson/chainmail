@@ -130,6 +130,19 @@ func ParseAddress(frag string) (Address, bool) {
 			return Address{Name: name, Raw: frag}, true
 		}
 		return Address{}, false
+	} else if i >= 0 {
+		// The same fold CleanDisplayName copes with, cut a few characters later: the
+		// closing bracket went and the address it introduced did not. Reading it
+		// here is what keeps `Name <addr` from being stored whole as a display
+		// name — a second person for a human whose address is sitting inside their
+		// own name, unreachable by every later sighting of that address.
+		if addr := reHeaderEmail.FindString(frag[i+1:]); addr != "" {
+			return Address{
+				Addr: strings.ToLower(addr),
+				Name: CleanDisplayName(frag[:i]),
+				Raw:  frag,
+			}, true
+		}
 	}
 	if strings.Contains(frag, "@") && !strings.ContainsAny(frag, " \t") {
 		return Address{Addr: strings.ToLower(frag), Raw: frag}, true
@@ -272,6 +285,66 @@ func NormaliseIdentity(kind, value string) (string, error) {
 	return v, nil
 }
 
+// plusBaseAddress reduces an address carrying an RFC 5233 subaddress to the
+// mailbox it is delivered to, and returns the tag separately. Everything from
+// the first `+` to the `@` is a detail the recipient chose — which signup, which
+// vendor — so `zachpmanson+salsa@gmail.com` and `zachpmanson@gmail.com` are one
+// mailbox and therefore one person.
+//
+// ok is false where there is no tag to take off, and where taking it off would
+// be a guess:
+//
+//   - a `+` in the domain is not a subaddress, so only the local part is read.
+//   - a local part that is nothing but a tag (`+x@d`) leaves no mailbox behind.
+//   - a tag encoding another mailbox is not a tag (see plusTagEncodesMailbox).
+//
+// The tag is returned rather than discarded because callers keep it: the corpus
+// is asked which signup produced a message, and an address reduced at parse time
+// can never answer that.
+func plusBaseAddress(addr string) (base, tag string, ok bool) {
+	at := strings.LastIndex(addr, "@")
+	if at < 0 {
+		return "", "", false
+	}
+	local, domain := addr[:at], addr[at+1:]
+	plus := strings.Index(local, "+")
+	if plus <= 0 {
+		return "", "", false
+	}
+	tag = local[plus+1:]
+	if plusTagEncodesMailbox(tag) {
+		return "", "", false
+	}
+	return local[:plus] + "@" + domain, tag, true
+}
+
+// hasSubaddress reports whether an address is shaped like a subaddress at all,
+// whatever plusBaseAddress then decides about it. It is what separates "there
+// was nothing here to reduce" from "this one was refused", so a refusal can be
+// reported and a domain holding a `+` is not.
+func hasSubaddress(addr string) bool {
+	at := strings.LastIndex(addr, "@")
+	return at >= 0 && strings.Contains(addr[:at], "+")
+}
+
+// rePlusEncodedMailbox matches an address written with `=` where the `@` goes,
+// which is how a forwarder encodes one mailbox inside another's tag.
+var rePlusEncodedMailbox = regexp.MustCompile(`[A-Za-z0-9._%+\-]+=[A-Za-z0-9.\-]+\.[A-Za-z]{2,}`)
+
+// plusTagEncodesMailbox reports whether a tag names a mailbox instead of
+// describing one. Gmail's forwarding artefact `zach+caf_=ellen=example.com@…`
+// is not a subaddress of zach's mailbox and not a person at all: the tag says
+// which account the mail was forwarded for, so reducing it would file somebody
+// else's mail under zach.
+//
+// Two signals, because either alone leaves a hole: `caf_` is the marker Gmail
+// writes, and the encoded form catches the same shape from any other forwarder
+// or bounce handler that spells an address with `=`.
+func plusTagEncodesMailbox(tag string) bool {
+	t := strings.ToLower(tag)
+	return strings.HasPrefix(t, "caf_") || rePlusEncodedMailbox.MatchString(t)
+}
+
 // Resolve finds or creates the person behind one identity, keyed on
 // (kind, value) in identities. displayName is advisory: it names a newly created
 // person, and it upgrades an existing person whose only name so far was an
@@ -290,6 +363,11 @@ func ResolveWithRule(s *Store, kind, value, displayName, rule string) (int64, er
 	v, err := NormaliseIdentity(kind, value)
 	if err != nil {
 		return 0, err
+	}
+	if kind == KindEmail {
+		if base, _, ok := plusBaseAddress(v); ok {
+			return resolveSubaddressed(s, v, base, displayName, rule)
+		}
 	}
 	name := strings.TrimSpace(displayName)
 
@@ -332,6 +410,42 @@ func ResolveWithRule(s *Store, kind, value, displayName, rule string) (int64, er
 		return 0, fmt.Errorf("recording identity %s %s: %w", kind, v, err)
 	}
 	return id, tx.Commit()
+}
+
+// resolveSubaddressed resolves a tagged address to the person holding the base
+// mailbox and records the tagged form as a second identity of theirs.
+//
+// Both notions are kept on purpose. Normalising the tag away at parse time is
+// simpler and would need none of this, but the tag is evidence — it says which
+// signup or which vendor produced the message — and a corpus that drops it can
+// never be asked what arrived via +salsa. So the base address is the identity of
+// record, because it is what a Slack profile and a correctly-quoted header will
+// match, and the tagged address hangs off the same person as a spelling of it.
+//
+// A tagged address already belonging to somebody else is left where it is and
+// this still answers with the base mailbox's person: the mailbox is theirs, and
+// re-pointing an identity is a merge, which RepairPlusAddresses decides and
+// records rather than a resolution doing it silently.
+func resolveSubaddressed(s *Store, tagged, base, displayName, rule string) (int64, error) {
+	id, err := ResolveWithRule(s, KindEmail, base, displayName, rule)
+	if err != nil {
+		return 0, err
+	}
+	var owner int64
+	err = s.db.QueryRow(`select person_id from identities where kind=? and value=?`,
+		KindEmail, tagged).Scan(&owner)
+	switch {
+	case err == nil:
+		return id, nil
+	case err != sql.ErrNoRows:
+		return 0, fmt.Errorf("looking up %s: %w", tagged, err)
+	}
+	if _, err := s.db.Exec(
+		`insert into identities (person_id, kind, value, rule) values (?,?,?,?)`,
+		id, KindEmail, tagged, rule+":subaddress"); err != nil {
+		return 0, fmt.Errorf("recording subaddress %s: %w", tagged, err)
+	}
+	return id, nil
 }
 
 // ResolveAddress resolves a parsed header address: by address when there is one,
