@@ -8,7 +8,7 @@
 //	corpus merge -keep <a> -drop <b>  same human, two addresses
 //	corpus alias -from <d> -to <d>    a rebrand: fold one domain into another
 //	corpus candidates                 pairs that may be one human, for review
-//	corpus repair                     reduce mailto: junk in stored addresses
+//	corpus repair                     undo what a folded header did to identities
 //	corpus search -q <text>           which chains are about this
 //	corpus spec -q <text> -o f.json   a timeline spec for those chains
 //	corpus unnest -id <gmail-id>      what extraction recovers from one message
@@ -63,8 +63,9 @@ const usage = `usage: corpus <command> [flags]
   candidates               probable duplicate identities, unmerged
   merge         -keep -drop  fold one identity into another
   alias         [-from -to]  list or add a domain alias
-  repair                   reduce addresses stored with a mailto: link, and
-                           fold the people that split apart
+  repair                   reduce addresses stored with a mailto: link, clean
+                           display names cut off at a bracket, and fold the
+                           people that split apart
 `
 
 // ingestUsage names the flags each source takes. "[flags]" told a reader only
@@ -329,6 +330,25 @@ func run(args []string) error {
 		if n := len(r.Ambiguous); n > 0 {
 			fmt.Printf("\n%d ambiguous %s — decide by hand, then `corpus merge`\n",
 				n, plural(n, "value", "values"))
+		}
+
+		// The same fold that doubled those addresses also cut some of them off
+		// entirely, so the two repairs run together: the mailto pass first, because
+		// the people it reunifies are the targets this one matches names against.
+		tr, err := corpus.RepairTruncatedNames(s)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("cleaned %d truncated %s, renamed %d %s, merged %d %s\n",
+			tr.Cleaned, plural(tr.Cleaned, "name", "names"),
+			tr.Renamed, plural(tr.Renamed, "person", "people"),
+			tr.Merged, plural(tr.Merged, "person", "people"))
+		for _, d := range tr.Declined {
+			fmt.Printf("  not merged, %s: %s\n", d.Reason, d.Value)
+		}
+		if n := len(tr.Declined); n > 0 {
+			fmt.Printf("\n%d truncated %s left for review — `corpus candidates`\n",
+				n, plural(n, "name", "names"))
 		}
 		return nil
 

@@ -63,10 +63,36 @@ func ParseAddresses(header string) []Address {
 		return out
 	}
 	var out []Address
-	for _, frag := range splitOutsideQuotes(header) {
+	for _, frag := range rejoinFoldedAddresses(splitOutsideQuotes(header)) {
 		if a, ok := ParseAddress(frag); ok {
 			out = append(out, a)
 		}
+	}
+	return out
+}
+
+// rejoinFoldedAddresses undoes a split made through the middle of one address.
+//
+// A recipient list recovered from quoted text arrives with its folds flattened,
+// and the flattening marks a fold with the same comma that separates two
+// recipients — so a list that wrapped between a display name and the address it
+// introduces reaches here as `Name <` followed by `addr>`. Split there, the
+// address is lost outright: the leading half degrades to a name-only participant
+// and stands as a second person for a human whose address was on the very next
+// fragment, and no later sighting can supply what was dropped.
+//
+// The join is made only when the next fragment carries an address, so a display
+// name that genuinely ends in a bracket cannot swallow the recipient behind it.
+func rejoinFoldedAddresses(frags []string) []string {
+	out := make([]string, 0, len(frags))
+	for i := 0; i < len(frags); i++ {
+		f := frags[i]
+		if strings.HasSuffix(f, "<") && i+1 < len(frags) &&
+			reHeaderEmail.MatchString(frags[i+1]) {
+			f += frags[i+1]
+			i++
+		}
+		out = append(out, f)
 	}
 	return out
 }
@@ -96,24 +122,46 @@ func ParseAddress(frag string) (Address, bool) {
 	}
 	if i, j := strings.Index(frag, "<"), strings.LastIndex(frag, ">"); i >= 0 && j > i {
 		addr := strings.ToLower(strings.TrimSpace(frag[i+1 : j]))
-		name := strings.Trim(strings.TrimSpace(frag[:i]), `"'`)
+		name := CleanDisplayName(frag[:i])
 		if addr != "" {
-			return Address{Addr: addr, Name: strings.TrimSpace(name), Raw: frag}, true
+			return Address{Addr: addr, Name: name, Raw: frag}, true
 		}
 		if name != "" {
-			return Address{Name: strings.TrimSpace(name), Raw: frag}, true
+			return Address{Name: name, Raw: frag}, true
 		}
 		return Address{}, false
 	}
 	if strings.Contains(frag, "@") && !strings.ContainsAny(frag, " \t") {
 		return Address{Addr: strings.ToLower(frag), Raw: frag}, true
 	}
-	return Address{Name: strings.Trim(frag, `"'`), Raw: frag}, true
+	// A fragment of nothing but brackets is the one thing worth dropping: it names
+	// nobody, so there is no participant in it to lose.
+	if name := CleanDisplayName(frag); name != "" {
+		return Address{Name: name, Raw: frag}, true
+	}
+	return Address{}, false
 }
 
-// reHeaderEmail matches an address-shaped run inside a header fragment. Only the
-// hyperlinked path uses it, so a domain with no dot (an intranet address) staying
-// unmatched costs nothing: such a fragment is left to bracket matching.
+// CleanDisplayName strips what a header fragment leaves around a display name:
+// the quotes it may be written in, and the `<` left behind where the address that
+// followed it was lost to a fold. A `<` anywhere but the end is kept, because a
+// name is the whole of a name-only participant's evidence and one written with a
+// bracket in it is still that person.
+func CleanDisplayName(name string) string {
+	// Twice around the quotes, because either can wrap the other: a fragment may
+	// be written `"Dai Rhys" <` or, once a quoted value has been re-quoted, `"Dai
+	// Rhys <"`.
+	for range 2 {
+		name = strings.TrimRight(strings.TrimSpace(name), " <")
+		name = strings.Trim(name, `"'`)
+	}
+	return strings.TrimSpace(name)
+}
+
+// reHeaderEmail matches an address-shaped run inside a header fragment. It
+// decides only whether a fragment is address-shaped enough for the hyperlinked
+// and folded paths to act on it, so a domain with no dot (an intranet address)
+// staying unmatched costs nothing: such a fragment is left to bracket matching.
 var reHeaderEmail = regexp.MustCompile(`[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}`)
 
 // hasMailtoLink reports whether a fragment carries a mailto: link. The colon is
