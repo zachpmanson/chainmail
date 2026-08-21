@@ -85,6 +85,10 @@ const usage = `usage: corpus <command> [flags]
                            a similarity floor has to separate
   show          <ext-id>   one entry in full, or -chain for the whole thread
   spec          -q <text>  write a timeline spec for the renderer
+  zones         [-people -chain <ext-id>]
+                           where the stated offsets place people, and what that
+                           settles about the clocks nobody labelled: stated,
+                           inferred, ambiguous, unknown
   unnest        <ext-id>   show the blocks one body contains, from the corpus;
                            -id <gmail-id> reads one from the mailbox instead;
                            -full prints each block whole; -chrono orders them by
@@ -385,6 +389,20 @@ func run(args []string) error {
 			}
 		}
 		return nil
+
+	case "zones":
+		fs := flag.NewFlagSet("zones", flag.ContinueOnError)
+		people := fs.Bool("people", false, "list every person and the zone fitted to them")
+		chain := fs.String("chain", "", "also print this chain entry by entry, by root ext-id")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		s, err := corpus.Open(path)
+		if err != nil {
+			return err
+		}
+		defer s.Close()
+		return zonesReport(os.Stdout, s, *people, *chain)
 
 	case "spec":
 		fs := flag.NewFlagSet("spec", flag.ContinueOnError)
