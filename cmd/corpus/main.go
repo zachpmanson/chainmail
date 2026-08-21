@@ -526,6 +526,14 @@ func run(args []string) error {
 		return nil
 
 	case "refresh":
+		// The previous run is positional, and consumed before flag parsing:
+		// flag.Parse stops at the first non-flag argument, so leaving it in the
+		// list would silently discard every flag written after it.
+		rest := args[1:]
+		var prevPath string
+		if len(rest) > 0 && !strings.HasPrefix(rest[0], "-") {
+			prevPath, rest = rest[0], rest[1:]
+		}
 		fs := flag.NewFlagSet("refresh", flag.ContinueOnError)
 		out := fs.String("o", "", "write the refreshed spec here (default stdout)")
 		fetch := fs.Bool("fetch", false, "also ask the mailbox for what has arrived since")
@@ -538,15 +546,18 @@ func run(args []string) error {
 		since := fs.String("since", "", "only entries on or after YYYY-MM-DD, overriding the spec's")
 		uploads := fs.String("uploads", defaultUploadDir(),
 			"archive upload root; image thumbnails are embedded from here (\"\" to embed none)")
-		if err := fs.Parse(args[1:]); err != nil {
+		if err := fs.Parse(rest); err != nil {
 			return err
 		}
-		if fs.NArg() != 1 {
+		if prevPath == "" && fs.NArg() == 1 {
+			prevPath = fs.Arg(0)
+		}
+		if prevPath == "" || fs.NArg() > 1 {
 			return errors.New("usage: corpus refresh <spec.json|page.html> [-o spec.json] [-fetch]\n" +
 				"                  [-include-new] [-accept <root,...>] [-title T] [-me <address>]\n" +
 				"                  [-limit N] [-person X] [-since YYYY-MM-DD] [-uploads <dir>]")
 		}
-		prev, err := refresh.Load(fs.Arg(0))
+		prev, err := refresh.Load(prevPath)
 		if err != nil {
 			return err
 		}

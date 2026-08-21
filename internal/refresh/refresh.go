@@ -255,9 +255,10 @@ func Run(store *corpus.Store, mb Mailbox, prev spec.Spec, opts Options) (Report,
 		}
 	}
 
+	containers, kept := membership(prev, sources)
 	next, err := spec.Generate(store, spec.Options{
-		Containers: containerIDs(prev.Threads),
-		ExtIDs:     accepted,
+		Containers: containers,
+		ExtIDs:     append(accepted, kept...),
 		Title:      opts.Title,
 		Queries:    prev.Queries,
 		Me:         opts.Me,
@@ -544,6 +545,54 @@ func containerSources(store *corpus.Store, threads []spec.Thread) (map[string]st
 		}
 	}
 	return out, rows.Err()
+}
+
+// membership resolves the recorded chains into what to select, which is not the
+// same thing for every source.
+//
+// A mail thread is expanded whole: a Gmail thread IS one conversation, so every
+// entry in it belongs, including a reply whose parent edge never resolved and
+// which a reply-graph closure would therefore miss. A Slack container is a
+// channel, not a conversation — expanding it would drag in hundreds of messages
+// about something else — so those chains are held to the entries the previous
+// page actually had.
+//
+// The handle for one of those entries is the spec's own `source` field, which for
+// a first-hand entry is its corpus ext id verbatim. That is the only durable name
+// a spec carries for a non-mail entry: mail has gmailId and threadId, Slack has
+// neither.
+func membership(prev spec.Spec, sources map[string]string) (containers, extIDs []string) {
+	whole := map[string]bool{}
+	for _, th := range prev.Threads {
+		if th.ID == "" {
+			continue
+		}
+		if src := sources[th.ID]; src == "" || src == "mail" {
+			whole[th.ID] = true
+			containers = append(containers, th.ID)
+		}
+	}
+	for _, m := range prev.Messages {
+		if m.ThreadID == "" || whole[m.ThreadID] || !isExtID(m.Source) {
+			continue
+		}
+		extIDs = append(extIDs, m.Source)
+	}
+	return containers, extIDs
+}
+
+// isExtID distinguishes a corpus ext id from the prose the same field carries for
+// an entry recovered from somebody's quote ("unspooled from msg …").
+func isExtID(s string) bool {
+	if strings.ContainsAny(s, " \t") {
+		return false
+	}
+	for _, prefix := range []string{"mail:", "slack:"} {
+		if strings.HasPrefix(s, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func containerIDs(threads []spec.Thread) []string {
