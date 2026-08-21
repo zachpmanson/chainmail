@@ -233,6 +233,42 @@
     background:var(--quote); color:var(--fg); }
   .att:hover { border-color:var(--accent); }
   .att.nolink { opacity:.6; }
+  /* A chip with a thumbnail centres on the picture instead of the text baseline,
+     which is what the other chips align to. Left as its own rule rather than
+     changing .att, so a chip without a picture keeps sitting on the baseline of
+     the line it is in. */
+  .att.haspop { align-items:center; }
+  /* One copy of the bytes serves the chip and the popover, embedded at the size
+     the popover needs and shown here at chip height. Cropped from the top left
+     rather than letterboxed: a screenshot is unreadable at this size either way,
+     and its top-left corner is the part that says which screenshot it is. */
+  .athumb { display:block; height:2.1rem; width:auto; max-width:9rem; object-fit:cover;
+    object-position:top left; border-radius:3px; border:1px solid var(--line); }
+  .att.haspop::after { content:"\2922"; font-size:.7rem; color:var(--muted); }
+  .att.haspop:hover::after, .att.haspop:focus-visible::after { color:var(--accent); }
+  /* Enlarged preview. Above the spec viewer's siblings but below it: the spec
+     viewer replaces the page, and a picture floating over it would be orphaned. */
+  .pop { position:fixed; inset:0; z-index:55; display:flex; align-items:center;
+    justify-content:center; padding:1.25rem;
+    background:color-mix(in srgb, var(--bg) 82%, transparent);
+    backdrop-filter:blur(2px); }
+  .pop[hidden] { display:none; }
+  .popbox { display:flex; flex-direction:column; gap:.4rem; max-width:100%;
+    max-height:100%; }
+  .popimg { max-width:100%; max-height:calc(100vh - 5rem); width:auto; height:auto;
+    object-fit:contain; border:1px solid var(--line); border-radius:6px;
+    background:var(--card); }
+  .popbar { display:flex; align-items:center; gap:.7rem; }
+  .popcap { font-size:.74rem; font-weight:650; color:var(--muted);
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .popx { margin-left:auto; font:inherit; font-size:.72rem; cursor:pointer;
+    border:1px solid var(--line); border-radius:6px; padding:.15rem .55rem;
+    background:var(--card); color:var(--fg); }
+  .popx:hover, .popx:focus-visible { border-color:var(--accent); }
+  /* The transcript must not scroll behind an enlarged picture: the reader's
+     position in it is what they return to when the popover closes. */
+  body.popped { overflow:hidden; }
   .afn { font-size:.74rem; font-weight:650; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
   .ameta { font-size:.64rem; color:var(--muted); }
   .foot { display:flex; flex-wrap:wrap; align-items:baseline; gap:.2rem .7rem;
