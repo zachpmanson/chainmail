@@ -168,6 +168,26 @@
   .bub ul { margin:.25rem 0; padding-left:1rem; }
   .bub li { margin:.08rem 0; font-size:.9rem; }
   .ed { font-size:.8rem; color:var(--muted); font-style:italic; }
+  /* A signature or a legal notice is folded, never dropped — the phone number in
+     one is sometimes the thing being searched for, and the text stays in the
+     document either way, so find-in-page and grep still reach it.
+     The control is deliberately given the weight of an editorial aside, matching
+     .ed above: on a page where most entries carry one, an expander styled to be
+     noticed trades one kind of noise for another. */
+  .bd details.sig { margin:.25rem 0 .1rem; }
+  .bd details.sig > summary { list-style:none; cursor:pointer; display:inline-block;
+    font-size:.8rem; color:var(--muted); font-style:italic; }
+  .bd details.sig > summary::-webkit-details-marker { display:none; }
+  .bd details.sig > summary::before { content:""; display:inline-block; width:0; height:0;
+    border:.28em solid transparent; border-left-color:currentColor;
+    margin-right:.35em; vertical-align:.02em; transition:transform .12s; }
+  .bd details.sig[open] > summary::before { transform:rotate(90deg); }
+  .bd details.sig > summary:hover { color:var(--accent); }
+  .bd details.sig .sigbd { border-left:2px solid var(--line); padding-left:.6rem;
+    margin:.2rem 0 .1rem; color:var(--muted); }
+  /* Print is the one reader that cannot click, and a page whose signatures are
+     unreachable on paper is not the same document. */
+  @media print { .bd details.sig .sigbd { display:block; } }
   /* A body is often the sender's own markup, laid out for a fixed-width white
      page. These rules hold it inside the bubble: an image scales down instead of
      pushing the column out, and a table that cannot shrink any further scrolls

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/zachpmanson/chainmail/internal/boiler"
 	"github.com/zachpmanson/chainmail/internal/corpus"
 )
 
@@ -38,6 +39,13 @@ type entryRow struct {
 	// reply that quoted it. See recoverHTML.
 	HostHTML []string
 	Atts     []attRow
+	// Fold is the trailing block of this body that is boilerplate — a signature,
+	// an org's legal notice — as found from every message in the corpus rather
+	// than from this one. Folded is whether the render actually folded it; the
+	// detection can be declined at the seam of a markup tree or on a body that is
+	// nothing but the block.
+	Fold   boiler.Fold
+	Folded bool
 }
 
 type attRow struct {
@@ -180,7 +188,28 @@ func load(store *corpus.Store, ids []int64) ([]*entryRow, error) {
 	if err := loadHostHTML(db, out); err != nil {
 		return nil, err
 	}
+	if err := loadFolds(store, out); err != nil {
+		return nil, err
+	}
 	return out, nil
+}
+
+// loadFolds attaches each entry's boilerplate block.
+//
+// The pass is over the whole corpus and only the selection's share of it is
+// kept, which is the same asymmetry inferZones runs on and for the same reason:
+// what a person appends to their mail is a fact about them, so a six-entry page
+// and a sixty-entry page have to fold the same block. Deriving it here rather
+// than reading a stored column is argued at corpus.Boilerplate.
+func loadFolds(store *corpus.Store, rows []*entryRow) error {
+	folds, err := store.Boilerplate()
+	if err != nil {
+		return err
+	}
+	for _, r := range rows {
+		r.Fold = folds[r.ID]
+	}
+	return nil
 }
 
 // loadHostHTML fetches the markup of the messages each unspooled entry was found

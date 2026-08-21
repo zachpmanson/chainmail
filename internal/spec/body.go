@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/zachpmanson/chainmail/internal/boiler"
 	"github.com/zachpmanson/chainmail/internal/unnest"
 )
 
@@ -33,21 +34,31 @@ import (
 //
 // The markup is emitted unsanitised. That is stated where the choice is made,
 // at the top of htmlbody.go, and tracked as issue #14.
+//
+// It records on r whether it folded a signature or a disclaimer. Only this pass
+// knows — the fold can be detected and then declined, at the seam of a markup
+// tree or on a body that is nothing but the block — and the source note has to
+// report entries that were folded rather than entries that could have been.
 func bodyHTML(r *entryRow) string {
 	st := styleFor(r)
+	bf := blockFor(r, st)
 	if r.BodyHTML != "" {
-		if s := htmlBody(r.BodyHTML, st); s != "" {
+		if s, folded := htmlBody(r.BodyHTML, st, bf); s != "" {
+			r.Folded = folded
 			return s
 		}
 	} else if !r.Direct {
 		// Only for an entry that was never in the mailbox. A message that was
 		// there and has no html part was sent as plain text, and the markup a
 		// quoting client wrapped it in later is that client's, not the sender's.
-		if s := recoverHTML(r.BodyText, r.HostHTML); s != "" {
+		if s, folded := recoverHTML(r.BodyText, r.HostHTML, bf); s != "" {
+			r.Folded = folded
 			return s
 		}
 	}
-	return textToHTML(r.BodyText, st)
+	s, folded := textToHTML(r.BodyText, st, r.Fold)
+	r.Folded = folded
+	return s
 }
 
 // bodyStyle says how far a body's text may be reshaped. Both switches are off
@@ -91,51 +102,37 @@ func styleFor(r *entryRow) bodyStyle {
 // inside a fluid-width bubble, which is what the ragged pages showed.
 const flowWidth = 66
 
-func textToHTML(text string, st bodyStyle) string {
+// textToHTML renders a body's text, and reports whether it folded a trailing
+// block of boilerplate. Peel reports line ranges precisely, and boiler.Lines
+// keeps them, so the quote depths this path renders as blockquotes survive — the
+// block texts Peel also returns have had their markers stripped.
+func textToHTML(text string, st bodyStyle, f boiler.Fold) (string, bool) {
 	if strings.TrimSpace(text) == "" {
-		return ""
+		return "", false
 	}
-	lines := unnest.Normalise(text)
-	if st.peel {
-		blocks := unnest.Peel(text)
-		if len(blocks) == 0 || blocks[0].Sentinel != "" {
-			// The body opens on a boundary: the sender forwarded or replied without
-			// writing anything of their own above it.
-			return ""
-		}
-		// Peel reports line ranges precisely so a caller can keep the depths that
-		// its own Text has stripped. Quote depth is presentation here, so the range
-		// is what is used and the block text is not.
-		lines = lines[:blocks[0].End]
+	lines, ok := boiler.Lines(text, st.peel)
+	if !ok {
+		// The body opens on a boundary: the sender forwarded or replied without
+		// writing anything of their own above it.
+		return "", false
 	}
-	lines, trimmed := trimSignature(lines)
+	lines, tail, note := splitBoilerplate(lines, f)
 
 	var b strings.Builder
 	render(&b, paragraphs(lines), 0, st)
 	if b.Len() == 0 {
-		return ""
+		return "", false
 	}
-	if trimmed {
-		// Trimming a signature is the right default — a legal disclaimer or a
-		// tracking pixel on every message buries the correspondence — but it is
-		// still the sender's text, so the page says it was there instead of
-		// quietly ending early.
-		b.WriteString(`<p class="ed">[signature trimmed]</p>`)
+	if len(tail) == 0 {
+		return b.String(), false
 	}
-	return b.String()
-}
-
-// reSigDelim matches the RFC 3676 signature delimiter. Normalise right-trims,
-// so "-- " arrives as "--".
-var reSigDelim = regexp.MustCompile(`^--$`)
-
-func trimSignature(lines []unnest.Line) ([]unnest.Line, bool) {
-	for i, l := range lines {
-		if reSigDelim.MatchString(strings.TrimSpace(l.Text)) {
-			return lines[:i], true
-		}
+	var t strings.Builder
+	render(&t, paragraphs(tail), 0, st)
+	if t.Len() == 0 {
+		return b.String(), false
 	}
-	return lines, false
+	b.WriteString(foldHTML(note, t.String()))
+	return b.String(), true
 }
 
 // para is a run of lines that belong together: one paragraph, at one quote
