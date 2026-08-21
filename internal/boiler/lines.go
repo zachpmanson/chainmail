@@ -31,7 +31,9 @@ func Lines(text string, peel bool) ([]unnest.Line, bool) {
 	return lines[:blocks[0].End], true
 }
 
-// Visible is the lines a tail is counted over: the non-blank ones, in order.
+// Visible is the lines a body shows, blanks dropped: the sender's own text, and
+// what a detected fold is applied to. Match is the same lines normalised for
+// comparison, which is what a tail is counted over.
 //
 // Blanks are dropped rather than counted because they are the one part of a
 // signature that is not the sender's. Clients disagree about how much vertical
