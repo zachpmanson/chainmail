@@ -308,6 +308,12 @@ func (b *builder) ref(person int64, name, address string) castRef {
 
 // source records where an entry was found: the mailbox, or someone's quoted
 // history. It is provenance, not prose — a later pass may make it read better.
+//
+// The shape is load-bearing: each host is "msg <gmail-id>" and hosts are joined
+// with ", ", which is what lets the renderer count them, collapse the line and
+// link each id, while showing a hand-written prose source verbatim. Change the
+// prefix or the separator and the collapse degrades to prose without failing
+// anything — TestSourceNamesEachHostAsMsgID is the pin.
 func (b *builder) source(r *entryRow) string {
 	if r.Direct {
 		if r.GmailID != "" {
@@ -318,16 +324,24 @@ func (b *builder) source(r *entryRow) string {
 	// The message that quoted this one is later in the trail, so it is named by
 	// its own source identity rather than by a spec id that may not exist yet.
 	var in []string
+	named := map[string]bool{}
 	for _, id := range r.SeenIn {
 		host, ok := b.rowByID[id]
 		if !ok {
 			continue
 		}
+		name := host.ExtID
 		if host.GmailID != "" {
-			in = append(in, "msg "+host.GmailID)
-		} else {
-			in = append(in, host.ExtID)
+			name = "msg " + host.GmailID
 		}
+		// A sighting is keyed by (entry, host, kind), so a host that both quoted
+		// and forwarded this entry arrives twice. It is one message to open, and a
+		// count that said two would be a claim about the trail that is not true.
+		if named[name] {
+			continue
+		}
+		named[name] = true
+		in = append(in, name)
 	}
 	if len(in) > 0 {
 		return "unspooled from " + strings.Join(in, ", ")

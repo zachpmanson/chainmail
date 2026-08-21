@@ -1,5 +1,6 @@
 import { initials, type View } from "../lib/derive";
 import type { Timeline as Spec } from "../lib/spec";
+import { msgCount } from "../lib/sources";
 
 /** A participant as the panel needs it, however the spec supplied them. */
 type Person = NonNullable<Spec["participants"]>[number];
@@ -62,7 +63,7 @@ export function ParticipantsPanel({ v }: { v: View }) {
                 // count of their messages does not tell you.
                 const bits = [
                   p.role,
-                  n ? `${n} msg${n === 1 ? "" : "s"}` : undefined,
+                  n ? msgCount(n) : undefined,
                   p.note,
                 ].filter(Boolean);
                 // Keyed by position, because a name is not unique: two corpus
@@ -194,7 +195,7 @@ export function SourcesPanel({ v, filter }: { v: View; filter?: ChainFilter }) {
     groups.push({
       title: `Mail threads (${threads.length})`,
       items: threads.map((t, i) => {
-        const meta = [t.count ? `${t.count} msgs` : null, t.span, t.note].filter(Boolean).join(" · ");
+        const meta = [t.count ? msgCount(t.count) : null, t.span, t.note].filter(Boolean).join(" · ");
         const label = t.subject ?? "(thread)";
         return (
           <span key={i}>
