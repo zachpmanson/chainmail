@@ -10,8 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "gen:types": "json2ts -i schema/timeline.schema.json -o src/lib/spec.d.ts --additionalProperties false",
-    "gen:api": "openapi-typescript api/openapi.yaml -o src/lib/api.d.ts",
-    "gen:api:provisional": "openapi-typescript schema/openapi.provisional.yaml -o src/lib/api.d.ts",
+    "gen:api": "openapi-typescript api/openapi.json -o src/lib/api.d.ts",
     "render": "tsx scripts/render.tsx"
   },
   "dependencies": {

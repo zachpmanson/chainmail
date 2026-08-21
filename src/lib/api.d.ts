@@ -11,7 +11,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Ranked chains matching a query — the selection candidates. */
+        /**
+         * Ranked chains for a query — the selection candidates.
+         * @description Selection stage. Lexical by default: FTS5 wins decisively on the tokens a mail corpus is dense with (invoice numbers, account ids, Message-IDs), and the structural half of a real question is a filter rather than something a similarity score encodes.
+         *
+         *     At least one of q, person or since must be given. With no filter at all an arbitrary slice of the corpus would come back reading like a ranked answer, so that is a 400.
+         */
         get: operations["search"];
         put?: never;
         post?: never;
@@ -32,7 +37,13 @@ export interface paths {
         put?: never;
         /**
          * Build a timeline spec from a chosen set of chains.
-         * @description Seconds for a large selection: it recovers HTML from host messages and detects boilerplate across the whole set.
+         * @description Render stage, and deliberately separate from search: what belongs on a page is a human decision, and removing a thread afterwards means regenerating everything downstream, so scope is settled once, up front.
+         *
+         *     The response validates against schema/timeline.schema.json, the contract the renderer already consumes.
+         *
+         *     Expensive: spec assembly recovers quoted bodies, detects repeated boilerplate and builds attachment thumbnails, which is seconds for a large selection. There is no job queue — the response is synchronous. Concurrency is capped, so an over-eager caller gets 429 rather than a server with every core in HTML recovery.
+         *
+         *     Entry bodies are sender HTML, and it is NOT sanitised (issue #14). That is accepted at today's risk because the server binds to loopback only. It is a hard blocker on binding wider, not a footnote.
          */
         post: operations["buildSpec"];
         delete?: never;
@@ -48,7 +59,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** One entry with its provenance. */
+        /** One entry, with its provenance and every sighting of it. */
         get: operations["getEntry"];
         put?: never;
         post?: never;
@@ -65,7 +76,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** A chain's entries in time order. */
+        /**
+         * The chain around an entry, in time order, as data.
+         * @description Kept even though selection makes it unnecessary for building a page, because reading a chain is a different act from rendering one: a client browsing a candidate wants its entries as data, cheaply, without paying for spec assembly or committing to a page.
+         *
+         *     Reachability is followed in BOTH directions, so ANY member's ext id returns the whole conversation — search reports the entry that matched, not the root. The parameter is named rootExtId because that is what search hands you.
+         */
         get: operations["getChain"];
         put?: never;
         post?: never;
@@ -82,7 +98,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Corpus overview. */
+        /** Counts and coverage. */
         get: operations["getStats"];
         put?: never;
         post?: never;
@@ -99,7 +115,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Everyone in the corpus, most-involved first. */
+        /** Everyone in the corpus, with their identities. */
         get: operations["getPeople"];
         put?: never;
         post?: never;
@@ -113,79 +129,385 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        Error: {
-            error: string;
-        };
-        SearchResult: {
+        /** @description Ranked candidates. Exactly one of chains or entries is present, decided by the `entries` parameter; neither is present when nothing matched, and an empty array is returned rather than omitted in that case. */
+        SearchResponse: {
+            /**
+             * @description The retrieval mode actually used.
+             * @enum {string}
+             */
+            mode: "lexical" | "semantic" | "hybrid";
+            /** @description Present when entries=false (the default). */
             chains?: components["schemas"]["ChainHit"][];
+            /** @description Present when entries=true. */
             entries?: components["schemas"]["EntryHit"][];
         };
-        /** @description A conversation, ranked by the aggregate relevance of its entries. */
+        /** @description One candidate chain — the unit a caller selects for POST /v1/spec. */
         ChainHit: {
-            /** @description The chain's durable name, and the id a selection is made of. */
+            /**
+             * @description Ext id of the entry the reply graph terminates at. The only chain identity worth storing, and what POST /v1/spec takes.
+             * @example mail:<c0ffee-1@example.com>
+             */
             rootExtId: string;
+            /** @description Subject of the chain. Absent when no entry in it carries one. */
             subject?: string;
+            /** @description Mail thread id or Slack channel id. Absent when the source stated none. */
             container?: string;
-            sources?: string[];
-            /** @description Size of the whole chain. */
+            /** @description Every archive this chain has entries from; more than one where a mail trail continued in Slack. */
+            sources?: ("mail" | "slack")[];
+            /** @description Entries in the whole chain. */
             entries: number;
-            /** @description How much of the chain the query hit. */
+            /** @description How many of them the query hit. matched/entries is the honest measure of whether the chain is about the query. */
             matched: number;
-            first?: string;
-            last?: string;
-            score?: number;
+            /**
+             * Format: date-time
+             * @description Timestamp of the earliest entry, UTC.
+             */
+            first: string;
+            /**
+             * Format: date-time
+             * @description Timestamp of the latest entry, UTC.
+             */
+            last: string;
+            /** @description Fused score. Comparable within one response only. */
+            score: number;
+            /** @description The top-scoring entries of this chain, most relevant first — the evidence for the ranking. */
             best?: components["schemas"]["EntryHit"][];
         };
+        /** @description One matching entry, as ranking sees it. */
         EntryHit: {
+            /**
+             * @description Corpus natural key, e.g. "mail:<c0ffee-1@example.com>". The identity that survives a rebuild, and the one the other endpoints take.
+             * @example mail:<c0ffee-1@example.com>
+             */
             extId: string;
-            source?: string;
-            ts?: string;
+            /**
+             * @description Which archive it came from.
+             * @enum {string}
+             */
+            source: "mail" | "slack";
+            /**
+             * Format: date-time
+             * @description Entry timestamp, UTC.
+             */
+            ts: string;
+            /** @description Author's person id, 0 when the author could not be resolved. */
+            personId: number;
+            /** @description Author's display name. Absent when no person row is attached. */
             person?: string;
+            /** @description Mail thread id or Slack channel id. Absent when the source stated none. */
             container?: string;
+            /** @description Absent for sources that have no subject, such as Slack. */
             subject?: string;
+            /** @description Opens the entry at its source. Absent when the source gave none. */
             permalink?: string;
-            /** @description FTS excerpt, matched terms wrapped in [ ]. */
+            /** @description Match excerpt with matched terms wrapped in square brackets. Absent for a structural-only query, which has nothing to highlight. */
             snippet?: string;
-            score?: number;
-            proseRank?: number;
-            identRank?: number;
-            semRank?: number;
+            /** @description Fused Reciprocal Rank Fusion score. Comparable within one response only. */
+            score: number;
+            /** @description 1-based position in the prose ranking; 0 means that ranking did not find this entry. Always present, because 0 is meaningful. */
+            proseRank: number;
+            /** @description 1-based position in the identifier (trigram) ranking; 0 means it did not find this entry. */
+            identRank: number;
+            /** @description 1-based position in the vector ranking; 0 means it did not find this entry, and is always 0 for mode=lexical. */
+            semRank: number;
+            /** @description Cosine to the query vector, in [-1, 1]. Present only when semRank is non-zero; it is reported, not fused. */
             similarity?: number;
         };
-        SpecRequest: {
-            /** @description Chain root ext ids, as chosen by a person. */
-            chains: string[];
-            title?: string;
-            me?: string;
+        /** @description One entry resolved for reading rather than for ranking: plain text, with its provenance. Deliberately not a timeline entry — no HTML recovery, no boilerplate folding, no thumbnails — so reading a chain costs a query rather than seconds of assembly. Use POST /v1/spec when the goal is to render. */
+        CorpusEntry: {
+            /**
+             * @description Corpus natural key.
+             * @example mail:<c0ffee-1@example.com>
+             */
+            extId: string;
+            /**
+             * @description Which archive it came from.
+             * @enum {string}
+             */
+            source: "mail" | "slack";
+            /** @description True when this entry exists only because someone quoted it: it was never in the mailbox as a standalone message. */
+            quoted: boolean;
+            /**
+             * Format: date-time
+             * @description Entry timestamp, UTC.
+             */
+            ts: string;
+            /** @description Zone label as the source stated it, e.g. "NZST". Absent when the source stated none; never guessed here. */
+            tz?: string;
+            /** @description Minutes east of UTC as the source stated it. Absent when it stated none. Carried alongside tz because a label does not determine an offset. */
+            tzOffsetMinutes?: number;
+            /** @description Display name of the sender. Absent when no person row is attached. */
+            author?: string;
+            /** @description Absent for sources that have no subject. */
+            subject?: string;
+            /** @description The entry's own plain text. Absent when the source carried no text body. */
+            body?: string;
+            /** @description Mail thread id or Slack channel id. Absent when the source stated none. */
+            container?: string;
+            /** @description Opens the entry at its source. Absent when the source gave none. */
+            permalink?: string;
+            /** @description Ext id of the entry this replies to. Absent at a chain root, and also absent when it names a parent that is not in the corpus — parentRef tells the two apart. */
+            parent?: string;
+            /** @description What the entry names as its parent (a Message-ID or thread_ts), resolved or not. Present with no parent means a known hole. */
+            parentRef?: string;
+            /** @description Every place this entry was found. */
+            sightings?: components["schemas"]["Sighting"][];
+            /** @description Everyone recorded on it, senders first. */
+            participants?: components["schemas"]["Participant"][];
         };
+        /** @description Every entry reachable from the named one, in time order. */
+        ChainResponse: {
+            /** @description The id that was asked for, echoed back. Note this is whatever the caller passed, which need not be the chain's root — see the path parameter. */
+            rootExtId: string;
+            /** @description The whole chain in time order, never empty: an id that resolves to nothing is a 404. */
+            entries: components["schemas"]["CorpusEntry"][];
+        };
+        /** @description One place an entry was found. A message quoted in five forwards has five, which is the evidence that it mattered. */
+        Sighting: {
+            /**
+             * @description How it was seen.
+             * @enum {string}
+             */
+            kind: "direct" | "quoted" | "forwarded";
+            /** @description Ext id of the message it was found inside. Absent for a direct sighting, which was not found inside anything. */
+            seenIn?: string;
+            /** @description Free-text note about the sighting. Absent when none was recorded. */
+            detail?: string;
+        };
+        /** @description Someone recorded on an entry, in role order. */
+        Participant: {
+            /** @description Person id. */
+            personId: number;
+            /** @description Display name. */
+            name: string;
+            /**
+             * @description How they appear on this entry.
+             * @enum {string}
+             */
+            role: "from" | "to" | "cc";
+        };
+        /** @description A page built from a chosen set of chains. Selection is the caller's decision and is not re-derived from a query here: naming chains IS the selection step. */
+        SpecRequest: {
+            /**
+             * @description Chain roots to include, as GET /v1/search reports them. At least one; an empty list is a 400, because a page with no messages fails the timeline schema.
+             * @example [
+             *       "mail:<c0ffee-1@example.com>",
+             *       "mail:<c0ffee-2@example.com>"
+             *     ]
+             */
+            chains: string[];
+            /**
+             * @description Page title. Defaults to the subject of the earliest selected entry, which the timeline schema requires to be non-empty.
+             * @example Solar install quote
+             */
+            title?: string;
+            /**
+             * @description The reader's own addresses, so their outbound messages are marked. Nothing in the corpus knows which mailbox it was collected from.
+             * @example [
+             *       "me@example.fed"
+             *     ]
+             */
+            me?: string[];
+            /** @description The searches the selection came from, recorded on the page so that a hole in the timeline is interpretable. Purely descriptive: nothing is re-run. */
+            queries?: components["schemas"]["SpecQuery"][];
+        };
+        /** @description A search that was run, recorded for provenance. */
+        SpecQuery: {
+            /**
+             * @description The query text.
+             * @example solar install quote
+             */
+            q: string;
+            /** @description Where it was run, e.g. "corpus search". */
+            note?: string;
+        };
+        /** @description What is in the corpus, and what is missing. */
         Stats: {
-            entries?: number;
-            bySource?: {
+            /** @description Total entries. */
+            entries: number;
+            /** @description Entry count per source. */
+            bySource: {
                 [key: string]: number;
             };
-            unresolved?: number;
-            roots?: number;
-            people?: number;
+            /** @description Distinct people, senders and recipients alike. */
+            people: number;
+            /** @description Entries that open a chain: no parent, and none named. */
+            chainRoots: number;
+            /** @description Entries that name a parent which is not in the corpus. Known holes, not errors. */
+            unresolved: number;
+            /** @description Empty when nothing has been embedded, in which case mode=semantic and mode=hybrid have nothing to rank against. */
+            embeddings: components["schemas"]["EmbedModelStats"][];
         };
-        Person: {
-            personId?: number;
-            displayName?: string;
+        /** @description Embedding coverage for one model. Reported per model because a half-finished model migration is a real state, and from the results alone it looks like a corpus that lost recall. */
+        EmbedModelStats: {
+            /**
+             * @description Model name.
+             * @example nomic-embed-text
+             */
+            model: string;
+            /** @description Dimensions its vectors have. */
+            dim: number;
+            /** @description Entries with a stored vector. */
+            vectors: number;
+            /** @description Entries deliberately not embedded, as having no topic. */
+            skipped: number;
+            /** @description Stored, but the entry's text or the preparation has moved on since. */
+            stale: number;
+            /** @description Entries a full backfill would still embed — how much work is left. */
+            eligible: number;
+        };
+        /** @description Everyone in the corpus, most involved first. */
+        PeopleResponse: {
+            /** @description Most-involved first. */
+            people: components["schemas"]["PersonSummary"][];
+        };
+        /** @description One person, with every identity that resolves to them. */
+        PersonSummary: {
+            /** @description Person id. */
+            personId: number;
+            /**
+             * @description Best known display name.
+             * @example Ada Okoye
+             */
+            displayName: string;
+            /** @description Every address or uid folded into this person. */
             identities?: string[];
-            sent?: number;
-            received?: number;
+            /** @description Entries they authored. */
+            sent: number;
+            /** @description Entries they were a to: or cc: on. Sent 0 with received above 0 is a recipient-only participant, which is a quarter of a real cast. */
+            received: number;
         };
-    };
-    responses: {
-        /** @description The service declined, and says why. */
+        /** @description Every non-2xx response carries this and nothing else. */
         Error: {
-            headers: {
-                [name: string]: unknown;
+            /**
+             * @description What went wrong, in the same words the CLI would use. Written to be shown to a person.
+             * @example mode "semantic": no embedding daemon reachable at http://localhost:11434: start it with `ollama serve`
+             */
+            error: string;
+        };
+        /**
+         * Timeline
+         * @description One email trail, unspooled out of its threads and forwards into a single chronological transcript. Produced by a collector (e.g. the mail-timeline skill); consumed by the chainmail renderer.
+         */
+        TimelineSpec: {
+            /**
+             * @description Contract version. Absent means 1.
+             * @default 1
+             */
+            specVersion: number;
+            /** @description Page title. A leading # renders as a channel-style hash. */
+            title: string;
+            /** @description One or two sentences. Provenance belongs in queries/threads/sourceNotes, not here. */
+            subtitle?: string;
+            /** @description Names this collection pass, e.g. 'pass 2, 20 Aug 2026'. */
+            runLabel?: string;
+            /** @description Labels of every pass so far, oldest first. */
+            runs?: string[];
+            /**
+             * @default light
+             * @enum {unknown}
+             */
+            theme: "light" | "dark" | "auto";
+            /** @default Still open */
+            openItemsTitle: string;
+            /** @description Unresolved questions, commitments and ownerless decisions. HTML permitted; cross-links encouraged. */
+            openItems?: string[];
+            /** @description Sender name -> image (data: URI or URL). Keys must match Message.sender exactly. */
+            avatars?: {
+                [key: string]: string;
             };
-            content: {
-                "application/json": components["schemas"]["Error"];
-            };
+            /** @description The full cast, including people who only ever appear as recipients. */
+            participants?: {
+                name: string;
+                org?: string;
+                /** @description Omit when no address appears anywhere in the trail. Never guess one. */
+                email?: string;
+                role?: string;
+                /** @description Use instead of role for cc-only people and aliases. */
+                note?: string;
+            }[];
+            /** @description Searches run, so a null result is interpretable. */
+            queries?: (string | {
+                q: string;
+                note?: string;
+            })[];
+            /** @description Mail threads the transcript was assembled from. */
+            threads?: {
+                subject?: string;
+                /** @description Gmail thread or message id; links out. */
+                id?: string;
+                count?: number;
+                span?: string;
+                note?: string;
+            }[];
+            /** @description Provenance caveats: avatar sources, unrecoverable addresses, truncation. */
+            sourceNotes?: {
+                title: string;
+                items: string[];
+            }[];
+            messages: components["schemas"]["TimelineEntry"][];
+        };
+        TimelineEntry: {
+            /**
+             * @description 'note' is a meeting or event that never existed as an email.
+             * @default message
+             * @enum {unknown}
+             */
+            kind: "message" | "note";
+            /** @description Stable anchor. Omit to derive from date+time+sender; content-derived ids survive inserting entries mid-trail. */
+            id?: string;
+            /** @description As displayed, e.g. 'Thu 16 Jul 2026'. Not normalised. */
+            date: string;
+            /** @description As displayed, e.g. '11:35'. Absent for undated notes. */
+            time?: string;
+            /** @description The zone this entry's clock is in, e.g. 'NZST', '+0530'. Drives absolute-time ordering. Omit rather than guess: absent means the zone is unknown and the renderer shows it as unknown. */
+            tz?: string;
+            /**
+             * @description Where tz came from. 'stated' is the source's own Date header or zone label. 'inferred' was worked out from other evidence and must be presented as a claim, not a fact. Omit when tz is absent.
+             * @enum {unknown}
+             */
+            tzSource?: "stated" | "inferred";
+            sender?: string;
+            /** @description Drives colour, assigned in first-appearance order. */
+            org?: string;
+            fromEmail?: string;
+            /** @description Free text as it appeared, including 'cc ...'. */
+            to?: string;
+            /** @description Names the chain when this entry opens one. Capture it during collection. */
+            subject?: string;
+            /** @description Notes only: what the meeting was. */
+            label?: string;
+            /** @description Trusted HTML. <p>, <ul>, <b>, <code>, <p class="ed"> for editorial gloss, <a class="xref"> for cross-links. */
+            body: string;
+            /** @description Reconstructed from quoted text; never existed as a standalone message here. */
+            quoted?: boolean;
+            /** @description The reader's own outbound. */
+            me?: boolean;
+            /** @description Where it came from: a Gmail id, or 'unspooled from the 2 Aug email'. */
+            source?: string;
+            gmailId?: string;
+            threadId?: string;
+            /** @description Id of the entry this replies to. Absent means it opens a chain. Coverage here drives ordering, lanes and the reply tree. */
+            parent?: string;
+            /** @description Meeting scheduling exhaust (invitation, notes, accept/decline). Forces the classification the renderer would otherwise infer. */
+            meta?: boolean;
+            mentions?: string[];
+            attachments?: {
+                name: string;
+                kind?: string;
+                size?: string;
+                /** @description Links to the message in Gmail. Only ever present on real messages. */
+                gmailId?: string;
+                /** @description Opens the attachment at its source, for attachments not reached through Gmail. */
+                link?: string;
+                /** @description Thumbnail as a data: URI. Never a URL — the page renders without a network. */
+                preview?: string;
+                previewW?: number;
+                previewH?: number;
+            }[];
         };
     };
+    responses: never;
     parameters: never;
     requestBodies: never;
     headers: never;
@@ -196,14 +518,26 @@ export interface operations {
     search: {
         parameters: {
             query?: {
+                /**
+                 * @description Free text. Double-quoted runs are kept as phrases; every other term must match. Terms that look like identifiers also go to the trigram index.
+                 * @example solar install quote
+                 */
                 q?: string;
+                /**
+                 * @description An address, display name or Slack uid. Matches anyone recorded on the entry, author or recipient — on a real trail a quarter of the participants appear only in to:/cc:, so "threads Ada was on" cannot be an author-only filter.
+                 * @example ada@example.com
+                 */
                 person?: string;
-                /** @description ISO date; entries older than this are excluded. */
+                /**
+                 * @description Only entries on or after this date.
+                 * @example 2026-01-31
+                 */
                 since?: string;
-                /** @description semantic and hybrid need the embedding daemon; a search asking for either fails with 503 when it is not running. */
+                /** @description Retrieval. semantic and hybrid need vectors (`corpus embed`) AND a running local embedding daemon; without the daemon they return 503, never an empty result set. */
                 mode?: "lexical" | "semantic" | "hybrid";
+                /** @description How many chains (or entries) to return. */
                 limit?: number;
-                /** @description Also return the matching entries, not only their chains. */
+                /** @description Return the matching entries instead of the chains they belong to. Changes which array of the response is populated. */
                 entries?: boolean;
             };
             header?: never;
@@ -212,17 +546,42 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Ranked results, best first. */
+            /** @description Ranked candidates. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SearchResult"];
+                    "application/json": components["schemas"]["SearchResponse"];
                 };
             };
-            400: components["responses"]["Error"];
-            503: components["responses"]["Error"];
+            /** @description No filter given, or a parameter could not be parsed. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description mode=semantic or mode=hybrid, and the embedding daemon is not reachable or has not pulled the model. The message names the fix. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The embedding daemon did not answer in time. */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     buildSpec: {
@@ -238,19 +597,42 @@ export interface operations {
             };
         };
         responses: {
-            /** @description A timeline spec. Left unmodelled on purpose — the spec's shape is generated from schema/timeline.schema.json into src/lib/spec.d.ts, and a second declaration of it here would be a second source of truth. */
+            /** @description A timeline spec, valid against schema/timeline.schema.json. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["TimelineSpec"];
                 };
             };
-            400: components["responses"]["Error"];
-            404: components["responses"]["Error"];
+            /** @description Malformed body, an empty chains list, or a selection that resolved to no entries. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description One of the named chains is not in the corpus. The message names which. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many spec builds already in flight. Retry-After is set. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     getEntry: {
@@ -258,6 +640,10 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /**
+                 * @description Corpus natural key, as search reports it. Percent-encode it: it contains a colon and usually angle brackets.
+                 * @example mail:<c0ffee-1@example.com>
+                 */
                 extId: string;
             };
             cookie?: never;
@@ -270,10 +656,18 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EntryHit"];
+                    "application/json": components["schemas"]["CorpusEntry"];
                 };
             };
-            404: components["responses"]["Error"];
+            /** @description No entry carries that id. Distinct from a search that matched nothing, which is a 200 with an empty array. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     getChain: {
@@ -281,26 +675,34 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /**
+                 * @description Ext id of any entry in the chain. Percent-encode it.
+                 * @example mail:<c0ffee-1@example.com>
+                 */
                 rootExtId: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description The chain's entries, oldest first. */
+            /** @description The chain in time order. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        rootExtId: string;
-                        subject?: string;
-                        entries: components["schemas"]["EntryHit"][];
-                    };
+                    "application/json": components["schemas"]["ChainResponse"];
                 };
             };
-            404: components["responses"]["Error"];
+            /** @description No entry carries that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     getStats: {
@@ -312,7 +714,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Counts. */
+            /** @description Corpus statistics. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -332,13 +734,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description People. */
+            /** @description People, most involved first. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Person"][];
+                    "application/json": components["schemas"]["PeopleResponse"];
                 };
             };
         };

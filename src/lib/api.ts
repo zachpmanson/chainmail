@@ -1,5 +1,5 @@
 import createClient from "openapi-fetch";
-import type { paths } from "./api.d";
+import type { components, paths } from "./api.d";
 import { normalise } from "./normalise";
 import type { Timeline } from "./spec";
 
@@ -69,16 +69,15 @@ export interface SearchParams {
   entries?: boolean;
 }
 
-export type ChainHit =
-  NonNullable<paths["/v1/search"]["get"]["responses"]["200"]["content"]["application/json"]["chains"]>[number];
-export type EntryHit =
-  NonNullable<paths["/v1/search"]["get"]["responses"]["200"]["content"]["application/json"]["entries"]>[number];
-export type Stats =
-  paths["/v1/stats"]["get"]["responses"]["200"]["content"]["application/json"];
-export type Person =
-  paths["/v1/people"]["get"]["responses"]["200"]["content"]["application/json"][number];
+export type ChainHit = components["schemas"]["ChainHit"];
+export type EntryHit = components["schemas"]["EntryHit"];
+export type CorpusEntry = components["schemas"]["CorpusEntry"];
+export type Stats = components["schemas"]["Stats"];
+export type Person = components["schemas"]["PersonSummary"];
 
 export interface SearchResult {
+  /** The mode the service actually ranked with, which it reports back. */
+  mode: SearchMode;
   chains: ChainHit[];
   entries: EntryHit[];
 }
@@ -104,14 +103,17 @@ export async function search(p: SearchParams): Promise<SearchResult> {
     params: { query: searchQuery(p) },
   });
   if (error !== undefined || !data) fail(error, response);
-  return { chains: data.chains ?? [], entries: data.entries ?? [] };
+  // Exactly one array is populated, chosen by the `entries` parameter; the other
+  // is absent rather than empty, so both are defaulted here.
+  return { mode: data.mode, chains: data.chains ?? [], entries: data.entries ?? [] };
 }
 
-export interface SpecRequest {
-  chains: string[];
-  title?: string;
-  me?: string;
-}
+/**
+ * `me` is a list of the reader's own addresses: nothing in the corpus records
+ * which mailbox it was collected from, so outbound messages can only be marked
+ * by being told which addresses are the reader's.
+ */
+export type SpecRequest = components["schemas"]["SpecRequest"];
 
 /**
  * Builds a page from a chosen set. The spec is passed through normalise() for the
@@ -124,7 +126,7 @@ export async function buildSpec(req: SpecRequest): Promise<Timeline> {
   return normalise(data as Record<string, unknown>);
 }
 
-export async function getEntry(extId: string): Promise<EntryHit> {
+export async function getEntry(extId: string): Promise<CorpusEntry> {
   const { data, error, response } = await client.GET("/v1/entries/{extId}", {
     params: { path: { extId } },
   });
@@ -141,5 +143,5 @@ export async function getStats(): Promise<Stats> {
 export async function getPeople(): Promise<Person[]> {
   const { data, error, response } = await client.GET("/v1/people", {});
   if (error !== undefined || !data) fail(error, response);
-  return data;
+  return data.people;
 }

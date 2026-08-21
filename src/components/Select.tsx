@@ -82,6 +82,7 @@ export function SelectView({ onBuilt }: { onBuilt: (spec: Timeline) => void }) {
   const [person, setPerson] = useState("");
   const [since, setSince] = useState("");
   const [title, setTitle] = useState("");
+  const [me, setMe] = useState("");
   const [asked, setAsked] = useState<SearchParams | null>(null);
   const [chosen, setChosen] = useState<string[]>([]);
 
@@ -101,6 +102,10 @@ export function SelectView({ onBuilt }: { onBuilt: (spec: Timeline) => void }) {
     setChosen((prev) => (prev.includes(root) ? prev.filter((r) => r !== root) : [...prev, root]));
 
   const chains = results.data?.chains ?? [];
+  const addresses = me
+    .split(",")
+    .map((a) => a.trim())
+    .filter((a) => a !== "");
 
   return (
     <div className="wrap selwrap">
@@ -161,10 +166,26 @@ export function SelectView({ onBuilt }: { onBuilt: (spec: Timeline) => void }) {
               <span>Page title</span>
               <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="optional" />
             </label>
+            {/* Nothing in the corpus records which mailbox it was collected
+                from, so the reader's own messages can only be marked by being
+                told which addresses are theirs. */}
+            <label className="self">
+              <span>Your addresses</span>
+              <input value={me} onChange={(e) => setMe(e.target.value)} placeholder="comma separated" />
+            </label>
             <button
               type="button"
               disabled={chosen.length === 0 || build.isPending}
-              onClick={() => build.mutate({ chains: chosen, ...(title.trim() ? { title: title.trim() } : {}) })}
+              onClick={() =>
+                build.mutate({
+                  chains: chosen,
+                  ...(title.trim() ? { title: title.trim() } : {}),
+                  ...(addresses.length ? { me: addresses } : {}),
+                  // Recorded on the page so a refresh can propose the chains
+                  // this query would find now but did not when it was curated.
+                  ...(asked ? { queries: [{ q: asked.q, note: `corpus search, mode=${asked.mode}` }] } : {}),
+                })
+              }
             >
               {build.isPending ? "Building…" : `Build page from ${chosen.length} chain${chosen.length === 1 ? "" : "s"}`}
             </button>

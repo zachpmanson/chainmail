@@ -26,7 +26,7 @@ class NoopObserver {
  */
 const CHAINS = [
   {
-    rootExtId: "chain-7f3a1c",
+    rootExtId: "mail:<loom-cutover-1@example.fed>",
     subject: "Loom cutover schedule",
     sources: ["mail"],
     entries: 4,
@@ -36,7 +36,7 @@ const CHAINS = [
     score: 0.91,
   },
   {
-    rootExtId: "chain-2b9de4",
+    rootExtId: "mail:<lease-renewal-1@example.fed>",
     subject: "Warehouse lease renewal",
     sources: ["mail", "slack"],
     entries: 180,
@@ -126,7 +126,7 @@ async function searchFor(text: string) {
 
 describe("searching for chains", () => {
   it("lists each candidate with the matched-of-total ratio", async () => {
-    handler = () => json(200, { chains: CHAINS });
+    handler = () => json(200, { mode: "lexical", chains: CHAINS });
     mount(<SelectView onBuilt={() => {}} />);
     await searchFor("cutover");
 
@@ -139,7 +139,7 @@ describe("searching for chains", () => {
   });
 
   it("passes the mode and drops the filters left blank", async () => {
-    handler = () => json(200, { chains: CHAINS });
+    handler = () => json(200, { mode: "lexical", chains: CHAINS });
     mount(<SelectView onBuilt={() => {}} />);
     typeInto("Mode", "hybrid");
     await searchFor("cutover");
@@ -154,6 +154,7 @@ describe("searching for chains", () => {
   it("does not show the previous mode's results while the next mode loads", async () => {
     handler = (c) =>
       json(200, {
+        mode: new URL(c.url).searchParams.get("mode") === "semantic" ? "semantic" : "lexical",
         chains: new URL(c.url).searchParams.get("mode") === "semantic" ? [CHAINS[1]] : [CHAINS[0]],
       });
     mount(<SelectView onBuilt={() => {}} />);
@@ -171,7 +172,7 @@ describe("searching for chains", () => {
     expect(screen.getByText("Searching…")).toBeTruthy();
 
     await act(async () => {
-      release(json(200, { chains: [CHAINS[1]] }));
+      release(json(200, { mode: "semantic", chains: [CHAINS[1]] }));
     });
     await screen.findByText("Warehouse lease renewal");
   });
@@ -179,12 +180,15 @@ describe("searching for chains", () => {
 
 describe("declining", () => {
   it("shows the service's own words when the embedding daemon is down, and asks once", async () => {
-    handler = () => json(503, { error: "semantic search needs the embedding daemon; it is not running" });
+    handler = () =>
+      json(503, {
+        error: 'mode "semantic": no embedding daemon reachable at http://localhost:11434',
+      });
     mount(<SelectView onBuilt={() => {}} />);
     typeInto("Mode", "semantic");
     await searchFor("cutover");
 
-    await screen.findByText(/needs the embedding daemon/);
+    await screen.findByText(/no embedding daemon reachable/);
     // a 503 here is a fact about the operator's machine, not a hiccup; retrying
     // it only delays saying so
     await new Promise((r) => setTimeout(r, 120));
@@ -199,18 +203,18 @@ describe("declining", () => {
 
     cleanup();
     calls = [];
-    handler = () => json(404, { error: "no chain named chain-000000" });
+    handler = () => json(404, { error: "no entry carries id mail:<nothing@example.fed>" });
     mount(<SelectView onBuilt={() => {}} />);
-    await searchFor("chain-000000");
+    await searchFor("mail:<nothing@example.fed>");
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("Not found (404)");
-    expect(alert.textContent).toContain("no chain named chain-000000");
+    expect(alert.textContent).toContain("no entry carries id mail:<nothing@example.fed>");
   });
 });
 
 describe("building a page from the chosen set", () => {
   it("posts exactly the ticked chains", async () => {
-    handler = (c) => (c.url.includes("/v1/spec") ? json(200, SPEC) : json(200, { chains: CHAINS }));
+    handler = (c) => (c.url.includes("/v1/spec") ? json(200, SPEC) : json(200, { mode: "lexical", chains: CHAINS }));
     const built = vi.fn();
     mount(<SelectView onBuilt={built} />);
     await searchFor("cutover");
@@ -226,7 +230,10 @@ describe("building a page from the chosen set", () => {
 
     const post = calls.find((c) => c.url.includes("/v1/spec"))!;
     expect(post.method).toBe("POST");
-    expect(JSON.parse(post.body!)).toEqual({ chains: ["chain-7f3a1c"] });
+    expect(JSON.parse(post.body!)).toEqual({
+      chains: ["mail:<loom-cutover-1@example.fed>"],
+      queries: [{ q: "cutover", note: "corpus search, mode=lexical" }],
+    });
     await waitFor(() => expect(built).toHaveBeenCalledTimes(1));
   });
 
@@ -235,7 +242,7 @@ describe("building a page from the chosen set", () => {
     handler = (c) =>
       c.url.includes("/v1/spec")
         ? new Promise<Response>((res) => (release = res))
-        : json(200, { chains: CHAINS });
+        : json(200, { mode: "lexical", chains: CHAINS });
     mount(<SelectView onBuilt={() => {}} />);
     await searchFor("cutover");
     await screen.findByText("Loom cutover schedule");
