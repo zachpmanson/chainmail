@@ -86,18 +86,110 @@ func TestAFoldIsAppliedToTheSendersOwnMarkupAtASiblingBoundary(t *testing.T) {
 	}
 }
 
-func TestAFoldStraddlingOneElementHidesLessRatherThanMore(t *testing.T) {
-	// The whole signature is inside the same paragraph as the sender's closing
-	// sentence. Folding that paragraph would put the sentence behind the
-	// disclosure, so nothing is folded at all.
+func TestAParagraphHoldingBothTheMessageAndTheBlockIsDividedAtTheBreakBetweenThem(t *testing.T) {
+	// The shape most mailbox messages arrive in: a client lays the signature out
+	// as <br>-separated lines inside the same paragraph as the closing sentence,
+	// so there is no sibling boundary anywhere in it. The paragraph is divided at
+	// the break the block opens after, which leaves the sentence on screen.
 	part := `<div><p>Numbers attached.<br>Ada Byron<br>Head of Metering, Loomworks<br>` +
 		`+61 400 000 000</p></div>`
 	got, folded := htmlBody(part, mailBody, sigBlock)
-	if folded || strings.Contains(got, "<details") {
-		t.Errorf("body = %q, want no fold: the block starts inside the sender's own paragraph", got)
+	if !folded {
+		t.Fatalf("body = %q, want the block folded", got)
 	}
-	if !strings.Contains(got, "Numbers attached.") {
-		t.Errorf("body = %q, want the sender's text kept", got)
+	i, j, k := strings.Index(got, "Numbers attached."), strings.Index(got, "<details"),
+		strings.Index(got, "Ada Byron")
+	if i < 0 || j < i || k < j {
+		t.Errorf("body = %q, want the sentence, then the disclosure, then the block", got)
+	}
+	if !strings.Contains(got, "+61 400 000 000") {
+		t.Errorf("body = %q, want the folded lines present, not removed", got)
+	}
+}
+
+func TestABlockOpeningPartwayAlongALineIsNotFoldedAtAll(t *testing.T) {
+	// Nothing in the markup ends a line where the block begins: the sender's
+	// sign-off runs into it. Dividing there would take half a line the sender
+	// wrote behind the disclosure, so the block is left in view instead.
+	part := `<div><p>Numbers attached. Ada Byron<br>Head of Metering, Loomworks<br>` +
+		`+61 400 000 000</p></div>`
+	got, folded := htmlBody(part, mailBody, sigBlock)
+	if folded || strings.Contains(got, "<details") {
+		t.Errorf("body = %q, want no fold when the block opens mid-line", got)
+	}
+	if !strings.Contains(got, "Numbers attached. Ada Byron") {
+		t.Errorf("body = %q, want the line intact, not divided", got)
+	}
+}
+
+func TestABlockRunningPastItsWrapperTakesTheSiblingsAfterItToo(t *testing.T) {
+	// The block opens inside the signature wrapper and ends in a notice the
+	// client wrote after it, so what has to be folded is neither a run of
+	// siblings nor one subtree. The wrapper is divided and the run continues into
+	// what follows it.
+	part := `<div><p>Numbers attached.</p>` +
+		`<div><p>Ada Byron<br>Head of Metering, Loomworks<br>+61 400 000 000</p></div>` +
+		`<p>This email is confidential.</p></div>`
+	block := bodyFold{
+		lines: []string{"+61 400 000 000", "This email is confidential."},
+		note:  repeatNote(boiler.Fold{Lines: 2, Count: 5, Senders: 2, Scope: boiler.Domain}),
+	}
+	got, folded := htmlBody(part, mailBody, block)
+	if !folded {
+		t.Fatalf("body = %q, want the block folded", got)
+	}
+	at := strings.Index(got, "<details")
+	if at < 0 || strings.Index(got, "Ada Byron") > at {
+		t.Errorf("body = %q, want the name on screen: it is not part of the block", got)
+	}
+	for _, want := range []string{"+61 400 000 000", "This email is confidential."} {
+		if i := strings.Index(got, want); i < at {
+			t.Errorf("body = %q, want %q inside the disclosure", got, want)
+		}
+	}
+}
+
+func TestASignatureLaidOutAsATableIsLeftInViewRatherThanRestructured(t *testing.T) {
+	// Dividing a table at a cell makes two tables whose columns no longer line
+	// up, which is a worse page than the signature it would have folded.
+	part := `<div><p>Numbers attached.</p><table><tr><td>Ada Byron<br>` +
+		`Head of Metering, Loomworks<br>+61 400 000 000</td></tr></table></div>`
+	block := bodyFold{
+		lines: []string{"Head of Metering, Loomworks", "+61 400 000 000"},
+		note:  repeatNote(sigFold),
+	}
+	got, folded := htmlBody(part, mailBody, block)
+	if folded || strings.Contains(got, "<details") {
+		t.Errorf("body = %q, want no fold inside a table", got)
+	}
+	if !strings.Contains(got, "<table>") {
+		t.Errorf("body = %q, want the table as the sender laid it out", got)
+	}
+}
+
+func TestAnImagePlaceholderInsideTheBlockDoesNotMoveWhereItEnds(t *testing.T) {
+	// The text rendition writes an inline image as "[alt]<href>", so a signature
+	// with a logo in it has a line the markup has no text for, and a cid: image
+	// is dropped before the fold is placed. Neither changes the end of the block,
+	// which is the end of the body.
+	part := `<div><p>Numbers attached.</p>` +
+		`<p>Ada Byron<br>Head of Metering, Loomworks<br>` +
+		`<img src="cid:logo001.png" alt="Loomworks">` +
+		`<img src="https://loomworks.example/sig.png" alt="Loomworks"><br>` +
+		`+61 400 000 000</p></div>`
+	got, folded := htmlBody(part, mailBody, sigBlock)
+	if !folded {
+		t.Fatalf("body = %q, want the block folded", got)
+	}
+	at := strings.Index(got, "<details")
+	if i := strings.Index(got, "sig.png"); i < at {
+		t.Errorf("body = %q, want the logo inside the disclosure with the rest of the block", got)
+	}
+	if strings.Contains(got, "cid:") {
+		t.Errorf("body = %q, want the unresolvable image dropped", got)
+	}
+	if !strings.Contains(got, "+61 400 000 000") {
+		t.Errorf("body = %q, want the line after the logo folded, not lost", got)
 	}
 }
 
@@ -221,5 +313,40 @@ func TestTheEvidenceIsTheCorpusAndNotThePage(t *testing.T) {
 	}
 	if !strings.Contains(note, "1 of 2 entries") {
 		t.Errorf("source note = %q, want the fold declared and counted", note)
+	}
+}
+
+func TestAMailboxMessagesOwnPartIsFoldedAfterItsHistoryIsPeeled(t *testing.T) {
+	// The direct path end to end: the entry was in the mailbox, so its trail comes
+	// off (it is on the page as its own entries) and the block is then the tail of
+	// what is left. The block's lines are read from this entry's own text, peeled
+	// the same way, which is what keeps the two ends of the fold measuring the
+	// same thing.
+	r := &entryRow{
+		Source: "mail",
+		Direct: true,
+		Fold:   sigFold,
+		BodyText: "The cutover is Monday.\nAda Byron\nHead of Metering, Loomworks\n" +
+			"+61 400 000 000\n\nOn Thu, 7 May 2026 at 04:38, Bo Halvorsen <bo@fjordline.example> wrote:\n" +
+			"> Which Monday?\n",
+		BodyHTML: `<div><p>The cutover is Monday.<br>Ada Byron<br>Head of Metering, Loomworks<br>` +
+			`+61 400 000 000</p>` +
+			`<div class="gmail_quote"><div class="gmail_attr">On Thu, 7 May 2026 at 04:38, ` +
+			`Bo Halvorsen &lt;bo@fjordline.example&gt; wrote:</div>` +
+			`<blockquote class="gmail_quote"><p>Which Monday?</p></blockquote></div></div>`,
+	}
+	got := bodyHTML(r)
+	if !r.Folded {
+		t.Fatalf("body = %q, want the block folded on the mailbox message's own markup", got)
+	}
+	if strings.Contains(got, "Which Monday?") {
+		t.Errorf("body = %q, want the quoted history peeled, not folded", got)
+	}
+	at := strings.Index(got, "<details")
+	if at < 0 || strings.Index(got, "The cutover is Monday.") > at {
+		t.Errorf("body = %q, want the sender's sentence on screen", got)
+	}
+	if !strings.Contains(got, "+61 400 000 000") {
+		t.Errorf("body = %q, want the folded lines still in the document", got)
 	}
 }

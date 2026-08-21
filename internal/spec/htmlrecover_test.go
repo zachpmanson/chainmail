@@ -189,3 +189,39 @@ func TestAMalformedHostIsJustAHostWithNothingToOffer(t *testing.T) {
 		}
 	}
 }
+
+func TestARecoveredBlockIsFoldedByTheSameMappingAsAMailboxMessage(t *testing.T) {
+	// One rule for both provenances. The signature is laid out inside a single
+	// paragraph here, so the fold is placed by dividing that paragraph — the same
+	// thing that happens to a mailbox message's own part (see
+	// TestAParagraphHoldingBothTheMessageAndTheBlockIsDividedAtTheBreakBetweenThem),
+	// and the reason the mapping is not written twice.
+	host := `<div dir="ltr">Numbers look right, thanks.</div>` +
+		`<div class="gmail_quote">` +
+		`<div class="gmail_attr">On Thu, 7 May 2026 at 04:38, Ada Byron ` +
+		`&lt;ada@loomworks.example&gt; wrote:</div>` +
+		`<blockquote class="gmail_quote">` +
+		`<p>Here is the column mapping we agreed, with the second column renamed so that the ` +
+		`import matches what the retailer sends us each month.<br>` +
+		`Ada Byron<br>Head of Metering, Loomworks<br>+61 400 000 000</p>` +
+		`</blockquote></div>`
+	r := &entryRow{
+		Source: "mail",
+		BodyText: "Here is the column mapping we agreed, with the second column renamed so that the\n" +
+			"import matches what the retailer sends us each month.\n" +
+			"Ada Byron\nHead of Metering, Loomworks\n+61 400 000 000\n",
+		HostHTML: []string{host},
+		Fold:     sigFold,
+	}
+	got := bodyHTML(r)
+	if !r.Folded {
+		t.Fatalf("body = %q, want the recovered block folded", got)
+	}
+	at := strings.Index(got, "<details")
+	if at < 0 || strings.Index(got, "column mapping") > at {
+		t.Errorf("body = %q, want the sender's own sentence on screen", got)
+	}
+	if !strings.Contains(got, "+61 400 000 000") {
+		t.Errorf("body = %q, want the folded lines still in the document", got)
+	}
+}

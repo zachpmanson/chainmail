@@ -87,24 +87,43 @@ func foldNodes(body *html.Node, run []*html.Node, note foldNote) bool {
 // lands a line early and the seam moves. The line the block opens on is the same
 // text in both.
 //
-// The fold has to start at a sibling boundary, so a block that begins partway
-// inside one element is not folded at all. Erring the other way would put the
-// sender's closing sentence behind the disclosure, which is the one outcome
-// worse than leaving a signature on screen.
+// The disclosure always begins at a line boundary — a <br>, or the edge of a
+// block element — and never partway through a line. A line the sender wrote is
+// the smallest thing this may not divide: half of a closing sentence behind the
+// disclosure is the one outcome worse than leaving a signature on screen, and
+// the words the block opens on are how the seam is placed at all.
+//
+// Where that boundary is not already the edge of one of the host's children, the
+// elements between it and the host are divided at it (see splitTail). A signature
+// that a client laid out as <br>-separated lines inside one paragraph has no
+// sibling boundary anywhere in it, and on this corpus that is the common shape:
+// of the mailbox messages whose block the corpus finds, 123 open it on a child of
+// the host and 395 open it inside one. Dividing reaches 36 of those; the rest are
+// declined by the rules below, most of them automated mail laid out in nested
+// tables, whose flattened text lines correspond to nothing in the markup.
 func foldRepeatedTail(body *html.Node, bf bodyFold) bool {
 	if len(bf.lines) == 0 {
 		return false
 	}
 	host := foldHost(body)
+	if run := tailRun(host, bf.lines); len(run) > 0 && foldNodes(body, run, bf.note) {
+		return true
+	}
+	return foldSplitTail(body, host, bf)
+}
+
+// tailRun is the run of the host's trailing children that the block covers, or
+// nil when no child of the host opens it.
+func tailRun(host *html.Node, block []string) []*html.Node {
 	var kids []*html.Node
 	for c := host.FirstChild; c != nil; c = c.NextSibling {
 		kids = append(kids, c)
 	}
-	want, at, best := len(bf.lines), -1, 0
+	want, at, best := len(block), -1, 0
 	tail := 0
 	for i := len(kids) - 1; i >= 0; i-- {
 		tail += visibleLines(kids[i])
-		if !startsBlock(kids[i], bf.lines) {
+		if !startsBlock(kids[i], block) {
 			continue
 		}
 		// The same opening line can appear twice — a sender whose sign-off names
@@ -116,9 +135,197 @@ func foldRepeatedTail(body *html.Node, bf bodyFold) bool {
 		}
 	}
 	if at < 0 {
+		return nil
+	}
+	return kids[at:]
+}
+
+// foldSplitTail divides the elements that hold the block's opening line, so that
+// the line begins a child of the host, and folds from there.
+//
+// The block is a suffix of the message, so what the disclosure has to hold is
+// everything from one point in document order onward — which is a run of
+// siblings only when the client happened to end an element there. Dividing an
+// element at a line boundary it already contains produces two elements that read
+// as the one did: the sender's <br> between two lines becomes the seam between
+// two paragraphs. Nothing is reordered and no text is dropped, which is what
+// makes this a different act from folding mid-line.
+func foldSplitTail(body, host *html.Node, bf bodyFold) bool {
+	n := splitPoint(host, bf.lines)
+	if n == nil {
 		return false
 	}
-	return foldNodes(body, kids[at:], bf.note)
+	// Asked before the split, because a fold that will be declined must not leave
+	// the tree divided: see foldNodes for why a body is never folded entirely.
+	if !hasContentBefore(host, n) {
+		return false
+	}
+	top := splitTail(host, n)
+	if p := top.PrevSibling; p != nil {
+		// The break the block used to follow is now the last thing in what stays on
+		// screen, separating nothing. It is the case trimTrailingChrome exists for.
+		trimTrailingChrome(p)
+	}
+	var run []*html.Node
+	for c := top; c != nil; c = c.NextSibling {
+		run = append(run, c)
+	}
+	return foldNodes(body, run, bf.note)
+}
+
+// splitPoint is the node inside the host that the block opens on, or nil when
+// the block opens partway along a line.
+//
+// A candidate has to open on the block's words *and* follow a line boundary.
+// Both, because either alone places a seam the sender did not write: the words
+// alone would divide a line in the middle of itself, and a boundary alone would
+// divide at whichever break came last.
+func splitPoint(host *html.Node, block []string) *html.Node {
+	want := len(block)
+	var best *html.Node
+	bestTail := 0
+	var walk func(*html.Node)
+	walk = func(p *html.Node) {
+		for c := p.FirstChild; c != nil; c = c.NextSibling {
+			if opensAfterBreak(c) && startsBlock(c, block) && divisible(host, c) {
+				// Closest to the block's length wins, as in tailRun and for the same
+				// reason: an opening line that appears twice is disambiguated by how
+				// much of the message follows it.
+				if t := suffixLines(host, c); best == nil || abs(t-want) < abs(bestTail-want) {
+					best, bestTail = c, t
+				}
+			}
+			walk(c)
+		}
+	}
+	walk(host)
+	return best
+}
+
+// opensAfterBreak reports whether a node starts a line: something before it
+// among its siblings ends one.
+//
+// The empty inline elements between are stepped over — Word writes an <o:p></o:p>
+// after every line of a signature — because they put nothing on the page and so
+// end nothing. A node that is the first of its parent's children reports false:
+// the question is then about the parent, which is a candidate in its own right
+// and answers it there.
+func opensAfterBreak(n *html.Node) bool {
+	for p := n.PrevSibling; p != nil; p = p.PrevSibling {
+		switch p.Type {
+		case html.ElementNode:
+			if breaksLine(p.DataAtom) {
+				return true
+			}
+			if hasContent(p) {
+				return false
+			}
+		case html.TextNode:
+			if strings.TrimSpace(p.Data) != "" {
+				return strings.HasSuffix(strings.TrimRight(p.Data, " \t"), "\n")
+			}
+			if strings.Contains(p.Data, "\n") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// divisible reports whether the elements between a node and the host may be
+// divided at it.
+//
+// The listed elements are the ones a client wraps a line in, and two of any of
+// them read as the one did. A table is the case that rules the others out: a
+// signature laid out as rows and cells divides into two tables whose columns no
+// longer line up, so a block inside one is left in view rather than restructured.
+// An <a> is excluded for the same kind of reason — dividing it would make two
+// links where the sender wrote one — and a <blockquote> because a second
+// blockquote is a second claim about who is being quoted.
+func divisible(host, n *html.Node) bool {
+	for cur := n.Parent; cur != nil && cur != host; cur = cur.Parent {
+		if !dividableTags[cur.DataAtom] {
+			return false
+		}
+	}
+	return true
+}
+
+var dividableTags = map[atom.Atom]bool{
+	atom.Div: true, atom.P: true, atom.Span: true, atom.Font: true,
+	atom.B: true, atom.Strong: true, atom.I: true, atom.Em: true, atom.U: true,
+}
+
+// splitTail divides every element between n and the host at n, and returns the
+// host's child that the block now begins.
+//
+// Each ancestor is replaced by two of itself: the one already there keeps what
+// came before n, and a copy carrying the same attributes takes n and everything
+// after it. Working outward means each division moves a node that is already the
+// first of its run, so no text changes order and none is copied.
+func splitTail(host, n *html.Node) *html.Node {
+	cur := n
+	for cur.Parent != host {
+		parent := cur.Parent
+		clone := &html.Node{Type: parent.Type, DataAtom: parent.DataAtom, Data: parent.Data,
+			Attr: append([]html.Attribute(nil), parent.Attr...)}
+		for s := cur; s != nil; {
+			next := s.NextSibling
+			parent.RemoveChild(s)
+			clone.AppendChild(s)
+			s = next
+		}
+		if parent.NextSibling != nil {
+			parent.Parent.InsertBefore(clone, parent.NextSibling)
+		} else {
+			parent.Parent.AppendChild(clone)
+		}
+		cur = clone
+	}
+	return cur
+}
+
+// suffixLines counts the visible lines from n to the end of the host: n's own,
+// and every sibling after it at each level up to the host.
+func suffixLines(host, n *html.Node) int {
+	count := visibleLines(n)
+	for cur := n; cur != nil && cur != host; cur = cur.Parent {
+		for s := cur.NextSibling; s != nil; s = s.NextSibling {
+			count += visibleLines(s)
+		}
+	}
+	return count
+}
+
+// hasContentBefore reports whether anything before n in document order puts
+// content on the page, reading an <img> as content exactly as hasContentOutside
+// does.
+func hasContentBefore(host, n *html.Node) bool {
+	found, has := false, false
+	var walk func(*html.Node)
+	walk = func(c *html.Node) {
+		if found || c == n {
+			found = true
+			return
+		}
+		switch c.Type {
+		case html.TextNode:
+			if strings.TrimSpace(c.Data) != "" {
+				has = true
+			}
+		case html.ElementNode:
+			if c.DataAtom == atom.Img {
+				has = true
+			}
+		}
+		for k := c.FirstChild; k != nil && !found; k = k.NextSibling {
+			walk(k)
+		}
+	}
+	for c := host.FirstChild; c != nil && !found; c = c.NextSibling {
+		walk(c)
+	}
+	return has
 }
 
 // startsBlock reports whether a node opens on the words the block opens on.
