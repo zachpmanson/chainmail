@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"math"
+	"regexp"
 	"sort"
 	"time"
 
@@ -64,6 +65,16 @@ const (
 	twinHeadRun    = 8
 	twinHeadWindow = 48
 	minTwinHead    = 0.75
+	// minAnnotationRun: the shortest run of words inserted into the middle of the
+	// survivor's own text to read as somebody answering inline rather than as a
+	// client rendering something differently. Five, measured: with the residue
+	// proseWords takes out, every interior run below five on this corpus is a
+	// renumbered list item or a link label, and the one real annotation is
+	// twenty-one words, so nothing between two and twenty-one is at stake here.
+	// What five costs is a two-word inline "yes, agreed", which still collapses
+	// and is still lost; what a lower figure costs is a duplicate left in view for
+	// every requote whose client renumbered a list.
+	minAnnotationRun = 5
 )
 
 // TwinCollapse is one group of copies read as one message, with the copy that
@@ -99,6 +110,12 @@ type TwinDecline struct {
 	Entry  int64
 	ExtID  string
 	Reason string
+	// Annotated marks the decline that is not an unresolved duplicate but a
+	// second copy the corpus needs: one whose quoter answered inside the text
+	// they quoted, so it holds words no other entry does. Worth reporting on
+	// every run rather than behind the flag the others sit behind — it is the one
+	// decline that would otherwise have destroyed something.
+	Annotated bool
 }
 
 // TwinPlan is what CollapseTwins decided, and whether it carried it out.
@@ -116,6 +133,11 @@ type TwinPlan struct {
 	WithMailbox, QuotedOnly int
 	// Measured is how many render offsets the plan establishes.
 	Measured int
+	// Annotated is how many copies were kept because their quoter answered inside
+	// the text they quoted. Counted separately from the rest of Declined because
+	// it is the only decline that says the corpus would have lost something: the
+	// others are duplicates nothing could resolve.
+	Annotated int
 }
 
 // twinCopy is one stored copy of a message as the twin test needs it.
@@ -130,7 +152,10 @@ type twinCopy struct {
 	quoted bool
 	wall   time.Time
 	words  []string
-	atts   int
+	// prose is words again with the markup residue removed: what the positional
+	// test needs, and what the identity gates must not use. See proseWords.
+	prose []string
+	atts  int
 }
 
 // CollapseTwins folds together the entries that are one message stored more than
@@ -156,12 +181,26 @@ func CollapseTwins(s *Store, apply bool) (TwinPlan, error) {
 		groups, declined := groupTwins(copies)
 		plan.Declined = append(plan.Declined, declined...)
 		for _, g := range groups {
-			c, why, ok := resolveTwins(g)
+			c, kept, why, ok := resolveTwins(g)
 			if !ok {
 				for _, m := range g {
 					plan.Declined = append(plan.Declined,
 						TwinDecline{Entry: m.id, ExtID: m.ext, Reason: why})
 				}
+				continue
+			}
+			// A group can hold both an annotated copy and a clean one — one quoter
+			// answered inline, another requoted the same message untouched. The
+			// clean copies still collapse, so the decline is per copy rather than
+			// per group; refusing the whole group would leave a duplicate standing
+			// for the sake of a copy it has nothing to do with.
+			plan.Declined = append(plan.Declined, kept...)
+			for _, k := range kept {
+				if k.Annotated {
+					plan.Annotated++
+				}
+			}
+			if len(c.Drop) == 0 {
 				continue
 			}
 			for _, drop := range c.Drop {
@@ -249,6 +288,7 @@ func twinCopies(s *Store, person int64) ([]twinCopy, error) {
 		}
 		c.wall = time.Unix(ts, 0).UTC()
 		c.words = copyWords(body, c.quoted)
+		c.prose = proseWords(body, c.quoted)
 		out = append(out, c)
 	}
 	return out, rows.Err()
@@ -270,6 +310,50 @@ func copyWords(body string, quoted bool) []string {
 		return textsim.Tokens(body)
 	}
 	return textsim.Tokens(ownWords(body))
+}
+
+// proseWords is copyWords again with the residue two renditions of one message
+// disagree about taken out: links, addresses, inline-image placeholders and
+// attachment names.
+//
+// The positional test cannot use the plain token list. Each of those things is
+// written differently by every client — the same inline image arrives as
+// "[image: shot.png]" from one and bracketed from the next, the same link as bare
+// anchor text in one rendition and as the text followed by the whole URL in the
+// other — and each lands as a run of tokens INSIDE the shared text, which is the
+// exact shape an inline answer has. On the raw tokens 73 of 556 collapses looked
+// annotated and one was; with the residue out, one looks annotated and it is the
+// same one.
+//
+// Not used by the identity gates, which are right to be tolerant of it: recall
+// and the ordered opening ask whether two copies are one message, and a link
+// rendered two ways does not make them two.
+func proseWords(body string, quoted bool) []string {
+	if !quoted {
+		body = ownWords(body)
+	}
+	for _, re := range markupResidue {
+		body = re.ReplaceAllString(body, " ")
+	}
+	return textsim.Tokens(body)
+}
+
+// markupResidue is what a client writes and a person does not.
+//
+// The bracketed form is deliberately wide: in a plain-text rendition angle
+// brackets hold URLs, addresses and image placeholders and little else, and the
+// alternative — an expression per client convention — would be a list that goes
+// stale the first time somebody's mail comes from a client not on it.
+var markupResidue = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)https?://\S+`),
+	regexp.MustCompile(`(?i)mailto:\S*`),
+	regexp.MustCompile(`(?i)\[cid:[^\]]*\]`),
+	regexp.MustCompile(`(?i)\[image:[^\]]*\]`),
+	// Same line only: a lone ">" opening a quoted line has no partner, and this
+	// must not swallow the rest of the body looking for one.
+	regexp.MustCompile(`<[^>\n]*>`),
+	regexp.MustCompile(`\S+@\S+`),
+	regexp.MustCompile(`(?i)\S+\.(?:png|jpe?g|gif|bmp|webp|pdf|csv|xlsx?|docx?)\b`),
 }
 
 // groupTwins partitions one person's copies into groups that are one message,
@@ -441,7 +525,13 @@ func nearestOffset(mins int) int {
 // With no mailbox copy the fullest text wins, on unnest.Dedup's reasoning that
 // quoting elides rather than invents, and the lowest id breaks a tie so the
 // choice cannot depend on the order rows came back in.
-func resolveTwins(g []twinCopy) (TwinCollapse, string, bool) {
+//
+// The copies it will not drop come back alongside the collapse: a copy whose
+// quoter answered inside the text they quoted holds words that exist nowhere else
+// as text, the quoter's own markup being the only other place they survive, and a
+// collapse would delete them. That is a worse outcome than the duplicate it
+// removes, so the copy stays.
+func resolveTwins(g []twinCopy) (TwinCollapse, []TwinDecline, string, bool) {
 	sort.Slice(g, func(i, j int) bool { return g[i].id < g[j].id })
 	keep, real := -1, 0
 	for i := range g {
@@ -454,7 +544,7 @@ func resolveTwins(g []twinCopy) (TwinCollapse, string, bool) {
 		// The relation says two messages that each carry their own Message-ID are
 		// one message. A gate is wrong about this group and nothing here can say
 		// which, so all of it stays.
-		return TwinCollapse{}, "group holds more than one mailbox copy", false
+		return TwinCollapse{}, nil, "group holds more than one mailbox copy", false
 	}
 	mail := true
 	why := fmt.Sprintf("the mailbox copy, against %d recovered", len(g)-1)
@@ -468,17 +558,63 @@ func resolveTwins(g []twinCopy) (TwinCollapse, string, bool) {
 		why = fmt.Sprintf("the fullest of %d recovered copies; no mailbox copy exists", len(g))
 	}
 	c := TwinCollapse{Keep: g[keep].id, KeepExt: g[keep].ext, Why: why, Mailbox: mail}
+	var kept []TwinDecline
 	for i := range g {
 		if i == keep {
 			continue
 		}
 		if g[i].atts > 0 {
-			return TwinCollapse{}, fmt.Sprintf("a copy to be dropped holds attachments, "+
+			return TwinCollapse{}, nil, fmt.Sprintf("a copy to be dropped holds attachments, "+
 				"so it was fetched rather than quoted: entry %d", g[i].id), false
+		}
+		if why, inline := annotates(g[keep], g[i]); why != "" {
+			kept = append(kept, TwinDecline{
+				Entry: g[i].id, ExtID: g[i].ext, Reason: why, Annotated: inline})
+			continue
 		}
 		c.Drop = append(c.Drop, g[i].id)
 	}
-	return c, "", true
+	return c, kept, "", true
+}
+
+// annotates reports whether dropping a copy would delete words only it holds,
+// says so in the terms the decline is printed in, and separates the copy somebody
+// annotated from the one that merely cannot be placed.
+//
+// Direction rather than chronology, and they are the same statement: quoting
+// elides rather than invents, so words present in a requote and absent from the
+// copy the corpus would keep were typed by whoever requoted it, after the fact.
+// Reading it off the pair instead of off the timestamps also keeps the test
+// honest in a quoted-only group, where no copy states a true instant and the
+// clocks say only where they were rendered.
+//
+// Position is what separates an answer from chrome. A signature, a legal notice
+// and a tracking blob land after the shared text and are appended by the client
+// on every requote; an inline answer lands between two of the survivor's own
+// adjacent words, which is a place no client puts anything. Only the longest
+// single run counts: scattered insertions of a word each are what a renderer
+// produces, and summing them would read a renumbered list as a paragraph.
+func annotates(keep, drop twinCopy) (string, bool) {
+	d := textsim.Divergences(keep.prose, drop.prose)
+	if !d.Measured {
+		// Too long to align — a machine-generated report rather than anything a
+		// person annotated, but position cannot be measured to say so. Containment
+		// can, in linear time and without an alignment: a copy holding no word the
+		// survivor lacks has nothing to lose wherever its words sit. Only a long
+		// copy that does hold one declines, because the collapse is the
+		// irreversible move and nothing here can place it.
+		if textsim.Overlap(drop.prose, keep.prose) == len(drop.prose) {
+			return "", false
+		}
+		return fmt.Sprintf("a copy to be dropped holds words the survivor lacks and is "+
+			"too long to place them: entry %d", drop.id), false
+	}
+	if d.LongestInside < minAnnotationRun {
+		return "", false
+	}
+	return fmt.Sprintf("its quoter answered inside the text they quoted, so a "+
+		"collapse would delete words no other entry holds: %d inserted into entry %d, "+
+		"in a run of %d", d.Inside, keep.id, d.LongestInside), true
 }
 
 // collapseGroup carries one collapse out.
@@ -698,7 +834,8 @@ func offsetLabel(mins int) string {
 // This is the same test the repair pass applies, asked at extraction so the twin
 // is never created in the first place. Both are needed and neither is enough: an
 // extraction-only fix leaves every twin already stored, and a repair-only fix
-// lets them come back on the next ingest.
+// lets them come back on the next ingest. The refusals are the same at both ends
+// too, including the annotated block.
 //
 // The caller must have a stated send time. A block whose clock was inferred from
 // its host carries the host's instant rather than a rendered wall clock, so the
@@ -708,7 +845,8 @@ func FindTwin(s *Store, person int64, wall time.Time, text string) (int64, bool,
 	if person == 0 {
 		return 0, false, nil
 	}
-	c := twinCopy{quoted: true, wall: wall, words: copyWords(text, true)}
+	c := twinCopy{quoted: true, wall: wall,
+		words: copyWords(text, true), prose: proseWords(text, true)}
 	if len(c.words) < minTwinTokens {
 		return 0, false, nil
 	}
@@ -733,7 +871,15 @@ func FindTwin(s *Store, person int64, wall time.Time, text string) (int64, bool,
 		}
 		o.wall = time.Unix(ts, 0).UTC()
 		o.words = copyWords(body, o.quoted)
+		o.prose = proseWords(body, o.quoted)
 		if _, ok := twinnable(c, o); !ok {
+			continue
+		}
+		// Converging here would store nothing but a sighting, so an inline answer
+		// in this block would never reach the corpus at all — the same loss the
+		// repair pass declines, one ingest earlier. The block becomes its own
+		// entry instead, which is what the caller does with a refusal.
+		if why, _ := annotates(o, c); why != "" {
 			continue
 		}
 		all = append(all, o.id)
