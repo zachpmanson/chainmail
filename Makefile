@@ -8,6 +8,8 @@
 CORPUS      ?= $(HOME)/.local/state/chainmail/corpus.db
 SLACK       ?= $(HOME)/.local/state/chainmail/slack
 BIN         ?= $(HOME)/.local/bin/corpus
+SERVER      ?= $(HOME)/.local/bin/chainmail-server
+PORT        ?= 8765
 # Mail is paged by week: docket caps a search at 500 results and `ingest mail`
 # takes a single page, so one wide query truncates silently. A week is well
 # under the cap on this mailbox — see the `saw 500` warning in slurp-mail.
@@ -15,7 +17,7 @@ SINCE       ?= 2026-08-01
 export CHAINMAIL_CORPUS = $(CORPUS)
 
 .PHONY: help install test check slurp slurp-mail slurp-slack settle embed \
-        backup page serve doctor
+        backup page serve api doctor
 
 help:
 	@printf 'Corpus\n'
@@ -32,10 +34,12 @@ help:
 	@printf '  make check          test, vet, gofmt, typecheck\n'
 	@printf '  make page Q=...     generate a spec and render it\n'
 	@printf '  make serve          vite dev server\n'
+	@printf '  make api            the read-only API on 127.0.0.1:%s\n' '$(PORT)'
 	@printf '\nOverride CORPUS, SLACK, SINCE, BIN on the command line.\n'
 
 install:
 	go build -o $(BIN) ./cmd/corpus
+	go build -o $(SERVER) ./cmd/server
 
 test:
 	go test ./...
@@ -108,3 +112,9 @@ page:
 
 serve:
 	npm run dev
+
+# Loopback, and it refuses anything else without a flag that says why. There is
+# no authentication and spec bodies are unsanitised sender HTML (#14), so the
+# dev client reaches this through a Vite proxy rather than over CORS.
+api:
+	go run ./cmd/server -addr 127.0.0.1:$(PORT) -corpus $(CORPUS)
