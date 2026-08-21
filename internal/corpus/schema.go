@@ -298,4 +298,39 @@ var migrations = []string{
 	);
 	create index render_offsets_person on render_offsets(person_id, at);
 	`,
+
+	// 10: where a walk of a source got to, so a killed ingest resumes.
+	//
+	// Keyed on (source, container). A mail container is the query string itself,
+	// not a label: two different queries cover two different sets and a cursor
+	// that conflated them would claim coverage it never had. Slack keys on the
+	// channel id for the same reason its entries do.
+	//
+	// `position` is opaque and source-defined — for mail it is docket's page
+	// token. It is only meaningful while `complete` is 0: a walk that finished
+	// has no position left to hold, and a stale token from a finished walk would
+	// resume in the middle of a set already covered.
+	//
+	// `frontier` is the newest entry timestamp a COMPLETED walk covered, and is
+	// the whole reason a top-up is cheap: paging runs newest-first, so a walk can
+	// stop once it reaches ground below the frontier. Written only on completion,
+	// because a frontier advanced by a partial walk would certify coverage of a
+	// gap the kill left behind.
+	//
+	// `succeeded_at` is the last completion, kept separately from `updated_at`
+	// so "we have written to this cursor recently" cannot be mistaken for "this
+	// container is fully covered".
+	`
+	create table cursors (
+	  source       text not null,       -- mail | slack
+	  container    text not null,       -- mail: the query | slack: channel id
+	  position     text,                -- resume point, source-defined; set while incomplete
+	  frontier     integer,             -- newest ts a completed walk covered
+	  complete     integer not null default 0,
+	  walked       integer not null,    -- entries walked since the last completion
+	  updated_at   integer not null,
+	  succeeded_at integer,
+	  primary key (source, container)
+	);
+	`,
 }

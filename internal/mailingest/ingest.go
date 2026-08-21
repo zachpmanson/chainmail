@@ -10,6 +10,50 @@ import (
 	"github.com/zachpmanson/chainmail/internal/corpus"
 )
 
+// Stop says why a walk ended. The distinction the corpus depends on is
+// Covered() — a walk that stopped because the caller bounded it has left mail
+// behind, and reporting that as a finished ingest is how a corpus comes to be
+// trusted for coverage it does not have.
+type Stop string
+
+const (
+	// StopExhausted: docket reported no further page. The query is fully read.
+	StopExhausted Stop = "exhausted"
+	// StopFrontier: the walk reached ground a previous completed walk covered.
+	StopFrontier Stop = "frontier"
+	// StopMax: the caller's Bound.Max ran out. MESSAGES REMAIN UNREAD.
+	StopMax Stop = "max"
+)
+
+// Covered reports whether everything matching the query is now in the corpus.
+// False means the walk stopped short and the query must be re-run to finish.
+func (s Stop) Covered() bool { return s == StopExhausted || s == StopFrontier }
+
+// Bound is what the caller will allow one walk to spend.
+type Bound struct {
+	// Max messages to walk. Zero is unbounded, which is the right setting for a
+	// backfill: a bound exists to cap a run's cost, and any bound that stops a
+	// walk early is reported as StopMax rather than absorbed.
+	Max int
+	// PageSize per docket request. Zero uses defaultPageSize.
+	PageSize int
+}
+
+// defaultPageSize is docket's own cap. A smaller page is not cheaper — the cost
+// is one API round trip per page either way — so paging at the cap minimises
+// round trips for a backfill of any size.
+const defaultPageSize = 500
+
+// frontierLookback overlaps the floor a completed walk established.
+//
+// Paging runs in the mailbox's receipt order, but the only timestamp an envelope
+// carries is the sender's Date header, and the two disagree whenever mail was
+// delayed or a sender's clock was wrong. A floor set exactly at the frontier
+// would step over such a message permanently. Re-reading a message is free —
+// body_sha makes the write a no-op — so the overlap costs a few reads and buys
+// the guarantee that the floor is a floor.
+const frontierLookback = 48 * time.Hour
+
 // Result summarises one ingest run.
 type Result struct {
 	Seen      int
@@ -17,39 +61,141 @@ type Result struct {
 	Changed   int
 	Resolved  int64 // parent edges linked after this batch
 	Truncated int   // bodies docket still had to cut — should always be zero
+	// Stop is why the walk ended. Read it, not Seen: a run that saw exactly its
+	// limit looks identical to a run that saw everything.
+	Stop Stop
+	// Pages is docket requests made, so a walk that paged can be told from one
+	// that took a single page.
+	Pages int
+	// Resumed is true when this run continued a cursor left by an earlier one.
+	Resumed bool
+	// NextPage is the token a StopMax run left behind, and is what the stored
+	// cursor holds. Empty for a covered walk.
+	NextPage string
 }
 
-// Ingest walks the results of a Gmail query, reads each message in full, and
-// upserts it. Idempotent: re-running over the same query changes nothing unless
-// a message's body actually changed.
-func Ingest(store *corpus.Store, c Client, query string, limit int) (Result, error) {
-	var r Result
+// Mailbox is the part of docket an ingest uses. An interface so the walk can be
+// driven by a fake: paging and bound behaviour are the logic worth testing, and
+// they are untestable against a binary that talks to Gmail.
+type Mailbox interface {
+	Search(query string, limit int, pageToken string) ([]Envelope, Page, error)
+	Read(id string) (Message, error)
+}
 
-	envs, err := c.Search(query, limit)
+// Ingest walks every page of a Gmail query, reads each message in full, and
+// upserts it, recording progress against a cursor keyed on the query.
+//
+// Restartable rather than duplicate-avoiding: body_sha already makes a re-read
+// harmless, so the cursor exists to answer "where had we got to", not "have we
+// seen this". Two things follow. A run killed between pages resumes at the page
+// it had reached. A run over a query whose last walk completed stops as soon as
+// it reaches that walk's frontier, so a top-up reads the new mail and not the
+// archive behind it.
+func Ingest(store *corpus.Store, c Mailbox, query string, b Bound) (Result, error) {
+	var r Result
+	if b.PageSize <= 0 {
+		b.PageSize = defaultPageSize
+	}
+
+	cur, err := corpus.LoadCursor(store, corpus.SourceMail, query)
 	if err != nil {
 		return r, err
 	}
-	for _, env := range envs {
-		msg, err := c.Read(env.ID)
-		if err != nil {
-			return r, fmt.Errorf("reading %s: %w", env.ID, err)
+	token := ""
+	if cur.Exists && !cur.Complete && cur.Position != "" {
+		token = cur.Position
+		r.Resumed = true
+	}
+	var floor time.Time
+	if !cur.Frontier.IsZero() {
+		floor = cur.Frontier.Add(-frontierLookback)
+	}
+	newest := cur.Frontier
+
+	r.Stop = StopExhausted
+walk:
+	for {
+		size := b.PageSize
+		if b.Max > 0 && b.Max-r.Seen < size {
+			size = b.Max - r.Seen
 		}
-		r.Seen++
-		if msg.Truncated {
-			// Loud, not tolerated: a truncated body means the oldest quoted
-			// history was dropped, which is the material extraction depends on.
-			r.Truncated++
-		}
-		res, err := Put(store, msg)
+		envs, page, err := c.Search(query, size, token)
 		if err != nil {
+			// A page token is server-side state and can expire. A cursor that
+			// cannot be resumed must not wedge the query forever, so one restart
+			// from the beginning is preferable to a permanently failing ingest —
+			// re-reading is free, and the frontier still bounds the walk.
+			if token == "" || r.Pages > 0 {
+				return r, err
+			}
+			token, r.Resumed = "", false
+			if err := corpus.SaveProgress(store, corpus.SourceMail, query, "", cur.Walked); err != nil {
+				return r, err
+			}
+			envs, page, err = c.Search(query, size, "")
+			if err != nil {
+				return r, err
+			}
+		}
+		r.Pages++
+
+		for _, env := range envs {
+			ts, _, _ := parseDate(env.Date)
+			if !floor.IsZero() && !ts.IsZero() && !ts.After(floor) {
+				r.Stop = StopFrontier
+				break walk
+			}
+			msg, err := c.Read(env.ID)
+			if err != nil {
+				return r, fmt.Errorf("reading %s: %w", env.ID, err)
+			}
+			r.Seen++
+			if msg.Truncated {
+				// Loud, not tolerated: a truncated body means the oldest quoted
+				// history was dropped, which is the material extraction depends on.
+				r.Truncated++
+			}
+			res, err := Put(store, msg)
+			if err != nil {
+				return r, err
+			}
+			switch {
+			case res.Created:
+				r.Created++
+			case res.Changed:
+				r.Changed++
+			}
+			if ts.After(newest) {
+				newest = ts
+			}
+		}
+
+		if !page.HasMore {
+			break
+		}
+		// docket promises a token with every has_more. Without one there is no
+		// way to continue, and calling that "exhausted" would record coverage of
+		// a set we demonstrably did not finish.
+		if page.NextPageToken == "" {
+			return r, fmt.Errorf("docket reported more results for %q but sent no page token", query)
+		}
+		token = page.NextPageToken
+		if b.Max > 0 && r.Seen >= b.Max {
+			r.Stop, r.NextPage = StopMax, token
+			break
+		}
+		// Between pages, not after: this write is what a kill resumes from.
+		if err := corpus.SaveProgress(store, corpus.SourceMail, query, token, cur.Walked+r.Seen); err != nil {
 			return r, err
 		}
-		switch {
-		case res.Created:
-			r.Created++
-		case res.Changed:
-			r.Changed++
+	}
+
+	if r.Stop.Covered() {
+		if err := corpus.SaveComplete(store, corpus.SourceMail, query, newest, 0); err != nil {
+			return r, err
 		}
+	} else if err := corpus.SaveProgress(store, corpus.SourceMail, query, r.NextPage, cur.Walked+r.Seen); err != nil {
+		return r, err
 	}
 
 	n, err := store.ResolveParents()
@@ -62,8 +208,11 @@ func Ingest(store *corpus.Store, c Client, query string, limit int) (Result, err
 
 // IngestIDs ingests specific message ids. Used for targeted top-ups and for
 // checking the header-derived graph against a known trail.
-func IngestIDs(store *corpus.Store, c Client, ids []string) (Result, error) {
-	var r Result
+func IngestIDs(store *corpus.Store, c Mailbox, ids []string) (Result, error) {
+	// An explicit list is its own bound: there is no page after the last id, so
+	// the walk is complete by construction. No cursor either — a list of ids is
+	// not a container anything could later top up.
+	r := Result{Stop: StopExhausted}
 	for _, id := range ids {
 		id = strings.TrimSpace(id)
 		if id == "" {

@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -61,12 +62,27 @@ type Message struct {
 }
 
 type envelope[T any] struct {
-	OK    bool `json:"ok"`
-	Data  T    `json:"data"`
+	OK    bool  `json:"ok"`
+	Data  T     `json:"data"`
+	Page  *Page `json:"page"`
 	Error *struct {
 		Code    string `json:"code"`
 		Message string `json:"message"`
 	} `json:"error"`
+}
+
+// Page is docket's paging block, a sibling of `data` on a search or list.
+//
+// HasMore and NextPageToken are read together and never separately: a token is
+// the server's own position in the result set, so a caller that stops on an
+// empty token would also stop on a page that simply arrived without one. Both
+// are absent from a docket old enough to predate paging, which is why a missing
+// block is treated as a single complete page — see Search.
+type Page struct {
+	Returned      int    `json:"returned"`
+	Limit         int    `json:"limit"`
+	HasMore       bool   `json:"has_more"`
+	NextPageToken string `json:"next_page_token"`
 }
 
 // Client runs docket. Bin defaults to "docket" on PATH.
@@ -80,6 +96,12 @@ func (c Client) bin() string {
 }
 
 func run[T any](c Client, args ...string) (T, error) {
+	data, _, err := runPaged[T](c, args...)
+	return data, err
+}
+
+// runPaged also returns the paging block. Nil when docket did not send one.
+func runPaged[T any](c Client, args ...string) (T, *Page, error) {
 	var zero T
 	cmd := exec.Command(c.bin(), args...)
 	out, err := cmd.Output()
@@ -88,26 +110,44 @@ func run[T any](c Client, args ...string) (T, error) {
 		if ee, ok := err.(*exec.ExitError); ok {
 			stderr = strings.TrimSpace(string(ee.Stderr))
 		}
-		return zero, fmt.Errorf("%s %s: %w%s", c.bin(), strings.Join(args, " "), err,
+		return zero, nil, fmt.Errorf("%s %s: %w%s", c.bin(), strings.Join(args, " "), err,
 			ifNotEmpty(": ", stderr))
 	}
 	var env envelope[T]
 	if err := json.Unmarshal(out, &env); err != nil {
-		return zero, fmt.Errorf("parsing %s output: %w", c.bin(), err)
+		return zero, nil, fmt.Errorf("parsing %s output: %w", c.bin(), err)
 	}
 	if !env.OK {
 		msg := "unknown error"
 		if env.Error != nil {
 			msg = env.Error.Message
 		}
-		return zero, fmt.Errorf("%s %s: %s", c.bin(), strings.Join(args, " "), msg)
+		return zero, nil, fmt.Errorf("%s %s: %s", c.bin(), strings.Join(args, " "), msg)
 	}
-	return env.Data, nil
+	return env.Data, env.Page, nil
 }
 
-// Search runs a Gmail query and returns envelopes.
-func (c Client) Search(query string, limit int) ([]Envelope, error) {
-	return run[[]Envelope](c, "mail", "search", "--query", query, "--limit", fmt.Sprint(limit))
+// Search runs a Gmail query and returns one page of envelopes plus the paging
+// block. Pass the previous page's NextPageToken to continue; pass "" to start.
+//
+// A docket too old to send a paging block yields a synthesised one with HasMore
+// false. That is the truthful reading of what such a binary can tell us — it has
+// no token to offer, so there is no continuation to take — and it keeps the walk
+// in Ingest from spinning on a token that will never arrive. The result then
+// reports the same single page it always did, and the limit is the only bound.
+func (c Client) Search(query string, limit int, pageToken string) ([]Envelope, Page, error) {
+	args := []string{"mail", "search", "--query", query, "--limit", fmt.Sprint(limit)}
+	if pageToken != "" {
+		args = append(args, "--page-token", pageToken)
+	}
+	envs, page, err := runPaged[[]Envelope](c, args...)
+	if err != nil {
+		return nil, Page{}, err
+	}
+	if page == nil {
+		return envs, Page{Returned: len(envs), Limit: limit}, nil
+	}
+	return envs, *page, nil
 }
 
 // Read fetches one message in full, with its HTML part. Always at full size —
@@ -131,13 +171,33 @@ func (c Client) Thread(id string) (struct {
 	}](c, "mail", "thread", "--id", id)
 }
 
+// probed caches SupportsThreadingHeaders for the lifetime of the process.
+//
+// Keyed on the binary, not global: a Client pointed at a fake in a test and one
+// pointed at the real docket are answering about different programs, and one
+// cached answer for both would make a test's verdict depend on what ran before
+// it. Nothing invalidates the cache — a docket replaced on disk mid-run is not a
+// case worth carrying state for, and the next invocation re-probes anyway.
+var probed struct {
+	sync.Mutex
+	answers map[string]bool
+}
+
 // SupportsThreadingHeaders reports whether the docket on PATH exposes the fields
 // this package needs. An older build returns an envelope without them and would
 // silently produce a corpus with no reply graph at all, so this fails closed.
 //
 // It retries once: the probe is a live API call, and a token refresh or a rate
 // blip should not abort a backfill that may otherwise run for hours.
+// The probe is one live API call, so it is cached for the process: a cron
+// top-up walking a dozen containers paid for a dozen identical answers.
 func (c Client) SupportsThreadingHeaders() (bool, error) {
+	probed.Lock()
+	defer probed.Unlock()
+	if ok, seen := probed.answers[c.bin()]; seen {
+		return ok, nil
+	}
+
 	var lastErr error
 	for attempt := 0; attempt < 2; attempt++ {
 		if attempt > 0 {
@@ -153,7 +213,12 @@ func (c Client) SupportsThreadingHeaders() (bool, error) {
 				"%s returned no messages, so it is impossible to tell whether it exposes "+
 					"threading headers", c.bin())
 		}
-		return out[0].MessageID != "", nil
+		ok := out[0].MessageID != ""
+		if probed.answers == nil {
+			probed.answers = map[string]bool{}
+		}
+		probed.answers[c.bin()] = ok
+		return ok, nil
 	}
 	return false, fmt.Errorf("probing %s for threading headers: %w", c.bin(), lastErr)
 }
