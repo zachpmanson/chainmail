@@ -20,8 +20,7 @@ export default defineConfig({
     // would make its unsanitised sender HTML reachable from another page.
     proxy: {
       "/v1": {
-        target: process.env.CHAINMAIL_API ?? "http://127.0.0.1:8080",
-        changeOrigin: false,
+        target: process.env.CHAINMAIL_API ?? "http://127.0.0.1:8765",
       },
     },
     fs: {

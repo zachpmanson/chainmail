@@ -11,21 +11,43 @@ import type { Timeline } from "./spec";
  */
 export class ApiError extends Error {
   readonly status: number;
-  constructor(status: number, message: string) {
+  /** From Retry-After, in ms. Set only when the service said when to come back. */
+  readonly retryAfterMs?: number;
+  constructor(status: number, message: string, retryAfterMs?: number) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    if (retryAfterMs !== undefined) this.retryAfterMs = retryAfterMs;
   }
+}
+
+/**
+ * Retry-After, as seconds or as an HTTP date. Absent or unparseable yields
+ * undefined rather than a guess: waiting an invented interval on a service that
+ * told you nothing is how a client turns a queue into a stampede.
+ */
+function retryAfter(response: Response): number | undefined {
+  const raw = response.headers.get("retry-after");
+  if (raw === null) return undefined;
+  const seconds = Number(raw.trim());
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+  const at = Date.parse(raw);
+  if (Number.isNaN(at)) return undefined;
+  return Math.max(0, at - Date.now());
 }
 
 /**
  * True when the failure is the service's answer rather than a hiccup on the way
  * to it. Retrying an answer cannot change it: a 404 for an unknown ext id, a 400
- * for a bad query and a 503 for a stopped embedding daemon are all stable facts,
- * and re-asking only delays telling the person about them.
+ * for a bad query, a 503 for a stopped embedding daemon and a 504 for a missed
+ * embedding deadline are all stable facts, and re-asking only delays saying so.
+ *
+ * 429 is the exception, and the only status worth retrying: the service is
+ * holding two spec builds already and says when to come back, so the answer is
+ * "not yet" rather than "no".
  */
 export function isAnswer(err: unknown): boolean {
-  return err instanceof ApiError;
+  return err instanceof ApiError && err.status !== 429;
 }
 
 /**
@@ -54,7 +76,11 @@ function messageOf(body: unknown, status: number, statusText: string): string {
 }
 
 function fail(error: unknown, response: Response): never {
-  throw new ApiError(response.status, messageOf(error, response.status, response.statusText));
+  throw new ApiError(
+    response.status,
+    messageOf(error, response.status, response.statusText),
+    retryAfter(response),
+  );
 }
 
 export type SearchMode = "lexical" | "semantic" | "hybrid";

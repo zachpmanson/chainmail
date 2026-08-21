@@ -14,7 +14,9 @@ const MODES: SearchMode[] = ["lexical", "semantic", "hybrid"];
 function statusLabel(status: number): string {
   if (status === 404) return "Not found";
   if (status === 400) return "Rejected";
+  if (status === 429) return "Busy";
   if (status === 503) return "Service unavailable";
+  if (status === 504) return "Timed out";
   return `Error ${status}`;
 }
 

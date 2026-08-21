@@ -72,10 +72,10 @@ let calls: Call[];
 type Handler = (call: Call) => Promise<Response> | Response;
 let handler: Handler;
 
-const json = (status: number, body: unknown) =>
+const json = (status: number, body: unknown, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...headers },
   });
 
 beforeEach(() => {
@@ -235,6 +235,45 @@ describe("building a page from the chosen set", () => {
       queries: [{ q: "cutover", note: "corpus search, mode=lexical" }],
     });
     await waitFor(() => expect(built).toHaveBeenCalledTimes(1));
+  });
+
+  it("comes back after the delay the service named when two builds are already running", async () => {
+    let posts = 0;
+    handler = (c) => {
+      if (!c.url.includes("/v1/spec")) return json(200, { mode: "lexical", chains: CHAINS });
+      posts += 1;
+      return posts === 1
+        ? json(429, { error: "two spec builds already in flight" }, { "retry-after": "0" })
+        : json(200, SPEC);
+    };
+    const built = vi.fn();
+    mount(<SelectView onBuilt={built} />);
+    await searchFor("cutover");
+    await screen.findByText("Loom cutover schedule");
+    click(screen.getAllByRole("checkbox")[0]!);
+    click(screen.getByRole("button", { name: /Build page/ }));
+
+    // "not yet", with a time attached, is the one decline worth re-asking
+    await waitFor(() => expect(built).toHaveBeenCalledTimes(1));
+    expect(posts).toBe(2);
+  });
+
+  it("does not re-ask when the embedding deadline was missed", async () => {
+    let posts = 0;
+    handler = (c) => {
+      if (!c.url.includes("/v1/spec")) return json(200, { mode: "lexical", chains: CHAINS });
+      posts += 1;
+      return json(504, { error: "embedding deadline exceeded" });
+    };
+    mount(<SelectView onBuilt={() => {}} />);
+    await searchFor("cutover");
+    await screen.findByText("Loom cutover schedule");
+    click(screen.getAllByRole("checkbox")[0]!);
+    click(screen.getByRole("button", { name: /Build page/ }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain("Timed out (504)");
+    await new Promise((r) => setTimeout(r, 120));
+    expect(posts).toBe(1);
   });
 
   it("keeps the wait visible while the spec is built", async () => {
