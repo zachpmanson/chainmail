@@ -60,8 +60,10 @@ const usage = `usage: corpus <command> [flags]
   init                     create or migrate the corpus
   ingest mail   -q <query> ingest Gmail results, with their quoted history
   ingest slack  [-archive] ingest a slackdump archive
-  search        -q <text>  ranked chains across every source, with -mode to
-                           choose lexical, semantic or hybrid retrieval
+  search        -q <text>  ranked chains across every source; -mode chooses
+                           lexical, semantic or hybrid retrieval, -topk how deep
+                           the vector ranking votes, -dim -model -url -timeout
+                           the model it asks
   embed         [-model -url -dim -batch -limit -timeout -prune]
                            embed the entries that have no current vector, so
                            semantic search has something to search; resumable,
@@ -140,6 +142,7 @@ func run(args []string) error {
 			"retrieval: lexical | semantic | hybrid (the last two need `corpus embed`)")
 		topk := fs.Int("topk", 0, "how deep the vector ranking votes (default 100)")
 		model := fs.String("model", embed.DefaultModel, "embedding model, for -mode semantic|hybrid")
+		dim := fs.Int("dim", embed.DefaultDim, "dimensions that model returns")
 		url := fs.String("url", embed.DefaultBaseURL, "ollama endpoint")
 		timeout := fs.String("timeout", "2m", "how long to wait for the model")
 		if err := fs.Parse(args[1:]); err != nil {
@@ -156,14 +159,14 @@ func run(args []string) error {
 		if *q == "" && *person == "" && *since == "" {
 			return errors.New("usage: corpus search -q <text> [-person X] [-since YYYY-MM-DD]\n" +
 				"       [-limit N] [-entries] [-mode lexical|semantic|hybrid] [-topk N]\n" +
-				"       [-model M] [-url U] [-timeout D]\n" +
+				"       [-model M] [-dim N] [-url U] [-timeout D]\n" +
 				"       (-q may be empty only when -person or -since narrows it)")
 		}
 		query, err := buildQuery(*q, *since, *person, *limit)
 		if err != nil {
 			return err
 		}
-		query.Semantic, err = semanticFor(*mode, *q, *model, *url, *timeout, *topk)
+		query.Semantic, err = semanticFor(*mode, *q, *model, *url, *timeout, *dim, *topk)
 		if err != nil {
 			return err
 		}
@@ -732,7 +735,7 @@ const (
 // inside search. A down daemon then surfaces as "ollama is not running" against
 // the command that needed it, instead of as an empty result set from a function
 // whose entire job is to return few results.
-func semanticFor(mode, text, model, url, timeout string, topK int) (*corpus.SemanticQuery, error) {
+func semanticFor(mode, text, model, url, timeout string, dim, topK int) (*corpus.SemanticQuery, error) {
 	switch mode {
 	case modeLexical, "":
 		return nil, nil
@@ -747,7 +750,10 @@ func semanticFor(mode, text, model, url, timeout string, topK int) (*corpus.Sema
 	if err != nil {
 		return nil, fmt.Errorf("-timeout %q: %w", timeout, err)
 	}
-	e := &embed.Ollama{BaseURL: url, Name: model, Dimension: embed.DefaultDim,
+	// The expected width is stated rather than inferred, so a model that is not
+	// the one whose vectors are stored fails here with a dimension mismatch
+	// instead of matching no rows and reading as an empty corpus.
+	e := &embed.Ollama{BaseURL: url, Name: model, Dimension: dim,
 		Client: &http.Client{Timeout: wait}}
 	ctx, cancel := context.WithTimeout(context.Background(), wait)
 	defer cancel()
