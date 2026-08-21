@@ -2,6 +2,7 @@
 //
 //	corpus init                       create or migrate the database
 //	corpus ingest mail -q <query>     slurp a Gmail query
+//	corpus ingest slack               slurp a slackdump archive
 //	corpus stats                      what is in it, and what is missing
 //	corpus people                     everyone involved, senders and recipients
 //	corpus merge -keep <a> -drop <b>  same human, two addresses
@@ -23,6 +24,7 @@ import (
 
 	"github.com/zachpmanson/chainmail/internal/corpus"
 	"github.com/zachpmanson/chainmail/internal/mailingest"
+	"github.com/zachpmanson/chainmail/internal/slackingest"
 	"github.com/zachpmanson/chainmail/internal/spec"
 	"github.com/zachpmanson/chainmail/internal/unnest"
 )
@@ -324,8 +326,14 @@ func run(args []string) error {
 	case "ingest":
 		// The source is a positional subcommand, so it must be consumed before
 		// flag parsing: flag.Parse stops at the first non-flag argument.
-		if len(args) < 2 || args[1] != "mail" {
-			return fmt.Errorf("usage: corpus ingest mail -q <query> [-limit n]")
+		if len(args) < 2 {
+			return fmt.Errorf("usage: corpus ingest <mail|slack> [flags]")
+		}
+		if args[1] == "slack" {
+			return ingestSlack(path, args[2:])
+		}
+		if args[1] != "mail" {
+			return fmt.Errorf("usage: corpus ingest <mail|slack> [flags]")
 		}
 		fs := flag.NewFlagSet("ingest mail", flag.ContinueOnError)
 		query := fs.String("q", "", "Gmail search query")
@@ -373,6 +381,60 @@ func run(args []string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown command %q", args[0])
+}
+
+// ingestSlack slurps a slackdump archive. The archive is a local file, so this
+// is safe to re-run at will — no Slack API call is made anywhere in the path.
+func ingestSlack(path string, args []string) error {
+	fs := flag.NewFlagSet("ingest slack", flag.ContinueOnError)
+	archive := fs.String("archive", defaultSlackArchive(),
+		"slackdump sqlite archive to read")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	a, err := slackingest.OpenArchive(*archive)
+	if err != nil {
+		return err
+	}
+	defer a.Close()
+
+	s, err := corpus.Open(path)
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+
+	r, err := slackingest.Ingest(s, a)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("saw %d in %d channels, created %d, changed %d, skipped %d, "+
+		"resolved %d thread edges\n",
+		r.Seen, r.Channels, r.Created, r.Changed, r.Skipped, r.Resolved)
+	fmt.Printf("users %d (%d bots), authors %d\n", r.Users, r.Bots, r.Authors)
+	// Not a warning: an account with no profile email is normal, and the number
+	// is the honest limit on how much of the Slack half joins up with mail.
+	fmt.Printf("no email: %d of %d users, %d of %d authors — keyed on slack uid, "+
+		"so they will not merge with a mail identity until aliased by hand\n",
+		r.UsersWithoutEmail, r.Users, r.AuthorsWithoutEmail, r.Authors)
+	if r.Unauthored > 0 {
+		fmt.Printf("unauthored  %d messages named no author at all\n", r.Unauthored)
+	}
+	if r.IdentityConflicts > 0 {
+		fmt.Fprintf(os.Stderr,
+			"warning: %d slack uids already belong to a different person than their "+
+				"email resolves to — review with `corpus candidates`\n", r.IdentityConflicts)
+	}
+	return nil
+}
+
+func defaultSlackArchive() string {
+	if p := os.Getenv("CHAINMAIL_SLACK_ARCHIVE"); p != "" {
+		return p
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".local", "state", "chainmail", "slack", "slackdump.sqlite")
 }
 
 // buildQuery turns CLI flags into a corpus query.
