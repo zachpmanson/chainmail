@@ -196,4 +196,22 @@ var migrations = []string{
 	alter table entries add column quoted integer not null default 0;
 	create index entries_quoted on entries(quoted, ts);
 	`,
+
+	// 7: name the Slack channel an entry came from.
+	//
+	// entries.container holds the channel id, which is the only thing stable
+	// enough to key on — a channel can be renamed and #general is not unique
+	// across workspaces. But an id is unreadable, and nothing else in the corpus
+	// carries the name, so a rendered Slack timeline could only ever say
+	// "C042NF1TTK8". The name is a display label, denormalised per entry on
+	// purpose: it records what the channel was called when the message was
+	// archived, which is what a reader of that message wants.
+	//
+	// Deliberately NOT in entries.subject, where it would be indexed at the
+	// subject column's weight on every message in the channel — searching for
+	// "general" would then rank the whole of #general above an actual mention.
+	`
+	alter table slack_detail add column channel_name text;
+	create index slack_channel on slack_detail(channel_id, ts);
+	`,
 }

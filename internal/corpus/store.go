@@ -148,6 +148,24 @@ type PutResult struct {
 // identical content is a no-op; a differing body is recorded and reported, which
 // is what the renderer surfaces as "revised".
 func (s *Store) Put(e Entry, m *Mail, atts []Attachment) (PutResult, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return PutResult{}, err
+	}
+	defer tx.Rollback()
+	res, err := s.put(tx, e, m, nil, atts)
+	if err != nil {
+		return res, err
+	}
+	return res, tx.Commit()
+}
+
+// put is the whole write for one entry — the row, the per-source detail, the
+// attachments and both FTS indexes — inside a transaction the caller owns. It
+// exists so a source detail row cannot be committed apart from its entry: a
+// slack_detail row without its entry, or an entry whose detail never landed, is
+// a hole no re-ingest would notice, since the entry already exists.
+func (s *Store) put(tx *sql.Tx, e Entry, m *Mail, sd *Slack, atts []Attachment) (PutResult, error) {
 	if e.Source == "" || e.ExtID == "" {
 		return PutResult{}, errors.New("entry needs a source and an ext_id")
 	}
@@ -157,11 +175,7 @@ func (s *Store) Put(e Entry, m *Mail, atts []Attachment) (PutResult, error) {
 	sha := BodySHA(e.BodyText, e.Subject)
 
 	var res PutResult
-	tx, err := s.db.Begin()
-	if err != nil {
-		return res, err
-	}
-	defer tx.Rollback()
+	var err error
 
 	// The old subject/body are needed to delete this row's terms from the FTS
 	// indexes: external-content tables do not store the text, so FTS5 cannot work
@@ -224,6 +238,12 @@ func (s *Store) Put(e Entry, m *Mail, atts []Attachment) (PutResult, error) {
 		}
 	}
 
+	if sd != nil {
+		if err := putSlackDetail(tx, res.ID, *sd); err != nil {
+			return res, fmt.Errorf("slack detail for %s: %w", e.ExtID, err)
+		}
+	}
+
 	// Attachments are replaced wholesale: the source is authoritative, and a
 	// message's attachment list does not change independently of its body.
 	if _, err := tx.Exec(`delete from attachments where entry_id=?`, res.ID); err != nil {
@@ -242,7 +262,7 @@ func (s *Store) Put(e Entry, m *Mail, atts []Attachment) (PutResult, error) {
 	if err := s.reindex(tx, res.ID, res.Created, oldSubject, oldBody); err != nil {
 		return res, err
 	}
-	return res, tx.Commit()
+	return res, nil
 }
 
 // reindex refreshes both FTS tables for one entry. External-content tables are
