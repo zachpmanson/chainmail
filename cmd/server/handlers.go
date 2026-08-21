@@ -46,6 +46,8 @@ type server struct {
 	uploads string
 
 	specSlots chan struct{}
+	// slotWait is how long a caller waits for a slot before being told to retry.
+	slotWait  time.Duration
 	embedder  func() *embed.Ollama
 	embedWait time.Duration
 }
@@ -268,7 +270,7 @@ func (s *server) acquireSpecSlot(ctx context.Context) bool {
 		return true
 	default:
 	}
-	t := time.NewTimer(specSlotWait)
+	t := time.NewTimer(s.slotWait)
 	defer t.Stop()
 	select {
 	case s.specSlots <- struct{}{}:

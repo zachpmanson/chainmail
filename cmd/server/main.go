@@ -71,6 +71,7 @@ func run(args []string) error {
 		store:     store,
 		uploads:   *uploads,
 		specSlots: make(chan struct{}, specConcurrency),
+		slotWait:  specSlotWait,
 		embedder: func() *embed.Ollama {
 			return &embed.Ollama{BaseURL: *url, Name: *model, Dimension: *dim,
 				Client: &http.Client{Timeout: *timeout}}
