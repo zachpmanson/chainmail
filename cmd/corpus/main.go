@@ -114,8 +114,10 @@ const usage = `usage: corpus <command> [flags]
                            the copy recovered from somebody's quote of it, whose
                            clocks differ by the quoter's UTC offset — keeping the
                            mailbox copy and every sighting, and measuring that
-                           offset on the way; -declined lists what it left alone;
-                           reports only until -apply
+                           offset on the way; a copy whose quoter answered inside
+                           the text they quoted is kept and reported, since only it
+                           holds that answer; -declined lists what else it left
+                           alone; reports only until -apply
   merge         -keep -drop | -keep-id -drop-id
                            fold one identity into another, by address or by person
                            id where one side has no address
@@ -1242,6 +1244,15 @@ func printTwins(plan corpus.TwinPlan, declined bool) {
 				tzinfer.FormatOffset(o.Off), o.Person, o.Host)
 		}
 	}
+	// The annotated ones print whether or not the flag was passed: every other
+	// decline is a duplicate nothing could resolve, while this one is a copy that
+	// holds words no other entry does, and a run that buried it would be a run
+	// that hid the only entries here worth reading twice.
+	for _, d := range plan.Declined {
+		if d.Annotated && !declined {
+			fmt.Printf("kept %6d %s\n  %s\n", d.Entry, d.ExtID, d.Reason)
+		}
+	}
 	if declined {
 		for _, d := range plan.Declined {
 			fmt.Printf("left alone %6d %s\n  %s\n", d.Entry, d.ExtID, d.Reason)
@@ -1265,7 +1276,8 @@ func printTwins(plan corpus.TwinPlan, declined bool) {
 		len(plan.Collapse), plan.Measured, plural(plan.Measured, "offset", "offsets"))
 	fmt.Printf("  %d onto the mailbox copy, %d recovered-only with no mailbox copy to keep\n",
 		plan.WithMailbox, plan.QuotedOnly)
-	fmt.Printf("left alone %d:\n", len(plan.Declined))
+	fmt.Printf("left alone %d, of which %d %s an answer written inside the quote:\n",
+		len(plan.Declined), plan.Annotated, plural(plan.Annotated, "holds", "hold"))
 	for _, r := range reasons {
 		fmt.Printf("  %5d  %s\n", byReason[r], r)
 	}

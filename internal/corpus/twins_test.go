@@ -1,6 +1,8 @@
 package corpus
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -534,5 +536,329 @@ func TestARenderOffsetPlacesAQuoterWhoseHeadersOnlySayUTC(t *testing.T) {
 	if after[tui].Verdict != tzinfer.Placed || after[tui].Seen[0] != 720 {
 		t.Fatalf("the quoter is %s at %v, want placed at +1200",
 			after[tui].Verdict, after[tui].Seen)
+	}
+}
+
+// The bodies the positional test turns on. Every one of them is the same message
+// as askBody; what differs is where the extra words sit.
+const (
+	// The case the decline exists for: a recipient answered one of the questions
+	// where it stood, inside the text they were quoting. Their answer is in no
+	// other entry — the mailbox copy predates it and their own body_html is peeled
+	// away — so a collapse would delete it.
+	askAnnotated = `Hi Priya, Can you confirm the meter number for the Rothwell depot before
+the tender pack goes out this afternoon? It is on the last invoice, I will send
+it over. The retailer wants it on the cover sheet and I do not want to guess at
+it. Thanks, Deniz Aslan`
+	// What a client adds on its own account, and where: after the shared text,
+	// never inside it. This must still collapse — refusing it would leave a
+	// duplicate standing for a footer.
+	askWithChrome = askQuoted + `
+Sent from a device that says so. This message was scanned for viruses by an
+appliance that appends a paragraph about it, and delivered by a helpdesk that
+appends another.`
+	// The same message with an inline image and a link rendered the way a second
+	// client renders them: both land inside the shared text, and both are
+	// markup rather than words anybody typed.
+	askRerendered = `Hi Priya, Can you confirm the meter number for the Rothwell depot
+<https://depot.example.test/rothwell/meters?ref=8841&utm_source=mail> before
+the tender pack goes out this afternoon? <Screenshot 2026-05-19 at 9.14.02 am.png>
+The retailer wants it on the cover sheet and I do not want to guess at it.
+Thanks, Deniz Aslan`
+)
+
+// The collapse that would destroy the answer. Both entries stay, and the decline
+// says which copy holds what.
+func TestAnAnnotatedCopyIsKeptAndSaysWhy(t *testing.T) {
+	s := open(t)
+	deniz := person(t, s, "deniz.aslan@quarry.fed", "Deniz Aslan")
+	tui := person(t, s, "tui.walker@moana.fed", "Tui Walker")
+	sent := twinAt(t, "2026-05-20 01:38:14")
+
+	mailbox(t, s, deniz, "ask@quarry.fed", askBody, sent)
+	h := host(t, s, tui, "reply@moana.fed", sent.Add(3*time.Hour))
+	drop := recovered(t, s, deniz, "abc", askAnnotated, sent.Add(10*time.Hour), h)
+
+	before := entryCount(t, s)
+	plan, err := CollapseTwins(s, true)
+	if err != nil {
+		t.Fatalf("CollapseTwins: %v", err)
+	}
+	if len(plan.Collapse) != 0 || plan.Removed != 0 {
+		t.Fatalf("collapsed a copy holding an inline answer: %+v", plan.Collapse)
+	}
+	if entryCount(t, s) != before {
+		t.Fatalf("entries went %d -> %d", before, entryCount(t, s))
+	}
+	if plan.Annotated != 1 || len(plan.Declined) != 1 {
+		t.Fatalf("plan = %d annotated of %d declined, want one of one",
+			plan.Annotated, len(plan.Declined))
+	}
+	d := plan.Declined[0]
+	if d.Entry != drop || !d.Annotated {
+		t.Fatalf("decline = %+v, want the annotated copy %d marked", d, drop)
+	}
+	if !strings.Contains(d.Reason, "answered inside the text they quoted") {
+		t.Fatalf("reason does not name the annotation: %q", d.Reason)
+	}
+	// And the words themselves are still in the corpus, which is the whole point.
+	var n int
+	if err := s.DB().QueryRow(
+		`select count(*) from entries_fts where entries_fts match ?`,
+		`"it is on the last invoice"`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n == 0 {
+		t.Fatal("the inserted answer is not findable")
+	}
+}
+
+// A footer, a virus-scanner paragraph and a "sent from" line are extra words the
+// survivor lacks, and they are not an annotation: they sit after the shared text,
+// which is where a client appends and a person does not answer.
+func TestAppendedChromeStillCollapses(t *testing.T) {
+	s := open(t)
+	deniz := person(t, s, "deniz.aslan@quarry.fed", "Deniz Aslan")
+	tui := person(t, s, "tui.walker@moana.fed", "Tui Walker")
+	sent := twinAt(t, "2026-05-20 01:38:14")
+
+	keep := mailbox(t, s, deniz, "ask@quarry.fed", askBody, sent)
+	h := host(t, s, tui, "reply@moana.fed", sent.Add(3*time.Hour))
+	recovered(t, s, deniz, "abc", askWithChrome, sent.Add(10*time.Hour), h)
+
+	plan, err := CollapseTwins(s, true)
+	if err != nil {
+		t.Fatalf("CollapseTwins: %v", err)
+	}
+	if len(plan.Collapse) != 1 || plan.Removed != 1 || plan.Annotated != 0 {
+		t.Fatalf("plan = %d groups removing %d, %d annotated; want one collapse and "+
+			"no annotation\n%+v", len(plan.Collapse), plan.Removed, plan.Annotated, plan.Declined)
+	}
+	if plan.Collapse[0].Keep != keep {
+		t.Fatalf("survivor is %d, want the mailbox copy %d", plan.Collapse[0].Keep, keep)
+	}
+}
+
+// Links, inline images and attachment names are written differently by every
+// client, and the difference lands inside the shared text rather than after it —
+// the same position an inline answer occupies. Reading them as an answer is how
+// the measurement inflates, so they collapse.
+func TestRerenderedMarkupInsideTheQuoteStillCollapses(t *testing.T) {
+	s := open(t)
+	deniz := person(t, s, "deniz.aslan@quarry.fed", "Deniz Aslan")
+	tui := person(t, s, "tui.walker@moana.fed", "Tui Walker")
+	sent := twinAt(t, "2026-05-20 01:38:14")
+
+	mailbox(t, s, deniz, "ask@quarry.fed", askBody, sent)
+	h := host(t, s, tui, "reply@moana.fed", sent.Add(3*time.Hour))
+	recovered(t, s, deniz, "abc", askRerendered, sent.Add(10*time.Hour), h)
+
+	plan, err := CollapseTwins(s, true)
+	if err != nil {
+		t.Fatalf("CollapseTwins: %v", err)
+	}
+	if len(plan.Collapse) != 1 || plan.Removed != 1 || plan.Annotated != 0 {
+		t.Fatalf("plan = %d groups removing %d, %d annotated; want one collapse and "+
+			"no annotation\n%+v", len(plan.Collapse), plan.Removed, plan.Annotated, plan.Declined)
+	}
+}
+
+// The other direction is elision, not annotation: the copy that survives holds
+// words the dropped one lacks, because quoting drops words. Nothing is lost by
+// dropping the shorter copy, so it goes.
+func TestACopyMissingWordsTheSurvivorHasStillCollapses(t *testing.T) {
+	s := open(t)
+	deniz := person(t, s, "deniz.aslan@quarry.fed", "Deniz Aslan")
+	tui := person(t, s, "tui.walker@moana.fed", "Tui Walker")
+	sent := twinAt(t, "2026-05-20 01:38:14")
+
+	// The mailbox copy carries the sentence; the requote elided it from the middle,
+	// which is the same position an annotation would occupy in the other copy.
+	keep := mailbox(t, s, deniz, "ask@quarry.fed", askAnnotated, sent)
+	h := host(t, s, tui, "reply@moana.fed", sent.Add(3*time.Hour))
+	recovered(t, s, deniz, "abc", askQuoted, sent.Add(10*time.Hour), h)
+
+	plan, err := CollapseTwins(s, true)
+	if err != nil {
+		t.Fatalf("CollapseTwins: %v", err)
+	}
+	if len(plan.Collapse) != 1 || plan.Removed != 1 || plan.Annotated != 0 {
+		t.Fatalf("plan = %d groups removing %d, %d annotated; want one collapse and "+
+			"no annotation\n%+v", len(plan.Collapse), plan.Removed, plan.Annotated, plan.Declined)
+	}
+	if plan.Collapse[0].Keep != keep {
+		t.Fatalf("survivor is %d, want the fuller mailbox copy %d", plan.Collapse[0].Keep, keep)
+	}
+}
+
+// One quoter answered inline and another requoted the same message untouched.
+// The clean copy is still a duplicate and still goes; refusing the whole group
+// would leave it standing for the sake of a copy it has nothing to do with.
+func TestAnAnnotatedCopyDoesNotSaveACleanOneFromCollapsing(t *testing.T) {
+	s := open(t)
+	deniz := person(t, s, "deniz.aslan@quarry.fed", "Deniz Aslan")
+	tui := person(t, s, "tui.walker@moana.fed", "Tui Walker")
+	sent := twinAt(t, "2026-05-20 01:38:14")
+
+	keep := mailbox(t, s, deniz, "ask@quarry.fed", askBody, sent)
+	h := host(t, s, tui, "reply@moana.fed", sent.Add(3*time.Hour))
+	annotated := recovered(t, s, deniz, "abc", askAnnotated, sent.Add(10*time.Hour), h)
+	clean := recovered(t, s, deniz, "def", askQuoted, sent.Add(12*time.Hour), h)
+
+	plan, err := CollapseTwins(s, true)
+	if err != nil {
+		t.Fatalf("CollapseTwins: %v", err)
+	}
+	if len(plan.Collapse) != 1 || plan.Removed != 1 {
+		t.Fatalf("plan = %d groups removing %d, want one group removing the clean copy "+
+			"only\n%+v", len(plan.Collapse), plan.Removed, plan.Declined)
+	}
+	if plan.Collapse[0].Keep != keep || plan.Collapse[0].Drop[0] != clean {
+		t.Fatalf("collapse = %+v, want %d dropped into %d", plan.Collapse[0], clean, keep)
+	}
+	if plan.Annotated != 1 || plan.Declined[0].Entry != annotated {
+		t.Fatalf("declined %+v, want the annotated copy %d kept", plan.Declined, annotated)
+	}
+	var n int
+	if err := s.DB().QueryRow(`select count(*) from entries where id=?`, annotated).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatal("the annotated copy did not survive")
+	}
+}
+
+// A second pass over a corpus holding an annotated copy decides the same thing
+// again, and a dry run writes nothing.
+func TestAnnotationDeclineIsIdempotentAndDryRunSafe(t *testing.T) {
+	s := open(t)
+	deniz := person(t, s, "deniz.aslan@quarry.fed", "Deniz Aslan")
+	tui := person(t, s, "tui.walker@moana.fed", "Tui Walker")
+	sent := twinAt(t, "2026-05-20 01:38:14")
+
+	mailbox(t, s, deniz, "ask@quarry.fed", askBody, sent)
+	h := host(t, s, tui, "reply@moana.fed", sent.Add(3*time.Hour))
+	recovered(t, s, deniz, "abc", askAnnotated, sent.Add(10*time.Hour), h)
+	recovered(t, s, deniz, "def", askQuoted, sent.Add(12*time.Hour), h)
+
+	before := entryCount(t, s)
+	dry, err := CollapseTwins(s, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entryCount(t, s) != before {
+		t.Fatalf("the dry run changed the corpus: %d -> %d", before, entryCount(t, s))
+	}
+	if _, err := CollapseTwins(s, true); err != nil {
+		t.Fatal(err)
+	}
+	again, err := CollapseTwins(s, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(again.Collapse) != 0 || again.Removed != 0 {
+		t.Fatalf("the second pass would collapse %+v", again.Collapse)
+	}
+	if again.Annotated != dry.Annotated {
+		t.Fatalf("annotated went %d -> %d across passes", dry.Annotated, again.Annotated)
+	}
+}
+
+// The shape the real case has: several numbered questions, and the answer to one
+// of them written where that question stands. Six words, which is what the
+// threshold has to see — and the requoting client renumbered the list, which is
+// residue arriving at the same position and must not be counted with them.
+const (
+	askedThree = `Hi Priya,
+
+A few things before the tender pack goes out.
+
+Is the Rothwell meter number the one on the last invoice?
+Can we send the pack by email, or do you want it in the portal?
+Do you still want the branded copies going out to the sites directly?
+
+Thanks,
+Deniz Aslan | Operations | Quarry Energy`
+	answeredThree = `Hi Priya, A few things before the tender pack goes out.
+1. Is the Rothwell meter number the one on the last invoice?
+2. Can we send the pack by email, or do you want it in the portal?
+3. Do you still want the branded copies going out to the sites directly? - Yes,
+please keep sending those directly.
+Thanks, Deniz Aslan | Operations | Quarry Energy`
+)
+
+func TestAnInlineAnswerOfSixWordsIsKept(t *testing.T) {
+	s := open(t)
+	deniz := person(t, s, "deniz.aslan@quarry.fed", "Deniz Aslan")
+	tui := person(t, s, "tui.walker@moana.fed", "Tui Walker")
+	sent := twinAt(t, "2026-05-20 01:38:14")
+
+	mailbox(t, s, deniz, "ask@quarry.fed", askedThree, sent)
+	h := host(t, s, tui, "reply@moana.fed", sent.Add(3*time.Hour))
+	drop := recovered(t, s, deniz, "abc", answeredThree, sent.Add(10*time.Hour), h)
+
+	plan, err := CollapseTwins(s, true)
+	if err != nil {
+		t.Fatalf("CollapseTwins: %v", err)
+	}
+	if len(plan.Collapse) != 0 || plan.Annotated != 1 || plan.Declined[0].Entry != drop {
+		t.Fatalf("plan collapsed %+v and declined %+v, want the annotated copy kept",
+			plan.Collapse, plan.Declined)
+	}
+}
+
+// The same refusal at the other end. Converging at extraction stores nothing but
+// a sighting, so an answer written inside a newly recovered block would never
+// reach the corpus at all — a loss the repair pass could not undo, because there
+// would be no second row for it to decline.
+func TestFindTwinWillNotConvergeAnAnnotatedBlock(t *testing.T) {
+	s := open(t)
+	deniz := person(t, s, "deniz.aslan@quarry.fed", "Deniz Aslan")
+	sent := twinAt(t, "2026-05-20 01:38:14")
+	keep := mailbox(t, s, deniz, "ask@quarry.fed", askBody, sent)
+
+	if id, ok, err := FindTwin(s, deniz, sent.Add(10*time.Hour), askQuoted); err != nil {
+		t.Fatal(err)
+	} else if !ok || id != keep {
+		t.Fatalf("a clean requote found twin %d (%v), want the mailbox copy %d", id, ok, keep)
+	}
+	if id, ok, err := FindTwin(s, deniz, sent.Add(10*time.Hour), askAnnotated); err != nil {
+		t.Fatal(err)
+	} else if ok {
+		t.Fatalf("an annotated block converged onto entry %d, losing the answer", id)
+	}
+}
+
+// A machine-generated report is far too long to align, and there is nothing to
+// place: its requote holds no word the mailbox copy lacks, so wherever those
+// words sit nothing is lost by dropping it. Declining on length alone would leave
+// a duplicate of every such report standing.
+func TestALongCopyHoldingNothingExtraStillCollapses(t *testing.T) {
+	s := open(t)
+	deniz := person(t, s, "deniz.aslan@quarry.fed", "Deniz Aslan")
+	tui := person(t, s, "tui.walker@moana.fed", "Tui Walker")
+	sent := twinAt(t, "2026-05-20 01:38:14")
+
+	var b strings.Builder
+	b.WriteString(askBody)
+	for i := 0; i < 900; i++ {
+		fmt.Fprintf(&b, "\nrow %d meter QB0838%04d reading %d kwh", i, i, i*7)
+	}
+	long := b.String()
+
+	keep := mailbox(t, s, deniz, "ask@quarry.fed", long, sent)
+	h := host(t, s, tui, "reply@moana.fed", sent.Add(3*time.Hour))
+	recovered(t, s, deniz, "abc", long, sent.Add(10*time.Hour), h)
+
+	plan, err := CollapseTwins(s, true)
+	if err != nil {
+		t.Fatalf("CollapseTwins: %v", err)
+	}
+	if len(plan.Collapse) != 1 || plan.Removed != 1 || plan.Annotated != 0 {
+		t.Fatalf("plan = %d groups removing %d, %d annotated; want one collapse\n%+v",
+			len(plan.Collapse), plan.Removed, plan.Annotated, plan.Declined)
+	}
+	if plan.Collapse[0].Keep != keep {
+		t.Fatalf("survivor is %d, want the mailbox copy %d", plan.Collapse[0].Keep, keep)
 	}
 }

@@ -108,3 +108,109 @@ func LCS(a, b []string) int {
 	}
 	return prev[len(b)]
 }
+
+// maxAlignTokens caps what Align will attempt. The alignment is quadratic in
+// both lengths, and above this a pair is a legal notice or a pasted report
+// rather than two renditions of one message — the answer would be slow and
+// would not be believed anyway.
+const maxAlignTokens = 2000
+
+// Divergence is where one rendition's extra words sit relative to the rendition
+// it quotes: the same count of extra words means different things depending on
+// whether they interrupt the quoted text or follow it.
+//
+// Inside is the count that a quoter typed into the middle of what they were
+// quoting, and it is the only field that says somebody answered inline. Appended
+// and Before are client chrome — a signature, a legal notice, a tracking blob, an
+// attribution line — which every requote grows and which no reader would miss.
+// Astride is extra words at a point where the quoted rendition also skips words
+// of its own, so the two texts diverge there rather than one containing the
+// other; that is what a wrongly paired footer looks like, and reading it as an
+// annotation is how the measurement inflates.
+type Divergence struct {
+	Inside        int
+	LongestInside int
+	Appended      int
+	Before        int
+	Astride       int
+	// Measured is false when the pair was too long to align, so a caller cannot
+	// mistake a skipped alignment for a clean one.
+	Measured bool
+}
+
+// Divergences locates the tokens of later that base does not have.
+//
+// Positional rather than a count, because the count alone cannot tell an inline
+// answer from a footer: both are "words the other copy lacks". The alignment is
+// the longest common subsequence, so the anchors it finds are in order, and a
+// run of later's tokens counts as inside only where base's own tokens run
+// straight through — anchor to adjacent anchor with nothing of base's skipped.
+// Requiring that adjacency is what keeps a footer's stray matches on common
+// words ("the", "and") from stretching the last anchor into the footer and
+// reporting it as an insertion.
+func Divergences(base, later []string) Divergence {
+	if len(base) > maxAlignTokens || len(later) > maxAlignTokens {
+		return Divergence{}
+	}
+	pairs := Align(base, later)
+	d := Divergence{Measured: true}
+	if len(pairs) == 0 {
+		return d
+	}
+	d.Before = pairs[0][1]
+	d.Appended = len(later) - 1 - pairs[len(pairs)-1][1]
+	for k := 1; k < len(pairs); k++ {
+		run := pairs[k][1] - pairs[k-1][1] - 1
+		if run == 0 {
+			continue
+		}
+		if pairs[k][0]-pairs[k-1][0] > 1 {
+			d.Astride += run
+			continue
+		}
+		d.Inside += run
+		d.LongestInside = max(d.LongestInside, run)
+	}
+	return d
+}
+
+// Align is the longest common subsequence of two token runs as the index pairs
+// it matches, in order.
+//
+// Separate from LCS, which answers only how long: the positional test needs the
+// anchors themselves, and a length cannot say where a gap between two matches
+// falls.
+func Align(a, b []string) [][2]int {
+	n, m := len(a), len(b)
+	// One row per prefix of a, kept whole: the backtrace needs the table, and
+	// int32 holds a length no token run this function accepts can exceed.
+	table := make([][]int32, n+1)
+	for i := range table {
+		table[i] = make([]int32, m+1)
+	}
+	for i := 1; i <= n; i++ {
+		for j := 1; j <= m; j++ {
+			if a[i-1] == b[j-1] {
+				table[i][j] = table[i-1][j-1] + 1
+				continue
+			}
+			table[i][j] = max(table[i-1][j], table[i][j-1])
+		}
+	}
+	out := make([][2]int, 0, table[n][m])
+	for i, j := n, m; i > 0 && j > 0; {
+		switch {
+		case a[i-1] == b[j-1]:
+			out = append(out, [2]int{i - 1, j - 1})
+			i, j = i-1, j-1
+		case table[i-1][j] >= table[i][j-1]:
+			i--
+		default:
+			j--
+		}
+	}
+	for l, r := 0, len(out)-1; l < r; l, r = l+1, r-1 {
+		out[l], out[r] = out[r], out[l]
+	}
+	return out
+}
