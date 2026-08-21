@@ -9,6 +9,7 @@
 //	corpus alias -from <d> -to <d>    a rebrand: fold one domain into another
 //	corpus candidates                 pairs that may be one human, for review
 //	corpus dedupe [-apply]            merge the duplicates three rules can prove
+//	corpus twins [-apply]             collapse the messages stored twice
 //	corpus repair                     rejoin the people one mailbox split into
 //	corpus search -q <text>           which chains are about this
 //	corpus embed                      fill in the vectors semantic search needs
@@ -28,6 +29,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -38,6 +40,7 @@ import (
 	"github.com/zachpmanson/chainmail/internal/mailingest"
 	"github.com/zachpmanson/chainmail/internal/slackingest"
 	"github.com/zachpmanson/chainmail/internal/spec"
+	"github.com/zachpmanson/chainmail/internal/tzinfer"
 	"github.com/zachpmanson/chainmail/internal/unnest"
 )
 
@@ -103,6 +106,12 @@ const usage = `usage: corpus <command> [flags]
                            organisation, and a webmail account spelling the whole
                            name of one work account — and report every group it
                            refuses; reports only until -apply
+  twins         [-apply]   collapse the messages stored twice — a mailbox copy and
+                           the copy recovered from somebody's quote of it, whose
+                           clocks differ by the quoter's UTC offset — keeping the
+                           mailbox copy and every sighting, and measuring that
+                           offset on the way; -declined lists what it left alone;
+                           reports only until -apply
   merge         -keep -drop | -keep-id -drop-id
                            fold one identity into another, by address or by person
                            id where one side has no address
@@ -646,6 +655,25 @@ func run(args []string) error {
 		printDedupe(plan)
 		return nil
 
+	case "twins":
+		fs := flag.NewFlagSet("twins", flag.ContinueOnError)
+		apply := fs.Bool("apply", false, "carry the plan out; without it nothing is written")
+		verbose := fs.Bool("declined", false, "list every candidate left alone, with the reason")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		s, err := corpus.Open(path)
+		if err != nil {
+			return err
+		}
+		defer s.Close()
+		plan, err := corpus.CollapseTwins(s, *apply)
+		if err != nil {
+			return err
+		}
+		printTwins(plan, *verbose)
+		return nil
+
 	case "merge":
 		fs := flag.NewFlagSet("merge", flag.ContinueOnError)
 		keep := fs.String("keep", "", "email address of the person to keep")
@@ -1180,4 +1208,60 @@ func printDedupe(plan corpus.DedupePlan) {
 	if !plan.Applied {
 		fmt.Println("nothing was written; `corpus dedupe -apply` carries this out")
 	}
+}
+
+// printTwins reports a collapse plan.
+//
+// The declined list is behind a flag and the reasons are counted by default: on
+// this corpus the pass leaves hundreds of candidates alone, and a wall of them
+// buries the collapses. The counts are the part worth reading every run — a
+// reason that suddenly dominates is how a mis-set gate shows up.
+func printTwins(plan corpus.TwinPlan, declined bool) {
+	for _, c := range plan.Collapse {
+		fmt.Printf("keep %6d %s\n  drop %v\n  why  %s\n", c.Keep, c.KeepExt, c.Drop, c.Why)
+		for _, o := range c.Offsets {
+			fmt.Printf("  measured %s rendered by person %d in entry %d\n",
+				tzinfer.FormatOffset(o.Off), o.Person, o.Host)
+		}
+	}
+	if declined {
+		for _, d := range plan.Declined {
+			fmt.Printf("left alone %6d %s\n  %s\n", d.Entry, d.ExtID, d.Reason)
+		}
+	}
+	byReason := map[string]int{}
+	for _, d := range plan.Declined {
+		byReason[shortReason(d.Reason)]++
+	}
+	reasons := make([]string, 0, len(byReason))
+	for r := range byReason {
+		reasons = append(reasons, r)
+	}
+	sort.Slice(reasons, func(i, j int) bool { return byReason[reasons[i]] > byReason[reasons[j]] })
+	verb := "would collapse"
+	if plan.Applied {
+		verb = "collapsed"
+	}
+	fmt.Printf("\n%s %d %s into %d, measuring %d render %s\n",
+		verb, plan.Removed+len(plan.Collapse), plural(plan.Removed+len(plan.Collapse), "copy", "copies"),
+		len(plan.Collapse), plan.Measured, plural(plan.Measured, "offset", "offsets"))
+	fmt.Printf("  %d onto the mailbox copy, %d recovered-only with no mailbox copy to keep\n",
+		plan.WithMailbox, plan.QuotedOnly)
+	fmt.Printf("left alone %d:\n", len(plan.Declined))
+	for _, r := range reasons {
+		fmt.Printf("  %5d  %s\n", byReason[r], r)
+	}
+	if !plan.Applied {
+		fmt.Println("nothing was written; `corpus twins -apply` carries this out")
+	}
+}
+
+// shortReason drops what a decline says about the particular pair — the offset,
+// the percentage, the entry id — so the reasons count as classes rather than as
+// one class per pair. Every reason states the class before the colon.
+func shortReason(s string) string {
+	if i := strings.Index(s, ":"); i >= 0 {
+		return s[:i]
+	}
+	return s
 }
