@@ -121,13 +121,13 @@ func impossible(stamps []Stamp) []Inversion {
 		if stamps[j].Wall.IsZero() {
 			continue
 		}
-		lo, _ := span(stamps[j])
+		lo, _ := Span(stamps[j])
 		worst := Inversion{Outer: -1, Inner: j}
 		for i := 0; i < j; i++ {
 			if stamps[i].Wall.IsZero() {
 				continue
 			}
-			_, hi := span(stamps[i])
+			_, hi := Span(stamps[i])
 			if excess := lo.Sub(hi); excess > 0 && excess > worst.Excess {
 				worst.Outer, worst.Excess = i, excess
 			}
@@ -139,7 +139,13 @@ func impossible(stamps []Stamp) []Inversion {
 	return out
 }
 
-// span is the window of instants a stamp could refer to.
+// Span is the window of instants a stamp could refer to.
+//
+// Exported because zone inference has to answer the same question: an inferred
+// zone narrows one of these windows to a point, and the narrowing is only
+// admissible if it still lands inside the windows of the messages around it.
+// A second definition of the window would let the inference accept an ordering
+// that -chrono calls impossible.
 //
 // Two widenings, both in the direction of claiming less:
 //
@@ -152,7 +158,7 @@ func impossible(stamps []Stamp) []Inversion {
 //     it gets the whole day's width. A real midnight send loses some detection;
 //     a misparsed clock would otherwise gain a false anomaly, and a feature that
 //     cries wolf is worth less than one that misses a case.
-func span(s Stamp) (lo, hi time.Time) {
+func Span(s Stamp) (lo, hi time.Time) {
 	lo, hi = s.Wall, s.Wall
 	if s.Off != nil {
 		lo = lo.Add(-time.Duration(*s.Off) * time.Minute)
