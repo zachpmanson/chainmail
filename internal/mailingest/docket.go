@@ -160,15 +160,17 @@ func (c Client) Read(id string) (Message, error) {
 	return run[Message](c, "mail", "read", "--id", id, "--html", "--max-bytes", maxBytes)
 }
 
-// Thread returns every envelope in a thread.
-func (c Client) Thread(id string) (struct {
+// ThreadResult is docket's thread shape: every envelope in one thread, whether
+// or not each one matches whatever query led here. Named rather than anonymous
+// so a caller can accept a mailbox as an interface and test against a fake.
+type ThreadResult struct {
 	ThreadID string     `json:"thread_id"`
 	Messages []Envelope `json:"messages"`
-}, error) {
-	return run[struct {
-		ThreadID string     `json:"thread_id"`
-		Messages []Envelope `json:"messages"`
-	}](c, "mail", "thread", "--id", id)
+}
+
+// Thread returns every envelope in a thread.
+func (c Client) Thread(id string) (ThreadResult, error) {
+	return run[ThreadResult](c, "mail", "thread", "--id", id)
 }
 
 // probed caches SupportsThreadingHeaders for the lifetime of the process.

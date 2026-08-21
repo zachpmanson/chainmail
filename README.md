@@ -55,14 +55,46 @@ Every rendered page embeds the spec that produced it, so a later pass reloads ex
 structured input instead of scraping HTML:
 
 ```bash
-render new.json -o page.html --since previous.html
+corpus refresh page.html -o new.json     # what has arrived since
+render new.json -o page.html --since page.prev.html
 ```
 
-That reports what is **new** (no counterpart in the previous pass) and what is
-**revised** (same anchor, changed words — or the same words at a corrected
+`render --since` reports what is **new** (no counterpart in the previous pass) and
+what is **revised** (same anchor, changed words — or the same words at a corrected
 timestamp, which would otherwise read as one deleted plus one new). Diffing a page
 against itself reports nothing, so a re-run that claims changes means the input
 really changed.
+
+`corpus refresh` produces the input for that, from a spec or from a page. It has
+two passes over two different kinds of thing, because the spec records both:
+
+- **`threads` is membership.** A chain list is a decision — search, then check off
+  what belongs — so every recorded chain is regenerated whole. This is the half
+  that matters: a reply carrying none of the query's words ("sounds good, Friday
+  then") is invisible to any search and arrives only this way.
+- **`queries` is discovery.** Re-running them finds chains the page does not have,
+  which are printed as proposals and left out. `-include-new` takes all of them,
+  `-accept <root>` takes one by the chain root the report names. Including them
+  automatically would let a curated page re-widen on every refresh, which would
+  make the curation meaningless.
+
+A chain the queries no longer return stays on the page and is reported, since
+dropping it would delete entries somebody has already read and permalinked — and
+`--since` would not say so, because that diff marks what is new and revised, not
+what is gone.
+
+The mailbox is not touched unless you ask. Filling the corpus is `corpus ingest`'s
+job, and a refresh against the corpus alone already picks up whatever a later
+ingest brought in. `-fetch` adds a pass that asks: each query narrowed to `after:`
+the previous run's date, and each mail thread by id with no date bound at all,
+since that call returns every envelope anyway and the ids are checked against the
+corpus before anything is read.
+
+Nothing-new is an outcome, not a silence. The per-pass lines print either way —
+what was asked, how many envelopes came back, how many were already stored — so
+"nothing new" is legible as proof it looked rather than as a refresh that broke.
+
+`make repage P=page.html` runs the whole loop.
 
 ## The contract
 

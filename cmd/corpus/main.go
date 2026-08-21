@@ -15,6 +15,7 @@
 //	corpus embed                      fill in the vectors semantic search needs
 //	corpus eval -set judged.json      score two retrieval configurations
 //	corpus spec -q <text> -o f.json   a timeline spec for those chains
+//	corpus refresh <prev> -o f.json   the same page again, with what has arrived since
 //	corpus unnest <ext-id>            what extraction recovers from one message
 package main
 
@@ -38,6 +39,7 @@ import (
 	"github.com/zachpmanson/chainmail/internal/embed"
 	"github.com/zachpmanson/chainmail/internal/eval"
 	"github.com/zachpmanson/chainmail/internal/mailingest"
+	"github.com/zachpmanson/chainmail/internal/refresh"
 	"github.com/zachpmanson/chainmail/internal/slackingest"
 	"github.com/zachpmanson/chainmail/internal/spec"
 	"github.com/zachpmanson/chainmail/internal/tzinfer"
@@ -88,6 +90,19 @@ const usage = `usage: corpus <command> [flags]
                            a similarity floor has to separate
   show          <ext-id>   one entry in full, or -chain for the whole thread
   spec          -q <text>  write a timeline spec for the renderer
+  refresh       <spec.json|page.html>
+                           the same page again, from the corpus as it now stands:
+                           every chain the spec lists is regenerated, so a reply
+                           that matches no query still lands, and each recorded
+                           query is re-run to propose chains the page does not
+                           have. Proposals are reported, not included — the chain
+                           list is a decision; -include-new takes all of them and
+                           -accept <root,...> takes the ones it names, by the
+                           chain root the report prints. -o writes the spec,
+                           -title -me -limit -person -since override what the
+                           spec recorded, -uploads is re-supplied because a spec
+                           records no local path, and -fetch additionally asks the
+                           mailbox, narrowed to after: the previous run's date
   sigs          [-people -domains]
                            which trailing blocks repeat enough to be a signature
                            or an organisation's notice, and how many lines that
@@ -480,6 +495,16 @@ func run(args []string) error {
 			Queries:  []spec.Query{{Q: *q, Note: "corpus search"}},
 			Me:       splitList(*me),
 			RunLabel: time.Now().Format("2 Jan 2006"),
+			// Recorded so `corpus refresh` reproduces this page rather than a
+			// differently-shaped one; -uploads is left out on purpose, since a
+			// spec is a document that gets sent to people and that flag names
+			// somebody's home directory.
+			Params: &spec.RunParams{
+				Me:     splitList(*me),
+				Limit:  *limit,
+				Person: *person,
+				Since:  *since,
+			},
 
 			UploadDir: *uploads,
 		})
@@ -498,6 +523,76 @@ func run(args []string) error {
 			return err
 		}
 		fmt.Printf("wrote %s — %d entries from %d chains\n", *out, len(sp.Messages), len(chains))
+		return nil
+
+	case "refresh":
+		// The previous run is positional, and consumed before flag parsing:
+		// flag.Parse stops at the first non-flag argument, so leaving it in the
+		// list would silently discard every flag written after it.
+		rest := args[1:]
+		var prevPath string
+		if len(rest) > 0 && !strings.HasPrefix(rest[0], "-") {
+			prevPath, rest = rest[0], rest[1:]
+		}
+		fs := flag.NewFlagSet("refresh", flag.ContinueOnError)
+		out := fs.String("o", "", "write the refreshed spec here (default stdout)")
+		fetch := fs.Bool("fetch", false, "also ask the mailbox for what has arrived since")
+		includeNew := fs.Bool("include-new", false, "accept every chain the queries propose")
+		accept := fs.String("accept", "", "comma-separated chain roots to accept, as the report prints them")
+		title := fs.String("title", "", "page title, overriding the spec's")
+		me := fs.String("me", "", "comma-separated addresses that are yours, overriding the spec's")
+		limit := fs.Int("limit", 0, "chains a query may propose, overriding the spec's")
+		person := fs.String("person", "", "involving this address, name or slack uid, overriding the spec's")
+		since := fs.String("since", "", "only entries on or after YYYY-MM-DD, overriding the spec's")
+		uploads := fs.String("uploads", defaultUploadDir(),
+			"archive upload root; image thumbnails are embedded from here (\"\" to embed none)")
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		if prevPath == "" && fs.NArg() == 1 {
+			prevPath = fs.Arg(0)
+		}
+		if prevPath == "" || fs.NArg() > 1 {
+			return errors.New("usage: corpus refresh <spec.json|page.html> [-o spec.json] [-fetch]\n" +
+				"                  [-include-new] [-accept <root,...>] [-title T] [-me <address>]\n" +
+				"                  [-limit N] [-person X] [-since YYYY-MM-DD] [-uploads <dir>]")
+		}
+		prev, err := refresh.Load(prevPath)
+		if err != nil {
+			return err
+		}
+		s, err := corpus.Open(path)
+		if err != nil {
+			return err
+		}
+		defer s.Close()
+		rep, next, err := refresh.Run(s, mailingest.Client{}, prev, refresh.Options{
+			Title:      *title,
+			Me:         splitList(*me),
+			Limit:      *limit,
+			Person:     *person,
+			Since:      *since,
+			Uploads:    *uploads,
+			Fetch:      *fetch,
+			IncludeNew: *includeNew,
+			Accept:     splitList(*accept),
+		})
+		if err != nil {
+			return err
+		}
+		printRefresh(os.Stdout, rep)
+		blob, err := json.MarshalIndent(next, "", " ")
+		if err != nil {
+			return err
+		}
+		if *out == "" {
+			fmt.Println(string(blob))
+			return nil
+		}
+		if err := os.WriteFile(*out, append(blob, '\n'), 0o600); err != nil {
+			return err
+		}
+		fmt.Printf("wrote %s — %d entries from %d chains\n", *out, len(next.Messages), len(next.Threads))
 		return nil
 
 	case "unnest":
