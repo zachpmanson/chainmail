@@ -1,25 +1,37 @@
 import { createRoot } from "react-dom/client";
 import { StrictMode, useEffect, useMemo, useState } from "react";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { Timeline } from "./components/Timeline";
 import { attach } from "./client/behaviour";
 import { derive } from "./lib/derive";
 import { SpecView } from "./components/SpecView";
 import { loadSpec } from "./lib/loadSpec";
+import { makeQueryClient } from "./lib/queries";
 import { normalise } from "./lib/normalise";
+import { SelectView } from "./components/Select";
 import type { Timeline as Spec } from "./lib/spec";
 import "./styles.css";
+import "./select.css";
 
-/** Dev shell: load a spec by ?spec=, or let one be dropped on the page. */
-function App() {
+/**
+ * Three ways in, in priority order: a spec named by ?spec=, a spec dropped on
+ * the page, or the search-and-select stage against the API.
+ *
+ * ?spec= stays because a spec on disk is how one gets inspected, and
+ * scripts/render.tsx still writes those files — the API is another source, not a
+ * replacement for the one the static pipeline uses.
+ */
+export function App() {
   const [spec, setSpec] = useState<Spec | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const param = useMemo(() => new URLSearchParams(location.search).get("spec"), []);
 
   useEffect(() => {
-    const param = new URLSearchParams(location.search).get("spec") ?? "synthetic.json";
+    if (param === null) return;
     loadSpec(param)
       .then(setSpec)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
-  }, []);
+  }, [param]);
 
   useEffect(() => {
     const onDrop = async (ev: DragEvent) => {
@@ -43,8 +55,12 @@ function App() {
         {"\n\nOr drop a spec JSON onto the page."}
       </pre>
     );
-  if (!spec) return <p style={{ padding: "2rem", opacity: 0.6 }}>Loading spec…</p>;
-  return <Rendered spec={spec} />;
+  if (spec)
+    // A spec named on the URL is what the page is for, so it offers no way back
+    // to a search it was never the result of.
+    return <Rendered spec={spec} onBack={param === null ? () => setSpec(null) : undefined} />;
+  if (param !== null) return <p style={{ padding: "2rem", opacity: 0.6 }}>Loading spec…</p>;
+  return <SelectView onBuilt={setSpec} />;
 }
 
 /**
@@ -52,7 +68,7 @@ function App() {
  * rebuilt. Excluding a chain re-derives ordering, lanes, spines, the minimap and
  * every count — hiding rows would leave holes in the grid and mis-drawn lanes.
  */
-function Rendered({ spec }: { spec: Spec }) {
+function Rendered({ spec, onBack }: { spec: Spec; onBack?: () => void }) {
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [showSpec, setShowSpec] = useState(false);
 
@@ -119,6 +135,11 @@ function Rendered({ spec }: { spec: Spec }) {
 
   return (
     <>
+      {onBack ? (
+        <button type="button" className="selback" onClick={onBack}>
+          ← choose chains
+        </button>
+      ) : null}
       <Timeline
         spec={filtered}
         filter={{ chains, excluded, onToggle }}
@@ -129,8 +150,12 @@ function Rendered({ spec }: { spec: Spec }) {
   );
 }
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);
+const root = document.getElementById("root");
+if (root)
+  createRoot(root).render(
+    <StrictMode>
+      <QueryClientProvider client={makeQueryClient()}>
+        <App />
+      </QueryClientProvider>
+    </StrictMode>,
+  );
