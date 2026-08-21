@@ -84,6 +84,11 @@ func Generate(store *corpus.Store, opts Options) (Spec, error) {
 		me[strings.ToLower(strings.TrimSpace(a))] = true
 	}
 
+	part, addrs, err := loadParticipation(db, ids)
+	if err != nil {
+		return Spec{}, err
+	}
+
 	b := &builder{
 		opts:      opts,
 		me:        me,
@@ -93,7 +98,9 @@ func Generate(store *corpus.Store, opts Options) (Spec, error) {
 		idOf:      map[int64]string{},
 		subjOf:    map[int64]string{},
 		rowByID:   map[int64]*entryRow{},
-		people:    map[string]Participant{},
+		cast:      newCast(),
+		part:      part,
+		addrs:     addrs,
 		badZones:  map[string]int{},
 		zoneWhy:   map[string]string{},
 	}
@@ -109,7 +116,7 @@ func Generate(store *corpus.Store, opts Options) (Spec, error) {
 		Title:        opts.Title,
 		RunLabel:     opts.RunLabel,
 		Queries:      opts.Queries,
-		Participants: b.cast(),
+		Participants: b.cast.people(),
 		Threads:      b.threads(rows),
 		SourceNotes:  b.notes(rows),
 		Messages:     b.messages,
@@ -119,6 +126,9 @@ func Generate(store *corpus.Store, opts Options) (Spec, error) {
 	}
 	if spec.Title == "" {
 		return Spec{}, fmt.Errorf("spec: no title given and entry %s has no subject to borrow", rows[0].ExtID)
+	}
+	if err := checkCastCoversSenders(spec); err != nil {
+		return Spec{}, err
 	}
 	return spec, nil
 }
@@ -134,8 +144,12 @@ type builder struct {
 	subjOf   map[int64]string    // corpus id -> subject, to spot a new chain
 	messages []Entry
 
-	castOrder []string
-	people    map[string]Participant
+	// cast is the participants panel; part and addrs are the corpus's own
+	// participation record, which is the only source for a Slack author or for
+	// anyone on an entry recovered from quoted text.
+	cast  *cast
+	part  map[int64][]partRow
+	addrs map[int64][]string
 
 	badZones map[string]int // unresolvable zone label -> entries affected
 	orphans  int            // entries naming a parent that is not in this spec
@@ -232,10 +246,47 @@ func (b *builder) add(r *entryRow) {
 	b.subjOf[r.ID] = r.Subject
 	b.messages = append(b.messages, e)
 
-	b.meet(from, e.Org)
-	for _, a := range append(append([]addr{}, to...), cc...) {
-		b.meet(a, orgOf(a.Address, b.opts.Orgs))
+	b.meet(r, e.Sender, from, to, cc)
+}
+
+// meet records everyone this entry involves, in the order the page reads: its
+// author, then the people the corpus says were addressed on it, then anyone
+// named in a header the corpus did not resolve to a person.
+func (b *builder) meet(r *entryRow, sender string, from addr, to, cc []addr) {
+	ref := b.ref(r.PersonID, sender, from.Address)
+	b.cast.sender(ref, orgOf(ref.address, b.opts.Orgs), r.Direct)
+	for _, p := range b.part[r.ID] {
+		if p.Role == corpus.RoleFrom {
+			// Already recorded, under the name the transcript shows beside their
+			// messages rather than the display name their own header carried.
+			continue
+		}
+		ref := b.ref(p.Person, p.Name, "")
+		b.cast.recipient(ref, orgOf(ref.address, b.opts.Orgs), r.Direct)
 	}
+	// A header the ingest never turned into a person still names someone. It is
+	// rare — 16 entries of 31k on the corpus this was measured against carry a To:
+	// line with no participants rows behind it — but the panel is not the place to
+	// lose them.
+	for _, a := range append(append([]addr{}, to...), cc...) {
+		ref := b.ref(0, a.Who(), a.Address)
+		b.cast.recipient(ref, orgOf(ref.address, b.opts.Orgs), r.Direct)
+	}
+}
+
+// ref assembles the identities one appearance is known by. An address is taken
+// from the header where there is one and from the corpus otherwise, which is what
+// gives a Slack author a mailbox to be reached at and an org to be grouped under.
+//
+// Only the panel is grouped that way. An entry's own `org` — and so its colour —
+// still comes from its From header, because a Slack author's colour slot would
+// otherwise depend on whether their mailbox happened to be in this selection.
+func (b *builder) ref(person int64, name, address string) castRef {
+	known := b.addrs[person]
+	if address == "" && len(known) > 0 {
+		address = known[0]
+	}
+	return castRef{person: person, address: address, name: name, others: known}
 }
 
 // source records where an entry was found: the mailbox, or someone's quoted
@@ -267,27 +318,30 @@ func (b *builder) source(r *entryRow) string {
 	return "unspooled from quoted text"
 }
 
-// meet records a person the moment they first appear, as sender or recipient.
-// An address is never invented: someone seen only as a display name is listed
-// without one.
-func (b *builder) meet(a addr, org string) {
-	if a.Who() == "" {
-		return
+// checkCastCoversSenders fails a spec that would show a message from someone the
+// participants panel does not list. The panel is the page's answer to "who was
+// involved", and the transcript is the reader's way of checking it; a name in one
+// and not the other reads as a person the tool lost rather than as a person who
+// was never there. The comparison is by name because that is the only key a
+// reader has — an address they cannot see would not help them.
+//
+// It is an error and not a note because the panel is what justifies the page not
+// listing its senders anywhere else.
+func checkCastCoversSenders(sp Spec) error {
+	named := map[string]bool{}
+	for _, p := range sp.Participants {
+		named[p.Name] = true
 	}
-	k := a.key()
-	if _, seen := b.people[k]; seen {
-		return
+	for _, m := range sp.Messages {
+		if m.Sender == "" || named[m.Sender] {
+			continue
+		}
+		return fmt.Errorf(
+			"spec: %q sent %s (%s) but is not in the participants panel — "+
+				"the panel is the only place the page names the cast",
+			m.Sender, m.ID, m.Date)
 	}
-	b.castOrder = append(b.castOrder, k)
-	b.people[k] = Participant{Name: a.Who(), Org: org, Email: a.Address}
-}
-
-func (b *builder) cast() []Participant {
-	out := make([]Participant, 0, len(b.castOrder))
-	for _, k := range b.castOrder {
-		out = append(out, b.people[k])
-	}
-	return out
+	return nil
 }
 
 // threads summarises the containers the transcript was assembled from.

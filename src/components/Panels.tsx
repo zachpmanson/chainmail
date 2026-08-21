@@ -55,15 +55,21 @@ export function ParticipantsPanel({ v }: { v: View }) {
           {groups.map((g) => (
             <div key={g.org || "other"} style={{ display: "contents" }}>
               <div className="ogh">{g.org || "Other"}</div>
-              {g.people.map((p) => {
+              {g.people.map((p, i) => {
                 const n = stats.get(p.name)?.n;
+                // The note is shown alongside the count, not only in its absence:
+                // it says how a person was seen, which is exactly the thing a
+                // count of their messages does not tell you.
                 const bits = [
                   p.role,
                   n ? `${n} msg${n === 1 ? "" : "s"}` : undefined,
-                  !n ? p.note : undefined,
+                  p.note,
                 ].filter(Boolean);
+                // Keyed by position, because a name is not unique: two corpus
+                // people can carry one display name, and both are listed rather
+                // than one silently winning.
                 return (
-                  <div className="p1" key={p.name}>
+                  <div className="p1" key={i}>
                     <div className="pd">
                       <div className="pn">
                         <Face name={p.name} v={v} />

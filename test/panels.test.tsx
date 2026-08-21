@@ -88,3 +88,45 @@ describe("static export", () => {
     expect(html).not.toContain('style="background-image');
   });
 });
+
+describe("participants panel", () => {
+  const senders = () => new Set(spec.messages.map((m) => m.sender).filter(Boolean) as string[]);
+  const panel = () => new Set((spec.participants ?? []).map((p) => p.name));
+
+  it("lists every sender, and more besides", () => {
+    // Both directions, because each catches a different failure. A sender the
+    // panel omits is a name the page shows and then cannot account for; a panel
+    // that is merely equal to the senders has stopped carrying the recipients,
+    // which is the whole reason it exists.
+    expect([...senders()].filter((s) => !panel().has(s))).toEqual([]);
+    expect([...panel()].filter((p) => !senders().has(p)).length).toBeGreaterThan(0);
+  });
+
+  it("shows someone who only ever appears in To:/Cc:", () => {
+    const html = renderToStaticMarkup(<Timeline spec={spec} />);
+    const silent = [...panel()].filter((p) => !senders().has(p));
+    for (const name of silent) expect(html).toContain(name);
+  });
+
+  it("no longer prints the per-org roster, which the panel supersedes", () => {
+    const html = renderToStaticMarkup(<Timeline spec={spec} />);
+    expect(html).not.toContain('class="roster"');
+  });
+
+  it("assigns the same avatar colour slots with the roster gone", () => {
+    // The slot is the index of an org in first-appearance order over the
+    // messages, which `derive` computes for itself; the roster only ever
+    // displayed that order. These counts are the baseline from before it was
+    // removed, so a change to where a colour comes from fails here.
+    const html = renderToStaticMarkup(<Timeline spec={spec} />);
+    const count = (slot: string) => (html.match(new RegExp(`class="av ${slot}`, "g")) ?? []).length;
+    expect([count("o1"), count("o2"), count("o3"), count("o4"), count("o5")])
+      .toEqual([36, 24, 5, 0, 5]);
+
+    const v = derive(spec);
+    const slotOf = new Map(v.rows.map((r) => [r.entry.org ?? "", r.orgSlot]));
+    expect(Object.fromEntries(slotOf)).toEqual({
+      Starfleet: "o1", Daystrom: "o2", "Utopia Planitia": "o3", "": "o5",
+    });
+  });
+});
