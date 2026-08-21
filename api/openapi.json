@@ -1,0 +1,1183 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "chainmail API",
+    "version": "1.0.0",
+    "description": "Read-only HTTP over a local chainmail corpus: search for candidate chains, choose which belong on a page, then build the timeline spec the renderer consumes.\n\nTwo stages on purpose. Search selects; POST /v1/spec renders a chosen set. A spec built straight from a query takes whatever the query returned, and then the only way to remove a thread is to regenerate the page.\n\nThis serves personal mail and has no authentication of any kind. It binds to loopback and refuses a non-loopback address unless explicitly overridden, and spec bodies carry unsanitised sender HTML (issue #14) \u2014 so the loopback bind is what makes the whole surface safe, not a default to be relaxed.\n\nOperator commands \u2014 ingest, embed, eval, dedupe, twins, repair, merge, alias, refresh \u2014 are deliberately absent. They mutate the corpus and belong to the CLI."
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:8765",
+      "description": "The only supported deployment: loopback on the machine holding the corpus."
+    }
+  ],
+  "paths": {
+    "/v1/search": {
+      "get": {
+        "summary": "Ranked chains for a query \u2014 the selection candidates.",
+        "description": "Selection stage. Lexical by default: FTS5 wins decisively on the tokens a mail corpus is dense with (invoice numbers, account ids, Message-IDs), and the structural half of a real question is a filter rather than something a similarity score encodes.\n\nAt least one of q, person or since must be given. With no filter at all an arbitrary slice of the corpus would come back reading like a ranked answer, so that is a 400.",
+        "operationId": "search",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Free text. Double-quoted runs are kept as phrases; every other term must match. Terms that look like identifiers also go to the trigram index.",
+            "schema": {
+              "type": "string",
+              "description": ""
+            },
+            "example": "solar install quote"
+          },
+          {
+            "name": "person",
+            "in": "query",
+            "description": "An address, display name or Slack uid. Matches anyone recorded on the entry, author or recipient \u2014 on a real trail a quarter of the participants appear only in to:/cc:, so \"threads Ada was on\" cannot be an author-only filter.",
+            "schema": {
+              "type": "string",
+              "description": ""
+            },
+            "example": "ada@example.com"
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "description": "Only entries on or after this date.",
+            "schema": {
+              "type": "string",
+              "description": "",
+              "format": "date"
+            },
+            "example": "2026-01-31"
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "description": "Retrieval. semantic and hybrid need vectors (`corpus embed`) AND a running local embedding daemon; without the daemon they return 503, never an empty result set.",
+            "schema": {
+              "type": "string",
+              "description": "",
+              "enum": [
+                "lexical",
+                "semantic",
+                "hybrid"
+              ],
+              "default": "lexical"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "How many chains (or entries) to return.",
+            "schema": {
+              "type": "integer",
+              "description": "",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20
+            }
+          },
+          {
+            "name": "entries",
+            "in": "query",
+            "description": "Return the matching entries instead of the chains they belong to. Changes which array of the response is populated.",
+            "schema": {
+              "type": "boolean",
+              "description": "",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ranked candidates.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No filter given, or a parameter could not be parsed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "mode=semantic or mode=hybrid, and the embedding daemon is not reachable or has not pulled the model. The message names the fix.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The embedding daemon did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/spec": {
+      "post": {
+        "summary": "Build a timeline spec from a chosen set of chains.",
+        "description": "Render stage, and deliberately separate from search: what belongs on a page is a human decision, and removing a thread afterwards means regenerating everything downstream, so scope is settled once, up front.\n\nThe response validates against schema/timeline.schema.json, the contract the renderer already consumes.\n\nExpensive: spec assembly recovers quoted bodies, detects repeated boilerplate and builds attachment thumbnails, which is seconds for a large selection. There is no job queue \u2014 the response is synchronous. Concurrency is capped, so an over-eager caller gets 429 rather than a server with every core in HTML recovery.\n\nEntry bodies are sender HTML, and it is NOT sanitised (issue #14). That is accepted at today's risk because the server binds to loopback only. It is a hard blocker on binding wider, not a footnote.",
+        "operationId": "buildSpec",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpecRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A timeline spec, valid against schema/timeline.schema.json.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimelineSpec"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed body, an empty chains list, or a selection that resolved to no entries.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "One of the named chains is not in the corpus. The message names which.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many spec builds already in flight. Retry-After is set.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/entries/{extId}": {
+      "get": {
+        "summary": "One entry, with its provenance and every sighting of it.",
+        "operationId": "getEntry",
+        "parameters": [
+          {
+            "name": "extId",
+            "in": "path",
+            "description": "Corpus natural key, as search reports it. Percent-encode it: it contains a colon and usually angle brackets.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": ""
+            },
+            "example": "mail:<c0ffee-1@example.com>"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The entry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorpusEntry"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No entry carries that id. Distinct from a search that matched nothing, which is a 200 with an empty array.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/chains/{rootExtId}": {
+      "get": {
+        "summary": "The chain around an entry, in time order, as data.",
+        "description": "Kept even though selection makes it unnecessary for building a page, because reading a chain is a different act from rendering one: a client browsing a candidate wants its entries as data, cheaply, without paying for spec assembly or committing to a page.\n\nReachability is followed in BOTH directions, so ANY member's ext id returns the whole conversation \u2014 search reports the entry that matched, not the root. The parameter is named rootExtId because that is what search hands you.",
+        "operationId": "getChain",
+        "parameters": [
+          {
+            "name": "rootExtId",
+            "in": "path",
+            "description": "Ext id of any entry in the chain. Percent-encode it.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": ""
+            },
+            "example": "mail:<c0ffee-1@example.com>"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The chain in time order.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChainResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No entry carries that id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/stats": {
+      "get": {
+        "summary": "Counts and coverage.",
+        "operationId": "getStats",
+        "responses": {
+          "200": {
+            "description": "Corpus statistics.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stats"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/people": {
+      "get": {
+        "summary": "Everyone in the corpus, with their identities.",
+        "operationId": "getPeople",
+        "responses": {
+          "200": {
+            "description": "People, most involved first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeopleResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "SearchResponse": {
+        "type": "object",
+        "description": "Ranked candidates. Exactly one of chains or entries is present, decided by the `entries` parameter; neither is present when nothing matched, and an empty array is returned rather than omitted in that case.",
+        "required": [
+          "mode"
+        ],
+        "properties": {
+          "mode": {
+            "type": "string",
+            "description": "The retrieval mode actually used.",
+            "enum": [
+              "lexical",
+              "semantic",
+              "hybrid"
+            ]
+          },
+          "chains": {
+            "type": "array",
+            "description": "Present when entries=false (the default).",
+            "items": {
+              "$ref": "#/components/schemas/ChainHit"
+            }
+          },
+          "entries": {
+            "type": "array",
+            "description": "Present when entries=true.",
+            "items": {
+              "$ref": "#/components/schemas/EntryHit"
+            }
+          }
+        }
+      },
+      "ChainHit": {
+        "type": "object",
+        "description": "One candidate chain \u2014 the unit a caller selects for POST /v1/spec.",
+        "required": [
+          "rootExtId",
+          "entries",
+          "matched",
+          "first",
+          "last",
+          "score"
+        ],
+        "properties": {
+          "rootExtId": {
+            "type": "string",
+            "description": "Ext id of the entry the reply graph terminates at. The only chain identity worth storing, and what POST /v1/spec takes.",
+            "example": "mail:<c0ffee-1@example.com>"
+          },
+          "subject": {
+            "type": "string",
+            "description": "Subject of the chain. Absent when no entry in it carries one."
+          },
+          "container": {
+            "type": "string",
+            "description": "Mail thread id or Slack channel id. Absent when the source stated none."
+          },
+          "sources": {
+            "type": "array",
+            "description": "Every archive this chain has entries from; more than one where a mail trail continued in Slack.",
+            "items": {
+              "type": "string",
+              "description": "",
+              "enum": [
+                "mail",
+                "slack"
+              ]
+            }
+          },
+          "entries": {
+            "type": "integer",
+            "description": "Entries in the whole chain."
+          },
+          "matched": {
+            "type": "integer",
+            "description": "How many of them the query hit. matched/entries is the honest measure of whether the chain is about the query."
+          },
+          "first": {
+            "type": "string",
+            "description": "Timestamp of the earliest entry, UTC.",
+            "format": "date-time"
+          },
+          "last": {
+            "type": "string",
+            "description": "Timestamp of the latest entry, UTC.",
+            "format": "date-time"
+          },
+          "score": {
+            "type": "number",
+            "description": "Fused score. Comparable within one response only."
+          },
+          "best": {
+            "type": "array",
+            "description": "The top-scoring entries of this chain, most relevant first \u2014 the evidence for the ranking.",
+            "items": {
+              "$ref": "#/components/schemas/EntryHit"
+            }
+          }
+        }
+      },
+      "EntryHit": {
+        "type": "object",
+        "description": "One matching entry, as ranking sees it.",
+        "required": [
+          "extId",
+          "source",
+          "ts",
+          "personId",
+          "score",
+          "proseRank",
+          "identRank",
+          "semRank"
+        ],
+        "properties": {
+          "extId": {
+            "type": "string",
+            "description": "Corpus natural key, e.g. \"mail:<c0ffee-1@example.com>\". The identity that survives a rebuild, and the one the other endpoints take.",
+            "example": "mail:<c0ffee-1@example.com>"
+          },
+          "source": {
+            "type": "string",
+            "description": "Which archive it came from.",
+            "enum": [
+              "mail",
+              "slack"
+            ]
+          },
+          "ts": {
+            "type": "string",
+            "description": "Entry timestamp, UTC.",
+            "format": "date-time"
+          },
+          "personId": {
+            "type": "integer",
+            "description": "Author's person id, 0 when the author could not be resolved."
+          },
+          "person": {
+            "type": "string",
+            "description": "Author's display name. Absent when no person row is attached."
+          },
+          "container": {
+            "type": "string",
+            "description": "Mail thread id or Slack channel id. Absent when the source stated none."
+          },
+          "subject": {
+            "type": "string",
+            "description": "Absent for sources that have no subject, such as Slack."
+          },
+          "permalink": {
+            "type": "string",
+            "description": "Opens the entry at its source. Absent when the source gave none."
+          },
+          "snippet": {
+            "type": "string",
+            "description": "Match excerpt with matched terms wrapped in square brackets. Absent for a structural-only query, which has nothing to highlight."
+          },
+          "score": {
+            "type": "number",
+            "description": "Fused Reciprocal Rank Fusion score. Comparable within one response only."
+          },
+          "proseRank": {
+            "type": "integer",
+            "description": "1-based position in the prose ranking; 0 means that ranking did not find this entry. Always present, because 0 is meaningful."
+          },
+          "identRank": {
+            "type": "integer",
+            "description": "1-based position in the identifier (trigram) ranking; 0 means it did not find this entry."
+          },
+          "semRank": {
+            "type": "integer",
+            "description": "1-based position in the vector ranking; 0 means it did not find this entry, and is always 0 for mode=lexical."
+          },
+          "similarity": {
+            "type": "number",
+            "description": "Cosine to the query vector, in [-1, 1]. Present only when semRank is non-zero; it is reported, not fused."
+          }
+        }
+      },
+      "CorpusEntry": {
+        "type": "object",
+        "description": "One entry resolved for reading rather than for ranking: plain text, with its provenance. Deliberately not a timeline entry \u2014 no HTML recovery, no boilerplate folding, no thumbnails \u2014 so reading a chain costs a query rather than seconds of assembly. Use POST /v1/spec when the goal is to render.",
+        "required": [
+          "extId",
+          "source",
+          "quoted",
+          "ts"
+        ],
+        "properties": {
+          "extId": {
+            "type": "string",
+            "description": "Corpus natural key.",
+            "example": "mail:<c0ffee-1@example.com>"
+          },
+          "source": {
+            "type": "string",
+            "description": "Which archive it came from.",
+            "enum": [
+              "mail",
+              "slack"
+            ]
+          },
+          "quoted": {
+            "type": "boolean",
+            "description": "True when this entry exists only because someone quoted it: it was never in the mailbox as a standalone message."
+          },
+          "ts": {
+            "type": "string",
+            "description": "Entry timestamp, UTC.",
+            "format": "date-time"
+          },
+          "tz": {
+            "type": "string",
+            "description": "Zone label as the source stated it, e.g. \"NZST\". Absent when the source stated none; never guessed here."
+          },
+          "tzOffsetMinutes": {
+            "type": "integer",
+            "description": "Minutes east of UTC as the source stated it. Absent when it stated none. Carried alongside tz because a label does not determine an offset."
+          },
+          "author": {
+            "type": "string",
+            "description": "Display name of the sender. Absent when no person row is attached."
+          },
+          "subject": {
+            "type": "string",
+            "description": "Absent for sources that have no subject."
+          },
+          "body": {
+            "type": "string",
+            "description": "The entry's own plain text. Absent when the source carried no text body."
+          },
+          "container": {
+            "type": "string",
+            "description": "Mail thread id or Slack channel id. Absent when the source stated none."
+          },
+          "permalink": {
+            "type": "string",
+            "description": "Opens the entry at its source. Absent when the source gave none."
+          },
+          "parent": {
+            "type": "string",
+            "description": "Ext id of the entry this replies to. Absent at a chain root, and also absent when it names a parent that is not in the corpus \u2014 parentRef tells the two apart."
+          },
+          "parentRef": {
+            "type": "string",
+            "description": "What the entry names as its parent (a Message-ID or thread_ts), resolved or not. Present with no parent means a known hole."
+          },
+          "sightings": {
+            "type": "array",
+            "description": "Every place this entry was found.",
+            "items": {
+              "$ref": "#/components/schemas/Sighting"
+            }
+          },
+          "participants": {
+            "type": "array",
+            "description": "Everyone recorded on it, senders first.",
+            "items": {
+              "$ref": "#/components/schemas/Participant"
+            }
+          }
+        }
+      },
+      "ChainResponse": {
+        "type": "object",
+        "description": "Every entry reachable from the named one, in time order.",
+        "required": [
+          "rootExtId",
+          "entries"
+        ],
+        "properties": {
+          "rootExtId": {
+            "type": "string",
+            "description": "The id that was asked for, echoed back. Note this is whatever the caller passed, which need not be the chain's root \u2014 see the path parameter."
+          },
+          "entries": {
+            "type": "array",
+            "description": "The whole chain in time order, never empty: an id that resolves to nothing is a 404.",
+            "items": {
+              "$ref": "#/components/schemas/CorpusEntry"
+            }
+          }
+        }
+      },
+      "Sighting": {
+        "type": "object",
+        "description": "One place an entry was found. A message quoted in five forwards has five, which is the evidence that it mattered.",
+        "required": [
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "How it was seen.",
+            "enum": [
+              "direct",
+              "quoted",
+              "forwarded"
+            ]
+          },
+          "seenIn": {
+            "type": "string",
+            "description": "Ext id of the message it was found inside. Absent for a direct sighting, which was not found inside anything."
+          },
+          "detail": {
+            "type": "string",
+            "description": "Free-text note about the sighting. Absent when none was recorded."
+          }
+        }
+      },
+      "Participant": {
+        "type": "object",
+        "description": "Someone recorded on an entry, in role order.",
+        "required": [
+          "personId",
+          "name",
+          "role"
+        ],
+        "properties": {
+          "personId": {
+            "type": "integer",
+            "description": "Person id."
+          },
+          "name": {
+            "type": "string",
+            "description": "Display name."
+          },
+          "role": {
+            "type": "string",
+            "description": "How they appear on this entry.",
+            "enum": [
+              "from",
+              "to",
+              "cc"
+            ]
+          }
+        }
+      },
+      "SpecRequest": {
+        "type": "object",
+        "description": "A page built from a chosen set of chains. Selection is the caller's decision and is not re-derived from a query here: naming chains IS the selection step.",
+        "required": [
+          "chains"
+        ],
+        "properties": {
+          "chains": {
+            "type": "array",
+            "description": "Chain roots to include, as GET /v1/search reports them. At least one; an empty list is a 400, because a page with no messages fails the timeline schema.",
+            "items": {
+              "type": "string",
+              "description": "A rootExtId from GET /v1/search."
+            },
+            "minItems": 1,
+            "example": [
+              "mail:<c0ffee-1@example.com>",
+              "mail:<c0ffee-2@example.com>"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "description": "Page title. Defaults to the subject of the earliest selected entry, which the timeline schema requires to be non-empty.",
+            "example": "Solar install quote"
+          },
+          "me": {
+            "type": "array",
+            "description": "The reader's own addresses, so their outbound messages are marked. Nothing in the corpus knows which mailbox it was collected from.",
+            "items": {
+              "type": "string",
+              "description": "One of the reader's own addresses."
+            },
+            "example": [
+              "me@example.fed"
+            ]
+          },
+          "queries": {
+            "type": "array",
+            "description": "The searches the selection came from, recorded on the page so that a hole in the timeline is interpretable. Purely descriptive: nothing is re-run.",
+            "items": {
+              "$ref": "#/components/schemas/SpecQuery"
+            }
+          }
+        }
+      },
+      "SpecQuery": {
+        "type": "object",
+        "description": "A search that was run, recorded for provenance.",
+        "required": [
+          "q"
+        ],
+        "properties": {
+          "q": {
+            "type": "string",
+            "description": "The query text.",
+            "example": "solar install quote"
+          },
+          "note": {
+            "type": "string",
+            "description": "Where it was run, e.g. \"corpus search\"."
+          }
+        }
+      },
+      "Stats": {
+        "type": "object",
+        "description": "What is in the corpus, and what is missing.",
+        "required": [
+          "entries",
+          "bySource",
+          "people",
+          "chainRoots",
+          "unresolved",
+          "embeddings"
+        ],
+        "properties": {
+          "entries": {
+            "type": "integer",
+            "description": "Total entries."
+          },
+          "bySource": {
+            "type": "object",
+            "description": "Entry count per source.",
+            "additionalProperties": {
+              "type": "integer",
+              "description": ""
+            }
+          },
+          "people": {
+            "type": "integer",
+            "description": "Distinct people, senders and recipients alike."
+          },
+          "chainRoots": {
+            "type": "integer",
+            "description": "Entries that open a chain: no parent, and none named."
+          },
+          "unresolved": {
+            "type": "integer",
+            "description": "Entries that name a parent which is not in the corpus. Known holes, not errors."
+          },
+          "embeddings": {
+            "type": "array",
+            "description": "Empty when nothing has been embedded, in which case mode=semantic and mode=hybrid have nothing to rank against.",
+            "items": {
+              "$ref": "#/components/schemas/EmbedModelStats"
+            }
+          }
+        }
+      },
+      "EmbedModelStats": {
+        "type": "object",
+        "description": "Embedding coverage for one model. Reported per model because a half-finished model migration is a real state, and from the results alone it looks like a corpus that lost recall.",
+        "required": [
+          "model",
+          "dim",
+          "vectors",
+          "skipped",
+          "stale",
+          "eligible"
+        ],
+        "properties": {
+          "model": {
+            "type": "string",
+            "description": "Model name.",
+            "example": "nomic-embed-text"
+          },
+          "dim": {
+            "type": "integer",
+            "description": "Dimensions its vectors have."
+          },
+          "vectors": {
+            "type": "integer",
+            "description": "Entries with a stored vector."
+          },
+          "skipped": {
+            "type": "integer",
+            "description": "Entries deliberately not embedded, as having no topic."
+          },
+          "stale": {
+            "type": "integer",
+            "description": "Stored, but the entry's text or the preparation has moved on since."
+          },
+          "eligible": {
+            "type": "integer",
+            "description": "Entries a full backfill would still embed \u2014 how much work is left."
+          }
+        }
+      },
+      "PeopleResponse": {
+        "type": "object",
+        "description": "Everyone in the corpus, most involved first.",
+        "required": [
+          "people"
+        ],
+        "properties": {
+          "people": {
+            "type": "array",
+            "description": "Most-involved first.",
+            "items": {
+              "$ref": "#/components/schemas/PersonSummary"
+            }
+          }
+        }
+      },
+      "PersonSummary": {
+        "type": "object",
+        "description": "One person, with every identity that resolves to them.",
+        "required": [
+          "personId",
+          "displayName",
+          "sent",
+          "received"
+        ],
+        "properties": {
+          "personId": {
+            "type": "integer",
+            "description": "Person id."
+          },
+          "displayName": {
+            "type": "string",
+            "description": "Best known display name.",
+            "example": "Ada Okoye"
+          },
+          "identities": {
+            "type": "array",
+            "description": "Every address or uid folded into this person.",
+            "items": {
+              "type": "string",
+              "description": "An identity, as \"kind:value\", e.g. \"email:ada@example.com\"."
+            }
+          },
+          "sent": {
+            "type": "integer",
+            "description": "Entries they authored."
+          },
+          "received": {
+            "type": "integer",
+            "description": "Entries they were a to: or cc: on. Sent 0 with received above 0 is a recipient-only participant, which is a quarter of a real cast."
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "description": "Every non-2xx response carries this and nothing else.",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "What went wrong, in the same words the CLI would use. Written to be shown to a person.",
+            "example": "mode \"semantic\": no embedding daemon reachable at http://localhost:11434: start it with `ollama serve`"
+          }
+        }
+      },
+      "TimelineSpec": {
+        "title": "Timeline",
+        "description": "One email trail, unspooled out of its threads and forwards into a single chronological transcript. Produced by a collector (e.g. the mail-timeline skill); consumed by the chainmail renderer.",
+        "type": "object",
+        "required": [
+          "title",
+          "messages"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "specVersion": {
+            "type": "integer",
+            "description": "Contract version. Absent means 1.",
+            "default": 1
+          },
+          "title": {
+            "type": "string",
+            "description": "Page title. A leading # renders as a channel-style hash."
+          },
+          "subtitle": {
+            "type": "string",
+            "description": "One or two sentences. Provenance belongs in queries/threads/sourceNotes, not here."
+          },
+          "runLabel": {
+            "type": "string",
+            "description": "Names this collection pass, e.g. 'pass 2, 20 Aug 2026'."
+          },
+          "runs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Labels of every pass so far, oldest first."
+          },
+          "theme": {
+            "enum": [
+              "light",
+              "dark",
+              "auto"
+            ],
+            "default": "light"
+          },
+          "openItemsTitle": {
+            "type": "string",
+            "default": "Still open"
+          },
+          "openItems": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Unresolved questions, commitments and ownerless decisions. HTML permitted; cross-links encouraged."
+          },
+          "avatars": {
+            "type": "object",
+            "description": "Sender name -> image (data: URI or URL). Keys must match Message.sender exactly.",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "participants": {
+            "type": "array",
+            "description": "The full cast, including people who only ever appear as recipients.",
+            "items": {
+              "type": "object",
+              "required": [
+                "name"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "org": {
+                  "type": "string"
+                },
+                "email": {
+                  "type": "string",
+                  "description": "Omit when no address appears anywhere in the trail. Never guess one."
+                },
+                "role": {
+                  "type": "string"
+                },
+                "note": {
+                  "type": "string",
+                  "description": "Use instead of role for cc-only people and aliases."
+                }
+              }
+            }
+          },
+          "queries": {
+            "type": "array",
+            "description": "Searches run, so a null result is interpretable.",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "q"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "q": {
+                      "type": "string"
+                    },
+                    "note": {
+                      "type": "string"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "threads": {
+            "type": "array",
+            "description": "Mail threads the transcript was assembled from.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "subject": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string",
+                  "description": "Gmail thread or message id; links out."
+                },
+                "count": {
+                  "type": "integer"
+                },
+                "span": {
+                  "type": "string"
+                },
+                "note": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "sourceNotes": {
+            "type": "array",
+            "description": "Provenance caveats: avatar sources, unrecoverable addresses, truncation.",
+            "items": {
+              "type": "object",
+              "required": [
+                "title",
+                "items"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "messages": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/TimelineEntry"
+            }
+          }
+        }
+      },
+      "TimelineEntry": {
+        "type": "object",
+        "required": [
+          "date",
+          "body"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "message",
+              "note"
+            ],
+            "default": "message",
+            "description": "'note' is a meeting or event that never existed as an email."
+          },
+          "id": {
+            "type": "string",
+            "description": "Stable anchor. Omit to derive from date+time+sender; content-derived ids survive inserting entries mid-trail."
+          },
+          "date": {
+            "type": "string",
+            "description": "As displayed, e.g. 'Thu 16 Jul 2026'. Not normalised."
+          },
+          "time": {
+            "type": "string",
+            "description": "As displayed, e.g. '11:35'. Absent for undated notes."
+          },
+          "tz": {
+            "type": "string",
+            "description": "The zone this entry's clock is in, e.g. 'NZST', '+0530'. Drives absolute-time ordering. Omit rather than guess: absent means the zone is unknown and the renderer shows it as unknown."
+          },
+          "tzSource": {
+            "enum": [
+              "stated",
+              "inferred"
+            ],
+            "description": "Where tz came from. 'stated' is the source's own Date header or zone label. 'inferred' was worked out from other evidence and must be presented as a claim, not a fact. Omit when tz is absent."
+          },
+          "sender": {
+            "type": "string"
+          },
+          "org": {
+            "type": "string",
+            "description": "Drives colour, assigned in first-appearance order."
+          },
+          "fromEmail": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string",
+            "description": "Free text as it appeared, including 'cc ...'."
+          },
+          "subject": {
+            "type": "string",
+            "description": "Names the chain when this entry opens one. Capture it during collection."
+          },
+          "label": {
+            "type": "string",
+            "description": "Notes only: what the meeting was."
+          },
+          "body": {
+            "type": "string",
+            "description": "Trusted HTML. <p>, <ul>, <b>, <code>, <p class=\"ed\"> for editorial gloss, <a class=\"xref\"> for cross-links."
+          },
+          "quoted": {
+            "type": "boolean",
+            "description": "Reconstructed from quoted text; never existed as a standalone message here."
+          },
+          "me": {
+            "type": "boolean",
+            "description": "The reader's own outbound."
+          },
+          "source": {
+            "type": "string",
+            "description": "Where it came from: a Gmail id, or 'unspooled from the 2 Aug email'."
+          },
+          "gmailId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "parent": {
+            "type": "string",
+            "description": "Id of the entry this replies to. Absent means it opens a chain. Coverage here drives ordering, lanes and the reply tree."
+          },
+          "meta": {
+            "type": "boolean",
+            "description": "Meeting scheduling exhaust (invitation, notes, accept/decline). Forces the classification the renderer would otherwise infer."
+          },
+          "mentions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "size": {
+                  "type": "string"
+                },
+                "gmailId": {
+                  "type": "string",
+                  "description": "Links to the message in Gmail. Only ever present on real messages."
+                },
+                "link": {
+                  "type": "string",
+                  "description": "Opens the attachment at its source, for attachments not reached through Gmail."
+                },
+                "preview": {
+                  "type": "string",
+                  "description": "Thumbnail as a data: URI. Never a URL \u2014 the page renders without a network.",
+                  "pattern": "^data:image/"
+                },
+                "previewW": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "previewH": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
