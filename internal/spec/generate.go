@@ -31,6 +31,9 @@ type Options struct {
 	// Queries record the searches the selection came from, so that a hole in the
 	// timeline is interpretable.
 	Queries []Query
+	// Params records the flags this selection was made with, so a later refresh
+	// reproduces the same page rather than a differently-shaped one.
+	Params *RunParams
 
 	// Me lists the reader's own addresses, so their outbound messages can be
 	// marked. Nothing in the corpus knows which mailbox it was collected from.
@@ -135,6 +138,7 @@ func Generate(store *corpus.Store, opts Options) (Spec, error) {
 		SpecVersion:  1,
 		Title:        opts.Title,
 		RunLabel:     opts.RunLabel,
+		RunParams:    opts.Params,
 		Queries:      opts.Queries,
 		Participants: b.cast.people(),
 		Threads:      b.threads(rows),

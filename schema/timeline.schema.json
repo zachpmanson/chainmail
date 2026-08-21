@@ -47,7 +47,22 @@
         }
       }
     },
-    "queries": {
+    "runParams": {
+   "type": "object",
+   "description": "Selection parameters this run was invoked with, so a later refresh reproduces the same page. Only what the rest of the spec cannot already supply; never a machine-local path.",
+   "additionalProperties": false,
+   "properties": {
+    "me": {
+     "type": "array",
+     "items": { "type": "string" },
+     "description": "Addresses belonging to the reader, whose messages render as outbound."
+    },
+    "limit": { "type": "integer", "description": "How many chains the search was allowed to select." },
+    "person": { "type": "string", "description": "Address, name or slack uid the selection was filtered to." },
+    "since": { "type": "string", "description": "YYYY-MM-DD floor on entry dates." }
+   }
+  },
+  "queries": {
       "type": "array",
       "description": "Searches run, so a null result is interpretable.",
       "items": {

@@ -58,6 +58,27 @@ export interface Timeline {
     note?: string;
   }[];
   /**
+   * Selection parameters this run was invoked with, so a later refresh reproduces the same page. Only what the rest of the spec cannot already supply; never a machine-local path.
+   */
+  runParams?: {
+    /**
+     * Addresses belonging to the reader, whose messages render as outbound.
+     */
+    me?: string[];
+    /**
+     * How many chains the search was allowed to select.
+     */
+    limit?: number;
+    /**
+     * Address, name or slack uid the selection was filtered to.
+     */
+    person?: string;
+    /**
+     * YYYY-MM-DD floor on entry dates.
+     */
+    since?: string;
+  };
+  /**
    * Searches run, so a null result is interpretable.
    */
   queries?: (

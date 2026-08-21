@@ -28,6 +28,7 @@ type Spec struct {
 	Avatars      map[string]string `json:"avatars,omitempty"`
 	Participants []Participant     `json:"participants,omitempty"`
 	Queries      []Query           `json:"queries,omitempty"`
+	RunParams    *RunParams        `json:"runParams,omitempty"`
 	Threads      []Thread          `json:"threads,omitempty"`
 	SourceNotes  []SourceNote      `json:"sourceNotes,omitempty"`
 	Messages     []Entry           `json:"messages"`
@@ -47,6 +48,23 @@ type Participant struct {
 type Query struct {
 	Q    string `json:"q"`
 	Note string `json:"note,omitempty"`
+}
+
+// RunParams records the selection parameters the run was invoked with.
+//
+// Only the ones a later pass cannot recover from the spec itself: title, the
+// queries and the threads are already fields, and everything interpretive is out
+// of scope. Without these a refresh re-selects on whatever the flags happen to be
+// that day and quietly produces a differently-shaped page under the same title.
+//
+// Machine-local paths are deliberately absent — an upload root names somebody's
+// home directory, and a spec is a document that gets sent to people. `refresh`
+// re-requires that one on the command line.
+type RunParams struct {
+	Me     []string `json:"me,omitempty"`
+	Limit  int      `json:"limit,omitempty"`
+	Person string   `json:"person,omitempty"`
+	Since  string   `json:"since,omitempty"`
 }
 
 // Thread is a mail thread the transcript was assembled from.
