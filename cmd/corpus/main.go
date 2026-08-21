@@ -794,6 +794,23 @@ func run(args []string) error {
 		fmt.Printf("people       %d\n", st.People)
 		fmt.Printf("chain roots  %d\n", st.Roots)
 		fmt.Printf("unresolved   %d  (parent named but not present: known holes)\n", st.Unresolved)
+
+		// Cursors are printed for the same reason they are stored: a count of
+		// entries says how much is in the corpus, never how much of what was
+		// asked for. A container left mid-walk is the one thing a reader of
+		// these numbers most needs to know.
+		curs, err := corpus.Cursors(s)
+		if err != nil {
+			return err
+		}
+		for _, c := range curs {
+			state := "covered  " + c.SucceededAt.Local().Format("2006-01-02 15:04")
+			if !c.Complete {
+				state = fmt.Sprintf("MID-WALK, %d in so far — re-run to finish", c.Walked)
+			}
+			fmt.Printf("cursor       %s %q: %s\n", c.Source, c.Container, state)
+		}
+
 		es, err := s.EmbedStats()
 		if err != nil {
 			return err
