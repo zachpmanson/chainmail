@@ -242,3 +242,68 @@ func TestAPersonWithNoAddressIsStillListed(t *testing.T) {
 		t.Errorf("email = %q — an address is never invented", p.Email)
 	}
 }
+
+// The panel is read as the key to the transcript's colours, so one person must
+// resolve to one org whichever side asks. A Slack author is the sharp case: they
+// have no From header, so the panel found their org through the mailbox the
+// corpus holds for them and their messages found none at all, and one person was
+// named at an org in the panel and left on the unknown slot in the transcript.
+func TestAPersonsOrgIsTheSameInThePanelAndOnTheirMessages(t *testing.T) {
+	s := open(t)
+	id := person(t, s, "Ada Byron", "ada@loomworks.example")
+	ts, _ := time.Parse(time.RFC3339, "2026-05-04T09:00:00Z")
+	res, err := s.PutSlack(corpus.Entry{
+		Source: corpus.SourceSlack, ExtID: "slack:C2:1000.1", TS: ts, PersonID: id,
+		Container: "C2", BodyText: "invented body",
+	}, corpus.Slack{ChannelID: "C2", ChannelName: "cutover", TS: "1000.1"}, nil)
+	if err != nil {
+		t.Fatalf("PutSlack: %v", err)
+	}
+	if err := s.Sight(res.ID, 0, "direct", ""); err != nil {
+		t.Fatalf("Sight: %v", err)
+	}
+	if err := corpus.Participate(s, res.ID, id, corpus.RoleFrom); err != nil {
+		t.Fatalf("Participate: %v", err)
+	}
+	sp := generate(t, s, Options{Containers: []string{"C2"}, Title: "#cutover"})
+
+	if got := sp.Messages[0].Org; got != "Loomworks" {
+		t.Errorf("message org = %q, want the org of the address the corpus holds", got)
+	}
+	if got := castNames(sp)["Ada Byron"].Org; got != sp.Messages[0].Org {
+		t.Errorf("panel org = %q, message org = %q; a page cannot key itself off two answers",
+			got, sp.Messages[0].Org)
+	}
+}
+
+// An org is never invented, so someone the corpus holds no work address for
+// stays without one. The renderer shows that as the unknown slot, which is an
+// honest gap; a guessed org would colour them as a colleague of people they have
+// nothing to do with.
+func TestNoAddressMeansNoOrgRatherThanAGuess(t *testing.T) {
+	s := open(t)
+	// A freemail domain says who hosts their mail, not who they work for.
+	id := person(t, s, "Cy Renner", "cy.renner@gmail.com")
+	ts, _ := time.Parse(time.RFC3339, "2026-05-04T09:00:00Z")
+	res, err := s.PutSlack(corpus.Entry{
+		Source: corpus.SourceSlack, ExtID: "slack:C3:1000.1", TS: ts, PersonID: id,
+		Container: "C3", BodyText: "invented body",
+	}, corpus.Slack{ChannelID: "C3", ChannelName: "cutover", TS: "1000.1"}, nil)
+	if err != nil {
+		t.Fatalf("PutSlack: %v", err)
+	}
+	if err := s.Sight(res.ID, 0, "direct", ""); err != nil {
+		t.Fatalf("Sight: %v", err)
+	}
+	if err := corpus.Participate(s, res.ID, id, corpus.RoleFrom); err != nil {
+		t.Fatalf("Participate: %v", err)
+	}
+	sp := generate(t, s, Options{Containers: []string{"C3"}, Title: "#cutover"})
+
+	if got := sp.Messages[0].Org; got != "" {
+		t.Errorf("message org = %q, want none: nothing here says where they work", got)
+	}
+	if got := castNames(sp)["Cy Renner"].Org; got != "" {
+		t.Errorf("panel org = %q, want none", got)
+	}
+}

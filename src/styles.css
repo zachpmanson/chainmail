@@ -53,8 +53,19 @@
     font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
     overflow-wrap:anywhere; }
   .p1 a.pe:hover { color:var(--accent); text-decoration:underline; }
+  /* Tinted to match the avatars under it and the org label on that group's
+     bubbles. Falls back to --muted for the group of people whose org nothing in
+     the trail established. */
   .ogh { grid-column:1/-1; font-size:.66rem; text-transform:uppercase; letter-spacing:.09em;
-    color:var(--muted); font-weight:700; margin:.45rem 0 .05rem; }
+    color:var(--orgc,var(--muted)); font-weight:700; margin:.45rem 0 .05rem; }
+  .ogh.o1 { --orgc:var(--o1); } .ogh.o2 { --orgc:var(--o2); }
+  .ogh.o3 { --orgc:var(--o3); } .ogh.o4 { --orgc:var(--o4); }
+  /* No .ogh.o5 on purpose. --o5 is an avatar fill carrying white text; as text
+     on the page background it is #4d4a52 on #141317 in the dark theme, which is
+     not readable at .66rem. --muted is, and "no colour" is the right reading for
+     the group whose org nothing established. A fifth org's heading is left grey
+     for the same reason, which is the slot cap showing through rather than a
+     second thing to fix here. */
   .ogh:first-child { margin-top:.15rem; }
   .srcgrp { margin:.45rem 0 0; }
   .srcgrp:first-child { margin-top:.15rem; }
