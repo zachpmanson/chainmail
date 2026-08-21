@@ -8,6 +8,7 @@
 //	corpus merge -keep <a> -drop <b>  same human, two addresses
 //	corpus alias -from <d> -to <d>    a rebrand: fold one domain into another
 //	corpus candidates                 pairs that may be one human, for review
+//	corpus repair                     reduce mailto: junk in stored addresses
 //	corpus search -q <text>           which chains are about this
 //	corpus spec -q <text> -o f.json   a timeline spec for those chains
 //	corpus unnest -id <gmail-id>      what extraction recovers from one message
@@ -62,6 +63,16 @@ const usage = `usage: corpus <command> [flags]
   candidates               probable duplicate identities, unmerged
   merge         -keep -drop  fold one identity into another
   alias         [-from -to]  list or add a domain alias
+  repair                   reduce addresses stored with a mailto: link, and
+                           fold the people that split apart
+`
+
+// ingestUsage names the flags each source takes. "[flags]" told a reader only
+// that flags exist, which is the same as telling them nothing.
+const ingestUsage = `usage: corpus ingest <mail|slack> [flags]
+
+  ingest mail   -q <gmail query> | -id <id,...>   [-limit N]
+  ingest slack  [-archive <path to slackdump.sqlite>]
 `
 
 func run(args []string) error {
@@ -170,7 +181,8 @@ func run(args []string) error {
 			return err
 		}
 		if *q == "" {
-			return fmt.Errorf("usage: corpus spec -q <query> [-o spec.json]")
+			return errors.New("usage: corpus spec -q <query> [-person X] [-since YYYY-MM-DD]\n" +
+				"                  [-limit N] [-o spec.json] [-title T] [-me <address>]")
 		}
 		s, err := corpus.Open(path)
 		if err != nil {
@@ -295,6 +307,31 @@ func run(args []string) error {
 			*from, *to, merged, plural(merged, "person", "people"))
 		return nil
 
+	case "repair":
+		s, err := corpus.Open(path)
+		if err != nil {
+			return err
+		}
+		defer s.Close()
+		r, err := corpus.RepairMailtoIdentities(s)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("repaired %d %s, renamed %d %s, merged %d %s\n",
+			r.Rewritten, plural(r.Rewritten, "identity", "identities"),
+			r.Renamed, plural(r.Renamed, "person", "people"),
+			r.Merged, plural(r.Merged, "person", "people"))
+		// Reported rather than resolved: a value naming two addresses cannot be
+		// reduced without guessing which human it belongs to.
+		for _, v := range r.Ambiguous {
+			fmt.Printf("  left alone, names more than one address: %s\n", v)
+		}
+		if n := len(r.Ambiguous); n > 0 {
+			fmt.Printf("\n%d ambiguous %s — decide by hand, then `corpus merge`\n",
+				n, plural(n, "value", "values"))
+		}
+		return nil
+
 	case "candidates":
 		s, err := corpus.Open(path)
 		if err != nil {
@@ -399,13 +436,13 @@ func run(args []string) error {
 		// The source is a positional subcommand, so it must be consumed before
 		// flag parsing: flag.Parse stops at the first non-flag argument.
 		if len(args) < 2 {
-			return fmt.Errorf("usage: corpus ingest <mail|slack> [flags]")
+			return errors.New(ingestUsage)
 		}
 		if args[1] == "slack" {
 			return ingestSlack(path, args[2:])
 		}
 		if args[1] != "mail" {
-			return fmt.Errorf("usage: corpus ingest <mail|slack> [flags]")
+			return errors.New(ingestUsage)
 		}
 		fs := flag.NewFlagSet("ingest mail", flag.ContinueOnError)
 		query := fs.String("q", "", "Gmail search query")
@@ -415,7 +452,7 @@ func run(args []string) error {
 			return err
 		}
 		if *query == "" && *ids == "" {
-			return fmt.Errorf("ingest needs -q <query> or -id <id,...>")
+			return errors.New("usage: corpus ingest mail -q <gmail query> | -id <id,...>  [-limit N]")
 		}
 
 		c := mailingest.Client{}
