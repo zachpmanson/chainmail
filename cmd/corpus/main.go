@@ -66,6 +66,18 @@ const usage = `usage: corpus <command> [flags]
   init                     create or migrate the corpus
   ingest mail   -q <query> ingest Gmail results, with their quoted history
   ingest slack  [-archive] ingest a slackdump archive
+  slurp                    every phase in the one order that finishes the most
+                           work: slack, mail, twins, repair, dedupe, embed.
+                           dedupe is REPORTED and never applied — its merges
+                           cannot be undone, so nothing unattended may apply
+                           them. -q or -since bounds the mail query, -limit
+                           -page-size how far one walk goes, -archive names the
+                           slackdump archive and -slackdump=false ingests it
+                           without refreshing it first, -model -url -dim the
+                           embedding model. -only and -skip choose phases by
+                           name, or "settle" for twins, repair and dedupe
+                           together; a phase whose prerequisite this host does
+                           not have is skipped and reported, not failed
   search        -q <text>  ranked chains across every source; -mode chooses
                            lexical, semantic or hybrid retrieval, -topk how deep
                            the vector ranking votes, -dim -model -url -timeout
@@ -767,6 +779,37 @@ func run(args []string) error {
 			fmt.Println()
 		}
 		return nil
+
+	case "slurp":
+		// Flags parsed here like every other subcommand's, so the usage test can
+		// see them; the sequence itself is in slurp.go.
+		fs := flag.NewFlagSet("slurp", flag.ContinueOnError)
+		q := fs.String("q", "", "mail query to walk; overrides -since")
+		since := fs.String("since", "",
+			"walk mail after this date, YYYY-MM-DD, as the whole query")
+		limit := fs.Int("limit", 0,
+			"stop the mail walk after N messages; 0 walks every page of the query")
+		pageSize := fs.Int("page-size", 0,
+			"messages per docket request; 0 uses docket's cap")
+		archive := fs.String("archive", defaultSlackArchive(),
+			"slackdump sqlite archive to read")
+		slackdump := fs.Bool("slackdump", true,
+			"refresh that archive with slackdump resume before ingesting it")
+		only := fs.String("only", "", "run only these phases, comma-separated")
+		skip := fs.String("skip", "", "run every phase but these, comma-separated")
+		model := fs.String("model", embed.DefaultModel, "embedding model to use")
+		url := fs.String("url", embed.DefaultBaseURL, "ollama endpoint")
+		dim := fs.Int("dim", embed.DefaultDim, "dimensions that model returns")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		o := slurpOpts{
+			query: *q, since: *since, limit: *limit, pageSz: *pageSize,
+			archive: *archive, slackdump: *slackdump,
+			only: splitList(*only), skip: splitList(*skip),
+			embedModel: *model, embedURL: *url, embedDim: *dim,
+		}
+		return runSlurp(os.Stdout, o, defaultSlurpDeps(path, o))
 
 	case "ingest":
 		// The source is a positional subcommand, so it must be consumed before
