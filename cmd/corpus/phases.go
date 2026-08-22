@@ -244,6 +244,7 @@ type mailOpts struct {
 	query string
 	ids   []string
 	bound mailingest.Bound
+	bin   string // docket binary/shim; "" uses "docket" on PATH
 }
 
 // runIngestMail walks one query, or reads the ids it is given, and says how far
@@ -252,7 +253,7 @@ type mailOpts struct {
 // summary, where an operator reading a timer's log will see it.
 func runIngestMail(path string, o mailOpts) (mailingest.Result, error) {
 	var r mailingest.Result
-	c := mailingest.Client{}
+	c := mailingest.Client{Bin: o.bin}
 	ok, err := c.SupportsThreadingHeaders()
 	if err != nil {
 		return r, fmt.Errorf("checking docket: %w", err)

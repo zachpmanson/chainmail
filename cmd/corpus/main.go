@@ -159,7 +159,7 @@ const usage = `usage: corpus <command> [flags]
 // that flags exist, which is the same as telling them nothing.
 const ingestUsage = `usage: corpus ingest <mail|slack> [flags]
 
-  ingest mail   -q <gmail query> | -id <id,...>   [-limit N] [-page-size N]
+  ingest mail   -q <gmail query> | -id <id,...>   [-limit N] [-page-size N] [-bin docket-suffix]
   ingest slack  [-archive <path to slackdump.sqlite>]
 `
 
@@ -792,6 +792,7 @@ func run(args []string) error {
 			"stop the mail walk after N messages; 0 walks every page of the query")
 		pageSize := fs.Int("page-size", 0,
 			"messages per docket request; 0 uses docket's cap")
+		bin := fs.String("bin", "", "docket binary/shim for the mail phase (default \"docket\" on PATH)")
 		archive := fs.String("archive", defaultSlackArchive(),
 			"slackdump sqlite archive to read")
 		slackdump := fs.Bool("slackdump", true,
@@ -805,7 +806,7 @@ func run(args []string) error {
 			return err
 		}
 		o := slurpOpts{
-			query: *q, since: *since, limit: *limit, pageSz: *pageSize,
+			query: *q, since: *since, limit: *limit, pageSz: *pageSize, bin: *bin,
 			archive: *archive, slackdump: *slackdump,
 			only: splitList(*only), skip: splitList(*skip),
 			embedModel: *model, embedURL: *url, embedDim: *dim,
@@ -831,16 +832,17 @@ func run(args []string) error {
 		pageSize := fs.Int("page-size", 0,
 			"messages per docket request; 0 uses docket's cap")
 		ids := fs.String("id", "", "comma-separated message ids, instead of a query")
+		bin := fs.String("bin", "", "docket binary/shim to shell out to (default \"docket\" on PATH)")
 		if err := fs.Parse(args[2:]); err != nil {
 			return err
 		}
 		if *query == "" && *ids == "" {
 			return errors.New("usage: corpus ingest mail -q <gmail query> | -id <id,...>  " +
-				"[-limit N] [-page-size N]")
+				"[-limit N] [-page-size N] [-bin <docket-binary>]")
 		}
 
 		_, err := runIngestMail(path, mailOpts{query: *query, ids: splitList(*ids),
-			bound: mailingest.Bound{Max: *limit, PageSize: *pageSize}})
+			bound: mailingest.Bound{Max: *limit, PageSize: *pageSize}, bin: *bin})
 		return err
 	}
 	return fmt.Errorf("unknown command %q", args[0])
