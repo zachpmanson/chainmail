@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { ApiError, type ChainHit, type SearchMode, type SearchParams } from "../lib/api";
-import { useSearch, useSpecBuild } from "../lib/queries";
+import { $api, ApiError, searchQuery, type ChainHit, type SearchMode, type SearchParams } from "../lib/api";
+import { normalise } from "../lib/normalise";
 import type { Timeline } from "../lib/spec";
 
 const MODES: SearchMode[] = ["lexical", "semantic", "hybrid"];
@@ -88,8 +88,30 @@ export function SelectView({ onBuilt }: { onBuilt: (spec: Timeline) => void }) {
   const [asked, setAsked] = useState<SearchParams | null>(null);
   const [chosen, setChosen] = useState<string[]>([]);
 
-  const results = useSearch(asked);
-  const build = useSpecBuild(onBuilt);
+  // The idle init is never sent: it stands in until a search is submitted, so
+  // the key it derives is a key nothing was ever fetched under.
+  const results = $api.useQuery(
+    "get",
+    "/v1/search",
+    { params: { query: asked ? searchQuery(asked) : {} } },
+    { enabled: asked !== null },
+  );
+
+  /**
+   * Building a spec runs HTML recovery and boilerplate detection over the whole
+   * selection, which takes seconds. A mutation, so it fires when a person asks
+   * for a page and never as a side effect of ticking a box — a selection of
+   * twelve chains would otherwise queue twelve builds and render the eleventh's
+   * answer.
+   *
+   * The response goes through normalise() for the same reason a file-loaded spec
+   * does: the renderer downstream is entitled to see exactly one shape whatever
+   * produced it, and its shape is the one in spec.d.ts, generated from
+   * schema/timeline.schema.json rather than from the service's inlined copy.
+   */
+  const build = $api.useMutation("post", "/v1/spec", {
+    onSuccess: (spec) => onBuilt(normalise(spec)),
+  });
 
   const submit = (ev: React.FormEvent) => {
     ev.preventDefault();
@@ -180,12 +202,16 @@ export function SelectView({ onBuilt }: { onBuilt: (spec: Timeline) => void }) {
               disabled={chosen.length === 0 || build.isPending}
               onClick={() =>
                 build.mutate({
-                  chains: chosen,
-                  ...(title.trim() ? { title: title.trim() } : {}),
-                  ...(addresses.length ? { me: addresses } : {}),
-                  // Recorded on the page so a refresh can propose the chains
-                  // this query would find now but did not when it was curated.
-                  ...(asked ? { queries: [{ q: asked.q, note: `corpus search, mode=${asked.mode}` }] } : {}),
+                  body: {
+                    chains: chosen,
+                    ...(title.trim() ? { title: title.trim() } : {}),
+                    ...(addresses.length ? { me: addresses } : {}),
+                    // Recorded on the page so a refresh can propose the chains
+                    // this query would find now but did not when it was curated.
+                    ...(asked
+                      ? { queries: [{ q: asked.q, note: `corpus search, mode=${asked.mode}` }] }
+                      : {}),
+                  },
                 })
               }
             >

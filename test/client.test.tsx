@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { QueryClientProvider } from "@tanstack/react-query";
 import { App } from "../src/main";
 import { SelectView } from "../src/components/Select";
-import { makeQueryClient } from "../src/lib/queries";
+import { makeQueryClient } from "../src/lib/queryClient";
 
 // React refuses to batch updates outside act() unless told it is under test.
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
