@@ -1,0 +1,48 @@
+/* The selection stage. Kept out of styles.css because that file is the rendered
+   transcript's stylesheet and ships inside every static page from
+   scripts/render.tsx, where none of these controls exist. */
+
+.selwrap { max-width:60rem; }
+
+.selform, .selbuild { display:flex; flex-wrap:wrap; align-items:flex-end; gap:.6rem;
+  margin:1rem 0 .4rem; }
+.self { display:flex; flex-direction:column; gap:.18rem; }
+.self > span { font-size:.66rem; text-transform:uppercase; letter-spacing:.09em;
+  color:var(--muted); font-weight:700; }
+.self input, .self select { font:inherit; font-size:.86rem; padding:.32rem .45rem;
+  border:1px solid var(--line); border-radius:6px; background:var(--card); color:var(--fg); }
+.self:first-child { flex:1 1 18rem; }
+.self:first-child input { width:100%; }
+
+.selform button, .selbuild button { font:inherit; font-size:.82rem; font-weight:650;
+  padding:.4rem .8rem; border:1px solid var(--line); border-radius:6px;
+  background:var(--mine); color:var(--fg); cursor:pointer; }
+.selform button:disabled, .selbuild button:disabled { opacity:.45; cursor:default; }
+
+.sellist { list-style:none; margin:.8rem 0 0; padding:0; border:1px solid var(--line);
+  border-radius:9px; background:var(--card); overflow:hidden; }
+.selrow + .selrow { border-top:1px solid var(--line); }
+.selrow > .chk { display:flex; gap:.5rem; padding:.5rem .7rem; cursor:pointer; }
+.selrow:hover { background:var(--quote); }
+.seld { display:flex; flex-direction:column; gap:.12rem; min-width:0; }
+.selsub { font-size:.88rem; font-weight:650; overflow-wrap:anywhere; }
+.selmeta { display:flex; flex-wrap:wrap; gap:.75rem; font-size:.7rem; color:var(--muted); }
+/* The ratio carries the judgement the person is being asked to make, so it is
+   the one piece of metadata not greyed down to the others' weight. */
+.selratio { color:var(--fg); font-weight:650; }
+.selsrc { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+
+.selbuild { border-top:1px solid var(--line); padding-top:.7rem; margin-top:.9rem; }
+.selnote { font-size:.78rem; color:var(--muted); margin:.5rem 0 0; flex:1 1 100%; }
+.selfail { font-size:.82rem; margin:.7rem 0 0; padding:.5rem .7rem;
+  border:1px solid var(--line); border-left:3px solid crimson; border-radius:6px;
+  background:var(--card); }
+.selfail strong { display:block; font-size:.7rem; text-transform:uppercase;
+  letter-spacing:.08em; color:crimson; }
+
+/* Fixed to the bottom-left because the transcript owns the top-right (toolbar)
+   and the right edge (minimap), and this must not move as the page scrolls. */
+.selback { position:fixed; left:.6rem; bottom:.6rem; z-index:32; font:inherit;
+  font-size:.76rem; padding:.3rem .6rem; border:1px solid var(--line); border-radius:6px;
+  background:var(--card); color:var(--muted); cursor:pointer; }
+.selback:hover { color:var(--accent); }

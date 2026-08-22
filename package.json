@@ -10,13 +10,17 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "gen:types": "json2ts -i schema/timeline.schema.json -o src/lib/spec.d.ts --additionalProperties false",
+    "gen:api": "openapi-typescript api/openapi.json -o src/lib/api.d.ts",
     "render": "tsx scripts/render.tsx"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.101.4",
+    "openapi-fetch": "^0.17.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^26.2.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
@@ -25,6 +29,7 @@
     "esbuild": "^0.24.2",
     "jsdom": "^30.0.1",
     "json-schema-to-typescript": "^15.0.4",
+    "openapi-typescript": "^7.13.0",
     "tsx": "^4.19.2",
     "typescript": "^5.9.3",
     "vite": "^6.0.7",
