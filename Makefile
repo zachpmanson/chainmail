@@ -1,9 +1,9 @@
 # Operating the corpus. `make help` lists what each target does.
 #
-# The slurp targets are ordered because each feeds the next: twins removes
-# duplicate rows before repair reads identities, and repair settles identities
-# before dedupe weighs evidence about them. Running them out of order is not
-# destructive, it just leaves work for the following run.
+# The sequence lives in the binary, as `corpus slurp`: the order matters for how
+# much of the work a run finishes, and a Makefile does not ship in the nix
+# package, so a host with the binaries would have had the phases and not the
+# order. The targets below name the phases one at a time, for running one by hand.
 
 CORPUS      ?= $(HOME)/.local/state/chainmail/corpus.db
 SLACK       ?= $(HOME)/.local/state/chainmail/slack
@@ -25,7 +25,7 @@ export CHAINMAIL_CORPUS = $(CORPUS)
 
 help:
 	@printf 'Corpus\n'
-	@printf '  make slurp          everything: slack, mail, settle, embed\n'
+	@printf '  make slurp          corpus slurp: slack, mail, settle, embed, in order\n'
 	@printf '  make slurp-mail     mail since SINCE=%s, paged to the end of the query\n' '$(SINCE)'
 	@printf '  make slurp-slack    refresh the slackdump archive, then ingest it\n'
 	@printf '  make settle         twins, repair, then dedupe (dry run)\n'
@@ -62,13 +62,17 @@ backup:
 	@for s in -wal -shm; do [ -f $(CORPUS)$$s ] && cp $(CORPUS)$$s $(CORPUS).bak$$s || true; done
 	@echo "backed up to $(CORPUS).bak"
 
-slurp: slurp-slack slurp-mail settle embed
+# One implementation of the order, and it is not this file: `corpus slurp` runs
+# the phases and reports each, so a headless host runs the same sequence a
+# checkout does. The targets below stay because a phase is often run alone —
+# after fixing an identity by hand, or once ollama is finally up.
+slurp:
+	$(BIN) slurp -since $(SINCE) -archive $(SLACK)/slackdump.sqlite
 
 # `resume` continues from slackdump's own checkpoint, so this is incremental.
 # Messages are treated as immutable, so ingest is insert-or-skip.
 slurp-slack:
-	slackdump resume $(SLACK)
-	$(BIN) ingest slack -archive $(SLACK)/slackdump.sqlite
+	$(BIN) slurp -only slack -archive $(SLACK)/slackdump.sqlite
 
 # One query, paged to its end. `ingest mail` prints "complete" when it reached
 # the end and writes INCOMPLETE to stderr when a bound stopped it, so a short
@@ -77,22 +81,25 @@ slurp-slack:
 # Re-running is cheap, not just harmless: the cursor for this query holds the
 # frontier the last completed run reached, and the walk stops there rather than
 # reading back to SINCE.
+#
+# Straight to `ingest mail` rather than through slurp: one phase alone needs no
+# sequencing, and this is the target a hand-written query gets pasted into.
 slurp-mail:
 	$(BIN) ingest mail -q "after:$(subst -,/,$(SINCE))"
 
 # twins and repair are idempotent and refuse rather than guess. dedupe is a dry
 # run on purpose: its merges weigh evidence and CANNOT be undone —
-# person_merges records that a merge happened, not how to reverse it.
+# person_merges records that a merge happened, not how to reverse it. `slurp`
+# has no flag that would apply them either; this prints the command that does.
 settle:
-	$(BIN) twins -apply
-	$(BIN) repair
+	$(BIN) slurp -only settle
 	@echo
-	@echo "dedupe below is a DRY RUN — review, then: $(BIN) dedupe -apply"
-	@echo
-	$(BIN) dedupe
+	@echo "the plan above is a DRY RUN — review, then: $(BIN) dedupe -apply"
 
 # Needs the embedding daemon. OLLAMA_KEEP_ALIVE=-1 keeps the model resident, so
-# a search does not pay a cold model load after five idle minutes.
+# a search does not pay a cold model load after five idle minutes. `slurp -only
+# embed` skips rather than fails when the daemon is down, which is right for a
+# nightly and wrong here: a target asked for by hand should say it did nothing.
 embed:
 	@curl -sf -m 3 http://localhost:11434/api/tags >/dev/null \
 	  || { echo "no embedding daemon: OLLAMA_KEEP_ALIVE=-1 ollama serve &"; exit 1; }

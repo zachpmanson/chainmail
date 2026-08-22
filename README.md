@@ -126,17 +126,22 @@ export CHAINMAIL_CORPUS=~/.local/state/chainmail/corpus.db   # this is the defau
 export CHAINMAIL_ME=you@example.com                          # marks your own messages
 
 corpus init
-make slurp          # slack, then mail, then settle, then embed
-make doctor         # what is in it, and what is missing
+corpus slurp -since 2026-08-01   # slack, then mail, then settle, then embed
+make doctor                      # what is in it, and what is missing
 ```
 
-`make slurp` is safe to re-run: ingest is keyed on a content hash, so an unchanged
-message is skipped, and mail is paged to the end of its query with a cursor that
-resumes rather than repeats.
+`corpus slurp` is the whole sequence, so a host with the binaries and no checkout
+runs it too — `make slurp` is a call to it. It is safe to re-run: ingest is keyed on
+a content hash, so an unchanged message is skipped, and mail is paged to the end of
+its query with a cursor that resumes rather than repeats. `-only` and `-skip` choose
+phases (`-skip slack` for a mailbox-only corpus, `-skip embed` when ollama is not
+up), and a phase whose prerequisite this host does not have is reported as a skip
+rather than failing the run, so only a real breakage exits non-zero.
 
-`settle` collapses duplicates and repairs identities. It runs `twins` and `repair`,
-which refuse rather than guess, then prints `dedupe` as a **dry run** — those merges
-weigh evidence and cannot be undone, so applying them is a separate decision:
+The `settle` phases collapse duplicates and repair identities. `twins` and `repair`
+refuse rather than guess, then `dedupe` is printed as a **dry run** — those merges
+weigh evidence and cannot be undone, so applying them is a separate decision, and
+no `slurp` flag will do it for you:
 
 ```bash
 corpus dedupe -apply
