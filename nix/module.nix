@@ -84,15 +84,14 @@ in {
       after = [ "network.target" ];
 
       serviceConfig = {
-        # List form, so each argument is one word and an empty uploads root is
-        # simply omitted rather than rendered as a bare `-uploads` with nothing
-        # to consume.
-        ExecStart = [
-          "${cfg.package}/bin/chainmail-server"
-          "-addr" "127.0.0.1:${toString cfg.port}"
-          "-corpus" cfg.corpus
-          "-uploads" cfg.uploads
-        ];
+        # A single string, not a list: NixOS renders each list element as its
+        # OWN ExecStart= line (systemd supports several, running all of them),
+        # and a leading '-' is systemd's "ignore failure" prefix — so a list
+        # of arguments turns `-addr` into a broken ignore-failure directive.
+        ExecStart = "${cfg.package}/bin/chainmail-server " +
+          "-addr 127.0.0.1:${toString cfg.port} " +
+          "-corpus ${cfg.corpus} " +
+          "-uploads ${cfg.uploads}";
         User = cfg.user;
         Group = cfg.user;
         StateDirectory = "chainmail";
