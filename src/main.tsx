@@ -6,7 +6,7 @@ import { attach } from "./client/behaviour";
 import { derive } from "./lib/derive";
 import { SpecView } from "./components/SpecView";
 import { loadSpec } from "./lib/loadSpec";
-import { makeQueryClient } from "./lib/queries";
+import { makeQueryClient } from "./lib/queryClient";
 import { normalise } from "./lib/normalise";
 import { SelectView } from "./components/Select";
 import type { Timeline as Spec } from "./lib/spec";

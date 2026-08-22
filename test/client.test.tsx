@@ -2,9 +2,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { $api, searchQuery } from "../src/lib/api";
 import { App } from "../src/main";
 import { SelectView } from "../src/components/Select";
-import { makeQueryClient } from "../src/lib/queries";
+import { makeQueryClient } from "../src/lib/queryClient";
 
 // React refuses to batch updates outside act() unless told it is under test.
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -175,6 +176,29 @@ describe("searching for chains", () => {
       release(json(200, { mode: "semantic", chains: [CHAINS[1]] }));
     });
     await screen.findByText("Warehouse lease renewal");
+  });
+});
+
+describe("the key a search is cached under", () => {
+  /**
+   * Asserted on the key itself, not through the UI: the pending-state test below
+   * proves the consequence, but it would also pass if the two requests differed
+   * for some other reason. This is the property everything else rests on — a key
+   * that omitted mode would serve the lexical answer to a semantic question and
+   * say nothing about having done so.
+   */
+  const keyFor = (mode: "lexical" | "semantic") =>
+    $api.queryOptions("get", "/v1/search", {
+      params: { query: searchQuery({ q: "cutover", mode }) },
+    }).queryKey;
+
+  it("distinguishes two modes of the same query", () => {
+    expect(keyFor("lexical")).not.toEqual(keyFor("semantic"));
+    expect(JSON.stringify(keyFor("semantic"))).toContain("semantic");
+  });
+
+  it("is the same key for the same search, so a repeat is not a fresh miss", () => {
+    expect(keyFor("lexical")).toEqual(keyFor("lexical"));
   });
 });
 
