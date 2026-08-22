@@ -11,6 +11,43 @@
       forAll = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
     in
     {
+      # One package, both binaries. `make install` builds them as a pair and the
+      # server is useless without a corpus for it to read, so splitting them
+      # would buy a machine the CLI alone at the cost of two derivations that
+      # share a source tree, a vendorHash and a test suite. Split it only if a
+      # host ever wants `corpus` without the service.
+      #
+      # The web client is deliberately not packaged. It is a Vite dev server run
+      # from a checkout, and packaging it would pin an npm lockfile hash that
+      # every dependency bump has to chase for no gain — nobody installs the
+      # client, they run `npm run dev`.
+      packages = forAll (pkgs: rec {
+        default = chainmail;
+
+        chainmail = pkgs.buildGoModule {
+          pname = "chainmail";
+          version = "0.1.0";
+          src = self;
+          vendorHash = "sha256-tE5twZddLbKWD6TyN1y+c8KkKh1TvLbKb2VViEIPHXQ=";
+
+          # The suite reads committed fixtures and an embedded tzdata, never the
+          # network, docket or $HOME, so it is safe to gate the install on it.
+          doCheck = true;
+
+          # `cmd/server` would install as plain `server`, which is far too
+          # generic a name to put on a user's PATH. This is the name the Makefile
+          # builds and the README tells people to run.
+          postInstall = ''
+            mv "$out/bin/server" "$out/bin/chainmail-server"
+          '';
+
+          meta = {
+            description = "read an email trail as one chronological transcript";
+            mainProgram = "corpus";
+          };
+        };
+      });
+
       devShells = forAll (pkgs: {
         default = pkgs.mkShell {
           name = "chainmail";
