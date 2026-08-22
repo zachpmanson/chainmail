@@ -108,6 +108,9 @@ export function SelectView({ onBuilt }: { onBuilt: (spec: Timeline) => void }) {
    * does: the renderer downstream is entitled to see exactly one shape whatever
    * produced it, and its shape is the one in spec.d.ts, generated from
    * schema/timeline.schema.json rather than from the service's inlined copy.
+   * Normalising here rather than around the request still reports a spec that
+   * will not normalise as the build's own failure, which is where a person
+   * looking at the button expects to be told.
    */
   const build = $api.useMutation("post", "/v1/spec", {
     onSuccess: (spec) => onBuilt(normalise(spec)),
