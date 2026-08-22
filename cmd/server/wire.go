@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"github.com/zachpmanson/chainmail/internal/corpus"
+	"github.com/zachpmanson/chainmail/internal/refresh"
+	"github.com/zachpmanson/chainmail/internal/spec"
 )
 
 // The wire types are separate from the corpus structs on purpose: they are the
@@ -150,6 +152,95 @@ func toChainHit(c corpus.ChainHit) chainHit {
 	}
 	for _, b := range c.Best {
 		out.Best = append(out.Best, toEntryHit(b))
+	}
+	return out
+}
+
+// refreshRequest is the previous run being brought up to date, plus the
+// overrides the CLI would take. The spec itself is authoritative for
+// membership; title, person, since, limit and me only narrow or rename how
+// that membership is reproduced. accept accepts proposed chains by root ext
+// id, the same handle POST /v1/spec takes.
+type refreshRequest struct {
+	Spec       spec.Spec `json:"spec"`
+	Title      string    `json:"title,omitempty"`
+	Person     string    `json:"person,omitempty"`
+	Since      string    `json:"since,omitempty"`
+	Limit      int       `json:"limit,omitempty"`
+	Me         []string  `json:"me,omitempty"`
+	IncludeNew bool      `json:"includeNew,omitempty"`
+	Accept     []string  `json:"accept,omitempty"`
+}
+
+// refreshResponse is the regenerated spec alongside what the refresh decided.
+// The spec is what the renderer consumes; the report is what a client shows to
+// explain it — a chain grew, a chain appeared, a chain was proposed.
+type refreshResponse struct {
+	Spec   spec.Spec     `json:"spec"`
+	Report refreshReport `json:"report"`
+}
+
+// refreshReport is the delta between the previous run and this one.
+//
+// The lists are omitted when empty, so a refresh with nothing new reads as {
+// entriesBefore, entriesAfter, nothingNew }. A chain cannot be in two lists:
+// added means it was not on the page before, grown means it was and gained
+// entries, proposed means it was found but not accepted, unranked means it is
+// kept but its query no longer returns it.
+type refreshReport struct {
+	EntriesBefore  int               `json:"entriesBefore"`
+	EntriesAfter   int               `json:"entriesAfter"`
+	ChainsAdded    []chainGrowth     `json:"chainsAdded,omitempty"`
+	ChainsGrown    []chainGrowth     `json:"chainsGrown,omitempty"`
+	ChainsProposed []candidateReport `json:"chainsProposed,omitempty"`
+	ChainsUnranked []string          `json:"chainsUnranked,omitempty"`
+	NothingNew     bool              `json:"nothingNew"`
+}
+
+// growthReport is one chain whose membership changed. before is absent when
+// the chain is new to the page through an accepted candidate or a container
+// newly attached to the reply graph; after is what the page now holds.
+type chainGrowth struct {
+	ID      string `json:"id"`
+	Subject string `json:"subject,omitempty"`
+	Before  int    `json:"before,omitempty"`
+	After   int    `json:"after"`
+}
+
+// candidateReport is a chain the queries found that the page does not yet
+// include, with what is needed to judge it before accepting: the id that
+// accepts it, its size, and which query found it.
+type candidateReport struct {
+	RootExtID string `json:"rootExtId"`
+	Subject   string `json:"subject,omitempty"`
+	Container string `json:"container,omitempty"`
+	Entries   int    `json:"entries"`
+	Matched   int    `json:"matched"`
+	Span      string `json:"span,omitempty"`
+	Query     string `json:"query"`
+}
+
+func toRefreshReport(r refresh.Report) refreshReport {
+	out := refreshReport{
+		EntriesBefore: r.EntriesBefore,
+		EntriesAfter:  r.EntriesAfter,
+		NothingNew:    r.NothingNew(),
+	}
+	for _, g := range r.ChainsAdded {
+		out.ChainsAdded = append(out.ChainsAdded, chainGrowth{
+			ID: g.ID, Subject: g.Subject, Before: g.Before, After: g.After})
+	}
+	for _, g := range r.ChainsGrown {
+		out.ChainsGrown = append(out.ChainsGrown, chainGrowth{
+			ID: g.ID, Subject: g.Subject, Before: g.Before, After: g.After})
+	}
+	for _, c := range r.ChainsProposed {
+		out.ChainsProposed = append(out.ChainsProposed, candidateReport{
+			RootExtID: c.RootExtID, Subject: c.Subject, Container: c.Container,
+			Entries: c.Entries, Matched: c.Matched, Span: c.Span, Query: c.Query})
+	}
+	for _, id := range r.ChainsUnranked {
+		out.ChainsUnranked = append(out.ChainsUnranked, id)
 	}
 	return out
 }

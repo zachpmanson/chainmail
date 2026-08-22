@@ -35,6 +35,14 @@ import (
 	"github.com/zachpmanson/chainmail/internal/spec"
 )
 
+// MaxSpecVersion is the newest spec contract this package can reproduce.
+// The CLI's Load refuses a newer spec, and so does the server, which sees
+// specs as JSON rather than through Load.
+//
+// Public on purpose: the server answers 400 for a spec this build cannot
+// reproduce before doing anything with it.
+var MaxSpecVersion = maxSpecVersion
+
 // Mailbox is the slice of the docket client refresh uses, and only when asked:
 // see Options.Fetch. An interface so both passes can be exercised against a
 // fake — everything else here is a query against a store a test can build in

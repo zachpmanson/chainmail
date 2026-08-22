@@ -5,6 +5,8 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/zachpmanson/chainmail/internal/spec"
 )
 
 func entryPath(prefix, extID string) string { return prefix + url.PathEscape(extID) }
@@ -316,6 +318,107 @@ func TestSpecRefusesABodyItDoesNotUnderstand(t *testing.T) {
 		}
 		res.errText(t)
 	}
+}
+
+// A refresh reproduces a page from the corpus, so the endpoint is exercised
+// against a saved spec: build it via POST /v1/spec, then bring it up to date.
+// Accepting nothing and fetching nothing (the server has no mailbox), the
+// refreshed page is the page it was, reported as such.
+func TestRefreshBringsABuiltPageUpToDate(t *testing.T) {
+	srv, api := testServer(t), loadAPI(t)
+	built := srv.do(t, "POST", "/v1/spec", specBody(extAda1))
+	if built.status != 200 {
+		t.Fatalf("build: status = %d: %s", built.status, built.body)
+	}
+
+	body, _ := json.Marshal(refreshRequest{Spec: decode[spec.Spec](t, built)})
+	res := srv.do(t, "POST", "/v1/refresh", body)
+	if res.status != 200 {
+		t.Fatalf("status = %d: %s", res.status, res.body)
+	}
+	// The response asserts against the contract, so a field the document forgot
+	// to declare is one a client cannot trust.
+	api.assert(t, "RefreshResponse", res.body)
+
+	got := decode[struct {
+		Spec struct {
+			Title    string
+			Messages []struct{ Sender string }
+		}
+		Report struct {
+			EntriesBefore int  `json:"entriesBefore"`
+			EntriesAfter  int  `json:"entriesAfter"`
+			NothingNew    bool `json:"nothingNew"`
+		}
+	}](t, res)
+	if got.Spec.Title != "Solar install quote" {
+		t.Errorf("title = %q", got.Spec.Title)
+	}
+	// Nothing new has arrived, so the page is unchanged and says so.
+	if len(got.Spec.Messages) != 3 {
+		t.Errorf("%d messages, want the built page's 3", len(got.Spec.Messages))
+	}
+	if got.Report.EntriesBefore != 3 || got.Report.EntriesAfter != 3 || !got.Report.NothingNew {
+		t.Errorf("report = %+v, want 3 -> 3 and nothingN", got.Report)
+	}
+}
+
+// The refresh surface is corpus-only, so accepting a proposed chain is the way
+// a page grows. There is no fetching: that is the CLI's, not this server's. A
+// spec carrying an unknown chain is still rejected on the input side.
+func TestRefreshRefusesANewPageAndAFutureVersion(t *testing.T) {
+	srv := testServer(t)
+	// A freshly built page has messages, but a refresh also has to reproduce the
+	// selection. Posting a body that is not a spec at all fails the same way.
+	res := srv.do(t, "POST", "/v1/refresh", []byte(`{}`))
+	if res.status != 400 {
+		t.Fatalf("{}: status = %d, want 400: %s", res.status, res.body)
+	}
+	if msg := res.errText(t); !strings.Contains(msg, "spec") {
+		t.Errorf("message %q does not name the missing spec", msg)
+	}
+	// A malformed body is refused, not half-read.
+	res = srv.do(t, "POST", "/v1/refresh", []byte(`not json`))
+	if res.status != 400 {
+		t.Errorf("malformed body: status = %d, want 400: %s", res.status, res.body)
+	}
+	res.errText(t)
+}
+
+// A misspelled field is a caller reading a different contract, and the server
+// must not re-derive the page they did not ask for.
+func TestRefreshRefusesABodyItDoesNotUnderstand(t *testing.T) {
+	srv := testServer(t)
+	built := srv.do(t, "POST", "/v1/spec", specBody(extAda1))
+	t.Helper()
+	if built.status != 200 {
+		t.Fatalf("build: status = %d: %s", built.status, built.body)
+	}
+	var sp spec.Spec
+	if err := json.Unmarshal(built.body, &sp); err != nil {
+		t.Fatalf("decoding built spec: %v", err)
+	}
+	for _, body := range []string{
+		`{"spec":{"title":"t","messages":[{"date":"d","body":"b"}]},"titel":"typo"}`,
+		`{"spec":{"title":"t","messages":[{"date":"d","body":"b"}]},"accept":"not-an-array"}`,
+	} {
+		res := srv.do(t, "POST", "/v1/refresh", []byte(body))
+		if res.status != 400 {
+			t.Errorf("%s: status = %d, want 400: %s", body, res.status, res.body)
+		}
+	}
+}
+
+func TestRefreshObeysTheMethodShape(t *testing.T) {
+	srv := testServer(t)
+	res := srv.do(t, "GET", "/v1/refresh", nil)
+	if res.status != 405 {
+		t.Errorf("GET /v1/refresh = %d, want 405", res.status)
+	}
+	if got := res.header.Get("Allow"); got != "POST" {
+		t.Errorf("Allow = %q, want POST", got)
+	}
+	res.errText(t)
 }
 
 func TestStatsCountsWhatIsThereAndWhatIsMissing(t *testing.T) {

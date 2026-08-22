@@ -13,6 +13,8 @@ import (
 
 	"github.com/zachpmanson/chainmail/internal/corpus"
 	"github.com/zachpmanson/chainmail/internal/embed"
+	"github.com/zachpmanson/chainmail/internal/mailingest"
+	"github.com/zachpmanson/chainmail/internal/refresh"
 	"github.com/zachpmanson/chainmail/internal/spec"
 )
 
@@ -62,6 +64,7 @@ func (s *server) routes() http.Handler {
 	// The method is checked in the handler rather than in the pattern, so that a
 	// wrong one answers with the same JSON error shape as everything else
 	// instead of ServeMux's plain text.
+	mux.HandleFunc("/v1/refresh", post(s.refresh))
 	mux.HandleFunc("/v1/search", get(s.search))
 	mux.HandleFunc("/v1/spec", post(s.spec))
 	mux.HandleFunc("/v1/entries/{extId}", get(s.entry))
@@ -259,6 +262,92 @@ func (s *server) spec(w http.ResponseWriter, r *http.Request) {
 	log.Printf("spec: %d entries from %d chains in %s", len(sp.Messages), len(req.Chains),
 		time.Since(started).Round(time.Millisecond))
 	send(w, http.StatusOK, sp)
+}
+
+// refresh brings a page that has already been built up to date: the caller
+// posts the previous spec (as POST /v1/spec returned it) and any selection
+// overrides, and the server regenerates the page from the corpus.
+//
+// This is the read half of the CLI's `refresh` command. The fetching half is
+// deliberately absent here: reaching the mailbox is `corpus ingest`'s job and
+// that belongs to the CLI and the cron, not a browser. So the refresh here is
+// corpus-only — it re-derives the page, grows the chains that gained entries,
+// and proposes new chains from the recorded queries, but never asks the
+// mailbox for what arrived.
+func (s *server) refresh(w http.ResponseWriter, r *http.Request) {
+	var req refreshRequest
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequestBody))
+	// A misspelled field is a caller reading a different contract; opening the
+	// corpus with a half-understood spec is worse than refusing.
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		fail(w, http.StatusBadRequest, fmt.Errorf("reading the request body: %w", err))
+		return
+	}
+	// A refresh has to know what to bring up to date. The CLI's Load() refuses
+	// a spec with no previous messages, and so do we, with the same message.
+	if len(req.Spec.Messages) == 0 {
+		fail(w, http.StatusBadRequest, fmt.Errorf(
+			"the spec has no messages, so there is no previous run to refresh — "+
+				"build it first with POST /v1/spec"))
+		return
+	}
+
+	// The previous spec may be from a newer build. Refresh refuses to reproduce
+	// what it would have to drop, so a caller with a future-version spec must
+	// rebuild the page rather than refresh it.
+	version := req.Spec.SpecVersion
+	if version == 0 {
+		version = 1 // the schema's stated default; absent means 1.
+	}
+	if version > refresh.MaxSpecVersion {
+		fail(w, http.StatusBadRequest, fmt.Errorf(
+			"specVersion %d, but this server refreshes up to %d — "+
+				"rebuild the page first (POST /v1/spec)", version, refresh.MaxSpecVersion))
+		return
+	}
+
+	rep, next, err := refresh.Run(s.store, noMailbox{}, req.Spec, refresh.Options{
+		Title:      req.Title,
+		Person:     req.Person,
+		Since:      req.Since,
+		Limit:      req.Limit,
+		Me:         req.Me,
+		IncludeNew: req.IncludeNew,
+		Accept:     req.Accept,
+		Uploads:    s.uploads,
+		// Fetch stays false: this server cannot reach the mailbox, on purpose.
+		Fetch: false,
+	})
+	if err != nil {
+		// The failure is the previous spec not being reproducible — nothing
+		// recorded to re-run, or a recorded selection that cannot be re-run.
+		// That is the caller's spec being wrong, not the server failing.
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	send(w, http.StatusOK, refreshResponse{Spec: next, Report: toRefreshReport(rep)})
+}
+
+// noMailbox is the browser-surface's mailbox: the one that cannot reach the
+// mailbox. The server is read-only on purpose (the mailbox is the CLI's
+// domain), so any path that would call it is a bug, made loud rather than
+// silent.
+type noMailbox struct{}
+
+func (m noMailbox) Search(_ string, _ int, _ string) ([]mailingest.Envelope, mailingest.Page, error) {
+	return []mailingest.Envelope{}, mailingest.Page{}, fmt.Errorf(
+		"the server cannot reach the mailbox: fetch belongs to `corpus ingest`")
+}
+
+func (m noMailbox) Read(_ string) (mailingest.Message, error) {
+	return mailingest.Message{}, fmt.Errorf(
+		"the server cannot reach the mailbox: fetch belongs to `corpus ingest`")
+}
+
+func (m noMailbox) Thread(_ string) (mailingest.ThreadResult, error) {
+	return mailingest.ThreadResult{}, fmt.Errorf(
+		"the server cannot reach the mailbox: fetch belongs to `corpus ingest`")
 }
 
 // acquireSpecSlot waits briefly rather than refusing at once: a second click

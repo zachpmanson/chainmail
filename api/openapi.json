@@ -308,6 +308,45 @@
           }
         }
       }
+    },
+    "/v1/refresh": {
+      "post": {
+        "summary": "Bring a previously built page up to date.",
+        "description": "Refresh stage, and deliberately the read half of the CLI's `refresh` command. The caller posts the previous spec (as POST /v1/spec returned it) and any selection overrides; the server re-derives the page from the corpus — a chain already on the page that gained entries is grown, a new chain the recorded queries find is proposed rather than included — and returns the regenerated spec alongside a report of what changed.\n\nThe server never reaches the mailbox, on purpose: fetching what arrived is `corpus ingest`'s job and belongs to the CLI and the cron, not a browser. So this refresh is corpus-only. What it cannot see, it cannot propose from fed to it by the mailbox later.",
+        "operationId": "refreshSpec",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The refreshed spec and what the refresh did.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefreshResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed body, a spec with no messages, or a spec version this build cannot reproduce.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -859,6 +898,205 @@
           "received": {
             "type": "integer",
             "description": "Entries they were a to: or cc: on. Sent 0 with received above 0 is a recipient-only participant, which is a quarter of a real cast."
+          }
+        }
+      },
+      "RefreshRequest": {
+        "type": "object",
+        "description": "The previous run being brought up to date. The spec itself is authoritative for what stays on the page; the other fields narrow or rename how that membership is reproduced, and accept takes proposed chains the report returns.",
+        "required": [
+          "spec"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "spec": {
+            "$ref": "#/components/schemas/TimelineSpec",
+            "description": "The previous spec, as POST /v1/spec returned it. Must carry at least one message; a fresh page has nothing to refresh."
+          },
+          "title": {
+            "type": "string",
+            "description": "Page title, overriding the spec's."
+          },
+          "person": {
+            "type": "string",
+            "description": "Address, name or slack uid, overriding the spec's recorded selection."
+          },
+          "since": {
+            "type": "string",
+            "description": "YYYY-MM-DD floor on entry dates, overriding the spec's recorded selection.",
+            "format": "date"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "How many chains a query may propose, overriding the spec's recorded selection.",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "me": {
+            "type": "array",
+            "description": "The reader's own addresses, so their outbound messages are marked.",
+            "items": {
+              "type": "string",
+              "description": "One of the reader's own addresses."
+            },
+            "example": [
+              "me@example.fed"
+            ]
+          },
+          "includeNew": {
+            "type": "boolean",
+            "description": "Accept every chain the queries propose, without naming them one by one. Defaults to false: a curated page is not re-widened on every refresh."
+          },
+          "accept": {
+            "type": "array",
+            "description": "Chain roots to accept, as the report's chainsProposed names them. Accepting is idempotent: a chain accepted once is not proposed again.",
+            "items": {
+              "type": "string",
+              "description": "A rootExtId as the report prints it."
+            },
+            "example": [
+              "mail:<c0ffee-1@loomworks.example>"
+            ]
+          }
+        }
+      },
+      "RefreshResponse": {
+        "type": "object",
+        "description": "The regenerated spec, plus a report of what the refresh did to get there. The spec is what a client renders; the report is what it shows to explain a change.",
+        "required": [
+          "spec",
+          "report"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "spec": {
+            "$ref": "#/components/schemas/TimelineSpec"
+          },
+          "report": {
+            "$ref": "#/components/schemas/RefreshReport"
+          }
+        }
+      },
+      "RefreshReport": {
+        "type": "object",
+        "description": "What moved between the previous run and this one. A chain is in exactly one list: added (new to the page), grown (was there and gained entries), proposed (found but not accepted) or unranked (kept, but its query no longer finds it).",
+        "required": [
+          "entriesBefore",
+          "entriesAfter",
+          "nothingNew"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "entriesBefore": {
+            "type": "integer",
+            "description": "Messages on the page when the refresh started."
+          },
+          "entriesAfter": {
+            "type": "integer",
+            "description": "Messages on the page after the refresh."
+          },
+          "chainsAdded": {
+            "type": "array",
+            "description": "Chains now on the page that were not on it before. Absent when none.",
+            "items": {
+              "$ref": "#/components/schemas/ChainGrowth"
+            }
+          },
+          "chainsGrown": {
+            "type": "array",
+            "description": "Chains on the page before that gained entries. Absent when none.",
+            "items": {
+              "$ref": "#/components/schemas/ChainGrowth"
+            }
+          },
+          "chainsProposed": {
+            "type": "array",
+            "description": "Chains a recorded query found that the page does not include, awaiting a decision. Accept them with the next refresh's accept.",
+            "items": {
+              "$ref": "#/components/schemas/RefreshCandidate"
+            }
+          },
+          "chainsUnranked": {
+            "type": "array",
+            "description": "Chains still on the page that no recorded query returns anymore. They are kept — dropping one would delete entries somebody has already read.",
+            "items": {
+              "type": "string",
+              "description": "A chain root ext id."
+            }
+          },
+          "nothingNew": {
+            "type": "boolean",
+            "description": "The refresh looked and found nothing to store, grow, add or propose. Distinct from an error: a report existing at all means the refresh actually ran."
+          }
+        }
+      },
+      "ChainGrowth": {
+        "type": "object",
+        "description": "One chain whose membership changed. before is absent when the chain is new to the page; after is what the page now holds.",
+        "required": [
+          "id",
+          "after"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The chain's container id (a Gmail thread id or Slack channel id)."
+          },
+          "subject": {
+            "type": "string",
+            "description": "Subject of the chain, when it carries one."
+          },
+          "before": {
+            "type": "integer",
+            "description": "Entries the chain had before. Absent when it is new to the page."
+          },
+          "after": {
+            "type": "integer",
+            "description": "Entries the chain holds now."
+          }
+        }
+      },
+      "RefreshCandidate": {
+        "type": "object",
+        "description": "A chain the queries found that the page does not yet include, named by the id that accepts it.",
+        "required": [
+          "rootExtId",
+          "entries",
+          "matched",
+          "query"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "rootExtId": {
+            "type": "string",
+            "description": "The chain root to pass back as accept, as GET /v1/search reports it.",
+            "example": "mail:<c0ffee-1@loomworks.example>"
+          },
+          "subject": {
+            "type": "string",
+            "description": "Subject of the chain, when it carries one."
+          },
+          "container": {
+            "type": "string",
+            "description": "Mail thread id or Slack channel id."
+          },
+          "entries": {
+            "type": "integer",
+            "description": "Entries in the whole chain."
+          },
+          "matched": {
+            "type": "integer",
+            "description": "How many of them the query hit. matched/entries is the honest measure of whether it is about the query."
+          },
+          "span": {
+            "type": "string",
+            "description": "Earliest – latest dates, e.g. '2 Jan 2026 – 14 Mar 2026'.",
+            "example": "2 Jan 2026 – 14 Mar 2026"
+          },
+          "query": {
+            "type": "string",
+            "description": "Which recorded query found it."
           }
         }
       },

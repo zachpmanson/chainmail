@@ -125,6 +125,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bring a previously built page up to date.
+         * @description Refresh stage, and deliberately the read half of the CLI's `refresh` command. The caller posts the previous spec (as POST /v1/spec returned it) and any selection overrides; the server re-derives the page from the corpus — a chain already on the page that gained entries is grown, a new chain the recorded queries find is proposed rather than included — and returns the regenerated spec alongside a report of what changed.
+         *
+         *     The server never reaches the mailbox, on purpose: fetching what arrived is `corpus ingest`'s job and belongs to the CLI and the cron, not a browser. So this refresh is corpus-only. What it cannot see, it cannot propose from fed to it by the mailbox later.
+         */
+        post: operations["refreshSpec"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -376,6 +398,94 @@ export interface components {
             sent: number;
             /** @description Entries they were a to: or cc: on. Sent 0 with received above 0 is a recipient-only participant, which is a quarter of a real cast. */
             received: number;
+        };
+        /** @description The previous run being brought up to date. The spec itself is authoritative for what stays on the page; the other fields narrow or rename how that membership is reproduced, and accept takes proposed chains the report returns. */
+        RefreshRequest: {
+            /** @description The previous spec, as POST /v1/spec returned it. Must carry at least one message; a fresh page has nothing to refresh. */
+            spec: components["schemas"]["TimelineSpec"];
+            /** @description Page title, overriding the spec's. */
+            title?: string;
+            /** @description Address, name or slack uid, overriding the spec's recorded selection. */
+            person?: string;
+            /**
+             * Format: date
+             * @description YYYY-MM-DD floor on entry dates, overriding the spec's recorded selection.
+             */
+            since?: string;
+            /** @description How many chains a query may propose, overriding the spec's recorded selection. */
+            limit?: number;
+            /**
+             * @description The reader's own addresses, so their outbound messages are marked.
+             * @example [
+             *       "me@example.fed"
+             *     ]
+             */
+            me?: string[];
+            /** @description Accept every chain the queries propose, without naming them one by one. Defaults to false: a curated page is not re-widened on every refresh. */
+            includeNew?: boolean;
+            /**
+             * @description Chain roots to accept, as the report's chainsProposed names them. Accepting is idempotent: a chain accepted once is not proposed again.
+             * @example [
+             *       "mail:<c0ffee-1@loomworks.example>"
+             *     ]
+             */
+            accept?: string[];
+        };
+        /** @description The regenerated spec, plus a report of what the refresh did to get there. The spec is what a client renders; the report is what it shows to explain a change. */
+        RefreshResponse: {
+            spec: components["schemas"]["TimelineSpec"];
+            report: components["schemas"]["RefreshReport"];
+        };
+        /** @description What moved between the previous run and this one. A chain is in exactly one list: added (new to the page), grown (was there and gained entries), proposed (found but not accepted) or unranked (kept, but its query no longer finds it). */
+        RefreshReport: {
+            /** @description Messages on the page when the refresh started. */
+            entriesBefore: number;
+            /** @description Messages on the page after the refresh. */
+            entriesAfter: number;
+            /** @description Chains now on the page that were not on it before. Absent when none. */
+            chainsAdded?: components["schemas"]["ChainGrowth"][];
+            /** @description Chains on the page before that gained entries. Absent when none. */
+            chainsGrown?: components["schemas"]["ChainGrowth"][];
+            /** @description Chains a recorded query found that the page does not include, awaiting a decision. Accept them with the next refresh's accept. */
+            chainsProposed?: components["schemas"]["RefreshCandidate"][];
+            /** @description Chains still on the page that no recorded query returns anymore. They are kept — dropping one would delete entries somebody has already read. */
+            chainsUnranked?: string[];
+            /** @description The refresh looked and found nothing to store, grow, add or propose. Distinct from an error: a report existing at all means the refresh actually ran. */
+            nothingNew: boolean;
+        };
+        /** @description One chain whose membership changed. before is absent when the chain is new to the page; after is what the page now holds. */
+        ChainGrowth: {
+            /** @description The chain's container id (a Gmail thread id or Slack channel id). */
+            id: string;
+            /** @description Subject of the chain, when it carries one. */
+            subject?: string;
+            /** @description Entries the chain had before. Absent when it is new to the page. */
+            before?: number;
+            /** @description Entries the chain holds now. */
+            after: number;
+        };
+        /** @description A chain the queries found that the page does not yet include, named by the id that accepts it. */
+        RefreshCandidate: {
+            /**
+             * @description The chain root to pass back as accept, as GET /v1/search reports it.
+             * @example mail:<c0ffee-1@loomworks.example>
+             */
+            rootExtId: string;
+            /** @description Subject of the chain, when it carries one. */
+            subject?: string;
+            /** @description Mail thread id or Slack channel id. */
+            container?: string;
+            /** @description Entries in the whole chain. */
+            entries: number;
+            /** @description How many of them the query hit. matched/entries is the honest measure of whether it is about the query. */
+            matched: number;
+            /**
+             * @description Earliest – latest dates, e.g. '2 Jan 2026 – 14 Mar 2026'.
+             * @example 2 Jan 2026 – 14 Mar 2026
+             */
+            span?: string;
+            /** @description Which recorded query found it. */
+            query: string;
         };
         /** @description Every non-2xx response carries this and nothing else. */
         Error: {
@@ -752,6 +862,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PeopleResponse"];
+                };
+            };
+        };
+    };
+    refreshSpec: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RefreshRequest"];
+            };
+        };
+        responses: {
+            /** @description The refreshed spec and what the refresh did. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RefreshResponse"];
+                };
+            };
+            /** @description Malformed body, a spec with no messages, or a spec version this build cannot reproduce. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
