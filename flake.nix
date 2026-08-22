@@ -78,5 +78,10 @@
       });
 
       formatter = forAll (pkgs: pkgs.nixfmt-rfc-style);
+
+      # The NixOS service module (nix/module.nix): runs chainmail-server on
+      # loopback. Imported by the machine config that deploys a corpus; the
+      # module owns the unit, the config owns the corpus transfer.
+      nixosModules.default = import ./nix/module.nix self;
     };
 }
