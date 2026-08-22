@@ -3,6 +3,7 @@
 //	corpus init                       create or migrate the database
 //	corpus ingest mail -q <query>     slurp a Gmail query
 //	corpus ingest slack               slurp a slackdump archive
+//	corpus slurp                      every phase in order, dedupe reported only
 //	corpus stats                      what is in it, and what is missing
 //	corpus people                     everyone involved, senders and recipients
 //	corpus merge -keep <a> -drop <b>  same human, two addresses (or -keep-id/-drop-id)
