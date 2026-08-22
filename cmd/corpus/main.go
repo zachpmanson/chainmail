@@ -28,11 +28,9 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/zachpmanson/chainmail/internal/corpus"
@@ -40,7 +38,6 @@ import (
 	"github.com/zachpmanson/chainmail/internal/eval"
 	"github.com/zachpmanson/chainmail/internal/mailingest"
 	"github.com/zachpmanson/chainmail/internal/refresh"
-	"github.com/zachpmanson/chainmail/internal/slackingest"
 	"github.com/zachpmanson/chainmail/internal/spec"
 	"github.com/zachpmanson/chainmail/internal/tzinfer"
 	"github.com/zachpmanson/chainmail/internal/unnest"
@@ -270,96 +267,20 @@ func run(args []string) error {
 		})
 
 	case "embed":
-		// Backfill. Long-running and interruptible on purpose: this is minutes of
-		// work against a local model, and ^C has to be a pause rather than a
-		// setback.
 		fs := flag.NewFlagSet("embed", flag.ContinueOnError)
 		model := fs.String("model", embed.DefaultModel, "embedding model to use")
 		url := fs.String("url", embed.DefaultBaseURL, "ollama endpoint")
 		dim := fs.Int("dim", embed.DefaultDim, "dimensions the model returns")
 		batch := fs.Int("batch", 0, "entries per request and per commit (default 32)")
 		limit := fs.Int("limit", 0, "stop after this many entries")
-		timeout := fs.String("timeout", "5m", "how long to wait for one batch")
+		timeout := fs.String("timeout", defaultEmbedTimeout, "how long to wait for one batch")
 		prune := fs.Bool("prune", false,
 			"after the run, drop vectors from every other model")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		wait, err := time.ParseDuration(*timeout)
-		if err != nil {
-			return fmt.Errorf("-timeout %q: %w", *timeout, err)
-		}
-		s, err := corpus.Open(path)
-		if err != nil {
-			return err
-		}
-		defer s.Close()
-
-		e := &embed.Ollama{BaseURL: *url, Name: *model, Dimension: *dim,
-			Client: &http.Client{Timeout: wait}}
-
-		// Checked up front. The alternative is discovering a missing model on the
-		// first batch, which is the same failure reported later and with a
-		// partially-written table to explain.
-		ready, err := e.Available(context.Background())
-		if err != nil {
-			return err
-		}
-		if !ready {
-			return fmt.Errorf("%s is running but does not have %s: run `ollama pull %s`",
-				*url, *model, *model)
-		}
-
-		// ^C stops between batches, so the work already committed stays and the
-		// run resumes where it left off.
-		ctx, stop := signal.NotifyContext(context.Background(),
-			os.Interrupt, syscall.SIGTERM)
-		defer stop()
-
-		started := time.Now()
-		var progressed bool
-		rep, err := s.BackfillEmbeddings(ctx, e, corpus.BackfillOptions{
-			Batch: *batch, Limit: *limit,
-			Progress: func(p corpus.BackfillProgress) {
-				progressed = true
-				// Rate and remaining, not a percentage: what a reader wants after
-				// two minutes of this is whether to wait for it.
-				elapsed := time.Since(started)
-				var eta time.Duration
-				if p.Done > 0 {
-					eta = (elapsed / time.Duration(p.Done)) * time.Duration(p.Pending-p.Done)
-				}
-				fmt.Printf("\r%d/%d  %d embedded  %d without a topic  %s elapsed, ~%s left   ",
-					p.Done, p.Pending, p.Embedded, p.Skipped,
-					elapsed.Round(time.Second), eta.Round(time.Second))
-			},
-		})
-		if progressed {
-			fmt.Println()
-		}
-		if err != nil {
-			if errors.Is(err, context.Canceled) {
-				fmt.Printf("stopped: %d embedded, %d without a topic, %d still to do — "+
-					"re-run to continue where this left off\n",
-					rep.Embedded, rep.Skipped, rep.Pending-rep.Embedded-rep.Skipped)
-				return nil
-			}
-			return err
-		}
-		fmt.Printf("%s at %dd: %d embedded, %d recorded as having no topic worth embedding\n",
-			rep.Model, rep.Dim, rep.Embedded, rep.Skipped)
-		if rep.Pending == 0 {
-			fmt.Println("everything was already current")
-		}
-		if *prune {
-			n, err := s.PruneEmbeddings(rep.Model)
-			if err != nil {
-				return err
-			}
-			fmt.Printf("pruned %d %s from other models\n",
-				n, plural(int(n), "vector", "vectors"))
-		}
-		return nil
+		return runEmbed(path, embedOpts{model: *model, url: *url, timeout: *timeout,
+			dim: *dim, batch: *batch, limit: *limit, prune: *prune})
 
 	case "eval":
 		// The judged set names the corpus each configuration searches, because
@@ -670,68 +591,7 @@ func run(args []string) error {
 		return nil
 
 	case "repair":
-		s, err := corpus.Open(path)
-		if err != nil {
-			return err
-		}
-		defer s.Close()
-		r, err := corpus.RepairMailtoIdentities(s)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("repaired %d %s, renamed %d %s, merged %d %s\n",
-			r.Rewritten, plural(r.Rewritten, "identity", "identities"),
-			r.Renamed, plural(r.Renamed, "person", "people"),
-			r.Merged, plural(r.Merged, "person", "people"))
-		// Reported rather than resolved: a value naming two addresses cannot be
-		// reduced without guessing which human it belongs to.
-		for _, v := range r.Ambiguous {
-			fmt.Printf("  left alone, names more than one address: %s\n", v)
-		}
-		if n := len(r.Ambiguous); n > 0 {
-			fmt.Printf("\n%d ambiguous %s — decide by hand, then `corpus merge`\n",
-				n, plural(n, "value", "values"))
-		}
-
-		// One mailbox written with RFC 5233 tags splits into a person per tag, which
-		// is the same kind of damage from a different cause, so it is repaired in the
-		// same pass rather than behind a flag of its own: every one of these passes
-		// is deterministic and refuses rather than guesses, and an operator who runs
-		// half of them keeps a corpus that is still split. `dedupe` is the one that
-		// weighs evidence, which is why that one waits for -apply.
-		pr, err := corpus.RepairPlusAddresses(s)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("recorded %d base %s, renamed %d %s, merged %d tagged %s\n",
-			pr.Anchored, plural(pr.Anchored, "mailbox", "mailboxes"),
-			pr.Renamed, plural(pr.Renamed, "person", "people"),
-			pr.Merged, plural(pr.Merged, "person", "people"))
-		for _, l := range pr.Left {
-			fmt.Printf("  left alone, %s: %s\n", l.Reason, l.Value)
-		}
-
-		// The same fold that doubled those addresses also cut some of them off
-		// entirely, so the two repairs run together: the mailto pass first, because
-		// the people it reunifies are the targets this one matches names against,
-		// and the tagged pass before both, so those targets are one person each.
-		tr, err := corpus.RepairTruncatedNames(s)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("cleaned %d truncated %s, split %d welded %s, renamed %d %s, merged %d %s\n",
-			tr.Cleaned, plural(tr.Cleaned, "name", "names"),
-			tr.Welded, plural(tr.Welded, "address", "addresses"),
-			tr.Renamed, plural(tr.Renamed, "person", "people"),
-			tr.Merged, plural(tr.Merged, "person", "people"))
-		for _, d := range tr.Declined {
-			fmt.Printf("  not merged, %s: %s\n", d.Reason, d.Value)
-		}
-		if n := len(tr.Declined); n > 0 {
-			fmt.Printf("\n%d truncated %s left for review — `corpus candidates`\n",
-				n, plural(n, "name", "names"))
-		}
-		return nil
+		return runRepair(path)
 
 	case "candidates":
 		s, err := corpus.Open(path)
@@ -763,17 +623,7 @@ func run(args []string) error {
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		s, err := corpus.Open(path)
-		if err != nil {
-			return err
-		}
-		defer s.Close()
-		plan, err := corpus.Dedupe(s, *apply)
-		if err != nil {
-			return err
-		}
-		printDedupe(plan)
-		return nil
+		return runDedupe(path, *apply)
 
 	case "twins":
 		fs := flag.NewFlagSet("twins", flag.ContinueOnError)
@@ -782,17 +632,7 @@ func run(args []string) error {
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		s, err := corpus.Open(path)
-		if err != nil {
-			return err
-		}
-		defer s.Close()
-		plan, err := corpus.CollapseTwins(s, *apply)
-		if err != nil {
-			return err
-		}
-		printTwins(plan, *verbose)
-		return nil
+		return runTwins(path, *apply, *verbose)
 
 	case "merge":
 		fs := flag.NewFlagSet("merge", flag.ContinueOnError)
@@ -955,62 +795,14 @@ func run(args []string) error {
 				"[-limit N] [-page-size N]")
 		}
 
-		c := mailingest.Client{}
-		ok, err := c.SupportsThreadingHeaders()
-		if err != nil {
-			return fmt.Errorf("checking docket: %w", err)
-		}
-		if !ok {
-			return fmt.Errorf("the docket on PATH does not expose threading headers " +
-				"(Message-ID/In-Reply-To/References) — the corpus would have no reply " +
-				"graph; update docket first")
-		}
-
-		s, err := corpus.Open(path)
-		if err != nil {
-			return err
-		}
-		defer s.Close()
-
-		var r mailingest.Result
-		if *ids != "" {
-			r, err = mailingest.IngestIDs(s, c, strings.Split(*ids, ","))
-		} else {
-			r, err = mailingest.Ingest(s, c, *query,
-				mailingest.Bound{Max: *limit, PageSize: *pageSize})
-		}
-		if err != nil {
-			return err
-		}
-		fmt.Printf("saw %d over %d page(s), created %d, changed %d, resolved %d parent edges\n",
-			r.Seen, r.Pages, r.Created, r.Changed, r.Resolved)
-		switch r.Stop {
-		case mailingest.StopExhausted:
-			fmt.Println("complete: docket had no further page")
-		case mailingest.StopFrontier:
-			fmt.Println("complete: reached the frontier an earlier walk left, " +
-				"so the mail below it is already in")
-		default:
-			// The point of the cursor: an incomplete walk says so, on stderr,
-			// with the command that finishes it. A count alone reads as coverage.
-			fmt.Fprintf(os.Stderr,
-				"INCOMPLETE: stopped at the -limit of %d with more matching mail unread; "+
-					"re-run the same -q to continue from the cursor\n", *limit)
-		}
-		if r.Resumed {
-			fmt.Println("resumed from a cursor left by an earlier run")
-		}
-		if r.Truncated > 0 {
-			fmt.Fprintf(os.Stderr,
-				"warning: %d bodies came back truncated — quoted history was lost\n", r.Truncated)
-		}
-		return nil
+		_, err := runIngestMail(path, mailOpts{query: *query, ids: splitList(*ids),
+			bound: mailingest.Bound{Max: *limit, PageSize: *pageSize}})
+		return err
 	}
 	return fmt.Errorf("unknown command %q", args[0])
 }
 
-// ingestSlack slurps a slackdump archive. The archive is a local file, so this
-// is safe to re-run at will — no Slack API call is made anywhere in the path.
+// ingestSlack parses the source's flags and hands the archive to the phase.
 func ingestSlack(path string, args []string) error {
 	fs := flag.NewFlagSet("ingest slack", flag.ContinueOnError)
 	archive := fs.String("archive", defaultSlackArchive(),
@@ -1019,40 +811,7 @@ func ingestSlack(path string, args []string) error {
 		return err
 	}
 
-	a, err := slackingest.OpenArchive(*archive)
-	if err != nil {
-		return err
-	}
-	defer a.Close()
-
-	s, err := corpus.Open(path)
-	if err != nil {
-		return err
-	}
-	defer s.Close()
-
-	r, err := slackingest.Ingest(s, a)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("saw %d in %d channels, created %d, changed %d, skipped %d, "+
-		"resolved %d thread edges\n",
-		r.Seen, r.Channels, r.Created, r.Changed, r.Skipped, r.Resolved)
-	fmt.Printf("users %d (%d bots), authors %d\n", r.Users, r.Bots, r.Authors)
-	// Not a warning: an account with no profile email is normal, and the number
-	// is the honest limit on how much of the Slack half joins up with mail.
-	fmt.Printf("no email: %d of %d users, %d of %d authors — keyed on slack uid, "+
-		"so they will not merge with a mail identity until aliased by hand\n",
-		r.UsersWithoutEmail, r.Users, r.AuthorsWithoutEmail, r.Authors)
-	if r.Unauthored > 0 {
-		fmt.Printf("unauthored  %d messages named no author at all\n", r.Unauthored)
-	}
-	if r.IdentityConflicts > 0 {
-		fmt.Fprintf(os.Stderr,
-			"warning: %d slack uids already belong to a different person than their "+
-				"email resolves to — review with `corpus candidates`\n", r.IdentityConflicts)
-	}
-	return nil
+	return runIngestSlack(path, *archive)
 }
 
 func defaultSlackArchive() string {
