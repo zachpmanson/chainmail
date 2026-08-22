@@ -88,10 +88,17 @@ in {
         # OWN ExecStart= line (systemd supports several, running all of them),
         # and a leading '-' is systemd's "ignore failure" prefix — so a list
         # of arguments turns `-addr` into a broken ignore-failure directive.
+        #
+        # -uploads is appended only when non-empty: a trailing empty value is
+        # dropped by systemd's arg parsing, which leaves a bare `-uploads` with
+        # nothing to consume and the server refuses to start. An empty root
+        # simply means the flag is absent and the server's previewer stays off
+        # (dir == "" disables previews; the default path is a system user's
+        # /var/empty, which holds nothing either way).
         ExecStart = "${cfg.package}/bin/chainmail-server " +
           "-addr 127.0.0.1:${toString cfg.port} " +
-          "-corpus ${cfg.corpus} " +
-          "-uploads ${cfg.uploads}";
+          "-corpus ${cfg.corpus}" +
+          lib.optionalString (cfg.uploads != "") " -uploads ${cfg.uploads}";
         User = cfg.user;
         Group = cfg.user;
         StateDirectory = "chainmail";
