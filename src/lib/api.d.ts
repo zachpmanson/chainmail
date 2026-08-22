@@ -426,6 +426,17 @@ export interface components {
                 /** @description Use instead of role for cc-only people and aliases. */
                 note?: string;
             }[];
+            /** @description Selection parameters this run was invoked with, so a later refresh reproduces the same page. Only what the rest of the spec cannot already supply; never a machine-local path. */
+            runParams?: {
+                /** @description Addresses belonging to the reader, whose messages render as outbound. */
+                me?: string[];
+                /** @description How many chains the search was allowed to select. */
+                limit?: number;
+                /** @description Address, name or slack uid the selection was filtered to. */
+                person?: string;
+                /** @description YYYY-MM-DD floor on entry dates. */
+                since?: string;
+            };
             /** @description Searches run, so a null result is interpretable. */
             queries?: (string | {
                 q: string;
