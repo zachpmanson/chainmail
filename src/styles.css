@@ -117,18 +117,18 @@
   .proposals-head .note { font-size:.7rem; color:var(--muted); margin-right:auto; }
   .proposals-list { margin:0; padding:.5rem .8rem; overflow:auto; list-style:none;
     display:flex; flex-direction:column; gap:.4rem; }
-  .propcard { display:flex; align-items:center; gap:.5rem;
-    padding:.35rem .5rem; border:1px solid var(--line); border-radius:5px;
+  .propcard { display:flex; flex-direction:column; gap:.3rem; align-items:stretch;
+    padding:.5rem .6rem; border:1px solid var(--line); border-radius:5px;
     background:var(--bg); }
-  .proptoggle { display:flex; align-items:center; gap:.5rem; flex:1 1 auto;
+  .proptoggle { display:flex; align-items:flex-start; gap:.5rem; flex:1 1 auto;
     min-width:0; cursor:pointer; }
-  .proptoggle input { accent-color:var(--o1); }
-  .propsubj { font-weight:600; overflow:hidden; text-overflow:ellipsis;
-    white-space:nowrap; }
+  .proptoggle input { accent-color:var(--o1); margin-top:.18rem; }
+  .propsubj { font-weight:600; max-width:100%; overflow-wrap:break-word;
+    white-space:normal; }
   .propsubj em { font-style:normal; color:var(--muted); }
-  .propmeta { font-size:.7rem; color:var(--muted); white-space:nowrap; }
-  .proprowid { font-size:.66rem; color:var(--accent); max-width:22rem;
-    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .propmeta { font-size:.7rem; color:var(--muted); margin-top:.15rem; }
+  .proprowid { font-size:.66rem; color:var(--accent); max-width:100%;
+    overflow-wrap:break-word; margin-top:.1rem; }
   .proposals-foot { display:flex; justify-content:flex-end; gap:.6rem;
     padding:.5rem .8rem; border-top:1px solid var(--line); }
   .srcgrp a { color:inherit; text-decoration-color:var(--accent); text-underline-offset:2px; }

@@ -27,7 +27,16 @@ export function Rendered({ spec, onBack, onRefresh, onAccept, report, refreshing
 }) {
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [showSpec, setShowSpec] = useState(false);
-  const [showProposals, setShowProposals] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+
+  // Auto-open the proposal evaluator whenever a fresh report brings proposals,
+  // so the reader is not sent hunting for a separate eval button. Closers keep
+  // it hidden for the current report; the next refresh report with proposals
+  // reopens it.
+  useEffect(() => {
+    if (!report?.chainsProposed?.length) setDismissed(false);
+  }, [report]);
+  const showProposals = Boolean(report?.chainsProposed?.length) && !dismissed;
 
   // chains of the UNFILTERED trail, so an excluded one stays listed and checkable
   const all = useMemo(() => derive(spec), [spec]);
@@ -68,8 +77,6 @@ export function Rendered({ spec, onBack, onRefresh, onAccept, report, refreshing
       return next;
     });
 
-  const proposals = report?.chainsProposed?.length ? report.chainsProposed : [];
-
   const empty = filtered.messages.length === 0;
 
   useEffect(() => {
@@ -104,7 +111,6 @@ export function Rendered({ spec, onBack, onRefresh, onAccept, report, refreshing
         filter={{ chains, excluded, onToggle }}
         onShowSpec={() => setShowSpec(true)}
         onRefresh={onRefresh}
-        onEval={proposals.length ? () => setShowProposals(true) : undefined}
         refreshing={refreshing}
         refreshNote={refreshNote}
       />
@@ -114,8 +120,8 @@ export function Rendered({ spec, onBack, onRefresh, onAccept, report, refreshing
           proposals={report.chainsProposed}
           open={showProposals}
           refreshing={refreshing}
-          onClose={() => setShowProposals(false)}
-          onAccept={(ids) => { onAccept?.(ids); setShowProposals(false); }}
+          onClose={() => setDismissed(true)}
+          onAccept={(ids) => { onAccept?.(ids); setDismissed(true); }}
         />
       ) : null}
     </>
@@ -155,7 +161,6 @@ function ProposalsModal({ proposals, open, refreshing, onClose, onAccept }: {
         <div className="proposals-head">
           <b>proposed</b>
           <span className="note">found by a query, not yet on the page — accept the ones that belong</span>
-          <button className="tbtn" type="button" onClick={onClose} disabled={refreshing}>close</button>
         </div>
         <ul className="proposals-list">
           {proposals.map((p) => {
@@ -181,6 +186,7 @@ function ProposalsModal({ proposals, open, refreshing, onClose, onAccept }: {
                   onClick={() => onAccept([...ids])}>
             accept all {proposals.length}
           </button>
+          <button className="tbtn" type="button" onClick={onClose} disabled={refreshing}>close</button>
         </div>
       </div>
     </div>
