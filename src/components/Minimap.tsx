@@ -117,10 +117,7 @@ export function Minimap({ v }: { v: View }) {
         </svg>
       </div>
       <div className="foot2">
-        Down is time; across is a parallel thread or a fork. A capped dot starts a chain.{" "}
-        <b>{g.roots}</b> chains · <b>{g.laneCount}</b> lanes · <b>{deepest}</b> deepest ·{" "}
-        <b>{g.forks}</b> forks · <b>{g.leaves}</b> dead ends. Hollow = reconstructed from a
-        quote. Click a dot to jump.
+        {g.roots} <b>chain</b> · {g.laneCount} <b>lane</b> · {deepest} <b>deep</b> · {g.forks} <b>fork</b>
       </div>
     </aside>
   );

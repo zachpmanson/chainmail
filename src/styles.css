@@ -414,9 +414,10 @@
      (solid card and dashed quote) without shifting layout. */
   .msg.mhov .bub, .sys.mhov { border-color:var(--accent);
     box-shadow:0 0 0 2.5px var(--accent), 0 1px 8px -2px var(--accent); }
-  .mini .foot2 { border-top:1px solid var(--line); padding:.4rem .7rem .5rem;
-    font-size:.62rem; color:var(--muted); line-height:1.35; }
-  .mini .foot2 b { color:var(--fg); font-weight:650; }
+  .mini .foot2 { border-top:1px solid var(--line); padding:.28rem .7rem .3rem;
+    font-size:.58rem; color:var(--muted); line-height:1.2;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .mini .foot2 b { color:var(--fg); font-weight:600; }
   /* Panel width lives in one variable; the toolbar and the content margin both
      derive from it, so hiding the tree cannot leave a button stranded over it. */
   body { --panel:0rem; padding-right:var(--panel); }
