@@ -171,7 +171,10 @@ function ProposalsModal({ proposals, open, refreshing, onClose, onAccept }: {
                   <input type="checkbox" checked={on} onChange={() => toggle(p.rootExtId)} />
                   <span className="propsubj">{p.subject ?? <em>no subject</em>}</span>
                 </label>
-                <span className="propmeta">{p.matched}/{p.entries} matched · {p.span ?? ""} · {p.query}</span>
+                <span className="propmeta">
+                  {p.matched}/{p.entries} matched · {p.span ?? ""} · {p.query}
+                  {p.semantic ? ` · sim ${p.similarity?.toFixed(2) ?? "–"}${p.lexical ? " (hybrid)" : " (semantic)"}` : p.lexical ? " · word match" : ""}
+                </span>
                 <code className="proprowid">{p.rootExtId}</code>
               </li>
             );

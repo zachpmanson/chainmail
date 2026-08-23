@@ -214,7 +214,9 @@ type chainGrowth struct {
 
 // candidateReport is a chain the queries found that the page does not yet
 // include, with what is needed to judge it before accepting: the id that
-// accepts it, its size, and which query found it.
+// accepts it, its size, and which query found it. Similarity and the two flags
+// tell how the discovery explained it — a semantic-only proposal has cleared
+// the chain floor, so the number a reader would want to see is carried here.
 type candidateReport struct {
 	RootExtID string `json:"rootExtId"`
 	Subject   string `json:"subject,omitempty"`
@@ -223,6 +225,12 @@ type candidateReport struct {
 	Matched   int    `json:"matched"`
 	Span      string `json:"span,omitempty"`
 	Query     string `json:"query"`
+	// Similarity is the chain's best cosine to the query; Semantic says the
+	// vectors found it, Lexical that words did. All absent for a lexical-only
+	// refresh, which is the pre-hybrid answer.
+	Similarity float64 `json:"similarity,omitempty"`
+	Semantic   bool    `json:"semantic,omitempty"`
+	Lexical    bool    `json:"lexical,omitempty"`
 }
 
 func toRefreshReport(r refresh.Report) refreshReport {
@@ -243,7 +251,8 @@ func toRefreshReport(r refresh.Report) refreshReport {
 	for _, c := range r.ChainsProposed {
 		out.ChainsProposed = append(out.ChainsProposed, candidateReport{
 			RootExtID: c.RootExtID, Subject: c.Subject, Container: c.Container,
-			Entries: c.Entries, Matched: c.Matched, Span: c.Span, Query: c.Query})
+			Entries: c.Entries, Matched: c.Matched, Span: c.Span, Query: c.Query,
+			Similarity: c.Similarity, Semantic: c.Semantic, Lexical: c.Lexical})
 	}
 	for _, id := range r.ChainsUnranked {
 		out.ChainsUnranked = append(out.ChainsUnranked, id)

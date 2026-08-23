@@ -461,6 +461,10 @@ func (s *server) refresh(w http.ResponseWriter, r *http.Request) {
 		Uploads:    s.uploads,
 		// Fetch stays false: this server cannot reach the mailbox, on purpose.
 		Fetch: false,
+		// Proposals run hybrid: the recorded queries are embedded so the
+		// vector half joins discovery, and a semantic-only chain must clear
+		// the model's chain floor before it is offered (see refresh.Options).
+		Embed: s.embedder(),
 	})
 	if err != nil {
 		// The failure is the previous spec not being reproducible — nothing

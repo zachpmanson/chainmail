@@ -1243,6 +1243,19 @@
           "query": {
             "type": "string",
             "description": "Which recorded query found it."
+          },
+          "similarity": {
+            "type": "number",
+            "description": "The chain's best cosine to the query, from the matched entries the vector ranking saw. 0 (absent falls in the same place) for a refresh that never ran hybrid, and for a chain no vector match explained.",
+            "example": 0.82
+          },
+          "semantic": {
+            "type": "boolean",
+            "description": "True when a vector match placed this chain — a semantic-only proposal has cleared the chain floor, which is why its similarity is offered here."
+          },
+          "lexical": {
+            "type": "boolean",
+            "description": "True when a word or identifier match anchored this chain, so it was proposed regardless of its cosine (the other half of the dual regime)."
           }
         }
       },

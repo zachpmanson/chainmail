@@ -25,12 +25,14 @@
 package refresh
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/zachpmanson/chainmail/internal/corpus"
+	"github.com/zachpmanson/chainmail/internal/embed"
 	"github.com/zachpmanson/chainmail/internal/mailingest"
 	"github.com/zachpmanson/chainmail/internal/spec"
 )
@@ -94,6 +96,24 @@ type Options struct {
 	// candidate can be taken later without re-running the search.
 	IncludeNew bool
 	Accept     []string
+
+	// Embed carries the embedding model that produces hybrid proposal
+	// discovery. Unset keeps the query pass lexical-only — the recorded queries
+	// are matched by words, and a chain the words find is proposed as today.
+	// With it set, each query is also embedded and its semantic votes join the
+	// fusion, so a thread discussing the query's topic under different words
+	// can surface. A model whose daemon is unreachable, or a corpus with no
+	// vectors for it, falls back to lexical per query and the report says so:
+	// a down daemon must not take a refresh down with it.
+	Embed embed.Embedder
+
+	// ProposalFloor is the second semantic floor — the relevance bar a chain
+	// found only by the vectors must clear before it is proposed. It is
+	// deliberately separate from the search-result floor (the model's
+	// MinSimilarity, which only gates which entries get to join the ranking at
+	// all). Zero uses defaultProposalFloor; a chain the words also found is a
+	// keyword claim of its own and passes regardless (the dual regime).
+	ProposalFloor float64
 }
 
 // QueryPass is what re-running one recorded query did. Fetched, Created and
@@ -106,7 +126,15 @@ type QueryPass struct {
 	Fetched  int    // of those, the ones not already in the corpus
 	Created  int
 	Changed  int
-	Proposed int // chains this query found that the page does not have
+	Proposed int // chains this query surfaced, that the page does not have
+
+	// Hybrid is whether the semantic half of this query was asked, i.e. the
+	// pass ran a fused lexical+semantic discovery. Fallback names how the
+	// semantic half was lost when it was set but did not run — the daemon was
+	// unreachable, or this refresh carries no embedder — and is empty when the
+	// semantic half ran or was never requested.
+	Hybrid   bool
+	Fallback string
 }
 
 // ThreadPass is what one recorded chain did on this refresh.
@@ -135,6 +163,36 @@ type Candidate struct {
 	Matched   int
 	Span      string
 	Query     string
+
+	// Similarity is the chain's best cosine to the query, from the matched
+	// entries the vector ranking found; 0 when none were. Semantic reports
+	// whether any matched entry was found by the vectors; Lexical whether any
+	// was explained by words. A proposed semantic-only chain has cleared the
+	// proposal floor (see Options.ProposalFloor) — the fields make the
+	// judgement as clear as the matched/entries ratio.
+	Similarity float64
+	Semantic   bool
+	Lexical    bool
+}
+
+// defaultProposalFloor is the second semantic floor: the relevance bar a
+// chain found only by the vectors must clear before it is proposed. It is
+// deliberately separate from — and higher than — the search-entry floor, the
+// embedding model's MinSimilarity (0.6 for the default model), which only
+// gates which entries get to vote on a search at all. 0.8 sits between this
+// corpus's absurd noise and its true answers, and is the same cut the search
+// page highlights. A proposal raised from 0.6 to 0.8 is what makes the dual
+// regime's semantic-side gate do real work, since every semantic vote has
+// already cleared the entry floor.
+const defaultProposalFloor = 0.8
+
+// semanticState is one recorded query's semantic disposition on a refresh: did
+// hybrid discovery run, and if not, why. candidates fills one per query, in
+// query order, so the caller can say alongside each result whether vectors
+// had a voice at all.
+type semanticState struct {
+	Hybrid   bool
+	Fallback string
 }
 
 // Growth is a chain that gained entries.
@@ -272,9 +330,13 @@ func Run(store *corpus.Store, mb Mailbox, prev spec.Spec, opts Options) (Report,
 
 	// Discovery runs against the corpus either way, so a chain a plain
 	// `corpus ingest` brought in is proposed on the next refresh.
-	cands, err := candidates(store, prev, opts)
+	cands, sem, err := candidates(store, prev, opts)
 	if err != nil {
 		return rep, spec.Spec{}, err
+	}
+	for i := range rep.Queries {
+		rep.Queries[i].Hybrid = sem[i].Hybrid
+		rep.Queries[i].Fallback = sem[i].Fallback
 	}
 	accepted, proposed := split(cands, opts)
 	rep.ChainsProposed = proposed
@@ -447,21 +509,46 @@ func ingest(store *corpus.Store, mb Mailbox, envs []mailingest.Envelope, known m
 }
 
 // candidates re-runs each query against the corpus and keeps the chains the page
-// does not already contain. Chains are named by root, matching `corpus spec`: a
-// trail is the whole conversation, not only the messages holding the words.
-func candidates(store *corpus.Store, prev spec.Spec, opts Options) ([]Candidate, error) {
+// does not already contain and the discovery is willing to surface. Chains are
+// named by root, matching `corpus spec`: a trail is the whole conversation, not
+// only the messages holding the words.
+func candidates(store *corpus.Store, prev spec.Spec, opts Options) ([]Candidate, []semanticState, error) {
 	have := map[string]bool{}
 	for _, th := range prev.Threads {
 		have[th.ID] = true
 	}
+
+	// Embed each query once, so a query recorded twice embeds a single time
+	// and shares one vote. An embedding that fails — daemon down, model
+	// missing — degrades that one query to lexical rather than taking the
+	// whole refresh down with it, and the state below says which lost what.
+	states := make([]semanticState, len(prev.Queries))
+	sem := map[string]*corpus.SemanticQuery{}
+	if opts.Embed != nil {
+		for i, q := range prev.Queries {
+			states[i].Hybrid = true
+			if _, ok := sem[q.Q]; ok {
+				continue
+			}
+			s, err := corpus.SemanticFor(context.Background(), opts.Embed, q.Q,
+				corpus.SemanticOptions{})
+			if err != nil {
+				sem[q.Q] = nil
+				states[i].Fallback = fmt.Sprintf("semantic fell back to lexical: %v", err)
+				continue
+			}
+			sem[q.Q] = s
+		}
+	}
+
 	seen := map[string]bool{}
 	var out []Candidate
 	for _, q := range prev.Queries {
-		cq := corpus.Query{Text: q.Q, Limit: opts.Limit}
+		cq := corpus.Query{Text: q.Q, Limit: opts.Limit, Semantic: sem[q.Q]}
 		if opts.Since != "" {
 			t, err := time.Parse("2006-01-02", opts.Since)
 			if err != nil {
-				return nil, fmt.Errorf("since %q recorded in the spec: want YYYY-MM-DD", opts.Since)
+				return nil, nil, fmt.Errorf("since %q recorded in the spec: want YYYY-MM-DD", opts.Since)
 			}
 			cq.Since = t
 		}
@@ -470,25 +557,77 @@ func candidates(store *corpus.Store, prev spec.Spec, opts Options) ([]Candidate,
 		}
 		chains, err := store.SearchChains(cq)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		for _, c := range chains {
 			if have[c.Container] || seen[c.RootExtID] {
 				continue
 			}
 			seen[c.RootExtID] = true
+			sim, lexical, semantic := chainSignal(c)
+			if !proposalAdmit(lexical, semantic, sim, opts) {
+				continue
+			}
 			out = append(out, Candidate{
-				RootExtID: c.RootExtID,
-				Subject:   c.Subject,
-				Container: c.Container,
-				Entries:   c.Entries,
-				Matched:   c.Matched,
-				Span:      span(c.First, c.Last),
-				Query:     q.Q,
+				RootExtID:  c.RootExtID,
+				Subject:    c.Subject,
+				Container:  c.Container,
+				Entries:    c.Entries,
+				Matched:    c.Matched,
+				Span:       span(c.First, c.Last),
+				Query:      q.Q,
+				Similarity: sim,
+				Semantic:   semantic,
+				Lexical:    lexical,
 			})
 		}
 	}
-	return out, nil
+	return out, states, nil
+}
+
+// chainSignal measures how a found chain is explained. lexical turns when any
+// matched entry carries a word or identifier match (prose or ident), so the
+// chain is anchored by precision; similarity is the best cosine any vector
+// match found, which is the honest "is this thread about the query" number a
+// semantic-only proposal rides on.
+func chainSignal(c corpus.ChainHit) (sim float64, lexical, semantic bool) {
+	for _, h := range c.Best {
+		if h.ProseRank > 0 || h.IdentRank > 0 {
+			lexical = true
+		}
+		if h.SemRank == 0 {
+			continue
+		}
+		semantic = true
+		if h.Similarity > sim {
+			sim = h.Similarity
+		}
+	}
+	return sim, lexical, semantic
+}
+
+// proposalAdmit is the dual regime: a chain the words hold is a keyword claim
+// and is offered however it sits in vector space; a chain only the vectors
+// found carries the whole relevance bar itself, so it is offered only when its
+// best similarity clears the floor. A purely lexical refresh gates nothing.
+func proposalAdmit(lexical, semantic bool, sim float64, opts Options) bool {
+	if opts.Embed == nil {
+		return true
+	}
+	if lexical {
+		return true
+	}
+	if !semantic {
+		// A chain with neither kind of evidence should not have survived
+		// ranking, but if one does it is missing the very thing that makes
+		// a proposal worth a decision.
+		return false
+	}
+	floor := opts.ProposalFloor
+	if floor == 0 {
+		floor = defaultProposalFloor
+	}
+	return floor == 0 || sim >= floor
 }
 
 // split sorts candidates into the ones a caller has accepted and the ones still

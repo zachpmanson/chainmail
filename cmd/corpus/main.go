@@ -485,6 +485,14 @@ func run(args []string) error {
 		since := fs.String("since", "", "only entries on or after YYYY-MM-DD, overriding the spec's")
 		uploads := fs.String("uploads", defaultUploadDir(),
 			"archive upload root; image thumbnails are embedded from here (\"\" to embed none)")
+		hybrid := fs.Bool("hybrid", false, "discover from fused lexical+semantic ranking")
+		model := fs.String("model", embed.DefaultModel, "embedding model, for -hybrid")
+		dim := fs.Int("dim", embed.DefaultDim, "dimensions that model returns")
+		url := fs.String("url", embed.DefaultBaseURL, "ollama endpoint")
+		timeout := fs.String("timeout", "60s", "embedding timeout, for -hybrid")
+		proposal := fs.Float64("proposal", noFloorSentinel,
+			"semantic-only chain proposals clear this cosine; below "+fmt.Sprint(noFloorSentinel)+
+				" means the default 0.8")
 		if err := fs.Parse(rest); err != nil {
 			return err
 		}
@@ -494,7 +502,21 @@ func run(args []string) error {
 		if prevPath == "" || fs.NArg() > 1 {
 			return errors.New("usage: corpus refresh <spec.json|page.html> [-o spec.json] [-fetch]\n" +
 				"                  [-include-new] [-accept <root,...>] [-title T] [-me <address>]\n" +
-				"                  [-limit N] [-person X] [-since YYYY-MM-DD] [-uploads <dir>]")
+				"                  [-limit N] [-person X] [-since YYYY-MM-DD] [-uploads <dir>]\n" +
+				"                  [-hybrid] [-model M] [-dim D] [-url U] [-timeout T] [-proposal P]")
+		}
+		emb := embed.Embedder(nil)
+		proposalFloor := 0.0
+		if *hybrid {
+			wait, err := time.ParseDuration(*timeout)
+			if err != nil {
+				return fmt.Errorf("-timeout %q: %w", *timeout, err)
+			}
+			emb = &embed.Ollama{BaseURL: *url, Name: *model, Dimension: *dim,
+				Client: &http.Client{Timeout: wait}}
+			if *proposal > noFloorSentinel {
+				proposalFloor = *proposal
+			}
 		}
 		prev, err := refresh.Load(prevPath)
 		if err != nil {
@@ -506,15 +528,17 @@ func run(args []string) error {
 		}
 		defer s.Close()
 		rep, next, err := refresh.Run(s, mailingest.Client{}, prev, refresh.Options{
-			Title:      *title,
-			Me:         splitList(*me),
-			Limit:      *limit,
-			Person:     *person,
-			Since:      *since,
-			Uploads:    *uploads,
-			Fetch:      *fetch,
-			IncludeNew: *includeNew,
-			Accept:     splitList(*accept),
+			Title:         *title,
+			Me:            splitList(*me),
+			Limit:         *limit,
+			Person:        *person,
+			Since:         *since,
+			Uploads:       *uploads,
+			Fetch:         *fetch,
+			IncludeNew:    *includeNew,
+			Accept:        splitList(*accept),
+			Embed:         emb,
+			ProposalFloor: proposalFloor,
 		})
 		if err != nil {
 			return err

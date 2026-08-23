@@ -49,9 +49,16 @@ func printRefresh(w io.Writer, r refresh.Report) {
 		fmt.Fprintf(w, "added   %s: %d entries\n", orElse(oneLine(g.Subject, 60), g.ID), g.After)
 	}
 	for _, c := range r.ChainsProposed {
-		fmt.Fprintf(w, "propose %s — %d entries, %d matched, %s\n",
-			orElse(oneLine(c.Subject, 60), c.Container), c.Entries, c.Matched, c.Span)
-		fmt.Fprintf(w, "        matched %q; accept it with -accept %s\n", c.Query, c.RootExtID)
+		evidence := fmt.Sprintf("%d entries, %d matched, %s", c.Entries, c.Matched, c.Span)
+		if c.Semantic || c.Lexical {
+			if c.Lexical && c.Semantic {
+				evidence += fmt.Sprintf(", similar %.2f", c.Similarity)
+			} else if c.Semantic {
+				evidence += fmt.Sprintf(", similar %.2f (semantic)", c.Similarity)
+			}
+		}
+		fmt.Fprintf(w, "propose  %s — %s\n", orElse(oneLine(c.Subject, 60), c.Container), evidence)
+		fmt.Fprintf(w, "         matched %q; accept it with -accept %s\n", c.Query, c.RootExtID)
 	}
 	for _, id := range r.ChainsUnranked {
 		fmt.Fprintf(w, "kept    %s is no longer returned by any recorded query, and stays on the "+
@@ -68,6 +75,11 @@ func printRefresh(w io.Writer, r refresh.Report) {
 
 func queryOutcome(p refresh.QueryPass) string {
 	s := fmt.Sprintf("proposes %d", p.Proposed)
+	if p.Hybrid && p.Fallback == "" {
+		s += ", hybrid"
+	} else if p.Fallback != "" {
+		s += ", " + p.Fallback
+	}
 	if p.Sent == "" {
 		return s + ", mailbox not asked"
 	}

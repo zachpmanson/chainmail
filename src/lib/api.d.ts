@@ -561,6 +561,15 @@ export interface components {
             span?: string;
             /** @description Which recorded query found it. */
             query: string;
+            /**
+             * @description The chain's best cosine to the query, from the matched entries the vector ranking saw. 0 (absent falls in the same place) for a refresh that never ran hybrid, and for a chain no vector match explained.
+             * @example 0.82
+             */
+            similarity?: number;
+            /** @description True when a vector match placed this chain — a semantic-only proposal has cleared the chain floor, which is why its similarity is offered here. */
+            semantic?: boolean;
+            /** @description True when a word or identifier match anchored this chain, so it was proposed regardless of its cosine (the other half of the dual regime). */
+            lexical?: boolean;
         };
         /** @description Every non-2xx response carries this and nothing else. */
         Error: {

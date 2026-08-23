@@ -24,6 +24,15 @@
 .selrow + .selrow { border-top:1px solid var(--line); }
 .selrow > .chk { display:flex; gap:.5rem; padding:.5rem .7rem; cursor:pointer; }
 .selrow:hover { background:var(--quote); }
+/* A strong semantic match: the row carries the highlight and the badge stays
+   readable under it. The colour is the search page's way of saying "this is
+   above the relevance floor" — same 0.8 refresh holds proposals to. */
+.selhot { background:color-mix(in srgb, var(--strong) 14%, var(--bg)); }
+.selhot > .chk:hover { background:color-mix(in srgb, var(--strong) 20%, var(--quote)); }
+.selshot { display:inline-block; margin-left:.35rem; font-size:.62rem; font-weight:700;
+  text-transform:uppercase; letter-spacing:.06em; color:var(--strong);
+  border:1px solid var(--strong); border-radius:999px; padding:0 .35rem .05rem; }
+.selsim { color:var(--strong); font-weight:600; }
 .seld { display:flex; flex-direction:column; gap:.12rem; min-width:0; }
 .selsub { font-size:.88rem; font-weight:650; overflow-wrap:anywhere; }
 .selmeta { display:flex; flex-wrap:wrap; gap:.75rem; font-size:.7rem; color:var(--muted); }

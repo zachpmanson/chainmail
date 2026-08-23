@@ -42,6 +42,20 @@ function span(chain: ChainHit): string {
   return `${a} – ${b}`;
 }
 
+/** The search page's relevance floor, for the highlight. A chain whose best
+ * cosine clears it is marked as a strong semantic match — the same number
+ * refresh holds semantic-only proposals to (see internal/refresh). */
+const HIGHLIGHT_FLOOR = 0.8;
+
+/** The chain's best cosine similarity to the query, from its best entry hits. */
+function chainSimilarity(chain: ChainHit): number {
+  let best = 0;
+  for (const e of chain.best ?? []) {
+    if (e.semRank > 0 && e.similarity !== undefined && e.similarity > best) best = e.similarity;
+  }
+  return best;
+}
+
 function ChainRow({
   chain,
   checked,
@@ -51,19 +65,30 @@ function ChainRow({
   checked: boolean;
   onToggle: () => void;
 }) {
+  const sim = chainSimilarity(chain);
+  const hot = sim > HIGHLIGHT_FLOOR;
   return (
-    <li className="selrow">
+    <li className={`selrow${hot ? " selhot" : ""}`}>
       <label className="chk">
         <input type="checkbox" checked={checked} onChange={onToggle} />
         <span className="seld">
-          <span className="selsub">{chain.subject || "(no subject)"}</span>
+          <span className="selsub">
+            {chain.subject || "(no subject)"}
+            {hot ? (
+              <span className="selshot" title="strong semantic match">
+                strong
+              </span>
+            ) : null}
+          </span>
           <span className="selmeta">
-            {/* The ratio, not the numerator: 3 of 4 entries is a thread about
-                the query, 3 of 180 is a thread that mentioned it once. Showing
-                only "3 matched" makes those two look identical. */}
             <span className="selratio" title="matching entries of the whole chain">
               {chain.matched} of {chain.entries} matched
             </span>
+            {sim > 0 ? (
+              <span className="selsim" title="best cosine similarity of the chain">
+                sim {sim.toFixed(2)}
+              </span>
+            ) : null}
             {chain.people > 0 ? (
               <span className="selppl" title="distinct people in the whole chain, senders and recipients">
                 {chain.people} participant{chain.people === 1 ? "" : "s"}

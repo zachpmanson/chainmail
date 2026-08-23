@@ -1,12 +1,14 @@
 package refresh
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/zachpmanson/chainmail/internal/corpus"
+	"github.com/zachpmanson/chainmail/internal/embed"
 	"github.com/zachpmanson/chainmail/internal/mailingest"
 	"github.com/zachpmanson/chainmail/internal/spec"
 )
@@ -511,5 +513,163 @@ func TestAfterDateNarrowsToThePreviousRun(t *testing.T) {
 		if got := AfterDate(label); got != want {
 			t.Errorf("AfterDate(%q) = %q, want %q", label, got, want)
 		}
+	}
+}
+
+// pinnedEmbedder is the real model's fake: same name, so the calibrated floor
+// and the task prefixes apply, and precise pins for the vectors a test means.
+func pinnedEmbedder(t *testing.T, pins map[string][]float32) *embed.Fake {
+	t.Helper()
+	return &embed.Fake{Name: "nomic-embed-text", Dimension: 8, Texts: pins}
+}
+
+// docTextOf is the document-form text a mail entry is embedded as, prefixed
+// the way the fake applies it, so a test can pin the vector under the exact
+// key BackfillEmbeddings looks up.
+func docTextOf(subject, body string) string {
+	text, reason := corpus.EmbedTextFor(corpus.SourceMail, subject, body)
+	if reason != "" {
+		panic("fixture skipped: " + reason)
+	}
+	return "search_document: " + text
+}
+
+func embedAll(t *testing.T, s *corpus.Store, f *embed.Fake) {
+	t.Helper()
+	if _, err := s.BackfillEmbeddings(context.Background(), f, corpus.BackfillOptions{}); err != nil {
+		t.Fatalf("BackfillEmbeddings: %v", err)
+	}
+}
+
+// The point of the hybrid refresh: a thread whose words share nothing with the
+// query still gets proposed, because the vectors place it there. It stays a
+// proposal — a decision — and the report carries the cosine that justifies it.
+func TestHybridProposalFoundByVectorsAlone(t *testing.T) {
+	s := store(t)
+	first := msg("m1", "here is the paddock survey we agreed")
+	put(t, s, first)
+	prev := prevRun(t, s, "thread-hedge", "paddock survey")
+
+	other := msg("m9", "The river block has been walked and the boundary line holds.",
+		subject("North block access"), inThread("thread-north"),
+		on("Tue, 03 Feb 2026 11:00:00 +1100"))
+	put(t, s, other)
+
+	f := pinnedEmbedder(t, map[string][]float32{
+		"search_query: paddock survey":              embed.Unit(8, 0, 1),
+		docTextOf("North block access", other.Body): embed.Mix(8, 0, 1, 0.2),
+	})
+	embedAll(t, s, f)
+
+	rep, next := run(t, s, newMailbox(), prev, Options{Embed: f})
+
+	if len(rep.ChainsProposed) != 1 {
+		t.Fatalf("proposed = %+v; the semantic-only chain must be offered", rep.ChainsProposed)
+	}
+	c := rep.ChainsProposed[0]
+	if !c.Semantic || c.Lexical {
+		t.Errorf("evidence = semantic %v lexical %v, want a vector-only chain", c.Semantic, c.Lexical)
+	}
+	if c.Similarity < 0.9 {
+		t.Errorf("similarity = %.3f, want the pinned ~0.98 cosine", c.Similarity)
+	}
+	if !rep.Queries[0].Hybrid || rep.Queries[0].Fallback != "" {
+		t.Errorf("query pass = hybrid %v fallback %q", rep.Queries[0].Hybrid, rep.Queries[0].Fallback)
+	}
+	if len(next.Threads) != 1 {
+		t.Errorf("still off the page until accepted: %+v", next.Threads)
+	}
+}
+
+// The dual regime, semantic side: a chain only the vectors found clears the
+// entry floor (it got to vote) but not the raised chain bar, so it is withheld
+// rather than offered for a decision it should not need one for.
+func TestSemanticOnlyProposalBelowTheChainFloorIsWithheld(t *testing.T) {
+	s := store(t)
+	first := msg("m1", "here is the paddock survey we agreed")
+	put(t, s, first)
+	prev := prevRun(t, s, "thread-hedge", "paddock survey")
+
+	other := msg("m9", "The river block has been walked and the boundary line holds.",
+		subject("North block access"), inThread("thread-north"),
+		on("Tue, 03 Feb 2026 11:00:00 +1100"))
+	put(t, s, other)
+
+	f := pinnedEmbedder(t, map[string][]float32{
+		"search_query: paddock survey":              embed.Unit(8, 0, 1),
+		docTextOf("North block access", other.Body): embed.Mix(8, 0, 1, 0.7), // cos 0.765: clears the 0.6 entry floor, but not 0.8
+	})
+	embedAll(t, s, f)
+
+	// No ProposalFloor: the default 0.8 must gate a semantic-only chain.
+	rep, _ := run(t, s, newMailbox(), prev, Options{Embed: f})
+
+	if len(rep.ChainsProposed) != 0 {
+		t.Fatalf("proposed = %+v; a below-bar semantic-only chain must not be offered", rep.ChainsProposed)
+	}
+}
+
+// And the lexical side of the dual regime: a chain the words find is a keyword
+// claim, offered even when its cosine sits nowhere near any floor. An explicit
+// high ProposalFloor (0.9) makes it obvious the raised bar still cannot hold it.
+func TestLexicalAnchoredProposalSurvivesAHighChainFloor(t *testing.T) {
+	s := store(t)
+	first := msg("m1", "here is the paddock survey we agreed")
+	put(t, s, first)
+	prev := prevRun(t, s, "thread-hedge", "paddock survey")
+
+	other := msg("m9", "The paddock survey for the north block is in the post.",
+		subject("North block access"), inThread("thread-north"),
+		on("Tue, 03 Feb 2026 11:00:00 +1100"))
+	put(t, s, other)
+
+	f := pinnedEmbedder(t, map[string][]float32{
+		"search_query: paddock survey":              embed.Unit(8, 0, 1),
+		docTextOf("North block access", other.Body): embed.Unit(8, 3, 1), // orthogonal: no semantic vote
+	})
+	embedAll(t, s, f)
+
+	rep, _ := run(t, s, newMailbox(), prev, Options{Embed: f, ProposalFloor: 0.9})
+
+	if len(rep.ChainsProposed) != 1 {
+		t.Fatalf("proposed = %+v; a chain the words found must be offered regardless of cosine", rep.ChainsProposed)
+	}
+	c := rep.ChainsProposed[0]
+	if !c.Lexical || c.Semantic {
+		t.Errorf("evidence = lexical %v semantic %v, want a keyword-anchored chain", c.Lexical, c.Semantic)
+	}
+	if c.Similarity != 0 {
+		t.Errorf("similarity = %.3f, want 0 for a chain no vector ranked", c.Similarity)
+	}
+}
+
+// A down daemon is a condition, not a failure: the refresh falls back to the
+// words and still proposes, and the report says which query lost the vectors.
+func TestHybridFallsBackToLexicalWhenTheModelIsDown(t *testing.T) {
+	s := store(t)
+	first := msg("m1", "here is the paddock survey we agreed")
+	put(t, s, first)
+	prev := prevRun(t, s, "thread-hedge", "paddock survey")
+
+	other := msg("m9", "The paddock survey for the north block is in the post.",
+		subject("North block access"), inThread("thread-north"),
+		on("Tue, 03 Feb 2026 11:00:00 +1100"))
+	put(t, s, other)
+
+	down := &embed.Fake{Name: "nomic-embed-text", Dimension: 8, Fail: embed.ErrDaemonDown}
+	rep, next := run(t, s, newMailbox(), prev, Options{Embed: down})
+
+	if !rep.Queries[0].Hybrid || rep.Queries[0].Fallback == "" {
+		t.Errorf("query pass = hybrid %v fallback %q, want the loss recorded",
+			rep.Queries[0].Hybrid, rep.Queries[0].Fallback)
+	}
+	if len(rep.ChainsProposed) != 1 {
+		t.Fatalf("proposed = %+v; lexical discovery must survive a missing model", rep.ChainsProposed)
+	}
+	if !rep.ChainsProposed[0].Lexical {
+		t.Errorf("fallback proposal evidence = %+v, want the lexical chain", rep.ChainsProposed[0])
+	}
+	if len(next.Threads) != 1 {
+		t.Errorf("refresh must still produce a spec: %+v", next.Threads)
 	}
 }
