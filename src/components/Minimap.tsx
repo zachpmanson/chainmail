@@ -5,7 +5,9 @@ const PITCH = 12;
 const IND = 11;
 const X0 = 11;
 const Y0 = 9;
-const MIN_W = 232;
+/* keep just enough floor for a single chain lane to stay readable; the svg is
+   otherwise sized to its lane count so the overlay panel can hug the tree */
+const MIN_W = 96;
 
 /**
  * A sticky index of the reply graph. Down is time — rows follow the transcript's
