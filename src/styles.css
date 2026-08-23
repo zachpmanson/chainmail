@@ -103,6 +103,34 @@
   .specpre { margin:0; flex:1 1 auto; overflow:auto; padding:.9rem 1rem 2rem;
     font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.72rem;
     line-height:1.5; tab-size:2; white-space:pre; color:var(--fg); }
+  /* proposal evaluator: a dimmed backdrop keeps the page visible while a proposed
+     chain is judged and accepted by root ext id (see refresh.go's Candidate). */
+  .proposals { position:fixed; inset:0; z-index:55; background:rgba(0,0,0,.45);
+    display:flex; align-items:center; justify-content:center; }
+  .proposals-panel { background:var(--card); border:1px solid var(--line);
+    border-radius:8px; max-width:44rem; max-height:70vh; display:flex;
+    flex-direction:column; box-shadow:0 8px 40px rgba(0,0,0,.35); }
+  .proposals-head { display:flex; align-items:center; gap:.6rem;
+    padding:.5rem .8rem; border-bottom:1px solid var(--line); }
+  .proposals-head b { font-size:.72rem; font-weight:700; text-transform:uppercase;
+    letter-spacing:.09em; color:var(--muted); }
+  .proposals-head .note { font-size:.7rem; color:var(--muted); margin-right:auto; }
+  .proposals-list { margin:0; padding:.5rem .8rem; overflow:auto; list-style:none;
+    display:flex; flex-direction:column; gap:.4rem; }
+  .propcard { display:flex; align-items:center; gap:.5rem;
+    padding:.35rem .5rem; border:1px solid var(--line); border-radius:5px;
+    background:var(--bg); }
+  .proptoggle { display:flex; align-items:center; gap:.5rem; flex:1 1 auto;
+    min-width:0; cursor:pointer; }
+  .proptoggle input { accent-color:var(--o1); }
+  .propsubj { font-weight:600; overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap; }
+  .propsubj em { font-style:normal; color:var(--muted); }
+  .propmeta { font-size:.7rem; color:var(--muted); white-space:nowrap; }
+  .proprowid { font-size:.66rem; color:var(--accent); max-width:22rem;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .proposals-foot { display:flex; justify-content:flex-end; gap:.6rem;
+    padding:.5rem .8rem; border-top:1px solid var(--line); }
   .srcgrp a { color:inherit; text-decoration-color:var(--accent); text-underline-offset:2px; }
   .srcgrp a:hover { color:var(--accent); }
   .newpill { font-size:.6rem; font-weight:800; text-transform:uppercase; letter-spacing:.09em;
@@ -411,7 +439,11 @@
      stays reachable so the overlay is dismissible. */
   @media (max-width:1024px) {
     body.hasmap { --panel:0rem; }
-    .mini { top:2.4rem; }
+    /* overlay: let the stream show through the panel a little (a faint ghost
+       of the cards under it, not a hard card wall); the svg content itself
+       stays opaque */
+    .mini { top:2.4rem;
+      background:color-mix(in srgb, var(--card) 86%, transparent); }
     #maptog { display:inline-block; }
     .refreshed { right:calc(16.5rem + .6rem); }
   }
