@@ -29,7 +29,7 @@ import (
 	"time"
 
 	"github.com/zachpmanson/chainmail/internal/corpus"
-	"github.com/zachpmanson/chainmail/internal/embed"
+	mailembed "github.com/zachpmanson/chainmail/internal/embed"
 )
 
 func main() {
@@ -45,9 +45,9 @@ func run(args []string) error {
 	path := fs.String("corpus", defaultCorpusPath(), "corpus database")
 	uploads := fs.String("uploads", defaultUploadDir(),
 		"archive upload root; attachment thumbnails are embedded from here (\"\" to embed none)")
-	model := fs.String("model", embed.DefaultModel, "embedding model, for mode=semantic|hybrid")
-	dim := fs.Int("dim", embed.DefaultDim, "dimensions that model returns")
-	url := fs.String("url", embed.DefaultBaseURL, "ollama endpoint")
+	model := fs.String("model", mailembed.DefaultModel, "embedding model, for mode=semantic|hybrid")
+	dim := fs.Int("dim", mailembed.DefaultDim, "dimensions that model returns")
+	url := fs.String("url", mailembed.DefaultBaseURL, "ollama endpoint")
 	timeout := fs.Duration("embed-timeout", 2*time.Minute, "how long to wait for the model")
 	serveRemote := fs.Bool(unsafeBindFlag, false,
 		"permit a non-loopback -addr; read what it prints before you use it")
@@ -72,8 +72,8 @@ func run(args []string) error {
 		uploads:   *uploads,
 		specSlots: make(chan struct{}, specConcurrency),
 		slotWait:  specSlotWait,
-		embedder: func() *embed.Ollama {
-			return &embed.Ollama{BaseURL: *url, Name: *model, Dimension: *dim,
+		embedder: func() *mailembed.Ollama {
+			return &mailembed.Ollama{BaseURL: *url, Name: *model, Dimension: *dim,
 				Client: &http.Client{Timeout: *timeout}}
 		},
 		embedWait: *timeout,

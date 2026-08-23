@@ -17,10 +17,12 @@
       # share a source tree, a vendorHash and a test suite. Split it only if a
       # host ever wants `corpus` without the service.
       #
-      # The web client is deliberately not packaged. It is a Vite dev server run
-      # from a checkout, and packaging it would pin an npm lockfile hash that
-      # every dependency bump has to chase for no gain — nobody installs the
-      # client, they run `npm run dev`.
+      # The web client is now embedded INTO the server: the flake builds it with
+      # npm (vite build → dist/) before compiling Go, so a single binary serves
+      # both the API and the UI. The lockfile is committed and frozen, so the
+      # npm ci is reproducible; the output is plain static assets with hashed
+      # names. This reverses the old "client is Vite dev only" note:
+      #       packages → removed the web-disabled paragraph; the client ships.
       packages = forAll (pkgs: rec {
         default = chainmail;
 
@@ -29,6 +31,15 @@
           version = "0.1.0";
           src = self;
           vendorHash = "sha256-tE5twZddLbKWD6TyN1y+c8KkKh1TvLbKb2VViEIPHXQ=";
+
+          # Build the web client first so cmd/server's go:embed finds dist/.
+          # npm ci from the committed lockfile; vite build outputs dist/ at the
+          # repo root, which cmd/server embeds with `//go:embed all:dist`.
+          nativeBuildInputs = [ pkgs.nodejs_22 ];
+          preBuild = ''
+            npm ci
+            npm run build
+          '';
 
           # The suite reads committed fixtures and an embedded tzdata, never the
           # network, docket or $HOME, so it is safe to gate the install on it.

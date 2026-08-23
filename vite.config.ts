@@ -1,13 +1,25 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { homedir } from "node:os";
+import { fileURLToPath } from "node:url";
 
 // The dev server is for iterating on the view against a spec on disk.
 // Shipping artifacts come from `npm run render` (scripts/render.tsx), which
 // server-renders a spec to one self-contained HTML file.
+// The production build (vite build) emits into cmd/server/dist/, which the Go
+// server embeds with `//go:embed all:dist` — one binary, both API and UI.
 export default defineConfig({
   plugins: [react()],
   publicDir: "fixtures",
+  build: {
+    // Where the Go package expects the embedded client. The embed directive is
+    // evaluated relative to cmd/server/ (go:embed cannot reach parent dirs).
+    outDir: fileURLToPath(new URL("./cmd/server/dist", import.meta.url)),
+    // The client is served from a single file server; hashed asset names are
+    // what vite produces by default, and emptyOutDir keeps a stale build from
+    // serving old hashes.
+    emptyOutDir: true,
+  },
   define: {
     // lets the client expand a leading ~ in ?spec=
     __HOME__: JSON.stringify(homedir()),

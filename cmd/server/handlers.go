@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"log"
 	"net/http"
 	"strconv"
@@ -12,11 +15,20 @@ import (
 	"time"
 
 	"github.com/zachpmanson/chainmail/internal/corpus"
-	"github.com/zachpmanson/chainmail/internal/embed"
+	mailembed "github.com/zachpmanson/chainmail/internal/embed"
 	"github.com/zachpmanson/chainmail/internal/mailingest"
 	"github.com/zachpmanson/chainmail/internal/refresh"
 	"github.com/zachpmanson/chainmail/internal/spec"
 )
+
+// The built web client, embedded so one binary serves both the API and the UI.
+// Building the client is a separate step (vite build → cmd/server/dist/, wired
+// into the package's build in flake.nix); when dist is absent the build fails
+// so a server that claims to serve the UI always can. cmd/server/dist is
+// gitignored; only the embedded result ships.
+//
+//go:embed all:dist
+var webDist embed.FS
 
 // specConcurrency bounds spec builds in flight. Assembly recovers quoted
 // bodies, measures repeated boilerplate and decodes attachment bytes, so a
@@ -50,7 +62,7 @@ type server struct {
 	specSlots chan struct{}
 	// slotWait is how long a caller waits for a slot before being told to retry.
 	slotWait  time.Duration
-	embedder  func() *embed.Ollama
+	embedder  func() *mailembed.Ollama
 	embedWait time.Duration
 }
 
@@ -71,10 +83,59 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("/v1/chains/{rootExtId}", get(s.chain))
 	mux.HandleFunc("/v1/stats", get(s.stats))
 	mux.HandleFunc("/v1/people", get(s.people))
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fail(w, http.StatusNotFound, fmt.Errorf("no such endpoint: %s %s", r.Method, r.URL.Path))
-	})
+	mux.HandleFunc("/", s.webRoot())
 	return mux
+}
+
+// webRoot serves the embedded web client, or a 404 when the build is absent.
+// API routes are registered first (longer, more specific pattern), so this only
+// sees non-/v1/ paths: the client's own assets, and SPA routes the client
+// handles client-side. An unknown file returns a 404 rather than index.html (no
+// catch-all fallback), so a mistyped path fails loudly instead of silently
+// serving a page that then can't render.
+// webRoot serves the embedded web client alongside the API: the app shell at
+// / and /index.html, static assets by name, and every other non-/v1/ path as
+// the API's JSON 404 (unknown endpoints stay in the one error shape — a path
+// that is not a file is not a frontend route, the client uses no router).
+// /v1/* that matches no registered handler still reaches here via the catch-
+// all and must keep the JSON 404 contract, never an HTML fallback.
+func (s *server) webRoot() http.HandlerFunc {
+	sub, err := fs.Sub(webDist, "dist")
+	if err != nil {
+		// The embed pattern guarantees dist exists inside the compiled binary.
+		panic(err)
+	}
+	fileServer := http.FileServer(http.FS(sub))
+	json404 := func(w http.ResponseWriter, r *http.Request) {
+		fail(w, http.StatusNotFound,
+			fmt.Errorf("no such endpoint: %s %s", r.Method, r.URL.Path))
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/v1/") {
+			json404(w, r)
+			return
+		}
+		p := strings.TrimPrefix(r.URL.Path, "/")
+		if p == "" || p == "index.html" {
+			// The app shell. FileServer would serve it for "/" via its implicit
+			// index, but that path also needs to answer for a bare /index.html;
+			// open it directly so both get the same bytes and cache headers.
+			f, err := sub.Open("index.html")
+			if err != nil {
+				json404(w, r)
+				return
+			}
+			defer f.Close()
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			io.Copy(w, f)
+			return
+		}
+		if _, err := fs.Stat(sub, p); err != nil {
+			json404(w, r)
+			return
+		}
+		fileServer.ServeHTTP(w, r)
+	}
 }
 
 func get(h http.HandlerFunc) http.HandlerFunc  { return method(http.MethodGet, h) }
@@ -190,7 +251,7 @@ func (s *server) semanticFor(ctx context.Context, mode, text string) (*corpus.Se
 	if err != nil {
 		wrapped := fmt.Errorf("mode %q: %w", mode, err)
 		switch {
-		case errors.Is(err, embed.ErrDaemonDown), errors.Is(err, embed.ErrModelMissing):
+		case errors.Is(err, mailembed.ErrDaemonDown), errors.Is(err, mailembed.ErrModelMissing):
 			return nil, http.StatusServiceUnavailable, wrapped
 		case errors.Is(err, context.DeadlineExceeded):
 			return nil, http.StatusGatewayTimeout, wrapped

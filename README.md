@@ -51,7 +51,9 @@ marks), with no dangling internal links.
 ## Install
 
 Two binaries and a web app. `corpus` owns the database and every operation on it;
-`chainmail-server` exposes the read paths over HTTP; the Vite app is the client.
+`chainmail-server` exposes the read paths over HTTP AND serves the web client
+(from the same port — the client is embedded into the binary via go:embed, so a
+single `chainmail-server` process is the whole product over one loopback port).
 
 ```bash
 nix develop              # go, node 22, npm — or bring your own
