@@ -8,6 +8,7 @@ import { SpecView } from "./components/SpecView";
 import { loadSpec } from "./lib/loadSpec";
 import { makeQueryClient } from "./lib/queryClient";
 import { normalise } from "./lib/normalise";
+import { $api, type RefreshReport } from "./lib/api";
 import { SelectView } from "./components/Select";
 import { parseRoute, type Route } from "./lib/route";
 import type { Timeline as Spec } from "./lib/spec";
@@ -28,11 +29,27 @@ import "./select.css";
 export function App() {
   const [spec, setSpec] = useState<Spec | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [refreshNote, setRefreshNote] = useState<string | null>(null);
   const param = useMemo(() => new URLSearchParams(location.search).get("spec"), []);
   const [route, setRoute] = useState<Route>(parseRoute);
   // The name of the spec in state when it came from the API, so the just-built
   // page is not fetched back out of the saved file the moment it is shown.
   const loaded = useRef<string | null>(null);
+
+  // Refresh is the read half of the CLI's `refresh` command, offered only on a
+  // saved page (/view/<name>), where the name lets the server rewrite the file
+  // too — so a reload lands on the same run. The mailbox is never reached: the
+  // corpus is the cron's job, this re-derives the page from it.
+  const refresh = $api.useMutation("post", "/v1/refresh", {
+    onSuccess: (data) => {
+      setSpec(normalise(data.spec));
+      setRefreshNote(refreshSummary(data.report));
+      setError(null);
+    },
+    onError: (e) => {
+      setRefreshNote(e instanceof Error ? e.message : String(e));
+    },
+  });
 
   // Browser back/forward move between / and /view/<name>; the server answers
   // /view/<name> with the same shell, so the route survives a reload.
@@ -73,6 +90,7 @@ export function App() {
     if (route.view === "search") {
       setSpec(null);
       loaded.current = null;
+      setRefreshNote(null);
     }
   }, [route]);
 
@@ -104,6 +122,7 @@ export function App() {
     loaded.current = viewName;
     let cancelled = false;
     setSpec(null);
+    setRefreshNote(null);
     loadSpec(`/v1/specs/${encodeURIComponent(viewName)}`)
       .then((sp) => {
         if (!cancelled) setSpec(sp);
@@ -131,6 +150,27 @@ export function App() {
       <Rendered
         spec={spec}
         onBack={route.view === "search" && param === null ? () => setSpec(null) : undefined}
+        onRefresh={
+          viewName !== null
+            ? () =>
+                refresh.mutate({
+                  body: {
+                    // The renderer's Timeline is laxer than the wire type
+                    // (specVersion, theme, openItemsTitle and entry kind are
+                    // optional locally but demanded on the wire). normalise
+                    // already produced a contract-shaped spec, so a single
+                    // typed cast at this boundary is honest — the alternative
+                    // is hand-filling defaults that would then disagree with
+                    // the server's own.
+                    spec: spec as unknown as Parameters<typeof refresh.mutate>[0]["body"]["spec"],
+                    name: viewName,
+                    includeNew: false,
+                  },
+                })
+            : undefined
+        }
+        refreshing={refresh.isPending}
+        refreshNote={refreshNote}
       />
     );
   if (viewName !== null) return <p style={{ padding: "2rem", opacity: 0.6 }}>Loading page…</p>;
@@ -156,7 +196,30 @@ export function App() {
  * rebuilt. Excluding a chain re-derives ordering, lanes, spines, the minimap and
  * every count — hiding rows would leave holes in the grid and mis-drawn lanes.
  */
-function Rendered({ spec, onBack }: { spec: Spec; onBack?: () => void }) {
+/**
+ * One line saying what a refresh did. NothingNew is the calm default: a page
+ * that was already current should not read as if it changed. The other four
+ * states are the four lists the report can hold, joined by comma, and a page
+ * that changed only its counts (entries) is still reported — those are the
+ * chains a reader can see grew.
+ */
+function refreshSummary(r: RefreshReport): string {
+  if (r.nothingNew) return "already up to date";
+  const parts: string[] = [];
+  if (r.chainsAdded?.length) parts.push(`${r.chainsAdded.length} added`);
+  if (r.chainsGrown?.length) parts.push(`${r.chainsGrown.length} grew`);
+  if (r.chainsProposed?.length) parts.push(`${r.chainsProposed.length} proposed`);
+  if (r.chainsUnranked?.length) parts.push(`${r.chainsUnranked.length} unranked`);
+  return parts.length ? `refresh: ${parts.join(", ")}` : "refresh: nothing changed";
+}
+
+function Rendered({ spec, onBack, onRefresh, refreshing, refreshNote }: {
+  spec: Spec;
+  onBack?: () => void;
+  onRefresh?: () => void;
+  refreshing?: boolean;
+  refreshNote?: string | null;
+}) {
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [showSpec, setShowSpec] = useState(false);
 
@@ -232,6 +295,9 @@ function Rendered({ spec, onBack }: { spec: Spec; onBack?: () => void }) {
         spec={filtered}
         filter={{ chains, excluded, onToggle }}
         onShowSpec={() => setShowSpec(true)}
+        onRefresh={onRefresh}
+        refreshing={refreshing}
+        refreshNote={refreshNote}
       />
       {showSpec ? <SpecView spec={filtered} onClose={() => setShowSpec(false)} /> : null}
     </>

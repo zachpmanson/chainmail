@@ -457,6 +457,8 @@ export interface components {
              *     ]
              */
             accept?: string[];
+            /** @description When set, saves the refreshed page back under /view/<name>, rewriting the file POST /v1/spec wrote, so a reload lands on this run. The same name rules as a build: letters, digits, '.', '_', '-'; no slashes and no '..'. */
+            name?: string;
         };
         /** @description The regenerated spec, plus a report of what the refresh did to get there. The spec is what a client renders; the report is what it shows to explain a change. */
         RefreshResponse: {

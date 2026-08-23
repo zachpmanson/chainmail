@@ -161,7 +161,8 @@ func toChainHit(c corpus.ChainHit) chainHit {
 // overrides the CLI would take. The spec itself is authoritative for
 // membership; title, person, since, limit and me only narrow or rename how
 // that membership is reproduced. accept accepts proposed chains by root ext
-// id, the same handle POST /v1/spec takes.
+// id, the same handle POST /v1/spec takes. name, when set, saves the
+// refreshed page back under /view/<name> so a reload lands on the new run.
 type refreshRequest struct {
 	Spec       spec.Spec `json:"spec"`
 	Title      string    `json:"title,omitempty"`
@@ -171,6 +172,7 @@ type refreshRequest struct {
 	Me         []string  `json:"me,omitempty"`
 	IncludeNew bool      `json:"includeNew,omitempty"`
 	Accept     []string  `json:"accept,omitempty"`
+	Name       string    `json:"name,omitempty"`
 }
 
 // refreshResponse is the regenerated spec alongside what the refresh decided.

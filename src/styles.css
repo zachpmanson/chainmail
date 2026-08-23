@@ -412,6 +412,13 @@
     .mini { display:none; } #maptog { display:none; }
   }
   @media print { .mini, .toolbar { display:none; } body.hasmap { --panel:0rem; } }
+  /* one-line verdict from a refresh, under the toolbar (matches .top layout) */
+  .refreshed { position:fixed; top:2.1rem; right:calc(var(--panel) + .6rem); z-index:30;
+    max-width:min(28rem, 60vw); margin:0; padding:.2rem .5rem;
+    font-size:.66rem; line-height:1.35; color:var(--muted); background:var(--card);
+    border:1px solid var(--line); border-radius:6px; }
+  .tbtn:disabled { opacity:.55; cursor:default; }
+  .tbtn:disabled:hover { color:var(--muted); border-color:var(--line); }
   /* --- chain columns: one column per reply chain, grid row = chronological
      position, so reading down stays in time order while each chain keeps a lane --- */
   .colhd, .spine, .chsec { display:none; }

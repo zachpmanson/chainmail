@@ -320,6 +320,56 @@ func TestSpecRefusesABodyItDoesNotUnderstand(t *testing.T) {
 	}
 }
 
+// A named refresh rewrites the saved page, exactly as the build would: the
+// client shows the refreshed spec and the file under /view/<name> is the same
+// run, so a reload lands on what the refresh produced rather than the stale
+// build.
+func TestRefreshWithANameRewritesTheSavedPage(t *testing.T) {
+	srv, api := testServer(t), loadAPI(t)
+
+	// Build and save under a name, as the client does at build time.
+	blob, _ := json.Marshal(specRequest{
+		Chains: []string{extAda1}, Title: "Solar install quote",
+		Me: []string{"ada@loomworks.example"}, Name: "solar-install-quote",
+	})
+	built := srv.do(t, "POST", "/v1/spec", blob)
+	if built.status != 200 {
+		t.Fatalf("build: status = %d: %s", built.status, built.body)
+	}
+
+	// Refresh the built page, naming it so the server rewrites the file.
+	body, _ := json.Marshal(refreshRequest{
+		Spec: decode[spec.Spec](t, built),
+		Name: "solar-install-quote",
+	})
+	res := srv.do(t, "POST", "/v1/refresh", body)
+	if res.status != 200 {
+		t.Fatalf("refresh: status = %d: %s", res.status, res.body)
+	}
+	api.assert(t, "RefreshResponse", res.body)
+
+	// The saved page under that name is now the refreshed run, not the build.
+	saved := srv.do(t, "GET", "/v1/specs/solar-install-quote", nil)
+	if saved.status != 200 {
+		t.Fatalf("GET saved page: status = %d: %s", saved.status, saved.body)
+	}
+	refreshed := decode[struct {
+		Spec spec.Spec `json:"spec"`
+	}](t, res)
+	if string(saved.body) != mustMarshal(t, refreshed.Spec) {
+		t.Error("saved page differs from the spec the refresh returned")
+	}
+}
+
+func mustMarshal(t *testing.T, v any) string {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
 // A refresh reproduces a page from the corpus, so the endpoint is exercised
 // against a saved spec: build it via POST /v1/spec, then bring it up to date.
 // Accepting nothing and fetching nothing (the server has no mailbox), the

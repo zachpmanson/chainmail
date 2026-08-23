@@ -1020,6 +1020,10 @@
             "example": [
               "mail:<c0ffee-1@loomworks.example>"
             ]
+          },
+          "name": {
+            "type": "string",
+            "description": "When set, saves the refreshed page back under /view/<name>, rewriting the file POST /v1/spec wrote, so a reload lands on this run. The same name rules as a build: letters, digits, '.', '_', '-'; no slashes and no '..'."
           }
         }
       },

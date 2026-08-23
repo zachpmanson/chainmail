@@ -459,6 +459,16 @@ func (s *server) refresh(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
+	if req.Name != "" {
+		// The saved page must not drift from what the client just received: the
+		// refresh rewrites the file exactly as POST /v1/spec would, so a reload
+		// of /view/<name> lands on this run, not the stale one.
+		if err := s.saveSpec(req.Name, next); err != nil {
+			fail(w, http.StatusInternalServerError,
+				fmt.Errorf("saving the refreshed page as %q: %w", req.Name, err))
+			return
+		}
+	}
 	send(w, http.StatusOK, refreshResponse{Spec: next, Report: toRefreshReport(rep)})
 }
 

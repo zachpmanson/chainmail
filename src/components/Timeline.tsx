@@ -301,9 +301,14 @@ export interface TimelineProps {
   filter?: ChainFilter;
   /** app-only: the static export has no place to put an interactive panel */
   onShowSpec?: () => void;
+  /** app-only: brings a saved page up to date from the corpus (refresh.go). */
+  onRefresh?: () => void;
+  refreshing?: boolean;
+  /** a one-line report of what the last refresh did, or why it failed */
+  refreshNote?: string | null;
 }
 
-export function Timeline({ spec, marks, prevLabel, filter, onShowSpec }: TimelineProps) {
+export function Timeline({ spec, marks, prevLabel, filter, onShowSpec, onRefresh, refreshing, refreshNote }: TimelineProps) {
   const v = derive(spec);
   const s = v.spec;
   return (
@@ -316,11 +321,19 @@ export function Timeline({ spec, marks, prevLabel, filter, onShowSpec }: Timelin
           <button className="tbtn" id="spectog" type="button" onClick={onShowSpec}
                   aria-label="Show the spec as JSON">json</button>
         ) : null}
+        {onRefresh ? (
+          <button className="tbtn" id="refreshtog" type="button" onClick={onRefresh}
+                  disabled={refreshing}
+                  aria-label="Re-derive this page from the corpus">
+            {refreshing ? "refreshing…" : "refresh"}
+          </button>
+        ) : null}
         <button className="tbtn" id="maptog" type="button" aria-pressed="true"
                 aria-label="Reply tree panel">tree</button>
         <button className="tbtn" id="plaintog" type="button" aria-pressed="false"
                 aria-label="Ignore the sender's own formatting">plain</button>
       </div>
+      {refreshNote ? <p className="refreshed">{refreshNote}</p> : null}
       <div className="wrap">
       <header className="top">
         <h1>

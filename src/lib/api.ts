@@ -120,6 +120,8 @@ export type SearchMode = "lexical" | "semantic" | "hybrid";
 
 export type ChainHit = components["schemas"]["ChainHit"];
 
+export type RefreshReport = components["schemas"]["RefreshReport"];
+
 /** Every input that changes the result set, before the blanks are dropped. */
 export interface SearchParams {
   q: string;
