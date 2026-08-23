@@ -85,7 +85,9 @@ func ExtractQuoted(store *corpus.Store, hostID int64, host corpus.Entry, body st
 		// the copy would be an artefact of that substitution.
 		var twin int64
 		if !inferred {
-			t, ok, err := corpus.FindTwin(store, person, ts, rec.Block.Text)
+			// The subject is the thread that vouches for a short block: without it
+			// the same few words on two threads would collapse into one message.
+			t, ok, err := corpus.FindTwin(store, person, ts, rec.Block.Text, rec.Subject)
 			if err != nil {
 				return r, err
 			}

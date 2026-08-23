@@ -6,6 +6,7 @@ import (
 	"math"
 	"regexp"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/zachpmanson/chainmail/internal/textsim"
@@ -152,6 +153,10 @@ type twinCopy struct {
 	quoted bool
 	wall   time.Time
 	words  []string
+	// subject is the stored, prefix-stripped thread subject. It is the one
+	// field a fetched message carries that an attribution-quote does not, which
+	// is what lets a short copy be vouched for (see sameSubjectWithMailbox).
+	subject string
 	// prose is words again with the markup residue removed: what the positional
 	// test needs, and what the identity gates must not use. See proseWords.
 	prose []string
@@ -269,7 +274,8 @@ func peopleWithQuotedEntries(s *Store) ([]int64, error) {
 // 31,000-entry cross join.
 func twinCopies(s *Store, person int64) ([]twinCopy, error) {
 	rows, err := s.db.Query(`
-		select e.id, e.ext_id, e.quoted, e.ts, coalesce(e.body_text,''),
+		select e.id, e.ext_id, e.quoted, e.ts, coalesce(e.subject,''),
+		       coalesce(e.body_text,''),
 		       (select count(*) from attachments a where a.entry_id = e.id)
 		from entries e
 		where e.person_id = ? and e.source = ?
@@ -283,7 +289,7 @@ func twinCopies(s *Store, person int64) ([]twinCopy, error) {
 		var c twinCopy
 		var ts int64
 		var body string
-		if err := rows.Scan(&c.id, &c.ext, &c.quoted, &ts, &body, &c.atts); err != nil {
+		if err := rows.Scan(&c.id, &c.ext, &c.quoted, &ts, &c.subject, &body, &c.atts); err != nil {
 			return nil, err
 		}
 		c.wall = time.Unix(ts, 0).UTC()
@@ -388,9 +394,9 @@ func groupTwins(copies []twinCopy) ([][]twinCopy, []TwinDecline) {
 		if !copies[i].quoted {
 			continue
 		}
-		if len(copies[i].words) < minTwinTokens {
+		short := len(copies[i].words) < minTwinTokens
+		if short {
 			reason[i] = "too short to identify: fewer than 25 words of its own"
-			continue
 		}
 		for j := range copies {
 			// The widest gap any pair could legitimately show: a mailbox copy sits
@@ -398,6 +404,12 @@ func groupTwins(copies []twinCopy) ([][]twinCopy, []TwinDecline) {
 			// quoted copies at most 26 hours apart when their quoters sit at
 			// opposite ends of the world.
 			if i == j || copies[j].wall.Sub(copies[i].wall).Abs() > 26*time.Hour {
+				continue
+			}
+			// A short copy is only paired with a mailbox copy that can vouch for
+			// it by subject; every other pairing still meets the floor in
+			// twinnable, where the refusal names the offset.
+			if short && !sameSubjectWithMailbox(copies[i], copies[j]) {
 				continue
 			}
 			why, ok := twinnable(copies[i], copies[j])
@@ -458,7 +470,14 @@ func twinnable(a, b twinCopy) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	if len(b.words) < minTwinTokens {
+	// The length floor is per pair, and a fetched mailbox copy can vouch for a
+	// short one: where the pair shares a thread subject, the words being alike
+	// is what the thread says they are, and the drop side is the recovered copy,
+	// so a wrong merge costs a sighting, not a message. Without the subject,
+	// identical short words are the norm across different messages — "Thanks,
+	// will do" is every second message in a mailbox — so the floor still holds.
+	if (len(a.words) < minTwinTokens || len(b.words) < minTwinTokens) &&
+		!sameSubjectWithMailbox(a, b) {
 		return "the copy at a plausible offset has fewer than 25 words of its own: " +
 			offsetLabel(off), false
 	}
@@ -476,6 +495,34 @@ func twinnable(a, b twinCopy) (string, bool) {
 			"opening, which is what a shared signature looks like: " + offsetLabel(off), false
 	}
 	return "", true
+}
+
+// sameSubjectWithMailbox reports whether one of a pair is a fetched mailbox copy
+// whose stored subject agrees with the other, quoted copy's. That is the pair a
+// short message is identified by: the subject is the thread, and two messages on
+// one thread with the same few words are one message re-quoted, where the same
+// few words on two threads are two messages. An attribution-only quote carries
+// no subject and is never vouched for.
+func sameSubjectWithMailbox(a, b twinCopy) bool {
+	q, m := a, b
+	if !a.quoted && b.quoted {
+		q, m = b, a
+	}
+	if !q.quoted || m.quoted || q.subject == "" || m.subject == "" {
+		return false
+	}
+	return subjectKey(q.subject) == subjectKey(m.subject)
+}
+
+// reTwinSubjectPrefix strips the Re:/Fw: chains a quoting client writes into the
+// sentinel's Subject line, mirroring the cleaning ingest applies before storage.
+var reTwinSubjectPrefix = regexp.MustCompile(`(?i)^((re|fw|fwd|aw|sv|vs)\s*:\s*)+`)
+
+// subjectKey reduces a stored subject to the string that identifies the thread:
+// case-folded, prefix-stripped, and with whitespace collapsed so two renders of
+// one line agree.
+func subjectKey(s string) string {
+	return strings.Join(strings.Fields(strings.ToLower(reTwinSubjectPrefix.ReplaceAllString(s, ""))), " ")
 }
 
 // twinOffset reads the gap between two copies as a UTC offset, and reports
@@ -841,17 +888,17 @@ func offsetLabel(mins int) string {
 // its host carries the host's instant rather than a rendered wall clock, so the
 // gap to a mailbox copy would be an artefact of that substitution and would mean
 // nothing as an offset.
-func FindTwin(s *Store, person int64, wall time.Time, text string) (int64, bool, error) {
+func FindTwin(s *Store, person int64, wall time.Time, text, subject string) (int64, bool, error) {
 	if person == 0 {
 		return 0, false, nil
 	}
-	c := twinCopy{quoted: true, wall: wall,
+	// No length pre-check: a short block can still be vouched for by a mailbox
+	// copy on the same thread, and twinnable applies the floor per pair.
+	c := twinCopy{quoted: true, wall: wall, subject: subject,
 		words: copyWords(text, true), prose: proseWords(text, true)}
-	if len(c.words) < minTwinTokens {
-		return 0, false, nil
-	}
 	rows, err := s.db.Query(`
-		select e.id, e.ext_id, e.quoted, e.ts, coalesce(e.body_text,''),
+		select e.id, e.ext_id, e.quoted, e.ts, coalesce(e.subject,''),
+		       coalesce(e.body_text,''),
 		       (select count(*) from attachments a where a.entry_id = e.id)
 		from entries e
 		where e.person_id = ? and e.source = ? and e.ts between ? and ?
@@ -866,7 +913,7 @@ func FindTwin(s *Store, person int64, wall time.Time, text string) (int64, bool,
 		var o twinCopy
 		var ts int64
 		var body string
-		if err := rows.Scan(&o.id, &o.ext, &o.quoted, &ts, &body, &o.atts); err != nil {
+		if err := rows.Scan(&o.id, &o.ext, &o.quoted, &ts, &o.subject, &body, &o.atts); err != nil {
 			return 0, false, err
 		}
 		o.wall = time.Unix(ts, 0).UTC()
