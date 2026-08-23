@@ -30,6 +30,7 @@
 /* The ratio carries the judgement the person is being asked to make, so it is
    the one piece of metadata not greyed down to the others' weight. */
 .selratio { color:var(--fg); font-weight:650; }
+.selppl { font-weight:600; }
 .selsrc { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
 
 .selbuild { border-top:1px solid var(--line); padding-top:.7rem; margin-top:.9rem; }

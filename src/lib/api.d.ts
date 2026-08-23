@@ -200,6 +200,8 @@ export interface components {
             entries: number;
             /** @description How many of them the query hit. matched/entries is the honest measure of whether the chain is about the query. */
             matched: number;
+            /** @description Distinct people involved in the whole chain, authors and recipients — the same "who was involved" answer the spec's participant list gives. 0 only when no entry carries a person row. */
+            people: number;
             /**
              * Format: date-time
              * @description Timestamp of the earliest entry, UTC.

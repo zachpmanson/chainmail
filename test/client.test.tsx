@@ -32,6 +32,7 @@ const CHAINS = [
     sources: ["mail"],
     entries: 4,
     matched: 3,
+    people: 4,
     first: "2026-03-02T09:15:00Z",
     last: "2026-03-11T17:40:00Z",
     score: 0.91,
@@ -42,6 +43,7 @@ const CHAINS = [
     sources: ["mail", "slack"],
     entries: 180,
     matched: 3,
+    people: 12,
     first: "2025-11-04T08:00:00Z",
     last: "2026-02-19T11:02:00Z",
     score: 0.22,
@@ -97,6 +99,10 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  // A search writes its parameters into the URL (that is the feature), and
+  // jsdom shares one location across the whole file — so each test starts
+  // from the bare home page, not from some earlier test's query string.
+  history.replaceState(null, "", "/");
 });
 
 const mount = (ui: React.ReactElement) =>
@@ -133,9 +139,12 @@ describe("searching for chains", () => {
 
     await screen.findByText("Loom cutover schedule");
     expect(await screen.findByText("3 of 4 matched")).toBeTruthy();
+    // The cast of the whole chain, not just the authors of the hits.
+    expect(await screen.findByText("4 participants")).toBeTruthy();
     // the same numerator over a different chain size — the ratio is what
     // separates a thread about the query from one that mentioned it
     expect(await screen.findByText("3 of 180 matched")).toBeTruthy();
+    expect(await screen.findByText("12 participants")).toBeTruthy();
     expect(screen.getByText("2026-03-02 – 2026-03-11")).toBeTruthy();
   });
 
@@ -260,7 +269,7 @@ describe("building a page from the chosen set", () => {
       chains: ["mail:<loom-cutover-1@example.fed>"],
       name: "loom-cutover", // slug of the page title: the URL it earns
       title: "Loom cutover",
-      queries: [{ q: "cutover", note: "corpus search, mode=lexical" }],
+      queries: [{ q: "cutover", note: "corpus search, mode=hybrid" }],
     });
     await waitFor(() => expect(built).toHaveBeenCalledTimes(1));
   });
@@ -390,5 +399,50 @@ describe("the render route /view/<name>", () => {
     await waitFor(() => expect(screen.queryByText("Loom cutover")).toBeNull());
     expect(screen.getByRole("button", { name: "Search" })).toBeTruthy();
     history.replaceState(null, "", "/");
+  });
+});
+
+describe("the search lives in the URL", () => {
+  it("restores the search from the query string on load", async () => {
+    history.replaceState(null, "", "/?q=cutover&mode=semantic");
+    // semantic answer for a semantic request, so the restore is not the mock
+    // cheerfully answering anything: the mode really flowed through.
+    handler = (c) =>
+      json(200, {
+        mode: new URL(c.url).searchParams.get("mode"),
+        chains: new URL(c.url).searchParams.get("mode") === "semantic" ? [CHAINS[1]] : [CHAINS[0]],
+      });
+    mount(<App />);
+
+    // Both inputs are back, and the search ran itself.
+    await waitFor(() => expect((screen.getByLabelText("Query") as HTMLInputElement).value).toBe("cutover"));
+    expect((screen.getByLabelText("Mode") as HTMLSelectElement).value).toBe("semantic");
+    await screen.findByText("Warehouse lease renewal");
+  });
+
+  it("writes the search to the URL, and Back from a built page lands on it", async () => {
+    history.replaceState(null, "", "/");
+    handler = (c) =>
+      c.url.includes("/v1/spec") ? json(200, SPEC) : json(200, { mode: "lexical", chains: CHAINS });
+    mount(<App />);
+
+    await searchFor("cutover");
+    // The default mode is omitted from the URL — the canonical home search is
+    // plain /.q=cutover, not a URL that spells out the default.
+    expect(location.search).toBe("?q=cutover");
+
+    await screen.findByText("Loom cutover schedule");
+    typeInto("Page title", "Loom cutover");
+    click(screen.getAllByRole("checkbox")[0]!);
+    click(screen.getByRole("button", { name: /Build page from 1 chain$/ }));
+    await waitFor(() => expect(location.pathname).toBe("/view/loom-cutover"));
+    await screen.findByText("Loom cutover");
+
+    // Back: the address bar returns to the search that built this page, and
+    // the search page comes back with its query and results, not a blank form.
+    history.back();
+    await waitFor(() => expect(location.pathname).toBe("/"));
+    await waitFor(() => expect((screen.getByLabelText("Query") as HTMLInputElement).value).toBe("cutover"));
+    await screen.findByText("Loom cutover schedule");
   });
 });

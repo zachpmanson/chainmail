@@ -443,6 +443,7 @@
           "rootExtId",
           "entries",
           "matched",
+          "people",
           "first",
           "last",
           "score"
@@ -481,6 +482,10 @@
           "matched": {
             "type": "integer",
             "description": "How many of them the query hit. matched/entries is the honest measure of whether the chain is about the query."
+          },
+          "people": {
+            "type": "integer",
+            "description": "Distinct people involved in the whole chain, authors and recipients — the same \"who was involved\" answer the spec's participant list gives. 0 only when no entry carries a person row."
           },
           "first": {
             "type": "string",

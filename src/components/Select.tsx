@@ -1,10 +1,12 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { $api, ApiError, searchQuery, type ChainHit, type SearchMode, type SearchParams } from "../lib/api";
 import { normalise } from "../lib/normalise";
 import { slug, untitledName } from "../lib/route";
 import type { Timeline } from "../lib/spec";
 
-const MODES: SearchMode[] = ["lexical", "semantic", "hybrid"];
+// The default-first order is what the dropdown shows: hybrid is the default
+// search style — lexical and semantic fused — and the order says so.
+const MODES: SearchMode[] = ["hybrid", "semantic", "lexical"];
 
 /**
  * Names the status so two declines are told apart. "Not found" and "Rejected"
@@ -63,6 +65,11 @@ function ChainRow({
             <span className="selratio" title="matching entries of the whole chain">
               {chain.matched} of {chain.entries} matched
             </span>
+            {chain.people > 0 ? (
+              <span className="selppl" title="distinct people in the whole chain, senders and recipients">
+                {chain.people} participant{chain.people === 1 ? "" : "s"}
+              </span>
+            ) : null}
             <span className="selspan">{span(chain)}</span>
             {chain.sources?.length ? (
               <span className="selsrc">{chain.sources.join(", ")}</span>
@@ -84,13 +91,31 @@ function ChainRow({
  * page is saved server-side, so it survives a refresh.
  */
 export function SelectView({ onBuilt }: { onBuilt: (spec: Timeline, name: string) => void }) {
-  const [q, setQ] = useState("");
-  const [mode, setMode] = useState<SearchMode>("lexical");
-  const [person, setPerson] = useState("");
-  const [since, setSince] = useState("");
+  // The search lives in the URL (q, mode, person, since) so that leaving for a
+  // built page and pressing Back restores the search that was there before —
+  // even after a reload. The URL is read once, at mount; the submit handler
+  // writes it back.
+  const initial = useMemo<{ q: string; mode: SearchMode; person: string; since: string }>(() => {
+    const p = new URLSearchParams(location.search);
+    const mode = p.get("mode");
+    return {
+      q: p.get("q") ?? "",
+      mode: mode === "lexical" || mode === "semantic" || mode === "hybrid" ? mode : "hybrid",
+      person: p.get("person") ?? "",
+      since: p.get("since") ?? "",
+    };
+  }, []);
+  const [q, setQ] = useState(initial.q);
+  const [mode, setMode] = useState<SearchMode>(initial.mode);
+  const [person, setPerson] = useState(initial.person);
+  const [since, setSince] = useState(initial.since);
   const [title, setTitle] = useState("");
   const [me, setMe] = useState("");
-  const [asked, setAsked] = useState<SearchParams | null>(null);
+  const [asked, setAsked] = useState<SearchParams | null>(() =>
+    initial.q.trim() || initial.person.trim() || initial.since.trim()
+      ? { q: initial.q, mode: initial.mode, person: initial.person.trim(), since: initial.since.trim() }
+      : null,
+  );
   const [chosen, setChosen] = useState<string[]>([]);
 
   // The idle init is never sent: it stands in until a search is submitted, so
@@ -133,6 +158,16 @@ export function SelectView({ onBuilt }: { onBuilt: (spec: Timeline, name: string
     // chains no longer on screen.
     setChosen([]);
     setAsked({ q, mode, person: person.trim(), since: since.trim() });
+    // The URL is replaced, not pushed: the search IS the home page, and Back
+    // from a built page (which is pushed) lands straight back on it. Only the
+    // non-default mode is written, so the canonical URL for the default search
+    // is plain /. Hybrid is the default, so it is omitted.
+    const usp = new URLSearchParams();
+    if (q.trim()) usp.set("q", q.trim());
+    if (mode !== "hybrid") usp.set("mode", mode);
+    if (person.trim()) usp.set("person", person.trim());
+    if (since.trim()) usp.set("since", since.trim());
+    history.replaceState(null, "", usp.size ? `/?${usp}` : "/");
   };
 
   const toggle = (root: string) =>
@@ -174,7 +209,7 @@ export function SelectView({ onBuilt }: { onBuilt: (spec: Timeline, name: string
           <span>Since</span>
           <input value={since} onChange={(e) => setSince(e.target.value)} placeholder="YYYY-MM-DD" />
         </label>
-        <button type="submit" disabled={q.trim() === ""}>
+        <button type="submit" disabled={!q.trim() && !person.trim() && !since.trim()}>
           Search
         </button>
       </form>

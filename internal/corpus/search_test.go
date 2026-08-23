@@ -605,6 +605,41 @@ func TestSourceAndContainerFilters(t *testing.T) {
 	}
 }
 
+// The cast is everyone involved, not the authors of the hits: a recipient who
+// only ever appears in To: is a participant too, and must count.
+func TestChainPeopleCountsTheWholeCast(t *testing.T) {
+	s := open(t)
+	alice := searchPerson(t, s, "Alice Example", "alice@example.com")
+	bob := searchPerson(t, s, "Bob Example", "bob@example.com")
+	cara := searchPerson(t, s, "Cara Example", "cara@example.com")
+
+	// One chain: Alice writes, Bob is cc'd around, Cara is the lone voice in
+	// the thread. All three are the cast even though the query only hit Alice.
+	put(t, s, msg{id: "<a1@example.com>", body: "the rebate letter", ts: may,
+		person: alice, to: "Bob Example <bob@example.com>"})
+	put(t, s, msg{id: "<a2@example.com>", parent: "<a1@example.com>", body: "the rebate reply", ts: june,
+		person: cara})
+	// A second, unrelated chain with one participant.
+	put(t, s, msg{id: "<b1@example.com>", body: "the rebate schedule", ts: july, person: bob})
+	if _, err := s.ResolveParents(); err != nil {
+		t.Fatal(err)
+	}
+
+	chains, err := s.SearchChains(Query{Text: "rebate"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(chains) != 2 {
+		t.Fatalf("got %d chains, want 2", len(chains))
+	}
+	if chains[0].People != 3 {
+		t.Errorf("chain A: people = %d, want 3 (Alice, Bob in To:, Cara)", chains[0].People)
+	}
+	if chains[1].People != 1 {
+		t.Errorf("chain B: people = %d, want 1 (Bob only)", chains[1].People)
+	}
+}
+
 func TestLimitAppliesToChainsNotToTheCandidatePool(t *testing.T) {
 	s := open(t)
 	// Two chains. A narrow candidate pool must not be mistaken for a narrow

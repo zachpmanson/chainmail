@@ -217,6 +217,11 @@ type ChainHit struct {
 	Entries int
 	Matched int
 
+	// People is the distinct cast of the whole chain, authors and recipients —
+	// the same "who was involved" answer the spec's participant list gives,
+	// not just the authors of the hits.
+	People int
+
 	First time.Time
 	Last  time.Time
 
@@ -360,6 +365,7 @@ func (s *Store) SearchChains(q Query) ([]ChainHit, error) {
 			First:     m.first,
 			Last:      m.last,
 			Score:     sr.score,
+			People:    m.people,
 		}
 		members := byRoot[sr.root]
 		if len(members) > q.PerChain {
@@ -740,6 +746,7 @@ type chainMetaRow struct {
 	entries   int
 	first     time.Time
 	last      time.Time
+	people    int
 }
 
 // chainMeta walks each root's descendants so a chain can report its true size
@@ -763,8 +770,10 @@ func (s *Store) chainMeta(roots []int64) (map[int64]chainMetaRow, error) {
 		       (select coalesce(container,'') from entries where id = d.root),
 		       count(distinct d.id),
 		       min(e.ts), max(e.ts),
-		       group_concat(distinct e.source)
+		       group_concat(distinct e.source),
+		       count(distinct p.person_id)
 		from down d join entries e on e.id = d.id
+		     left join participants p on p.entry_id = e.id
 		group by d.root`,
 		append(args, walkDepthCap)...)
 	if err != nil {
@@ -778,7 +787,7 @@ func (s *Store) chainMeta(roots []int64) (map[int64]chainMetaRow, error) {
 		var first, last int64
 		var srcs sql.NullString
 		if err := rows.Scan(&root, &m.extID, &m.subject, &m.container,
-			&m.entries, &first, &last, &srcs); err != nil {
+			&m.entries, &first, &last, &srcs, &m.people); err != nil {
 			return nil, err
 		}
 		m.first = time.Unix(first, 0).UTC()

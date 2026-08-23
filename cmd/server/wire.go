@@ -30,6 +30,7 @@ type chainHit struct {
 	Sources   []string   `json:"sources,omitempty"`
 	Entries   int        `json:"entries"`
 	Matched   int        `json:"matched"`
+	People    int        `json:"people"`
 	First     string     `json:"first"`
 	Last      string     `json:"last"`
 	Score     float64    `json:"score"`
@@ -148,7 +149,7 @@ func toChainHit(c corpus.ChainHit) chainHit {
 	out := chainHit{
 		RootExtID: c.RootExtID, Subject: c.Subject, Container: c.Container,
 		Sources: c.Sources, Entries: c.Entries, Matched: c.Matched,
-		First: stamp(c.First), Last: stamp(c.Last), Score: c.Score,
+		People: c.People, First: stamp(c.First), Last: stamp(c.Last), Score: c.Score,
 	}
 	for _, b := range c.Best {
 		out.Best = append(out.Best, toEntryHit(b))
