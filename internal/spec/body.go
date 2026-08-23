@@ -25,6 +25,12 @@ import (
 // the message and is emitted as an empty string rather than an empty <p>, which
 // would render as a bubble claiming content that does not exist.
 //
+// With one exception: a direct mail entry whose body is blank BECAUSE it only
+// carried other messages — a bare forward, or a reply that only quotes history
+// back — gets a line of the page's own editorial voice (<p class="ed">, per the
+// schema) saying so, rather than a bubble that reads as a rendering failure.
+// See blankGloss.
+//
 // Three sources, in order of how close each is to what the sender actually sent:
 // their own text/html part; the same message quoted inside somebody else's part,
 // where the markup survives even though this entry has none of its own; and last
@@ -58,7 +64,42 @@ func bodyHTML(r *entryRow) string {
 	}
 	s, folded := textToHTML(r.BodyText, st, r.Fold)
 	r.Folded = folded
+	if s == "" {
+		// A direct mail entry can still be genuinely blank: the sender only
+		// forwarded another message, or only quoted history back. An empty
+		// bubble reads as a render failure, so the page says what the
+		// emptiness is, in its own editorial voice (the schema's
+		// <p class="ed">).
+		if gloss := blankGloss(r); gloss != "" {
+			return gloss
+		}
+	}
 	return s
+}
+
+// blankGloss explains a body that rendered empty, or "" when the emptiness
+// is not this kind. Only a direct mail entry is considered: a Slack file-only
+// post is blank for a reason the reader can see (the attachment), and an
+// unspooled entry's text is its block's content, which is never blank.
+//
+// The two blank shapes are told apart by the boundary the body opened on. A
+// forward rule means the sender passed someone else's message on whole —
+// peel knows it, because it is the same rule that mined the copy below. An
+// attribution or a header block means they only quoted history back. Either
+// way the carried content is on the page as entries of its own, so the gloss
+// points down rather than promising something that is not there.
+func blankGloss(r *entryRow) string {
+	if !r.Direct || r.Source != "mail" {
+		return ""
+	}
+	blocks := unnest.Peel(r.BodyText)
+	if len(blocks) == 0 || blocks[0].Sentinel == "" {
+		return ""
+	}
+	if blocks[0].Kind == unnest.KindForwardRule {
+		return `<p class="ed">Blank — only forwarded the messages below.</p>`
+	}
+	return `<p class="ed">Blank — no text of its own; the messages below were quoted.</p>`
 }
 
 // bodyStyle says how far a body's text may be reshaped. Both switches are off

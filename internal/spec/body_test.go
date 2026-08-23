@@ -257,3 +257,16 @@ func TestStyleFollowsProvenance(t *testing.T) {
 		}
 	}
 }
+
+func TestABareDirectMailForwardRendersABlankGloss(t *testing.T) {
+	r := &entryRow{
+		Source: "mail",
+		Direct: true,
+		BodyText: "---------- Forwarded message ---------\nFrom: Ada " +
+			"<ada@loomworks.example>\nDate: Thu, 7 May 2026 at 04:38\n",
+		BodyHTML: "",
+	}
+	if got := bodyHTML(r); !strings.Contains(got, `class="ed"`) || !strings.Contains(got, "Blank") {
+		t.Errorf("bodyHTML = %q, want the blank gloss", got)
+	}
+}
