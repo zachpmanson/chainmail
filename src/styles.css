@@ -407,7 +407,7 @@
   body.mapoff .mini { display:none; }
   /* the overlay costs width; below this the page is better off without it */
   /* below this the panel costs more width than it returns; drop it and its toggle */
-  @media (max-width:1180px) {
+  @media (max-width:1024px) {
     body.hasmap { --panel:0rem; }
     .mini { display:none; } #maptog { display:none; }
   }

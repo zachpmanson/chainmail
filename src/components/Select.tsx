@@ -177,17 +177,6 @@ export function SelectView({ onBuilt }: { onBuilt: (spec: Timeline) => void }) {
 
       {chains.length > 0 ? (
         <>
-          <ul className="sellist">
-            {chains.map((c) => (
-              <ChainRow
-                key={c.rootExtId}
-                chain={c}
-                checked={chosen.includes(c.rootExtId)}
-                onToggle={() => toggle(c.rootExtId)}
-              />
-            ))}
-          </ul>
-
           <div className="selbuild">
             <label className="self">
               <span>Page title</span>
@@ -230,6 +219,17 @@ export function SelectView({ onBuilt }: { onBuilt: (spec: Timeline) => void }) {
             ) : null}
             {build.isError ? <Failure error={build.error} /> : null}
           </div>
+
+          <ul className="sellist">
+            {chains.map((c) => (
+              <ChainRow
+                key={c.rootExtId}
+                chain={c}
+                checked={chosen.includes(c.rootExtId)}
+                onToggle={() => toggle(c.rootExtId)}
+              />
+            ))}
+          </ul>
         </>
       ) : null}
     </div>
