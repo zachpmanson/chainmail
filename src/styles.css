@@ -449,7 +449,7 @@
     /* overlay: let the stream show through the panel a little (a faint ghost
        of the cards under it, not a hard card wall); the svg content itself
        stays opaque */
-    .mini { top:2.4rem;
+    .mini { top:2.4rem; width:max-content; max-width:16.5rem;
       background:color-mix(in srgb, var(--card) 86%, transparent); }
     #maptog { display:inline-block; }
     .refreshed { right:calc(16.5rem + .6rem); }
