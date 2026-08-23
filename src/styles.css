@@ -414,10 +414,16 @@
      (solid card and dashed quote) without shifting layout. */
   .msg.mhov .bub, .sys.mhov { border-color:var(--accent);
     box-shadow:0 0 0 2.5px var(--accent), 0 1px 8px -2px var(--accent); }
-  .mini .foot2 { border-top:1px solid var(--line); padding:.28rem .7rem .3rem;
-    font-size:.58rem; color:var(--muted); line-height:1.2;
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .mini .foot2 { border-top:1px solid var(--line); padding:.28rem .6rem .35rem;
+    font-size:.58rem; color:var(--muted); line-height:1.25;
+    display:flex; flex-direction:column; gap:.22rem; }
   .mini .foot2 b { color:var(--fg); font-weight:600; }
+  .mini .foot2 .tally { display:flex; flex-direction:column; gap:.12rem; }
+  .mini .foot2 .tally div { white-space:nowrap; }
+  .mini .foot2 .legend { margin:0; display:flex; flex-direction:column; gap:.1rem; }
+  .mini .foot2 .legend div { display:flex; align-items:center; gap:.34rem; }
+  .mini .foot2 .legend svg.lg { width:.7em; height:.7em; flex:none; }
+  .mini .foot2 .legend dt { margin:0; color:var(--muted); }
   /* Panel width lives in one variable; the toolbar and the content margin both
      derive from it, so hiding the tree cannot leave a button stranded over it. */
   body { --panel:0rem; padding-right:var(--panel); }

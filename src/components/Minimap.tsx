@@ -117,7 +117,19 @@ export function Minimap({ v }: { v: View }) {
         </svg>
       </div>
       <div className="foot2">
-        {g.roots} <b>chain</b> · {g.laneCount} <b>lane</b> · {deepest} <b>deep</b> · {g.forks} <b>fork</b>
+        <div className="tally">
+          <div><b>{g.roots}</b> chains</div>
+          <div><b>{g.laneCount}</b> lanes</div>
+          <div><b>{deepest}</b> deep</div>
+          <div><b>{g.forks}</b> forks</div>
+          <div><b>{g.leaves}</b> dead ends</div>
+        </div>
+        <dl className="legend">
+          <div><svg className="lg" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="2.9" fill="currentColor"/></svg><dt>message</dt></div>
+          <div><svg className="lg" viewBox="0 0 10 10" aria-hidden="true"><rect x="2.6" y="2.6" width="4.8" height="4.8" fill="currentColor" transform="rotate(45 5 5)"/></svg><dt>note</dt></div>
+          <div><svg className="lg" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 2.6 H8" stroke="currentColor" strokeWidth="1.1"/><circle cx="5" cy="5.5" r="2.5" fill="currentColor"/></svg><dt>starts chain</dt></div>
+          <div><svg className="lg" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="2.9" fill="none" stroke="currentColor" strokeWidth="1.2"/></svg><dt>reconstructed</dt></div>
+        </dl>
       </div>
     </aside>
   );
