@@ -61,4 +61,18 @@ describe("trimBody", () => {
       '<details class="sig"><summary>signature</summary><div><p>Regards</p></div></details>',
     );
   });
+
+  it("trims a blank nested before the fold inside a single wrapper", () => {
+    // Mail clients commonly wrap the whole message in one <div>; the blank
+    // spacer sits inside it, just above the fold. Top-level trimming would
+    // miss it, so the wrapper's interior is trimmed recursively.
+    const body =
+      '<div dir="ltr"><div>Hi Jason,</div><div>Yes we also have</div>' +
+      '<div><br/></div>' +
+      '<details class="sig"><summary>signature</summary><div>Regards</div></details></div>';
+    expect(trimBody(body)).toBe(
+      '<div dir="ltr"><div>Hi Jason,</div><div>Yes we also have</div>' +
+      '<details class="sig"><summary>signature</summary><div>Regards</div></details></div>',
+    );
+  });
 });

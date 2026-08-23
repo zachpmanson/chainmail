@@ -142,6 +142,41 @@ function hasClass(classes: string, want: string): boolean {
   return classes.split(/\s+/).includes(want);
 }
 
+/** Whether a span is, after unwrapping thin single-element wrapper layers,
+ *  a <details class="sig"> fold. Some clients wrap the stage: <div>
+ *  <details class="sig">…</details></div>. The fold is that wrapper's whole
+ *  point, so a wrapper that reduces to a sig-fold counts as the fold. */
+function resolvesToFold(body: string, span: { start: number; end: number }): boolean {
+  let start = span.start;
+  let end = span.end;
+  for (let depth = 0; depth < 8; depth++) {
+    const inner = body.slice(start, end);
+    const subs = topLevelSpans(inner);
+    if (subs.length !== 1) return false;
+    const only = subs[0]!;
+    const tg = parseTag(inner, only.start);
+    // in the given span an actual sig-details fold counts directly
+    if (tg && !tg.closing && tg.cls === "details" && hasClass(tg.classes, "sig")) {
+      return true;
+    }
+    // unwrap a single non-void, non-pre element covering the whole span
+    if (
+      tg &&
+      !tg.closing &&
+      !tg.selfClose &&
+      tg.cls !== "pre" &&
+      only!.start === 0 &&
+      only!.end === inner.length
+    ) {
+      start += tg.gt; // past the opening tag
+      end -= tg.cls.length + 3; // before the matching close </name>
+      continue;
+    }
+    return false;
+  }
+  return false;
+}
+
 /** Trim the whitespace-only edges of a serialized message body. */
 export function trimBody(body: string): string {
   const spans = topLevelSpans(body);
@@ -155,15 +190,41 @@ export function trimBody(body: string): string {
   // Leading: drop blank spans up to the first content (or fold).
   let first = 0;
   while (first < n && !content(first)) first++;
+  if (first === n) return "";
 
   // Trailing: find the last content span. When the body ends in a fold, the
   // fold is content and is handled as the very last kept span; blanks between
   // the last real line and it are dropped too (they sit above the disclosure,
   // not between lines).
-  const endFold = spans[n - 1]!.fold;
+  const endFold = resolvesToFold(body, spans[n - 1]!);
 
-  // When the body is exactly the fold (nothing else), keep just it.
-  if (n === 1) return body;
+  // A single wrapping element: some clients wrap the whole message in one
+  // <div> (Gmail, Outlook do). Top-level trimming sees only that one span and
+  // would miss blanks nested beside the fold inside it, so recurse into the
+  // wrapper's interior and reassemble. Never into a <pre>.
+  if (spans.length === 1) {
+    const only = spans[0]!;
+    const onlyTag = parseTag(body, only.start);
+    const isWrap =
+      onlyTag &&
+      !onlyTag.closing &&
+      !onlyTag.selfClose &&
+      onlyTag.cls !== "pre" &&
+      !only.fold &&
+      only.start === 0 &&
+      only.end === body.length;
+    if (isWrap) {
+      const close = "</" + onlyTag.cls + ">";
+      if (body.slice(only.end - close.length).toLowerCase() === close) {
+        const inner = body.slice(onlyTag.gt, only.end - close.length);
+        const trimmed = trimBody(inner);
+        if (trimmed === inner) return body;
+        return body.slice(0, onlyTag.gt) + trimmed + body.slice(only.end - close.length);
+      }
+      return body;
+    }
+  }
+
 
   // Walk back from before the trailing fold (or from the end) to the last
   // content span, skipping the blank run that sits above the fold.
