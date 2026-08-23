@@ -349,6 +349,9 @@ func TestRefreshWithANameRewritesTheSavedPage(t *testing.T) {
 	api.assert(t, "RefreshResponse", res.body)
 
 	// The saved page under that name is now the refreshed run, not the build.
+	// The refresh response embeds the spec beside a report of what it did, so
+	// compare the saved file against that embedded spec rather than the whole
+	// envelope.
 	saved := srv.do(t, "GET", "/v1/specs/solar-install-quote", nil)
 	if saved.status != 200 {
 		t.Fatalf("GET saved page: status = %d: %s", saved.status, saved.body)
@@ -356,7 +359,8 @@ func TestRefreshWithANameRewritesTheSavedPage(t *testing.T) {
 	refreshed := decode[struct {
 		Spec spec.Spec `json:"spec"`
 	}](t, res)
-	if string(saved.body) != mustMarshal(t, refreshed.Spec) {
+	savedSpec := decode[spec.Spec](t, saved)
+	if mustMarshal(t, savedSpec) != mustMarshal(t, refreshed.Spec) {
 		t.Error("saved page differs from the spec the refresh returned")
 	}
 }

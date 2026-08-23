@@ -156,12 +156,13 @@ export function App() {
                 refresh.mutate({
                   body: {
                     // The renderer's Timeline is laxer than the wire type
-                    // (specVersion, theme, openItemsTitle and entry kind are
-                    // optional locally but demanded on the wire). normalise
-                    // already produced a contract-shaped spec, so a single
-                    // typed cast at this boundary is honest — the alternative
-                    // is hand-filling defaults that would then disagree with
-                    // the server's own.
+                    // (specVersion, theme and entry kind are optional locally
+                    // but demanded on the wire), and the wire type in turn
+                    // carries renderer-only fields (openItemsTitle) the server
+                    // never emits or accepts. normalise already produced a
+                    // server-shaped spec, so a single cast at this boundary is
+                    // honest — inventing defaults for the renderer-only fields
+                    // would make the server reject the body it is being sent.
                     spec: spec as unknown as Parameters<typeof refresh.mutate>[0]["body"]["spec"],
                     name: viewName,
                     includeNew: false,
