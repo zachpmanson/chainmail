@@ -190,6 +190,58 @@
         }
       }
     },
+    "/v1/specs/{name}": {
+      "get": {
+        "summary": "A page that POST /v1/spec saved under a name — the read half of the render route /view/<name>.",
+        "description": "The page was written by the same server process family (specs live beside the corpus, in ~/.local/state/chainmail/specs), so a refresh or a reboot lands back on the same page from the same URL. The response is byte-identical to what the build returned.",
+        "operationId": "getSavedSpec",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "The name the build was saved under. Letters, digits, '.', '_', '-'; no slashes and no '..'.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+            },
+            "example": "solar-install-quote"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The saved timeline spec.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimelineSpec"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The name is not a valid spec name.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No page was ever saved under that name.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/entries/{extId}": {
       "get": {
         "summary": "One entry, with its provenance and every sighting of it.",
@@ -738,6 +790,12 @@
             "items": {
               "$ref": "#/components/schemas/SpecQuery"
             }
+          },
+          "name": {
+            "type": "string",
+            "description": "When set, saves the built page under /view/<name> so it survives a refresh (and a reboot) and can be reopened from its URL. The client chooses it; the server validates it. Letters, digits, '.', '_', '-'; no slashes and no '..'. Blank builds without saving.",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "example": "solar-install-quote"
           }
         }
       },

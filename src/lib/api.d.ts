@@ -52,6 +52,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/specs/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A page that POST /v1/spec saved under a name — the read half of the render route /view/<name>.
+         * @description The page was written by the same server process family (specs live beside the corpus, in ~/.local/state/chainmail/specs), so a refresh or a reboot lands back on the same page from the same URL. The response is byte-identical to what the build returned.
+         */
+        get: operations["getSavedSpec"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/entries/{extId}": {
         parameters: {
             query?: never;
@@ -332,6 +352,11 @@ export interface components {
             me?: string[];
             /** @description The searches the selection came from, recorded on the page so that a hole in the timeline is interpretable. Purely descriptive: nothing is re-run. */
             queries?: components["schemas"]["SpecQuery"][];
+            /**
+             * @description When set, saves the built page under /view/<name> so it survives a refresh (and a reboot) and can be reopened from its URL. The client chooses it; the server validates it. Letters, digits, '.', '_', '-'; no slashes and no '..'. Blank builds without saving.
+             * @example solar-install-quote
+             */
+            name?: string;
         };
         /** @description A search that was run, recorded for provenance. */
         SpecQuery: {
@@ -747,6 +772,50 @@ export interface operations {
             };
             /** @description Too many spec builds already in flight. Retry-After is set. */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getSavedSpec: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description The name the build was saved under. Letters, digits, '.', '_', '-'; no slashes and no '..'.
+                 * @example solar-install-quote
+                 */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The saved timeline spec. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimelineSpec"];
+                };
+            };
+            /** @description The name is not a valid spec name. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No page was ever saved under that name. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

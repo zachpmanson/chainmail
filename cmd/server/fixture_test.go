@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -119,8 +121,11 @@ func testServer(t *testing.T) *harness {
 		t.Fatalf("ResolveParents: %v", err)
 	}
 
-	srv := &server{
+	// Seeded so the documented-path walk can GET /v1/specs/{name} without a
+	// prior save; the round-trip test writes its own.
+	serve := &server{
 		store:     s,
+		specs:     t.TempDir(),
 		specSlots: make(chan struct{}, specConcurrency),
 		// Shortened from the real wait so the 429 path is a fast test.
 		slotWait:  10 * time.Millisecond,
@@ -132,7 +137,11 @@ func testServer(t *testing.T) *harness {
 				Dimension: embed.DefaultDim, Client: &http.Client{Timeout: 2 * time.Second}}
 		},
 	}
-	return &harness{server: srv, handler: srv.routes()}
+	if err := os.WriteFile(filepath.Join(serve.specs, "demo.json"),
+		[]byte(`{"title":"demo","messages":[]}`), 0o644); err != nil {
+		t.Fatalf("seeding the saved page: %v", err)
+	}
+	return &harness{server: serve, handler: serve.routes()}
 }
 
 func specBody(chains ...string) []byte {

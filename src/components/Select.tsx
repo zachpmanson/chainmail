@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { $api, ApiError, searchQuery, type ChainHit, type SearchMode, type SearchParams } from "../lib/api";
 import { normalise } from "../lib/normalise";
+import { slug, untitledName } from "../lib/route";
 import type { Timeline } from "../lib/spec";
 
 const MODES: SearchMode[] = ["lexical", "semantic", "hybrid"];
@@ -77,8 +78,12 @@ function ChainRow({
  * Search, then choose, then build. Selection is a stage of its own because
  * dropping a chain after the fact means rebuilding the page and everything
  * derived from it, so scope is settled once, before anything is generated.
+ *
+ * Building names the page (from the title, or a clock name when it has none)
+ * and hands the name up with the spec: the app pushes /view/<name> and the
+ * page is saved server-side, so it survives a refresh.
  */
-export function SelectView({ onBuilt }: { onBuilt: (spec: Timeline) => void }) {
+export function SelectView({ onBuilt }: { onBuilt: (spec: Timeline, name: string) => void }) {
   const [q, setQ] = useState("");
   const [mode, setMode] = useState<SearchMode>("lexical");
   const [person, setPerson] = useState("");
@@ -112,8 +117,13 @@ export function SelectView({ onBuilt }: { onBuilt: (spec: Timeline) => void }) {
    * will not normalise as the build's own failure, which is where a person
    * looking at the button expects to be told.
    */
+  // The name is settled at click time, in one place, so the URL that is pushed
+  // and the file the server saves can never disagree. A clock name for an
+  // untitled page is generated per click for the same reason: two builds must
+  // not overwrite each other silently.
+  const pendingName = useRef("");
   const build = $api.useMutation("post", "/v1/spec", {
-    onSuccess: (spec) => onBuilt(normalise(spec)),
+    onSuccess: (spec) => onBuilt(normalise(spec), pendingName.current),
   });
 
   const submit = (ev: React.FormEvent) => {
@@ -192,10 +202,12 @@ export function SelectView({ onBuilt }: { onBuilt: (spec: Timeline) => void }) {
             <button
               type="button"
               disabled={chosen.length === 0 || build.isPending}
-              onClick={() =>
+              onClick={() => {
+                pendingName.current = slug(title.trim()) || untitledName();
                 build.mutate({
                   body: {
                     chains: chosen,
+                    name: pendingName.current,
                     ...(title.trim() ? { title: title.trim() } : {}),
                     ...(addresses.length ? { me: addresses } : {}),
                     // Recorded on the page so a refresh can propose the chains
@@ -204,8 +216,8 @@ export function SelectView({ onBuilt }: { onBuilt: (spec: Timeline) => void }) {
                       ? { queries: [{ q: asked.q, note: `corpus search, mode=${asked.mode}` }] }
                       : {}),
                   },
-                })
-              }
+                });
+              }}
             >
               {build.isPending ? "Building…" : `Build page from ${chosen.length} chain${chosen.length === 1 ? "" : "s"}`}
             </button>

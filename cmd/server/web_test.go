@@ -1,15 +1,19 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 )
 
 // The server ships the web client embedded, so one loopback port serves both
 // the API and the UI. The app shell is at / and /index.html, built assets are
-// served by their hashed names, and every other path keeps the API's JSON 404
-// shape — the client uses no router, so a non-file path is not a frontend
-// route, and an operator command must never be reachable as a page.
+// served by their hashed names, the client's render route /view/<name> gets
+// the shell again (a deep link or refresh of a saved page must land on the
+// client, which then loads GET /v1/specs/<name>), and every other path keeps
+// the API's JSON 404 shape — an operator command must never be reachable as a
+// page.
 func TestWebClientIsServedFromTheSamePort(t *testing.T) {
 	srv := testServer(t)
 
@@ -28,6 +32,22 @@ func TestWebClientIsServedFromTheSamePort(t *testing.T) {
 	// /index.html is the same shell.
 	if res := srv.do(t, "GET", "/index.html", nil); res.status != 200 {
 		t.Errorf("GET /index.html = %d, want 200", res.status)
+	}
+
+	// The render route is the shell too, so /view/<name> survives a refresh.
+	// The client then loads the named page from GET /v1/specs/{name}.
+	for _, p := range []string{"/view", "/view/demo", "/view/solar-install-quote"} {
+		res := srv.do(t, "GET", p, nil)
+		if res.status != 200 {
+			t.Errorf("GET %s = %d, want 200 (the render route must answer the shell)", p, res.status)
+		}
+		if !strings.Contains(string(res.body), "<div id=\"root\"></div>") {
+			t.Errorf("GET %s does not serve the app shell", p)
+		}
+	}
+	// A look-alike is not the route: viewfoo is an unknown file, not a page.
+	if res := srv.do(t, "GET", "/viewfoo", nil); res.status != 404 {
+		t.Errorf("GET /viewfoo = %d, want the API 404 shape", res.status)
 	}
 
 	// A hashed asset from the build is served with its real bytes. The name is
@@ -71,4 +91,57 @@ func TestWebClientIsServedFromTheSamePort(t *testing.T) {
 		t.Errorf("GET /nope = %d, want the API 404 shape", res.status)
 	}
 	res.errText(t)
+}
+
+// The render route is only as good as the read half of it: a page saved by
+// POST /v1/spec under a name must come back from GET /v1/specs/{name} exactly
+// as it was built, so /view/<name> is reloadable after a refresh or a reboot.
+func TestASavedSpecRoundTripsByName(t *testing.T) {
+	srv := testServer(t)
+
+	var req specRequest
+	if err := json.Unmarshal(specBody(extAda1), &req); err != nil {
+		t.Fatal(err)
+	}
+	req.Name = "solar-install-quote"
+	blob, err := json.Marshal(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	built := srv.do(t, "POST", "/v1/spec", blob)
+	if built.status != 200 {
+		t.Fatalf("POST /v1/spec with a name = %d, want 200:\n%s", built.status, built.body)
+	}
+
+	got := srv.do(t, "GET", "/v1/specs/solar-install-quote", nil)
+	if got.status != 200 {
+		t.Fatalf("GET /v1/specs/solar-install-quote = %d, want 200:\n%s", got.status, got.body)
+	}
+	if !bytes.Equal(got.body, built.body) {
+		t.Error("the saved page differs from what the build returned — the render route would show a different page than the one just built")
+	}
+
+	// A name that was never saved is a 404 naming the missing page.
+	if res := srv.do(t, "GET", "/v1/specs/never-built", nil); res.status != 404 {
+		t.Errorf("GET /v1/specs/never-built = %d, want 404", res.status)
+	}
+
+	// A name that would escape the specs dir is refused, not written or read.
+	req.Name = "../escape"
+	if blob, err = json.Marshal(req); err != nil {
+		t.Fatal(err)
+	}
+	if res := srv.do(t, "POST", "/v1/spec", blob); res.status != 400 {
+		t.Errorf("POST /v1/spec with name %q = %d, want 400", req.Name, res.status)
+	}
+
+	// A blank name still builds without saving: the old behaviour is the default.
+	req.Name = ""
+	if blob, err = json.Marshal(req); err != nil {
+		t.Fatal(err)
+	}
+	if res := srv.do(t, "POST", "/v1/spec", blob); res.status != 200 {
+		t.Errorf("POST /v1/spec without a name = %d, want 200", res.status)
+	}
 }

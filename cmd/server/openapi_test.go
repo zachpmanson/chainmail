@@ -214,8 +214,8 @@ func TestEveryDocumentedPathIsServed(t *testing.T) {
 	if err := json.Unmarshal(blob, &doc); err != nil {
 		t.Fatal(err)
 	}
-	if len(doc.Paths) != 7 {
-		t.Errorf("the contract declares %d paths; the handler table lists 7", len(doc.Paths))
+	if len(doc.Paths) != 8 {
+		t.Errorf("the contract declares %d paths; the handler table lists 8", len(doc.Paths))
 	}
 	srv := testServer(t)
 	for path, ops := range doc.Paths {
@@ -223,7 +223,7 @@ func TestEveryDocumentedPathIsServed(t *testing.T) {
 			// Path parameters are filled with the fixture's own ids, so a routed
 			// path answers 200 and an unrouted one 404 for the right reason.
 			concrete := strings.NewReplacer(
-				"{extId}", extAda1, "{rootExtId}", extAda1).Replace(path)
+				"{extId}", extAda1, "{rootExtId}", extAda1, "{name}", "demo").Replace(path)
 			var res *response
 			if verb == "post" {
 				res = srv.do(t, "POST", concrete, specBody(extAda1))

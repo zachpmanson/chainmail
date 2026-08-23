@@ -10,6 +10,9 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -58,6 +61,7 @@ type server struct {
 	// the write lock, and fails outright against a read-only copy.
 	store   *corpus.Store
 	uploads string
+	specs   string // dir for saved pages (POST /v1/spec writes here, GET /v1/specs reads)
 
 	specSlots chan struct{}
 	// slotWait is how long a caller waits for a slot before being told to retry.
@@ -79,6 +83,7 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("/v1/refresh", post(s.refresh))
 	mux.HandleFunc("/v1/search", get(s.search))
 	mux.HandleFunc("/v1/spec", post(s.spec))
+	mux.HandleFunc("/v1/specs/{name}", get(s.savedSpec))
 	mux.HandleFunc("/v1/entries/{extId}", get(s.entry))
 	mux.HandleFunc("/v1/chains/{rootExtId}", get(s.chain))
 	mux.HandleFunc("/v1/stats", get(s.stats))
@@ -87,16 +92,12 @@ func (s *server) routes() http.Handler {
 	return mux
 }
 
-// webRoot serves the embedded web client, or a 404 when the build is absent.
-// API routes are registered first (longer, more specific pattern), so this only
-// sees non-/v1/ paths: the client's own assets, and SPA routes the client
-// handles client-side. An unknown file returns a 404 rather than index.html (no
-// catch-all fallback), so a mistyped path fails loudly instead of silently
-// serving a page that then can't render.
 // webRoot serves the embedded web client alongside the API: the app shell at
-// / and /index.html, static assets by name, and every other non-/v1/ path as
+// / and /index.html, static assets by name, the render route /view/<name> as
+// the shell (a deep link or refresh of a saved page must land on the client,
+// which then fetches GET /v1/specs/<name>), and every other non-/v1/ path as
 // the API's JSON 404 (unknown endpoints stay in the one error shape — a path
-// that is not a file is not a frontend route, the client uses no router).
+// that is not a file is not a frontend route).
 // /v1/* that matches no registered handler still reaches here via the catch-
 // all and must keep the JSON 404 contract, never an HTML fallback.
 func (s *server) webRoot() http.HandlerFunc {
@@ -110,24 +111,30 @@ func (s *server) webRoot() http.HandlerFunc {
 		fail(w, http.StatusNotFound,
 			fmt.Errorf("no such endpoint: %s %s", r.Method, r.URL.Path))
 	}
+	// The app shell. FileServer would serve it for "/" via its implicit index,
+	// but the same bytes must also answer for a bare /index.html and the render
+	// route; open index.html directly so all three get the same headers.
+	shell := func(w http.ResponseWriter, r *http.Request) {
+		f, err := sub.Open("index.html")
+		if err != nil {
+			json404(w, r)
+			return
+		}
+		defer f.Close()
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		io.Copy(w, f)
+	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/v1/") {
 			json404(w, r)
 			return
 		}
 		p := strings.TrimPrefix(r.URL.Path, "/")
-		if p == "" || p == "index.html" {
-			// The app shell. FileServer would serve it for "/" via its implicit
-			// index, but that path also needs to answer for a bare /index.html;
-			// open it directly so both get the same bytes and cache headers.
-			f, err := sub.Open("index.html")
-			if err != nil {
-				json404(w, r)
-				return
-			}
-			defer f.Close()
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			io.Copy(w, f)
+		// The route prefix is matched carefully — view, view/ and view/<name>
+		// but not a file named "viewfoo" or "view-notes".
+		isView := p == "view" || strings.HasPrefix(p, "view/")
+		if p == "" || p == "index.html" || isView {
+			shell(w, r)
 			return
 		}
 		if _, err := fs.Stat(sub, p); err != nil {
@@ -266,6 +273,11 @@ type specRequest struct {
 	Title   string       `json:"title"`
 	Me      []string     `json:"me"`
 	Queries []spec.Query `json:"queries"`
+	// Name, when set, saves the built page under /view/<name> so it survives a
+	// refresh (and a reboot) and can be reopened from its URL. The client
+	// chooses it — the URL it pushes has to match — and the server validates it
+	// rather than trusting it; a blank name builds the page without saving.
+	Name string `json:"name,omitempty"`
 }
 
 func (s *server) spec(w http.ResponseWriter, r *http.Request) {
@@ -281,6 +293,13 @@ func (s *server) spec(w http.ResponseWriter, r *http.Request) {
 	if len(req.Chains) == 0 {
 		fail(w, http.StatusBadRequest, errors.New(
 			"chains is empty: name the chains the page is built from (GET /v1/search reports their rootExtId)"))
+		return
+	}
+	// A malformed name is refused before any work: building the page takes
+	// seconds, and a name that cannot name a file should cost nothing.
+	if req.Name != "" && !validSpecName(req.Name) {
+		fail(w, http.StatusBadRequest, fmt.Errorf(
+			"name %q: use letters, digits, '.' '_' '-' (no slashes, no '..')", req.Name))
 		return
 	}
 	// Resolve every named chain before doing any work, so an id that is not in
@@ -322,7 +341,60 @@ func (s *server) spec(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("spec: %d entries from %d chains in %s", len(sp.Messages), len(req.Chains),
 		time.Since(started).Round(time.Millisecond))
+	if req.Name != "" {
+		if err := s.saveSpec(req.Name, sp); err != nil {
+			fail(w, http.StatusInternalServerError,
+				fmt.Errorf("saving the page as %q: %w", req.Name, err))
+			return
+		}
+	}
 	send(w, http.StatusOK, sp)
+}
+
+// specNameRe is what a saved page's name may be: it is joined onto a directory
+// path and echoed into the URL, so slashes, dot-dot and control characters are
+// refused outright rather than escaped.
+var specNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
+
+func validSpecName(name string) bool {
+	return name != "." && name != ".." && specNameRe.MatchString(name)
+}
+
+// saveSpec writes the built page under the server's specs dir so GET
+// /v1/specs/{name} can send it again after a refresh or a reboot. The bytes
+// are the same the caller just received: marshal once, so the saved copy and
+// the live response can never drift apart.
+func (s *server) saveSpec(name string, sp spec.Spec) error {
+	blob, err := json.Marshal(sp)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(s.specs, 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(s.specs, name+".json"), blob, 0o644)
+}
+
+// savedSpec returns a page that POST /v1/spec named — the read half of the
+// render route /view/<name>.
+func (s *server) savedSpec(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if !validSpecName(name) {
+		fail(w, http.StatusBadRequest, fmt.Errorf(
+			"name %q: use letters, digits, '.' '_' '-' (no slashes, no '..')", name))
+		return
+	}
+	blob, err := os.ReadFile(filepath.Join(s.specs, name+".json"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			fail(w, http.StatusNotFound, fmt.Errorf(
+				"no saved page named %q — build it first with POST /v1/spec (name: %q)", name, name))
+			return
+		}
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	send(w, http.StatusOK, json.RawMessage(blob))
 }
 
 // refresh brings a page that has already been built up to date: the caller

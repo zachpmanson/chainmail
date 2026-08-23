@@ -70,6 +70,7 @@ func run(args []string) error {
 	srv := &server{
 		store:     store,
 		uploads:   *uploads,
+		specs:     filepath.Join(filepath.Dir(*path), "specs"),
 		specSlots: make(chan struct{}, specConcurrency),
 		slotWait:  specSlotWait,
 		embedder: func() *mailembed.Ollama {

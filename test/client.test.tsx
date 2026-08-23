@@ -248,14 +248,18 @@ describe("building a page from the chosen set", () => {
     click(boxes[0]!);
     click(boxes[1]!);
     click(boxes[1]!); // unticked again: it must not reach the request
+    typeInto("Page title", "Loom cutover");
 
     click(screen.getByRole("button", { name: /Build page from 1 chain$/ }));
     await waitFor(() => expect(calls.some((c) => c.url.includes("/v1/spec"))).toBe(true));
 
     const post = calls.find((c) => c.url.includes("/v1/spec"))!;
     expect(post.method).toBe("POST");
+    // The title was typed, so the page earns the slug as its name.
     expect(JSON.parse(post.body!)).toEqual({
       chains: ["mail:<loom-cutover-1@example.fed>"],
+      name: "loom-cutover", // slug of the page title: the URL it earns
+      title: "Loom cutover",
       queries: [{ q: "cutover", note: "corpus search, mode=lexical" }],
     });
     await waitFor(() => expect(built).toHaveBeenCalledTimes(1));
@@ -335,6 +339,56 @@ describe("a spec named on the URL", () => {
 
     await screen.findByText("Loom cutover");
     expect(calls.map((c) => new URL(c.url).pathname)).toEqual(["/synthetic.json"]);
+    history.replaceState(null, "", "/");
+  });
+});
+
+describe("the render route /view/<name>", () => {
+  it("loads the saved page from the API when the URL names one", async () => {
+    history.replaceState(null, "", "/view/loom-cutover");
+    handler = (c) =>
+      c.url.includes("/v1/specs/loom-cutover")
+        ? json(200, SPEC)
+        : json(500, { error: "unexpected call" });
+    mount(<App />);
+
+    await waitFor(() => expect(calls.some((c) => c.url.includes("/v1/specs/loom-cutover"))).toBe(true));
+    await screen.findByText("Loom cutover");
+    // No back button: a page under /view/<name> just is, it was not the result
+    // of a search.
+    expect(screen.queryByRole("button", { name: /Back/ })).toBeNull();
+    history.replaceState(null, "", "/");
+  });
+
+  it("moves the address bar to /view/<name> when a page is built", async () => {
+    history.replaceState(null, "", "/");
+    handler = (c) =>
+      c.url.includes("/v1/spec") ? json(200, SPEC) : json(200, { mode: "lexical", chains: CHAINS });
+    mount(<App />);
+
+    await searchFor("cutover");
+    await screen.findByText("Loom cutover schedule");
+    typeInto("Page title", "Loom cutover");
+    click(screen.getAllByRole("checkbox")[0]!);
+    click(screen.getByRole("button", { name: /Build page from 1 chain$/ }));
+
+    await waitFor(() => expect(location.pathname).toBe("/view/loom-cutover"));
+    await screen.findByText("Loom cutover");
+  });
+
+  it("goes back to the search when the page is left", async () => {
+    history.replaceState(null, "", "/view/loom-cutover");
+    handler = (c) =>
+      c.url.includes("/v1/specs/loom-cutover")
+        ? json(200, SPEC)
+        : json(500, { error: "unexpected call" });
+    mount(<App />);
+    await screen.findByText("Loom cutover");
+
+    history.pushState(null, "", "/");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await waitFor(() => expect(screen.queryByText("Loom cutover")).toBeNull());
+    expect(screen.getByRole("button", { name: "Search" })).toBeTruthy();
     history.replaceState(null, "", "/");
   });
 });
