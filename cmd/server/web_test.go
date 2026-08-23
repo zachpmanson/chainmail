@@ -9,11 +9,11 @@ import (
 
 // The server ships the web client embedded, so one loopback port serves both
 // the API and the UI. The app shell is at / and /index.html, built assets are
-// served by their hashed names, the client's render route /view/<name> gets
-// the shell again (a deep link or refresh of a saved page must land on the
-// client, which then loads GET /v1/specs/<name>), and every other path keeps
-// the API's JSON 404 shape — an operator command must never be reachable as a
-// page.
+// served by their hashed names, and every other non-/v1/ path is the shell
+// too — the client owns the routes, so a deep link or a mistyped path lands
+// on the client, which renders the page or its own 404 view. Only the /v1/
+// surface keeps the JSON 404 shape, so an operator command can never be
+// reachable as a page.
 func TestWebClientIsServedFromTheSamePort(t *testing.T) {
 	srv := testServer(t)
 
@@ -34,20 +34,17 @@ func TestWebClientIsServedFromTheSamePort(t *testing.T) {
 		t.Errorf("GET /index.html = %d, want 200", res.status)
 	}
 
-	// The render route is the shell too, so /view/<name> survives a refresh.
-	// The client then loads the named page from GET /v1/specs/{name}.
-	for _, p := range []string{"/view", "/view/demo", "/view/solar-install-quote"} {
+	// Every client route is the shell too: a deep link to a saved page, a bare
+	// route prefix, an unknown path (the client's 404 view answers that one),
+	// and a look-alike that used to 404 server-side.
+	for _, p := range []string{"/view", "/view/demo", "/view/solar-install-quote", "/viewfoo", "/nope", "/viwe/typo"} {
 		res := srv.do(t, "GET", p, nil)
 		if res.status != 200 {
-			t.Errorf("GET %s = %d, want 200 (the render route must answer the shell)", p, res.status)
+			t.Errorf("GET %s = %d, want 200 (every non-/v1 path is the shell)", p, res.status)
 		}
 		if !strings.Contains(string(res.body), "<div id=\"root\"></div>") {
 			t.Errorf("GET %s does not serve the app shell", p)
 		}
-	}
-	// A look-alike is not the route: viewfoo is an unknown file, not a page.
-	if res := srv.do(t, "GET", "/viewfoo", nil); res.status != 404 {
-		t.Errorf("GET /viewfoo = %d, want the API 404 shape", res.status)
 	}
 
 	// A hashed asset from the build is served with its real bytes. The name is
@@ -78,17 +75,11 @@ func TestWebClientIsServedFromTheSamePort(t *testing.T) {
 		t.Errorf("asset Content-Type = %q, want javascript", ct)
 	}
 
-	// A path that is neither a file nor an API route keeps the API error shape.
+	// An undocumented API path keeps the API error shape: an operator command
+	// must never be reachable as a page.
 	res = srv.do(t, "GET", "/v1/ingest", nil)
 	if res.status != 404 {
 		t.Errorf("GET /v1/ingest = %d, want 404 (operator command must not be a page)", res.status)
-	}
-	res.errText(t)
-
-	// An unknown non-API path is also the JSON 404, not a served page.
-	res = srv.do(t, "GET", "/nope", nil)
-	if res.status != 404 {
-		t.Errorf("GET /nope = %d, want the API 404 shape", res.status)
 	}
 	res.errText(t)
 }
