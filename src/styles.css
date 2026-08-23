@@ -362,7 +362,8 @@
   .msg:target .bub, .sys:target { animation:flash 1.4s ease-out 1;
     border-color:var(--accent); }
   /* --- reply-tree minimap: sticky structural index of the reply graph --- */
-  .mini { position:fixed; top:0; right:0; bottom:0; width:16.5rem; z-index:30;
+  .mini { position:fixed; top:0; right:0; bottom:0; width:max-content;
+    max-width:16.5rem; z-index:30;
     background:var(--card); border-left:1px solid var(--line);
     display:flex; flex-direction:column; }
   .mini h3 { margin:0; padding:.55rem .7rem .4rem; font-size:.66rem; font-weight:700;
@@ -427,8 +428,11 @@
   /* Panel width lives in one variable; the toolbar and the content margin both
      derive from it, so hiding the tree cannot leave a button stranded over it. */
   body { --panel:0rem; padding-right:var(--panel); }
-  body.hasmap { --panel:16.5rem; }
-  body.hasmap.mapoff { --panel:0rem; }
+  /* JS feeds the panel's rendered width into --panel, so the toolbar, the
+     refresh verdict and the reserved content column all sit at the panel's
+     real edge rather than a fixed 16.5rem. Without JS the panel just does not
+     reserve a column. */
+  body.hasmap { padding-right:var(--panel); }
   .toolbar { position:fixed; top:.5rem; right:calc(var(--panel) + .6rem); z-index:31;
     display:flex; gap:.35rem; }
   .tbtn { font:inherit; font-size:.66rem; font-weight:700; text-transform:uppercase;
@@ -445,16 +449,16 @@
      Tucked just under the toolbar (which keeps the right edge), and the toggle
      stays reachable so the overlay is dismissible. */
   @media (max-width:1024px) {
-    body.hasmap { --panel:0rem; }
-    /* overlay: let the stream show through the panel a little (a faint ghost
-       of the cards under it, not a hard card wall); the svg content itself
-       stays opaque */
+    /* overlay: the panel no longer reserves a column, so the stream runs out
+       to the edge under it. --panel still holds the measured width so the
+       refresh verdict clears the panel's left edge. */
+    body.hasmap { padding-right:0; }
     .mini { top:2.4rem; width:max-content; max-width:16.5rem;
       background:color-mix(in srgb, var(--card) 86%, transparent); }
     #maptog { display:inline-block; }
-    .refreshed { right:calc(16.5rem + .6rem); }
+    .refreshed { right:calc(var(--panel) + .6rem); }
   }
-  @media print { .mini, .toolbar { display:none; } body.hasmap { --panel:0rem; } }
+  @media print { .mini, .toolbar { display:none; } body.hasmap { padding-right:0; } }
   /* one-line verdict from a refresh, under the toolbar (matches .top layout) */
   .refreshed { position:fixed; top:2.1rem; right:calc(var(--panel) + .6rem); z-index:30;
     max-width:min(28rem, 60vw); margin:0; padding:.2rem .5rem;

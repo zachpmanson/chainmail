@@ -40,6 +40,21 @@ export function attach(doc: Document = document): () => void {
   };
 
   /**
+   * Panel width is its content (fit to lane count, tallies, legend), not a fixed
+   * column — but the toolbar, refresh verdict and reserved content column all
+   * offset from it. Feed the measured rendered width back into --panel, and
+   * re-measure when the panel is toggled or the window resizes.
+   *
+   * Reads the live offsetWidth, so when the panel is hidden (mapoff) no column
+   * is reserved either.
+   */
+  const syncPanel = () => {
+    if (!mini) return;
+    if (body.classList.contains("mapoff")) body.style.removeProperty("--panel");
+    else body.style.setProperty("--panel", `${Math.round(mini.offsetWidth)}px`);
+  };
+
+  /**
    * Panels are shown by default, so the body class marks the HIDDEN state and the
    * button's pressed state is its inverse. One table rather than three near-copies.
    */
@@ -49,16 +64,18 @@ export function attach(doc: Document = document): () => void {
   for (const [id, cls, key] of HIDEABLE) {
     const btn = doc.getElementById(id) as HTMLButtonElement | null;
     if (!btn) continue;
-    const apply = (hidden: boolean) => {
-      body.classList.toggle(cls, hidden);
-      btn.setAttribute("aria-pressed", hidden ? "false" : "true");
-      try { localStorage.setItem(key, hidden ? "1" : "0"); } catch { /* private mode */ }
+    const apply = (hid: boolean) => {
+      body.classList.toggle(cls, hid);
+      btn.setAttribute("aria-pressed", hid ? "false" : "true");
+      try { localStorage.setItem(key, hid ? "1" : "0"); } catch { /* private mode */ }
+      syncPanel();
     };
     let stored: string | null = null;
     try { stored = localStorage.getItem(key); } catch { /* ignore */ }
     apply(stored === "1");
     on(btn, "click", () => apply(!body.classList.contains(cls)));
   }
+  if (mini) { on(window, "resize", syncPanel); syncPanel(); }
 
   // A body is the sender's markup, so its emphasis and alignment are theirs, not
   // the page's. "plain" neutralises what is left of that presentation without
