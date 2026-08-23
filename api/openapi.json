@@ -361,6 +361,25 @@
         }
       }
     },
+    "/v1/status": {
+      "get": {
+        "summary": "Which backend services are logged in, as the operator last probed them.",
+        "description": "The connection snapshot the operator's probe wrote beside the corpus. The server is read-only on purpose, so it never asks docket or slackdump whether their sessions are still good; it serves the probe's answer. Each service carries one of four states: ok, needs-auth, down, or unchecked. A machine with no snapshot yet answers every service unchecked, not with an error.",
+        "operationId": "getStatus",
+        "responses": {
+          "200": {
+            "description": "The connection snapshot.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/refresh": {
       "post": {
         "summary": "Bring a previously built page up to date.",
@@ -923,6 +942,62 @@
             "items": {
               "$ref": "#/components/schemas/PersonSummary"
             }
+          }
+        }
+      },
+      "StatusResponse": {
+        "type": "object",
+        "description": "The connection snapshot the operator's probe wrote. checkedAt is omitted until some probe has run; services is always the full known set, so a missing snapshot reads as unchecked rather than empty.",
+        "required": [
+          "services"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "checkedAt": {
+            "type": "string",
+            "description": "UTC RFC3339 stamp of the last probe. Absent when no probe has run.",
+            "format": "date-time"
+          },
+          "services": {
+            "type": "array",
+            "description": "Every backend, in the screen's order.",
+            "items": {
+              "$ref": "#/components/schemas/ServiceStatus"
+            }
+          }
+        }
+      },
+      "ServiceStatus": {
+        "type": "object",
+        "description": "One backend's connection, as the last probe reported it.",
+        "required": [
+          "id",
+          "label",
+          "status"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The backend's key: mail, slack, or embed."
+          },
+          "label": {
+            "type": "string",
+            "description": "What it is, shown as the row's title."
+          },
+          "status": {
+            "type": "string",
+            "description": "One of ok, needs-auth, down, or unchecked.",
+            "enum": [
+              "ok",
+              "needs-auth",
+              "down",
+              "unchecked"
+            ]
+          },
+          "detail": {
+            "type": "string",
+            "description": "The fix or state in the operator's own words. Absent when the service is fine."
           }
         }
       },

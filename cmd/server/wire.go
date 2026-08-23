@@ -6,6 +6,7 @@ import (
 	"github.com/zachpmanson/chainmail/internal/corpus"
 	"github.com/zachpmanson/chainmail/internal/refresh"
 	"github.com/zachpmanson/chainmail/internal/spec"
+	"github.com/zachpmanson/chainmail/internal/status"
 )
 
 // The wire types are separate from the corpus structs on purpose: they are the
@@ -265,4 +266,34 @@ func toCorpusEntry(s corpus.Shown) corpusEntry {
 			participant{PersonID: p.PersonID, Name: p.DisplayName, Role: p.Role})
 	}
 	return e
+}
+
+// statusResponse is the connection snapshot the server serves from the file
+// the operator's probe wrote. CheckedAt is the probe's UTC stamp, omitted when
+// no probe has ever run; the services list is always present, each backend
+// answered "unchecked" rather than absent, so the screen degrades instead of
+// 404ing.
+type statusResponse struct {
+	CheckedAt string          `json:"checkedAt,omitempty"`
+	Services  []serviceStatus `json:"services"`
+}
+
+type serviceStatus struct {
+	ID     string `json:"id"`
+	Label  string `json:"label"`
+	Status string `json:"status"`
+	Detail string `json:"detail,omitempty"`
+}
+
+func toStatusResponse(s status.Snapshot) statusResponse {
+	out := statusResponse{Services: make([]serviceStatus, 0, len(s.Services))}
+	if s.CheckedAt != "" {
+		out.CheckedAt = s.CheckedAt
+	}
+	for _, svc := range s.Services {
+		out.Services = append(out.Services, serviceStatus{
+			ID: svc.ID, Label: svc.Label, Status: svc.Status, Detail: svc.Detail,
+		})
+	}
+	return out
 }

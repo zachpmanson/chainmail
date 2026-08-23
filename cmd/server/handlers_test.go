@@ -3,10 +3,12 @@ package main
 import (
 	"encoding/json"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/zachpmanson/chainmail/internal/spec"
+	"github.com/zachpmanson/chainmail/internal/status"
 )
 
 func entryPath(prefix, extID string) string { return prefix + url.PathEscape(extID) }
@@ -574,5 +576,86 @@ func TestSpecRefusesRatherThanQueuesWhenEveryBuilderIsBusy(t *testing.T) {
 	<-srv.specSlots
 	if res := srv.do(t, "POST", "/v1/spec", specBody(extAda1)); res.status != 200 {
 		t.Errorf("status = %d after a slot freed: %s", res.status, res.body)
+	}
+}
+
+// A machine with no probe is a real state, not an error: every known backend
+// is answered unchecked and nothing claims a probe ever ran. This is what the
+// screen looks like on first boot, before `corpus status` has written a
+// snapshot.
+func TestStatusWithNoSnapshotNamesEveryBackendUnchecked(t *testing.T) {
+	srv, api := testServer(t), loadAPI(t)
+	res := srv.do(t, "GET", "/v1/status", nil)
+	if res.status != 200 {
+		t.Fatalf("status = %d: %s", res.status, res.body)
+	}
+	api.assert(t, "StatusResponse", res.body)
+	got := decode[statusResponse](t, res)
+	if got.CheckedAt != "" {
+		t.Errorf("no probe ever ran, but checkedAt is %q", got.CheckedAt)
+	}
+	if len(got.Services) != 3 {
+		t.Fatalf("%d services, want the known backends", len(got.Services))
+	}
+	for _, svc := range got.Services {
+		if svc.Status != status.Unchecked {
+			t.Errorf("%s = %q, want unchecked with no snapshot", svc.ID, svc.Status)
+		}
+	}
+}
+
+// The server is not the one who asks the backends whether they are logged in;
+// it serves what the operator's probe wrote. That boundary is the whole point:
+// the read-only surface does not reach docket or slackdump.
+func TestStatusServesTheSnapshotTheProbeWrote(t *testing.T) {
+	srv, api := testServer(t), loadAPI(t)
+
+	blob, _ := json.Marshal(map[string]any{
+		"checkedAt": "2026-08-22T15:04:00Z",
+		"services": []any{
+			map[string]any{"id": "mail", "label": "Gmail (docket)",
+				"status": "ok", "detail": "docket answered"},
+			map[string]any{"id": "embed", "label": "Embeddings (ollama)",
+				"status": "down", "detail": "no daemon"},
+		},
+	})
+	writeSnapshot(t, srv.statusPath, blob)
+
+	res := srv.do(t, "GET", "/v1/status", nil)
+	if res.status != 200 {
+		t.Fatalf("status = %d: %s", res.status, res.body)
+	}
+	api.assert(t, "StatusResponse", res.body)
+	got := decode[statusResponse](t, res)
+	if got.CheckedAt != "2026-08-22T15:04:00Z" {
+		t.Errorf("checkedAt = %q", got.CheckedAt)
+	}
+	byID := map[string]serviceStatus{}
+	for _, svc := range got.Services {
+		byID[svc.ID] = svc
+	}
+	// The snapshot carried no slack row: it still appears, unchecked, so the
+	// screen never silently drops a backend it knows about.
+	var slack *serviceStatus
+	for i, svc := range got.Services {
+		if svc.ID == "slack" {
+			slack = &got.Services[i]
+		}
+	}
+	if len(byID) != 3 || slack == nil {
+		t.Errorf("services = %+v", byID)
+	}
+	if slack.Status != status.Unchecked {
+		t.Errorf("slack = %q, want unchecked (the probe carried no row)", slack.Status)
+	}
+	if byID["embed"].Status != "down" || !strings.Contains(byID["embed"].Detail, "no daemon") {
+		t.Errorf("embed = %+v", byID["embed"])
+	}
+}
+
+func writeSnapshot(t *testing.T, path string, blob []byte) {
+	t.Helper()
+	if err := os.WriteFile(path, blob, 0o600); err != nil {
+		t.Fatalf("writing the snapshot: %v", err)
 	}
 }

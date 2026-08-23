@@ -158,6 +158,32 @@ const buildHandler: Handler = (c) => {
   return json(500, { error: `unexpected call to ${c.method} ${p}` });
 };
 
+/** The /status view's fixtures: three backends and a small corpus. */
+const STATUS = {
+  checkedAt: "2026-08-22T15:04:00Z",
+  services: [
+    { id: "mail", label: "Gmail (docket)", status: "ok" },
+    { id: "slack", label: "Slack (slackdump)", status: "needs-auth", detail: "run the slackdump import" },
+    { id: "embed", label: "Embedding daemon (ollama)", status: "down", detail: "start it with `ollama serve`" },
+  ],
+};
+
+const STATS = {
+  entries: 4281,
+  bySource: { mail: 4001, slack: 280 },
+  people: 214,
+  chainRoots: 1024,
+  unresolved: 13,
+  embeddings: [{ model: "nomic-embed-text", dim: 768, vectors: 4100, skipped: 120, stale: 0, eligible: 61 }],
+};
+
+const statusHandler: Handler = (c) => {
+  const p = pathOf(c);
+  if (p === "/v1/status") return json(200, STATUS);
+  if (p === "/v1/stats") return json(200, STATS);
+  return json(500, { error: `unexpected call to ${c.method} ${p}` });
+};
+
 describe("searching for chains", () => {
   it("lists each candidate with the matched-of-total ratio", async () => {
     handler = () => json(200, { mode: "lexical", chains: CHAINS });
@@ -391,6 +417,29 @@ describe("a spec named on the URL", () => {
   });
 });
 
+describe("the status route /status", () => {
+  it("shows each service's state and the corpus coverage", async () => {
+    handler = statusHandler;
+    await mountApp("/status");
+
+    await waitFor(() => expect(calls.some((c) => pathOf(c) === "/v1/status")).toBe(true));
+    expect(calls.some((c) => pathOf(c) === "/v1/stats")).toBe(true);
+
+    // Badges: two of the three are not fully in.
+    expect(await screen.findByText("logged in")).toBeTruthy();
+    expect(await screen.findByText("needs auth")).toBeTruthy();
+    expect(await screen.findByText("down")).toBeTruthy();
+    expect(await screen.findByText("Gmail (docket)")).toBeTruthy();
+    // The detail under a not-ok row says what the fix is.
+    expect(await screen.findByText("start it with `ollama serve`")).toBeTruthy();
+
+    // Corpus coverage from /v1/stats.
+    expect(await screen.findByText("4281")).toBeTruthy();
+    expect(await screen.findByText("mail entries")).toBeTruthy();
+  });
+});
+
+// The render route /view/<name>.
 describe("the render route /view/<name>", () => {
   it("loads the saved page from the API when the URL names one", async () => {
     handler = (c) =>

@@ -32,6 +32,7 @@ help:
 	@printf '  make embed          vectors for entries that have none\n'
 	@printf '  make backup         copy the corpus before anything risky\n'
 	@printf '  make doctor         what is in the corpus and what is missing\n'
+	@printf '  make status         probe each backend, write the connection snapshot\n'
 	@printf '\nBuild\n'
 	@printf '  make install        build the corpus binary to %s\n' '$(BIN)'
 	@printf '  make test           go + frontend tests\n'
@@ -111,6 +112,13 @@ doctor:
 	@$(BIN) zones | head -5
 	@echo
 	@$(BIN) sigs -domains | head -4
+
+# Probe each backend and write the connection snapshot the server's
+# /v1/status serves. Intentionally shallow: mail is asked whether docket's
+# session answers one query, the Slack archive whether it opens, and the
+# embedding daemon whether it is up — none of them fetch anything.
+status:
+	@$(BIN) status -archive $(SLACK)/slackdump.sqlite
 
 # make page Q="billing csv" ME=you@example.com
 page:

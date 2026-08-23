@@ -5,6 +5,7 @@
 //	corpus ingest slack               slurp a slackdump archive
 //	corpus slurp                      every phase in order, dedupe reported only
 //	corpus stats                      what is in it, and what is missing
+//	corpus status                     probe each backend, write the connection snapshot
 //	corpus people                     everyone involved, senders and recipients
 //	corpus merge -keep <a> -drop <b>  same human, two addresses (or -keep-id/-drop-id)
 //	corpus alias -from <d> -to <d>    a rebrand: fold one domain into another
@@ -126,6 +127,7 @@ const usage = `usage: corpus <command> [flags]
                            -full prints each block whole; -chrono orders them by
                            the date each states and names what cannot be true
   stats                    counts, coverage and what is missing
+  status                   probe each backend and write the connection snapshot
   people                   everyone in the corpus, with their identities
   candidates               probable duplicate identities, unmerged, each with the
                            command that would settle it; role mailboxes shared by
@@ -724,6 +726,21 @@ func run(args []string) error {
 		}
 		printShown(it, *full)
 		return nil
+
+	case "status":
+		// The operator's probe: ask each backend, shallowly, whether it is
+		// logged in, and write the snapshot the server's /v1/status serves.
+		fs := flag.NewFlagSet("status", flag.ContinueOnError)
+		bin := fs.String("bin", "", "docket binary, for the mail probe (default \"docket\")")
+		archive := fs.String("archive", defaultSlackArchive(), "slackdump archive to probe")
+		url := fs.String("url", embed.DefaultBaseURL, "ollama endpoint to probe")
+		model := fs.String("model", embed.DefaultModel, "embedding model the daemon should hold")
+		out := fs.String("o", "", "where to write the snapshot (default beside the corpus as status.json)")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		return runStatus(path, statusOpts{
+			bin: *bin, archive: *archive, url: *url, model: *model, out: *out})
 
 	case "stats":
 		s, err := corpus.Open(path)

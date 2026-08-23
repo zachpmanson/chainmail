@@ -160,6 +160,18 @@ npm run dev             # vite, proxying /v1 to the server
 
 Then search, tick the chains that belong, and build a page from them.
 
+`/status` shows which backends this machine is logged into. The server is
+read-only on purpose and never contacts docket or slackdump, so the answer is
+whatever the operator's probe last wrote beside the corpus:
+
+```bash
+make status   # corpus status -archive …: docket, slackdump, ollama
+```
+
+Run that whenever a credential changes and the screen reflects it. Before the
+first probe the screen shows every backend as *unchecked*, which is the honest
+first boot rather than an error.
+
 The server refuses a non-loopback bind before it even opens the database. This is
 personal mail, and a spec carries the sender's own HTML unsanitised — see the note
 on the bind, and issue #14.
