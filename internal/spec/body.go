@@ -97,7 +97,7 @@ func blankGloss(r *entryRow) string {
 		return ""
 	}
 	if blocks[0].Kind == unnest.KindForwardRule {
-		return `<p class="ed">Blank — only forwarded the messages below.</p>`
+		return `<p class="ed">Blank — only forwarded messages.</p>`
 	}
 	return `<p class="ed">Blank — no text of its own; the messages below were quoted.</p>`
 }
