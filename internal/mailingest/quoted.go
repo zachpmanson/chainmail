@@ -14,6 +14,7 @@ type QuotedResult struct {
 	Created  int // new entries
 	Merged   int // matched an entry already present
 	Twinned  int // matched a stored copy of the same message under a different clock
+	Derived  int // a modified copy of a stored message, not a twin and not unrelated
 	Enriched int // merged entries that gained a field from this sighting
 	Edges    int // reply edges linked from positional nesting
 	Undated  int // blocks whose time had to be inferred from the host
@@ -84,6 +85,7 @@ func ExtractQuoted(store *corpus.Store, hostID int64, host corpus.Entry, body st
 		// clock qualifies: an inferred one is the host's instant, and the gap to
 		// the copy would be an artefact of that substitution.
 		var twin int64
+		var derived corpus.DerivedMatch
 		if !inferred {
 			// The subject is the thread that vouches for a short block: without it
 			// the same few words on two threads would collapse into one message.
@@ -93,6 +95,15 @@ func ExtractQuoted(store *corpus.Store, hostID int64, host corpus.Entry, body st
 			}
 			if ok {
 				twin = t
+			} else {
+				// Not a twin; ask whether it is the SAME message line, edited.
+				d, ok2, err := corpus.FindDerived(store, person, ts, rec.Block.Text, rec.Subject)
+				if err != nil {
+					return r, err
+				}
+				if ok2 {
+					derived = d
+				}
 			}
 		}
 		id, created := twin, false
@@ -100,6 +111,17 @@ func ExtractQuoted(store *corpus.Store, hostID int64, host corpus.Entry, body st
 			id, created, err = store.PutQuoted(e)
 			if err != nil {
 				return r, fmt.Errorf("storing quoted block %d of %s: %w", i, host.ExtID, err)
+			}
+			if derived.Base != 0 {
+				r.Derived++
+				// The modified quote's parent is the message it was edited INSIDE,
+				// not the host: it is what the quoter was answering back. SetParent
+				// only fills a NULL parent, so this survives the positional nesting
+				// below rather than being clobbered by a structural guess.
+				if err := store.SetParent(id, derived.Base); err != nil {
+					return r, fmt.Errorf("linking modified block %d to its base %d: %w",
+						id, derived.Base, err)
+				}
 			}
 		} else {
 			r.Twinned++
