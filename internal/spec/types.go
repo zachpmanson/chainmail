@@ -17,21 +17,36 @@ package spec
 
 // Spec is one timeline. Field order follows the schema; every optional field is
 // omitempty so a generated spec carries only what the corpus actually knows.
+// Spec is the document both sides of the wire agree on.
+//
+// It mirrors schema/timeline.schema.json field for field (the OpenAPI contract
+// inlines that file, and cmd/server proves they have not drifted), so a field
+// added here must be added there too — and a renderer-only field belongs in
+// both, because the server is what a saved page round-trips through. Fields on
+// the wire are optional exactly as the schema says: the renderer supplies the
+// fallbacks, so e.g. an absent specVersion means 1 and an absent kind means
+// "message", never a struct zero value a caller must interpret.
+//
+// The one deliberate gap is OpenItemsTitle: the schema declares it (the
+// renderer reads it), and it must survive a refresh round-trip, so it is
+// carried here even though every page the server itself builds leaves it
+// unset.
 type Spec struct {
-	SpecVersion  int               `json:"specVersion,omitempty"`
-	Title        string            `json:"title"`
-	Subtitle     string            `json:"subtitle,omitempty"`
-	RunLabel     string            `json:"runLabel,omitempty"`
-	Runs         []string          `json:"runs,omitempty"`
-	Theme        string            `json:"theme,omitempty"`
-	OpenItems    []string          `json:"openItems,omitempty"`
-	Avatars      map[string]string `json:"avatars,omitempty"`
-	Participants []Participant     `json:"participants,omitempty"`
-	Queries      []Query           `json:"queries,omitempty"`
-	RunParams    *RunParams        `json:"runParams,omitempty"`
-	Threads      []Thread          `json:"threads,omitempty"`
-	SourceNotes  []SourceNote      `json:"sourceNotes,omitempty"`
-	Messages     []Entry           `json:"messages"`
+	SpecVersion    int               `json:"specVersion,omitempty"`
+	Title          string            `json:"title"`
+	Subtitle       string            `json:"subtitle,omitempty"`
+	RunLabel       string            `json:"runLabel,omitempty"`
+	Runs           []string          `json:"runs,omitempty"`
+	Theme          string            `json:"theme,omitempty"`
+	OpenItems      []string          `json:"openItems,omitempty"`
+	OpenItemsTitle string            `json:"openItemsTitle,omitempty"`
+	Avatars        map[string]string `json:"avatars,omitempty"`
+	Participants   []Participant     `json:"participants,omitempty"`
+	Queries        []Query           `json:"queries,omitempty"`
+	RunParams      *RunParams        `json:"runParams,omitempty"`
+	Threads        []Thread          `json:"threads,omitempty"`
+	SourceNotes    []SourceNote      `json:"sourceNotes,omitempty"`
+	Messages       []Entry           `json:"messages"`
 }
 
 // Participant is one member of the cast, including people who only ever appear

@@ -1198,8 +1198,7 @@
         "properties": {
           "specVersion": {
             "type": "integer",
-            "description": "Contract version. Absent means 1.",
-            "default": 1
+            "description": "Contract version. Absent means 1."
           },
           "title": {
             "type": "string",
@@ -1226,11 +1225,11 @@
               "dark",
               "auto"
             ],
-            "default": "light"
+            "description": "Renderer theme. Omitted means the renderer's default (light)."
           },
           "openItemsTitle": {
             "type": "string",
-            "default": "Still open"
+            "description": "Heading over the unresolved-questions section. Omitted means 'Still open'."
           },
           "openItems": {
             "type": "array",
@@ -1399,8 +1398,7 @@
               "message",
               "note"
             ],
-            "default": "message",
-            "description": "'note' is a meeting or event that never existed as an email."
+            "description": "'note' is a meeting or event that never existed as an email. Omitted means message."
           },
           "id": {
             "type": "string",

@@ -309,6 +309,7 @@ func Run(store *corpus.Store, mb Mailbox, prev spec.Spec, opts Options) (Report,
 	next.Subtitle = prev.Subtitle
 	next.Theme = prev.Theme
 	next.OpenItems = prev.OpenItems
+	next.OpenItemsTitle = prev.OpenItemsTitle
 
 	rep.fill(prev, next)
 	return rep, next, nil

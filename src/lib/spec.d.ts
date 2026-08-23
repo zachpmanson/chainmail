@@ -29,7 +29,13 @@ export interface Timeline {
    * Labels of every pass so far, oldest first.
    */
   runs?: string[];
+  /**
+   * Renderer theme. Omitted means the renderer's default (light).
+   */
   theme?: "light" | "dark" | "auto";
+  /**
+   * Heading over the unresolved-questions section. Omitted means 'Still open'.
+   */
   openItemsTitle?: string;
   /**
    * Unresolved questions, commitments and ownerless decisions. HTML permitted; cross-links encouraged.
@@ -115,7 +121,7 @@ export interface Timeline {
 }
 export interface Entry {
   /**
-   * 'note' is a meeting or event that never existed as an email.
+   * 'note' is a meeting or event that never existed as an email. Omitted means message.
    */
   kind?: "message" | "note";
   /**

@@ -344,6 +344,14 @@ func TestParametersSurviveTheRoundTrip(t *testing.T) {
 			on("Mon, 02 Feb 2026 10:00:00 +1100")))
 	prev := prevRun(t, s, "thread-hedge", "paddock survey")
 
+	// Page-level presentation survives the round trip too: the server does not
+	// invent these, so a page that carries them keeps them and one that does not
+	// stays unset (the renderer supplies the fallbacks — that is what the
+	// schema dropping its defaults means).
+	prev.Theme = "dark"
+	prev.OpenItemsTitle = "Open threads"
+	prev.OpenItems = []string{"confirm the fence budget"}
+
 	_, next := run(t, s, newMailbox(), prev, Options{})
 
 	if next.Title != prev.Title {
@@ -373,6 +381,16 @@ func TestParametersSurviveTheRoundTrip(t *testing.T) {
 	}
 	if len(next.Runs) != 1 || next.Runs[0] != "2 Feb 2026" {
 		t.Errorf("runs = %v, want the superseded pass named", next.Runs)
+	}
+
+	if next.Theme != "dark" {
+		t.Errorf("theme = %q, want the carried 'dark'", next.Theme)
+	}
+	if next.OpenItemsTitle != "Open threads" {
+		t.Errorf("openItemsTitle = %q, want the carried 'Open threads'", next.OpenItemsTitle)
+	}
+	if got := strings.Join(next.OpenItems, ","); got != "confirm the fence budget" {
+		t.Errorf("openItems = %q, want the carried items", got)
 	}
 }
 

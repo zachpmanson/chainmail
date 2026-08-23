@@ -9,8 +9,7 @@
   "properties": {
     "specVersion": {
       "type": "integer",
-      "description": "Contract version. Absent means 1.",
-      "default": 1
+      "description": "Contract version. Absent means 1."
     },
     "title": {
       "type": "string",
@@ -19,8 +18,14 @@
     "subtitle": { "type": "string", "description": "One or two sentences. Provenance belongs in queries/threads/sourceNotes, not here." },
     "runLabel": { "type": "string", "description": "Names this collection pass, e.g. 'pass 2, 20 Aug 2026'." },
     "runs": { "type": "array", "items": { "type": "string" }, "description": "Labels of every pass so far, oldest first." },
-    "theme": { "enum": ["light", "dark", "auto"], "default": "light" },
-    "openItemsTitle": { "type": "string", "default": "Still open" },
+    "theme": {
+      "enum": ["light", "dark", "auto"],
+      "description": "Renderer theme. Omitted means the renderer's default (light)."
+    },
+    "openItemsTitle": {
+      "type": "string",
+      "description": "Heading over the unresolved-questions section. Omitted means 'Still open'."
+    },
     "openItems": {
       "type": "array",
       "items": { "type": "string" },
@@ -117,7 +122,7 @@
       "required": ["date", "body"],
       "additionalProperties": false,
       "properties": {
-        "kind": { "enum": ["message", "note"], "default": "message", "description": "'note' is a meeting or event that never existed as an email." },
+        "kind": { "enum": ["message", "note"], "description": "'note' is a meeting or event that never existed as an email. Omitted means message." },
         "id": { "type": "string", "description": "Stable anchor. Omit to derive from date+time+sender; content-derived ids survive inserting entries mid-trail." },
         "date": { "type": "string", "description": "As displayed, e.g. 'Thu 16 Jul 2026'. Not normalised." },
         "time": { "type": "string", "description": "As displayed, e.g. '11:35'. Absent for undated notes." },

@@ -531,11 +531,8 @@ export interface components {
          * @description One email trail, unspooled out of its threads and forwards into a single chronological transcript. Produced by a collector (e.g. the mail-timeline skill); consumed by the chainmail renderer.
          */
         TimelineSpec: {
-            /**
-             * @description Contract version. Absent means 1.
-             * @default 1
-             */
-            specVersion: number;
+            /** @description Contract version. Absent means 1. */
+            specVersion?: number;
             /** @description Page title. A leading # renders as a channel-style hash. */
             title: string;
             /** @description One or two sentences. Provenance belongs in queries/threads/sourceNotes, not here. */
@@ -545,12 +542,12 @@ export interface components {
             /** @description Labels of every pass so far, oldest first. */
             runs?: string[];
             /**
-             * @default light
+             * @description Renderer theme. Omitted means the renderer's default (light).
              * @enum {unknown}
              */
-            theme: "light" | "dark" | "auto";
-            /** @default Still open */
-            openItemsTitle: string;
+            theme?: "light" | "dark" | "auto";
+            /** @description Heading over the unresolved-questions section. Omitted means 'Still open'. */
+            openItemsTitle?: string;
             /** @description Unresolved questions, commitments and ownerless decisions. HTML permitted; cross-links encouraged. */
             openItems?: string[];
             /** @description Sender name -> image (data: URI or URL). Keys must match Message.sender exactly. */
@@ -601,11 +598,10 @@ export interface components {
         };
         TimelineEntry: {
             /**
-             * @description 'note' is a meeting or event that never existed as an email.
-             * @default message
+             * @description 'note' is a meeting or event that never existed as an email. Omitted means message.
              * @enum {unknown}
              */
-            kind: "message" | "note";
+            kind?: "message" | "note";
             /** @description Stable anchor. Omit to derive from date+time+sender; content-derived ids survive inserting entries mid-trail. */
             id?: string;
             /** @description As displayed, e.g. 'Thu 16 Jul 2026'. Not normalised. */
