@@ -30,10 +30,29 @@ func TestWebClientIsServedFromTheSamePort(t *testing.T) {
 		t.Errorf("GET /index.html = %d, want 200", res.status)
 	}
 
-	// A hashed asset from the build is served with its real bytes.
-	res = srv.do(t, "GET", "/assets/index-D5Ar9yXF.js", nil)
+	// A hashed asset from the build is served with its real bytes. The name is
+	// discovered from the embedded index.html rather than hardcoded: vite's
+	// content hash changes with every build.
+	root := srv.do(t, "GET", "/", nil)
+	asset := ""
+	for _, f := range strings.Fields(string(root.body)) {
+		if strings.Contains(f, "/assets/") {
+			// f is src="/assets/index-....js"></script> — take the attribute
+			// value: after src=" and up to the next quote.
+			if a, ok := strings.CutPrefix(f, "src=\""); ok {
+				if a, _, ok := strings.Cut(a, "\""); ok {
+					asset = a
+				}
+			}
+			break
+		}
+	}
+	if asset == "" {
+		t.Fatal("no /assets/ reference in the served index.html")
+	}
+	res = srv.do(t, "GET", asset, nil)
 	if res.status != 200 {
-		t.Fatalf("GET /assets/...js = %d, want 200", res.status)
+		t.Fatalf("GET %s = %d, want 200", asset, res.status)
 	}
 	if ct := res.header.Get("Content-Type"); !strings.Contains(ct, "javascript") {
 		t.Errorf("asset Content-Type = %q, want javascript", ct)

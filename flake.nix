@@ -17,14 +17,35 @@
       # share a source tree, a vendorHash and a test suite. Split it only if a
       # host ever wants `corpus` without the service.
       #
-      # The web client is now embedded INTO the server: the flake builds it with
-      # npm (vite build → dist/) before compiling Go, so a single binary serves
-      # both the API and the UI. The lockfile is committed and frozen, so the
-      # npm ci is reproducible; the output is plain static assets with hashed
-      # names. This reverses the old "client is Vite dev only" note:
-      #       packages → removed the web-disabled paragraph; the client ships.
+      # The web client is embedded INTO the server: vite build → cmd/server/dist,
+      # go:embed → one binary serving API + UI. Deps are fetched through
+      # buildNpmPackage's npmDepsHash — a fixed-output derivation nix DOES give
+      # network access (a plain `npm ci` in preBuild is sandboxed with no network
+      # and hangs forever). The hash makes the fetch cached and reproducible:
+      # slow once, instant every later build and every deploy.
       packages = forAll (pkgs: rec {
         default = chainmail;
+
+        # The web client build. buildNpmPackage runs npm ci (offline, from the
+        # locked hash) then `npm run build`, which vite sends to cmd/server/dist
+        # inside the copied source. We then copy that dist into the Go build's
+        # source in preBuild so cmd/server's go:embed resolves.
+        webClient = pkgs.buildNpmPackage {
+          pname = "chainmail-web";
+          version = "0.1.0";
+          src = self;
+          nodejs = pkgs.nodejs_22;
+          npmDepsHash = "sha256-MG9+F15fiFh+tbWGZC69tDfIYGcsQujwvUpCQ6Cp92Y=";
+          # The default npmInstallHook re-installs from package.json, which
+          # drops the vite-built cmd/server/dist (untracked, not in `files`).
+          # The only artifact this package must ship IS that dist, so the
+          # install phase is just: copy it out.
+          dontNpmInstall = true;
+          installPhase = ''
+            mkdir -p $out/dist
+            cp -r cmd/server/dist/. $out/dist/
+          '';
+        };
 
         chainmail = pkgs.buildGoModule {
           pname = "chainmail";
@@ -32,13 +53,10 @@
           src = self;
           vendorHash = "sha256-tE5twZddLbKWD6TyN1y+c8KkKh1TvLbKb2VViEIPHXQ=";
 
-          # Build the web client first so cmd/server's go:embed finds dist/.
-          # npm ci from the committed lockfile; vite build outputs dist/ at the
-          # repo root, which cmd/server embeds with `//go:embed all:dist`.
-          nativeBuildInputs = [ pkgs.nodejs_22 ];
+          # copy the vite-built client into the Go source so go:embed finds it.
           preBuild = ''
-            npm ci
-            npm run build
+            mkdir -p cmd/server/dist
+            cp -r ${webClient}/dist/. cmd/server/dist/
           '';
 
           # The suite reads committed fixtures and an embedded tzdata, never the
