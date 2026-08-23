@@ -123,10 +123,14 @@ func testServer(t *testing.T) *harness {
 
 	// Seeded so the documented-path walk can GET /v1/specs/{name} without a
 	// prior save; the round-trip test writes its own.
+	specsDir := t.TempDir()
 	serve := &server{
-		store:     s,
-		specs:     t.TempDir(),
-		specSlots: make(chan struct{}, specConcurrency),
+		store: s,
+		specs: specsDir,
+		// Seeded with the saved pages, so a test that writes a snapshot can
+		// point the server at it without a separate temp path.
+		statusPath: filepath.Join(specsDir, "status.json"),
+		specSlots:  make(chan struct{}, specConcurrency),
 		// Shortened from the real wait so the 429 path is a fast test.
 		slotWait:  10 * time.Millisecond,
 		embedWait: 2 * time.Second,

@@ -145,6 +145,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Which backend services are logged in, as the operator last probed them.
+         * @description The connection snapshot the operator's probe wrote beside the corpus. The server is read-only on purpose, so it never asks docket or slackdump whether their sessions are still good; it serves the probe's answer. Each service carries one of four states: ok, needs-auth, down, or unchecked. A machine with no snapshot yet answers every service unchecked, not with an error.
+         */
+        get: operations["getStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/refresh": {
         parameters: {
             query?: never;
@@ -409,6 +429,30 @@ export interface components {
         PeopleResponse: {
             /** @description Most-involved first. */
             people: components["schemas"]["PersonSummary"][];
+        };
+        /** @description The connection snapshot the operator's probe wrote. checkedAt is omitted until some probe has run; services is always the full known set, so a missing snapshot reads as unchecked rather than empty. */
+        StatusResponse: {
+            /**
+             * Format: date-time
+             * @description UTC RFC3339 stamp of the last probe. Absent when no probe has run.
+             */
+            checkedAt?: string;
+            /** @description Every backend, in the screen's order. */
+            services: components["schemas"]["ServiceStatus"][];
+        };
+        /** @description One backend's connection, as the last probe reported it. */
+        ServiceStatus: {
+            /** @description The backend's key: mail, slack, or embed. */
+            id: string;
+            /** @description What it is, shown as the row's title. */
+            label: string;
+            /**
+             * @description One of ok, needs-auth, down, or unchecked.
+             * @enum {string}
+             */
+            status: "ok" | "needs-auth" | "down" | "unchecked";
+            /** @description The fix or state in the operator's own words. Absent when the service is fine. */
+            detail?: string;
         };
         /** @description One person, with every identity that resolves to them. */
         PersonSummary: {
@@ -933,6 +977,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PeopleResponse"];
+                };
+            };
+        };
+    };
+    getStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The connection snapshot. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatusResponse"];
                 };
             };
         };

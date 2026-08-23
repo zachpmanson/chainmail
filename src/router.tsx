@@ -14,6 +14,7 @@ import { SelectView } from "./components/Select";
 import { ViewPage } from "./components/ViewPage";
 import { NotFound } from "./components/NotFound";
 import { Rendered } from "./components/Rendered";
+import { StatusView } from "./components/StatusView";
 import type { SearchMode } from "./lib/api";
 
 /**
@@ -157,13 +158,19 @@ const searchRoute = createRoute({
   component: SelectView,
 });
 
+const statusRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/status",
+  component: StatusView,
+});
+
 const viewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/view/$name",
   component: ViewPage,
 });
 
-const routeTree = rootRoute.addChildren([searchRoute, viewRoute]);
+const routeTree = rootRoute.addChildren([searchRoute, statusRoute, viewRoute]);
 
 /** The app's router, bound to the browser's history. */
 export const router = createRouter({

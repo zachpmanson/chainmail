@@ -22,6 +22,7 @@ import (
 	"github.com/zachpmanson/chainmail/internal/mailingest"
 	"github.com/zachpmanson/chainmail/internal/refresh"
 	"github.com/zachpmanson/chainmail/internal/spec"
+	"github.com/zachpmanson/chainmail/internal/status"
 )
 
 // The built web client, embedded so one binary serves both the API and the UI.
@@ -62,6 +63,10 @@ type server struct {
 	store   *corpus.Store
 	uploads string
 	specs   string // dir for saved pages (POST /v1/spec writes here, GET /v1/specs reads)
+	// statusPath is the connection snapshot the operator's probe wrote; the
+	// server serves it read-only, so the credential checks stay where the
+	// credentials are.
+	statusPath string
 
 	specSlots chan struct{}
 	// slotWait is how long a caller waits for a slot before being told to retry.
@@ -82,6 +87,7 @@ func (s *server) routes() http.Handler {
 	// instead of ServeMux's plain text.
 	mux.HandleFunc("/v1/refresh", post(s.refresh))
 	mux.HandleFunc("/v1/search", get(s.search))
+	mux.HandleFunc("/v1/status", get(s.status))
 	mux.HandleFunc("/v1/spec", post(s.spec))
 	mux.HandleFunc("/v1/specs/{name}", get(s.savedSpec))
 	mux.HandleFunc("/v1/entries/{extId}", get(s.entry))
@@ -570,6 +576,20 @@ func (s *server) stats(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	send(w, http.StatusOK, out)
+}
+
+func (s *server) status(w http.ResponseWriter, r *http.Request) {
+	// The snapshot is the operator's copy of the machine's state; a missing or
+	// unparseable one is the unchecked grid, not an error. The server only ever
+	// reads it — reaching docket or slackdump here would break the read-only
+	// contract, so that stays the operator's probe's job.
+	var snap status.Snapshot
+	if blob, err := os.ReadFile(s.statusPath); err != nil {
+		snap = status.Empty()
+	} else {
+		snap = status.Parse(blob)
+	}
+	send(w, http.StatusOK, toStatusResponse(snap))
 }
 
 func (s *server) people(w http.ResponseWriter, r *http.Request) {

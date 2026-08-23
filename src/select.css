@@ -47,3 +47,28 @@
   font-size:.76rem; padding:.3rem .6rem; border:1px solid var(--line); border-radius:6px;
   background:var(--card); color:var(--muted); cursor:pointer; }
 .selback:hover { color:var(--accent); }
+
+/* The /status screen. Same visual family as the selection stage: it, too, is a
+   browser-only control surface that never ships inside a rendered transcript. */
+.statuswrap { max-width:60rem; }
+.sthead { font-size:.7rem; text-transform:uppercase; letter-spacing:.1em;
+  color:var(--muted); margin:1.1rem 0 .1rem; }
+.stnote { font-size:.74rem; color:var(--muted); margin:.35rem 0 .5rem; }
+.stlist { list-style:none; margin:.5rem 0 0; padding:0; border:1px solid var(--line);
+  border-radius:9px; background:var(--card); overflow:hidden; }
+.strow + .strow { border-top:1px solid var(--line); }
+.strow { display:flex; gap:.6rem; align-items:baseline; padding:.55rem .7rem; }
+.stempty { color:var(--muted); font-size:.8rem; }
+.stbad { font:inherit; font-size:.66rem; font-weight:700; padding:.1rem .45rem;
+  border:1px solid currentColor; border-radius:99px; white-space:nowrap; }
+.st-ok { color:#2e7d32; }
+.st-na { color:#b26b00; }
+.st-down { color:crimson; }
+.st-un { color:var(--muted); }
+.stlabel { font-size:.86rem; font-weight:650; min-width:12rem; }
+.stdetail { font-size:.72rem; color:var(--muted); overflow-wrap:anywhere; }
+.stdl { margin:.5rem 0 0; display:grid; grid-template-columns:max-content 1fr;
+  gap:.45rem 0; }
+.stdl dt { font-size:.76rem; color:var(--muted); text-transform:uppercase;
+  letter-spacing:.06em; padding-right:1rem; }
+.stdl dd { margin:0; font-size:.86rem; font-variant-numeric:tabular-nums; }

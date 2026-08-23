@@ -30,6 +30,7 @@ import (
 
 	"github.com/zachpmanson/chainmail/internal/corpus"
 	mailembed "github.com/zachpmanson/chainmail/internal/embed"
+	"github.com/zachpmanson/chainmail/internal/status"
 )
 
 func main() {
@@ -68,11 +69,12 @@ func run(args []string) error {
 	defer store.Close()
 
 	srv := &server{
-		store:     store,
-		uploads:   *uploads,
-		specs:     filepath.Join(filepath.Dir(*path), "specs"),
-		specSlots: make(chan struct{}, specConcurrency),
-		slotWait:  specSlotWait,
+		store:      store,
+		uploads:    *uploads,
+		specs:      filepath.Join(filepath.Dir(*path), "specs"),
+		statusPath: status.FileName(*path),
+		specSlots:  make(chan struct{}, specConcurrency),
+		slotWait:   specSlotWait,
 		embedder: func() *mailembed.Ollama {
 			return &mailembed.Ollama{BaseURL: *url, Name: *model, Dimension: *dim,
 				Client: &http.Client{Timeout: *timeout}}

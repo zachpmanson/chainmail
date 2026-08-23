@@ -120,6 +120,12 @@ export type SearchMode = "lexical" | "semantic" | "hybrid";
 
 export type ChainHit = components["schemas"]["ChainHit"];
 
+export type ServiceStatus = components["schemas"]["ServiceStatus"];
+
+export type StatusResponse = components["schemas"]["StatusResponse"];
+
+export type Stats = components["schemas"]["Stats"];
+
 export type RefreshReport = components["schemas"]["RefreshReport"];
 
 export type RefreshCandidate = components["schemas"]["RefreshCandidate"];
