@@ -346,6 +346,7 @@ describe("building a page from the chosen set", () => {
     await searchFor("cutover");
     await screen.findByText("Loom cutover schedule");
     click(screen.getAllByRole("checkbox")[0]!);
+    typeInto("Page title", "Loom cutover");
     click(screen.getByRole("button", { name: /Build page/ }));
 
     // "not yet", with a time attached, is the one decline worth re-asking
@@ -389,6 +390,7 @@ describe("building a page from the chosen set", () => {
     await screen.findByText("Loom cutover schedule");
 
     click(screen.getAllByRole("checkbox")[0]!);
+    typeInto("Page title", "Loom cutover");
     const button = screen.getByRole("button", { name: /Build page/ });
     click(button);
 

@@ -165,15 +165,17 @@ export function SelectView() {
   // not overwrite each other silently.
   const pendingName = useRef("");
   const build = $api.useMutation("post", "/v1/spec", {
-    // The saved page's URL follows what the service returned, not what the
-    // client asked for: the server is the authority on the final shape (it may
-    // have borrowed a canonical title, and it names the file it saved). Navigating
-    // to the returned spec's own title keeps the address bar true to the saved
-    // page, and falls back to the requested name only when the response has none.
-    onSuccess: (data) =>
+    // The saved page's URL is the name the client chose, always: the server
+    // saves exactly `name` from the request and returns it as the title (it may
+    // borrow a subject when none was given, but that borrows a title, not a
+    // file name). Reslugging the returned title would point the address bar at
+    // a file that was never written — a titleless build saves under the clock
+    // name but announces the borrowed subject's slug. The request name IS the
+    // saved file, so it IS the URL.
+    onSuccess: () =>
       navigate({
         to: "/view/$name",
-        params: { name: (data && data.title && slug(data.title)) || pendingName.current },
+        params: { name: pendingName.current },
       }),
   });
 
