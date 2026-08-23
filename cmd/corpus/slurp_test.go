@@ -32,6 +32,7 @@ type recorder struct {
 	embedWhy  string
 	embedDown bool
 	embedErr  error
+	statusErr error
 	mailSeen  mailOpts
 }
 
@@ -57,6 +58,10 @@ func (r *recorder) deps() slurpDeps {
 			return !r.embedDown, r.embedWhy
 		},
 		embed: func() error { note("embed"); return r.embedErr },
+		status: func() error {
+			note("status")
+			return r.statusErr
+		},
 	}
 }
 
@@ -92,7 +97,7 @@ func TestPhasesRunInTheOrderThatFinishesTheWork(t *testing.T) {
 		t.Fatalf("runSlurp: %v", err)
 	}
 	want := []string{"refresh", "slack", "mail", "twins", "repair", "dedupe",
-		"embed-ready", "embed"}
+		"embed-ready", "embed", "status"}
 	if got := strings.Join(r.calls, ","); got != strings.Join(want, ",") {
 		t.Errorf("phase order\n got %s\nwant %s", got, strings.Join(want, ","))
 	}
@@ -192,7 +197,8 @@ func TestEmbedWithoutADaemonIsASkip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("a daemon that is down failed the run: %v", err)
 	}
-	if last := r.calls[len(r.calls)-1]; last != "embed-ready" {
+	if !strings.Contains(strings.Join(r.calls, ","), "embed-ready") ||
+		strings.Contains(strings.Join(r.calls, ","), "embed,") {
 		t.Errorf("embedded against a daemon that is not there: %v", r.calls)
 	}
 	if !strings.Contains(out, "embed   skipped") ||
@@ -240,13 +246,13 @@ func TestOnlyAndSkipChoosePhases(t *testing.T) {
 		only, skip []string
 		want       string
 	}{
-		{name: "mail only", only: []string{"mail"}, want: "mail"},
-		{name: "slack only", only: []string{"slack"}, want: "refresh,slack"},
+		{name: "mail only", only: []string{"mail"}, want: "mail,status"},
+		{name: "slack only", only: []string{"slack"}, want: "refresh,slack,status"},
 		{name: "no embedding", skip: []string{"embed"},
-			want: "refresh,slack,mail,twins,repair,dedupe"},
-		{name: "settle is a group", only: []string{"settle"}, want: "twins,repair,dedupe"},
+			want: "refresh,slack,mail,twins,repair,dedupe,status"},
+		{name: "settle is a group", only: []string{"settle"}, want: "twins,repair,dedupe,status"},
 		{name: "skip the group", skip: []string{"settle", "embed"},
-			want: "refresh,slack,mail"},
+			want: "refresh,slack,mail,status"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := &recorder{mail: covered}

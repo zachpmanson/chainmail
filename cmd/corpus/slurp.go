@@ -40,6 +40,7 @@ const (
 	phaseRepair slurpPhase = "repair"
 	phaseDedupe slurpPhase = "dedupe"
 	phaseEmbed  slurpPhase = "embed"
+	phaseStatus slurpPhase = "status"
 )
 
 // slurpOrder is the sequence, written down once. A phase is added here and
@@ -107,6 +108,10 @@ type slurpDeps struct {
 	// the answer is no.
 	embedReady func() (bool, string)
 	embed      func() error
+	// status probes each backend and writes the snapshot the server serves. It
+	// is the tail of every slurp, so the screen is never staler than the last
+	// run; it cannot be excluded by -skip (see runSlurp).
+	status func() error
 }
 
 func defaultSlurpDeps(path string, o slurpOpts) slurpDeps {
@@ -121,6 +126,7 @@ func defaultSlurpDeps(path string, o slurpOpts) slurpDeps {
 		dedupe:       func(apply bool) error { return runDedupe(path, apply) },
 		embedReady:   func() (bool, string) { return embedDaemon(eo) },
 		embed:        func() error { return runEmbed(path, eo) },
+		status:       func() error { return runStatusTail(path, o) },
 	}
 }
 
@@ -318,7 +324,29 @@ func runSlurp(w io.Writer, o slurpOpts, d slurpDeps) error {
 			report(p, outcomeDone, "vectors current")
 		}
 	}
+
+	// The status probe is the tail of every slurp, selected or not. It asks the
+	// same questions the standalone `corpus status` does and writes the answer
+	// beside the corpus, so the /v1/status screen is never staler than the last
+	// run — and a host's -only list cannot drop it, because it is the point of
+	// the screen to reflect whatever the machine can reach right now. A write
+	// failure is a real fault (the screen cannot tell its truth without the
+	// file), but a backend answering "needs auth" or "down" is not: that is a
+	// finding, recorded in the snapshot.
+	oc, note := probeTail(w, d)
+	report(phaseStatus, oc, note)
 	return summarise(w, results)
+}
+
+// probeTail runs the status probe and carries its outcome. A write failure is
+// a failure (the screen cannot tell its truth without the file); a backend
+// that answers "needs auth" or "down" is a finding recorded in the snapshot,
+// so the outcome of THAT question is complete, not failed.
+func probeTail(w io.Writer, d slurpDeps) (outcome, string) {
+	if err := d.status(); err != nil {
+		return outcomeFailed, err.Error()
+	}
+	return outcomeDone, "services probed"
 }
 
 // slurpSlack refreshes the archive if it can, then ingests it.

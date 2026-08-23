@@ -31,16 +31,8 @@ type statusOpts struct {
 const probeTimeout = 5 * time.Second
 
 func runStatus(path string, o statusOpts) error {
-	if o.out == "" {
-		o.out = status.FileName(path)
-	}
-	snap := status.Snapshot{CheckedAt: time.Now().UTC().Format(time.RFC3339)}
-	snap.Services = append(snap.Services, probeMail(o), probeSlack(o), probeEmbed(o))
-
-	if err := os.MkdirAll(filepath.Dir(o.out), 0o700); err != nil {
-		return err
-	}
-	if err := os.WriteFile(o.out, snap.Marshal(), 0o600); err != nil {
+	snap, err := writeStatusSnapshot(path, o)
+	if err != nil {
 		return err
 	}
 
@@ -49,6 +41,34 @@ func runStatus(path string, o statusOpts) error {
 		fmt.Printf("  %-6s %-12s %s\n", s.ID, s.Status, s.Detail)
 	}
 	return nil
+}
+
+// writeStatusSnapshot probes every backend and writes the snapshot file beside
+// the corpus, returning what it recorded. runStatus and the slurp's tail both
+// reach the probes through here, so a probe is never implemented twice.
+func writeStatusSnapshot(path string, o statusOpts) (status.Snapshot, error) {
+	if o.out == "" {
+		o.out = status.FileName(path)
+	}
+	snap := status.Snapshot{CheckedAt: time.Now().UTC().Format(time.RFC3339)}
+	snap.Services = append(snap.Services, probeMail(o), probeSlack(o), probeEmbed(o))
+
+	if err := os.MkdirAll(filepath.Dir(o.out), 0o700); err != nil {
+		return snap, err
+	}
+	if err := os.WriteFile(o.out, snap.Marshal(), 0o660); err != nil {
+		return snap, err
+	}
+	return snap, nil
+}
+
+// runStatusTail gives the slurp a one-liner behind the same probes the
+// standalone command uses: probe, write, report, and carry a write failure as
+// the phase's outcome.
+func runStatusTail(path string, o slurpOpts) error {
+	oo := statusOpts{bin: o.bin, archive: o.archive, url: o.embedURL, model: o.embedModel}
+	_, err := writeStatusSnapshot(path, oo)
+	return err
 }
 
 // probeMail asks docket, the Gmail proxy, for one message's envelope. A reply
