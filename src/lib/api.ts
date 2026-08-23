@@ -122,6 +122,8 @@ export type ChainHit = components["schemas"]["ChainHit"];
 
 export type RefreshReport = components["schemas"]["RefreshReport"];
 
+export type RefreshCandidate = components["schemas"]["RefreshCandidate"];
+
 /** Every input that changes the result set, before the blanks are dropped. */
 export interface SearchParams {
   q: string;

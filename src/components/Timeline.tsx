@@ -303,12 +303,14 @@ export interface TimelineProps {
   onShowSpec?: () => void;
   /** app-only: brings a saved page up to date from the corpus (refresh.go). */
   onRefresh?: () => void;
+  /** app-only: opens the proposal evaluator, when the last refresh proposed chains. */
+  onEval?: () => void;
   refreshing?: boolean;
   /** a one-line report of what the last refresh did, or why it failed */
   refreshNote?: string | null;
 }
 
-export function Timeline({ spec, marks, prevLabel, filter, onShowSpec, onRefresh, refreshing, refreshNote }: TimelineProps) {
+export function Timeline({ spec, marks, prevLabel, filter, onShowSpec, onRefresh, onEval, refreshing, refreshNote }: TimelineProps) {
   const v = derive(spec);
   const s = v.spec;
   return (
@@ -327,6 +329,10 @@ export function Timeline({ spec, marks, prevLabel, filter, onShowSpec, onRefresh
                   aria-label="Re-derive this page from the corpus">
             {refreshing ? "refreshing…" : "refresh"}
           </button>
+        ) : null}
+        {onEval ? (
+          <button className="tbtn" type="button" onClick={onEval}
+                  aria-label="Evaluate chains the queries proposed">eval</button>
         ) : null}
         <button className="tbtn" id="maptog" type="button" aria-pressed="true"
                 aria-label="Reply tree panel">tree</button>
