@@ -288,3 +288,38 @@ func TestAReplyThatOnlyQuotesHasNoBody(t *testing.T) {
 		t.Errorf("body = %q, want empty", got)
 	}
 }
+
+func TestLeadingAndTrailingWhitespaceIsTrimmed(t *testing.T) {
+	// Clients pad a body's edges: a leading newline or blank directive, and a
+	// trailing run of blank lines before a signature. The page claims to be a
+	// transcript, so the exposed body should start and end on the sender's own
+	// words, not on the formatting margin.
+	got := renderMarkup("\n<div><br></div><p>Good morning,</p><p>Please find attached.</p>\n<p>&nbsp;</p>", mailBody)
+	if got != "<p>Good morning,</p><p>Please find attached.</p>" {
+		t.Errorf("body = %q, want the leading/trailing blanks gone", got)
+	}
+}
+
+func TestTrailingWhitespaceBeforeAFoldIsTrimmed(t *testing.T) {
+	// A body that folds a signature must trim the exposed part right up to the
+	// disclosure, not leave blank lines standing between the last word and the
+	// signature summary.
+	part := `<div><p>Ready to go.</p><p>&nbsp;</p><p>&nbsp;</p>` +
+		`<div class="gmail_signature"><div>Tom<br>Co-founder</div></div></div>`
+	got := renderMarkup(part, mailBody)
+	if !strings.Contains(got, `<details class="sig">`) {
+		t.Errorf("body = %q, want the signature folded", got)
+	}
+	// Everything before the fold is the exposed part: it must not end on a
+	// blank line.
+	if cut := strings.Index(got, "<details"); cut >= 0 {
+		exposed := got[:cut]
+		if stripped := strings.TrimRight(exposed, " \t\n"); stripped != exposed {
+			t.Errorf("body = %q, want no blank lines between content and the fold", got)
+		}
+	}
+	// The fold's own signature content survives intact.
+	if !strings.Contains(got, "Tom") || !strings.Contains(got, "Co-founder") {
+		t.Errorf("body = %q, want the signature kept inside the fold", got)
+	}
+}

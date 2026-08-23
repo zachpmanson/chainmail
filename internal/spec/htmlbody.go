@@ -86,6 +86,7 @@ func renderBody(body *html.Node, bf bodyFold) (string, bool) {
 		// and folding a second time would fold the first disclosure inside another.
 		folded = foldRepeatedTail(body, bf)
 	}
+	trimEdgeWhitespace(body)
 	var b strings.Builder
 	for c := body.FirstChild; c != nil; c = c.NextSibling {
 		if err := html.Render(&b, c); err != nil {
@@ -556,9 +557,82 @@ func keptStyle(v string) string {
 	return strings.Join(keep, "; ")
 }
 
-// trimTrailingChrome drops the separator a peel leaves dangling. Outlook writes
-// a horizontal rule above the block it quotes, so cutting at the block ends the
-// body on a rule that now separates nothing.
+// trimEdgeWhitespace strips the whitespace-only nodes at the very start and very
+// end of a body, so the first and last visible lines of a message are its own
+// content rather than the formatting margin email clients pad their markup
+// with. A leading blank paragraph or a trailing run of blank lines reads as a
+// sloppy edge on a page that presents email as a clean transcript; the sender's
+// markup is preserved whole, only the emptiness at the two edges goes.
+//
+// Trailing whitespace is treated as running to the first disclosed (folded)
+// signature: the fold is signed-content, not trailer, and the body ends where
+// the signature summary is reached. So a build that folded a five-line
+// signature has its exposed remainder trimmed right up to the disclosure,
+// leaving exactly one clean boundary before the fold starts.
+func trimEdgeWhitespace(body *html.Node) {
+	trimLeadingWhitespace(body)
+	trimTrailingWhitespace(body)
+}
+
+// trimLeadingWhitespace removes whitespace-only nodes from the start of a body:
+// a run of blank text, <br>, or an empty container (like the empty <div> some
+// clients open a message with). It stops at a node that has content — an image,
+// text, or a folded signature summary — so nothing real is touched.
+func trimLeadingWhitespace(n *html.Node) {
+	for c := n.FirstChild; c != nil; c = n.FirstChild {
+		if isSignatureFold(c) {
+			return
+		}
+		if hasContent(c) {
+			if c.Type == html.ElementNode && c.DataAtom != atom.Pre {
+				trimLeadingWhitespace(c)
+			}
+			return
+		}
+		n.RemoveChild(c)
+	}
+}
+
+// trimTrailingWhitespace removes whitespace-only nodes from the end of a body,
+// stopping before a folded signature: the fold summary is content and stays.
+// A <br> or blank paragraph trailing the last real line is dropped, so the final
+// line of the exposed body sits edge-on to the signature disclosure rather than
+// a run of empty lines.
+func trimTrailingWhitespace(n *html.Node) {
+	for {
+		c := n.LastChild
+		if c == nil {
+			return
+		}
+		if isSignatureFold(c) {
+			// The exposed body ends right before the fold. Trim the blanks sitting
+			// immediately above it — a blank paragraph or two before a disclosure
+			// reads as a sloppy edge — but stop at the nearest real node. The
+			// fold itself and its own internal padding are left untouched.
+			for p := c.PrevSibling; p != nil && !hasContent(p); p = p.PrevSibling {
+				c.Parent.RemoveChild(p)
+			}
+			return
+		}
+		if hasContent(c) {
+			if c.Type == html.ElementNode && c.DataAtom != atom.Pre {
+				trimTrailingWhitespace(c)
+			}
+			return
+		}
+		n.RemoveChild(c)
+	}
+}
+
+// isSignatureFold reports whether a node begins a disclosed signature block —
+// the <details class="sig"> both fold paths build. Used by the two edge trims
+// to keep the signature (and its own padding) intact while trimming the exposed
+// body around it.
+func isSignatureFold(n *html.Node) bool {
+	return n.Type == html.ElementNode && n.DataAtom == atom.Details && hasClass(n, "sig")
+}
+
+// trimTrailingChrome drops the whitespace a peel leaves dangling. Outlook writes
 func trimTrailingChrome(n *html.Node) {
 	for c := n.LastChild; c != nil; c = n.LastChild {
 		if hasContent(c) {
