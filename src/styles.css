@@ -456,6 +456,11 @@
     .mini { top:2.4rem; width:max-content; max-width:16.5rem;
       background:color-mix(in srgb, var(--card) 86%, transparent); }
     #maptog { display:inline-block; }
+    /* The panel floats as an overlay now (no reserved column), so the toolbar
+       buttons sit at the stream's true right edge rather than clearing a
+       panel that is no longer beside them. The verdict below is the one that
+       still needs --panel, to stay clear of the panel's left edge. */
+    .toolbar { right:.6rem; }
     .refreshed { right:calc(var(--panel) + .6rem); }
   }
   @media print { .mini, .toolbar { display:none; } body.hasmap { padding-right:0; } }
