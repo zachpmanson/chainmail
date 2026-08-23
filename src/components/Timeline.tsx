@@ -6,6 +6,7 @@ import { COLLAPSE_FROM, msgCount, provenance, type SourceId } from "../lib/sourc
 import { attHref, hasPreview } from "../lib/attachments";
 import { DiffPanel, Legend, ParticipantsPanel, SourcesPanel, type ChainFilter } from "./Panels";
 import { Minimap } from "./Minimap";
+import { trimBody } from "../lib/trimBody";
 
 const html = (s: string) => ({ __html: s });
 
@@ -214,7 +215,7 @@ function EntryBlock({ row, v, mark }: { row: Row; v: View; mark?: "new" | "revis
           </a>
         </div>
         <div className="syslabel">{e.label}</div>
-        <div className="bd" dangerouslySetInnerHTML={html(e.body)} />
+        <div className="bd" dangerouslySetInnerHTML={html(trimBody(e.body))} />
         <ReplyLink row={row} v={v} />
       </div>
     );
@@ -250,7 +251,7 @@ function EntryBlock({ row, v, mark }: { row: Row; v: View; mark?: "new" | "revis
               ))}
             </div>
           ) : null}
-          <div className="bd" dangerouslySetInnerHTML={html(e.body)} />
+          <div className="bd" dangerouslySetInnerHTML={html(trimBody(e.body))} />
           <Attachments e={e} />
           <div className="foot">
             <span className="to">to {e.to ?? "—"}</span>
