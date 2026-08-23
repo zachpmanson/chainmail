@@ -19,7 +19,10 @@ import (
 // slack, mail, twins, repair, dedupe (reported, never applied), embed:
 //
 //   - twins before repair, because twins removes duplicate rows before repair
-//     reads the identities on them.
+//     reads the identities on them. A standalone `corpus ingest mail` ends with
+//     the same sweep, so a manual walk leaves no duplicate standing either; the
+//     slurp's own mail phase does not sweep, because this twins phase follows it
+//     anyway.
 //   - repair before dedupe, because repair settles identities before anything
 //     weighs evidence about them.
 //   - embed last, because it embeds whatever the earlier phases left behind, and

@@ -842,7 +842,7 @@ func run(args []string) error {
 		}
 
 		_, err := runIngestMail(path, mailOpts{query: *query, ids: splitList(*ids),
-			bound: mailingest.Bound{Max: *limit, PageSize: *pageSize}, bin: *bin})
+			bound: mailingest.Bound{Max: *limit, PageSize: *pageSize}, bin: *bin, twins: true})
 		return err
 	}
 	return fmt.Errorf("unknown command %q", args[0])

@@ -33,6 +33,14 @@ func printRefresh(w io.Writer, r refresh.Report) {
 		fmt.Fprintf(w, "  chain  %-40s %s\n", trunc(name, 40), threadOutcome(p))
 	}
 
+	// The sweep is part of the run: a quote stored before its mailbox original
+	// arrived is one message kept twice, and clearing it before redrawing is a
+	// refresh's job, not a separate chore. Printed next to the passes it cost.
+	if r.TwinsCollapsed > 0 {
+		fmt.Fprintf(w, "twins   collapsed %d stored %s before redrawing\n",
+			r.TwinsCollapsed, plural(r.TwinsCollapsed, "pair", "pairs"))
+	}
+
 	for _, g := range r.ChainsGrown {
 		fmt.Fprintf(w, "grew    %s: %d -> %d entries\n", orElse(oneLine(g.Subject, 60), g.ID),
 			g.Before, g.After)

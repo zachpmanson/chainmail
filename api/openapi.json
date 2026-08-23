@@ -3,7 +3,7 @@
   "info": {
     "title": "chainmail API",
     "version": "1.0.0",
-    "description": "Read-only HTTP over a local chainmail corpus: search for candidate chains, choose which belong on a page, then build the timeline spec the renderer consumes.\n\nTwo stages on purpose. Search selects; POST /v1/spec renders a chosen set. A spec built straight from a query takes whatever the query returned, and then the only way to remove a thread is to regenerate the page.\n\nThis serves personal mail and has no authentication of any kind. It binds to loopback and refuses a non-loopback address unless explicitly overridden, and spec bodies carry unsanitised sender HTML (issue #14) \u2014 so the loopback bind is what makes the whole surface safe, not a default to be relaxed.\n\nOperator commands \u2014 ingest, embed, eval, dedupe, twins, repair, merge, alias, refresh \u2014 are deliberately absent. They mutate the corpus and belong to the CLI."
+    "description": "Read-only HTTP over a local chainmail corpus: search for candidate chains, choose which belong on a page, then build the timeline spec the renderer consumes.\n\nTwo stages on purpose. Search selects; POST /v1/spec renders a chosen set. A spec built straight from a query takes whatever the query returned, and then the only way to remove a thread is to regenerate the page.\n\nThis serves personal mail and has no authentication of any kind. It binds to loopback and refuses a non-loopback address unless explicitly overridden, and spec bodies carry unsanitised sender HTML (issue #14) \u2014 so the loopback bind is what makes the whole surface safe, not a default to be relaxed.\n\nOperator commands \u2014 ingest, embed, eval, dedupe, twins, repair, merge, alias, refresh \u2014 are absent in their mailbox-touching forms; that reach belongs to the CLI and the cron. POST /v1/refresh is the one exception and it stays local: it re-derives a saved page from the corpus and, before redrawing, collapses stored twin copies (one message stored twice) with the same refusal-based sweep the CLI's slurp runs."
   },
   "servers": [
     {
@@ -1061,6 +1061,10 @@
           "entriesAfter": {
             "type": "integer",
             "description": "Messages on the page after the refresh."
+          },
+          "twinsCollapsed": {
+            "type": "integer",
+            "description": "Stored twin pairs the refresh collapsed before redrawing: a quoted copy and the mailbox message it was recovered from, one message stored twice. Absent when none."
           },
           "chainsAdded": {
             "type": "array",

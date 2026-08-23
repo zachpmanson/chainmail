@@ -471,6 +471,8 @@ export interface components {
             entriesBefore: number;
             /** @description Messages on the page after the refresh. */
             entriesAfter: number;
+            /** @description Stored twin pairs the refresh collapsed before redrawing: a quoted copy and the mailbox message it was recovered from, one message stored twice. Absent when none. */
+            twinsCollapsed?: number;
             /** @description Chains now on the page that were not on it before. Absent when none. */
             chainsAdded?: components["schemas"]["ChainGrowth"][];
             /** @description Chains on the page before that gained entries. Absent when none. */

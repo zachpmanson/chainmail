@@ -93,11 +93,11 @@ func (s *server) routes() http.Handler {
 }
 
 // webRoot serves the embedded web client alongside the API: the app shell at
-// / and /index.html, static assets by name, the render route /view/<name> as
-// the shell (a deep link or refresh of a saved page must land on the client,
-// which then fetches GET /v1/specs/<name>), and every other non-/v1/ path as
-// the API's JSON 404 (unknown endpoints stay in the one error shape — a path
-// that is not a file is not a frontend route).
+// / and /index.html, static assets by name, and the client's routes — which
+// are every other non-/v1/ path — as the shell. The client owns the routes
+// (TanStack Router knows them all), so an unknown path reaching the shell
+// here is not a bug but the point: the client renders its own 404 view, which
+// is the only thing that can truthfully say "no page here".
 // /v1/* that matches no registered handler still reaches here via the catch-
 // all and must keep the JSON 404 contract, never an HTML fallback.
 func (s *server) webRoot() http.HandlerFunc {
@@ -112,8 +112,8 @@ func (s *server) webRoot() http.HandlerFunc {
 			fmt.Errorf("no such endpoint: %s %s", r.Method, r.URL.Path))
 	}
 	// The app shell. FileServer would serve it for "/" via its implicit index,
-	// but the same bytes must also answer for a bare /index.html and the render
-	// route; open index.html directly so all three get the same headers.
+	// but the same bytes must also answer for a bare /index.html and every
+	// client route; open index.html directly so they all get the same headers.
 	shell := func(w http.ResponseWriter, r *http.Request) {
 		f, err := sub.Open("index.html")
 		if err != nil {
@@ -130,18 +130,17 @@ func (s *server) webRoot() http.HandlerFunc {
 			return
 		}
 		p := strings.TrimPrefix(r.URL.Path, "/")
-		// The route prefix is matched carefully — view, view/ and view/<name>
-		// but not a file named "viewfoo" or "view-notes".
-		isView := p == "view" || strings.HasPrefix(p, "view/")
-		if p == "" || p == "index.html" || isView {
+		if p == "" || p == "index.html" {
 			shell(w, r)
 			return
 		}
-		if _, err := fs.Stat(sub, p); err != nil {
-			json404(w, r)
+		if _, err := fs.Stat(sub, p); err == nil {
+			fileServer.ServeHTTP(w, r)
 			return
 		}
-		fileServer.ServeHTTP(w, r)
+		// Not a file: a client route, present or mistyped. Either way the shell
+		// answers and the client decides what belongs there.
+		shell(w, r)
 	}
 }
 
@@ -407,6 +406,11 @@ func (s *server) savedSpec(w http.ResponseWriter, r *http.Request) {
 // corpus-only — it re-derives the page, grows the chains that gained entries,
 // and proposes new chains from the recorded queries, but never asks the
 // mailbox for what arrived.
+//
+// One mutation it does perform is the same twins sweep `corpus slurp` runs:
+// a quoted copy stored before its mailbox original arrived is one message
+// stored twice, and a page re-derived over them would show it twice. The
+// sweep refuses rather than guesses, so a corpus with no twins is untouched.
 func (s *server) refresh(w http.ResponseWriter, r *http.Request) {
 	var req refreshRequest
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequestBody))

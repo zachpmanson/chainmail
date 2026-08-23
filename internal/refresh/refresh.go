@@ -153,6 +153,14 @@ type Report struct {
 
 	EntriesBefore int
 	EntriesAfter  int
+	// TwinsCollapsed is how many duplicate pairs the refresh collapsed before
+	// redrawing. Ingestion is the cron's job, but refresh is where a page gets
+	// re-derived, so it is also where a stored twin pair — a quoted copy and
+	// the mailbox original it was recovered from, ingested on different days —
+	// would otherwise sit until a human ran `corpus twins`. The sweep is the
+	// same one the slurp pipeline runs; it refuses rather than guesses, and a
+	// corpus with no twins leaves this at 0.
+	TwinsCollapsed int
 	// ChainsAdded are chains now on the page: accepted candidates, or a
 	// container the corpus has newly attached to the reply graph.
 	ChainsAdded []Growth
@@ -197,7 +205,7 @@ func (r Report) Changed() int {
 // one.
 func (r Report) NothingNew() bool {
 	return r.Created() == 0 && r.Changed() == 0 &&
-		r.EntriesAfter == r.EntriesBefore &&
+		r.EntriesAfter == r.EntriesBefore && r.TwinsCollapsed == 0 &&
 		len(r.ChainsAdded) == 0 && len(r.ChainsGrown) == 0 &&
 		len(r.ChainsProposed) == 0
 }
@@ -211,6 +219,16 @@ func Run(store *corpus.Store, mb Mailbox, prev spec.Spec, opts Options) (Report,
 		return rep, spec.Spec{}, fmt.Errorf("the spec records neither a query nor a thread, " +
 			"so there is nothing to re-run — regenerate it with `corpus spec`")
 	}
+
+	// Collapse stored twins before the passes read from the store: a quote and
+	// the mailbox copy it was recovered from, ingested on different days, are
+	// one message stored twice, and a page re-derived over them would count it
+	// twice. The sweep is idempotent; a corpus with none leaves the count 0.
+	plan, err := corpus.CollapseTwins(store, true)
+	if err != nil {
+		return rep, spec.Spec{}, fmt.Errorf("collapsing stored twins: %w", err)
+	}
+	rep.TwinsCollapsed = len(plan.Collapse)
 
 	known, err := knownMessageIDs(store)
 	if err != nil {

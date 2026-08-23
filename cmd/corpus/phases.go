@@ -245,6 +245,13 @@ type mailOpts struct {
 	ids   []string
 	bound mailingest.Bound
 	bin   string // docket binary/shim; "" uses "docket" on PATH
+	// twins ends the walk with the same sweep the slurp pipeline gives its own
+	// mail phase: a late mailbox copy alongside a quote already recovered from
+	// it is one message stored twice, so collapsing it now is part of ingesting
+	// it, not a separate chore. Slurp leaves this false — its next phase is the
+	// twins phase anyway, and running the sweep twice would be a waste, not a
+	// mistake (the second pass finds planes with nothing on them).
+	twins bool
 }
 
 // runIngestMail walks one query, or reads the ids it is given, and says how far
@@ -299,6 +306,23 @@ func runIngestMail(path string, o mailOpts) (mailingest.Result, error) {
 	if r.Truncated > 0 {
 		fmt.Fprintf(os.Stderr,
 			"warning: %d bodies came back truncated — quoted history was lost\n", r.Truncated)
+	}
+	if o.twins {
+		plan, err := corpus.CollapseTwins(s, true)
+		if err != nil {
+			return r, fmt.Errorf("after the walk, collapsing twins: %w", err)
+		}
+		if len(plan.Collapse) > 0 {
+			fmt.Printf("twins: collapsed %d %s into %d, measuring %d render %s; "+
+				"%d onto the mailbox copy, %d recovered-only\n",
+				plan.Removed+len(plan.Collapse),
+				plural(plan.Removed+len(plan.Collapse), "copy", "copies"),
+				len(plan.Collapse), plan.Measured,
+				plural(plan.Measured, "offset", "offsets"),
+				plan.WithMailbox, plan.QuotedOnly)
+		} else {
+			fmt.Println("twins: nothing to collapse")
+		}
 	}
 	return r, nil
 }

@@ -193,6 +193,7 @@ type refreshResponse struct {
 type refreshReport struct {
 	EntriesBefore  int               `json:"entriesBefore"`
 	EntriesAfter   int               `json:"entriesAfter"`
+	TwinsCollapsed int               `json:"twinsCollapsed,omitempty"`
 	ChainsAdded    []chainGrowth     `json:"chainsAdded,omitempty"`
 	ChainsGrown    []chainGrowth     `json:"chainsGrown,omitempty"`
 	ChainsProposed []candidateReport `json:"chainsProposed,omitempty"`
@@ -225,9 +226,10 @@ type candidateReport struct {
 
 func toRefreshReport(r refresh.Report) refreshReport {
 	out := refreshReport{
-		EntriesBefore: r.EntriesBefore,
-		EntriesAfter:  r.EntriesAfter,
-		NothingNew:    r.NothingNew(),
+		EntriesBefore:  r.EntriesBefore,
+		EntriesAfter:   r.EntriesAfter,
+		TwinsCollapsed: r.TwinsCollapsed,
+		NothingNew:     r.NothingNew(),
 	}
 	for _, g := range r.ChainsAdded {
 		out.ChainsAdded = append(out.ChainsAdded, chainGrowth{

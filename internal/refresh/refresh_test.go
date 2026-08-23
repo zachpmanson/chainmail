@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/zachpmanson/chainmail/internal/corpus"
 	"github.com/zachpmanson/chainmail/internal/mailingest"
@@ -400,6 +401,72 @@ func TestRefreshingTwiceAddsNothingTheSecondTime(t *testing.T) {
 	if len(mb.reads) != reads {
 		t.Errorf("a third refresh re-read %d messages the corpus already holds",
 			len(mb.reads)-reads)
+	}
+}
+
+// The bug issue #20 describes: a mailbox copy that arrived long after a quote
+// was recovered from it is one message stored twice, and a refresh is where a
+// page re-derived over them would otherwise show it twice. Run's first step is
+// the same sweep the slurp pipeline runs, and the report counts what it did.
+func TestRefreshCollapsesStoredTwinsBeforeRedrawing(t *testing.T) {
+	s := store(t)
+
+	// First the mailbox original, as the slurper would store it.
+	put(t, s, msg("orig-1",
+		`Hi Ilma,
+
+I have reviewed the north paddock survey and the boundary markers all check out
+against the cadastre layer you sent last week. The crown land strip on the
+western edge needs a separate approval before we fence it, so I am holding the
+quote at the current rate until that clears.
+
+Regards,
+Bo Vantel | Fernlea Surveying`,
+		inThread("thread-twins")))
+
+	// Then the same message as it was recovered from a later reply, before the
+	// original had arrived: a quote: entry with the quoter's wall clock (off by
+	// the zone offset the quoter's client applied) and no zone of its own.
+	bo, err := corpus.ResolveAddress(s, corpus.ParseAddresses("bo@fernlea.example.com")[0], "twins test")
+	if err != nil {
+		t.Fatalf("ResolveAddress: %v", err)
+	}
+	quoteExt := "quote:twins"
+	_, created, err := s.PutQuoted(corpus.Entry{
+		Source: corpus.SourceMail, ExtID: quoteExt, Kind: "message",
+		TS:        time.Date(2026, 2, 2, 9, 15, 0, 0, time.UTC),
+		PersonID:  bo,
+		Container: "thread-twins",
+		Subject:   "Fernlea site access",
+		BodyText: `Hi Ilma, I have reviewed the north paddock survey and the boundary
+markers all check out against the cadastre layer you sent last week. The crown
+land strip on the western edge needs a separate approval before we fence it, so
+I am holding the quote at the current rate. Regards, Bo Vantel`,
+	})
+	if err != nil {
+		t.Fatalf("PutQuoted: %v", err)
+	}
+	if !created {
+		t.Fatalf("quote copy already existed")
+	}
+
+	// The page contains both copies, so a refresh starts at 2 and ends at 1.
+	prev := prevRun(t, s, "thread-twins", "paddock survey")
+	if n := len(prev.Messages); n != 2 {
+		t.Fatalf("prev run has %d entries, want the two copies", n)
+	}
+	rep, next := run(t, s, newMailbox(), prev, Options{})
+	if rep.TwinsCollapsed != 1 {
+		t.Errorf("TwinsCollapsed = %d, want 1", rep.TwinsCollapsed)
+	}
+	if rep.EntriesBefore != 2 || rep.EntriesAfter != 1 {
+		t.Errorf("entries %d -> %d, want 2 -> 1", rep.EntriesBefore, rep.EntriesAfter)
+	}
+	if rep.NothingNew() {
+		t.Error("a refresh that collapsed a twin reports nothing new")
+	}
+	if len(next.Messages) != 1 || next.Messages[0].Quoted {
+		t.Errorf("survivor = %+v, want exactly the mailbox copy", next.Messages[0])
 	}
 }
 
