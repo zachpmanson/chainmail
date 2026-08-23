@@ -1,8 +1,7 @@
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { $api, ApiError, searchQuery, type ChainHit, type SearchMode, type SearchParams } from "../lib/api";
-import { normalise } from "../lib/normalise";
 import { slug, untitledName } from "../lib/route";
-import type { Timeline } from "../lib/spec";
 
 // The default-first order is what the dropdown shows: hybrid is the default
 // search style — lexical and semantic fused — and the order says so.
@@ -87,33 +86,26 @@ function ChainRow({
  * derived from it, so scope is settled once, before anything is generated.
  *
  * Building names the page (from the title, or a clock name when it has none)
- * and hands the name up with the spec: the app pushes /view/<name> and the
- * page is saved server-side, so it survives a refresh.
+ * and navigates to /view/<name>: the router owns the URL, the page is saved
+ * server-side, so it survives a refresh.
  */
-export function SelectView({ onBuilt }: { onBuilt: (spec: Timeline, name: string) => void }) {
-  // The search lives in the URL (q, mode, person, since) so that leaving for a
-  // built page and pressing Back restores the search that was there before —
-  // even after a reload. The URL is read once, at mount; the submit handler
-  // writes it back.
-  const initial = useMemo<{ q: string; mode: SearchMode; person: string; since: string }>(() => {
-    const p = new URLSearchParams(location.search);
-    const mode = p.get("mode");
-    return {
-      q: p.get("q") ?? "",
-      mode: mode === "lexical" || mode === "semantic" || mode === "hybrid" ? mode : "hybrid",
-      person: p.get("person") ?? "",
-      since: p.get("since") ?? "",
-    };
-  }, []);
-  const [q, setQ] = useState(initial.q);
-  const [mode, setMode] = useState<SearchMode>(initial.mode);
-  const [person, setPerson] = useState(initial.person);
-  const [since, setSince] = useState(initial.since);
+export function SelectView() {
+  const navigate = useNavigate();
+  // The search lives in the URL (q, mode, person, since), validated and typed
+  // by the route: leaving for a built page and pressing Back restores the
+  // search that was there before, even after a reload.
+  const urlSearch = useSearch({ from: "/" });
+  const [q, setQ] = useState(urlSearch.q ?? "");
+  const [mode, setMode] = useState<SearchMode>(urlSearch.mode ?? "hybrid");
+  const [person, setPerson] = useState(urlSearch.person ?? "");
+  const [since, setSince] = useState(urlSearch.since ?? "");
   const [title, setTitle] = useState("");
   const [me, setMe] = useState("");
+  // A URL that already names a search (a reload, or Back from a built page)
+  // runs it on mount instead of waiting for a submit.
   const [asked, setAsked] = useState<SearchParams | null>(() =>
-    initial.q.trim() || initial.person.trim() || initial.since.trim()
-      ? { q: initial.q, mode: initial.mode, person: initial.person.trim(), since: initial.since.trim() }
+    urlSearch.q?.trim() || urlSearch.person?.trim() || urlSearch.since?.trim()
+      ? { q: urlSearch.q ?? "", mode: urlSearch.mode ?? "hybrid", person: urlSearch.person?.trim() ?? "", since: urlSearch.since?.trim() ?? "" }
       : null,
   );
   const [chosen, setChosen] = useState<string[]>([]);
@@ -148,7 +140,16 @@ export function SelectView({ onBuilt }: { onBuilt: (spec: Timeline, name: string
   // not overwrite each other silently.
   const pendingName = useRef("");
   const build = $api.useMutation("post", "/v1/spec", {
-    onSuccess: (spec) => onBuilt(normalise(spec), pendingName.current),
+    // The saved page's URL follows what the service returned, not what the
+    // client asked for: the server is the authority on the final shape (it may
+    // have borrowed a canonical title, and it names the file it saved). Navigating
+    // to the returned spec's own title keeps the address bar true to the saved
+    // page, and falls back to the requested name only when the response has none.
+    onSuccess: (data) =>
+      navigate({
+        to: "/view/$name",
+        params: { name: (data && data.title && slug(data.title)) || pendingName.current },
+      }),
   });
 
   const submit = (ev: React.FormEvent) => {
@@ -162,12 +163,16 @@ export function SelectView({ onBuilt }: { onBuilt: (spec: Timeline, name: string
     // from a built page (which is pushed) lands straight back on it. Only the
     // non-default mode is written, so the canonical URL for the default search
     // is plain /. Hybrid is the default, so it is omitted.
-    const usp = new URLSearchParams();
-    if (q.trim()) usp.set("q", q.trim());
-    if (mode !== "hybrid") usp.set("mode", mode);
-    if (person.trim()) usp.set("person", person.trim());
-    if (since.trim()) usp.set("since", since.trim());
-    history.replaceState(null, "", usp.size ? `/?${usp}` : "/");
+    navigate({
+      to: "/",
+      search: {
+        ...(q.trim() ? { q: q.trim() } : {}),
+        ...(mode !== "hybrid" ? { mode } : {}),
+        ...(person.trim() ? { person: person.trim() } : {}),
+        ...(since.trim() ? { since: since.trim() } : {}),
+      },
+      replace: true,
+    });
   };
 
   const toggle = (root: string) =>

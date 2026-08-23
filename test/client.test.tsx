@@ -2,10 +2,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { RouterProvider } from "@tanstack/react-router";
 import { $api, searchQuery } from "../src/lib/api";
-import { App } from "../src/main";
-import { SelectView } from "../src/components/Select";
 import { makeQueryClient } from "../src/lib/queryClient";
+import { createChainmailRouter } from "../src/router";
 
 // React refuses to batch updates outside act() unless told it is under test.
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -81,6 +81,9 @@ const json = (status: number, body: unknown, headers: Record<string, string> = {
     headers: { "content-type": "application/json", ...headers },
   });
 
+/** Dispatch on the exact path: "/v1/spec" is a substring of "/v1/specs/<name>". */
+const pathOf = (c: Call) => new URL(c.url).pathname;
+
 beforeEach(() => {
   calls = [];
   handler = () => json(500, { error: "no handler installed" });
@@ -99,14 +102,28 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
-  // A search writes its parameters into the URL (that is the feature), and
-  // jsdom shares one location across the whole file — so each test starts
-  // from the bare home page, not from some earlier test's query string.
   history.replaceState(null, "", "/");
 });
 
-const mount = (ui: React.ReactElement) =>
-  render(<QueryClientProvider client={makeQueryClient()}>{ui}</QueryClientProvider>);
+/**
+ * The whole app under a fresh router with an in-memory history: jsdom's real
+ * window.history is shared across a file, and a singleton router would keep
+ * its first URL forever, so each test starts from its own URL (and its own
+ * query client, so caches never leak between tests) and asserts on
+ * router.state.location, which is the URL the client actually owns.
+ */
+async function mountApp(...initialEntries: string[]) {
+  const router = createChainmailRouter(initialEntries);
+  // The router resolves its initial URL and builds the match tree asynchronously;
+  // render only once it has somewhere to go.
+  await router.load();
+  render(
+    <QueryClientProvider client={makeQueryClient()}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  );
+  return router;
+}
 
 /** fireEvent.change, not a direct .value assignment: React tracks the previous
  *  value on the node and ignores a write it did not see. */
@@ -123,7 +140,7 @@ function submitSearch() {
   fireEvent.submit(button.closest("form")!);
 }
 
-const searchCalls = () => calls.filter((c) => c.url.includes("/v1/search"));
+const searchCalls = () => calls.filter((c) => pathOf(c) === "/v1/search");
 
 async function searchFor(text: string) {
   typeInto("Query", text);
@@ -131,10 +148,20 @@ async function searchFor(text: string) {
   await waitFor(() => expect(searchCalls().length).toBeGreaterThan(0));
 }
 
+/** The common building mocks: search answers with the two chains, a build with
+ *  SPEC, and the saved page a build lands on with the same SPEC. */
+const buildHandler: Handler = (c) => {
+  const p = pathOf(c);
+  if (p === "/v1/spec" && c.method === "POST") return json(200, SPEC);
+  if (p === "/v1/specs/loom-cutover") return json(200, SPEC);
+  if (p === "/v1/search") return json(200, { mode: "lexical", chains: CHAINS });
+  return json(500, { error: `unexpected call to ${c.method} ${p}` });
+};
+
 describe("searching for chains", () => {
   it("lists each candidate with the matched-of-total ratio", async () => {
     handler = () => json(200, { mode: "lexical", chains: CHAINS });
-    mount(<SelectView onBuilt={() => {}} />);
+    await mountApp("/");
     await searchFor("cutover");
 
     await screen.findByText("Loom cutover schedule");
@@ -150,7 +177,7 @@ describe("searching for chains", () => {
 
   it("passes the mode and drops the filters left blank", async () => {
     handler = () => json(200, { mode: "lexical", chains: CHAINS });
-    mount(<SelectView onBuilt={() => {}} />);
+    await mountApp("/");
     typeInto("Mode", "hybrid");
     await searchFor("cutover");
 
@@ -167,7 +194,7 @@ describe("searching for chains", () => {
         mode: new URL(c.url).searchParams.get("mode") === "semantic" ? "semantic" : "lexical",
         chains: new URL(c.url).searchParams.get("mode") === "semantic" ? [CHAINS[1]] : [CHAINS[0]],
       });
-    mount(<SelectView onBuilt={() => {}} />);
+    await mountApp("/");
     await searchFor("cutover");
     await screen.findByText("Loom cutover schedule");
 
@@ -217,7 +244,7 @@ describe("declining", () => {
       json(503, {
         error: 'mode "semantic": no embedding daemon reachable at http://localhost:11434',
       });
-    mount(<SelectView onBuilt={() => {}} />);
+    await mountApp("/");
     typeInto("Mode", "semantic");
     await searchFor("cutover");
 
@@ -230,14 +257,14 @@ describe("declining", () => {
 
   it("tells a rejected query apart from a name that matches nothing", async () => {
     handler = () => json(400, { error: "unbalanced quote in query" });
-    mount(<SelectView onBuilt={() => {}} />);
+    await mountApp("/");
     await searchFor('"cutover');
     expect((await screen.findByRole("alert")).textContent).toContain("Rejected (400)");
 
     cleanup();
     calls = [];
     handler = () => json(404, { error: "no entry carries id mail:<nothing@example.fed>" });
-    mount(<SelectView onBuilt={() => {}} />);
+    await mountApp("/");
     await searchFor("mail:<nothing@example.fed>");
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("Not found (404)");
@@ -246,10 +273,9 @@ describe("declining", () => {
 });
 
 describe("building a page from the chosen set", () => {
-  it("posts exactly the ticked chains", async () => {
-    handler = (c) => (c.url.includes("/v1/spec") ? json(200, SPEC) : json(200, { mode: "lexical", chains: CHAINS }));
-    const built = vi.fn();
-    mount(<SelectView onBuilt={built} />);
+  it("posts exactly the ticked chains and lands on the page", async () => {
+    handler = buildHandler;
+    const router = await mountApp("/");
     await searchFor("cutover");
     await screen.findByText("Loom cutover schedule");
 
@@ -260,9 +286,9 @@ describe("building a page from the chosen set", () => {
     typeInto("Page title", "Loom cutover");
 
     click(screen.getByRole("button", { name: /Build page from 1 chain$/ }));
-    await waitFor(() => expect(calls.some((c) => c.url.includes("/v1/spec"))).toBe(true));
+    await waitFor(() => expect(calls.some((c) => pathOf(c) === "/v1/spec")).toBe(true));
 
-    const post = calls.find((c) => c.url.includes("/v1/spec"))!;
+    const post = calls.find((c) => pathOf(c) === "/v1/spec")!;
     expect(post.method).toBe("POST");
     // The title was typed, so the page earns the slug as its name.
     expect(JSON.parse(post.body!)).toEqual({
@@ -271,38 +297,47 @@ describe("building a page from the chosen set", () => {
       title: "Loom cutover",
       queries: [{ q: "cutover", note: "corpus search, mode=hybrid" }],
     });
-    await waitFor(() => expect(built).toHaveBeenCalledTimes(1));
+    // The page route owns the URL now, clean of the search that built it.
+    await waitFor(() => expect(router.state.location.pathname).toBe("/view/loom-cutover"));
+    expect(router.state.location.searchStr).toBe("");
   });
 
   it("comes back after the delay the service named when two builds are already running", async () => {
     let posts = 0;
     handler = (c) => {
-      if (!c.url.includes("/v1/spec")) return json(200, { mode: "lexical", chains: CHAINS });
-      posts += 1;
-      return posts === 1
-        ? json(429, { error: "two spec builds already in flight" }, { "retry-after": "0" })
-        : json(200, SPEC);
+      const p = pathOf(c);
+      if (p === "/v1/spec" && c.method === "POST") {
+        posts += 1;
+        return posts === 1
+          ? json(429, { error: "two spec builds already in flight" }, { "retry-after": "0" })
+          : json(200, SPEC);
+      }
+      if (p === "/v1/specs/loom-cutover") return json(200, SPEC);
+      if (p === "/v1/search") return json(200, { mode: "lexical", chains: CHAINS });
+      return json(500, { error: "unexpected" });
     };
-    const built = vi.fn();
-    mount(<SelectView onBuilt={built} />);
+    const router = await mountApp("/");
     await searchFor("cutover");
     await screen.findByText("Loom cutover schedule");
     click(screen.getAllByRole("checkbox")[0]!);
     click(screen.getByRole("button", { name: /Build page/ }));
 
     // "not yet", with a time attached, is the one decline worth re-asking
-    await waitFor(() => expect(built).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/view/loom-cutover"));
     expect(posts).toBe(2);
   });
 
   it("does not re-ask when the embedding deadline was missed", async () => {
     let posts = 0;
     handler = (c) => {
-      if (!c.url.includes("/v1/spec")) return json(200, { mode: "lexical", chains: CHAINS });
-      posts += 1;
-      return json(504, { error: "embedding deadline exceeded" });
+      if (pathOf(c) === "/v1/spec" && c.method === "POST") {
+        posts += 1;
+        return json(504, { error: "embedding deadline exceeded" });
+      }
+      if (pathOf(c) === "/v1/search") return json(200, { mode: "lexical", chains: CHAINS });
+      return json(500, { error: "unexpected" });
     };
-    mount(<SelectView onBuilt={() => {}} />);
+    await mountApp("/");
     await searchFor("cutover");
     await screen.findByText("Loom cutover schedule");
     click(screen.getAllByRole("checkbox")[0]!);
@@ -315,11 +350,15 @@ describe("building a page from the chosen set", () => {
 
   it("keeps the wait visible while the spec is built", async () => {
     let release: (r: Response) => void = () => {};
-    handler = (c) =>
-      c.url.includes("/v1/spec")
-        ? new Promise<Response>((res) => (release = res))
-        : json(200, { mode: "lexical", chains: CHAINS });
-    mount(<SelectView onBuilt={() => {}} />);
+    handler = (c) => {
+      const p = pathOf(c);
+      if (p === "/v1/spec" && c.method === "POST")
+        return new Promise<Response>((res) => (release = res));
+      if (p === "/v1/specs/loom-cutover") return json(200, SPEC);
+      if (p === "/v1/search") return json(200, { mode: "lexical", chains: CHAINS });
+      return json(500, { error: "unexpected" });
+    };
+    await mountApp("/");
     await searchFor("cutover");
     await screen.findByText("Loom cutover schedule");
 
@@ -334,46 +373,42 @@ describe("building a page from the chosen set", () => {
     await act(async () => {
       release(json(200, SPEC));
     });
+    // The save succeeded and the page route opens.
+    await screen.findByText("Loom cutover");
   });
 });
 
 describe("a spec named on the URL", () => {
   it("still loads from the file path, without touching the API", async () => {
-    history.replaceState(null, "", "/?spec=/synthetic.json");
     handler = (c) =>
       c.url.endsWith("/synthetic.json")
         ? json(200, SPEC)
         : json(404, { error: "not a spec route" });
-    mount(<App />);
+    await mountApp("/?spec=/synthetic.json");
 
     await screen.findByText("Loom cutover");
     expect(calls.map((c) => new URL(c.url).pathname)).toEqual(["/synthetic.json"]);
-    history.replaceState(null, "", "/");
   });
 });
 
 describe("the render route /view/<name>", () => {
   it("loads the saved page from the API when the URL names one", async () => {
-    history.replaceState(null, "", "/view/loom-cutover");
     handler = (c) =>
-      c.url.includes("/v1/specs/loom-cutover")
+      pathOf(c) === "/v1/specs/loom-cutover"
         ? json(200, SPEC)
         : json(500, { error: "unexpected call" });
-    mount(<App />);
+    await mountApp("/view/loom-cutover");
 
-    await waitFor(() => expect(calls.some((c) => c.url.includes("/v1/specs/loom-cutover"))).toBe(true));
+    await waitFor(() => expect(calls.some((c) => pathOf(c) === "/v1/specs/loom-cutover")).toBe(true));
     await screen.findByText("Loom cutover");
     // No back button: a page under /view/<name> just is, it was not the result
     // of a search.
     expect(screen.queryByRole("button", { name: /Back/ })).toBeNull();
-    history.replaceState(null, "", "/");
   });
 
   it("moves the address bar to /view/<name> when a page is built", async () => {
-    history.replaceState(null, "", "/");
-    handler = (c) =>
-      c.url.includes("/v1/spec") ? json(200, SPEC) : json(200, { mode: "lexical", chains: CHAINS });
-    mount(<App />);
+    handler = buildHandler;
+    const router = await mountApp("/");
 
     await searchFor("cutover");
     await screen.findByText("Loom cutover schedule");
@@ -381,38 +416,44 @@ describe("the render route /view/<name>", () => {
     click(screen.getAllByRole("checkbox")[0]!);
     click(screen.getByRole("button", { name: /Build page from 1 chain$/ }));
 
-    await waitFor(() => expect(location.pathname).toBe("/view/loom-cutover"));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/view/loom-cutover"));
     await screen.findByText("Loom cutover");
   });
 
   it("goes back to the search when the page is left", async () => {
-    history.replaceState(null, "", "/view/loom-cutover");
     handler = (c) =>
-      c.url.includes("/v1/specs/loom-cutover")
+      pathOf(c) === "/v1/specs/loom-cutover"
         ? json(200, SPEC)
         : json(500, { error: "unexpected call" });
-    mount(<App />);
+    // Two history entries, so Back has somewhere to go.
+    const router = await mountApp("/", "/view/loom-cutover");
     await screen.findByText("Loom cutover");
 
-    history.pushState(null, "", "/");
-    window.dispatchEvent(new PopStateEvent("popstate"));
+    await act(async () => {
+      router.history.back();
+    });
     await waitFor(() => expect(screen.queryByText("Loom cutover")).toBeNull());
+    expect(router.state.location.pathname).toBe("/");
     expect(screen.getByRole("button", { name: "Search" })).toBeTruthy();
-    history.replaceState(null, "", "/");
+  });
+
+  it("renders the client's own 404 view for a URL that is not a route", async () => {
+    handler = () => json(500, { error: "no API call should happen for an unknown page" });
+    await mountApp("/viwe/typo");
+
+    expect(await screen.findByText(/No page at/)).toBeTruthy();
+    expect(calls.length).toBe(0);
   });
 });
 
 describe("the search lives in the URL", () => {
   it("restores the search from the query string on load", async () => {
-    history.replaceState(null, "", "/?q=cutover&mode=semantic");
-    // semantic answer for a semantic request, so the restore is not the mock
-    // cheerfully answering anything: the mode really flowed through.
     handler = (c) =>
       json(200, {
         mode: new URL(c.url).searchParams.get("mode"),
         chains: new URL(c.url).searchParams.get("mode") === "semantic" ? [CHAINS[1]] : [CHAINS[0]],
       });
-    mount(<App />);
+    await mountApp("/?q=cutover&mode=semantic");
 
     // Both inputs are back, and the search ran itself.
     await waitFor(() => expect((screen.getByLabelText("Query") as HTMLInputElement).value).toBe("cutover"));
@@ -421,27 +462,28 @@ describe("the search lives in the URL", () => {
   });
 
   it("writes the search to the URL, and Back from a built page lands on it", async () => {
-    history.replaceState(null, "", "/");
-    handler = (c) =>
-      c.url.includes("/v1/spec") ? json(200, SPEC) : json(200, { mode: "lexical", chains: CHAINS });
-    mount(<App />);
+    handler = buildHandler;
+    const router = await mountApp("/");
 
     await searchFor("cutover");
     // The default mode is omitted from the URL — the canonical home search is
     // plain /.q=cutover, not a URL that spells out the default.
-    expect(location.search).toBe("?q=cutover");
+    expect(router.state.location.searchStr).toBe("?q=cutover");
 
     await screen.findByText("Loom cutover schedule");
     typeInto("Page title", "Loom cutover");
     click(screen.getAllByRole("checkbox")[0]!);
     click(screen.getByRole("button", { name: /Build page from 1 chain$/ }));
-    await waitFor(() => expect(location.pathname).toBe("/view/loom-cutover"));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/view/loom-cutover"));
     await screen.findByText("Loom cutover");
 
     // Back: the address bar returns to the search that built this page, and
     // the search page comes back with its query and results, not a blank form.
-    history.back();
-    await waitFor(() => expect(location.pathname).toBe("/"));
+    await act(async () => {
+      router.history.back();
+    });
+    await waitFor(() => expect(router.state.location.pathname).toBe("/"));
+    expect(router.state.location.searchStr).toBe("?q=cutover");
     await waitFor(() => expect((screen.getByLabelText("Query") as HTMLInputElement).value).toBe("cutover"));
     await screen.findByText("Loom cutover schedule");
   });
