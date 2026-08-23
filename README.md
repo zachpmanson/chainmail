@@ -151,6 +151,10 @@ corpus dedupe -apply
 
 Back the database up first (`make backup`) if you are going to.
 
+Every slurp ends by re-probing the backends and rewriting the connection
+snapshot beside the corpus — the same probe `corpus status` runs by hand — so
+the /status screen is never staler than the last slurp.
+
 ## Running it
 
 ```bash

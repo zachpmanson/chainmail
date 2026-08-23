@@ -69,7 +69,8 @@ const usage = `usage: corpus <command> [flags]
   ingest mail   -q <query> ingest Gmail results, with their quoted history
   ingest slack  [-archive] ingest a slackdump archive
   slurp                    every phase in the one order that finishes the most
-                           work: slack, mail, twins, repair, dedupe, embed.
+                           work: slack, mail, twins, repair, dedupe, embed,
+                           then a probe that refreshes the status screen.
                            dedupe is REPORTED and never applied — its merges
                            cannot be undone, so nothing unattended may apply
                            them. -q or -since bounds the mail query, -limit
@@ -79,7 +80,9 @@ const usage = `usage: corpus <command> [flags]
                            embedding model. -only and -skip choose phases by
                            name, or "settle" for twins, repair and dedupe
                            together; a phase whose prerequisite this host does
-                           not have is skipped and reported, not failed
+                           not have is skipped and reported, not failed. The
+                           probe cannot be skipped: it writes the snapshot the
+                           status screen serves
   search        -q <text>  ranked chains across every source; -mode chooses
                            lexical, semantic or hybrid retrieval, -topk how deep
                            the vector ranking votes, -dim -model -url -timeout
