@@ -139,6 +139,19 @@ type TwinPlan struct {
 	// it is the only decline that says the corpus would have lost something: the
 	// others are duplicates nothing could resolve.
 	Annotated int
+	// Derived records the relations the pass recovered: an annotated copy that
+	// resolved against a base in the same group but was ingested before it, so
+	// the derive classification at ingest could not fire. The base is named here
+	// so the persisted relation is identical to what FindDerived+SetParent would
+	// have written had the base arrived first.
+	Derived []DerivedRelation
+}
+
+// DerivedRelation is one annotated copy's base, recovered by the twin pass.
+// See TwinPlan.Derived.
+type DerivedRelation struct {
+	Copy int64 // the annotated copy, itself the persisted interface
+	Base int64 // the message it is a modified copy of
 }
 
 // twinCopy is one stored copy of a message as the twin test needs it.
@@ -203,6 +216,14 @@ func CollapseTwins(s *Store, apply bool) (TwinPlan, error) {
 			for _, k := range kept {
 				if k.Annotated {
 					plan.Annotated++
+					// A kept copy whose quoter answered inside is a MODIFIED copy of the
+					// group's survivor. If that survivor is a different entry and the copy
+					// was ingested before it, the derive-time classification never ran;
+					// name the base here so apply can persist it the way the derive
+					// would have.
+					if c.Keep != k.Entry {
+						plan.Derived = append(plan.Derived, DerivedRelation{Copy: k.Entry, Base: c.Keep})
+					}
 				}
 			}
 			if len(c.Drop) == 0 {
@@ -233,6 +254,9 @@ func CollapseTwins(s *Store, apply bool) (TwinPlan, error) {
 	sort.Slice(plan.Declined, func(i, j int) bool {
 		return plan.Declined[i].Entry < plan.Declined[j].Entry
 	})
+	sort.Slice(plan.Derived, func(i, j int) bool {
+		return plan.Derived[i].Copy < plan.Derived[j].Copy
+	})
 	if !apply {
 		return plan, nil
 	}
@@ -242,7 +266,25 @@ func CollapseTwins(s *Store, apply bool) (TwinPlan, error) {
 			return plan, fmt.Errorf("collapsing into %s: %w", c.KeepExt, err)
 		}
 	}
+	for _, d := range plan.Derived {
+		if err := persistDerived(s, d.Copy, d.Base); err != nil {
+			return plan, err
+		}
+	}
 	return plan, nil
+}
+
+// persistDerived records that one entry is a MODIFIED copy of another, the
+// write FindDerived+SetParent makes at ingest. The twin pass reaches this way
+// when the copy was ingested before its base: the group attests the two are one
+// message line (the twin gates), annotates refused the collapse because the
+// quoter answered inside, and the survivor is the base it modified. Writing it
+// here lets the renderer draw the edit inline instead of a floating duplicate.
+func persistDerived(s *Store, copy, base int64) error {
+	if _, err := s.db.Exec(`update entries set derived = 1, parent_id = ? where id = ?`, base, copy); err != nil {
+		return fmt.Errorf("marking %d a modified copy of %d: %w", copy, base, err)
+	}
+	return nil
 }
 
 func peopleWithQuotedEntries(s *Store) ([]int64, error) {
