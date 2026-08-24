@@ -193,9 +193,18 @@ func TestPresentationIsDroppedAndEmphasisIsKept(t *testing.T) {
 		`<td style="color:#000000;width:300px;font-weight:bold" class="MsoNormal" id="c1">Peak</td>` +
 		`<td><font color="#ff0000" face="Calibri">12.40 c/kWh</font></td></tr></table>`
 	got := renderMarkup(part, mailBody)
-	for _, gone := range []string{"color:#000000", "width:300px", `width="600"`, "bgcolor", "MsoNormal", `id="c1"`, "Calibri"} {
+	// Foreground colour passes through (#40): style="color:…" survives and a
+	// bare color attr survives, so a red number stays red.
+	if !strings.Contains(got, "color:#000000") {
+		t.Errorf("body = %q, want the sender's foreground colour kept (#40)", got)
+	}
+	if !strings.Contains(got, `color="#ff0000"`) {
+		t.Errorf("body = %q, want the font color attribute kept (#40)", got)
+	}
+	// Size and presentation are still dropped.
+	for _, gone := range []string{"width:300px", `width="600"`, "bgcolor", "MsoNormal", `id="c1"`, "Calibri"} {
 		if strings.Contains(got, gone) {
-			t.Errorf("body = %q, want %q dropped: it asserts a colour or a size", got, gone)
+			t.Errorf("body = %q, want %q dropped: it asserts a size or theme-hostile presentation", got, gone)
 		}
 	}
 	if !strings.Contains(got, "font-weight:bold") {

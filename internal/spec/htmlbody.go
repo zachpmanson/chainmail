@@ -449,35 +449,44 @@ var droppedTags = map[atom.Atom]bool{
 }
 
 // Attributes that carry a light-background, fixed-width document's presentation
-// into a themed fluid one. A hardcoded color:#000 is invisible on the dark
-// theme (11% of parts declare one) and a width:600px table pushes the timeline
-// sideways (88% declare a pixel width), so what is dropped here is exactly what
-// asserts a colour or a size.
+// into a themed fluid one. A width:600px table pushes the timeline sideways
+// (88% declare a pixel width) and bgcolor/background are theme-hostile, so what
+// is dropped here is a size or a background.
 //
-// class and id go with them. The sender's stylesheet was just dropped, so their
-// class names now select nothing of theirs — while a name like "sub" or "tm"
-// would select this page's own rules, and a duplicated id would break the
-// fragment links the timeline navigates by.
+// Foreground colour is NOT dropped: style="color:…" is kept (see keptStyleProps,
+// the colour pass-through of #40) and a bare color attribute (font color="#ff0000")
+// is kept too, so a sender-chosen text colour survives flatten to render. class
+// and id go as before — the sender's stylesheet was just dropped, so their class
+// names now select nothing of theirs, while a name like "sub" or "tm" would
+// select this page's own rules, and a duplicated id would break the fragment
+// links. A sender hardcoding an invisible-on-dark value is their bubble's choice.
 //
 // What that costs: a sender's red "URGENT" reads as ordinary text, and a table
 // they sized to their content is sized to ours. Keeping the declarations
 // instead costs legibility on a whole theme, which is worse — a body that cannot
 // be read is not a body.
 var droppedAttrs = map[string]bool{
-	"class": true, "id": true, "style": true,
-	"bgcolor": true, "background": true, "color": true, "face": true,
+	"class": true, "id": true,
+	"bgcolor": true, "background": true, "face": true,
 	"width": true, "height": true,
 	"border": true, "cellpadding": true, "cellspacing": true,
 }
 
 // Declarations kept out of a style attribute: emphasis the sender chose, which
-// means the same thing against any background. Dropping these with the rest
-// would flatten a deliberately bold line into prose.
+// means the same thing against any background, plus the foreground colour the
+// sender applied. Keeping the colour is the point of the colour pass-through
+// (#40): a red "URGENT" or a green number reads as the sender wrote it. It costs
+// only legibility for a sender who hardcoded a near-black against the dark
+// theme's background, which is their choice to make on their own bubble.
+//
+// Background colour and size are still dropped — those do not survive a theme
+// change and are the presentation this function exists to trim.
 var keptStyleProps = map[string]bool{
 	"font-weight":     true,
 	"font-style":      true,
 	"text-decoration": true,
 	"text-align":      true,
+	"color":           true,
 }
 
 // stripChrome removes the document-level nodes and the presentational
