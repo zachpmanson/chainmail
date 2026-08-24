@@ -41,6 +41,10 @@ const footer = (messages: Entry[]) => {
   return m[1]!;
 };
 
+/** Every bubble footer, so a multi-message page can assert on a specific one. */
+const foots = (messages: Entry[]) =>
+  [...page(messages).matchAll(/<div class="foot">(.*?)<\/div><\/div><\/div><\/div>/gs)].map((m) => m[1]!);
+
 describe("reading a provenance line", () => {
   it("recognises a list of generated ids", () => {
     const p = provenance(`unspooled from msg ${H[0]}, msg ${H[1]}`);
@@ -87,8 +91,10 @@ describe("the source line under a bubble", () => {
     expect(foot).toContain('<details class="src srcx"><summary>');
     expect(foot).not.toContain("open=");
     for (const h of H) {
-      expect(foot).toContain(`href="https://mail.google.com/mail/u/0/#all/${h}"`);
+      // the ids stay in the document, but none of these hosts is a row on this
+      // page, so no unspooled id is an outbound Gmail link any more
       expect(foot).toContain(`msg ${h}`);
+      expect(foot).not.toContain(`href="https://mail.google.com/mail/u/0/#all/${h}"`);
     }
   });
 
@@ -96,9 +102,25 @@ describe("the source line under a bubble", () => {
     const foot = footer([entry({ quoted: true, source: `unspooled from msg ${H[0]}` })]);
     expect(foot).not.toMatch(/\b1 msgs?\b/);
     expect(foot).not.toContain("<details");
-    expect(foot).toContain(
-      `unspooled from <span class="sid"><a href="https://mail.google.com/mail/u/0/#all/${H[0]}"`,
+    // no on-page message with this gmailId: the id is named, not shipped to Gmail
+    expect(foot).toContain(`unspooled from <span class="sid">msg ${H[0]}</span>`);
+    expect(foot).not.toContain("mail.google.com");
+  });
+
+  it("anchors an unspooled id to the same-page message it came from", () => {
+    const real = entry({ sender: "Ada Byron", source: `msg ${H[0]}`, gmailId: H[0] });
+    const spool = entry({ sender: "Bo Halvorsen", quoted: true, source: `unspooled from msg ${H[0]}` });
+    const all = foots([real, spool]);
+    const spoolFooter = all.find((f) => f.includes("unspooled from"))!;
+    // the unspooled id links to the on-page anchor of the message it was lifted
+    // out of, not out to Gmail
+    expect(spoolFooter).toContain(
+      `unspooled from <span class="sid"><a href="#m-20260302-0915-ab" title="The message this was unspooled from, on this page">msg ${H[0]}</a></span>`,
     );
+    expect(spoolFooter).not.toContain("mail.google.com");
+    // the named message's own footer still opens its mailbox copy
+    const realFooter = all.find((f) => f.includes(`msg ${H[0]}`) && !f.includes("unspooled"))!;
+    expect(realFooter).toContain(`href="https://mail.google.com/mail/u/0/#all/${H[0]}"`);
   });
 
   it("collapses from two, since two handles outrun the summary that replaces them", () => {

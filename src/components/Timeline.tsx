@@ -136,27 +136,43 @@ function Attachments({ e }: { e: Entry }) {
  * after a comma: inside .sid, "msg" and its handle are one token to the reader
  * and splitting them across lines reads as two truncated ids.
  */
-function SourceIds({ ids }: { ids: SourceId[] }) {
+function SourceIds({ ids, unspooled, anchorByGmail }: {
+  ids: SourceId[];
+  /** the line is "unspooled from …"; its ids name the message the content was lifted out of */
+  unspooled: boolean;
+  /** gmailId -> this page's anchor for that message, where it is present as a row */
+  anchorByGmail: Map<string, string>;
+}) {
   return (
     <>
-      {ids.map((s, i) => (
-        <Fragment key={i}>
-          {i ? ", " : ""}
-          <span className="sid">
-            {s.gmailId ? (
-              <a
-                href={`https://mail.google.com/mail/u/0/#all/${s.gmailId}`}
-                target="_blank"
-                rel="noopener"
-              >
-                {s.text}
-              </a>
-            ) : (
-              s.text
-            )}
-          </span>
-        </Fragment>
-      ))}
+      {ids.map((s, i) => {
+        // An unspooled id names a sibling message on this very page, so it links
+        // there (a fragment anchor) instead of shipping the reader out to Gmail.
+        // A direct message's own id still opens its mailbox copy.
+        const anchor = unspooled && s.gmailId ? anchorByGmail.get(s.gmailId) : undefined;
+        return (
+          <Fragment key={i}>
+            {i ? ", " : ""}
+            <span className="sid">
+              {anchor ? (
+                <a href={`#${anchor}`} title="The message this was unspooled from, on this page">
+                  {s.text}
+                </a>
+              ) : unspooled || !s.gmailId ? (
+                s.text
+              ) : (
+                <a
+                  href={`https://mail.google.com/mail/u/0/#all/${s.gmailId}`}
+                  target="_blank"
+                  rel="noopener"
+                >
+                  {s.text}
+                </a>
+              )}
+            </span>
+          </Fragment>
+        );
+      })}
     </>
   );
 }
@@ -171,15 +187,19 @@ function SourceIds({ ids }: { ids: SourceId[] }) {
  * is keyboard-operable and reachable by find-in-page without any of ours. A
  * folding mechanism elsewhere on the page can be the same element.
  */
-function Source({ e }: { e: Entry }) {
+function Source({ e, anchorByGmail }: { e: Entry; anchorByGmail: Map<string, string> }) {
   if (!e.source) return null;
   const p = provenance(e.source);
   if (p.kind === "prose") return <span className="src">{p.text}</span>;
+  // "unspooled from …" lines carry an empty prefix only when not unspooled;
+  // prose never reaches here, so prefix !== "" means the ids were unspooled
+  const unspooled = p.prefix !== "";
+  const ids = <SourceIds ids={p.ids} unspooled={unspooled} anchorByGmail={anchorByGmail} />;
   if (p.ids.length < COLLAPSE_FROM) {
     return (
       <span className="src">
         {p.prefix}
-        <SourceIds ids={p.ids} />
+        {ids}
       </span>
     );
   }
@@ -189,14 +209,12 @@ function Source({ e }: { e: Entry }) {
         {p.prefix}
         {msgCount(p.ids.length)}
       </summary>
-      <div className="srcids">
-        <SourceIds ids={p.ids} />
-      </div>
+      <div className="srcids">{ids}</div>
     </details>
   );
 }
 
-function EntryBlock({ row, v, mark }: { row: Row; v: View; mark?: "new" | "revised" }) {
+function EntryBlock({ row, v, mark, anchorByGmail }: { row: Row; v: View; mark?: "new" | "revised"; anchorByGmail: Map<string, string> }) {
   const e = row.entry;
   const grid = { gridColumn: row.lane + 1, gridRow: row.row };
   const start = row.isChainStart ? " chstart" : "";
@@ -256,7 +274,7 @@ function EntryBlock({ row, v, mark }: { row: Row; v: View; mark?: "new" | "revis
           <div className="foot">
             <span className="to">to {e.to ?? "—"}</span>
             <ReplyLink row={row} v={v} />
-            <Source e={e} />
+            <Source e={e} anchorByGmail={anchorByGmail} />
           </div>
         </div>
       </div>
@@ -314,6 +332,13 @@ export interface TimelineProps {
 export function Timeline({ spec, marks, prevLabel, filter, onShowSpec, onRefresh, onEval, refreshing, refreshNote }: TimelineProps) {
   const v = derive(spec);
   const s = v.spec;
+  // gmailId -> the id of the row that carries it, so an unspooled source line
+  // can anchor to the message it was lifted out of on this same page. A message
+  // is keyed by the first row that holds its gmailId.
+  const anchorByGmail = new Map<string, string>();
+  for (const r of v.rows) {
+    if (r.entry.gmailId && !anchorByGmail.has(r.entry.gmailId)) anchorByGmail.set(r.entry.gmailId, r.id);
+  }
   return (
     <>
       {v.avatarCss ? <style dangerouslySetInnerHTML={html(v.avatarCss)} /> : null}
@@ -356,7 +381,7 @@ export function Timeline({ spec, marks, prevLabel, filter, onShowSpec, onRefresh
       <div className="stream" id="stream" style={{ ["--nch" as string]: v.layout.laneCount }}>
         <Chains v={v} />
         {v.rows.map((r) => (
-          <EntryBlock key={r.id} row={r} v={v} mark={marks?.get(r.id)} />
+          <EntryBlock key={r.id} row={r} v={v} mark={marks?.get(r.id)} anchorByGmail={anchorByGmail} />
         ))}
       </div>
       {s.openItems?.length ? (
