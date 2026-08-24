@@ -690,6 +690,31 @@ export interface components {
             threadId?: string;
             /** @description Id of the entry this replies to. Absent means it opens a chain. Coverage here drives ordering, lanes and the reply tree. */
             parent?: string;
+            /**
+             * @description A quoter's in-place change to a message it quoted (issue #42). Each names the base that was edited, who made the change (the quoter), when, and the quoter's modified text. The renderer draws these inline inside this message instead of floating the derived copy as its own node.
+             */
+            edits?: {
+                /**
+                 * @description Spec id of the derived (edited) copy; the diff source.
+                 */
+                id?: string;
+                /**
+                 * @description Spec id of the original message the change was made to.
+                 */
+                base?: string;
+                /**
+                 * @description The quoter who made the edit.
+                 */
+                who?: string;
+                /**
+                 * @description When the quoting message was sent, e.g. '14:00'.
+                 */
+                time?: string;
+                /**
+                 * @description The quoter's modified text of the quote, as stored (plain text, not HTML).
+                 */
+                body?: string;
+            }[];
             /** @description Meeting scheduling exhaust (invitation, notes, accept/decline). Forces the classification the renderer would otherwise infer. */
             meta?: boolean;
             mentions?: string[];
