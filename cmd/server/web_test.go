@@ -136,3 +136,33 @@ func TestASavedSpecRoundTripsByName(t *testing.T) {
 		t.Errorf("POST /v1/spec without a name = %d, want 200", res.status)
 	}
 }
+
+// The index is the list half of the specs dir: GET /v1/specs must surface the
+// pages /view/<name> can serve, each with a name (its URL), its title and when
+// it was last written, newest first. The fixture seeds one page ("demo").
+func TestSavedSpecsListsPagesNewestFirst(t *testing.T) {
+	srv := testServer(t)
+
+	res := srv.do(t, "GET", "/v1/specs", nil)
+	if res.status != 200 {
+		t.Fatalf("GET /v1/specs = %d, want 200:\n%s", res.status, res.body)
+	}
+	var list specListResponse
+	if err := json.Unmarshal(res.body, &list); err != nil {
+		t.Fatalf("GET /v1/specs is not a spec list: %v\n%s", err, res.body)
+	}
+	if len(list.Specs) != 1 {
+		t.Fatalf("GET /v1/specs = %d pages, want the one seeded demo page", len(list.Specs))
+	}
+	got := list.Specs[0]
+	// The seeded file is `{"title":"demo","messages":[]}` under name demo.
+	if got.Name != "demo" {
+		t.Errorf("name = %q, want the seeded file's name", got.Name)
+	}
+	if got.Title != "demo" {
+		t.Errorf("title = %q, want the seeded page's title", got.Title)
+	}
+	if got.SavedAt == "" {
+		t.Error("savedAt is empty — the row cannot say when the page was written")
+	}
+}

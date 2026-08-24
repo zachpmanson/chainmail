@@ -441,6 +441,37 @@ describe("the status route /status", () => {
   });
 });
 
+/** The /specs index: saved pages, newest first, each named by its URL. */
+const SPECS = {
+  specs: [
+    { name: "loom-cutover", title: "Loom cutover", savedAt: "2026-08-22T15:04:00Z" },
+    // A second, older page sharing the title proves the row resolves by name +
+    // when, not by title alone.
+    { name: "cutover-note", title: "Loom cutover", savedAt: "2026-08-01T09:30:00Z" },
+  ],
+};
+
+const specsHandler: Handler = (c) =>
+  pathOf(c) === "/v1/specs"
+    ? json(200, SPECS)
+    : json(500, { error: `unexpected call to ${c.method} ${pathOf(c)}` });
+
+describe("the specs index /specs", () => {
+  it("lists every saved page, linked to its view route, ordered by saved-at", async () => {
+    handler = specsHandler;
+    await mountApp("/specs");
+
+    await waitFor(() => expect(calls.some((c) => pathOf(c) === "/v1/specs" && c.method === "GET")).toBe(true));
+
+    // Each title is shown and rates its own link to /view/<name>.
+    expect(await screen.findAllByText("Loom cutover")).toHaveLength(2);
+    const links: HTMLAnchorElement[] = screen.getAllByRole("link", { name: "Loom cutover" });
+    expect(links.map((l) => l.getAttribute("href"))).toEqual(
+      expect.arrayContaining(["/view/loom-cutover", "/view/cutover-note"]),
+    );
+  });
+});
+
 // The render route /view/<name>.
 describe("the render route /view/<name>", () => {
   it("loads the saved page from the API when the URL names one", async () => {
