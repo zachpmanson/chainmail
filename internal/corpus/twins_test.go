@@ -827,6 +827,15 @@ func TestFindTwinWillNotConvergeAnAnnotatedBlock(t *testing.T) {
 	} else if ok {
 		t.Fatalf("an annotated block converged onto entry %d, losing the answer", id)
 	}
+	// FindDerived is how that refusal is not lost: the same block is recognisably
+	// a MODIFIED copy of the base it answered inside, not an unrelated message.
+	if d, ok, err := FindDerived(s, deniz, sent.Add(10*time.Hour), askAnnotated, ""); err != nil {
+		t.Fatal(err)
+	} else if !ok {
+		t.Fatalf("FindDerived did not recognise the annotated block as a copy")
+	} else if d.Base != keep {
+		t.Fatalf("derived base = %d, want the mailbox copy %d", d.Base, keep)
+	}
 }
 
 // A machine-generated report is far too long to align, and there is nothing to

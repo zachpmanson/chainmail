@@ -203,3 +203,66 @@ func TestQuotingAMailboxMessageCreatesNoSecondEntry(t *testing.T) {
 		t.Fatalf("sighting names host %d, want the reply %d", seenIn, host)
 	}
 }
+
+// An answer typed INSIDE the text being quoted is not a twin of the original
+// (the words do not hold) and not an unrelated message (it answers the very
+// quote it sits in): extraction must recognise it as a MODIFIED copy, count it
+// as Derived, and hang it off the base it edited so the renderer can show it
+// as a quote-in-progress rather than a floating duplicate.
+func TestAnAnswerInsideAQuotedMessageIsADerivedCopy(t *testing.T) {
+	s := openTest(t)
+	sent := time.Date(2026, 5, 20, 1, 38, 14, 0, time.UTC)
+	original := "Can you confirm the meter number for the Rothwell depot before the " +
+		"tender pack goes out this afternoon? The retailer wants it on the cover " +
+		"sheet and I do not want to guess at it."
+	if _, err := Put(s, Message{
+		Envelope: Envelope{
+			ID: "orig", MessageID: "<orig@quarry.fed>", ThreadID: "t1",
+			From: "Deniz Aslan <deniz.aslan@quarry.fed>", Subject: "Rothwell tender pack",
+			Date: sent.Format(time.RFC1123Z),
+		},
+		Body: original,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Another participant answers INSIDE the quoted text: a sentence is woven
+	// into the middle of the original, the way a red inline reply lands.
+	annotated := "Can you confirm the meter number for the Rothwell depot before the " +
+		"tender pack goes out before this afternoon? On the last invoice, I will " +
+		"send it over. The retailer wants it on the cover sheet and I do not want " +
+		"to guess at it."
+	if _, err := Put(s, Message{
+		Envelope: Envelope{
+			ID: "reply", MessageID: "<reply@moana.fed>", ThreadID: "t1",
+			From: "Tui Walker <tui.walker@moana.fed>", Subject: "Re: Rothwell tender pack",
+			Date: sent.Add(3 * time.Hour).Format(time.RFC1123Z),
+		},
+		Body: "The meter number is on the way too.\n\n" +
+			"On Wed, 20 May 2026 at 11:38, Deniz Aslan <deniz.aslan@quarry.fed> wrote:\n" +
+			annotated,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// The original is not duplicated: the inline answer stays its own entry.
+	// Its parent is the message it was edited inside, not the reply that quoted
+	// it — that is the visible "modified quote lives where it was edited" edge.
+	var derivedEntries, parentOf int64
+	if err := s.DB().QueryRow(`
+		select count(*) from entries where ext_id like 'quote:%'
+		  and source = 'mail'`).Scan(&derivedEntries); err != nil {
+		t.Fatal(err)
+	}
+	if derivedEntries != 1 {
+		t.Fatalf("quoted entries = %d, want 1 (the edited copy, no duplicate of the original)",
+			derivedEntries)
+	}
+	if err := s.DB().QueryRow(`
+		select coalesce(parent_id,0) from entries where ext_id like 'quote:%'`,
+	).Scan(&parentOf); err != nil {
+		t.Fatal(err)
+	}
+	if parentOf == 0 {
+		t.Fatalf("the modified copy was not linked to its base")
+	}
+}

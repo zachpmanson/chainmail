@@ -875,6 +875,41 @@ func offsetLabel(mins int) string {
 	return fmt.Sprintf("%s%02d%02d", sign, mins/60, mins%60)
 }
 
+// nearbyCopies loads the mail a sender wrote around a wall clock: the candidate
+// set both twin and derived tests reason over. Shared so the two
+// classifications never disagree about which copies were even in range.
+func nearbyCopies(s *Store, person int64, wall time.Time) ([]twinCopy, error) {
+	rows, err := s.db.Query(`
+		select e.id, e.ext_id, e.quoted, e.ts, coalesce(e.subject,''),
+		       coalesce(e.body_text,''),
+		       (select count(*) from attachments a where a.entry_id = e.id)
+		from entries e
+		where e.person_id = ? and e.source = ? and e.ts between ? and ?
+		order by e.id`, person, SourceMail,
+		wall.Add(-26*time.Hour).Unix(), wall.Add(26*time.Hour).Unix())
+	if err != nil {
+		return nil, fmt.Errorf("looking at a sender's nearby copies: %w", err)
+	}
+	defer rows.Close()
+	var out []twinCopy
+	for rows.Next() {
+		var o twinCopy
+		var ts int64
+		var body string
+		if err := rows.Scan(&o.id, &o.ext, &o.quoted, &ts, &o.subject, &body, &o.atts); err != nil {
+			return nil, err
+		}
+		o.wall = time.Unix(ts, 0).UTC()
+		o.words = copyWords(body, o.quoted)
+		o.prose = proseWords(body, o.quoted)
+		out = append(out, o)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // FindTwin returns the entry a newly recovered block is a second copy of, if
 // the corpus already holds one.
 //
@@ -896,29 +931,12 @@ func FindTwin(s *Store, person int64, wall time.Time, text, subject string) (int
 	// copy on the same thread, and twinnable applies the floor per pair.
 	c := twinCopy{quoted: true, wall: wall, subject: subject,
 		words: copyWords(text, true), prose: proseWords(text, true)}
-	rows, err := s.db.Query(`
-		select e.id, e.ext_id, e.quoted, e.ts, coalesce(e.subject,''),
-		       coalesce(e.body_text,''),
-		       (select count(*) from attachments a where a.entry_id = e.id)
-		from entries e
-		where e.person_id = ? and e.source = ? and e.ts between ? and ?
-		order by e.id`, person, SourceMail,
-		wall.Add(-26*time.Hour).Unix(), wall.Add(26*time.Hour).Unix())
+	near, err := nearbyCopies(s, person, wall)
 	if err != nil {
 		return 0, false, fmt.Errorf("looking for a twin of a recovered block: %w", err)
 	}
-	defer rows.Close()
 	var mailbox, all []int64
-	for rows.Next() {
-		var o twinCopy
-		var ts int64
-		var body string
-		if err := rows.Scan(&o.id, &o.ext, &o.quoted, &ts, &o.subject, &body, &o.atts); err != nil {
-			return 0, false, err
-		}
-		o.wall = time.Unix(ts, 0).UTC()
-		o.words = copyWords(body, o.quoted)
-		o.prose = proseWords(body, o.quoted)
+	for _, o := range near {
 		if _, ok := twinnable(c, o); !ok {
 			continue
 		}
@@ -934,9 +952,6 @@ func FindTwin(s *Store, person int64, wall time.Time, text, subject string) (int
 			mailbox = append(mailbox, o.id)
 		}
 	}
-	if err := rows.Err(); err != nil {
-		return 0, false, err
-	}
 	// The mailbox copy is the one to converge on when there is exactly one, for
 	// the reasons resolveTwins gives. Two of them, or several recovered copies
 	// with none, is the ambiguous case: the block is stored as its own entry and
@@ -948,5 +963,49 @@ func FindTwin(s *Store, person int64, wall time.Time, text, subject string) (int
 	case len(mailbox) == 0 && len(all) == 1:
 		return all[0], true, nil
 	}
+
 	return 0, false, nil
+}
+
+// DerivedMatch reports that a recovered block is recognisably a MODIFIED copy of
+// an existing entry, not an independent message and not a pure twin. It carries
+// the base it was edited from and the reason the collapse was refused, so the
+// caller can present it as a quote-in-progress rather than a floating duplicate.
+type DerivedMatch struct {
+	Base int64  // the entry this block is a modified copy of
+	Why  string // why it is not a twin: the quoter answered/edited inside
+}
+
+// FindDerived returns the existing entry a newly recovered block is a modified
+// copy of, when it is recognisably one but cannot be a twin. Complementary to
+// FindTwin: the twin answers "identical message, merge"; this answers "the same
+// message line, but the quoter edited it – do not merge, but do not call it
+// unrelated either".
+//
+// The strong case is the interleaved answer — the quoter typing inside the text
+// they quoted, which annotates already recognises (that is why FindTwin refused
+// the collapse). FindDerived surfaces that refusal as a relationship to the base
+// instead of leaving the block to look like a brand-new message. Where there is
+// no such verified position (an edited quote whose extra words only drift, or a
+// genuinely different message), it refuses to guess, mirroring the repair pass.
+func FindDerived(s *Store, person int64, wall time.Time, text, subject string) (DerivedMatch, bool, error) {
+	if person == 0 {
+		return DerivedMatch{}, false, nil
+	}
+	c := twinCopy{quoted: true, wall: wall, subject: subject,
+		words: copyWords(text, true), prose: proseWords(text, true)}
+	near, err := nearbyCopies(s, person, wall)
+	if err != nil {
+		return DerivedMatch{}, false, fmt.Errorf("looking for the base of a modified block: %w", err)
+	}
+	// The quoter answered WHERE the base's own text runs straight through: the
+	// divergence is verifiably an interior insertion. That is a modified copy,
+	// and annotates already refuses to merge such a block, so naming its base
+	// here is evidence, not a guess.
+	for _, o := range near {
+		if why, yes := annotates(o, c); yes {
+			return DerivedMatch{Base: o.id, Why: why}, true, nil
+		}
+	}
+	return DerivedMatch{}, false, nil
 }
