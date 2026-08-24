@@ -185,6 +185,31 @@ export interface Entry {
    */
   parent?: string;
   /**
+   * A quoter's in-place change to a message it quoted (issue #42). Each names the base that was edited, who made the change (the quoter), when, and the quoter's modified text. The renderer draws these inline inside this message instead of floating the derived copy as its own node.
+   */
+  edits?: {
+    /**
+     * Spec id of the derived (edited) copy; the diff source.
+     */
+    id?: string;
+    /**
+     * Spec id of the original message the change was made to.
+     */
+    base?: string;
+    /**
+     * The quoter who made the edit.
+     */
+    who?: string;
+    /**
+     * When the quoting message was sent, e.g. '14:00'.
+     */
+    time?: string;
+    /**
+     * The quoter's modified text of the quote, as stored (plain text, not HTML).
+     */
+    body?: string;
+  }[];
+  /**
    * Meeting scheduling exhaust (invitation, notes, accept/decline). Forces the classification the renderer would otherwise infer.
    */
   meta?: boolean;

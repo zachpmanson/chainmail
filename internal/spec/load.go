@@ -33,6 +33,7 @@ type entryRow struct {
 	BodyText  string
 	BodyHTML  string  // the sender's own text/html part, "" for an unspooled entry
 	Direct    bool    // seen in the mailbox itself, not only inside a quote
+	Derived   bool    // a quoter's MODIFIED copy of a quoted message (see twins.go)
 	SeenIn    []int64 // entries this one was found quoted or forwarded inside
 	// HostHTML is the markup of those entries, loaded only when this entry has
 	// none of its own: an unspooled message's formatting survives inside the
@@ -152,7 +153,7 @@ func load(store *corpus.Store, ids []int64) ([]*entryRow, error) {
 	ph, args := placeholders(ids)
 	rows, err := db.Query(`
 		select e.id, coalesce(e.parent_id, 0), coalesce(e.parent_ref, ''), e.kind,
-		       e.source, e.ts,
+		       e.source, e.ts, e.derived,
 		       coalesce(e.tz, ''), e.tz_offset, coalesce(e.person_id, 0),
 		       coalesce(p.display_name, ''),
 		       coalesce(e.container, ''),
@@ -174,11 +175,13 @@ func load(store *corpus.Store, ids []int64) ([]*entryRow, error) {
 	for rows.Next() {
 		var r entryRow
 		var ts int64
-		if err := rows.Scan(&r.ID, &r.ParentID, &r.ParentRef, &r.Kind, &r.Source, &ts, &r.TZ,
-			&r.TZOffset, &r.PersonID, &r.Person, &r.Container, &r.Subject, &r.ExtID, &r.GmailID, &r.From, &r.To, &r.Cc,
+		var derived int
+		if err := rows.Scan(&r.ID, &r.ParentID, &r.ParentRef, &r.Kind, &r.Source, &ts, &derived,
+			&r.TZ, &r.TZOffset, &r.PersonID, &r.Person, &r.Container, &r.Subject, &r.ExtID, &r.GmailID, &r.From, &r.To, &r.Cc,
 			&r.BodyText, &r.BodyHTML); err != nil {
 			return nil, err
 		}
+		r.Derived = derived != 0
 		r.TS = time.Unix(ts, 0).UTC()
 		out = append(out, &r)
 		byID[r.ID] = &r

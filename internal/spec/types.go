@@ -118,6 +118,7 @@ type Entry struct {
 	GmailID     string       `json:"gmailId,omitempty"`
 	ThreadID    string       `json:"threadId,omitempty"`
 	Parent      string       `json:"parent,omitempty"`
+	Edits       []Edit       `json:"edits,omitempty"`
 	Meta        bool         `json:"meta,omitempty"`
 	Mentions    []string     `json:"mentions,omitempty"`
 	Attachments []Attachment `json:"attachments,omitempty"`
@@ -141,4 +142,23 @@ type Attachment struct {
 	// not reflow as it reads.
 	PreviewW int `json:"previewW,omitempty"`
 	PreviewH int `json:"previewH,omitempty"`
+}
+
+// Edit surfaces a quoter's in-place change to the message it quoted, so the
+// renderer can draw the modification inline inside the quoting message instead
+// of letting the derived copy float as its own node (issue #42). It names the
+// base the edit was made against, who made it and when, and carries the
+// quoter's MODIFIED copy of the text so the diff can be shown against the
+// original.
+//
+// The wire form is intentionally lean: `id` and `base` are spec ids (the
+// renderer resolves them), and `body` is the raw stored text of the edit, not
+// HTML — the diff primitive reads plain text, and re-rendering here would
+// duplicate what body.go already does for message bodies.
+type Edit struct {
+	ID   string `json:"id,omitempty"`
+	Base string `json:"base,omitempty"`
+	Who  string `json:"who,omitempty"`
+	Time string `json:"time,omitempty"`
+	Body string `json:"body,omitempty"`
 }

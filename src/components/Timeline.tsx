@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 import type { Entry } from "../lib/spec";
-import { derive, initials, type Row, type View } from "../lib/derive";
+import { derive, initials, type Row, type RowEdit, type View } from "../lib/derive";
 import type { Timeline as Spec } from "../lib/spec";
 import { COLLAPSE_FROM, msgCount, provenance, type SourceId } from "../lib/sources";
 import { attHref, hasPreview } from "../lib/attachments";
@@ -67,6 +67,29 @@ function ReplyLink({ row, v }: { row: Row; v: View }) {
         in reply to <b>{who}</b>, {when}
       </span>
     </a>
+  );
+}
+
+/** A quoter's inline edit to a message this one quoted (issue #42): the
+ *  modified text with the change marked, anchored to the original, attributed
+ *  to the quoter — rendered here so the edit reads inside the message that
+ *  made it rather than floating as its own unspooled node. */
+function Edits({ edits, v }: { edits?: RowEdit[]; v: View }) {
+  if (!edits?.length) return null;
+  return (
+    <div className="edits">
+      {edits.map((ed, i) => (
+        <div className="edit" key={ed.base || i}>
+          <div className="ehdr">
+            <a href={`#${ed.base}`} title="the message this change was made to">
+              edited by {ed.who || v.title || "someone"}
+            </a>
+            {ed.time ? <span className="ets">{ed.time}</span> : null}
+          </div>
+          <div className="ebd" dangerouslySetInnerHTML={html(ed.html)} />
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -270,6 +293,7 @@ function EntryBlock({ row, v, mark, anchorByGmail }: { row: Row; v: View; mark?:
             </div>
           ) : null}
           <div className="bd" dangerouslySetInnerHTML={html(trimBody(e.body))} />
+          <Edits edits={row.edits} v={v} />
           <Attachments e={e} />
           <div className="foot">
             <span className="to">to {e.to ?? "—"}</span>

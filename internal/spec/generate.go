@@ -133,6 +133,10 @@ func Generate(store *corpus.Store, opts Options) (Spec, error) {
 	for _, r := range rows {
 		b.add(r)
 	}
+	// A quoter's in-place change to a quoted message (a DERIVED copy) is drawn
+	// as an edit inside the message that quoted it, never left floating as its
+	// own node. The relation was decided at ingest; this only surfaces it.
+	b.attachEdits(rows)
 
 	spec := Spec{
 		SpecVersion:  1,
@@ -379,6 +383,55 @@ func (b *builder) source(r *entryRow) string {
 		return "unspooled from " + strings.Join(in, ", ")
 	}
 	return "unspooled from quoted text"
+}
+
+// attachEdits surfaces a quoter's in-place change to a quoted message as an
+// edit on the message that contained it (the host), anchored to the base it
+// modified. Without this the derived copy — Charles's original with Jason's
+// change woven in — renders as its own unspooled node above the original: a
+// duplicate that reorders history (issue #42).
+//
+// Who and when come from the HOST, not the derived copy: Jason edited the
+// quote, so the edit is Jason's at Jason's time, even though the copy still
+// names Charles (the quoted author) as its sender.
+//
+// Both the base and the host must be in this selection. When either is not —
+// the change is anchored outside the page, or the quoting message was never
+// collected — the derived entry keeps its own unspooled row and link, and no
+// edit is attached, so the trail is not silently lost.
+func (b *builder) attachEdits(rows []*entryRow) {
+	// rows[i] built b.messages[i] in b.add, so this maps a corpus id to the
+	// entry it became, letting us mutate a host and read the base's id.
+	at := map[int64]int{}
+	for i, r := range rows {
+		at[r.ID] = i
+	}
+	for _, r := range rows {
+		if !r.Derived || r.ParentID == 0 {
+			continue
+		}
+		if _, ok := at[r.ParentID]; !ok {
+			continue // the base it changed is not on this page
+		}
+		// The host is whichever collected message the copy was sighted inside.
+		var host *Entry
+		for _, h := range r.SeenIn {
+			if j, ok := at[h]; ok {
+				host = &b.messages[j]
+				break
+			}
+		}
+		if host == nil {
+			continue // the quoting message is not in this timeline
+		}
+		host.Edits = append(host.Edits, Edit{
+			ID:   b.idOf[r.ID],
+			Base: b.idOf[r.ParentID],
+			Who:  host.Sender,
+			Time: host.Time,
+			Body: r.BodyText,
+		})
+	}
 }
 
 // checkCastCoversSenders fails a spec that would show a message from someone the

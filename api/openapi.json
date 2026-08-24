@@ -1559,6 +1559,21 @@
             "type": "string",
             "description": "Id of the entry this replies to. Absent means it opens a chain. Coverage here drives ordering, lanes and the reply tree."
           },
+          "edits": {
+            "type": "array",
+            "description": "A quoter's in-place change to a message it quoted (issue #42). Each names the base that was edited, who made the change (the quoter), when, and the quoter's modified text. The renderer draws these inline inside this message instead of floating the derived copy as its own node.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": { "type": "string", "description": "Spec id of the derived (edited) copy; the diff source." },
+                "base": { "type": "string", "description": "Spec id of the original message the change was made to." },
+                "who": { "type": "string", "description": "The quoter who made the edit." },
+                "time": { "type": "string", "description": "When the quoting message was sent, e.g. '14:00'." },
+                "body": { "type": "string", "description": "The quoter's modified text of the quote, as stored (plain text, not HTML)." }
+              }
+            }
+          },
           "meta": {
             "type": "boolean",
             "description": "Meeting scheduling exhaust (invitation, notes, accept/decline). Forces the classification the renderer would otherwise infer."

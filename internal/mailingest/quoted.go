@@ -108,6 +108,11 @@ func ExtractQuoted(store *corpus.Store, hostID int64, host corpus.Entry, body st
 		}
 		id, created := twin, false
 		if twin == 0 {
+			// The copy is a quoter's modified re-send of an existing message when
+			// FindDerived recognised the overlap; persist that so the renderer can
+			// hoist it into the host as an inline edit rather than re-deriving the
+			// judgement itself.
+			e.Derived = derived.Base != 0
 			id, created, err = store.PutQuoted(e)
 			if err != nil {
 				return r, fmt.Errorf("storing quoted block %d of %s: %w", i, host.ExtID, err)

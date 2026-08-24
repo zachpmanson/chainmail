@@ -758,3 +758,116 @@ func TestSourceNamesOneHostOnceHoweverManyWaysItQuoted(t *testing.T) {
 		t.Errorf("source = %q, want %q", got, want)
 	}
 }
+
+// A reply that EDITS the quote it re-sends arrives at the corpus as a DERIVED
+// entry (see mailingest/quoted.go): a modified copy of the base it changed,
+// sighted inside the host where the edit was made, with a reply edge at that
+// base. The spec must surface that relation on the HOST message — an `edits`
+// list naming base, who, when and the modified text — so the renderer can draw
+// the change inline instead of floating a second copy of the original above it
+// (issue #42).
+func TestDerivedQuoteSurfacesAsAnEditOnItsHost(t *testing.T) {
+	s := open(t)
+	ada := person(t, s, "Charles Nelaturi", "charles@ruralco.example")
+	bo := person(t, s, "Jason Yarrow", "jason@termina.example")
+
+	base := put(t, s, msg{
+		ext: "mail:<c@ruralco>", ts: "2026-08-21T09:00:00+10:00", tz: "+1000",
+		person: ada, container: "r", subject: "CSV layout",
+		messageID: "<c@ruralco>", from: "Charles Nelaturi <charles@ruralco.example>",
+		to: "Jason Yarrow <jason@termina.example>", gmail: "g-c",
+		text: "CSV layout: A: Member Number · B: ATS Number · C: Property Name · " +
+			"D: Statement Date · E: Amount Due",
+	})
+	host := put(t, s, msg{
+		ext: "mail:<j@termina>", ts: "2026-08-21T14:00:00+10:00", tz: "+1000",
+		person: bo, container: "r", subject: "Re: CSV layout",
+		messageID: "<j@termina>", inReplyTo: "<c@ruralco>",
+		from: "Jason Yarrow <jason@termina.example>",
+		to:   "Charles Nelaturi <charles@ruralco.example>", gmail: "g-j",
+		text: "Actually one change — we track Invoice Amount, not Amount Due.",
+	})
+	// The modified copy the ingest classifies as DERIVED: Charles's message,
+	// re-quoted with Jason's Invoice-Amount edit woven in. Its person is the
+	// quote's author (Charles); the edit itself is attributed at render from the
+	// host.
+	ds, err := time.Parse(time.RFC3339, "2026-08-21T09:00:00+10:00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	derived, _, err := s.PutQuoted(corpus.Entry{
+		Source: corpus.SourceMail, ExtID: "quote:csv-edit", Kind: "message",
+		TS: ds, TZ: "+1000", PersonID: ada, Container: "r", Subject: "CSV layout",
+		BodyText: "CSV layout: A: Member Number · B: ATS Number · C: Property Name · " +
+			"D: Statement Date · E: Invoice Amount",
+		// The ingest classifies a modified re-quote as DERIVED (FindDerived) and
+		// persists that; this test constructs the copy the way that write leaves it.
+		Derived: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The edit was made INSIDE Jason's reply, so the copy is sighted against the
+	// host, and its reply edge points at the original it modified.
+	if err := s.Sight(derived, host, "quoted", "inline edit"); err != nil {
+		t.Fatalf("Sight derived: %v", err)
+	}
+	if err := s.SetParent(derived, base); err != nil {
+		t.Fatalf("SetParent: %v", err)
+	}
+	for _, id := range []int64{base, host} {
+		if err := s.Sight(id, 0, "direct", ""); err != nil {
+			t.Fatalf("Sight: %v", err)
+		}
+	}
+
+	sp := generate(t, s, Options{Containers: []string{"r"}})
+	var hostMsg, relMsg Entry
+	for _, m := range sp.Messages {
+		switch m.GmailID {
+		case "g-j":
+			hostMsg = m
+		}
+		if m.GmailID == "" && m.Quoted {
+			relMsg = m // the edited copy, unspooled (the floating node of today)
+		}
+	}
+
+	// The host carries the edit, keyed to the base, so the renderer can hoist the
+	// derived copy inside it rather than leaving it as a separate node.
+	if hostMsg.Edits == nil || len(hostMsg.Edits) == 0 {
+		t.Fatal("host message carries no edits — the derived relation is not surfaced")
+	}
+	if len(hostMsg.Edits) != 1 {
+		t.Fatalf("edits = %d, want exactly the one edit", len(hostMsg.Edits))
+	}
+	e := hostMsg.Edits[0]
+	if e.Who != "Jason Yarrow" {
+		t.Errorf("edit who = %q, want the quoter Jason Yarrow", e.Who)
+	}
+	if got, want := e.Time, "14:00"; e.Time != want {
+		t.Errorf("edit time = %q, want %q", got, want)
+	}
+	if !strings.Contains(e.Body, "Invoice Amount") {
+		t.Errorf("edit body = %q, want it to carry Jason's modification", e.Body)
+	}
+	// The edit names the base it modified and the derived entry it IS.
+	if e.ID == "" {
+		t.Error("edit has no id for the derived entry it surfaces")
+	}
+	if e.ID != relMsg.ID {
+		t.Errorf("edit id = %q, want the derived entry %q", e.ID, relMsg.ID)
+	}
+	if e.Base == "" {
+		t.Error("edit names no base it modified")
+	}
+	var baseID string
+	for _, m := range sp.Messages {
+		if m.GmailID == "g-c" {
+			baseID = m.ID
+		}
+	}
+	if e.Base != baseID {
+		t.Errorf("edit base = %q, want the original %q", e.Base, baseID)
+	}
+}
