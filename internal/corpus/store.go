@@ -39,6 +39,11 @@ type Entry struct {
 	BodyHTML  string
 	BodyText  string
 	Permalink string
+	// Derived marks an entry that is a MODIFIED copy of a quoted message (its
+	// parent points at the base it edited). Set at ingest from the graded overlap
+	// decision; the renderer reads it to hoist the copy into its host as an
+	// inline edit rather than rendering a floating duplicate.
+	Derived bool
 }
 
 // Mail holds the fields that only make sense for a mail entry.
@@ -203,8 +208,8 @@ func (s *Store) put(tx *sql.Tx, e Entry, m *Mail, sd *Slack, atts []Attachment) 
 	row := tx.QueryRow(`
 		insert into entries (source, ext_id, kind, ts, tz, tz_offset, person_id,
 		                     container, parent_ref, subject, body_html, body_text,
-		                     permalink, body_sha, ingested_at)
-		values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+		                     permalink, body_sha, derived, ingested_at)
+		values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		on conflict(source, ext_id) do update set
 		  kind=excluded.kind, ts=excluded.ts, tz=excluded.tz,
 		  tz_offset=excluded.tz_offset,
@@ -212,11 +217,12 @@ func (s *Store) put(tx *sql.Tx, e Entry, m *Mail, sd *Slack, atts []Attachment) 
 		  container=excluded.container, parent_ref=excluded.parent_ref,
 		  subject=excluded.subject, body_html=excluded.body_html,
 		  body_text=excluded.body_text, permalink=excluded.permalink,
+		  derived=coalesce(entries.derived, excluded.derived),
 		  body_sha=excluded.body_sha, ingested_at=excluded.ingested_at
 		returning id`,
 		e.Source, e.ExtID, e.Kind, e.TS.UTC().Unix(), nullStr(e.TZ), nullInt(e.TZOffset),
 		personID, nullStr(e.Container), nullStr(e.ParentRef), nullStr(e.Subject),
-		nullStr(e.BodyHTML), e.BodyText, nullStr(e.Permalink), sha, time.Now().Unix())
+		nullStr(e.BodyHTML), e.BodyText, nullStr(e.Permalink), sha, boolInt(e.Derived), time.Now().Unix())
 	if err := row.Scan(&res.ID); err != nil {
 		return res, fmt.Errorf("upserting %s: %w", e.ExtID, err)
 	}

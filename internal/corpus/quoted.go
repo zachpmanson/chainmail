@@ -43,12 +43,12 @@ func (s *Store) PutQuoted(e Entry) (int64, bool, error) {
 	res, err := tx.Exec(`
 		insert into entries (source, ext_id, kind, ts, tz, tz_offset, person_id,
 		                     container, parent_ref, subject, body_text, permalink,
-		                     body_sha, quoted, ingested_at)
-		values (?,?,?,?,?,?,?,?,?,?,?,?,?,1,?)`,
+		                     body_sha, quoted, derived, ingested_at)
+		values (?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)`,
 		e.Source, e.ExtID, nz(e.Kind, "message"), e.TS.Unix(), nullStr(e.TZ), e.TZOffset,
 		nullInt64(e.PersonID), nullStr(e.Container), nullStr(e.ParentRef),
 		nullStr(e.Subject), nullStr(e.BodyText), nullStr(e.Permalink),
-		BodySHA(e.Subject, e.BodyText), time.Now().Unix())
+		BodySHA(e.Subject, e.BodyText), boolInt(e.Derived), time.Now().Unix())
 	if err != nil {
 		return 0, false, err
 	}

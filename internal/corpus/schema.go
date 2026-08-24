@@ -333,4 +333,11 @@ var migrations = []string{
 	  primary key (source, container)
 	);
 	`,
+
+	// 11: a modified copy of a quoted message — the DERIVED classification from
+	// the graded overlap in twins.go/FindDerived. Persisted because deciding
+	// (vs a twin, vs unrelated) needs the whole corpus and belongs at ingest,
+	// not re-derived at render. The renderer reads it to draw the quoter's edit
+	// inline inside the message that quoted it instead of a floating duplicate.
+	`alter table entries add column derived integer not null default 0;`,
 }
