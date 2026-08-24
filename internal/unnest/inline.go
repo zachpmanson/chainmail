@@ -41,7 +41,7 @@ func InlineRuns(raw string) []InlineRun {
 		return nil
 	}
 	var out []InlineRun
-	collectColourRuns(doc, &out, false)
+	collectColourRuns(doc, &out)
 	return out
 }
 
@@ -52,30 +52,22 @@ const (
 
 var reInlineColour = regexp.MustCompile(`(?i)color\s*:`)
 
-// collectColourRuns walks the tree and appends each colour-marked run. inside
-// tells a node it is beneath an already-collected colour span, so a nested
-// colour does not become a second run of the same answer. It returns whether
-// this subtree held a colour run, so the caller can mark everything beneath one.
-func collectColourRuns(n *html.Node, out *[]InlineRun, inside bool) bool {
-	if inside {
-		return true
-	}
+// collectColourRuns walks the tree and appends each colour-marked run. When a
+// node is itself a colour run, the whole subtree beneath it is that one run and
+// is not re-scanned (a nested colour span carries the same words); siblings and
+// everything else are scanned normally.
+func collectColourRuns(n *html.Node, out *[]InlineRun) {
 	if n.Type == html.ElementNode && colourAttributed(n) {
 		text := nodeText(n)
 		w := len(strings.Fields(normaliseRun(text)))
 		if w >= minInlineWords && w <= maxInlineWords {
 			*out = append(*out, InlineRun{Text: normaliseRun(text), WordCount: w})
-			// The whole subtree is the same run; do not scan inside it again.
-			return true
+			return
 		}
 	}
-	held := false
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		if collectColourRuns(c, out, inside || held) {
-			held = true
-		}
+		collectColourRuns(c, out)
 	}
-	return held
 }
 
 // colourAttributed reports whether an element states a colour itself.
