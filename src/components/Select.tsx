@@ -1,6 +1,6 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearch, Link } from "@tanstack/react-router";
-import { $api, ApiError, searchQuery, type ChainHit, type SearchMode, type SearchParams } from "../lib/api";
+import { $api, ApiError, searchQuery, type ChainHit, type CorpusEntry, type SearchMode, type SearchParams } from "../lib/api";
 import { slug, untitledName } from "../lib/route";
 
 // The default-first order is what the dropdown shows: hybrid is the default
@@ -60,10 +60,12 @@ function ChainRow({
   chain,
   checked,
   onToggle,
+  onPreview,
 }: {
   chain: ChainHit;
   checked: boolean;
   onToggle: () => void;
+  onPreview: () => void;
 }) {
   const sim = chainSimilarity(chain);
   const hot = sim > HIGHLIGHT_FLOOR;
@@ -101,7 +103,85 @@ function ChainRow({
           </span>
         </span>
       </label>
+      {/* Preview reads the chain as data — cheap, no spec assembly — so a
+          candidate can be judged on its entries before it is committed to a
+          page. The button is kept out of the checkbox label, so ticking a row
+          and previewing it never fight over one hit area. */}
+      <button type="button" className="selpvbtn" aria-haspopup="dialog" onClick={onPreview}>
+        Preview
+      </button>
     </li>
+  );
+}
+
+/** The wire's yyyy-mm-dd day is the part worth showing here; the clock is
+ * the operator's own, left to them (same convention as the /status screen). */
+function dayOf(stamp?: string): string {
+  return stamp ? stamp.slice(0, 10) : "";
+}
+
+function EntryCard({ e }: { e: CorpusEntry }) {
+  return (
+    <div className="selen">
+      <div className="selenh">
+        {e.author ? <span className="selena">{e.author}</span> : <em className="selenun">unknown author</em>}
+        {e.quoted ? (
+          <span className="selenq" title="this entry survived only inside a quoted block, not as a standalone message">
+            quoted
+          </span>
+        ) : null}
+        <span className="selendate">{dayOf(e.ts)}</span>
+      </div>
+      {e.subject ? <div className="selensubj">{e.subject}</div> : null}
+      {e.body ? <p className="selenbody">{e.body}</p> : <p className="selenempty">no text body</p>}
+    </div>
+  );
+}
+
+/** A candidate chain read as data, in a modal. This is deliberately NOT the
+ * rendered transcript: reading a chain is a different act from rendering one,
+ * and the /v1/chains endpoint returns plain entries without paying for spec
+ * assembly. The modal shows enough to judge a candidate before committing it
+ * to a page — who said what, in what order. */
+function ChainPreview({ chain, onClose }: { chain: ChainHit; onClose: () => void }) {
+  const fetched = $api.useQuery("get", "/v1/chains/{rootExtId}", {
+    params: { path: { rootExtId: chain.rootExtId } },
+  });
+  // Escape closes the modal, matching the transcript's dialog habits; the
+  // listener lives here because the modal only exists while it is open.
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const entries = fetched.data?.entries ?? [];
+  return (
+    <div className="selpv" role="dialog" aria-modal="true" aria-label="Chain preview" onClick={onClose}>
+      <div className="selpv-panel" onClick={(e) => e.stopPropagation()}>
+        <div className="selpv-head">
+          <b>preview</b>
+          <span className="note">{chain.subject || "(no subject)"} · {chain.entries} entr{chain.entries === 1 ? "y" : "ies"}</span>
+          <button type="button" className="selpv-close" onClick={onClose}>
+            Close
+          </button>
+        </div>
+        {fetched.isError ? <Failure error={fetched.error} /> : null}
+        {fetched.isFetching ? <p className="selnote">Loading the chain…</p> : null}
+        {!fetched.isFetching && !fetched.isError && entries.length === 0 ? (
+          <p className="selnote">No entries to show.</p>
+        ) : null}
+        {entries.length > 0 ? (
+          <div className="selpv-list">
+            {entries.map((e) => (
+              <EntryCard key={e.extId} e={e} />
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -134,6 +214,8 @@ export function SelectView() {
       : null,
   );
   const [chosen, setChosen] = useState<string[]>([]);
+  // The chain being previewed, by root ext id. Null when no modal is open.
+  const [preview, setPreview] = useState<ChainHit | null>(null);
 
   // The idle init is never sent: it stands in until a search is submitted, so
   // the key it derives is a key nothing was ever fetched under.
@@ -307,9 +389,11 @@ export function SelectView() {
                 chain={c}
                 checked={chosen.includes(c.rootExtId)}
                 onToggle={() => toggle(c.rootExtId)}
+                onPreview={() => setPreview(c)}
               />
             ))}
           </ul>
+          {preview ? <ChainPreview chain={preview} onClose={() => setPreview(null)} /> : null}
         </>
       ) : null}
     </div>

@@ -21,9 +21,17 @@
 
 .sellist { list-style:none; margin:.8rem 0 0; padding:0; border:1px solid var(--line);
   border-radius:9px; background:var(--card); overflow:hidden; }
+.selrow { display:flex; align-items:center; gap:.4rem; }
 .selrow + .selrow { border-top:1px solid var(--line); }
-.selrow > .chk { display:flex; gap:.5rem; padding:.5rem .7rem; cursor:pointer; }
+.selrow > .chk { display:flex; gap:.5rem; padding:.5rem .7rem; cursor:pointer;
+  flex:1 1 auto; min-width:0; }
 .selrow:hover { background:var(--quote); }
+/* The row's preview button: pinned to the right edge, out of the checkbox's
+   hit area. Kept quiet until hovered so the metadata stays the row's voice. */
+.selpvbtn { font:inherit; font-size:.72rem; font-weight:650; margin-right:.5rem;
+  padding:.3rem .6rem; border:1px solid var(--line); border-radius:6px;
+  background:var(--card); color:var(--muted); cursor:pointer; white-space:nowrap; }
+.selpvbtn:hover { color:var(--accent); border-color:var(--accent); }
 /* A strong semantic match: the row carries the highlight and the badge stays
    readable under it. The colour is the search page's way of saying "this is
    above the relevance floor" — same 0.8 refresh holds proposals to. */
@@ -49,6 +57,42 @@
   background:var(--card); }
 .selfail strong { display:block; font-size:.7rem; text-transform:uppercase;
   letter-spacing:.08em; color:crimson; }
+
+/* Chain preview modal. Same dimmed-backdrop family as the proposal evaluator:
+   the page stays visible while a candidate chain is read as data. */
+.selpv { position:fixed; inset:0; z-index:55; background:rgba(0,0,0,.45);
+  display:flex; align-items:center; justify-content:center; }
+.selpv-panel { background:var(--card); border:1px solid var(--line); border-radius:8px;
+  width:min(46rem, 94vw); max-height:82vh; display:flex; flex-direction:column;
+  box-shadow:0 8px 40px rgba(0,0,0,.35); }
+.selpv-head { display:flex; align-items:center; gap:.6rem; padding:.5rem .8rem;
+  border-bottom:1px solid var(--line); }
+.selpv-head b { font-size:.72rem; font-weight:700; text-transform:uppercase;
+  letter-spacing:.09em; color:var(--muted); }
+.selpv-head .note { font-size:.74rem; color:var(--muted); margin-right:auto;
+  min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.selpv-close { font:inherit; font-size:.72rem; font-weight:650; padding:.28rem .55rem;
+  border:1px solid var(--line); border-radius:6px; background:var(--bg);
+  color:var(--muted); cursor:pointer; }
+.selpv-close:hover { color:var(--accent); border-color:var(--accent); }
+.selpv-list { overflow:auto; padding:.5rem .8rem .8rem; display:flex;
+  flex-direction:column; gap:.5rem; }
+.selpv .selfail { margin:.5rem .8rem .8rem; }
+.selpv .selnote { margin:.5rem .8rem; }
+.selen { padding:.55rem .65rem; border:1px solid var(--line); border-radius:6px;
+  background:var(--bg); }
+.selenh { display:flex; align-items:baseline; gap:.5rem; }
+.selena { font-size:.82rem; font-weight:700; }
+.selenun { font-size:.78rem; color:var(--muted); }
+.selenq { font-size:.6rem; font-weight:700; text-transform:uppercase;
+  letter-spacing:.06em; color:var(--muted); border:1px solid var(--line);
+  border-radius:999px; padding:0 .35rem .05rem; }
+.selendate { margin-left:auto; font-size:.68rem; color:var(--muted);
+  font-variant-numeric:tabular-nums; }
+.selensubj { font-size:.78rem; font-weight:650; margin-top:.25rem; overflow-wrap:anywhere; }
+.selenbody { font-size:.78rem; line-height:1.5; margin:.3rem 0 0; color:var(--fg);
+  white-space:pre-wrap; overflow-wrap:anywhere; max-height:11rem; overflow:auto; }
+.selenempty { font-size:.74rem; color:var(--muted); margin:.3rem 0 0; font-style:italic; }
 
 /* Fixed to the bottom-left because the transcript owns the top-right (toolbar)
    and the right edge (minimap), and this must not move as the page scrolls. */
