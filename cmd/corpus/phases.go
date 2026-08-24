@@ -141,6 +141,27 @@ func embedDaemon(o embedOpts) (bool, string) {
 	return true, ""
 }
 
+// runReindex rebuilds the search indexes from the entries table. This is the
+// sanctioned wipe path for the external-content fts5 shadow tables — a raw
+// DELETE corrupts them (snippet() throws malformed) while count/match still
+// work, so the store always clears+rebuilds via the virtual table commands.
+func runReindex(path string) error {
+	s, err := corpus.Open(path)
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+	if err := s.ReindexFTS(); err != nil {
+		return err
+	}
+	var n int
+	if err := s.DB().QueryRow("select count(*) from entries_fts").Scan(&n); err != nil {
+		return err
+	}
+	fmt.Printf("rebuilt the search indexes — %d entries indexed\n", n)
+	return nil
+}
+
 // runRepair reduces the identities one mailbox split into.
 func runRepair(path string) error {
 	s, err := corpus.Open(path)

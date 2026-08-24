@@ -294,6 +294,23 @@ func (s *Store) reindex(tx *sql.Tx, id int64, created bool, oldSubject, oldBody 
 	return nil
 }
 
+// ReindexFTS rebuilds both search indexes from scratch. The shadow tables are
+// external-content fts5: they cannot be cleared with a plain DELETE (that
+// corrupts the segment list — count/match still work while snippet() throws
+// malformed), so a rebuild goes through the virtual table's own commands,
+// which is also how a wipe+re-ingest leaves them consistent.
+func (s *Store) ReindexFTS() error {
+	for _, tbl := range []string{"entries_fts", "entries_ident"} {
+		if _, err := s.db.Exec("insert into " + tbl + "(" + tbl + ") values('delete-all')"); err != nil {
+			return fmt.Errorf("clearing %s: %w", tbl, err)
+		}
+		if _, err := s.db.Exec("insert into " + tbl + "(" + tbl + ", rank) values('rebuild', 0)"); err != nil {
+			return fmt.Errorf("rebuilding %s: %w", tbl, err)
+		}
+	}
+	return nil
+}
+
 // Sight records that an entry was seen somewhere: directly in the mailbox, or
 // quoted inside another entry.
 func (s *Store) Sight(entryID, seenIn int64, kind, detail string) error {

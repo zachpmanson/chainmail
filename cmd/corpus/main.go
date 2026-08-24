@@ -158,6 +158,10 @@ const usage = `usage: corpus <command> [flags]
                            RFC 5233 +tag, split the address out of a display name
                            that swallowed it, clean display names cut off at a
                            bracket, and fold the people that split apart
+  reindex                  rebuild the full-text and identifier search indexes
+                           from the entries table. Only needed after a manual
+                           wipe of the shadow tables, or when snippet() reports
+                           a malformed index; harmless to run any time
 `
 
 // ingestUsage names the flags each source takes. "[flags]" told a reader only
@@ -634,6 +638,9 @@ func run(args []string) error {
 
 	case "repair":
 		return runRepair(path)
+
+	case "reindex":
+		return runReindex(path)
 
 	case "candidates":
 		s, err := corpus.Open(path)
