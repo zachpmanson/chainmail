@@ -62,22 +62,37 @@ export function derive(input: Timeline): View {
   // A quoter's edit to a quoted message (issue #42) is drawn inside the message
   // that quoted it, never as its own floating node. The backend already attaches
   // the edit to the host and carries its own id; here we drop the derived entry
-  // from the laid-out rows and let the host bubble render it inline. The guard
-  // on descendants keeps the trail intact in the vanishing edge where someone
-  // replied to the edited copy — then it stays a real row rather than losing a
-  // subtree.
-  const children = new Map<string, string[]>();
-  for (const e of input.messages) {
-    const p = e.parent && byId.has(e.parent) ? e.parent : null;
-    if (p) children.set(p, [...(children.get(p) ?? []), idOf(e)]);
-  }
+  // from the laid-out rows and let the host bubble render it inline.
+  //
+  // A copy is hoisted however many replies it has, because each of those replies is
+  // anchored to the message the edit is diffed against, not to this ghost of it. A
+  // real chain (the Termina x Ruralco CSV thread) has the host — the message that
+  // re-quotes and therefore carries the edit — as a DIRECT descendant of the
+  // edited copy, because the thread was replied-to from the copied row before the
+  // corpus realised it was a derivative. Re-parenting those replies up to the
+  // copy's own parent (the base) keeps the subtree attached and the reply graph
+  // intact, instead of leaving the host orphaned on a dangling id.
   const hoisted = new Set<string>();
   for (const e of input.messages) {
-    for (const ed of e.edits ?? []) {
-      if (ed.id && byId.has(ed.id) && !children.has(ed.id)) hoisted.add(ed.id);
-    }
+    for (const ed of e.edits ?? []) if (ed.id && byId.has(ed.id)) hoisted.add(ed.id);
   }
+  // A hoisted copy is replaced in every remaining parent chain by its own parent
+  // (the base it derives from), so descendants attach to what the copy itself
+  // attached to, rather than dangling on an id that no longer occupies a row.
+  // Mutated in place: idOf keys by object identity, so a clone would be a
+  // stranger to the id map and every layout function after this reads parent off
+  // the very entries it is given.
+  const effective = (id?: string): string | undefined => {
+    const seen = new Set<string>();
+    let cur = id;
+    while (cur && byId.has(cur) && hoisted.has(cur) && !seen.has(cur)) {
+      seen.add(cur);
+      cur = byId.get(cur)!.parent;
+    }
+    return cur && byId.has(cur) ? cur : undefined;
+  };
   const visible = input.messages.filter((e) => !hoisted.has(idOf(e)));
+  for (const e of visible) e.parent = effective(e.parent);
 
   const ordered = order(visible, idOf);
   const spec: Timeline = { ...input, messages: ordered as Timeline["messages"] };

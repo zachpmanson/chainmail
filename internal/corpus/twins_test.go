@@ -613,6 +613,61 @@ func TestAnAnnotatedCopyIsKeptAndSaysWhy(t *testing.T) {
 	}
 }
 
+// https://github.com/zachpmanson/chainmail/issues/42 real-world failure: the
+// quoted copy is ingested BEFORE its base, so the derive classification at
+// ingest (FindDerived+SetParent) has nothing to anchor to and leaves the copy
+// unmarked. When the base later arrives from the mailbox, the twin pass pairs
+// them and annotates refuses the collapse (the quoter answered inside), but it
+// never WRITES the derived relation back — so the renderer keeps drawing a
+// floating duplicate. Persisting it here lets the renderer draw the edit inline.
+func TestAnAnnotatedCopyIngestedBeforeItsBaseIsPersistedDerived(t *testing.T) {
+	s := open(t)
+	deniz := person(t, s, "deniz.aslan@quarry.fed", "Deniz Aslan")
+	tui := person(t, s, "tui.walker@moana.fed", "Tui Walker")
+	sent := twinAt(t, "2026-05-20 01:38:14")
+
+	// The copy is recovered first, from a reply, and runs FindDerived against a
+	// base that is not in the corpus yet — so it is stored unmarked and without a
+	// parent, exactly as the real chain did.
+	h := host(t, s, tui, "reply@moana.fed", sent.Add(3*time.Hour))
+	drop := recovered(t, s, deniz, "abc", askAnnotated, sent.Add(10*time.Hour), h)
+	// The base only reaches the mailbox afterwards.
+	keep := mailbox(t, s, deniz, "ask@quarry.fed", askBody, sent)
+
+	plan, err := CollapseTwins(s, true)
+	if err != nil {
+		t.Fatalf("CollapseTwins: %v", err)
+	}
+	// The copy is still refused the collapse (it is the quoter's inline answer),
+	// but the pass has now persisted it as a DERIVED copy of the base.
+	if len(plan.Collapse) != 0 || plan.Removed != 0 {
+		t.Fatalf("collapsed a copy holding an inline answer: %+v", plan.Collapse)
+	}
+	if plan.Annotated != 1 || len(plan.Declined) != 1 {
+		t.Fatalf("plan = %d annotated of %d declined, want one of one",
+			plan.Annotated, len(plan.Declined))
+	}
+	if len(plan.Derived) != 1 {
+		t.Fatalf("persisted %d derived relations, want 1", len(plan.Derived))
+	}
+	if plan.Derived[0].Copy != drop || plan.Derived[0].Base != keep {
+		t.Fatalf("derived relation = %+v, want copy %d -> base %d",
+			plan.Derived[0], drop, keep)
+	}
+	// And apply wrote it to the store, so the renderer reads it.
+	var derived bool
+	var parent int64
+	if err := s.DB().QueryRow(
+		`select derived, coalesce(parent_id,0) from entries where id=?`, drop,
+	).Scan(&derived, &parent); err != nil {
+		t.Fatal(err)
+	}
+	if !derived || parent != keep {
+		t.Fatalf("copy stored as derived=%v parent=%d, want derived=true parent=%d",
+			derived, parent, keep)
+	}
+}
+
 // A footer, a virus-scanner paragraph and a "sent from" line are extra words the
 // survivor lacks, and they are not an annotation: they sit after the shared text,
 // which is where a client appends and a person does not answer.
