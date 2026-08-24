@@ -2,8 +2,6 @@ package mailingest
 
 import (
 	"fmt"
-	"regexp"
-	"strings"
 
 	"github.com/zachpmanson/chainmail/internal/corpus"
 	"github.com/zachpmanson/chainmail/internal/unnest"
@@ -18,7 +16,6 @@ type QuotedResult struct {
 	Twinned  int // matched a stored copy of the same message under a different clock
 	Derived  int // a modified copy of a stored message, not a twin and not unrelated
 	Enriched int // merged entries that gained a field from this sighting
-	Inline   int // inline replies typed into a quoted block, stored as messages of their own
 	Edges    int // reply edges linked from positional nesting
 	Undated  int // blocks whose time had to be inferred from the host
 }
@@ -50,34 +47,8 @@ func ExtractQuoted(store *corpus.Store, hostID int64, host corpus.Entry, body st
 	rs = unnest.Dedup(rs)
 	r.Distinct = len(rs)
 
-	// An inline reply is a run the host coloured inside a quoted message — the
-	// quoter's answer to a question they quoted, rather than another quote of the
-	// original. It is a live reply edge to the quoted message, so it must be its
-	// own entry with a parent to the message it answered, not text silently
-	// attributed to the quoted author. The colour signal lives only in the host's
-	// text/html part; the flattened text this body is peeled from loses it, so
-	// the runs are recovered here and matched back onto the blocks.
-	inlines := []unnest.InlineRun{}
-	if host.BodyHTML != "" {
-		inlines = unnest.InlineRuns(host.BodyHTML)
-	}
-
 	ids := make([]int64, len(rs))
 	for i, rec := range rs {
-		// Remove the host's inline replies from this quoted block first, so the
-		// block that remains is the quoted original and the answers are stored
-		// separately below. A run inside a quoted block is an interjection; a run
-		// at the top of the body is the host's own words and never reaches here
-		// (the first block is skipped above).
-		var answers []string
-		if len(inlines) > 0 {
-			var kept string
-			kept, answers = stripInlines(rec.Block.Text, inlines)
-			if len(answers) > 0 {
-				rec.Block.Text = kept
-			}
-		}
-
 		person, err := resolveRecovered(store, rec)
 		if err != nil {
 			return r, err
@@ -197,44 +168,6 @@ func ExtractQuoted(store *corpus.Store, hostID int64, host corpus.Entry, body st
 				return r, err
 			}
 		}
-
-		// Each inline answer is a message of its own: the host typed it into a
-		// reply to the block above, so it is a child of that block (id) — the
-		// answer to the very message it sits inside. It carries the host's
-		// identity and clock, not the quoted author's.
-		for _, answer := range answers {
-			if strings.TrimSpace(answer) == "" {
-				continue
-			}
-			okID, _, err := store.PutQuoted(corpus.Entry{
-				Source:    corpus.SourceMail,
-				ExtID:     "inline:" + corpus.BodySHA(host.ExtID, answer),
-				Kind:      "message",
-				TS:        host.TS,
-				TZ:        host.TZ,
-				PersonID:  host.PersonID,
-				Container: host.Container,
-				Subject:   cleanSubject(rec.Subject),
-				BodyText:  answer,
-			})
-			if err != nil {
-				return r, fmt.Errorf("storing inline reply %q of %s: %w", answer, host.ExtID, err)
-			}
-			if err := store.Sight(okID, hostID, "quoted", "inline reply"); err != nil {
-				return r, err
-			}
-			// The answer's parent is the message it was stitched into — the
-			// block's resolved id, the quoted original or its base.
-			if err := store.SetParent(okID, id); err != nil {
-				return r, err
-			}
-			if host.PersonID != 0 {
-				if err := corpus.Participate(store, okID, host.PersonID, corpus.RoleFrom); err != nil {
-					return r, err
-				}
-			}
-			r.Inline++
-		}
 	}
 
 	// Positional nesting IS the reply graph, and its direction is fixed: you quote
@@ -282,46 +215,3 @@ func resolveRecovered(store *corpus.Store, rec unnest.Recovered) (int64, error) 
 	}
 	return 0, nil
 }
-
-// stripInlines removes a host's inline replies from a quoted block's text,
-// returning the reduced original and the answers that were taken out.
-//
-// A run is matched when its words appear contiguously in the block (whitespace
-// collapsed, so a rewrap or client-added divider does not hide it), and any
-// leading "– " the quoter typed before the answer goes with it so the reduced
-// block reads as the question it was. A block may hold several answers; each is
-// found independently.
-func stripInlines(text string, inlines []unnest.InlineRun) (string, []string) {
-	var answers []string
-	rest := text
-	for _, run := range inlines {
-		if run.Text == "" {
-			continue
-		}
-		m := inlinePattern(run).FindStringIndex(rest)
-		if m == nil {
-			continue
-		}
-		answers = append(answers, run.Text)
-		rest = rest[:m[0]] + rest[m[1]:]
-	}
-	return rest, answers
-}
-
-// inlinePattern is the whitespace-tolerating shape of one answer run, with the
-// quoter's leading dash (the way an answer joins the line it answers) folded in.
-func inlinePattern(run unnest.InlineRun) *regexp.Regexp {
-	if re, ok := inlinePats[run.Text]; ok {
-		return re
-	}
-	var words []string
-	for _, w := range strings.Fields(run.Text) {
-		words = append(words, regexp.QuoteMeta(w))
-	}
-	pat := `(?:[-—]\s+)?` + strings.Join(words, `\s+`)
-	re := regexp.MustCompile(`(?i)` + pat)
-	inlinePats[run.Text] = re
-	return re
-}
-
-var inlinePats = map[string]*regexp.Regexp{}

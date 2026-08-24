@@ -1,7 +1,6 @@
 package mailingest
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -265,106 +264,5 @@ func TestAnAnswerInsideAQuotedMessageIsADerivedCopy(t *testing.T) {
 	}
 	if parentOf == 0 {
 		t.Fatalf("the modified copy was not linked to its base")
-	}
-}
-
-// Issue #29: an answer someone types INSIDE the message they quote, marked in
-// red in the text/html part, is a fresh reply from the quoter — not a rewrite
-// of the quoted original. The colour exists only in the HTML, so detection reads
-// it from the stored part; the flat text would hand the words to the quoted
-// author. Extraction must lift the colour-marked run out as its own entry,
-// attributed to the host who typed it, with a child edge to the message it
-// answers.
-func TestRedAnswerInsideAQuoteBecomesItsOwnEntry(t *testing.T) {
-	s := openTest(t)
-	sent := time.Date(2026, 5, 20, 1, 38, 14, 0, time.UTC)
-	original := "Can you confirm the meter number for the Rothwell depot before the " +
-		"tender pack goes out this afternoon? The retailer wants it on the cover " +
-		"sheet and I do not want to guess at it."
-	if _, err := Put(s, Message{
-		Envelope: Envelope{
-			ID: "orig", MessageID: "<orig@quarry.fed>", ThreadID: "t1",
-			From: "Deniz Aslan <deniz.aslan@quarry.fed>", Subject: "Rothwell tender pack",
-			Date: sent.Format(time.RFC1123Z),
-		},
-		Body: original,
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	// The quoter's red answer is interleaved into the text being quoted. It sits
-	// in the flattened Body (so the quote reads as edited) AND is colour-marked
-	// in the BodyHTML — the colour is the only sign it is the quoter's reply.
-	answer := "On the last invoice, I will send it over."
-	annotated := "Can you confirm the meter number for the Rothwell depot before the " +
-		"tender pack goes out before this afternoon? " + answer + " The retailer " +
-		"wants it on the cover sheet and I do not want to guess at it."
-	html := "<p>The meter number is on the way too.</p>" +
-		"<div>On Wed, 20 May 2026 at 11:38, Deniz Aslan " +
-		"&lt;deniz.aslan@quarry.fed&gt; wrote:</div><blockquote>" + original +
-		"<span style=\"color:red\"> " + answer + "</span> The retailer wants " +
-		"it on the cover sheet and I do not want to guess at it.</blockquote>"
-	if _, err := Put(s, Message{
-		Envelope: Envelope{
-			ID: "reply", MessageID: "<reply@moana.fed>", ThreadID: "t1",
-			From: "Tui Walker <tui.walker@moana.fed>", Subject: "Re: Rothwell tender pack",
-			Date: sent.Add(3 * time.Hour).Format(time.RFC1123Z),
-		},
-		Body: "The meter number is on the way too.\n\n" +
-			"On Wed, 20 May 2026 at 11:38, Deniz Aslan <deniz.aslan@quarry.fed> wrote:\n" +
-			annotated,
-		BodyHTML: html,
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	// The answer is its own entry: edge to the original, authored by the quoter.
-	var inlineID, inlinePerson, inlineParent int64
-	var inlineBody string
-	if err := s.DB().QueryRow(`
-		select id, person_id, coalesce(parent_id,0), body_text
-		  from entries where ext_id like 'inline:%'`).Scan(
-		&inlineID, &inlinePerson, &inlineParent, &inlineBody); err != nil {
-		t.Fatal(err)
-	}
-	if strings.Join(strings.Fields(inlineBody), " ") != answer {
-		t.Fatalf("inline body = %q, want the red answer %q", inlineBody, answer)
-	}
-
-	var origID, origPerson int64
-	if err := s.DB().QueryRow(`
-		select id, person_id from entries where ext_id = 'mail:<orig@quarry.fed>'`,
-	).Scan(&origID, &origPerson); err != nil {
-		t.Fatal(err)
-	}
-	if inlineParent != origID {
-		t.Fatalf("inline parent = %d, want the quoted original %d (the child edge)",
-			inlineParent, origID)
-	}
-
-	var replyPerson int64
-	if err := s.DB().QueryRow(`
-		select person_id from entries where ext_id = 'mail:<reply@moana.fed>'`,
-	).Scan(&replyPerson); err != nil {
-		t.Fatal(err)
-	}
-	if inlinePerson == 0 || inlinePerson != replyPerson {
-		t.Fatalf("inline author = %d, want the quoter's person %d (not the quoted author %d)",
-			inlinePerson, replyPerson, origPerson)
-	}
-	if inlinePerson == origPerson {
-		t.Fatalf("inline answer attributed to the quoted original's author — that is the bug #29 removes")
-	}
-
-	// With the answer lifted out, the quoted block is the original again and
-	// collapses to it: no separate quote entry survives.
-	var quotes int64
-	if err := s.DB().QueryRow(`
-		select count(*) from entries where ext_id like 'quote:%'
-		  and source = 'mail'`).Scan(&quotes); err != nil {
-		t.Fatal(err)
-	}
-	if quotes != 0 {
-		t.Fatalf("quoted copies = %d, want 0 (the quote, denuded of the answer, folded into the original)", quotes)
 	}
 }
