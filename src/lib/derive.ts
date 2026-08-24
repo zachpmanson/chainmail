@@ -2,6 +2,17 @@ import type { Entry, Timeline } from "./spec";
 import { entryId, initials } from "./anchors";
 import { order, zones, type ZoneState, type Zones } from "./chronological";
 import { layout, type Layout } from "./lanes";
+import { editHtml } from "./editDiff";
+
+/** A quoter's edit resolved for the bubble: diff markup plus attribution. */
+export interface RowEdit {
+  /** spec id of the original message the change was made to (anchor target) */
+  base: string;
+  who: string;
+  time: string;
+  /** the quoter's modified text as diff-marked HTML (`.edel` strike / `.eins` insert) */
+  html: string;
+}
 
 export interface Row {
   entry: Entry;
@@ -13,6 +24,8 @@ export interface Row {
   orgSlot: string;
   /** class suffix for this sender's avatar image, e.g. "p0"; absent = initials */
   avatarClass?: string;
+  /** the quoter's inline edits to this message's quoted text, resolved to diff markup */
+  edits?: RowEdit[];
   stamp: { date: string; time?: string; tz?: string; zone: ZoneState };
 }
 
@@ -43,8 +56,30 @@ export function derive(input: Timeline): View {
   const used = new Set<string>();
   const idMap = new Map<Entry, string>(input.messages.map((e) => [e, entryId(e, used)]));
   const idOf = (e: Entry) => idMap.get(e)!;
+  const byId = new Map<string, Entry>();
+  for (const [e, id] of idMap) byId.set(id, e);
 
-  const ordered = order(input.messages, idOf);
+  // A quoter's edit to a quoted message (issue #42) is drawn inside the message
+  // that quoted it, never as its own floating node. The backend already attaches
+  // the edit to the host and carries its own id; here we drop the derived entry
+  // from the laid-out rows and let the host bubble render it inline. The guard
+  // on descendants keeps the trail intact in the vanishing edge where someone
+  // replied to the edited copy — then it stays a real row rather than losing a
+  // subtree.
+  const children = new Map<string, string[]>();
+  for (const e of input.messages) {
+    const p = e.parent && byId.has(e.parent) ? e.parent : null;
+    if (p) children.set(p, [...(children.get(p) ?? []), idOf(e)]);
+  }
+  const hoisted = new Set<string>();
+  for (const e of input.messages) {
+    for (const ed of e.edits ?? []) {
+      if (ed.id && byId.has(ed.id) && !children.has(ed.id)) hoisted.add(ed.id);
+    }
+  }
+  const visible = input.messages.filter((e) => !hoisted.has(idOf(e)));
+
+  const ordered = order(visible, idOf);
   const spec: Timeline = { ...input, messages: ordered as Timeline["messages"] };
   const lay = layout(ordered, idOf);
   const z = zones(ordered);
@@ -86,6 +121,16 @@ export function derive(input: Timeline): View {
     const id = idOf(entry);
     const chain = lay.chainOf.get(id)!;
     const lbl = z.label(entry);
+    const edits = (entry.edits ?? [])
+      .map((ed) => {
+        const baseEntry = ed.base ? byId.get(ed.base) : undefined;
+        return {
+          base: ed.base ?? "",
+          who: ed.who ?? entry.sender ?? "",
+          time: ed.time ?? entry.time ?? "",
+          html: editHtml(baseEntry?.body ?? "", ed.body ?? ""),
+        };
+      });
     return {
       entry, id, chain,
       row: lay.row.get(id)!,
@@ -93,6 +138,7 @@ export function derive(input: Timeline): View {
       isChainStart: lay.row.get(id) === firstRow.get(chain),
       orgSlot: slot(entry.org),
       avatarClass: entry.sender ? avatarClass.get(entry.sender) : undefined,
+      edits: edits.length ? edits : undefined,
       stamp: { date: entry.date, time: entry.time, tz: lbl.tz, zone: lbl.state },
     };
   });

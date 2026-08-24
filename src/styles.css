@@ -238,6 +238,20 @@
   .bd img { max-width:100%; height:auto; }
   .bd table { min-width:0; max-width:100%; }
   .bd td, .bd th { vertical-align:top; }
+  /* A quoter's inline edit to a quoted message (issue #42) renders as a pale
+     block inside the quoting message's bubble. No colour is load-bearing: the
+     relation came from the ingest's graded overlap, and these classes only
+     shape a visible diff — strike for the removed words, a soft highlight for
+     the inserted ones. */
+  .edits { margin:.35rem 0 0; }
+  .edit { background:var(--dash); border-left:2px solid var(--line);
+    border-radius:6px; padding:.3rem .55rem; }
+  .edit .ehdr { font-size:.72rem; color:var(--muted); } .edit .ehdr a { color:var(--accent); }
+  .edit .ets { margin-left:.35rem; }
+  .edit .ebd { font-size:.92rem; overflow-x:auto; }
+  .edit .edel { color:var(--muted); text-decoration:line-through; }
+  .edit .eins { background:color-mix(in srgb, var(--mine) 55%, transparent);
+    border-radius:3px; padding:0 .12rem; }
   /* "plain" mode. The Go side already drops what would break a theme — colours,
      pixel widths, stylesheets — so what survives into a body is the emphasis and
      alignment the sender chose. This turns that off without removing structure:
