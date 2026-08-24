@@ -15,6 +15,7 @@ import { ViewPage } from "./components/ViewPage";
 import { NotFound } from "./components/NotFound";
 import { Rendered } from "./components/Rendered";
 import { StatusView } from "./components/StatusView";
+import { SpecsView } from "./components/SpecsView";
 import type { SearchMode } from "./lib/api";
 
 /**
@@ -29,6 +30,9 @@ import type { SearchMode } from "./lib/api";
  *   "/view/<name>" — a page POST /v1/spec saved under that name, reloadable by
  *                    the URL alone. The server answers any /view/* path with
  *                    the shell; everything deeper is this route's business.
+ *   "/status"      — which backends the corpus reads through are logged in.
+ *   "/specs"      — every page saved under /view/<name>, newest first, so a
+ *                     saved build can be reopened without remembering its name.
  *   "*"            — the client's own 404. Unknown paths reach the shell too,
  *                    so the client (which knows every route) is the one that
  *                    can truthfully say "no page here".
@@ -164,13 +168,19 @@ const statusRoute = createRoute({
   component: StatusView,
 });
 
+const specsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/specs",
+  component: SpecsView,
+});
+
 const viewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/view/$name",
   component: ViewPage,
 });
 
-const routeTree = rootRoute.addChildren([searchRoute, statusRoute, viewRoute]);
+const routeTree = rootRoute.addChildren([searchRoute, statusRoute, specsRoute, viewRoute]);
 
 /** The app's router, bound to the browser's history. */
 export const router = createRouter({

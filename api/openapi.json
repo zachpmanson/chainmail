@@ -190,6 +190,25 @@
         }
       }
     },
+    "/v1/specs": {
+      "get": {
+        "summary": "Every saved page, newest saved or refreshed first — the index behind the /specs route.",
+        "description": "The list half of the spec storage: what GET /v1/specs/{name} can serve, so a saved build can be reopened without remembering its name. Each row is name + title + last-saved time — titles alone cannot tell saved pages apart (distinct builds routinely share one), so the mtime is what disambiguates.",
+        "operationId": "listSavedSpecs",
+        "responses": {
+          "200": {
+            "description": "Saved pages, newest first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/specs/{name}": {
       "get": {
         "summary": "A page that POST /v1/spec saved under a name — the read half of the render route /view/<name>.",
@@ -1271,6 +1290,49 @@
             "type": "string",
             "description": "What went wrong, in the same words the CLI would use. Written to be shown to a person.",
             "example": "mode \"semantic\": no embedding daemon reachable at http://localhost:11434: start it with `ollama serve`"
+          }
+        }
+      },
+      "SavedSpec": {
+        "type": "object",
+        "description": "One saved page, as the index lists it: enough to reopen it without fetching the whole page.",
+        "required": [
+          "name",
+          "title",
+          "savedAt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The name the build was saved under. /view/<name> opens it.",
+            "example": "solar-install-quote"
+          },
+          "title": {
+            "type": "string",
+            "description": "The page's title. Distinct saved pages can share a title — savedAt is what tells them apart."
+          },
+          "savedAt": {
+            "type": "string",
+            "description": "UTC RFC3339 stamp of the last save or refresh; the page's mtime, which is also what orders the index.",
+            "format": "date-time"
+          }
+        }
+      },
+      "SpecListResponse": {
+        "type": "object",
+        "description": "Every page the specs dir holds, newest saved/refreshed first. The dir grows one row per distinct name (a refresh rewrites the same file), so the list is capped at a generous bound rather than a treadmill.",
+        "required": [
+          "specs"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "specs": {
+            "type": "array",
+            "description": "Saved pages, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/SavedSpec"
+            }
           }
         }
       },

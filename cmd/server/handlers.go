@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -89,6 +90,7 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("/v1/search", get(s.search))
 	mux.HandleFunc("/v1/status", get(s.status))
 	mux.HandleFunc("/v1/spec", post(s.spec))
+	mux.HandleFunc("/v1/specs", get(s.savedSpecs))
 	mux.HandleFunc("/v1/specs/{name}", get(s.savedSpec))
 	mux.HandleFunc("/v1/entries/{extId}", get(s.entry))
 	mux.HandleFunc("/v1/chains/{rootExtId}", get(s.chain))
@@ -400,6 +402,84 @@ func (s *server) savedSpec(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	send(w, http.StatusOK, json.RawMessage(blob))
+}
+
+// savedSpecs is the index half of the specs dir: every page POST /v1/spec
+// saved, newest saved/refreshed first, so a saved build can be reopened
+// without remembering its name. It surfaces only name, title and mtime per
+// page — never a full page body — so the index stays cheap however many pages
+// accumulate.
+func (s *server) savedSpecs(w http.ResponseWriter, r *http.Request) {
+	specs, err := s.listSpecs()
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	if specs == nil {
+		specs = []savedSpecSummary{}
+	}
+	send(w, http.StatusOK, specListResponse{Specs: specs})
+}
+
+// maxListedSpecs caps the index so it cannot balloon with every refresh of one
+// page: each saved page is one entry no matter how often it is rewritten, but a
+// page saved under dozens of distinct names still deserves a bounded list. The
+// cap is generous because the dir only grows one row per distinct name.
+const maxListedSpecs = 200
+
+// listSpecs reads the server's specs dir and returns every saved page, newest
+// (by mtime, i.e. last saved or refreshed) first.
+func (s *server) listSpecs() ([]savedSpecSummary, error) {
+	dir, err := os.ReadDir(s.specs)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil // no saved pages yet: an empty list, not an error
+		}
+		return nil, err
+	}
+	out := make([]savedSpecSummary, 0, len(dir))
+	for _, de := range dir {
+		if de.IsDir() || !strings.HasSuffix(de.Name(), ".json") {
+			continue
+		}
+		name := strings.TrimSuffix(de.Name(), ".json")
+		if !validSpecName(name) {
+			// A file that cannot name a route is not a saved page; don't list it.
+			continue
+		}
+		info, err := de.Info()
+		if err != nil {
+			continue
+		}
+		out = append(out, savedSpecSummary{
+			Name:    name,
+			Title:   specTitleOf(filepath.Join(s.specs, de.Name())),
+			SavedAt: stamp(info.ModTime()),
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].SavedAt > out[j].SavedAt })
+	if len(out) > maxListedSpecs {
+		out = out[:maxListedSpecs]
+	}
+	return out, nil
+}
+
+// specTitleOf reads just the title out of a saved page — the one field the
+// index surfaces before opening it. A page that reads or parses cleanly has a
+// title by contract (timeline.schema.json marks it required); a page that does
+// not is treated as titleless rather than breaking the whole index.
+func specTitleOf(path string) string {
+	blob, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	var meta struct {
+		Title string `json:"title"`
+	}
+	if err := json.Unmarshal(blob, &meta); err != nil {
+		return ""
+	}
+	return meta.Title
 }
 
 // refresh brings a page that has already been built up to date: the caller

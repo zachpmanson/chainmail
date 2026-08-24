@@ -52,6 +52,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/specs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every saved page, newest saved or refreshed first — the index behind the /specs route.
+         * @description The list half of the spec storage: what GET /v1/specs/{name} can serve, so a saved build can be reopened without remembering its name. Each row is name + title + last-saved time — titles alone cannot tell saved pages apart (distinct builds routinely share one), so the mtime is what disambiguates.
+         */
+        get: operations["listSavedSpecs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/specs/{name}": {
         parameters: {
             query?: never;
@@ -579,6 +599,26 @@ export interface components {
              */
             error: string;
         };
+        /** @description One saved page, as the index lists it: enough to reopen it without fetching the whole page. */
+        SavedSpec: {
+            /**
+             * @description The name the build was saved under. /view/<name> opens it.
+             * @example solar-install-quote
+             */
+            name: string;
+            /** @description The page's title. Distinct saved pages can share a title — savedAt is what tells them apart. */
+            title: string;
+            /**
+             * Format: date-time
+             * @description UTC RFC3339 stamp of the last save or refresh; the page's mtime, which is also what orders the index.
+             */
+            savedAt: string;
+        };
+        /** @description Every page the specs dir holds, newest saved/refreshed first. The dir grows one row per distinct name (a refresh rewrites the same file), so the list is capped at a generous bound rather than a treadmill. */
+        SpecListResponse: {
+            /** @description Saved pages, newest first. */
+            specs: components["schemas"]["SavedSpec"][];
+        };
         /**
          * Timeline
          * @description One email trail, unspooled out of its threads and forwards into a single chronological transcript. Produced by a collector (e.g. the mail-timeline skill); consumed by the chainmail renderer.
@@ -690,29 +730,17 @@ export interface components {
             threadId?: string;
             /** @description Id of the entry this replies to. Absent means it opens a chain. Coverage here drives ordering, lanes and the reply tree. */
             parent?: string;
-            /**
-             * @description A quoter's in-place change to a message it quoted (issue #42). Each names the base that was edited, who made the change (the quoter), when, and the quoter's modified text. The renderer draws these inline inside this message instead of floating the derived copy as its own node.
-             */
+            /** @description A quoter's in-place change to a message it quoted (issue #42). Each names the base that was edited, who made the change (the quoter), when, and the quoter's modified text. The renderer draws these inline inside this message instead of floating the derived copy as its own node. */
             edits?: {
-                /**
-                 * @description Spec id of the derived (edited) copy; the diff source.
-                 */
+                /** @description Spec id of the derived (edited) copy; the diff source. */
                 id?: string;
-                /**
-                 * @description Spec id of the original message the change was made to.
-                 */
+                /** @description Spec id of the original message the change was made to. */
                 base?: string;
-                /**
-                 * @description The quoter who made the edit.
-                 */
+                /** @description The quoter who made the edit. */
                 who?: string;
-                /**
-                 * @description When the quoting message was sent, e.g. '14:00'.
-                 */
+                /** @description When the quoting message was sent, e.g. '14:00'. */
                 time?: string;
-                /**
-                 * @description The quoter's modified text of the quote, as stored (plain text, not HTML).
-                 */
+                /** @description The quoter's modified text of the quote, as stored (plain text, not HTML). */
                 body?: string;
             }[];
             /** @description Meeting scheduling exhaust (invitation, notes, accept/decline). Forces the classification the renderer would otherwise infer. */
@@ -857,6 +885,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listSavedSpecs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Saved pages, newest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpecListResponse"];
                 };
             };
         };

@@ -123,10 +123,27 @@ type personSummary struct {
 	Received    int64    `json:"received"`
 }
 
-// stamp renders a corpus timestamp. UTC, always: the corpus stores unix
+// specListResponse is the answer to GET /v1/specs: every page POST /v1/spec
+// saved, newest first.
+type specListResponse struct {
+	Specs []savedSpecSummary `json:"specs"`
+}
+
+// savedSpecSummary is one row of the index: enough to list and reopen a page
+// without fetching it whole. The name IS the /view/<name> URL, the savedAt is
+// the disambiguation the page's own title cannot always give (distinct saved
+// pages routinely share a title), and title is what the links spell out.
+type savedSpecSummary struct {
+	Name    string `json:"name"`
+	Title   string `json:"title"`
+	SavedAt string `json:"savedAt"`
+}
+
+// stamp renders a UTC timestamp. UTC on purpose: the corpus stores unix
 // seconds, so a local rendering would say whatever zone the server happens to
-// run in and mean nothing to the client. Per-entry wall clocks live in
-// corpusEntry.tz and in the timeline spec, which is where they belong.
+// run in and mean nothing to the client. Per-message wall clocks live in
+// corpusEntry and the timeline spec, which is where they belong; a page's
+// saved-at is a property of the file, best pinned where the file's mtime is.
 func stamp(t time.Time) string { return t.UTC().Format(time.RFC3339) }
 
 func toEntryHit(h corpus.EntryHit) entryHit {
