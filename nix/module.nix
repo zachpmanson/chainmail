@@ -102,6 +102,12 @@ in {
         User = cfg.user;
         Group = cfg.user;
         StateDirectory = "chainmail";
+        # The corpus is shared with beltino (who ingests it): the group needs
+        # write to the state dir. StateDirectoryMode is REQUIRED, not cosmetic
+        # — systemd adjusts an existing StateDirectory to this mode on every
+        # start and defaults to 0755, which silently clobbers any tmpfiles
+        # mode (e.g. the 0770 z-rule the machine config adds) at each restart.
+        StateDirectoryMode = "0770";
         WorkingDirectory = cfg.stateDir;
         # No network namespace beyond loopback and whatever a later slurper
         # needs; ProtectSystem=strict makes the store and /etc read-only.
