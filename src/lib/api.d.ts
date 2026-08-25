@@ -457,6 +457,11 @@ export interface components {
              * @description UTC RFC3339 stamp of the last probe. Absent when no probe has run.
              */
             checkedAt?: string;
+            /**
+             * Format: date-time
+             * @description UTC RFC3339 stamp of the next scheduled slurp pulse. Computed live from the hourly timer cadence (OnCalendar="*:0"), so it is present even before any probe has run.
+             */
+            nextSlurpAt?: string;
             /** @description Every backend, in the screen's order. */
             services: components["schemas"]["ServiceStatus"][];
         };

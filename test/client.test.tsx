@@ -161,6 +161,7 @@ const buildHandler: Handler = (c) => {
 /** The /status view's fixtures: three backends and a small corpus. */
 const STATUS = {
   checkedAt: "2026-08-22T15:04:00Z",
+  nextSlurpAt: "2026-08-22T16:00:00Z",
   services: [
     { id: "mail", label: "Gmail (docket)", status: "ok" },
     { id: "slack", label: "Slack (slackdump)", status: "needs-auth", detail: "run the slackdump import" },
@@ -434,6 +435,13 @@ describe("the status route /status", () => {
     expect(await screen.findByText("Gmail (docket)")).toBeTruthy();
     // The detail under a not-ok row says what the fix is.
     expect(await screen.findByText("start it with `ollama serve`")).toBeTruthy();
+
+    // The note shows when the state was last measured AND when the next scheduled
+    // slurp fires; both carry a clock now, not just a day. Exact text varies by
+    // the machine's timezone, so assert the sentence holds both timestamps.
+    const note = (await screen.findByText(/Next slurp/)).textContent ?? "";
+    expect(note).toContain("Last checked");
+    expect(note).toMatch(/\d{1,2}:\d{2}/);
 
     // Corpus coverage from /v1/stats.
     expect(await screen.findByText("4281")).toBeTruthy();

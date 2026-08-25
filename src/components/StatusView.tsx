@@ -28,10 +28,17 @@ function OneRow({ svc }: { svc: ServiceStatus }) {
   );
 }
 
-/** The wire's yyyy-mm-dd day is the part worth showing; the clock is the
- * operator's own, left to them. */
-function dayOf(stamp?: string): string {
-  return stamp ? stamp.slice(0, 10) : "";
+/** A UTC RFC3339 stamp shown in the reader's own local time: date and clock,
+ *  year dropped when it is the current one, so a recent check reads fresh. */
+function when(stamp: string): string {
+  const d = new Date(stamp);
+  if (Number.isNaN(d.getTime())) return stamp;
+  const nowY = new Date().getFullYear();
+  const date = d.getFullYear() === nowY
+    ? d.toLocaleDateString(undefined, { day: "numeric", month: "short" })
+    : d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  const t = d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  return `${date}, ${t}`;
 }
 
 function CorpusStats({ s }: { s: Stats }) {
@@ -82,8 +89,9 @@ export function StatusView() {
       <h2 className="sthead">Logged in</h2>
       <p className="stnote">
         Run <code>corpus status</code> to re-measure.
-        {status.data?.checkedAt ? <> Last checked {dayOf(status.data.checkedAt)}.</>
+        {status.data?.checkedAt ? <> Last checked {when(status.data.checkedAt)}.</>
           : " Nothing measured yet."}
+        {status.data?.nextSlurpAt ? <> Next slurp {when(status.data.nextSlurpAt)}.</> : null}
       </p>
       {status.isError ? (
         <p className="selfail" role="alert">
