@@ -143,11 +143,20 @@ export function derive(input: Timeline): View {
     const edits = (entry.edits ?? [])
       .map((ed) => {
         const baseEntry = ed.base ? byId.get(ed.base) : undefined;
+        // The derived copy (`ed.id`) is the message the quoter actually pasted,
+        // and it is where a pasted quote's formatting survives (a red answer in
+        // a forwarded thread, say). Format from it when present; the bare
+        // original only carries the text that has still to gain the edit.
+        const copyEntry = ed.id ? byId.get(ed.id) : undefined;
         return {
           base: ed.base ?? "",
           who: ed.who ?? entry.sender ?? "",
           time: ed.time ?? entry.time ?? "",
-          html: editHtml(baseEntry?.body ?? "", ed.body ?? ""),
+          html: editHtml(
+            copyEntry?.body ?? "",
+            baseEntry?.body ?? "",
+            ed.body ?? "",
+          ),
           origWho: baseEntry?.sender ?? "",
           origStamp: [baseEntry?.date, baseEntry?.time].filter(Boolean).join(" "),
         };
