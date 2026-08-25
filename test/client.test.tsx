@@ -592,6 +592,39 @@ const EDIT_SPEC = {
   ],
 };
 
+describe("clicking an in-page anchor", () => {
+  it("smooth-scrolls to the target and records it in the URL", async () => {
+    handler = (c) =>
+      pathOf(c) === "/v1/specs/loom-cutover"
+        ? json(200, EDIT_SPEC)
+        : json(500, { error: "unexpected call" });
+    // jsdom does not implement scrollIntoView; record the call so the test can
+    // assert the smooth behaviour instead of the scroll's effect.
+    const scrolled: Array<[Element | null, ScrollIntoViewOptions | undefined]> = [];
+    const orig = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function (arg?: ScrollIntoViewOptions) {
+      scrolled.push([this, arg]);
+    };
+    try {
+      await mountApp("/view/loom-cutover");
+      // "original" is a quoter's-edit link whose href is #c-orig (asserted by
+      // the sibling test); clicking it must scroll, not teleport.
+      const anchor = (await screen.findByText("original")).closest("a")!;
+      expect(anchor.getAttribute("href")).toBe("#c-orig");
+      click(anchor);
+
+      expect(scrolled).toHaveLength(1);
+      expect(scrolled[0]![0]).toBe(document.getElementById("c-orig"));
+      expect(scrolled[0]![1]).toEqual({ block: "start", behavior: "smooth" });
+      // The URL carries the same id :target would have used, so the permalink
+      // and the flash still work exactly as a native jump would.
+      expect(location.hash).toBe("#c-orig");
+    } finally {
+      Element.prototype.scrollIntoView = orig;
+    }
+  });
+});
+
 describe("a quoter's edit in the transcript", () => {
   it("renders the edited quote and an attributed 'original from … at …' header", async () => {
     handler = (c) =>
