@@ -24,30 +24,14 @@ export function attach(doc: Document = document): () => void {
   const mini = doc.getElementById("mini");
   const entries = [...doc.querySelectorAll<HTMLElement>(".msg[id], .sys[id]")];
 
-  /* ---------- in-page anchors scroll, not teleport ---------- */
-  // Every internal cross-reference (reply spine, unspooled-from, xref, or a
-  // permalink link) is a bare href="#id". The browser default jumps instantly;
-  // the point of the link is *reading the message*, so the show is the trip.
-  // Intercept the click, scroll the target into view smoothly, and write the
-  // same id to the URL so :target, the flash and the copyable permalink all
-  // behave exactly as the native jump would have.
-  on(doc, "click", (ev) => {
-    const t = ev.target as Element | null;
-    const a = t?.closest?.(`a[href^="#"]`) as HTMLAnchorElement | null;
-    if (!a) return;
-    const href = a.getAttribute("href") ?? "";
-    if (href.length < 2) return;
-    const id = decodeURIComponent(href.slice(1));
-    const el = doc.getElementById(id);
-    if (!el) return; // not a same-page anchor — let the default navigate it
-    const m = ev as MouseEvent;
-    // A modified click (or a changed navigation hand) wants the plain default:
-    // the URL bar stays honest and the browser does its usual thing.
-    if (m.metaKey || m.ctrlKey || m.shiftKey || m.altKey || m.button !== 0) return;
-    ev.preventDefault();
-    el.scrollIntoView({ block: "start", behavior: "smooth" });
-    history.replaceState(null, "", `#${id}`);
-  });
+  /* ---------- in-page anchors scroll, not teleport ----------
+   * Every internal cross-reference (reply spine, unspooled-from, xref, or a
+   * permalink link) is a bare href="#id", and CSS sets
+   * `scroll-behavior:smooth` on the root — so the browser's OWN fragment
+   * navigation already smooth-scrolls to the target, updates the URL hash and
+   * fires :target. No JS needed here; intercepting the click (as a earlier
+   * version did to force `behavior:"smooth"`) is what the CSS makes redundant.
+   */
 
   /* ---------- toggles ---------- */
   const toggle = (id: string, cls: string, key: string, defaultOn: boolean) => {
@@ -212,8 +196,11 @@ export function attach(doc: Document = document): () => void {
     for (const hit of mini.querySelectorAll<SVGRectElement>(".hit")) {
       const id = hit.dataset.id!;
       const el = doc.getElementById(id);
+      // The minimap's nodes are SVG rectangles, not links, so they still need JS
+      // to say *which* message to show — but CSS scroll-behavior:smooth makes
+      // the resulting scroll glide, so no behavior:"smooth" is needed here.
       on(hit, "click", () => {
-        el?.scrollIntoView({ block: "center", behavior: "smooth" });
+        el?.scrollIntoView({ block: "center" });
         history.replaceState(null, "", `#${id}`);
       });
       on(hit, "mouseenter", () => { el?.classList.add("mhov"); hovId = id; refresh(); });

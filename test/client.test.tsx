@@ -593,14 +593,17 @@ const EDIT_SPEC = {
 };
 
 
-describe("clicking an in-page anchor", () => {
-  it("scrolls smoothly to the target and records the URL", async () => {
+describe("in-page anchor links", () => {
+  it("are plain #-fragment links that no JS intercepts", async () => {
     handler = (c) =>
       pathOf(c) === "/v1/specs/loom-cutover"
         ? json(200, EDIT_SPEC)
         : json(500, { error: "unexpected call" });
-    // jsdom has no scrolling, so capture scrollIntoView and assert the native
-    // smooth request we make, including the block alignment.
+    // With scroll-behavior:smooth in CSS, a plain href="#id" link smooth-scrolls
+    // natively — the browser does the rest. jsdom cannot run that native
+    // navigation (and the router intercepts clicks), so the contract to pin is
+    // that the link is a same-page fragment AND our code no longer hijacks the
+    // click with a scrollIntoView (the earlier JS handler is gone).
     const scrolled: Array<[Element, ScrollIntoViewOptions | undefined]> = [];
     const orig = Element.prototype.scrollIntoView;
     Element.prototype.scrollIntoView = function (arg?: ScrollIntoViewOptions) {
@@ -609,15 +612,12 @@ describe("clicking an in-page anchor", () => {
     try {
       await mountApp("/view/loom-cutover");
       const anchor = (await screen.findByText("original")).closest("a")!;
+      // A bare # fragment into the page's own message — left to the browser.
       expect(anchor.getAttribute("href")).toBe("#c-orig");
+      expect(document.getElementById("c-orig")).not.toBeNull();
       click(anchor);
-
-      // The URL records the same id, exactly as a native :target would.
-      expect(location.hash).toBe("#c-orig");
-      // And we asked the browser for a smooth trip to the message, not a jump.
-      expect(scrolled).toHaveLength(1);
-      expect(scrolled[0]![0]).toBe(document.getElementById("c-orig"));
-      expect(scrolled[0]![1]).toEqual({ block: "start", behavior: "smooth" });
+      // Our JS asked for no scroll; whether the browser scrolls is up to it.
+      expect(scrolled).toHaveLength(0);
     } finally {
       Element.prototype.scrollIntoView = orig;
     }
