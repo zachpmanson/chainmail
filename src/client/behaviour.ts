@@ -24,6 +24,32 @@ export function attach(doc: Document = document): () => void {
   const mini = doc.getElementById("mini");
   const entries = [...doc.querySelectorAll<HTMLElement>(".msg[id], .sys[id]")];
 
+  /* ---------- in-page anchors scroll, not teleport ---------- */
+  // Every internal cross-reference (reply spine, unspooled-from, xref, or a
+  // permalink link) is a bare href="#id". The browser default jumps instantly;
+  // the point of the link is *reading the message*, so the show is the trip.
+  // Intercept the click, scroll the target into view smoothly, and write the
+  // same id to the URL so :target, the flash and the copyable permalink all
+  // behave exactly as the native jump would have.
+  const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  on(doc, "click", (ev) => {
+    const t = ev.target as Element | null;
+    const a = t?.closest?.(`a[href^="#"]`) as HTMLAnchorElement | null;
+    if (!a) return;
+    const href = a.getAttribute("href") ?? "";
+    if (href.length < 2) return;
+    const id = decodeURIComponent(href.slice(1));
+    const el = doc.getElementById(id);
+    if (!el) return; // not a same-page anchor — let the default navigate it
+    const m = ev as MouseEvent;
+    // A modified click (or a changed navigation hand) wants the plain default:
+    // the URL bar stays honest and the browser does its usual thing.
+    if (m.metaKey || m.ctrlKey || m.shiftKey || m.altKey || m.button !== 0) return;
+    ev.preventDefault();
+    el.scrollIntoView({ block: "start", behavior: reducedMotion() ? "auto" : "smooth" });
+    history.replaceState(null, "", `#${id}`);
+  });
+
   /* ---------- toggles ---------- */
   const toggle = (id: string, cls: string, key: string, defaultOn: boolean) => {
     const btn = doc.getElementById(id) as HTMLButtonElement | null;
