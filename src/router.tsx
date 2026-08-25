@@ -150,6 +150,8 @@ function RootLayout() {
         <Link to="/">Home</Link>
         <span className="sep">·</span>
         <Link to="/specs">Browse saved specs</Link>
+        <span className="sep">·</span>
+        <Link to="/status">Services</Link>
       </footer>
     </>
   );
