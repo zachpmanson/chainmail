@@ -70,9 +70,23 @@ const (
 // offers a confident match. The second return says whether a signature or a
 // disclaimer was folded out of it.
 func recoverHTML(text string, hosts []string, bf bodyFold) (string, bool) {
+	best := bestCandidate(text, hosts)
+	if best == nil {
+		return "", false
+	}
+	return renderBody(best.extract(), bf)
+}
+
+// bestCandidate finds the host block that most confidently holds text, or nil
+// when no block clears every confidence bound.
+//
+// Two blocks of the trail fitting an entry while saying different things is an
+// ambiguity that cannot be told apart, and guessing is the one outcome worse
+// than plain text.
+func bestCandidate(text string, hosts []string) *candidate {
 	needle := textsim.Tokens(text)
 	if len(needle) < minNeedleTokens {
-		return "", false
+		return nil
 	}
 	var best, rival *candidate
 	for _, h := range hosts {
@@ -90,16 +104,41 @@ func recoverHTML(text string, hosts []string, bf bodyFold) (string, bool) {
 		}
 	}
 	if best == nil {
-		return "", false
+		return nil
 	}
 	if rival != nil && best.f1-rival.f1 < ambiguityMargin &&
 		textsim.Similarity(best.tokens, rival.tokens) < sameContent {
-		// Two blocks of the trail fit this entry and they do not say the same
-		// thing, so one of them is a different message. Which one cannot be told
-		// from here, and guessing is the one outcome worse than plain text.
-		return "", false
+		return nil
 	}
-	return renderBody(best.extract(), bf)
+	return best
+}
+
+// inlineImages returns the filenames of the images a quoted message placed in
+// its block: the alt text of every cid-referenced <img> in the host block that
+// best matches text. Gmail writes the pasted file's name as the image's alt, so
+// alt text is how the part is matched back to the MIME attachment that the
+// host's row carries. See attributeInlineImages.
+func inlineImages(text string, hosts []string) []string {
+	c := bestCandidate(text, hosts)
+	if c == nil {
+		return nil
+	}
+	var out []string
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode && n.DataAtom == atom.Img && isDeadImage(n) {
+			if a := strings.TrimSpace(attr(n, "alt")); a != "" {
+				out = append(out, a)
+			}
+		}
+		for ch := n.FirstChild; ch != nil; ch = ch.NextSibling {
+			walk(ch)
+		}
+	}
+	for n := c.first; n != nil && n != c.end; n = n.NextSibling {
+		walk(n)
+	}
+	return out
 }
 
 // candidate is one block of a host's markup: a run of sibling nodes bounded by

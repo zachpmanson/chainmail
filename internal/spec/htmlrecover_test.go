@@ -225,3 +225,79 @@ func TestARecoveredBlockIsFoldedByTheSameMappingAsAMailboxMessage(t *testing.T) 
 		t.Errorf("body = %q, want the folded lines still in the document", got)
 	}
 }
+
+func TestInlineImagesFindsTheCidImageInTheMatchedBlock(t *testing.T) {
+	// A host whose quoted message pastes an image in with a cid: reference — the
+	// #51 shape. The image's alt is its filename, which is how it is matched back
+	// to the host's MIME attachment.
+	host := `<div dir="ltr">Thanks for the screenshot.</div>` +
+		`<div class="gmail_quote">` +
+		`<div class="gmail_attr">On Mon, 17 Aug 2026 at 11:11, Chris &lt;chris@x.example&gt; wrote:</div>` +
+		`<blockquote class="gmail_quote">` +
+		`<div>I retendered these three sites last week but I am not sure why they ` +
+		`still show up on this report every morning, despite the fact that we ` +
+		`completed the whole review process for each of them before the end of ` +
+		`the previous month.</div>` +
+		`<img src="cid:ii_abc123" alt="image.png" width="562" height="154">` +
+		`</blockquote></div>`
+	text := "I retendered these three sites last week but I am not sure why they " +
+		"still show up on this report every morning, despite the fact that we " +
+		"completed the whole review process for each of them before the end of " +
+		"the previous month."
+	got := inlineImages(text, []string{host})
+	if len(got) != 1 || got[0] != "image.png" {
+		t.Fatalf("inlineImages = %v, want [image.png]", got)
+	}
+}
+
+func TestInlineImagesNoneWhenBlockHasNoCidImage(t *testing.T) {
+	host := `<div dir="ltr">ok</div>` +
+		`<div class="gmail_quote">` +
+		`<div class="gmail_attr">On Mon, 17 Aug 2026 at 11:11, Chris wrote:</div>` +
+		`<blockquote class="gmail_quote"><div>No image lives in this quoted message body.</div></blockquote></div>`
+	text := "No image lives in this quoted message body."
+	got := inlineImages(text, []string{host})
+	if len(got) != 0 {
+		t.Fatalf("inlineImages = %v, want none", got)
+	}
+}
+
+func TestAttributeInlineImagesMovesTheCidImageToTheQuotedEntry(t *testing.T) {
+	host := &entryRow{
+		ID: 1, Source: "mail", Direct: true, GmailID: "gmail-host",
+		BodyHTML: `<div dir="ltr">Thanks.</div>` +
+			`<div class="gmail_quote">` +
+			`<div class="gmail_attr">On Mon, 17 Aug 2026 at 11:11, Chris &lt;chris@x.example&gt; wrote:</div>` +
+			`<blockquote class="gmail_quote">` +
+			`<div>I retendered these three sites last week but I am not sure why they ` +
+			`still show up on this report every morning, despite the fact that we ` +
+			`completed the whole review process for each of them before the end of ` +
+			`the previous month.</div>` +
+			`<img src="cid:ii_abc123" alt="image.png" width="562" height="154">` +
+			`</blockquote></div>`,
+		Atts: []attRow{
+			{Name: "image.png", Mime: "image/png", Size: 64632, SourceRef: "1"},
+			{Name: "quote.pdf", Mime: "application/pdf", Size: 2048, SourceRef: "2"},
+		},
+	}
+	child := &entryRow{
+		ID: 2, Source: "mail", Direct: false, SeenIn: []int64{1},
+		BodyText: "I retendered these three sites last week but I am not sure why they " +
+			"still show up on this report every morning, despite the fact that we " +
+			"completed the whole review process for each of them before the end of " +
+			"the previous month.",
+	}
+	rows := []*entryRow{host, child}
+	attributeInlineImages(rows)
+
+	if len(child.Atts) != 1 || child.Atts[0].Name != "image.png" {
+		t.Fatalf("child.Atts = %+v, want the image.png moved onto it", child.Atts)
+	}
+	if child.Atts[0].GmailID != "gmail-host" {
+		t.Errorf("moved att GmailID = %q, want the host's so the chip still opens the image", child.Atts[0].GmailID)
+	}
+	// The host keeps only what it genuinely carried itself.
+	if len(host.Atts) != 1 || host.Atts[0].Name != "quote.pdf" {
+		t.Fatalf("host.Atts = %+v, want only the pdf left", host.Atts)
+	}
+}
