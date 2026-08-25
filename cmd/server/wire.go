@@ -298,10 +298,12 @@ func toCorpusEntry(s corpus.Shown) corpusEntry {
 // the operator's probe wrote. CheckedAt is the probe's UTC stamp, omitted when
 // no probe has ever run; the services list is always present, each backend
 // answered "unchecked" rather than absent, so the screen degrades instead of
-// 404ing.
+// 404ing. NextSlurpAt is the next scheduled pulse, computed live (never
+// stored), so it stays right however long ago the last probe or slurp ran.
 type statusResponse struct {
-	CheckedAt string          `json:"checkedAt,omitempty"`
-	Services  []serviceStatus `json:"services"`
+	CheckedAt   string          `json:"checkedAt,omitempty"`
+	NextSlurpAt string          `json:"nextSlurpAt,omitempty"`
+	Services    []serviceStatus `json:"services"`
 }
 
 type serviceStatus struct {
@@ -312,7 +314,10 @@ type serviceStatus struct {
 }
 
 func toStatusResponse(s status.Snapshot) statusResponse {
-	out := statusResponse{Services: make([]serviceStatus, 0, len(s.Services))}
+	out := statusResponse{
+		NextSlurpAt: nextSlurpAt(),
+		Services:    make([]serviceStatus, 0, len(s.Services)),
+	}
 	if s.CheckedAt != "" {
 		out.CheckedAt = s.CheckedAt
 	}
@@ -322,4 +327,15 @@ func toStatusResponse(s status.Snapshot) statusResponse {
 		})
 	}
 	return out
+}
+
+// nextSlurpAt is when the scheduled slurp pulse next fires, as a UTC RFC3339
+// stamp. The deployed timer runs OnCalendar="*:0" (naboo's chainmail-slurp
+// timer: on the hour, every hour), so the next one is the next top of the hour
+// in local time. Computed rather than stored so it never goes stale between
+// runs; if the timer's cadence ever changes, this must follow it.
+func nextSlurpAt() string {
+	now := time.Now()
+	next := time.Date(now.Year(), now.Month(), now.Day(), now.Hour(), 0, 0, 0, now.Location()).Add(time.Hour)
+	return next.UTC().Format(time.RFC3339)
 }
