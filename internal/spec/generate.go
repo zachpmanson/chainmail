@@ -130,6 +130,10 @@ func Generate(store *corpus.Store, opts Options) (Spec, error) {
 			}
 		}
 	}
+	// Attribute every inline (cid) image to the quoted message that placed it
+	// before entries are rendered, so the chip lands under the right message.
+	attributeInlineImages(rows)
+
 	for _, r := range rows {
 		b.add(r)
 	}
@@ -271,6 +275,10 @@ func (b *builder) add(r *entryRow) {
 		if r.Direct {
 			// Only a real message can be opened in Gmail.
 			att.GmailID = r.GmailID
+		} else if a.GmailID != "" {
+			// An inline (cid) image re-attributed to the quoted entry that placed
+			// it: the chip opens the host message that actually shows the image.
+			att.GmailID = a.GmailID
 		}
 		if att.GmailID == "" {
 			// A mail attachment's permalink is the same Gmail URL the id already
@@ -431,6 +439,55 @@ func (b *builder) attachEdits(rows []*entryRow) {
 			Time: host.Time,
 			Body: r.BodyText,
 		})
+	}
+}
+
+// attributeInlineImages moves an inline (cid) image's attachment row from the
+// message that merely quoted it onto the quoted message that actually placed it.
+//
+// Gmail pastes a screenshot as an <img src="cid:…"> inside the quoted block and
+// carries the bytes as a MIME part on the quoting (host) message; the corpus stores
+// those parts against the host, so without this pass the chip lands under the wrong
+// message. The part is matched back to the block by filename — Gmail writes the
+// pasted file's name as the image's alt text (see inlineImages). Only attachments
+// that are images AND appear as a cid image in a confidently-matched quoted block
+// are moved; a host's own inline images stay put. The chip keeps the host's Gmail
+// id so it still opens the message that shows the image.
+func attributeInlineImages(rows []*entryRow) {
+	byID := map[int64]*entryRow{}
+	for _, r := range rows {
+		byID[r.ID] = r
+	}
+	for _, child := range rows {
+		// Only a quoted mail entry can have placed an image; it carries no
+		// attachments of its own, which is exactly the gap being closed.
+		if child.Direct || child.Source != "mail" || len(child.Atts) > 0 {
+			continue
+		}
+		for _, hid := range child.SeenIn {
+			host, ok := byID[hid]
+			if !ok || host.BodyHTML == "" {
+				continue
+			}
+			names := inlineImages(child.BodyText, []string{host.BodyHTML})
+			if len(names) == 0 {
+				continue
+			}
+			named := map[string]bool{}
+			for _, n := range names {
+				named[n] = true
+			}
+			var keep []attRow
+			for _, a := range host.Atts {
+				if named[a.Name] && strings.HasPrefix(strings.ToLower(a.Mime), "image/") {
+					a.GmailID = host.GmailID
+					child.Atts = append(child.Atts, a)
+					continue
+				}
+				keep = append(keep, a)
+			}
+			host.Atts = keep
+		}
 	}
 }
 

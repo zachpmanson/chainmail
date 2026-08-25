@@ -61,6 +61,10 @@ type attRow struct {
 	// MIME part number for mail. It is what locates the bytes on disk where the
 	// archive kept them.
 	SourceRef string
+	// GmailID is the Gmail message the attachment lives in. Only set for an
+	// inline (cid) image re-attributed to the quoted entry that placed it: the
+	// chip then opens the host message that actually shows the image.
+	GmailID string
 }
 
 // seeds resolves Options into the set of entry ids to start from, before the
