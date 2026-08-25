@@ -105,21 +105,110 @@ export function diffBaseToEdit(baseText: string, editText: string): Span[] {
 
 /**
  * Render a quoter's edit to markup for the host bubble: the quoter's modified
- * text with the change marked (deleted struck, inserted highlighted). Escaping
- * is applied per run so the stored plain text cannot inject markup.
+ * text with the change marked (deleted struck, inserted highlighted) and the
+ * original quote's structure and formatting kept. Escaping is applied to the
+ * quoter's own words so their stored plain text cannot inject markup, while the
+ * base's trusted HTML is passed through verbatim — that is what carries the
+ * formatting (paragraphs, bullets, a coloured phrase, an editorial gloss) that
+ * a plain-text diff would flatten away.
+ *
+ * The base is walked tag-by-tag rather than stripped to text first, so the
+ * unchanged runs keep every tag around them; only the words the quoter dropped
+ * get struck and only the words they added get a highlight, in place.
  */
 export function editHtml(baseBodyHtml: string, editBody: string): string {
+  const cells = tokenize(baseBodyHtml ?? "");
+  const baseWords: string[] = [];
+  for (const c of cells) if (c.text !== undefined) baseWords.push(...words(c.text));
+  const b = words(toText(baseBodyHtml));
+  if (baseWords.length !== b.length) {
+    // The tag-walk and the diff disagree on what the words are — a defensive
+    // fallback that still marks the change, without risking a misaligned pass.
+    return flatHtml(toText(baseBodyHtml), editBody);
+  }
+
+  const spans = diffBaseToEdit(toText(baseBodyHtml), editBody);
+  // labels[i] tells whether base word i survived (“same”) or was dropped (“del”);
+  // inserts[i] holds the quoter’s added words to slide in before base word i.
+  const labels: Array<"same" | "del"> = [];
+  const inserts: string[][] = [];
+  let gi = 0;
+  for (const s of spans) {
+    const sw = words(s.text);
+    if (s.kind === "del") {
+      for (let k = 0; k < sw.length; k++) labels[gi++] = "del";
+    } else if (s.kind === "ins") {
+      (inserts[gi] ??= []).push(...sw);
+    } else {
+      labels[gi] = "same";
+      gi++;
+    }
+  }
+
+  // Walk the base again, assigning each word to its label. A fresh cursor (not
+  // the `gi` above, which ended at the base's word count) so the first word
+  // reads label[0].
+  let wi = 0;
+  let out = cells
+    .map((c) => {
+      if (c.tag !== undefined) return c.tag;
+      // A text cell: its words are consumed in order; separators (original
+      // whitespace) pass through so the line keeps its original spacing.
+      let cell = "";
+      const parts = c.text!.split(/(\s+)/);
+      for (let i = 0; i < parts.length; i++) {
+        const word = parts[i]!;
+        if (i % 2 === 1) {
+          cell += word; // a separator
+          continue;
+        }
+        if (word === "") continue;
+        for (const ins of inserts[wi] ?? []) cell += `<b class="eins">${escapeHtml(ins)}</b> `;
+        cell += labels[wi] === "del" ? `<del class="edel">${word}</del>` : word;
+        wi++;
+      }
+      return cell;
+    })
+    .join("");
+  // Words the quoter added at the very end of the quote (after the last base
+  // word) have no base cell to sit before, so append them here.
+  for (const ins of inserts[wi] ?? []) out += ` <b class="eins">${escapeHtml(ins)}</b>`;
+  return out;
+}
+
+/**
+ * The old all-text rendering, kept as the alignment fallback: strip the base to
+ * its words, diff, and re-emit as escaped text with the change marked.
+ */
+function flatHtml(baseBodyHtml: string, editBody: string): string {
   const spans = diffBaseToEdit(toText(baseBodyHtml), editBody);
   let out = "";
   for (let i = 0; i < spans.length; i++) {
     const s = spans[i]!;
     if (i > 0) out += " ";
     const inner = escapeHtml(s.text).split("\n").join("<br>");
-    if (s.kind === "del") out += `<s class="edel">${inner}</s>`;
+    if (s.kind === "del") out += `<del class="edel">${inner}</del>`;
     else if (s.kind === "ins") out += `<b class="eins">${inner}</b>`;
     else out += inner;
   }
   return out || escapeHtml(editBody ?? "").split("\n").join("<br>");
+}
+
+/** A body split into its tags and the raw text between them, in document order. */
+function tokenize(html: string): Array<{ tag?: string; text?: string }> {
+  const out: Array<{ tag?: string; text?: string }> = [];
+  const re = /<[^>]+>/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) !== null) {
+    const pre = html.slice(last, m.index);
+    if (pre) out.push({ text: pre });
+    out.push({ tag: m[0] });
+    last = m.index + m[0].length;
+  }
+  const rest = html.slice(last);
+  if (rest) out.push({ text: rest });
+  return out;
 }
 
 const escapeHtml = (t: string): string =>

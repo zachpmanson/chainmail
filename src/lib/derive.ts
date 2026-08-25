@@ -12,6 +12,10 @@ export interface RowEdit {
   time: string;
   /** the quoter's modified text as diff-marked HTML (`.edel` strike / `.eins` insert) */
   html: string;
+  /** the original message's sender, for “original from <y>” (may be empty) */
+  origWho: string;
+  /** the original message's date + time, for “at <timestamp>” (may be empty) */
+  origStamp: string;
 }
 
 export interface Row {
@@ -144,6 +148,8 @@ export function derive(input: Timeline): View {
           who: ed.who ?? entry.sender ?? "",
           time: ed.time ?? entry.time ?? "",
           html: editHtml(baseEntry?.body ?? "", ed.body ?? ""),
+          origWho: baseEntry?.sender ?? "",
+          origStamp: [baseEntry?.date, baseEntry?.time].filter(Boolean).join(" "),
         };
       });
     return {

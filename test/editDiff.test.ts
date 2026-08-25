@@ -43,7 +43,7 @@ describe("toText", () => {
 describe("editHtml", () => {
   it("wraps the change in strike/insert and escapes the rest", () => {
     const h = editHtml("<p>E: Amount Due</p>", "E: <Invoice Amount");
-    expect(h).toContain("<s class=\"edel\"");
+    expect(h).toContain("<del class=\"edel\"");
     expect(h).toContain("<b class=\"eins\"");
     expect(h).toContain("&lt;"); // the leading < of <Invoice is escaped, not markup
     expect(h).not.toContain("<Invoice"); // no live tag from the quoter's text
@@ -61,5 +61,30 @@ describe("editHtml", () => {
     expect(h).toContain("Invoice");
     expect(h).toContain("<b class=\"eins\"");
     expect(h.replace(/<[^>]+>/g, "").replace(/\s+/g, " ")).toContain("E: Invoice Amount");
+  });
+
+  it("keeps the original quote's tags so its formatting survives", () => {
+    const base =
+      "<p>The <span class=\"x\">critical</span> figure stood at " +
+      "&middot; <b>1,240</b>.</p>";
+    // The quoter leaves the wording untouched, so every unexpected tag is verbatim.
+    const h = editHtml(base, "The critical figure stood at · 1,240.");
+    expect(h).toContain("<span class=\"x\">");
+    expect(h).toContain("<b>");
+    expect(h).toContain("&middot;"); // the entity survives, not flattened to its glyph
+  });
+
+  it("annotates an edit inside the preserved structure", () => {
+    const clean = "<p>Quote keeps <b>bold</b> emphasis</p>";
+    const h = editHtml(clean, "Quote keeps <b>bold</b> strong emphasis");
+    // the shared "bold" run keeps its <b>, and the change is still marked
+    expect(h).toContain("<b>");
+    expect(h).toContain("<b class=\"eins\">strong</b>");
+  });
+
+  it("appends words added after the last base word", () => {
+    const h = editHtml("<p>one two</p>", "one two three");
+    expect(h).toContain("<p>one two</p>");
+    expect(h).toContain("<b class=\"eins\">three</b>");
   });
 });

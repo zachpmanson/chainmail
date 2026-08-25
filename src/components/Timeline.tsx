@@ -81,10 +81,17 @@ function Edits({ edits, v }: { edits?: RowEdit[]; v: View }) {
       {edits.map((ed, i) => (
         <div className="edit" key={ed.base || i}>
           <div className="ehdr">
-            <a href={`#${ed.base}`} title="the message this change was made to">
-              edited by {ed.who || v.title || "someone"}
-            </a>
-            {ed.time ? <span className="ets">{ed.time}</span> : null}
+            edited by <span className="editwho">{ed.who || v.title || "someone"}</span>
+            {ed.origWho || ed.origStamp ? (
+              <>
+                ,{" "}
+                <a href={`#${ed.base}`} title="the message this change was made to">
+                  original
+                </a>
+                {ed.origWho ? <span> from {ed.origWho}</span> : null}
+                {ed.origStamp ? <span className="ets"> at {ed.origStamp}</span> : null}
+              </>
+            ) : null}
           </div>
           <div className="ebd" dangerouslySetInnerHTML={html(ed.html)} />
         </div>

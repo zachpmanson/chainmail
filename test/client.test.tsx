@@ -570,3 +570,51 @@ describe("the search lives in the URL", () => {
     await screen.findByText("Loom cutover schedule");
   });
 });
+// A page carrying a quoter's edit (#42): the host message repeats a chunk the
+// quoter changed, with an `edits` record naming the original and the change.
+const EDIT_SPEC = {
+  title: "CSV layout",
+  messages: [
+    {
+      id: "c-orig", date: "Fri 21 Aug 2026", time: "09:00", tz: "+1000",
+      sender: "Charles XPTO", org: "ruralco",
+      body: "<p>CSV layout: A: Member Number &middot; E: Amount Due</p>",
+    },
+    {
+      id: "j-host", date: "Fri 21 Aug 2026", time: "14:00", tz: "+1000",
+      sender: "Jason Yago", org: "termina", parent: "c-orig",
+      body: "<p>Actually one change — we track Invoice Amount.</p>",
+      edits: [{
+        id: "c-edit", base: "c-orig", who: "Jason Yago", time: "14:00",
+        body: "CSV layout: A: Member Number \u00b7 E: Invoice Amount",
+      }],
+    },
+  ],
+};
+
+describe("a quoter's edit in the transcript", () => {
+  it("renders the edited quote and an attributed 'original from … at …' header", async () => {
+    handler = (c) =>
+      pathOf(c) === "/v1/specs/loom-cutover"
+        ? json(200, EDIT_SPEC)
+        : json(500, { error: "unexpected call" });
+    await mountApp("/view/loom-cutover");
+
+    // The original's formatting (the entity) survives inside the quoted edit.
+    // The word "original" is the anchor; once it is on screen the render is done.
+    const original = await screen.findByText("original");
+
+    // The header reads "edited by <quoter>, original from <author> at <ts>",
+    // and "original" is the anchor back to the source message.
+    const anchor = original.closest("a");
+    expect(anchor?.getAttribute("href")).toBe("#c-orig");
+
+    const headerText = anchor?.parentElement?.textContent ?? "";
+    expect(headerText).toContain("edited by Jason Yago");
+    expect(headerText).toContain("original from Charles XPTO");
+    expect(headerText).toContain("at Fri 21 Aug 2026 09:00");
+
+    // The quoter's inserted word reaches the quote body, marked.
+    expect(screen.getByText("Invoice")).toBeTruthy();
+  });
+});
