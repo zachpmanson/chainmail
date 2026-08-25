@@ -8,54 +8,6 @@
 /** The listener registrar `attach` hands to the behaviours it delegates to. */
 type On = (el: EventTarget, type: string, fn: (ev: Event) => void, opts?: AddEventListenerOptions) => void;
 
-/* ---------- scrolling ---------- */
-
-const SCROLL_MS = 420;
-// easeInOutCubic: gentle on departure and arrival, but not lazy in the middle.
-const easeInOutCubic = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
-
-let scrollTimer: number | null = null;
-
-/**
- * Scroll the document to `to` (absolute Y) over SCROLL_MS, driven by rAF.
- *
- * This exists because an OS-level "reduce motion" preference makes a browser
- * collapse native smooth scrolling to an instant jump — both
- * `scrollIntoView({behavior:"smooth"})` and `window.scrollTo({behavior:"smooth"})`.
- * A cross-reference click's whole point is the trip, so we animate the scroll
- * position ourselves; nothing the platform decided about motion can cancel it.
- */
-function animateWindowScroll(to: number) {
-  if (scrollTimer !== null) cancelAnimationFrame(scrollTimer);
-  const root = document.scrollingElement || document.documentElement;
-  const winH = document.scrollingElement ? window.innerHeight : root.clientHeight;
-  const from = document.scrollingElement ? window.scrollY : root.scrollTop;
-  const target = Math.max(0, Math.min(to, root.scrollHeight - winH));
-  if (Math.abs(target - from) < 1) return;
-  const start = performance.now();
-  const step = (now: number) => {
-    const t = Math.min(1, (now - start) / SCROLL_MS);
-    window.scrollTo(0, from + (target - from) * easeInOutCubic(t));
-    if (t < 1) scrollTimer = requestAnimationFrame(step);
-    else scrollTimer = null;
-  };
-  scrollTimer = requestAnimationFrame(step);
-}
-
-/**
- * Bring `el` into view with the trip a cross-link deserves: the element's
- * offset from the viewport top, minus its declared scroll-margin (CSS gives
- * messages a 1.5rem landing room), animated over the window — so the arrival
- * interval matches a native `:target` jump exactly.
- */
-type ScrollAlign = "start" | "center";
-export function scrollToElement(el: Element, align: ScrollAlign) {
-  const margin = parseFloat(getComputedStyle(el).scrollMarginTop) || 0;
-  const y = el.getBoundingClientRect().top + (document.scrollingElement ? window.scrollY : 0);
-  const target = align === "center" ? y - (window.innerHeight - el.clientHeight) / 2 : y - margin;
-  animateWindowScroll(target);
-}
-
 export function attach(doc: Document = document): () => void {
   const cleanups: Array<() => void> = [];
   const on = <K extends keyof HTMLElementEventMap>(
@@ -93,7 +45,7 @@ export function attach(doc: Document = document): () => void {
     // the URL bar stays honest and the browser does its usual thing.
     if (m.metaKey || m.ctrlKey || m.shiftKey || m.altKey || m.button !== 0) return;
     ev.preventDefault();
-    scrollToElement(el, "start");
+    el.scrollIntoView({ block: "start", behavior: "smooth" });
     history.replaceState(null, "", `#${id}`);
   });
 
@@ -261,7 +213,7 @@ export function attach(doc: Document = document): () => void {
       const id = hit.dataset.id!;
       const el = doc.getElementById(id);
       on(hit, "click", () => {
-        if (el) scrollToElement(el, "center");
+        el?.scrollIntoView({ block: "center", behavior: "smooth" });
         history.replaceState(null, "", `#${id}`);
       });
       on(hit, "mouseenter", () => { el?.classList.add("mhov"); hovId = id; refresh(); });

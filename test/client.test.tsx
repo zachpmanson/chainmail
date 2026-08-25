@@ -592,79 +592,34 @@ const EDIT_SPEC = {
   ],
 };
 
+
 describe("clicking an in-page anchor", () => {
-  it("drives a smooth scroll (not a single jump) and records the URL", async () => {
+  it("scrolls smoothly to the target and records the URL", async () => {
     handler = (c) =>
       pathOf(c) === "/v1/specs/loom-cutover"
         ? json(200, EDIT_SPEC)
         : json(500, { error: "unexpected call" });
-    // The scroll is rAF-driven (behaviour.ts animateWindowScroll) because an OS
-    // reduce-motion preference collapses native behavior:"smooth" to a jump. In
-    // jsdom there is no animation timing, so capture the scheduled frame and
-    // drive one interpolation step, then assert the scroll *moved partway* — a
-    // smooth trip, which an instant jump could never show.
-    const scrollCalls: number[] = [];
-    const realRAF = window.requestAnimationFrame.bind(window);
-    Object.defineProperty(window, "scrollY", { value: 0, writable: true, configurable: true });
-    Object.defineProperty(window, "scrollTo", {
-      configurable: true,
-      value: ((_x: number, y: number) => {
-        Object.defineProperty(window, "scrollY", { value: y, writable: true, configurable: true });
-        scrollCalls.push(y);
-      }) as typeof window.scrollTo,
-    });
-    // Run the animation to completion synchronously: each rAF callback advances
-    // the clock a frame and schedules the next, so the whole tween executes in
-    // one tick and every intermediate scroll lands in scrollCalls.
-    let clock = performance.now();
-    window.requestAnimationFrame = ((fn) => {
-      clock += 16;
-      fn(clock);
-      return clock;
-    }) as typeof window.requestAnimationFrame;
-
+    // jsdom has no scrolling, so capture scrollIntoView and assert the native
+    // smooth request we make, including the block alignment.
+    const scrolled: Array<[Element, ScrollIntoViewOptions | undefined]> = [];
+    const orig = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function (arg?: ScrollIntoViewOptions) {
+      scrolled.push([this, arg]);
+    };
     try {
       await mountApp("/view/loom-cutover");
-      // Give the target a real page position far below the fold by resolving the
-      // anchor's own href, so the test never hard-codes a DOM id that rendering
-      // may derive differently.
       const anchor = (await screen.findByText("original")).closest("a")!;
       expect(anchor.getAttribute("href")).toBe("#c-orig");
-      const targetId = decodeURIComponent(anchor.getAttribute("href")!.slice(1));
-      const cOrig = document.getElementById(targetId);
-      expect(cOrig).not.toBeNull();
-      Object.defineProperty(cOrig!, "getBoundingClientRect", {
-        value: () => ({ top: 1200, height: 40 }) as DOMRect,
-      });
-      // Give the scroller somewhere to go, or the clamp pins the target to 0 and
-      // the animation returns before scheduling a frame (jsdom has no layout;
-      // scrollingElement is null, so animateWindowScroll uses documentElement).
-      const root = document.documentElement;
-      Object.defineProperty(root, "scrollHeight", {
-        value: 5000, writable: true, configurable: true,
-      });
-      Object.defineProperty(root, "clientHeight", {
-        value: 800, writable: true, configurable: true,
-      });
-
       click(anchor);
-      expect(location.hash).toBe("#c-orig"); // URL recorded, like a native :target
 
-      // Many frames, each a distinct intermediate position: a trip, not a jump.
-      expect(scrollCalls.length).toBeGreaterThan(5);
-      // Router churn may interleave its own scrollTo calls; pull out the numeric
-      // interpolation steps before asserting the tween's shape.
-      const steps = scrollCalls.filter((x): x is number => Number.isFinite(x));
-      expect(steps.length).toBeGreaterThan(5);
-      // It reached the target at the end…
-      expect(steps[steps.length - 1]!).toBeCloseTo(1200, 0);
-      // …through a strictly increasing run of steps, never one leap to the end.
-      for (let i = 1; i < steps.length; i++) {
-        expect(steps[i]).toBeGreaterThan(steps[i - 1]!);
-        expect(steps[i]).toBeLessThan(1200 + 1);
-      }
+      // The URL records the same id, exactly as a native :target would.
+      expect(location.hash).toBe("#c-orig");
+      // And we asked the browser for a smooth trip to the message, not a jump.
+      expect(scrolled).toHaveLength(1);
+      expect(scrolled[0]![0]).toBe(document.getElementById("c-orig"));
+      expect(scrolled[0]![1]).toEqual({ block: "start", behavior: "smooth" });
     } finally {
-      window.requestAnimationFrame = realRAF;
+      Element.prototype.scrollIntoView = orig;
     }
   });
 });
@@ -676,22 +631,13 @@ describe("a quoter's edit in the transcript", () => {
         ? json(200, EDIT_SPEC)
         : json(500, { error: "unexpected call" });
     await mountApp("/view/loom-cutover");
-
-    // The original's formatting (the entity) survives inside the quoted edit.
-    // The word "original" is the anchor; once it is on screen the render is done.
     const original = await screen.findByText("original");
-
-    // The header reads "edited by <quoter>, original from <author> at <ts>",
-    // and "original" is the anchor back to the source message.
     const anchor = original.closest("a");
     expect(anchor?.getAttribute("href")).toBe("#c-orig");
-
     const headerText = anchor?.parentElement?.textContent ?? "";
     expect(headerText).toContain("edited by Jason Yago");
     expect(headerText).toContain("original from Charles XPTO");
     expect(headerText).toContain("at Fri 21 Aug 2026 09:00");
-
-    // The quoter's inserted word reaches the quote body, marked.
     expect(screen.getByText("Invoice")).toBeTruthy();
   });
 });
