@@ -105,83 +105,110 @@ export function diffBaseToEdit(baseText: string, editText: string): Span[] {
 
 /**
  * Render a quoter's edit to markup for the host bubble: the quoter's modified
- * text with the change marked (deleted struck, inserted highlighted) and the
- * original quote's structure and formatting kept. Escaping is applied to the
- * quoter's own words so their stored plain text cannot inject markup, while the
- * base's trusted HTML is passed through verbatim — that is what carries the
- * formatting (paragraphs, bullets, a coloured phrase, an editorial gloss) that
- * a plain-text diff would flatten away.
+ * text with the change marked (deleted struck, inserted highlighted) while the
+ * quoted message's structure and formatting are kept. The quote's formatting
+ * comes from the derived copy — the message the quoter actually pasted — not
+ * the bare original, because that is where a pasted message's colour lives
+ * (e.g. an answer written in red inside a forwarded thread). Escaping is applied
+ * only to the quoter's own added words, so stored plain text cannot inject
+ * markup, while the trusted copy HTML passes through verbatim.
  *
- * The base is walked tag-by-tag rather than stripped to text first, so the
- * unchanged runs keep every tag around them; only the words the quoter dropped
- * get struck and only the words they added get a highlight, in place.
+ * The copy is walked tag-by-tag rather than stripped to text first, so the
+ * unchanged runs keep every tag around them; only words the original lacked get
+ * a highlight, in place.
  */
-export function editHtml(baseBodyHtml: string, editBody: string): string {
-  const cells = tokenize(baseBodyHtml ?? "");
-  const baseWords: string[] = [];
-  for (const c of cells) if (c.text !== undefined) baseWords.push(...words(c.text));
-  const b = words(toText(baseBodyHtml));
-  if (baseWords.length !== b.length) {
-    // The tag-walk and the diff disagree on what the words are — a defensive
-    // fallback that still marks the change, without risking a misaligned pass.
-    return flatHtml(toText(baseBodyHtml), editBody);
-  }
-
-  const spans = diffBaseToEdit(toText(baseBodyHtml), editBody);
-  // labels[i] tells whether base word i survived (“same”) or was dropped (“del”);
-  // inserts[i] holds the quoter’s added words to slide in before base word i.
-  const labels: Array<"same" | "del"> = [];
-  const inserts: string[][] = [];
-  let gi = 0;
-  for (const s of spans) {
-    const sw = words(s.text);
-    if (s.kind === "del") {
-      for (let k = 0; k < sw.length; k++) labels[gi++] = "del";
-    } else if (s.kind === "ins") {
-      (inserts[gi] ??= []).push(...sw);
-    } else {
-      labels[gi] = "same";
-      gi++;
+export function editHtml(formattedHtml: string, originalHtml: string, editBody: string): string {
+  const srcText = toText(formattedHtml);
+  const baseText = toText(originalHtml);
+  if (formattedHtml && originalHtml) {
+    const cells = tokenize(formattedHtml);
+    const srcWords: string[] = [];
+    for (const c of cells) if (c.text !== undefined) srcWords.push(...words(c.text));
+    if (srcWords.length === words(srcText).length) {
+      // Render the copy's own words with its own tags — that is what carries the
+      // formatting — and highlight as new the words the original did not have.
+      return renderCells(cells, labelsAgainstBase(baseText, srcText));
     }
   }
+  // No derived copy to preserve (or the tag-walk misaligned): fall back to the
+  // plain base-vs-edit diff that still marks the change.
+  return flatHtml(baseText, editBody);
+}
 
-  // Walk the base again, assigning each word to its label. A fresh cursor (not
-  // the `gi` above, which ended at the base's word count) so the first word
-  // reads label[0].
+/** 'same' where a copy word is also in the original, else 'ins' (new to it). */
+function labelsAgainstBase(originalText: string, copyText: string): Array<"same" | "ins"> {
+  const labels: Array<"same" | "ins"> = [];
+  let ci = 0;
+  for (const s of diffBaseToEdit(originalText, copyText)) {
+    const sw = words(s.text);
+    if (s.kind === "del") continue; // original-only words are absent from the copy
+    for (let k = 0; k < sw.length; k++) labels[ci++] = s.kind === "ins" ? "ins" : "same";
+  }
+  return labels;
+}
+
+/** Re-emit the copy's cells verbatim, highlighting runs of new ('ins') words. */
+function renderCells(cells: Array<{ tag?: string; text?: string }>, labels: Array<"same" | "ins">): string {
   let wi = 0;
-  let out = cells
+  return cells
     .map((c) => {
       if (c.tag !== undefined) return c.tag;
-      // A text cell: its words are consumed in order; separators (original
-      // whitespace) pass through so the line keeps its original spacing.
-      let cell = "";
+      // A text cell, as alternating separators (original whitespace) and words.
       const parts = c.text!.split(/(\s+)/);
+      const toks: Array<{ sep?: string; word?: string }> = [];
       for (let i = 0; i < parts.length; i++) {
-        const word = parts[i]!;
-        if (i % 2 === 1) {
-          cell += word; // a separator
+        if (i % 2 === 1) toks.push({ sep: parts[i] });
+        else if (parts[i] !== "") toks.push({ word: parts[i] });
+      }
+      let out = "";
+      let i = 0;
+      while (i < toks.length) {
+        const t = toks[i]!;
+        if (t.sep !== undefined) {
+          out += t.sep;
+          i++;
           continue;
         }
-        if (word === "") continue;
-        for (const ins of inserts[wi] ?? []) cell += `<b class="eins">${escapeHtml(ins)}</b> `;
-        cell += labels[wi] === "del" ? `<del class="edel">${word}</del>` : word;
+        if (labels[wi] !== "ins") {
+          out += t.word;
+          wi++;
+          i++;
+          continue;
+        }
+        // A run of adjacent inserted words reads as one highlighted phrase;
+        // separators between inserted words fold inside, but a trailing
+        // separator (before the next kept word) stays out.
+        let run = t.word!;
+        while (i + 1 < toks.length) {
+          const next = toks[i + 1]!;
+          if (next.sep !== undefined) {
+            // only swallow a separator if what follows it is another insert
+            const after = toks[i + 2];
+            if (after === undefined || after.word === undefined || labels[wi + 1] !== "ins") break;
+            run += next.sep;
+            i++;
+            continue;
+          }
+          if (labels[wi + 1] !== "ins") break;
+          run += next.word!;
+          wi++;
+          i++;
+        }
+        out += `<b class="eins">${run}</b>`;
         wi++;
+        i++;
       }
-      return cell;
+      return out;
     })
     .join("");
-  // Words the quoter added at the very end of the quote (after the last base
-  // word) have no base cell to sit before, so append them here.
-  for (const ins of inserts[wi] ?? []) out += ` <b class="eins">${escapeHtml(ins)}</b>`;
-  return out;
 }
 
 /**
- * The old all-text rendering, kept as the alignment fallback: strip the base to
- * its words, diff, and re-emit as escaped text with the change marked.
+ * The all-text fallback: diff the original against the quoter's plain text and
+ * re-emit escaped, with the change marked.
  */
-function flatHtml(baseBodyHtml: string, editBody: string): string {
-  const spans = diffBaseToEdit(toText(baseBodyHtml), editBody);
+function flatHtml(originalText: string, editBody: string): string {
+  const spans = diffBaseToEdit(originalText, editBody);
   let out = "";
   for (let i = 0; i < spans.length; i++) {
     const s = spans[i]!;

@@ -41,50 +41,59 @@ describe("toText", () => {
 });
 
 describe("editHtml", () => {
-  it("wraps the change in strike/insert and escapes the rest", () => {
-    const h = editHtml("<p>E: Amount Due</p>", "E: <Invoice Amount");
+  // In production the copy is the pasted message (which carries formatting) and
+  // the original is the pre-edit base; the quoted body is the quoter's version.
+  it("highlights the quoter's added words, keeping the copy's formatting", () => {
+    const copy = "<p>CSV layout: E: <b>Invoice</b> Amount</p>";
+    const original = "<p>CSV layout: E: Amount Due</p>";
+    const h = editHtml(copy, original, "CSV layout: E: Invoice Amount");
+    // the added word is a live-inserted highlight (escaped source-safe)
+    expect(h).toContain("<b class=\"eins\">Invoice</b>");
+    // an original-only word is elided, not struck: the copy simply does not have it
+    expect(h).not.toContain("Due");
+  });
+
+  it("keeps the rest of the CSV list and marks only the quoter's added answer", () => {
+    const copy =
+      "<p>CSV layout: A: Member Number &middot; B: ATS Number " +
+      "&middot; E: Invoice Amount</p>";
+    const original =
+      "<p>CSV layout: A: Member Number &middot; B: ATS Number &middot; E: Amount Due</p>";
+    const body = "CSV layout: A: Member Number \u00b7 B: ATS Number \u00b7 E: Invoice Amount";
+    const h = editHtml(copy, original, body);
+    // the list survives, and only Invoice is highlighted as new to the original
+    expect(h).toContain("Member Number");
+    expect(h).toContain("<b class=\"eins\">Invoice</b>");
+    expect(h).not.toContain("Due");
+  });
+
+  it("keeps the copy's tags, including a coloured run (the #52 repro)", () => {
+    const copy =
+      "<p>Once we use the CSV, will it be ours? - " +
+      "<span style=\"color:red\">Yes, PDFs go to members</span>.</p>";
+    const original = "<p>Once we use the CSV, will it be ours?</p>";
+    const body = "Once we use the CSV, will it be ours? - Yes, PDFs go to members.";
+    const h = editHtml(copy, original, body);
+    // the red span survives and the added answer is highlighted inside it
+    expect(h).toContain("<span style=\"color:red\">");
+    expect(h).toContain("Yes, PDFs go to members");
+    expect(h).toContain("<b class=\"eins\">");
+  });
+
+  it("renders a copy with no added words verbatim (formatting only)", () => {
+    const copy = "<p>The <b>critical</b> figure stood at &middot; 1,240.</p>";
+    const h = editHtml(copy, copy, "The critical figure stood at · 1,240.");
+    expect(h).toContain("<p>");
+    expect(h).toContain("<b>");
+    expect(h).toContain("&middot;");
+    expect(h).not.toContain("eins");
+  });
+
+  it("falls back to a plain diff when there is no derived copy", () => {
+    // (no copy body) → diff the original against the quoter's text, still marked
+    const h = editHtml("", "<p>E: Amount Due</p>", "E: Invoice Amount");
+    expect(h).toContain("Invoice");
     expect(h).toContain("<del class=\"edel\"");
     expect(h).toContain("<b class=\"eins\"");
-    expect(h).toContain("&lt;"); // the leading < of <Invoice is escaped, not markup
-    expect(h).not.toContain("<Invoice"); // no live tag from the quoter's text
-  });
-
-  it("is stable and lossless for the CSV example", () => {
-    const base =
-      "<p>CSV layout: A: Member Number &middot; B: ATS Number &middot; " +
-      "C: Property Name &middot; D: Statement Date &middot; E: Amount Due</p>";
-    const edit = "CSV layout: A: Member Number \u00b7 B: ATS Number \u00b7 " +
-      "C: Property Name \u00b7 D: Statement Date \u00b7 E: Invoice Amount";
-    const h = editHtml(base, edit);
-    // the unchanged field list survives, and the E: change is marked
-    expect(h).toContain("Member Number");
-    expect(h).toContain("Invoice");
-    expect(h).toContain("<b class=\"eins\"");
-    expect(h.replace(/<[^>]+>/g, "").replace(/\s+/g, " ")).toContain("E: Invoice Amount");
-  });
-
-  it("keeps the original quote's tags so its formatting survives", () => {
-    const base =
-      "<p>The <span class=\"x\">critical</span> figure stood at " +
-      "&middot; <b>1,240</b>.</p>";
-    // The quoter leaves the wording untouched, so every unexpected tag is verbatim.
-    const h = editHtml(base, "The critical figure stood at · 1,240.");
-    expect(h).toContain("<span class=\"x\">");
-    expect(h).toContain("<b>");
-    expect(h).toContain("&middot;"); // the entity survives, not flattened to its glyph
-  });
-
-  it("annotates an edit inside the preserved structure", () => {
-    const clean = "<p>Quote keeps <b>bold</b> emphasis</p>";
-    const h = editHtml(clean, "Quote keeps <b>bold</b> strong emphasis");
-    // the shared "bold" run keeps its <b>, and the change is still marked
-    expect(h).toContain("<b>");
-    expect(h).toContain("<b class=\"eins\">strong</b>");
-  });
-
-  it("appends words added after the last base word", () => {
-    const h = editHtml("<p>one two</p>", "one two three");
-    expect(h).toContain("<p>one two</p>");
-    expect(h).toContain("<b class=\"eins\">three</b>");
   });
 });

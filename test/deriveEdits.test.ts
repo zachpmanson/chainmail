@@ -48,7 +48,7 @@ describe("hoist for a quoter's edit (#42)", () => {
     // the original message's sender and timestamp feed the “from y at <ts>” header
     expect(ed?.origWho).toBe("Charles");
     expect(ed?.origStamp).toBe("Fri 21 Aug 2026 09:00");
-    expect(ed?.html).toContain("edel"); // the change is struck/inserted
+    // the added answer is highlighted as new to the original
     expect(ed?.html).toContain("eins");
   });
 
