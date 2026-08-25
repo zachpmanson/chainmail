@@ -3,6 +3,7 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  Link,
   Outlet,
   useRouterState,
 } from "@tanstack/react-router";
@@ -142,7 +143,16 @@ function RootLayout() {
     return (
       <Rendered spec={dropped} onBack={pathname === "/" ? () => setDropped(null) : undefined} />
     );
-  return <Outlet />;
+  return (
+    <>
+      <Outlet />
+      <footer className="sitefoot">
+        <Link to="/">Home</Link>
+        <span className="sep">·</span>
+        <Link to="/specs">Browse saved specs</Link>
+      </footer>
+    </>
+  );
 }
 
 const rootRoute = createRootRoute({
