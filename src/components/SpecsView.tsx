@@ -39,7 +39,7 @@ export function SpecsView() {
         <h1>chainmail</h1>
         <p className="sub">
           Saved pages, newest first. Each name is its URL — pick one to reopen a
-          build.{" "}<Link to="/">Search</Link>.
+          build.
         </p>
       </header>
 

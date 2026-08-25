@@ -1,4 +1,3 @@
-import { Link } from "@tanstack/react-router";
 import { $api, type ServiceStatus, type Stats } from "../lib/api";
 
 function errText(e: unknown): string {
@@ -76,8 +75,7 @@ export function StatusView() {
       <header className="top">
         <h1>chainmail</h1>
         <p className="sub">
-          Which services this machine is logged into, and what the corpus holds.{" "}
-          <Link to="/">Search</Link>.
+          Which services this machine is logged into, and what the corpus holds.
         </p>
       </header>
 

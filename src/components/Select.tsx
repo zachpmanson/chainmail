@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useSearch, Link } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { $api, ApiError, searchQuery, type ChainHit, type CorpusEntry, type SearchMode, type SearchParams } from "../lib/api";
 import { slug, untitledName } from "../lib/route";
 
@@ -298,9 +298,6 @@ export function SelectView() {
       <header className="top">
         <h1>chainmail</h1>
         <p className="sub">Search the corpus, choose the chains that belong, then build the page.</p>
-        <p className="selnote">
-          <Link to="/specs">Saved pages</Link> · <Link to="/status">Services</Link>
-        </p>
       </header>
 
       <form className="selform" onSubmit={submit}>
