@@ -262,7 +262,7 @@ func TestInlineImagesNoneWhenBlockHasNoCidImage(t *testing.T) {
 	}
 }
 
-func TestAttributeInlineImagesMovesTheCidImageToTheQuotedEntry(t *testing.T) {
+func TestAttributeInlineImagesDuplicatesTheCidImageOntoTheQuotedEntry(t *testing.T) {
 	host := &entryRow{
 		ID: 1, Source: "mail", Direct: true, GmailID: "gmail-host",
 		BodyHTML: `<div dir="ltr">Thanks.</div>` +
@@ -288,16 +288,46 @@ func TestAttributeInlineImagesMovesTheCidImageToTheQuotedEntry(t *testing.T) {
 			"the previous month.",
 	}
 	rows := []*entryRow{host, child}
-	attributeInlineImages(rows)
+	attributeAttachments(rows)
 
 	if len(child.Atts) != 1 || child.Atts[0].Name != "image.png" {
-		t.Fatalf("child.Atts = %+v, want the image.png moved onto it", child.Atts)
+		t.Fatalf("child.Atts = %+v, want the image.png duplicated onto it", child.Atts)
 	}
 	if child.Atts[0].GmailID != "gmail-host" {
-		t.Errorf("moved att GmailID = %q, want the host's so the chip still opens the image", child.Atts[0].GmailID)
+		t.Errorf("copied att GmailID = %q, want the host's so the chip still opens the image", child.Atts[0].GmailID)
 	}
-	// The host keeps only what it genuinely carried itself.
-	if len(host.Atts) != 1 || host.Atts[0].Name != "quote.pdf" {
-		t.Fatalf("host.Atts = %+v, want only the pdf left", host.Atts)
+	// The host keeps its own row: the file is genuinely in its mailbox too.
+	if len(host.Atts) != 2 {
+		t.Fatalf("host.Atts = %+v, want both carried attachments kept", host.Atts)
+	}
+}
+
+func TestAttributeFilenamesMentionedInChildText(t *testing.T) {
+	// A quoted child whose body is a single short line naming the file it
+	// pasted — below the token floor for block matching, so only the filename
+	// evidence works. This is the Nepal-shaped case.
+	host := &entryRow{
+		ID: 3, Source: "mail", Direct: true, GmailID: "gmail-host2",
+		Atts: []attRow{
+			{Name: "image.png", Mime: "image/png", Size: 116876, SourceRef: "1"},
+			{Name: "Screenshot 2026-08-26 at 8.52.12 am.png", Mime: "image/png", Size: 95716, SourceRef: "2"},
+		},
+	}
+	child := &entryRow{
+		ID: 4, Source: "mail", Direct: false, SeenIn: []int64{3},
+		BodyText: "+fyi @Siobhan Murphy <mailto:siobhan@termina.io>\n<image.png>",
+	}
+	rows := []*entryRow{host, child}
+	attributeAttachments(rows)
+
+	if len(child.Atts) != 1 || child.Atts[0].Name != "image.png" {
+		t.Fatalf("child.Atts = %+v, want image.png duplicated onto it", child.Atts)
+	}
+	if child.Atts[0].Size != 116876 {
+		t.Errorf("copied size = %d, want 116876 (the image.png row, not the screenshot)", child.Atts[0].Size)
+	}
+	// The screenshot, not mentioned by name, stays on the host only.
+	if len(host.Atts) != 2 {
+		t.Fatalf("host.Atts = %+v, want both rows kept on the host", host.Atts)
 	}
 }

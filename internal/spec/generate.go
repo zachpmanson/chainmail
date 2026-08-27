@@ -132,7 +132,7 @@ func Generate(store *corpus.Store, opts Options) (Spec, error) {
 	}
 	// Attribute every inline (cid) image to the quoted message that placed it
 	// before entries are rendered, so the chip lands under the right message.
-	attributeInlineImages(rows)
+	attributeAttachments(rows)
 
 	for _, r := range rows {
 		b.add(r)
@@ -442,53 +442,101 @@ func (b *builder) attachEdits(rows []*entryRow) {
 	}
 }
 
-// attributeInlineImages moves an inline (cid) image's attachment row from the
-// message that merely quoted it onto the quoted message that actually placed it.
+// attributeAttachments shows an attachment the host carries on the quoted
+// message that placed it, WITHOUT removing it from the host — the file genuinely
+// lives in the host's mailbox, so one qualifier is one owner.
 //
-// Gmail pastes a screenshot as an <img src="cid:…"> inside the quoted block and
-// carries the bytes as a MIME part on the quoting (host) message; the corpus stores
-// those parts against the host, so without this pass the chip lands under the wrong
-// message. The part is matched back to the block by filename — Gmail writes the
-// pasted file's name as the image's alt text (see inlineImages). Only attachments
-// that are images AND appear as a cid image in a confidently-matched quoted block
-// are moved; a host's own inline images stay put. The chip keeps the host's Gmail
-// id so it still opens the message that shows the image.
-func attributeInlineImages(rows []*entryRow) {
+// A forwarding host carries the bytes of an attachment that belongs to the
+// message it quotes: Gmail pastes a screenshot as an <img src="cid:…"> inside the
+// quoted block and stores the parts against the host, so the chip lands under the
+// wrong message unless it is also shown where the block shows it. The attachment
+// is matched to the quoted message two ways:
+//
+//   - a cid image in a confidently-matched quoted block, matched by its alt text
+//     (Gmail writes the pasted file's name as the alt) — see inlineImages, and
+//   - the attachment's filename appearing in the quoted child's own text, e.g.
+//     "please see attached report.xlsx". This second signal needs no token-count
+//     floor, so it also works for a short quoted body whose only evidence is the
+//     filename itself (the child's relationship to the host is already recorded
+//     in SeenIn, and the name has to match one of the host's listed attachments).
+//
+// The chip is duplicated onto the child with the host's Gmail id so it still
+// opens the mailbox that holds the bytes. The host keeps its own row: the
+// attachment is genuinely there too, and removing it would hide the forwarded
+// file from the reader of the forward.
+func attributeAttachments(rows []*entryRow) {
 	byID := map[int64]*entryRow{}
 	for _, r := range rows {
 		byID[r.ID] = r
 	}
 	for _, child := range rows {
-		// Only a quoted mail entry can have placed an image; it carries no
-		// attachments of its own, which is exactly the gap being closed.
-		if child.Direct || child.Source != "mail" || len(child.Atts) > 0 {
+		// A mail entry that has no attachments of its own is the gap being closed.
+		if child.Source != "mail" || len(child.Atts) > 0 {
 			continue
 		}
 		for _, hid := range child.SeenIn {
 			host, ok := byID[hid]
-			if !ok || host.BodyHTML == "" {
+			if !ok || host.GmailID == "" || len(host.Atts) == 0 {
 				continue
 			}
-			names := inlineImages(child.BodyText, []string{host.BodyHTML})
-			if len(names) == 0 {
-				continue
-			}
+			// Names the child is evidence* for, from this host's markup and text.
 			named := map[string]bool{}
-			for _, n := range names {
+			for _, n := range inlineImages(child.BodyText, []string{host.BodyHTML}) {
 				named[n] = true
 			}
-			var keep []attRow
 			for _, a := range host.Atts {
-				if named[a.Name] && strings.HasPrefix(strings.ToLower(a.Mime), "image/") {
-					a.GmailID = host.GmailID
-					child.Atts = append(child.Atts, a)
+				if a.Name != "" && filenameMentioned(child.BodyText, a.Name) {
+					named[a.Name] = true
+				}
+			}
+			if len(named) == 0 {
+				continue
+			}
+			for _, a := range host.Atts {
+				if !named[a.Name] {
 					continue
 				}
-				keep = append(keep, a)
+				// Duplicate, don't remove: the chip on the child opens the host
+				// message that holds the bytes, and the host row stays put.
+				if hasAttRow(child.Atts, a) {
+					continue
+				}
+				a.GmailID = host.GmailID
+				child.Atts = append(child.Atts, a)
 			}
-			host.Atts = keep
 		}
 	}
+}
+
+// hasAttRow reports whether a child already carries this attachment, so a file
+// quoted in more than one host is not shown duplicated under the same message.
+// It identifies a row the way hasAttachment does: by name and size.
+func hasAttRow(as []attRow, a attRow) bool {
+	for _, x := range as {
+		if x.Name == a.Name && x.Size == a.Size {
+			return true
+		}
+	}
+	return false
+}
+
+// filenameMentioned reports whether a quoted child's text names an attachment by
+// its filename — the words a sender writes when they refer to the file they
+// pasted or forwarded ("see the attached report.pdf"). It is a case-insensitive
+// containment check with word boundaries turned off: archive filenames often
+// contain dots and spaces, so a plain token split would miss them, and a
+// substring match against the child body is a strict enough bound because the
+// filename has to match one of the host's listed attachments exactly.
+func filenameMentioned(text, filename string) bool {
+	if filename == "" {
+		return false
+	}
+	t := strings.ToLower(strings.TrimSpace(text))
+	f := strings.ToLower(filename)
+	if f == "" {
+		return false
+	}
+	return strings.Contains(t, strings.TrimRight(f, "/"))
 }
 
 // checkCastCoversSenders fails a spec that would show a message from someone the
