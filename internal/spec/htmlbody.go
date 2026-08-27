@@ -607,6 +607,13 @@ func trimLeadingWhitespace(n *html.Node) {
 // A <br> or blank paragraph trailing the last real line is dropped, so the final
 // line of the exposed body sits edge-on to the signature disclosure rather than
 // a run of empty lines.
+//
+// The fold can also arrive wrapped in its own sibling element — Gmail renders
+// a message and its signature as adjacent blocks, so a body
+// <div>text…<br clear="all"/></div><div><details class="sig">…</details></div>
+// has the blanks to drop at the tail of the *content* block, not directly above
+// a bare <details>. That case is handled by resolving the wrapper to a fold and
+// trimming the trailing whitespace of the content block that precedes it.
 func trimTrailingWhitespace(n *html.Node) {
 	for {
 		c := n.LastChild
@@ -623,6 +630,21 @@ func trimTrailingWhitespace(n *html.Node) {
 			}
 			return
 		}
+		if isWrappedFold(c) {
+			// The signature block is the last child wrapped in its own element. The
+			// exposed content sits in the sibling(s) just before it; drop their
+			// trailing whitespace so the body still ends edge-on to the disclosure.
+			sibling := c.PrevSibling
+			for sibling != nil && !hasContent(sibling) {
+				prev := sibling.PrevSibling
+				n.RemoveChild(sibling)
+				sibling = prev
+			}
+			if sibling != nil && sibling.Type == html.ElementNode && sibling.DataAtom != atom.Pre {
+				trimTrailingWhitespace(sibling)
+			}
+			return
+		}
 		if hasContent(c) {
 			if c.Type == html.ElementNode && c.DataAtom != atom.Pre {
 				trimTrailingWhitespace(c)
@@ -631,6 +653,40 @@ func trimTrailingWhitespace(n *html.Node) {
 		}
 		n.RemoveChild(c)
 	}
+}
+
+// isWrappedFold reports whether a node is a single-element wrapper whose only
+// child is (or itself resolves to) a folded signature — the shape Gmail leaves
+// when it nests <details class="sig"> inside an extra <div>. Mirrors the
+// frontend resolvesToFold.
+func isWrappedFold(n *html.Node) bool {
+	depth := 0
+	for depth < 8 && n != nil {
+		if n.Type == html.ElementNode {
+			if n.DataAtom == atom.Pre {
+				return false
+			}
+			if isSignatureFold(n) {
+				return true
+			}
+		}
+		// walk through a single non-void element child
+		var only *html.Node
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			if c.Type == html.ElementNode && c.DataAtom != atom.Br && c.DataAtom != atom.Img {
+				if only != nil {
+					return false // more than one wrapping element
+				}
+				only = c
+			}
+		}
+		if only == nil {
+			return false
+		}
+		n = only
+		depth++
+	}
+	return false
 }
 
 // isSignatureFold reports whether a node begins a disclosed signature block —

@@ -246,7 +246,17 @@ export function trimBody(body: string): string {
   const parts: string[] = [];
   for (let i = first; i <= lastContent; i++) {
     const s = spans[i]!;
-    parts.push(body.slice(s.start, s.end));
+    let piece = body.slice(s.start, s.end);
+    if (s.fold) { parts.push(piece); continue; }
+    // The final kept span is the one that meets the trimmed edge, so its own
+    // trailing whitespace is peeled as deep as it goes — the <br clear
+    // style separator nest Gmail leaves just above a signature block, or a
+    // blank run at the very end of a body. The render-time twin of the
+    // backend's recursion into the last content node.
+    if (i === lastContent) {
+      piece = trimTrailingOf(body, s.start, s.end);
+    }
+    parts.push(piece);
   }
   if (endFold) {
     const fold = spans[n - 1]!;
@@ -254,3 +264,57 @@ export function trimBody(body: string): string {
   }
   return parts.join("");
 }
+
+/**
+ * Trim the trailing whitespace-only top-level siblings of a span [start,end),
+ * then recurse into the final kept element so blanks nested at any depth are
+ * peeled too. Mirrors the backend trimTrailingWhitespace: Gmail renders a
+ * message and its signature as adjacent sibling blocks
+ * (<div>text…<br clear="all"/></div><div><details class="sig">…</details></div>),
+ * and may leave a deeper <br/>&nbsp; run inside the last content block, so the
+ * trailing edge is peeled as deep as it goes. Returns the trimmed substring.
+ */
+function trimTrailingOf(body: string, start: number, end: number): string {
+  const inner = body.slice(start, end);
+  const subs = topLevelSpans(inner);
+  if (subs.length === 0) return "";
+  // Drop the trailing run of whitespace-only spans (e.g. a <br clear="all"/>).
+  let last = subs.length;
+  while (
+    last > 0 &&
+    !(subs[last - 1]!.fold || subtreeHasContent(inner, subs[last - 1]!.start, subs[last - 1]!.end))
+  ) {
+    last--;
+  }
+  if (last === 0) return "";
+  const s = subs[last - 1]!;
+  // Recurse into the final kept element when it is a block container (a div,
+  // table cell, etc. — NOT a <p> or an inline run) so an inner trailing blank
+  // run is trimmed too — the <br clear style separator nest Gmail leaves just
+  // above the signature block, which sits inside a <div>, not a paragraph. A
+  // <p> is treated as terminal: its own trailing empties are the author's
+  // text (Gmail u-filler), kept to match the backend's fold-adjacent output.
+  const t = parseTag(inner, s.start);
+  let sStr = inner.slice(s.start, s.end);
+  if (t && CONTAINERS[t.cls] && !t.selfClose) {
+    const close = "</" + t.cls + ">";
+    if (sStr.slice(sStr.length - close.length).toLowerCase() === close) {
+      const openEnd = t.gt;
+      const closeStart = s.end - close.length;
+      const mid = inner.slice(openEnd, closeStart);
+      const trimmedMid = trimBody(mid);
+      if (trimmedMid !== mid) {
+        sStr = sStr.slice(0, openEnd - s.start) + trimmedMid + close;
+      }
+    }
+  }
+  return inner.slice(0, s.start) + sStr; // drop everything after keptEnd
+}
+
+// Block containers whose interior tail recursive trim descends into. Leaves
+// paragraphs and inline runs alone so their trailing empties (the author's own
+// spacer text or Gmail <u></u> filler) are preserved.
+const CONTAINERS: Record<string, boolean> = {
+  div: true, table: true, tbody: true, thead: true, tfoot: true,
+  tr: true, td: true, th: true, section: true, article: true, blockquote: true,
+};

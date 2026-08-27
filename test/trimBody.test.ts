@@ -76,3 +76,31 @@ describe("trimBody", () => {
     );
   });
 });
+  it("trims a deep <br clear=\"all\"/> run before a wrapped fold", () => {
+    // Gmail nests the message and its signature as adjacent sibling blocks,
+    // and the <br clear="all"/> lives two levels down, at the tail of the
+    // content block. The trim must descend into that block so the body ends
+    // edge-on to the disclosure.
+    const body =
+      '<div dir="ltr">' +
+      '<div><span>Done.</span><br/><span><br/></span></div>' +
+      '<br clear="all"/>' +
+      '</div>' +
+      '<div><details class="sig"><summary>signature</summary><div>Ada</div></details></div>';
+    expect(trimBody(body)).toBe(
+      '<div dir="ltr"><div><span>Done.</span></div></div>' +
+      '<div><details class="sig"><summary>signature</summary><div>Ada</div></details></div>',
+    );
+  });
+
+  it("trims a deep blank run at the very end of a body", () => {
+    // No fold: the trailing <br>/blank run sits nested inside the last content
+    // element. The final kept span's own tail is trimmed too.
+    const body =
+      '<div dir="ltr"><div>Thanks,</div><div><br/></div>' +
+      '<div><span>Bye.</span><br/><span style="text-align:center"><br/></span></div>' +
+      '<br clear="all"/></div>';
+    expect(trimBody(body)).toBe(
+      '<div dir="ltr"><div>Thanks,</div><div><br/></div><div><span>Bye.</span></div></div>',
+    );
+  });

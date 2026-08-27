@@ -332,3 +332,32 @@ func TestTrailingWhitespaceBeforeAFoldIsTrimmed(t *testing.T) {
 		t.Errorf("body = %q, want the signature kept inside the fold", got)
 	}
 }
+
+func TestTrailingWhitespaceBeforeAWrappedFoldIsTrimmed(t *testing.T) {
+	// Gmail nests the message and its signature as adjacent sibling blocks: the
+	// content block ends in a <br clear="all"/> (and possibly blank lines), then a
+	// separate <div> wraps the <details class="sig"> disclosure. The exposed body
+	// must still trim right up to the fold — the <br clear="all"/> and trailing
+	// blanks belong to the content block and should be dropped, not left standing
+	// between the last word and the signature summary.
+	part := `<div dir="ltr"><div>@Nepo can you help?<div><br/></div><div>Thanks,</div><br clear="all"/></div>` +
+		`<div><div class="gmail_signature"><div>Ada<br>Loomworks</div></div></div></div>`
+	got := renderMarkup(part, mailBody)
+	if !strings.Contains(got, `<details class="sig">`) {
+		t.Errorf("body = %q, want the signature folded", got)
+	}
+	if cut := strings.Index(got, "<details"); cut >= 0 {
+		exposed := got[:cut]
+		if stripped := strings.TrimRight(exposed, " \t\n"); stripped != exposed {
+			t.Errorf("body = %q, want no blanks between content and the wrapped fold", got)
+		}
+		if strings.Contains(exposed, "clear=\"all\"") {
+			t.Errorf("body = %q, the <br clear=\"all\"/> must be trimmed", got)
+		}
+	} else {
+		t.Errorf("body = %q, want a fold to exist", got)
+	}
+	if !strings.Contains(got, "Ada") || !strings.Contains(got, "Loomworks") {
+		t.Errorf("body = %q, want the signature kept inside the fold", got)
+	}
+}
