@@ -186,7 +186,7 @@
      so a page that is mostly unknown does not look like a page of facts */
   .tz.tzu { opacity:.45; font-style:italic; letter-spacing:.02em; cursor:help; }
   .bub { position:relative; background:var(--card); border:1px solid var(--line);
-    border-radius:10px; padding:.45rem .7rem; }
+    border-radius:10px; padding:.45rem .7rem; overflow:hidden; }
   /* Org colour, as a strip down the bubble's inside edge. A page is scanned in
      the body column, so the avatar's colour is in the wrong place to answer
      "who is this from" while reading.
@@ -198,8 +198,13 @@
      is worse than not having it, because the colour then means nothing rather
      than something. This sits inside .isnew's border-left instead of fighting
      it, so a new message shows both marks. */
+  /* The strip is clipped by the bubble's own rounded corners (overflow:hidden),
+     so its two corners follow the card exactly instead of carrying a radius of
+     their own — a 3px strip with a big radius draws a corner that does not hug
+     the card's curve. Clipping by the card is what makes the strip's corners
+     match the card's, whatever the radius. */
   .bub::before { content:""; position:absolute; left:0; top:0; bottom:0; width:3px;
-    border-radius:10px 0 0 10px; background:var(--orgc,transparent); }
+    background:var(--orgc,transparent); }
   .msg.o1 .bub { --orgc:var(--o1); } .msg.o2 .bub { --orgc:var(--o2); }
   .msg.o3 .bub { --orgc:var(--o3); } .msg.o4 .bub { --orgc:var(--o4); }
   .msg.o5 .bub { --orgc:var(--o5); }
