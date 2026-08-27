@@ -170,6 +170,12 @@ type twinCopy struct {
 	// field a fetched message carries that an attribution-quote does not, which
 	// is what lets a short copy be vouched for (see sameSubjectWithMailbox).
 	subject string
+	// container is the mail thread id both copies sit in. A fetched mailbox copy
+	// carries it from its headers; a quoted copy inherits it from the host it was
+	// unspooled out of (quoted.go stores Container: host.Container). It is the
+	// thread signal that survives a quoting client dropping the Subject head,
+	// which is what lets sameThreadWithMailbox vouch a short copy.
+	container string
 	// prose is words again with the markup residue removed: what the positional
 	// test needs, and what the identity gates must not use. See proseWords.
 	prose []string
@@ -317,6 +323,7 @@ func peopleWithQuotedEntries(s *Store) ([]int64, error) {
 func twinCopies(s *Store, person int64) ([]twinCopy, error) {
 	rows, err := s.db.Query(`
 		select e.id, e.ext_id, e.quoted, e.ts, coalesce(e.subject,''),
+		       coalesce(e.container,''),
 		       coalesce(e.body_text,''),
 		       (select count(*) from attachments a where a.entry_id = e.id)
 		from entries e
@@ -331,7 +338,7 @@ func twinCopies(s *Store, person int64) ([]twinCopy, error) {
 		var c twinCopy
 		var ts int64
 		var body string
-		if err := rows.Scan(&c.id, &c.ext, &c.quoted, &ts, &c.subject, &body, &c.atts); err != nil {
+		if err := rows.Scan(&c.id, &c.ext, &c.quoted, &ts, &c.subject, &c.container, &body, &c.atts); err != nil {
 			return nil, err
 		}
 		c.wall = time.Unix(ts, 0).UTC()
@@ -448,10 +455,10 @@ func groupTwins(copies []twinCopy) ([][]twinCopy, []TwinDecline) {
 			if i == j || copies[j].wall.Sub(copies[i].wall).Abs() > 26*time.Hour {
 				continue
 			}
-			// A short copy is only paired with a mailbox copy that can vouch for
-			// it by subject; every other pairing still meets the floor in
-			// twinnable, where the refusal names the offset.
-			if short && !sameSubjectWithMailbox(copies[i], copies[j]) {
+			// A short copy is only paired with a mailbox copy that can vouch for it
+			// by subject or by sharing its thread; every other pairing still meets
+			// the floor in twinnable, where the refusal names the offset.
+			if short && !shortVouched(copies[i], copies[j]) {
 				continue
 			}
 			why, ok := twinnable(copies[i], copies[j])
@@ -519,7 +526,7 @@ func twinnable(a, b twinCopy) (string, bool) {
 	// identical short words are the norm across different messages — "Thanks,
 	// will do" is every second message in a mailbox — so the floor still holds.
 	if (len(a.words) < minTwinTokens || len(b.words) < minTwinTokens) &&
-		!sameSubjectWithMailbox(a, b) {
+		!shortVouched(a, b) {
 		return "the copy at a plausible offset has fewer than 25 words of its own: " +
 			offsetLabel(off), false
 	}
@@ -554,6 +561,62 @@ func sameSubjectWithMailbox(a, b twinCopy) bool {
 		return false
 	}
 	return subjectKey(q.subject) == subjectKey(m.subject)
+}
+
+// shortVouched reports whether one of a pair can vouch for the other being the
+// same message despite the other being too short to identify by its words alone.
+// A short copy is only ever vouched for by a fetched mailbox copy on the same
+// thread — either by subject (sameSubjectWithMailbox) or by the thread id it
+// shares with its host (sameThreadWithMailbox). Nothing else is asked to accept
+// five words as an identity: the floor exists because "Thanks, will do" is every
+// second message in a mailbox, and picking the wrong one of two identical
+// replies is undetectable once the other is gone.
+func shortVouched(a, b twinCopy) bool {
+	return sameSubjectWithMailbox(a, b) || sameThreadWithMailbox(a, b)
+}
+
+// sameThreadWithMailbox vouches a short copy whose quoting client dropped the
+// Subject head from the sentinel: the mailbox copy keeps its thread, and the
+// quoted copy inherits the same thread from the host it was unspooled out of
+// (quoted.go stores Container: host.Container), so the thread id is still there
+// even when the subject is not. Words must match exactly, because with no
+// subject to key on, identical few-word text on one thread is the whole of the
+// evidence — and two messages on one thread with the same few words are one
+// message re-quoted, where the same few words on two threads are two messages.
+//
+// Thread id is orthogonal to subject: where both are present they are the same
+// thread, and sameSubjectWithMailbox already caught the copy; this is the fall
+// through for the copy whose subject was emptied. Both are strict subsets of the
+// real cross-check — exact words on the same thread a mailbox copy holds.
+func sameThreadWithMailbox(a, b twinCopy) bool {
+	q, m := a, b
+	if !a.quoted && b.quoted {
+		q, m = b, a
+	}
+	if !q.quoted || m.quoted || q.container == "" || m.container == "" {
+		return false
+	}
+	if q.container != m.container {
+		return false
+	}
+	if len(q.words) == 0 && len(m.words) == 0 {
+		return true
+	}
+	return wordSlicesEqual(q.words, m.words)
+}
+
+// wordSlicesEqual compares two token slices under the ordering the identity
+// gates use, in both directions being irrelevant for equality.
+func wordSlicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // reTwinSubjectPrefix strips the Re:/Fw: chains a quoting client writes into the
@@ -923,6 +986,7 @@ func offsetLabel(mins int) string {
 func nearbyCopies(s *Store, person int64, wall time.Time) ([]twinCopy, error) {
 	rows, err := s.db.Query(`
 		select e.id, e.ext_id, e.quoted, e.ts, coalesce(e.subject,''),
+		       coalesce(e.container,''),
 		       coalesce(e.body_text,''),
 		       (select count(*) from attachments a where a.entry_id = e.id)
 		from entries e
@@ -938,7 +1002,7 @@ func nearbyCopies(s *Store, person int64, wall time.Time) ([]twinCopy, error) {
 		var o twinCopy
 		var ts int64
 		var body string
-		if err := rows.Scan(&o.id, &o.ext, &o.quoted, &ts, &o.subject, &body, &o.atts); err != nil {
+		if err := rows.Scan(&o.id, &o.ext, &o.quoted, &ts, &o.subject, &o.container, &body, &o.atts); err != nil {
 			return nil, err
 		}
 		o.wall = time.Unix(ts, 0).UTC()
@@ -965,13 +1029,13 @@ func nearbyCopies(s *Store, person int64, wall time.Time) ([]twinCopy, error) {
 // its host carries the host's instant rather than a rendered wall clock, so the
 // gap to a mailbox copy would be an artefact of that substitution and would mean
 // nothing as an offset.
-func FindTwin(s *Store, person int64, wall time.Time, text, subject string) (int64, bool, error) {
+func FindTwin(s *Store, person int64, wall time.Time, text, subject, container string) (int64, bool, error) {
 	if person == 0 {
 		return 0, false, nil
 	}
 	// No length pre-check: a short block can still be vouched for by a mailbox
 	// copy on the same thread, and twinnable applies the floor per pair.
-	c := twinCopy{quoted: true, wall: wall, subject: subject,
+	c := twinCopy{quoted: true, wall: wall, subject: subject, container: container,
 		words: copyWords(text, true), prose: proseWords(text, true)}
 	near, err := nearbyCopies(s, person, wall)
 	if err != nil {
@@ -1030,11 +1094,11 @@ type DerivedMatch struct {
 // instead of leaving the block to look like a brand-new message. Where there is
 // no such verified position (an edited quote whose extra words only drift, or a
 // genuinely different message), it refuses to guess, mirroring the repair pass.
-func FindDerived(s *Store, person int64, wall time.Time, text, subject string) (DerivedMatch, bool, error) {
+func FindDerived(s *Store, person int64, wall time.Time, text, subject, container string) (DerivedMatch, bool, error) {
 	if person == 0 {
 		return DerivedMatch{}, false, nil
 	}
-	c := twinCopy{quoted: true, wall: wall, subject: subject,
+	c := twinCopy{quoted: true, wall: wall, subject: subject, container: container,
 		words: copyWords(text, true), prose: proseWords(text, true)}
 	near, err := nearbyCopies(s, person, wall)
 	if err != nil {
