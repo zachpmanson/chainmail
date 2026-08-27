@@ -1,6 +1,7 @@
 package spec
 
 import (
+	"regexp"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -84,7 +85,7 @@ func recoverHTML(text string, hosts []string, bf bodyFold) (string, bool) {
 // ambiguity that cannot be told apart, and guessing is the one outcome worse
 // than plain text.
 func bestCandidate(text string, hosts []string) *candidate {
-	needle := textsim.Tokens(text)
+	needle := textsim.Tokens(stripMailtoMentions(text))
 	if len(needle) < minNeedleTokens {
 		return nil
 	}
@@ -111,6 +112,24 @@ func bestCandidate(text string, hosts []string) *candidate {
 		return nil
 	}
 	return best
+}
+
+// mailtoMention matches the address Gmail appends to a pasted mention: the
+// quoted recovery's needle text holds "@Siobhan Murphy <mailto:siobhan@...>"
+// while the same mention in the host's markup is rendered as a link whose
+// visible text is only the name. The mailto: address therefore contributes tokens
+// that exist in the needle but nowhere in the block, so a body opening on a
+// mention failed the head alignment: three of the first eight tokens were
+// mailto: address fragments that could never match. Remove the address and the
+// name counts the way it does in markup: "@Siobhan Murphy", then the content.
+var mailtoMention = regexp.MustCompile(`<mailto:[^>]+>`)
+
+// stripMailtoMentions drops an @mention's trailing mailto address from text
+// before it is tokenised as the recovery needle. The name itself stays: it is
+// real content that appears in both renditions. Only the address fragment, an
+// artifact of how the plain rendition writes a mention, is removed.
+func stripMailtoMentions(text string) string {
+	return mailtoMention.ReplaceAllString(text, "")
 }
 
 // inlineImages returns the filenames of the images a quoted message placed in

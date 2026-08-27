@@ -27,6 +27,36 @@ const gmailQuotedText = "Here is the column mapping we agreed:\n" +
 	"Read date\tMeter read\n" +
 	"Shout if the second column is wrong for the Fjordvik sites.\n"
 
+func TestAMailtoMentionOpeningStillRecoversTheTable(t *testing.T) {
+	// The #20 shape: the quoted message opens on a pasted mention — the needle
+	// holds "@Siobhan Murphy <mailto:siobhan@termina.io>" while the host renders
+	// the same mention as a link whose visible text is only the name. The
+	// mailto: address adds needle tokens that never appear in the block, which
+	// used to fail the head alignment and drop the whole body to plain text.
+	host := `<div dir="ltr"><a href="mailto:siobhan@termina.io">@Siobhan Murphy</a>, pls help</div>` +
+		`<div class="gmail_quote">` +
+		`<div class="gmail_attr">On Tue, 4 Aug 2026 at 13:26, Tosh Chak wrote:</div>` +
+		`<div dir="ltr">Hi <a href="mailto:siobhan@termina.io">@Siobhan Murphy</a>,</div>` +
+		`<div>This ICP has been added to the database under Multiplex Cinemas Ltd. Since this is an ` +
+		`unbundled ICP, no online review was completed.</div>` +
+		`<table><tr><th>ICP</th><th>Remarks</th></tr>` +
+		`<tr><td>0030020136PCDA3</td><td>Unbundle</td></tr></table>` +
+		`<div>Thanks!</div>` +
+		`</div>`
+	r := &entryRow{
+		Source: "mail",
+		BodyText: "Hi @Siobhan Murphy <mailto:siobhan@termina.io>,\n" +
+			"This ICP has been added to the database under Multiplex Cinemas Ltd. Since this is an " +
+			"unbundled ICP, no online review was completed.\n" +
+			"ICP\tRemarks\n003002002122PCDA3\tUnbundle\nThanks!",
+		HostHTML: []string{host},
+	}
+	got := bodyHTML(r)
+	if !strings.Contains(got, "<table>") {
+		t.Fatalf("body = %q, want the table recovered despite the mailto mention opening", got)
+	}
+}
+
 func TestAQuotedEntryRecoversItsMarkupFromAHost(t *testing.T) {
 	// The point of the whole file: this entry has no markup of its own, and its
 	// table exists only inside the reply that quoted it.
