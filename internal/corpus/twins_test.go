@@ -468,25 +468,32 @@ func TestGroupWithTwoMailboxCopiesIsRefused(t *testing.T) {
 }
 
 // A recovered copy short enough to match anything is left alone and said so.
-func TestTooShortToIdentifyIsDeclined(t *testing.T) {
+func TestTooShortIdentifiedByItsThreadCollapses(t *testing.T) {
 	s := open(t)
 	deniz := person(t, s, "deniz.aslan@quarry.fed", "Deniz Aslan")
 	tui := person(t, s, "tui.walker@moana.fed", "Tui Walker")
 	sent := twinAt(t, "2026-05-20 01:38:14")
 
-	mailbox(t, s, deniz, "ask@quarry.fed", "Thanks, will do.", sent)
+	keep := mailbox(t, s, deniz, "ask@quarry.fed", "Thanks, will do.", sent)
 	h := host(t, s, tui, "reply@moana.fed", sent.Add(3*time.Hour))
 	drop := recovered(t, s, deniz, "abc", "Thanks, will do.", sent.Add(10*time.Hour), h)
 
-	plan, err := CollapseTwins(s, false)
+	plan, err := CollapseTwins(s, true)
 	if err != nil {
 		t.Fatalf("CollapseTwins: %v", err)
 	}
-	if len(plan.Collapse) != 0 {
-		t.Fatalf("collapsed on 3 words: %+v", plan.Collapse)
+	if len(plan.Collapse) != 1 || plan.Removed != 1 || plan.Collapse[0].Keep != keep {
+		t.Fatalf("plan = %+v, want the short copy collapsed onto the mailbox copy", plan.Collapse)
 	}
-	if len(plan.Declined) != 1 || plan.Declined[0].Entry != drop {
-		t.Fatalf("declines = %+v, want the short copy named", plan.Declined)
+	if len(plan.Declined) != 0 {
+		t.Fatalf("declines = %+v, want none", plan.Declined)
+	}
+	var n int
+	if err := s.DB().QueryRow(`select count(*) from entries where id=?`, drop).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatal("the short copy is still there")
 	}
 }
 
@@ -872,19 +879,19 @@ func TestFindTwinWillNotConvergeAnAnnotatedBlock(t *testing.T) {
 	sent := twinAt(t, "2026-05-20 01:38:14")
 	keep := mailbox(t, s, deniz, "ask@quarry.fed", askBody, sent)
 
-	if id, ok, err := FindTwin(s, deniz, sent.Add(10*time.Hour), askQuoted, ""); err != nil {
+	if id, ok, err := FindTwin(s, deniz, sent.Add(10*time.Hour), askQuoted, "", "thread-1"); err != nil {
 		t.Fatal(err)
 	} else if !ok || id != keep {
 		t.Fatalf("a clean requote found twin %d (%v), want the mailbox copy %d", id, ok, keep)
 	}
-	if id, ok, err := FindTwin(s, deniz, sent.Add(10*time.Hour), askAnnotated, ""); err != nil {
+	if id, ok, err := FindTwin(s, deniz, sent.Add(10*time.Hour), askAnnotated, "", "thread-1"); err != nil {
 		t.Fatal(err)
 	} else if ok {
 		t.Fatalf("an annotated block converged onto entry %d, losing the answer", id)
 	}
 	// FindDerived is how that refusal is not lost: the same block is recognisably
 	// a MODIFIED copy of the base it answered inside, not an unrelated message.
-	if d, ok, err := FindDerived(s, deniz, sent.Add(10*time.Hour), askAnnotated, ""); err != nil {
+	if d, ok, err := FindDerived(s, deniz, sent.Add(10*time.Hour), askAnnotated, "", "thread-1"); err != nil {
 		t.Fatal(err)
 	} else if !ok {
 		t.Fatalf("FindDerived did not recognise the annotated block as a copy")
@@ -966,7 +973,7 @@ Aria`
 	quoted := `Hi Dev, I have attached an example data file here. Let me know how it goes. Regards, Aria`
 	wall := sent.Add(12 * time.Hour)
 	if id, ok, err := FindTwin(s, aria, wall, quoted,
-		"Re: Meadow & Northland - Data Sharing"); err != nil {
+		"Re: Meadow & Northland - Data Sharing", "thread-9"); err != nil {
 		t.Fatal(err)
 	} else if !ok || id != res.ID {
 		t.Fatalf("a vouched short requote found twin %d (%v), want the mailbox copy %d", id, ok, res.ID)
@@ -1049,7 +1056,7 @@ func TestShortCopyFromAnotherThreadIsStillDeclined(t *testing.T) {
 	// it a plausible offset away, which is exactly the trap the floor exists for.
 	quoted := "Thanks, will do."
 	wall := sent.Add(12 * time.Hour)
-	if id, ok, err := FindTwin(s, aria, wall, quoted, "Re: August invoice"); err != nil {
+	if id, ok, err := FindTwin(s, aria, wall, quoted, "Re: August invoice", "thread-11"); err != nil {
 		t.Fatal(err)
 	} else if ok {
 		t.Fatalf("a short block from another thread converged onto entry %d", id)
@@ -1093,5 +1100,73 @@ func TestShortCopyFromAnotherThreadIsStillDeclined(t *testing.T) {
 	}
 	if n != 1 {
 		t.Fatalf("the second message did not survive (entries where id=%d is %d)", drop, n)
+	}
+}
+
+// The real case that motivated the thread-tier: a short "I will look into this
+// this morning." whose quoting client dropped the Subject head from the
+// sentinel. The mailbox copy carries the subject and thread; the recovered
+// block carries no subject but does carry the thread it was unspooled out of
+// (quoted.go stores Container: host.Container). The subject voucher needs a
+// subject on both sides and cannot fire — the thread id is what keys them. At
+// ingest the block converges onto the mailbox copy instead of being stored as a
+// second entry.
+func TestShortCopyWithDroppedSubjectConvergesByThread(t *testing.T) {
+	s := open(t)
+	aria := person(t, s, "aria.meyer@acme.test", "Aria Meyer")
+	dev := person(t, s, "dev.patel@northland.test", "Dev Patel")
+	sent := twinAt(t, "2026-04-14 06:59:05")
+
+	// The mailbox copy: true instant, AEST, a subject and a thread id.
+	res, err := s.Put(Entry{
+		Source: SourceMail, ExtID: "mail:<morning@acme.test>", TS: sent,
+		TZ: "AEST", TZOffset: &[]int{600}[0], PersonID: aria, Container: "thread-7",
+		Subject: "Multiplex Cinemas Ltd", BodyText: "I will look into this this morning.",
+	}, &Mail{MessageID: "<morning@acme.test>"}, nil)
+	if err != nil {
+		t.Fatalf("storing the mailbox copy: %v", err)
+	}
+	if err := Participate(s, res.ID, aria, RoleFrom); err != nil {
+		t.Fatal(err)
+	}
+
+	// The recovered block: same thread, no subject, few words. The subject
+	// voucher cannot vouch (empty subject), but the thread id can.
+	quoted := "I will look into this this morning."
+	wall := sent.Add(10 * time.Hour)
+	if id, ok, err := FindTwin(s, aria, wall, quoted, "", "thread-7"); err != nil {
+		t.Fatal(err)
+	} else if !ok || id != res.ID {
+		t.Fatalf("a subject-less short requote on the same thread found twin %d (%v), "+
+			"want the mailbox copy %d", id, ok, res.ID)
+	}
+
+	// And the repair pass converges it the same way if the copy was stored first.
+	h := host(t, s, dev, "reply@northland.test", sent.Add(14*time.Hour))
+	drop, created, err := s.PutQuoted(Entry{
+		Source: SourceMail, ExtID: "quote:morning@acme.test", TS: wall,
+		PersonID: aria, Container: "thread-7",
+		BodyText: quoted,
+	})
+	if err != nil {
+		t.Fatalf("storing the recovered copy: %v", err)
+	}
+	if !created {
+		t.Fatal("recovered copy already existed")
+	}
+	if err := s.Sight(drop, h, "quoted", "depth 1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := Participate(s, drop, aria, RoleFrom); err != nil {
+		t.Fatal(err)
+	}
+
+	plan, err := CollapseTwins(s, true)
+	if err != nil {
+		t.Fatalf("CollapseTwins: %v", err)
+	}
+	if len(plan.Collapse) != 1 || plan.Removed != 1 || plan.Declined != nil {
+		t.Fatalf("plan = %+v declined=%+v, want one collision with no decline",
+			plan.Collapse, plan.Declined)
 	}
 }

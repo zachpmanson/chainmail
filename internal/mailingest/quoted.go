@@ -87,9 +87,10 @@ func ExtractQuoted(store *corpus.Store, hostID int64, host corpus.Entry, body st
 		var twin int64
 		var derived corpus.DerivedMatch
 		if !inferred {
-			// The subject is the thread that vouches for a short block: without it
-			// the same few words on two threads would collapse into one message.
-			t, ok, err := corpus.FindTwin(store, person, ts, rec.Block.Text, rec.Subject)
+			// The subject — or, when the client dropped it, the host's own thread —
+			// vouches for a short block: without one of them the same few words on
+			// two threads would collapse into one message.
+			t, ok, err := corpus.FindTwin(store, person, ts, rec.Block.Text, rec.Subject, host.Container)
 			if err != nil {
 				return r, err
 			}
@@ -97,7 +98,7 @@ func ExtractQuoted(store *corpus.Store, hostID int64, host corpus.Entry, body st
 				twin = t
 			} else {
 				// Not a twin; ask whether it is the SAME message line, edited.
-				d, ok2, err := corpus.FindDerived(store, person, ts, rec.Block.Text, rec.Subject)
+				d, ok2, err := corpus.FindDerived(store, person, ts, rec.Block.Text, rec.Subject, host.Container)
 				if err != nil {
 					return r, err
 				}
