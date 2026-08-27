@@ -527,16 +527,22 @@ func hasAttRow(as []attRow, a attRow) bool {
 // contain dots and spaces, so a plain token split would miss them, and a
 // substring match against the child body is a strict enough bound because the
 // filename has to match one of the host's listed attachments exactly.
+//
+// Both sides are normalised first: every run of Unicode whitespace — including
+// the U+202F narrow no-break space Gmail writes into a macOS "YYYY-MM-DD HH\u00a0AM"
+// screenshot name — collapses to a single regular space, so the bodies-readable
+// rendition of the name matches the archived one. Distinct words stay distinct; a
+// space is never dropped, only unified.
 func filenameMentioned(text, filename string) bool {
 	if filename == "" {
 		return false
 	}
-	t := strings.ToLower(strings.TrimSpace(text))
-	f := strings.ToLower(filename)
+	t := strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(text)), " "))
+	f := strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(filename)), " "))
 	if f == "" {
 		return false
 	}
-	return strings.Contains(t, strings.TrimRight(f, "/"))
+	return strings.Contains(t, f)
 }
 
 // checkCastCoversSenders fails a spec that would show a message from someone the

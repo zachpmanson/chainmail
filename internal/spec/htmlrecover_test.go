@@ -361,3 +361,29 @@ func TestAttributeFilenamesMentionedInChildText(t *testing.T) {
 		t.Fatalf("host.Atts = %+v, want both rows kept on the host", host.Atts)
 	}
 }
+
+func TestAttributeFilenamesMentionedNormalisesWhitespace(t *testing.T) {
+	// Gmail archives a macOS screenshot with a U+202F narrow no-break space in
+	// the clock ("8.52.12\u202fam"), while the quoted body renders the same
+	// name with a plain space. The filename has to match across that before it
+	// can be attributed to the message that showed it.
+	host := &entryRow{
+		ID: 5, Source: "mail", Direct: true, GmailID: "gmail-host3",
+		Atts: []attRow{
+			{Name: "Screenshot 2026-08-26 at 8.52.12\u202fam.png", Mime: "image/png", Size: 95716, SourceRef: "1"},
+		},
+	}
+	child := &entryRow{
+		ID: 6, Source: "mail", Direct: false, SeenIn: []int64{5},
+		BodyText: "Please update ASAP @review\n<Screenshot 2026-08-26 at 8.52.12 am.png>",
+	}
+	rows := []*entryRow{host, child}
+	attributeAttachments(rows)
+
+	if len(child.Atts) != 1 || child.Atts[0].Name != "Screenshot 2026-08-26 at 8.52.12\u202fam.png" {
+		t.Fatalf("child.Atts = %+v, want the screenshot attributed despite the nbsp in the clock", child.Atts)
+	}
+	if child.Atts[0].Size != 95716 {
+		t.Errorf("copied size = %d, want 95716", child.Atts[0].Size)
+	}
+}
