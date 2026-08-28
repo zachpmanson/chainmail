@@ -237,7 +237,16 @@ export function trimBody(body: string): string {
     return endFold ? body.slice(spans[n - 1]!.start, spans[n - 1]!.end) : "";
   }
 
-  if (!endFold && first === 0 && lastContent === n - 1) return body;
+  if (!endFold && first === 0 && lastContent === n - 1) {
+    // The body already starts and ends on content at the top level. But the
+    // final span may still wrap a signature behind a leading blank run
+    // (Gmail opens the wrap with <br clear="all"/> before the fold), in which
+    // case the whole-span fast-path is not clean: rebuild the last span with
+    // that interior leading whitespace peeled. Otherwise the body is done.
+    const stripped = stripWrapLead(body.slice(spans[n - 1]!.start, spans[n - 1]!.end));
+    if (stripped == null) return body;
+    return body.slice(0, spans[n - 1]!.start) + stripped;
+  }
 
   // Keep every span from first..lastContent. Between two content spans a blank
   // is the author's separator and stays; the only blanks that fall out are the
@@ -266,14 +275,41 @@ export function trimBody(body: string): string {
 }
 
 /**
- * Trim the trailing whitespace-only top-level siblings of a span [start,end),
- * then recurse into the final kept element so blanks nested at any depth are
- * peeled too. Mirrors the backend trimTrailingWhitespace: Gmail renders a
- * message and its signature as adjacent sibling blocks
- * (<div>text…<br clear="all"/></div><div><details class="sig">…</details></div>),
- * and may leave a deeper <br/>&nbsp; run inside the last content block, so the
- * trailing edge is peeled as deep as it goes. Returns the trimmed substring.
+ * Strip the leading whitespace-only children that open a span when the span is
+ * a single non-void wrapper whose interior still ends in a folded signature —
+ * Gmail opens a signature wrap with one or two <br clear="all"/> before the
+ * actual table, so the blanks sit inside the wrap's leading edge. The fold and
+ * every opener/closer before and after are kept; only the blank run ahead of
+ * the first content child is removed. Mirrors the backend trimLeadingWhitespace
+ * inside the wrapped-fold branch of trimTrailingWhitespace.
+ *
+ * Returns the rewritten span slice, or null when the span is not shaped this
+ * way (so the caller keeps its input).
  */
+function stripWrapLead(innerOfSpan: string): string | null {
+  const t = parseTag(innerOfSpan, 0);
+  if (!t || t.closing || t.selfClose || t.cls === "pre") return null;
+  const close = "</" + t.cls + ">";
+  if (innerOfSpan.slice(innerOfSpan.length - close.length).toLowerCase() !== close) return null;
+  const mid = innerOfSpan.slice(t.gt, innerOfSpan.length - close.length);
+  const subs = topLevelSpans(mid);
+  let first = 0;
+  while (
+    first < subs.length &&
+    !(subs[first]!.fold || subtreeHasContent(mid, subs[first]!.start, subs[first]!.end))
+  ) {
+    first++;
+  }
+  if (first === 0) return null; // no leading blanks to peel
+  if (first === subs.length) return null; // nothing but blanks
+  // The first content child must itself resolve to a wrapper hiding a fold;
+  // otherwise this is a real blank line the author wanted and we keep it.
+  const abs = { start: subs[first]!.start, end: subs[first]!.end };
+  if (!resolvesToFold(mid, abs)) return null;
+  // Rebuild: keep the open tag and everything from the first content child on,
+  // dropping the leading-blank run ([t.gt, t.gt+subs[first].start) inside the wrap).
+  return innerOfSpan.slice(0, t.gt) + innerOfSpan.slice(t.gt + subs[first]!.start);
+}
 function trimTrailingOf(body: string, start: number, end: number): string {
   const inner = body.slice(start, end);
   const subs = topLevelSpans(inner);

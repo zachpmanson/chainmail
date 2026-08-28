@@ -361,3 +361,31 @@ func TestTrailingWhitespaceBeforeAWrappedFoldIsTrimmed(t *testing.T) {
 		t.Errorf("body = %q, want the signature kept inside the fold", got)
 	}
 }
+
+func TestTrailingSeparatorsInsideTheFoldWrapperAreTrimmed(t *testing.T) {
+	// A Gmail signature block is itself an HTML table, and the sender may open
+	// the wrap with one or two <br clear="all"/> before the actual table — so
+	// the blank separators sit *inside* the wrapper's leading edge, not in the
+	// preceding content block. The exposed body must still sit edge-on to the
+	// disclosure, so those leading blanks inside the wrap are dropped too.
+	part := `<div dir="auto">Hi mate,</div>` +
+		`<div dir="auto"><br/></div>` +
+		`<div dir="auto">Reach Jason&nbsp;</div>` +
+		`<div><br clear="all"/><br clear="all"/><div class="gmail_signature"><div>Lane<br>Country Mgmt</div></div></div>`
+	got := renderMarkup(part, mailBody)
+	if !strings.Contains(got, `<details class="sig">`) {
+		t.Fatalf("body = %q, want the signature folded", got)
+	}
+	if cut := strings.Index(got, "<details"); cut >= 0 {
+		exposed := got[:cut]
+		if strings.Contains(exposed, `<br clear="all"/>`) {
+			t.Errorf("body = %q, want the wrapper's leading <br clear> blanks gone", got)
+		}
+		if stripped := strings.TrimRight(exposed, " \t\n"); stripped != exposed {
+			t.Errorf("body = %q, want no blanks between content and the wrap", got)
+		}
+	}
+	if !strings.Contains(got, "Lane") || !strings.Contains(got, "Mgmt") {
+		t.Errorf("body = %q, want the signature kept inside the fold", got)
+	}
+}

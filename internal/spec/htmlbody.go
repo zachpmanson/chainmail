@@ -634,6 +634,10 @@ func trimTrailingWhitespace(n *html.Node) {
 			// The signature block is the last child wrapped in its own element. The
 			// exposed content sits in the sibling(s) just before it; drop their
 			// trailing whitespace so the body still ends edge-on to the disclosure.
+			// The wrapper may also carry blanks of its own ahead of the fold (Gmail
+			// opens a signature with one or two <br clear="all"/> inside the same
+			// wrap), so trim the wrapper's leading whitespace too.
+			trimLeadingWhitespace(c)
 			sibling := c.PrevSibling
 			for sibling != nil && !hasContent(sibling) {
 				prev := sibling.PrevSibling
