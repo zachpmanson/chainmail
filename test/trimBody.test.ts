@@ -104,3 +104,23 @@ describe("trimBody", () => {
       '<div dir="ltr"><div>Thanks,</div><div><br/></div><div><span>Bye.</span></div></div>',
     );
   });
+
+  it("trims leading blanks inside a wrap that hides a fold", () => {
+    // A Gmail signature block is an HTML table that opens with one or two
+    // <br clear="all"/> before the table, so the separator sits as leading
+    // children *inside* the wrapper that also holds the fold. The body must
+    // still lift edge-on to the disclosure — those interior leading blanks
+    // are dropped, the fold and the wrapper's open/close tags stay.
+    const body =
+      '<div dir="auto">Hi mate,</div>' +
+      '<div dir="auto"><br/></div>' +
+      '<div dir="auto">Reach Jason&nbsp;</div>' +
+      '<div><br clear="all"/><br clear="all"/>' +
+      '<div><details class="sig"><summary>signature</summary><div>Lane</div></details></div></div>';
+    expect(trimBody(body)).toBe(
+      '<div dir="auto">Hi mate,</div>' +
+      '<div dir="auto"><br/></div>' +
+      '<div dir="auto">Reach Jason&nbsp;</div>' +
+      '<div><div><details class="sig"><summary>signature</summary><div>Lane</div></details></div></div>',
+    );
+  });
