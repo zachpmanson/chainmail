@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import type { Entry } from "../lib/spec";
 import { derive, initials, type Row, type RowEdit, type View } from "../lib/derive";
 import type { Timeline as Spec } from "../lib/spec";
@@ -28,6 +28,51 @@ function Avatar({ row, v }: { row: Row; v: View }) {
  * clock beside a labelled one silently invites the reader to compare them, and
  * on this page most clocks are unlabelled.
  */
+/**
+ * A clip button that drops the message's own data onto the clipboard as JSON —
+ * the spec entry as the renderer saw it, plus the row id and any resolved
+ * quote-edits (the "edited by … original from …" attribution), so a message
+ * that renders wrong can be pasted somewhere and inspected whole. Quiet, and
+ * not a navigational control: inline handlers only, no listener of its own.
+ */
+function CopyJson({ row }: { row: Row }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      type="button"
+      className="copyjson"
+      title="Copy this message's JSON"
+      aria-label="Copy this message's JSON"
+      onClick={() => {
+        const payload = JSON.stringify(
+          {
+            id: row.id,
+            chain: row.chain ?? null,
+            entry: row.entry,
+            edits: row.edits?.length ? row.edits : undefined,
+          },
+          null,
+          2,
+        );
+        navigator.clipboard?.writeText(payload).then(
+          () => setDone(true),
+          () => {},
+        );
+        window.setTimeout(() => setDone(false), 1200);
+      }}
+    >
+      {done ? "copied" : (
+        <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+          <rect x="5.5" y="5.5" width="8" height="8" rx="1.2" fill="none"
+            stroke="currentColor" strokeWidth="1.4" />
+          <path d="M3 10.5 V3.5 a.5.5 0 0 1 .5-.5 H10" fill="none"
+            stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+        </svg>
+      )}
+    </button>
+  );
+}
+
 function Stamp({ row }: { row: Row }) {
   const { date, time, tz, zone } = row.stamp;
   return (
@@ -288,6 +333,7 @@ function EntryBlock({ row, v, mark, anchorByGmail }: { row: Row; v: View; mark?:
           <Stamp row={row} />
           {mark === "new" ? <span className="newpill">new</span> : null}
           {mark === "revised" ? <span className="revpill">revised</span> : null}
+          <CopyJson row={row} />
         </div>
         <div className="bub">
           {e.mentions?.length ? (

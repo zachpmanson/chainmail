@@ -182,6 +182,11 @@
   .msg.o3 .org { --orgc:var(--o3); } .msg.o4 .org { --orgc:var(--o4); }
   .msg.o5 .org { --orgc:var(--o5); }
   .tm { font-size:.71rem; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .copyjson { margin-left:auto; display:inline-flex; align-items:center; gap:.3rem;
+    font:inherit; font-size:.66rem; font-weight:650; color:var(--muted);
+    background:transparent; border:1px solid transparent; border-radius:5px;
+    padding:.12rem .3rem; cursor:pointer; }
+  .copyjson:hover { color:var(--accent); border-color:var(--line); background:var(--card); }
   .tz { font-size:.9em; opacity:.75; }
   /* an inferred zone must not read as a stated one */
   .tz.tzi { opacity:.55; border-bottom:1px dotted currentColor; cursor:help; }
