@@ -225,6 +225,28 @@ func runRepair(path string) error {
 		fmt.Printf("\n%d truncated %s left for review — `corpus candidates`\n",
 			n, plural(n, "name", "names"))
 	}
+
+	// The reply graph is repaired last, because it is the damage the rest of
+	// the phase can have made: twins-absorb adopts and derived re-parents each
+	// close an edge that was honest alone, and a ring turns every walk that
+	// enters it into an empty answer — a chain that exists reads as one that
+	// does not. Repaired here rather than behind a flag of its own for the same
+	// reason the identity repairs are: it is deterministic, refuses rather than
+	// guesses, and an operator who runs half of the phase keeps a graph that is
+	// still wrong. A healthy graph reports zero; that is the pass being cheap.
+	gr, err := s.RepairGraph()
+	if err != nil {
+		return fmt.Errorf("repairing the reply graph: %w", err)
+	}
+	if gr.Edges > 0 {
+		fmt.Printf("repair-graph: severed %d ring %s\n",
+			gr.Edges, plural(gr.Edges, "edge", "edges"))
+		for _, e := range gr.Severed {
+			fmt.Printf("  %s -> %s (%s)\n", e.ChildExt, e.ParentExt, e.Why)
+		}
+	} else {
+		fmt.Println("repair-graph: no rings in the reply graph")
+	}
 	return nil
 }
 
