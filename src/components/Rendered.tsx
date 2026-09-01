@@ -3,6 +3,7 @@ import { Timeline } from "./Timeline";
 import { attach } from "../client/behaviour";
 import { derive } from "../lib/derive";
 import { SpecView } from "./SpecView";
+import { ChainPreview } from "./ChainPreview";
 import type { RefreshCandidate, RefreshReport } from "../lib/api";
 import type { Timeline as Spec } from "../lib/spec";
 
@@ -144,6 +145,8 @@ function ProposalsModal({ proposals, open, refreshing, onClose, onAccept }: {
   onAccept: (ids: string[]) => void;
 }) {
   const [accepted, setAccepted] = useState<Set<string>>(new Set());
+  // The proposal being previewed, by root ext id. Null when no modal is open.
+  const [preview, setPreview] = useState<RefreshCandidate | null>(null);
   if (!open) return null;
 
   const ids = proposals.map((p) => p.rootExtId);
@@ -156,8 +159,9 @@ function ProposalsModal({ proposals, open, refreshing, onClose, onAccept }: {
     });
 
   return (
-    <div className="proposals" role="dialog" aria-modal="true" aria-label="Proposed chains">
-      <div className="proposals-panel">
+    <>
+      <div className="proposals" role="dialog" aria-modal="true" aria-label="Proposed chains">
+        <div className="proposals-panel">
         <div className="proposals-head">
           <b>proposed</b>
           <span className="note">found by a query, not yet on the page — accept the ones that belong</span>
@@ -167,15 +171,25 @@ function ProposalsModal({ proposals, open, refreshing, onClose, onAccept }: {
             const on = accepted.has(p.rootExtId);
             return (
               <li key={p.subject ?? p.container ?? p.rootExtId} className="propcard">
-                <label className="proptoggle">
-                  <input type="checkbox" checked={on} onChange={() => toggle(p.rootExtId)} />
-                  <span className="propsubj">{p.subject ?? <em>no subject</em>}</span>
-                </label>
-                <span className="propmeta">
-                  {p.matched}/{p.entries} matched · {p.span ?? ""} · {p.query}
-                  {p.semantic ? ` · sim ${p.similarity?.toFixed(2) ?? "–"}${p.lexical ? " (hybrid)" : " (semantic)"}` : p.lexical ? " · word match" : ""}
-                </span>
-                <code className="proprowid">{p.rootExtId}</code>
+                <div className="propcard-body">
+                  <label className="proptoggle">
+                    <input type="checkbox" checked={on} onChange={() => toggle(p.rootExtId)} />
+                    <span className="propsubj">{p.subject ?? <em>no subject</em>}</span>
+                  </label>
+                  <span className="propmeta">
+                    {p.matched}/{p.entries} matched · {p.span ?? ""} · {p.query}
+                    {p.semantic ? ` · sim ${p.similarity?.toFixed(2) ?? "–"}${p.lexical ? " (hybrid)" : " (semantic)"}` : p.lexical ? " · word match" : ""}
+                  </span>
+                  <code className="proprowid">{p.rootExtId}</code>
+                </div>
+                {/* Preview reads the chain as data, the same modal the search
+                    page uses, so a proposal can be judged on its entries before
+                    it is accepted. Kept out of the toggle label, so ticking it
+                    and previewing it never fight over one hit area. */}
+                <button type="button" className="selpvbtn" aria-haspopup="dialog"
+                        onClick={() => setPreview(p)}>
+                  Preview
+                </button>
               </li>
             );
           })}
@@ -190,8 +204,10 @@ function ProposalsModal({ proposals, open, refreshing, onClose, onAccept }: {
             accept all {proposals.length}
           </button>
           <button className="tbtn" type="button" onClick={onClose} disabled={refreshing}>close</button>
+          </div>
         </div>
       </div>
-    </div>
+      {preview ? <ChainPreview chain={preview} onClose={() => setPreview(null)} /> : null}
+    </>
   );
 }
