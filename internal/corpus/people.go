@@ -604,6 +604,18 @@ func mergeWithReason(s *Store, keep, drop int64, reason string) error {
 	if _, err := tx.Exec(`delete from participants where person_id=?`, drop); err != nil {
 		return err
 	}
+	// The render-offset measurements — whose client rendered a quoted clock —
+	// are facts about the same human, so they follow the merge just like
+	// participation, with the same collision handling: repoint what does not
+	// collide, and drop what does. A merge that skipped this table would die on
+	// the foreign key when the emptied person row was deleted.
+	if _, err := tx.Exec(
+		`update or ignore render_offsets set person_id=? where person_id=?`, keep, drop); err != nil {
+		return fmt.Errorf("repointing render offsets of %d: %w", drop, err)
+	}
+	if _, err := tx.Exec(`delete from render_offsets where person_id=?`, drop); err != nil {
+		return err
+	}
 	if _, err := tx.Exec(
 		`update person_merges set kept_id=? where kept_id=?`, keep, drop); err != nil {
 		return err

@@ -266,6 +266,51 @@ func TestMergeFoldsEveryIdentityAndReferenceIntoTheSurvivor(t *testing.T) {
 	}
 }
 
+// The merge that crashed the live corpus: a dropped person who has render
+// offsets measured by the twins pass (whose client rendered a quoted clock).
+// The offsets must follow the survivor, and the emptied person row must delete
+// without tripping the render_offsets foreign key.
+func TestMergeCarriesRenderOffsets(t *testing.T) {
+	s := open(t)
+	keep, err := Resolve(s, KindEmail, "dan@current.example", "Dan D")
+	if err != nil {
+		t.Fatal(err)
+	}
+	drop, err := Resolve(s, KindEmail, "dan@old.example", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The dropped half measured one offset; the survivor measured a different
+	// one on a different entry, so the PK (person_id, entry_id, off) does not
+	// collide and both rows should survive under the survivor.
+	e1, err := s.Put(entry("mail:<r1@x>", "rendered in one"), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e2, err := s.Put(entry("mail:<r2@x>", "rendered in two"), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`
+		insert into render_offsets (person_id, entry_id, at, off, measured_from, measured_at)
+		values (?, ?, 100, 600, ?, 200), (?, ?, 100, 720, ?, 200)`,
+		drop, e1.ID, e1.ID, keep, e2.ID, e2.ID); err != nil {
+		t.Fatalf("seeding render offsets: %v", err)
+	}
+
+	if err := Merge(s, keep, drop); err != nil {
+		t.Fatalf("Merge: %v", err)
+	}
+	var n int
+	if err := s.DB().QueryRow(
+		`select count(*) from render_offsets where person_id=?`, keep).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Fatalf("render offsets under the survivor: got %d, want 2", n)
+	}
+}
+
 func TestMergeByEmailAndItsRefusals(t *testing.T) {
 	s := open(t)
 	keep, err := Resolve(s, KindEmail, "erin@current.example", "Erin E")
