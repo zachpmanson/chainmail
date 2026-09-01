@@ -72,9 +72,19 @@ func (s *Store) PutQuoted(e Entry) (int64, bool, error) {
 // the block it was quoted beneath — so it is linked at extraction time.
 //
 // Refuses to make an entry its own parent, which positional nesting can produce
-// when two blocks collapse to one under dedup.
+// when two blocks collapse to one under dedup, and refuses any edge that would
+// close a cycle: the same quoted content can surface at different depths of
+// different forwards, and linking the copies of one message to the copies of
+// another in both orders would ring the graph, which no walk of it could then
+// read. A refused edge leaves the entry a root — the reading that cannot be
+// wrong.
 func (s *Store) SetParent(child, parent int64) error {
 	if child == 0 || parent == 0 || child == parent {
+		return nil
+	}
+	if bad, err := closesCycle(s.db, child, parent); err != nil {
+		return err
+	} else if bad {
 		return nil
 	}
 	_, err := s.db.Exec(

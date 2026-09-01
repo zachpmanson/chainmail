@@ -287,6 +287,21 @@ func CollapseTwins(s *Store, apply bool) (TwinPlan, error) {
 // quoter answered inside, and the survivor is the base it modified. Writing it
 // here lets the renderer draw the edit inline instead of a floating duplicate.
 func persistDerived(s *Store, copy, base int64) error {
+	// The modified copy can sit inside a reply whose own edge points back at the
+	// base (the reply-back pattern that also rings absorb's adopt), so the
+	// parent edge is checked before it is written: refused, the entry is still
+	// marked derived — the renderer still reads it as an edit — but keeps the
+	// parent it had, which cannot be a ring.
+	bad, err := closesCycle(s.db, copy, base)
+	if err != nil {
+		return fmt.Errorf("checking %d against %d: %w", copy, base, err)
+	}
+	if bad {
+		if _, err := s.db.Exec(`update entries set derived = 1 where id = ?`, copy); err != nil {
+			return fmt.Errorf("marking %d a modified copy of %d: %w", copy, base, err)
+		}
+		return nil
+	}
 	if _, err := s.db.Exec(`update entries set derived = 1, parent_id = ? where id = ?`, base, copy); err != nil {
 		return fmt.Errorf("marking %d a modified copy of %d: %w", copy, base, err)
 	}
@@ -809,29 +824,61 @@ func absorb(tx *sql.Tx, s *Store, keep, drop int64) error {
 			return fmt.Errorf("moving the evidence of %d: %w", drop, err)
 		}
 	}
-	// A child of the dropped copy replied to the MESSAGE, so it now replies to the
-	// survivor — except the survivor itself, which quoted the copy of its own
-	// words and would otherwise become its own parent.
-	if _, err := tx.Exec(
-		`update entries set parent_id=? where parent_id=? and id<>?`, keep, drop, keep); err != nil {
-		return fmt.Errorf("repointing the children of %d: %w", drop, err)
+	// A child of the dropped copy replied to the MESSAGE, so it now replies to
+	// the survivor. Repointed one at a time so every edge can be checked: a
+	// child that is already an ancestor of the survivor would ring the graph if
+	// it pointed at the survivor, and a ring is worse than a thread that reads
+	// as ending, so that child keeps no parent at all. (The dropped copy is
+	// going away just below, so leaving the old edge behind is not an option.)
+	children, err := tx.Query(`select id from entries where parent_id = ? and id <> ?`, drop, drop)
+	if err != nil {
+		return fmt.Errorf("listing the children of %d: %w", drop, err)
 	}
-	// A message can be quoted inside itself — a resend whose body carries the
-	// "Sent:" header block of the message being resent — which leaves the mailbox
-	// copy pointing at the copy of its own words. That edge goes rather than
-	// travelling: nothing replied to anything.
-	if _, err := tx.Exec(
-		`update entries set parent_id=null where id=? and parent_id=?`, keep, drop); err != nil {
-		return fmt.Errorf("clearing the self-edge of %d: %w", keep, err)
+	for children.Next() {
+		var child int64
+		if err := children.Scan(&child); err != nil {
+			children.Close()
+			return fmt.Errorf("listing the children of %d: %w", drop, err)
+		}
+		reparent := keep
+		if bad, err := closesCycle(tx, child, keep); err != nil {
+			children.Close()
+			return err
+		} else if bad {
+			reparent = 0
+		}
+		if _, err := tx.Exec(
+			`update entries set parent_id = ? where id = ? and parent_id = ?`,
+			nullInt64(reparent), child, drop); err != nil {
+			children.Close()
+			return fmt.Errorf("repointing the children of %d: %w", drop, err)
+		}
+	}
+	if err := children.Close(); err != nil {
+		return err
 	}
 	// And the survivor's own parent, where it has none and the dropped copy was
-	// quoted somewhere that showed one.
-	if _, err := tx.Exec(`
-		update entries set parent_id = (select parent_id from entries where id=?)
-		where id=? and parent_id is null
-		  and coalesce((select parent_id from entries where id=?), ?) not in (?, ?)`,
-		drop, keep, drop, keep, keep, drop); err != nil {
-		return fmt.Errorf("adopting the parent of %d: %w", drop, err)
+	// quoted somewhere that showed one. The edge is checked before it is written
+	// because the copy sat INSIDE the message that quoted it, and where that
+	// message's own reply edge points back at the survivor — a reply that quotes
+	// the original — adopting its parent would ring the graph: survivor -> reply
+	// -> ... -> survivor. The reply edge already carries the connection, so the
+	// survivor stays a root rather than close the loop.
+	var dropParent int64
+	if err := tx.QueryRow(`select coalesce(parent_id, 0) from entries where id = ?`, drop).
+		Scan(&dropParent); err != nil {
+		return fmt.Errorf("reading the parent of %d: %w", drop, err)
+	}
+	if dropParent != 0 && dropParent != keep {
+		if bad, err := closesCycle(tx, keep, dropParent); err != nil {
+			return err
+		} else if !bad {
+			if _, err := tx.Exec(
+				`update entries set parent_id = ? where id = ? and parent_id is null`,
+				dropParent, keep); err != nil {
+				return fmt.Errorf("adopting the parent of %d: %w", drop, err)
+			}
+		}
 	}
 
 	// Subject, zone and author fill gaps on a surviving quoted copy exactly as a
