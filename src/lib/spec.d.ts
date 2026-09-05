@@ -6,7 +6,7 @@
  */
 
 /**
- * One email trail, unspooled out of its threads and forwards into a single chronological transcript. Produced by a collector (e.g. the mail-timeline skill); consumed by the chainmail renderer.
+ * One email trail, unspooled out of its threads and forwards into a single chronological transcript. Produced by a collector (e.g. the mail-timeline skill); consumed by the chainmail renderer. The fields that carry HTML (body, subtitle, openItems) are rendered as authored, so a spec from an untrusted source must be sanitised before it is rendered.
  */
 export interface Timeline {
   /**
@@ -18,7 +18,7 @@ export interface Timeline {
    */
   title: string;
   /**
-   * One or two sentences. Provenance belongs in queries/threads/sourceNotes, not here.
+   * One or two sentences. Provenance belongs in queries/threads/sourceNotes, not here. Rendered as authored (inline <em>, <b>, <code>, <a> with an http(s) or #fragment href); a spec from an untrusted source must be sanitised before rendering.
    */
   subtitle?: string;
   /**
@@ -38,11 +38,11 @@ export interface Timeline {
    */
   openItemsTitle?: string;
   /**
-   * Unresolved questions, commitments and ownerless decisions. HTML permitted; cross-links encouraged.
+   * Unresolved questions, commitments and ownerless decisions. HTML from the subtitle allowlist: inline <em>, <b>, <code>, <a> with an http(s) or #fragment href. A spec from an untrusted source must be sanitised before rendering.
    */
   openItems?: string[];
   /**
-   * Sender name -> image (data: URI or URL). Keys must match Message.sender exactly.
+   * Sender name -> image. Only a data: image URI or an http(s) URL is rendered — the renderer refuses anything else. Keys must match Message.sender exactly.
    */
   avatars?: {
     [k: string]: string;
@@ -163,7 +163,7 @@ export interface Entry {
    */
   label?: string;
   /**
-   * Trusted HTML. <p>, <ul>, <b>, <code>, <p class="ed"> for editorial gloss, <a class="xref"> for cross-links.
+   * Rendered HTML, produced through the collector's allowlist (internal/spec/sanitise.go): blocks <p>, <div>, <blockquote>, <ul>/<ol>/<li>, <table>/<tr>/<td>/<th>, <pre>, <h1>-<h6>, <hr>; inline <a href> (http(s) only), <img src> (http(s) or data:image only), <b>, <i>, <em>, <strong>, <u>, <s>, <code>, <span style>; the editorial gloss (<p class="ed">) and the signature fold (<details class="sig">, <summary title>, <div class="sigbd">). Nothing else — no scripts, stylesheets, event handlers or other URL schemes. The collector enforces this; a spec that did not come from the collector is only as safe as its author, so sanitise an untrusted spec before rendering.
    */
   body: string;
   /**
