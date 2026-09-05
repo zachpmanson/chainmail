@@ -125,8 +125,18 @@ export function derive(input: Timeline): View {
 
   const avatarNames = Object.keys(input.avatars ?? {}).sort();
   const avatarClass = new Map(avatarNames.map((n, i) => [n, `p${i}`]));
+  // An avatar value is emitted into a CSS url() inside a <style> element, so
+  // it is a CSS sink: a value that breaks out of the url() could append
+  // arbitrary rules. It is also a data: URI or a URL the page will load, so
+  // the scheme is the boundary — only an http(s) URL or a data: image is a
+  // thing worth loading, and only if it holds no character that could end the
+  // url() token or quote its way out. An avatar that fails either check is
+  // skipped: the person keeps their initials rather than the page keeping
+  // someone else's CSS.
   const avatarCss = avatarNames
-    .map((n) => `.av.${avatarClass.get(n)}{background-image:url(${input.avatars![n]})}`)
+    .map((n) => ({ n, v: avatarURL(input.avatars![n] ?? "") }))
+    .filter(({ v }) => v !== null)
+    .map(({ n, v }) => `.av.${avatarClass.get(n)}{background-image:url(${v})}`)
     .join("");
 
   const emails = new Map<string, string>();
@@ -182,3 +192,28 @@ export function derive(input: Timeline): View {
 }
 
 export { initials };
+
+/**
+ * avatarURL is the boundary for an avatar value before it is emitted into the
+ * page's <style>. The value is injected into `background-image:url(…)`, so it
+ * must be a URL the page may load and must contain no character that could
+ * end or escape the url() token — a data: or http(s) value using only the
+ * URL-safe characters. Returns the value to emit, or null to skip the avatar.
+ *
+ * Every refusal keeps the sender's initials: an avatar is decoration, and a
+ * person whose picture is refused reads as a person rather than a rendering
+ * failure.
+ */
+export function avatarURL(v: string): string | null {
+  const low = v.toLowerCase();
+  const okScheme =
+    low.startsWith("data:image/") ||
+    low.startsWith("http://") ||
+    low.startsWith("https://");
+  if (!okScheme) return null;
+  // Whitespace, quotes, backslash, parens and angle brackets are the bytes
+  // that could end the url() or quote it; a data: URI's `;`, `,`, `+`, `/`,
+  // `=` pass, and a URL's `?`, `&`, `#` pass. Control characters are refused
+  // wholesale so a value cannot smuggle a newline into the stylesheet.
+  return /[\s"'\\()<>`\u0000-\u001f]/.test(v) ? null : v;
+}

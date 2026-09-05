@@ -177,8 +177,9 @@ first probe the screen shows every backend as *unchecked*, which is the honest
 first boot rather than an error.
 
 The server refuses a non-loopback bind before it even opens the database. This is
-personal mail, and a spec carries the sender's own HTML unsanitised — see the note
-on the bind, and issue #14.
+personal mail and there is no authentication. Spec bodies themselves are
+allowlist-sanitised (sanitise.go, #14), so the bind is an access-control
+question now, not an XSS one.
 
 To work without the server, a spec on disk still renders directly:
 
