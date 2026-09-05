@@ -123,12 +123,11 @@ const unsafeBindFlag = "serve-personal-mail-to-the-network"
 // checkBind refuses any address this process could accept a non-loopback
 // connection on.
 //
-// There is no authentication here, of any kind, and POST /v1/spec returns
-// sender HTML with no sanitisation (#14) — so a page it builds can run script
-// from anyone who ever emailed this mailbox, against an origin that can read
-// the whole corpus. The loopback bind is not a default: it is the only thing
-// making the surface safe. Closing #14 is a prerequisite for widening it, not
-// a follow-up.
+// There is no authentication here, of any kind. POST /v1/spec bodies are
+// allowlist-sanitised (sanitise.go, #14), so a page it builds cannot run
+// script from someone who emailed the mailbox — but it still hands the whole
+// corpus to anyone who can route to the port. The loopback bind is not a
+// default: it is the only thing between that address and the network.
 //
 // A wildcard host ("" or 0.0.0.0 or ::) is refused rather than resolved, since
 // it binds every interface the machine has, including ones acquired later.
@@ -169,14 +168,13 @@ func checkBind(addr string, override bool) error {
 	}
 	if !override {
 		return fmt.Errorf("-addr %q reaches %s, and this serves personal mail with no "+
-			"authentication and unsanitised sender HTML (#14). Bind 127.0.0.1, or pass "+
+			"authentication. Bind 127.0.0.1, or pass "+
 			"-%s if you have read what that means",
 			addr, remote, unsafeBindFlag)
 	}
 	fmt.Fprintf(os.Stderr,
-		"server: WARNING serving personal mail on %s — no authentication, and\n"+
-			"server: WARNING spec bodies are unsanitised sender HTML (#14). Anyone who can\n"+
-			"server: WARNING reach this port can read the whole corpus.\n", remote)
+		"server: WARNING serving personal mail on %s — no authentication. Anyone who\n"+
+			"server: WARNING can reach this port can read the whole corpus.\n", remote)
 	return nil
 }
 

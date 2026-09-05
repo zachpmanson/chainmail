@@ -7,9 +7,10 @@ import (
 	"testing"
 )
 
-// The bind is the whole security model. There is no authentication, and a spec
-// response carries unsanitised sender HTML (#14), so an address that reaches
-// the network hands the corpus to anyone who can route to it.
+// The bind is the whole security model. There is no authentication, and a
+// spec response hands the corpus to anyone who can reach the port — the
+// bodies themselves are allowlist-sanitised (sanitise.go, #14), so widening
+// the bind is an access-control question, not an XSS one.
 func TestANonLoopbackBindIsRefused(t *testing.T) {
 	refused := []string{
 		":8765",           // every interface, including ones acquired later
