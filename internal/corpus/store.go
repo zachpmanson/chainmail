@@ -147,6 +147,10 @@ type PutResult struct {
 	ID      int64
 	Created bool
 	Changed bool // existed, but the body hash differed
+	// Skipped: the caller declined to store this message. Not an error —
+	// a Gmail draft is real evidence someone composed, but it was never
+	// sent and must not enter the timeline as first-class mail.
+	Skipped bool
 }
 
 // Put inserts or updates an entry, keyed on (source, ext_id). Re-ingesting

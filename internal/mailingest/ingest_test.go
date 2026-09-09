@@ -30,6 +30,38 @@ func store(t *testing.T) *corpus.Store {
 	return s
 }
 
+// A draft is a message Gmail never sent: composed, then abandoned or deleted.
+// The slurp walks 'in:anywhere', which includes the drafts box, so without the
+// gate a draft would join the timeline as first-class mail — same sender and
+// thread, a full quoted history below, a permalink that works while it exists.
+// Put must decline it, and report the decline, and store nothing.
+func TestDraftLabelIsSkippedAtPut(t *testing.T) {
+	s := store(t)
+	d := msg("m9", `alice@example.com`, `bob@example.com`, "")
+	d.Labels = []string{"DRAFT"}
+
+	res, err := Put(s, d)
+	if err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	if !res.Skipped || res.Created || res.Changed {
+		t.Fatalf("a draft: got %+v, want skipped and nothing created", res)
+	}
+	var n int
+	if err := s.DB().QueryRow(`select count(*) from entries`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("entries after a draft: got %d, want 0", n)
+	}
+	if err := s.DB().QueryRow(`select count(*) from people`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("people after a draft: got %d, want 0", n)
+	}
+}
+
 // The bug this fixes: only the From address became a person, so anyone who never
 // sent anything did not exist. Here two of the three participants are silent.
 func TestPutRecordsRecipientsNotJustTheSender(t *testing.T) {
