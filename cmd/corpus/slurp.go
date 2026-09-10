@@ -62,6 +62,7 @@ type slurpOpts struct {
 	limit, pageSz int
 	archive       string
 	bin           string // docket binary/shim for the mail phase
+	backend       string // mail transport: "docket" (shell out) or "gmail" (lib); empty = docket
 	slackdump     bool
 	only, skip    []string
 	embedURL      string
@@ -263,7 +264,7 @@ func runSlurp(w io.Writer, o slurpOpts, d slurpDeps) error {
 			report(p, oc, note)
 
 		case phaseMail:
-			r, err := d.ingestMail(mailOpts{query: query, bin: o.bin,
+			r, err := d.ingestMail(mailOpts{query: query, bin: o.bin, backend: o.backend,
 				bound: mailingest.Bound{Max: o.limit, PageSize: o.pageSz}})
 			switch {
 			case err != nil:

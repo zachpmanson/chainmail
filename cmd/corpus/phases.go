@@ -20,6 +20,7 @@ import (
 
 	"github.com/zachpmanson/chainmail/internal/corpus"
 	"github.com/zachpmanson/chainmail/internal/embed"
+	"github.com/zachpmanson/chainmail/internal/gmailclient"
 	"github.com/zachpmanson/chainmail/internal/mailingest"
 	"github.com/zachpmanson/chainmail/internal/slackingest"
 )
@@ -288,6 +289,9 @@ type mailOpts struct {
 	ids   []string
 	bound mailingest.Bound
 	bin   string // docket binary/shim; "" uses "docket" on PATH
+	// backend selects the mail transport: "docket" (shell out to bin) or
+	// "gmail" (in-process, via the shared docket library). Empty means docket.
+	backend string
 	// twins ends the walk with the same sweep the slurp pipeline gives its own
 	// mail phase: a late mailbox copy alongside a quote already recovered from
 	// it is one message stored twice, so collapsing it now is part of ingesting
@@ -303,6 +307,16 @@ type mailOpts struct {
 // summary, where an operator reading a timer's log will see it.
 func runIngestMail(path string, o mailOpts) (mailingest.Result, error) {
 	var r mailingest.Result
+	if o.backend == "gmail" {
+		gc, err := gmailclient.New()
+		if err != nil {
+			return r, fmt.Errorf("opening gmail library client: %w", err)
+		}
+		// The library backend carries threading headers by construction — the
+		// lib's envelope is the same shape the CLI emits, so there is no old
+		// binary to probe and nothing to fail closed on.
+		return runWithMailbox(path, o, *gc)
+	}
 	c := mailingest.Client{Bin: o.bin}
 	ok, err := c.SupportsThreadingHeaders()
 	if err != nil {
@@ -313,7 +327,13 @@ func runIngestMail(path string, o mailOpts) (mailingest.Result, error) {
 			"(Message-ID/In-Reply-To/References) — the corpus would have no reply " +
 			"graph; update docket first")
 	}
+	return runWithMailbox(path, o, c)
+}
 
+// runWithMailbox walks one query, or reads the ids it is given, against any
+// Mailbox — subprocess docket or in-process library — and says how far it got.
+func runWithMailbox(path string, o mailOpts, c mailingest.Mailbox) (mailingest.Result, error) {
+	var r mailingest.Result
 	s, err := corpus.Open(path)
 	if err != nil {
 		return r, err
