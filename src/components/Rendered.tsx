@@ -39,6 +39,19 @@ export function Rendered({ spec, onBack, onRefresh, onAccept, report, refreshing
   }, [report]);
   const showProposals = Boolean(report?.chainsProposed?.length) && !dismissed;
 
+  // Every spec names its own tab title: the shell serves one static <title>
+  // for every route, and the spec is the only thing that knows what it holds.
+  // Restoring the previous title on unload keeps the next page from inheriting
+  // this one's name.
+  useEffect(() => {
+    const previous = document.title;
+    const own = (spec.title ?? "").trim();
+    document.title = own ? `${own} — Chainmail` : "Chainmail";
+    return () => {
+      document.title = previous;
+    };
+  }, [spec.title]);
+
   // chains of the UNFILTERED trail, so an excluded one stays listed and checkable
   const all = useMemo(() => derive(spec), [spec]);
   const chains = useMemo(
