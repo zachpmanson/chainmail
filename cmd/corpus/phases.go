@@ -284,13 +284,33 @@ func runDedupe(path string, apply bool) error {
 	return nil
 }
 
+// The two mail transports. -backend takes exactly these and the ingest and the
+// status probe both switch on them; the library is the default, because it is
+// what every host reads mail through now — the docket CLI is the legacy path,
+// kept for a machine that has not moved.
+const (
+	backendGmail  = "gmail"  // in-process, through the shared docket library
+	backendDocket = "docket" // a docket subprocess, via -bin
+)
+
+// validBackend refuses a -backend that names neither transport, so a typo cannot
+// silently pick one: "gmailx" would read as gmail and a legacy host would be told
+// its credential is missing rather than that it mistyped a flag. An empty value
+// is the default, which is gmail.
+func validBackend(b string) error {
+	if b == "" || b == backendGmail || b == backendDocket {
+		return nil
+	}
+	return fmt.Errorf("-backend %q: want %q or %q", b, backendGmail, backendDocket)
+}
+
 type mailOpts struct {
 	query string
 	ids   []string
 	bound mailingest.Bound
 	bin   string // docket binary/shim; "" uses "docket" on PATH
-	// backend selects the mail transport: "docket" (shell out to bin) or
-	// "gmail" (in-process, via the shared docket library). Empty means docket.
+	// backend selects the mail transport: "gmail" (in-process, through the shared
+	// docket library) or "docket" (shell out to bin, legacy). Empty means gmail.
 	backend string
 	// twins ends the walk with the same sweep the slurp pipeline gives its own
 	// mail phase: a late mailbox copy alongside a quote already recovered from
@@ -307,7 +327,10 @@ type mailOpts struct {
 // summary, where an operator reading a timer's log will see it.
 func runIngestMail(path string, o mailOpts) (mailingest.Result, error) {
 	var r mailingest.Result
-	if o.backend == "gmail" {
+	if err := validBackend(o.backend); err != nil {
+		return r, err
+	}
+	if o.backend != backendDocket {
 		gc, err := gmailclient.New()
 		if err != nil {
 			return r, fmt.Errorf("opening gmail library client: %w", err)

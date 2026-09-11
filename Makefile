@@ -114,9 +114,10 @@ doctor:
 	@$(BIN) sigs -domains | head -4
 
 # Probe each backend and write the connection snapshot the server's
-# /v1/status serves. Intentionally shallow: mail is asked whether docket's
-# session answers one query, the Slack archive whether it opens, and the
-# embedding daemon whether it is up — none of them fetch anything.
+# /v1/status serves. Intentionally shallow: mail is asked whether the backend
+# the ingest reads through (gmail, unless -backend docket) answers one query,
+# the Slack archive whether it opens, and the embedding daemon whether it is up
+# — none of them fetch anything.
 status:
 	@$(BIN) status -archive $(SLACK)/slackdump.sqlite
 

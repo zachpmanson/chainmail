@@ -69,15 +69,23 @@ already have Go and Node on the same versions.
 Four external pieces, in the order they are needed. Only the first is required —
 without Slack you have a mail corpus, and without ollama you have lexical search.
 
-### 1. docket — mail
+### 1. Gmail — mail
 
-[`docket`](https://github.com/zachpmanson/docket) is the Gmail CLI. Chainmail
-shells out to it rather than holding OAuth credentials of its own, so authenticate
-there once and chainmail inherits it. It must be on `PATH`.
+Mail is read through [`docket`](https://github.com/zachpmanson/docket)'s library,
+in this process: chainmail keeps its own OAuth grant and reads the mailbox
+directly, so no other principal sits in the data path and no CLI has to be on
+`PATH`. This is the default (`-backend gmail`).
 
-Chainmail needs a build that exposes threading headers, the HTML part, and
-attachment bytes; `corpus ingest mail` fails closed if the threading headers are
-missing rather than silently building a corpus with no reply graph.
+You do not provision it by hand: the server's own sign-in writes the grant into
+the store the pipeline reads (`docket`'s token file, under
+the state directory of whoever the server runs as). Open the app, use the
+**Sign in with Google** bar, and the next `corpus slurp` reads mail as that
+account.
+
+The older path, `-backend docket`, shells out to the `docket` CLI and inherits
+that CLI's session instead. It needs a build exposing threading headers, the HTML
+part and attachment bytes; `corpus ingest mail` fails closed if the threading
+headers are missing rather than silently building a corpus with no reply graph.
 
 ### 2. slackdump — Slack
 
@@ -165,12 +173,16 @@ npm run dev             # vite, proxying /v1 to the server
 Then search, tick the chains that belong, and build a page from them.
 
 `/status` shows which backends this machine is logged into. The server is
-read-only on purpose and never contacts docket or slackdump, so the answer is
+read-only on purpose and never contacts Gmail or slackdump, so the answer is
 whatever the operator's probe last wrote beside the corpus:
 
 ```bash
-make status   # corpus status -archive …: docket, slackdump, ollama
+make status   # corpus status: the Gmail backend, slackdump, ollama
 ```
+
+The probe asks the mail backend the ingest reads through (`-backend`, gmail by
+default), so a host reading mail through the library is never told that a docket
+CLI is missing.
 
 Run that whenever a credential changes and the screen reflects it. Before the
 first probe the screen shows every backend as *unchecked*, which is the honest

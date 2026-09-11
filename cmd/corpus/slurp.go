@@ -62,7 +62,7 @@ type slurpOpts struct {
 	limit, pageSz int
 	archive       string
 	bin           string // docket binary/shim for the mail phase
-	backend       string // mail transport: "docket" (shell out) or "gmail" (lib); empty = docket
+	backend       string // mail transport: "gmail" (library, default) or "docket" (shell out to bin)
 	slackdump     bool
 	only, skip    []string
 	embedURL      string
@@ -238,12 +238,15 @@ func mailQuery(o slurpOpts) (string, error) {
 // leave an operator to discover the rest one re-run at a time. The failures are
 // carried to the summary and to the exit status.
 func runSlurp(w io.Writer, o slurpOpts, d slurpDeps) error {
+	// Resolved before anything runs: a usage mistake should not be discovered
+	// after the Slack phase has already written to the corpus.
+	if err := validBackend(o.backend); err != nil {
+		return err
+	}
 	sel, err := selectPhases(o.only, o.skip)
 	if err != nil {
 		return err
 	}
-	// Resolved before anything runs: a usage mistake should not be discovered
-	// after the Slack phase has already written to the corpus.
 	var query string
 	if hasPhase(sel, phaseMail) {
 		if query, err = mailQuery(o); err != nil {

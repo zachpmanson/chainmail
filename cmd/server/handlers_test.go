@@ -680,8 +680,8 @@ func TestStatusServesTheSnapshotTheProbeWrote(t *testing.T) {
 	blob, _ := json.Marshal(map[string]any{
 		"checkedAt": "2026-08-22T15:04:00Z",
 		"services": []any{
-			map[string]any{"id": "mail", "label": "Gmail (docket)",
-				"status": "ok", "detail": "docket answered"},
+			map[string]any{"id": "mail", "label": "Gmail",
+				"status": "ok", "detail": "in-process Gmail backend answered"},
 			map[string]any{"id": "embed", "label": "Embeddings (ollama)",
 				"status": "down", "detail": "no daemon"},
 		},

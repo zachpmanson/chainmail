@@ -166,7 +166,7 @@ const STATUS = {
   checkedAt: "2026-08-22T15:04:00Z",
   nextSlurpAt: "2026-08-22T16:00:00Z",
   services: [
-    { id: "mail", label: "Gmail (docket)", status: "ok" },
+    { id: "mail", label: "Gmail", status: "ok" },
     { id: "slack", label: "Slack (slackdump)", status: "needs-auth", detail: "run the slackdump import" },
     { id: "embed", label: "Embedding daemon (ollama)", status: "down", detail: "start it with `ollama serve`" },
   ],
@@ -438,7 +438,7 @@ describe("the status route /status", () => {
     expect(await screen.findByText("logged in")).toBeTruthy();
     expect(await screen.findByText("needs auth")).toBeTruthy();
     expect(await screen.findByText("down")).toBeTruthy();
-    expect(await screen.findByText("Gmail (docket)")).toBeTruthy();
+    expect(await screen.findByText("Gmail")).toBeTruthy();
     // The detail under a not-ok row says what the fix is.
     expect(await screen.findByText("start it with `ollama serve`")).toBeTruthy();
 
