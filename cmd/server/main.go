@@ -52,6 +52,15 @@ func run(args []string) error {
 	timeout := fs.Duration("embed-timeout", 2*time.Minute, "how long to wait for the model")
 	serveRemote := fs.Bool(unsafeBindFlag, false,
 		"permit a non-loopback -addr; read what it prints before you use it")
+	slurp := fs.Bool("slurp", false,
+		"permit POST /v1/slurp: reach the work mailbox and ingest it. Off by "+
+			"default — the surface stays read-most and never touches the mailbox "+
+			"until this is switched on (the nix module is what grants this "+
+			"process the scoped access the ingest runs under).")
+	slurpBin := fs.String("slurp-bin", "docket-work",
+		"the docket shim name `corpus slurp -bin` calls, when -slurp is on")
+	slurpTimeout := fs.Duration("slurp-timeout", 15*time.Minute,
+		"upper bound on one /v1/slurp ingest")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -76,13 +85,18 @@ func run(args []string) error {
 	defer store.Close()
 
 	srv := &server{
-		store:      store,
-		uploads:    *uploads,
-		specs:      filepath.Join(filepath.Dir(*path), "specs"),
-		statusPath: status.FileName(*path),
-		specSlots:  make(chan struct{}, specConcurrency),
-		slotWait:   specSlotWait,
-		loginPort:  port,
+		store:        store,
+		uploads:      *uploads,
+		corpusPath:   *path,
+		specs:        filepath.Join(filepath.Dir(*path), "specs"),
+		statusPath:   status.FileName(*path),
+		slurpEnabled: *slurp,
+		slurpBin:     *slurpBin,
+		slurpTimeout: *slurpTimeout,
+		runSlurp:     defaultSlurp(*slurpBin),
+		specSlots:    make(chan struct{}, specConcurrency),
+		slotWait:     specSlotWait,
+		loginPort:    port,
 		embedder: func() *mailembed.Ollama {
 			return &mailembed.Ollama{BaseURL: *url, Name: *model, Dimension: *dim,
 				Client: &http.Client{Timeout: *timeout}}

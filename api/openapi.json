@@ -3,7 +3,7 @@
   "info": {
     "title": "chainmail API",
     "version": "1.0.0",
-    "description": "Read-only HTTP over a local chainmail corpus: search for candidate chains, choose which belong on a page, then build the timeline spec the renderer consumes.\n\nTwo stages on purpose. Search selects; POST /v1/spec renders a chosen set. A spec built straight from a query takes whatever the query returned, and then the only way to remove a thread is to regenerate the page.\n\nThis serves personal mail and has no authentication of any kind. It binds to loopback and refuses a non-loopback address unless explicitly overridden, and spec bodies carry unsanitised sender HTML (issue #14) \u2014 so the loopback bind is what makes the whole surface safe, not a default to be relaxed.\n\nOperator commands \u2014 ingest, embed, eval, dedupe, twins, repair, merge, alias, refresh \u2014 are absent in their mailbox-touching forms; that reach belongs to the CLI and the cron. Two local exceptions, both refusal-based and both carrying the audit trail: POST /v1/refresh re-derives a saved page and, before redrawing, collapses stored twin copies with the same sweep the CLI's slurp runs; GET /v1/ops/plan and POST /v1/ops/merge review people merges, the one write applying a single pair from the re-derived plan, never a whole plan."
+    "description": "Read-only HTTP over a local chainmail corpus: search for candidate chains, choose which belong on a page, then build the timeline spec the renderer consumes.\n\nTwo stages on purpose. Search selects; POST /v1/spec renders a chosen set. A spec built straight from a query takes whatever the query returned, and then the only way to remove a thread is to regenerate the page.\n\nThis serves personal mail and has no authentication of any kind. It binds to loopback and refuses a non-loopback address unless explicitly overridden, and spec bodies carry unsanitised sender HTML (issue #14) \u2014 so the loopback bind is what makes the whole surface safe, not a default to be relaxed.\n\nOperator commands \u2014 ingest, embed, eval, dedupe, twins, repair, merge, alias, refresh \u2014 are absent in their mailbox-touching forms; that reach belongs to the CLI and the cron, with one opt-in exception: POST /v1/slurp runs the same ingest the cron runs, and answers 403 unless the server was started with -slurp. Two local exceptions, both refusal-based and both carrying the audit trail: POST /v1/refresh re-derives a saved page and, before redrawing, collapses stored twin copies with the same sweep the CLI's slurp runs; GET /v1/ops/plan and POST /v1/ops/merge review people merges, the one write applying a single pair from the re-derived plan, never a whole plan."
   },
   "servers": [
     {
@@ -120,6 +120,45 @@
           },
           "504": {
             "description": "The embedding daemon did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/slurp": {
+      "post": {
+        "summary": "Reach the work mailbox and ingest it.",
+        "description": "Runs `corpus slurp` against the corpus — reaching the work mailbox through the scoped docket access the host grants this unit — so a subsequent /v1/refresh can build over mail that arrived since the last ingest. The phases are the ones the chainmail-slurp unit runs (mail, twins, repair, dedupe as a dry run, embed), and the ingest's own transcript is returned.\n\nOpt-in and off by default: a server started without -slurp answers 403, keeping the surface read-most and never touching the mailbox.",
+        "operationId": "slurp",
+        "responses": {
+          "200": {
+            "description": "The ingest transcript.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SlurpResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Slurping is disabled: the server was started without -slurp.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The ingest failed, at the mailbox or over the corpus.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2116,6 +2155,20 @@
             }
           }
         }
+      },
+      "SlurpResponse": {
+        "type": "object",
+        "description": "The outcome of POST /v1/slurp: the ingest's own transcript. Returned rather than only logged, because what was fetched is the reason someone pressed the button.",
+        "required": [
+          "report"
+        ],
+        "properties": {
+          "report": {
+            "type": "string",
+            "description": "The per-phase lines the ingest printed."
+          }
+        },
+        "additionalProperties": false
       }
     }
   }

@@ -26,6 +26,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/slurp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reach the work mailbox and ingest it.
+         * @description Runs `corpus slurp` against the corpus — reaching the work mailbox through the scoped docket access the host grants this unit — so a subsequent /v1/refresh can build over mail that arrived since the last ingest. The phases are the ones the chainmail-slurp unit runs (mail, twins, repair, dedupe as a dry run, embed), and the ingest's own transcript is returned.
+         *
+         *     Opt-in and off by default: a server started without -slurp answers 403, keeping the surface read-most and never touching the mailbox.
+         */
+        post: operations["slurp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/spec": {
         parameters: {
             query?: never;
@@ -980,6 +1002,11 @@ export interface components {
                 previewH?: number;
             }[];
         };
+        /** @description The outcome of POST /v1/slurp: the ingest's own transcript. Returned rather than only logged, because what was fetched is the reason someone pressed the button. */
+        SlurpResponse: {
+            /** @description The per-phase lines the ingest printed. */
+            report: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -1049,6 +1076,44 @@ export interface operations {
             };
             /** @description The embedding daemon did not answer in time. */
             504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    slurp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The ingest transcript. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SlurpResponse"];
+                };
+            };
+            /** @description Slurping is disabled: the server was started without -slurp. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The ingest failed, at the mailbox or over the corpus. */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };
