@@ -168,7 +168,7 @@ const usage = `usage: corpus <command> [flags]
 // that flags exist, which is the same as telling them nothing.
 const ingestUsage = `usage: corpus ingest <mail|slack> [flags]
 
-  ingest mail   -q <gmail query> | -id <id,...>   [-limit N] [-page-size N] [-bin docket-suffix]
+  ingest mail   -q <gmail query> | -id <id,...>   [-limit N] [-page-size N] [-bin docket-suffix] [-backend docket|gmail]
   ingest slack  [-archive <path to slackdump.sqlite>]
 `
 
@@ -844,6 +844,8 @@ func run(args []string) error {
 		pageSize := fs.Int("page-size", 0,
 			"messages per docket request; 0 uses docket's cap")
 		bin := fs.String("bin", "", "docket binary/shim for the mail phase (default \"docket\" on PATH)")
+		backend := fs.String("backend", "docket",
+			"mail transport: docket (shell out to -bin) or gmail (in-process library)")
 		archive := fs.String("archive", defaultSlackArchive(),
 			"slackdump sqlite archive to read")
 		slackdump := fs.Bool("slackdump", true,
@@ -858,6 +860,7 @@ func run(args []string) error {
 		}
 		o := slurpOpts{
 			query: *q, since: *since, limit: *limit, pageSz: *pageSize, bin: *bin,
+			backend: *backend,
 			archive: *archive, slackdump: *slackdump,
 			only: splitList(*only), skip: splitList(*skip),
 			embedModel: *model, embedURL: *url, embedDim: *dim,
@@ -884,16 +887,19 @@ func run(args []string) error {
 			"messages per docket request; 0 uses docket's cap")
 		ids := fs.String("id", "", "comma-separated message ids, instead of a query")
 		bin := fs.String("bin", "", "docket binary/shim to shell out to (default \"docket\" on PATH)")
+		backend := fs.String("backend", "docket",
+			"mail transport: docket (shell out to -bin) or gmail (in-process library)")
 		if err := fs.Parse(args[2:]); err != nil {
 			return err
 		}
 		if *query == "" && *ids == "" {
 			return errors.New("usage: corpus ingest mail -q <gmail query> | -id <id,...>  " +
-				"[-limit N] [-page-size N] [-bin <docket-binary>]")
+				"[-limit N] [-page-size N] [-bin <docket-binary>] [-backend docket|gmail]")
 		}
 
 		_, err := runIngestMail(path, mailOpts{query: *query, ids: splitList(*ids),
-			bound: mailingest.Bound{Max: *limit, PageSize: *pageSize}, bin: *bin, twins: true})
+			bound: mailingest.Bound{Max: *limit, PageSize: *pageSize}, bin: *bin,
+			backend: *backend, twins: true})
 		return err
 	}
 	return fmt.Errorf("unknown command %q", args[0])
