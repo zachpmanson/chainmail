@@ -485,7 +485,7 @@ describe("the site navigation", () => {
     if (!site) throw new Error("the shell rendered no site header");
     // Document order is the claim: the site nav is the first thing on the page.
     expect(document.querySelectorAll("header")[0]).toBe(site);
-    for (const name of ["Home", "Browse saved specs", "Services", "Ops"]) {
+    for (const name of ["Home", "Browse", "Services", "Ops"]) {
       expect(within(site as HTMLElement).getByRole("link", { name })).toBeTruthy();
     }
     expect(document.querySelector("footer")).toBeNull();

@@ -176,7 +176,7 @@ function RootLayout() {
       <header className="sitehead">
         <Link to="/">Home</Link>
         <span className="sep">·</span>
-        <Link to="/specs">Browse saved specs</Link>
+        <Link to="/specs">Browse</Link>
         <span className="sep">·</span>
         <Link to="/status">Services</Link>
         <span className="sep">·</span>
