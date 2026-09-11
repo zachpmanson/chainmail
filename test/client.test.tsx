@@ -579,6 +579,86 @@ describe("the render route /view/<name>", () => {
   });
 });
 
+describe("pressing refresh on a saved page", () => {
+  // One line per phase, in the CLI's own shape: this is a transcript, and the
+  // page shows it as one.
+  const TRANSCRIPT = "[1/5] mail: created 2, changed 0\n[2/5] twins: no duplicates\n";
+
+  const refreshHandler = (opts: { slurp: () => Response }) =>
+    ((c: Call) => {
+      const p = pathOf(c);
+      if (p === "/v1/specs/loom-cutover") return json(200, SPEC);
+      if (p === "/v1/slurp" && c.method === "POST") return opts.slurp();
+      if (p === "/v1/refresh" && c.method === "POST")
+        return json(200, {
+          spec: SPEC,
+          report: {
+            entriesBefore: 4,
+            entriesAfter: 4,
+            nothingNew: true,
+            chainsAdded: [],
+            chainsGrown: [],
+            chainsProposed: [],
+            unranked: [],
+          },
+        });
+      return json(500, { error: `unexpected call to ${c.method} ${p}` });
+    }) as Handler;
+
+  it("fetches from the mailbox before it re-derives, and shows what came back", async () => {
+    handler = refreshHandler({ slurp: () => json(200, { report: TRANSCRIPT }) });
+    await mountApp("/view/loom-cutover");
+    await screen.findByText("Loom cutover");
+
+    click(screen.getByRole("button", { name: "Re-derive this page from the corpus" }));
+
+    // The order is the contract: re-deriving before the ingest would rebuild the
+    // page from the very corpus the fetch was supposed to extend.
+    await waitFor(() =>
+      expect(calls.filter((c) => c.method === "POST").map(pathOf)).toEqual([
+        "/v1/slurp",
+        "/v1/refresh",
+      ]),
+    );
+    // The rebuild still reports itself, and the fetch's own transcript survives
+    // alongside it rather than being overwritten by the summary.
+    await screen.findByText(/already up to date/);
+    expect(screen.getByText(/\[1\/5\] mail: created 2/)).toBeTruthy();
+  });
+
+  it("re-derives anyway on a host with no mailbox reach, and says so", async () => {
+    // The deployed default: no -slurp, so the endpoint refuses. A 403 here is
+    // not a failure of the button, it is the read-most fallback.
+    handler = refreshHandler({
+      slurp: () =>
+        json(403, {
+          error: "slurping is disabled: this server was started without -slurp, so it cannot reach the work mailbox.",
+        }),
+    });
+    await mountApp("/view/loom-cutover");
+    await screen.findByText("Loom cutover");
+
+    click(screen.getByRole("button", { name: "Re-derive this page from the corpus" }));
+
+    await screen.findByText(/no mailbox reach on this host/);
+    await screen.findByText(/already up to date/);
+  });
+
+  it("reports a failed ingest without swallowing it", async () => {
+    handler = refreshHandler({
+      slurp: () => json(502, { error: "slurp failed: docket refused: no threading headers" }),
+    });
+    await mountApp("/view/loom-cutover");
+    await screen.findByText("Loom cutover");
+
+    click(screen.getByRole("button", { name: "Re-derive this page from the corpus" }));
+
+    // A failure that is not "disabled" is worth reading, so the server's own
+    // words are what the page shows.
+    await screen.findByText(/docket refused: no threading headers/);
+  });
+});
+
 describe("adding another email to a page", () => {
   it("searches the corpus from the toolbar and adds the chosen chain by accept", async () => {
     handler = (c) => {

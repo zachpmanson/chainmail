@@ -16,6 +16,12 @@
 # refresh) stay CLI-only and are NOT exposed here: the HTTP surface is
 # read-only by design, and a browser is the wrong place to trigger a merge
 # that person_merges cannot reverse.
+#
+# One reach is exposed, opt-in: enableSlurp passes -slurp, which turns POST
+# /v1/slurp into the same ingest the hourly unit runs — the browser's way to
+# fetch new mail before a page refresh. Off by default, and the option alone
+# grants nothing: the mailbox access is a scoped sudo the machine config
+# supplies, and without it the endpoint fails to find its runner.
 self: { config, lib, pkgs, ... }:
 
 let
@@ -69,6 +75,29 @@ in {
         Slack previews are wanted on the host.
       '';
     };
+
+    enableSlurp = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Permit POST /v1/slurp: have the server reach the work mailbox and ingest
+        it, so a saved page's refresh can build over mail that arrived since the
+        last cron run. Off by default, so a host that has not given this server
+        mail access keeps the read-most posture.
+
+        The grant is the one this unit already holds: HOME points at the state
+        directory, the served sign-in writes the mail token there, and the
+        in-process backend reads it. Switching this on hands a page no access
+        the host had not already given this user — the server refuses the
+        request unless the flag is passed, and nothing else changes.
+      '';
+    };
+
+    slurpTimeout = lib.mkOption {
+      type = lib.types.str;
+      default = "15m";
+      description = "Upper bound on one /v1/slurp ingest, as a wall-clock duration string.";
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -99,7 +128,9 @@ in {
         ExecStart = "${cfg.package}/bin/chainmail-server " +
           "-addr 127.0.0.1:${toString cfg.port} " +
           "-corpus ${cfg.corpus}" +
-          lib.optionalString (cfg.uploads != "") " -uploads ${cfg.uploads}";
+          lib.optionalString (cfg.uploads != "") " -uploads ${cfg.uploads}" +
+          lib.optionalString cfg.enableSlurp (
+            " -slurp -slurp-timeout ${cfg.slurpTimeout}");
         User = cfg.user;
         Group = cfg.user;
         StateDirectory = "chainmail";
@@ -120,7 +151,13 @@ in {
         # needs; ProtectSystem=strict makes the store and /etc read-only.
         ProtectSystem = "strict";
         PrivateTmp = true;
-        NoNewPrivileges = true;
+        # setuid-denied unless the server may slurp: reaching the work mailbox is
+        # a scoped sudo INTO the docket runner that holds the token, and the
+        # setuid wrapper is what carries that. With slurp off the read-only
+        # posture keeps NoNewPrivileges; with it on the grant is pinned to the
+        # runner by the machine config, rather than to a blanket ability to
+        # become root.
+        NoNewPrivileges = !cfg.enableSlurp;
         # The server opens the corpus WAL-mode but this unit is read-only;
         # Restart is what keeps a transient failure from taking the tunnel down.
         Restart = "on-failure";

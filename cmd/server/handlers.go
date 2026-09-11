@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -66,11 +67,29 @@ type server struct {
 	// the write lock, and fails outright against a read-only copy.
 	store   *corpus.Store
 	uploads string
-	specs   string // dir for saved pages (POST /v1/spec writes here, GET /v1/specs reads)
+	// corpusPath is the path passed to corpus.Open, kept so the slurp subprocess
+	// can point CHAINMAIL_CORPUS at the same database this process has open.
+	corpusPath string
+	specs      string // dir for saved pages (POST /v1/spec writes here, GET /v1/specs reads)
 	// statusPath is the connection snapshot the operator's probe wrote; the
 	// server serves it read-only, so the credential checks stay where the
 	// credentials are.
 	statusPath string
+
+	// slurpEnabled enables POST /v1/slurp: reach the work mailbox and ingest it,
+	// so a page's refresh can build over mail that arrived since the hourly cron
+	// run. Opt-in (`-slurp`), and when off the surface stays read-most and never
+	// touches the mailbox. See defaultSlurp for the boundary the switch crosses.
+	slurpEnabled bool
+	// slurpTimeout bounds one ingest. A slurp walks the mail query, then twins,
+	// repair, dedupe (reported, never applied) and embed, so it takes minutes
+	// rather than seconds — and a request that ends must not leave that walk
+	// half-done, which is what the context carries.
+	slurpTimeout time.Duration
+	// runSlurp is the mailbox-reaching operation, injected so the handler can be
+	// tested without a mailbox. The real one delegates to the sibling `corpus`
+	// binary (see defaultSlurp), so every phase and its ordering stays there.
+	runSlurp func(ctx context.Context, corpusPath string) ([]byte, error)
 
 	specSlots chan struct{}
 	// slotWait is how long a caller waits for a slot before being told to retry.
@@ -103,6 +122,7 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("/v1/ops/plan", get(s.opsPlan))
 	mux.HandleFunc("/v1/ops/merge", post(s.opsMerge))
 	mux.HandleFunc("/v1/search", get(s.search))
+	mux.HandleFunc("/v1/slurp", post(s.slurp))
 	mux.HandleFunc("/v1/status", get(s.status))
 	mux.HandleFunc("/v1/spec", post(s.spec))
 	mux.HandleFunc("/v1/specs", get(s.savedSpecs))
@@ -600,16 +620,99 @@ func specTitleOf(path string) string {
 	return meta.Title
 }
 
+// slurp reaches the work mailbox and ingests it into the corpus, so a
+// subsequent /v1/refresh can build a page over mail that arrived since the last
+// ingest. It is the browser surface's door to `corpus slurp`, and it is the one
+// thing here that writes to the corpus.
+//
+// Opt-in and off by default. Without -slurp the server keeps its read-most,
+// never-touches-the-mailbox posture and this answers 403: handing a page the
+// ability to fire a real mailbox ingest is switching that off, deliberately and
+// per host (see defaultSlurp for what the switch crosses).
+func (s *server) slurp(w http.ResponseWriter, r *http.Request) {
+	if !s.slurpEnabled {
+		fail(w, http.StatusForbidden, fmt.Errorf(
+			"slurping is disabled: this server was started without -slurp, so it "+
+				"cannot reach the work mailbox. A restart with -slurp enables POST /v1/slurp."))
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), s.slurpTimeout)
+	defer cancel()
+	out, err := s.runSlurp(ctx, s.corpusPath)
+	if err != nil {
+		fail(w, http.StatusBadGateway, fmt.Errorf("slurp failed: %w", err))
+		return
+	}
+	send(w, http.StatusOK, slurpResponse{Report: string(out)})
+}
+
+// slurpResponse is the outcome of POST /v1/slurp: the ingest's own text, the
+// per-phase lines the CLI prints. It is returned rather than logged because the
+// page shows it — what was fetched is the reason someone pressed the button,
+// and a phase that found nothing is worth seeing too.
+type slurpResponse struct {
+	Report string `json:"report"`
+}
+
+// defaultSlurp returns a function that runs `corpus slurp` against the corpus
+// and returns the ingest transcript.
+//
+// It delegates to the sibling `corpus` binary rather than re-implementing the
+// phases: the ingest order, fail-closed threading check, dedupe-as-dry-run,
+// embed-skip reporting and connection-snapshot probe all live there, and the
+// server shares none of that logic. The sibling ships beside this binary in the
+// same nix package (corpus lands next to chainmail-server in $out/bin).
+//
+// Mail reaches the mailbox the way every other ingest on this host does — the
+// in-process library reading the OAuth grant in this unit's own HOME, which the
+// nix module points at the state directory the server and the slurp units share.
+// That is what makes the switch cheap to grant: -slurp asks for no credential
+// the server did not already have, and `-backend` needs no spelling out because
+// the ingest and the server are one package with one default.
+//
+// Which phases run matches the chainmail-slurp unit (mail, twins, repair,
+// dedupe, embed): a human pressed this button, so the dedupe plan is worth
+// showing — it stays a dry run in slurp regardless. CHAINMAIL_CORPUS pins the
+// same database this process has open; being WAL, the ingest writes beside the
+// reader.
+func defaultSlurp() func(ctx context.Context, corpusPath string) ([]byte, error) {
+	return func(ctx context.Context, corpusPath string) ([]byte, error) {
+		corpus, err := siblingBin("corpus")
+		if err != nil {
+			return nil, err
+		}
+		args := []string{"slurp", "-q", "in:anywhere",
+			"-only", "mail,twins,repair,dedupe,embed"}
+		cmd := exec.CommandContext(ctx, corpus, args...)
+		cmd.Env = append(os.Environ(), "CHAINMAIL_CORPUS="+corpusPath)
+		return cmd.CombinedOutput()
+	}
+}
+
+// siblingBin resolves a command installed beside this server's own binary — in
+// the nix package both `corpus` and `chainmail-server` land in $out/bin — so
+// the server can hand the ingest to the real CLI wherever it is installed.
+// Falls back to PATH, for a `go run` dev build with no sibling.
+func siblingBin(name string) (string, error) {
+	if exe, err := os.Executable(); err == nil {
+		if p, err := exec.LookPath(filepath.Join(filepath.Dir(exe), name)); err == nil {
+			return p, nil
+		}
+	}
+	if p, err := exec.LookPath(name); err == nil {
+		return p, nil
+	}
+	return "", fmt.Errorf("cannot find the %q binary to run slurp; it is not beside this server and not on PATH", name)
+}
+
 // refresh brings a page that has already been built up to date: the caller
 // posts the previous spec (as POST /v1/spec returned it) and any selection
 // overrides, and the server regenerates the page from the corpus.
 //
 // This is the read half of the CLI's `refresh` command. The fetching half is
 // deliberately absent here: reaching the mailbox is `corpus ingest`'s job and
-// that belongs to the CLI and the cron, not a browser. So the refresh here is
-// corpus-only — it re-derives the page, grows the chains that gained entries,
-// and proposes new chains from the recorded queries, but never asks the
-// mailbox for what arrived.
+// that belongs to the CLI, the cron, or POST /v1/slurp when -slurp is on — not
+// to a refresh, which only re-derives what the corpus already holds.
 //
 // One mutation it does perform is the same twins sweep `corpus slurp` runs:
 // a quoted copy stored before its mailbox original arrived is one message
