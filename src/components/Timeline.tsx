@@ -399,6 +399,8 @@ export interface TimelineProps {
   onShowSpec?: () => void;
   /** app-only: brings a saved page up to date from the corpus (refresh.go). */
   onRefresh?: () => void;
+  /** app-only: opens a search to add another email's chain to this page. */
+  onAdd?: () => void;
   /** app-only: opens the proposal evaluator, when the last refresh proposed chains. */
   onEval?: () => void;
   refreshing?: boolean;
@@ -406,7 +408,7 @@ export interface TimelineProps {
   refreshNote?: string | null;
 }
 
-export function Timeline({ spec, marks, prevLabel, filter, onShowSpec, onRefresh, onEval, refreshing, refreshNote }: TimelineProps) {
+export function Timeline({ spec, marks, prevLabel, filter, onShowSpec, onRefresh, onAdd, onEval, refreshing, refreshNote }: TimelineProps) {
   const v = derive(spec);
   const s = v.spec;
   // gmailId -> the id of the row that carries it, so an unspooled source line
@@ -431,6 +433,12 @@ export function Timeline({ spec, marks, prevLabel, filter, onShowSpec, onRefresh
                   disabled={refreshing}
                   aria-label="Re-derive this page from the corpus">
             {refreshing ? "refreshing…" : "refresh"}
+          </button>
+        ) : null}
+        {onAdd ? (
+          <button className="tbtn" type="button" onClick={onAdd}
+                  aria-label="Search the corpus for another email to add to this page">
+            add email
           </button>
         ) : null}
         {onEval ? (

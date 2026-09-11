@@ -103,6 +103,9 @@ export function ViewPage() {
       onAccept={(ids) =>
         refresh.mutate({ body: { spec, name, accept: ids } })
       }
+      onAdd={(ids) =>
+        refresh.mutate({ body: { spec, name, accept: ids } })
+      }
       report={report}
       refreshing={refresh.isPending}
       refreshNote={refreshNote}

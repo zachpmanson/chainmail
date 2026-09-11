@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { $api, searchQuery } from "../src/lib/api";
@@ -554,6 +554,65 @@ describe("the render route /view/<name>", () => {
     // a separate concern and answered signed in by the shared handler.
     const routeCalls = calls.filter((c) => pathOf(c) !== "/auth/status");
     expect(routeCalls.length).toBe(0);
+  });
+});
+
+describe("adding another email to a page", () => {
+  it("searches the corpus from the toolbar and adds the chosen chain by accept", async () => {
+    handler = (c) => {
+      const p = pathOf(c);
+      if (p === "/v1/specs/loom-cutover") return json(200, SPEC);
+      if (p === "/v1/search")
+        return json(200, { mode: "hybrid", chains: [CHAINS[1]] });
+      if (p === "/v1/refresh" && c.method === "POST")
+        return json(200, {
+          spec: SPEC,
+          report: {
+            entriesBefore: 1,
+            entriesAfter: 5,
+            nothingNew: false,
+            chainsAdded: ["mail:<lease-renewal-1@example.fed>"],
+            chainsGrown: [],
+            chainsProposed: [],
+            unranked: [],
+          },
+        });
+      if (p === "/auth/status") return json(200, { signed_in: true });
+      return json(500, { error: `unexpected call to ${c.method} ${p}` });
+    };
+    await mountApp("/view/loom-cutover");
+    await screen.findByText("Loom cutover");
+
+    // The toolbar button only appears where a refresh can accept the choice.
+    click(screen.getByRole("button", { name: "Search the corpus for another email to add to this page" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add another email" });
+
+    // A fresh corpus search, scoped to the page, not a build.
+    typeInto("Search query", "lease");
+    const button = screen.getByRole("button", { name: "Search" }) as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    fireEvent.submit(button.closest("form")!);
+    await waitFor(() => expect(searchCalls().length).toBeGreaterThan(0));
+    await screen.findByText("Warehouse lease renewal");
+
+    // One tick, then the add goes back through the same accept path a proposal
+    // uses: re-run the refresh with the roots named. The checkbox is scoped to
+    // the dialog — the page behind has exclusion checkboxes of its own.
+    click(within(dialog).getAllByRole("checkbox")[0]!);
+    click(within(dialog).getByRole("button", { name: "add 1 to page" }));
+    await waitFor(() =>
+      expect(calls.some((c) => pathOf(c) === "/v1/refresh")).toBe(true),
+    );
+    const body = JSON.parse(
+      calls.find((c) => pathOf(c) === "/v1/refresh")!.body!,
+    );
+    expect(body.name).toBe("loom-cutover");
+    expect(body.accept).toEqual(["mail:<lease-renewal-1@example.fed>"]);
+    // The modal closed once the add was sent.
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Add another email" })).toBeNull());
+
+    // The refreshed page reports the growth like any other refresh.
+    await screen.findByText(/1 added/);
   });
 });
 
