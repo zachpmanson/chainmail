@@ -69,7 +69,7 @@ func TestSlurpFailureIsBadGatewayWithTheError(t *testing.T) {
 	h.slurpEnabled = true
 	h.slurpTimeout = 5 * time.Second
 	h.runSlurp = func(_ context.Context, _ string) ([]byte, error) {
-		return nil, errors.New("docket refused: no threading headers")
+		return nil, errors.New("opening gmail library client: no token on disk")
 	}
 	res := h.do(t, "POST", "/v1/slurp", nil)
 	if res.status != http.StatusBadGateway {
@@ -77,9 +77,54 @@ func TestSlurpFailureIsBadGatewayWithTheError(t *testing.T) {
 	}
 	// The mailbox's own refusal is the useful part of the message: a 502 that
 	// only said "slurp failed" would send the reader to the server's logs to
-	// find out that docket is the thing to look at.
-	if got := res.errText(t); !strings.Contains(got, "docket") {
+	// find out that the credential is the thing to look at.
+	if got := res.errText(t); !strings.Contains(got, "no token on disk") {
 		t.Errorf("error = %q, want the ingest failure echoed", got)
+	}
+}
+
+// What the server passes the CLI is a contract, so it is pinned against a real
+// sibling: the phases a human's button is allowed to run, and no transport flag
+// at all. The ingest and the server are one package reading one credential, so a
+// -bin docket shim here would name access this unit has no reason to want.
+func TestSlurpRunsTheSiblingCLIWithThePipelinePhases(t *testing.T) {
+	dir := t.TempDir()
+	record := filepath.Join(dir, "args")
+	// Whatever PATH resolves `corpus` to is what the server asks; recording argv
+	// is the whole of what this one has to do.
+	script := "#!/bin/sh\n: > " + record + "\nfor a in \"$@\"; do printf '%s\\n' \"$a\" >> " + record + "; done\n" +
+		"printf 'env:%s\\n' \"$CHAINMAIL_CORPUS\" >> " + record + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "corpus"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	out, err := defaultSlurp()(context.Background(), "/tmp/chainmail-test.db")
+	if err != nil {
+		t.Fatalf("running the sibling: %v (output %q)", err, out)
+	}
+	recorded, err := os.ReadFile(record)
+	if err != nil {
+		t.Fatalf("the CLI recorded nothing: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(recorded)), "\n")
+	if len(lines) == 0 || lines[len(lines)-1] != "env:/tmp/chainmail-test.db" {
+		t.Errorf("argv = %q, want CHAINMAIL_CORPUS to pin the database this process has open", lines)
+	}
+	args := lines[:len(lines)-1]
+	if len(args) == 0 || args[0] != "slurp" {
+		t.Fatalf("argv = %q, want it to run the slurp subcommand", args)
+	}
+	joined := strings.Join(args, " ")
+	for _, want := range []string{"-q in:anywhere", "-only mail,twins,repair,dedupe,embed"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("argv = %q, want it to carry %q", args, want)
+		}
+	}
+	for _, unwanted := range []string{"-bin", "-backend"} {
+		if strings.Contains(joined, unwanted) {
+			t.Errorf("argv = %q, want no %s: the mail credential is the unit's own", args, unwanted)
+		}
 	}
 }
 

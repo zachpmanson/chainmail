@@ -82,20 +82,15 @@ in {
       description = ''
         Permit POST /v1/slurp: have the server reach the work mailbox and ingest
         it, so a saved page's refresh can build over mail that arrived since the
-        last cron run. Off by default, so a host that has not granted this
-        server access to the mailbox keeps the read-most posture.
+        last cron run. Off by default, so a host that has not given this server
+        mail access keeps the read-most posture.
 
-        The server refuses to run a slurp unless this is on; the grant itself is
-        not here. The machine config supplies the scoped sudo to the work
-        mailbox's docket runner and puts that shim on this unit's PATH — this
-        option only passes the flag and the shim name.
+        The grant is the one this unit already holds: HOME points at the state
+        directory, the served sign-in writes the mail token there, and the
+        in-process backend reads it. Switching this on hands a page no access
+        the host had not already given this user — the server refuses the
+        request unless the flag is passed, and nothing else changes.
       '';
-    };
-
-    slurpBin = lib.mkOption {
-      type = lib.types.str;
-      default = "docket-work";
-      description = "The docket shim name `corpus slurp -bin` calls, when enableSlurp is set.";
     };
 
     slurpTimeout = lib.mkOption {
@@ -135,7 +130,7 @@ in {
           "-corpus ${cfg.corpus}" +
           lib.optionalString (cfg.uploads != "") " -uploads ${cfg.uploads}" +
           lib.optionalString cfg.enableSlurp (
-            " -slurp -slurp-bin ${cfg.slurpBin} -slurp-timeout ${cfg.slurpTimeout}");
+            " -slurp -slurp-timeout ${cfg.slurpTimeout}");
         User = cfg.user;
         Group = cfg.user;
         StateDirectory = "chainmail";

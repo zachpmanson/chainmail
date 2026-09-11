@@ -81,9 +81,6 @@ type server struct {
 	// run. Opt-in (`-slurp`), and when off the surface stays read-most and never
 	// touches the mailbox. See defaultSlurp for the boundary the switch crosses.
 	slurpEnabled bool
-	// slurpBin is the docket shim `corpus slurp -bin` calls. The nix module puts
-	// it on this unit's PATH and carries the scoped sudo behind it.
-	slurpBin string
 	// slurpTimeout bounds one ingest. A slurp walks the mail query, then twins,
 	// repair, dedupe (reported, never applied) and embed, so it takes minutes
 	// rather than seconds — and a request that ends must not leave that walk
@@ -657,32 +654,34 @@ type slurpResponse struct {
 	Report string `json:"report"`
 }
 
-// defaultSlurp returns a function that runs `corpus slurp` against the corpus,
-// reaching the work mailbox through the caller's docket access, and returns the
-// ingest transcript.
+// defaultSlurp returns a function that runs `corpus slurp` against the corpus
+// and returns the ingest transcript.
 //
 // It delegates to the sibling `corpus` binary rather than re-implementing the
 // phases: the ingest order, fail-closed threading check, dedupe-as-dry-run,
 // embed-skip reporting and connection-snapshot probe all live there, and the
 // server shares none of that logic. The sibling ships beside this binary in the
-// same nix package (corpus lands next to chainmail-server in $out/bin). The
-// mail subcommand name comes through slurpBin: the nix service grants this
-// process a scoped sudo to the work mailbox's docket runner and puts that shim
-// on PATH, so `-bin docket-work` here is the same boundary the chainmail-slurp
-// unit already crosses.
+// same nix package (corpus lands next to chainmail-server in $out/bin).
 //
-// Which phases run matches that unit (mail, twins, repair, dedupe, embed): a
-// human pressed this button, so the dedupe plan is worth showing — it stays a
-// dry run in slurp regardless. CHAINMAIL_CORPUS pins the same database this
-// process has open; being WAL, the ingest writes beside the reader.
-func defaultSlurp(slurpBin string) func(ctx context.Context, corpusPath string) ([]byte, error) {
+// Mail reaches the mailbox the way every other ingest on this host does — the
+// in-process library reading the OAuth grant in this unit's own HOME, which the
+// nix module points at the state directory the server and the slurp units share.
+// That is what makes the switch cheap to grant: -slurp asks for no credential
+// the server did not already have, and `-backend` needs no spelling out because
+// the ingest and the server are one package with one default.
+//
+// Which phases run matches the chainmail-slurp unit (mail, twins, repair,
+// dedupe, embed): a human pressed this button, so the dedupe plan is worth
+// showing — it stays a dry run in slurp regardless. CHAINMAIL_CORPUS pins the
+// same database this process has open; being WAL, the ingest writes beside the
+// reader.
+func defaultSlurp() func(ctx context.Context, corpusPath string) ([]byte, error) {
 	return func(ctx context.Context, corpusPath string) ([]byte, error) {
 		corpus, err := siblingBin("corpus")
 		if err != nil {
 			return nil, err
 		}
 		args := []string{"slurp", "-q", "in:anywhere",
-			"-bin", slurpBin,
 			"-only", "mail,twins,repair,dedupe,embed"}
 		cmd := exec.CommandContext(ctx, corpus, args...)
 		cmd.Env = append(os.Environ(), "CHAINMAIL_CORPUS="+corpusPath)

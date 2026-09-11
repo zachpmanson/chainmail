@@ -134,7 +134,7 @@
     "/v1/slurp": {
       "post": {
         "summary": "Reach the work mailbox and ingest it.",
-        "description": "Runs `corpus slurp` against the corpus — reaching the work mailbox through the scoped docket access the host grants this unit — so a subsequent /v1/refresh can build over mail that arrived since the last ingest. The phases are the ones the chainmail-slurp unit runs (mail, twins, repair, dedupe as a dry run, embed), and the ingest's own transcript is returned.\n\nOpt-in and off by default: a server started without -slurp answers 403, keeping the surface read-most and never touching the mailbox.",
+        "description": "Runs `corpus slurp` against the corpus — reading the work mailbox through the mail credential this unit already holds — so a subsequent /v1/refresh can build over mail that arrived since the last ingest. The phases are the ones the chainmail-slurp unit runs (mail, twins, repair, dedupe as a dry run, embed), and the ingest's own transcript is returned.\n\nOpt-in and off by default: a server started without -slurp answers 403, keeping the surface read-most and never touching the mailbox.",
         "operationId": "slurp",
         "responses": {
           "200": {

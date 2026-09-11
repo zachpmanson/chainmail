@@ -55,10 +55,9 @@ func run(args []string) error {
 	slurp := fs.Bool("slurp", false,
 		"permit POST /v1/slurp: reach the work mailbox and ingest it. Off by "+
 			"default — the surface stays read-most and never touches the mailbox "+
-			"until this is switched on (the nix module is what grants this "+
-			"process the scoped access the ingest runs under).")
-	slurpBin := fs.String("slurp-bin", "docket-work",
-		"the docket shim name `corpus slurp -bin` calls, when -slurp is on")
+			"until this is switched on. The grant it uses is the mail credential "+
+			"this unit already reads (HOME's docket token store), so switching it "+
+			"on hands the page no access the host had not already given this user.")
 	slurpTimeout := fs.Duration("slurp-timeout", 15*time.Minute,
 		"upper bound on one /v1/slurp ingest")
 	if err := fs.Parse(args); err != nil {
@@ -91,9 +90,8 @@ func run(args []string) error {
 		specs:        filepath.Join(filepath.Dir(*path), "specs"),
 		statusPath:   status.FileName(*path),
 		slurpEnabled: *slurp,
-		slurpBin:     *slurpBin,
 		slurpTimeout: *slurpTimeout,
-		runSlurp:     defaultSlurp(*slurpBin),
+		runSlurp:     defaultSlurp(),
 		specSlots:    make(chan struct{}, specConcurrency),
 		slotWait:     specSlotWait,
 		loginPort:    port,
