@@ -591,3 +591,8 @@
     color:var(--muted); margin:0 0 .6rem; }
   footer.end ul { margin:0; padding-left:1.15rem; }
   footer.end li { margin:.2rem 0; font-size:.89rem; }
+  /* --- sign-in banner --- */
+  .authbar { max-width:76rem; margin:1.1rem auto .25rem; padding:.6rem .9rem;
+    background:var(--card); border:1px solid var(--accent); border-radius:8px;
+    font-size:.88rem; color:var(--muted); }
+  .authbar a { color:var(--accent); font-weight:600; }

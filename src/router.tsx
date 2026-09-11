@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import type { Timeline } from "./lib/spec";
 import { loadSpec } from "./lib/loadSpec";
 import { normalise } from "./lib/normalise";
+import { $api } from "./lib/api";
 import { SelectView } from "./components/Select";
 import { ViewPage } from "./components/ViewPage";
 import { NotFound } from "./components/NotFound";
@@ -66,6 +67,25 @@ function validateSearchParams(search: Record<string, unknown>): SearchParams {
     person: typeof search.person === "string" ? search.person : undefined,
     since: typeof search.since === "string" ? search.since : undefined,
   };
+}
+
+/**
+ * The sign-in banner. A fresh install has no Google token yet; rather than a
+ * dead-end "needs auth" the whole app stays usable and this bar offers the
+ * step that unlocks the hourly slurp. Signed-in state is the same store the
+ * server's own /auth/status reports, so a completed login flips it on its
+ * own refetch.
+ */
+function SignInBar() {
+  const auth = $api.useQuery("get", "/auth/status", {});
+  if (auth.isPending || auth.isError) return null;
+  if (auth.data?.signed_in) return null;
+  return (
+    <div className="authbar">
+      Not signed in to Google — the hourly slurp is paused.{" "}
+      <a href="/auth/login">Sign in with Google</a>.
+    </div>
+  );
 }
 
 /** The full screen is the app shell; this root owns the legacy ways in. */
@@ -146,6 +166,7 @@ function RootLayout() {
   return (
     <>
       <Outlet />
+      <SignInBar />
       <footer className="sitefoot">
         <Link to="/">Home</Link>
         <span className="sep">·</span>

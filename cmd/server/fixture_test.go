@@ -134,6 +134,8 @@ func testServer(t *testing.T) *harness {
 		// Shortened from the real wait so the 429 path is a fast test.
 		slotWait:  10 * time.Millisecond,
 		embedWait: 2 * time.Second,
+		// The auth flows host the Google redirect on the bound port.
+		loginPort: "9876",
 		// Pointed at a port nothing listens on, so mode=semantic exercises the
 		// daemon-down path without needing ollama absent from the machine.
 		embedder: func() *embed.Ollama {

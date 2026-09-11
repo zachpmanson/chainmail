@@ -49,6 +49,8 @@ github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
 github.com/zachpmanson/docket/gmail v0.0.0-20260910114535-e3f0953601b8 h1:NB442613PY0Fxw86eoQlC97Cyl8qQG2e5RKtzlUoy2U=
 github.com/zachpmanson/docket/gmail v0.0.0-20260910114535-e3f0953601b8/go.mod h1:+8GYJATXSYNZKunN/I6mFs/SFMI7nkQtNRpBmDk+Hcg=
+github.com/zachpmanson/docket/gmail v0.0.0-20260910235321-3968e88c4549 h1:8+vhrzBx0kvsGVWG8SN53nN58mxN3Aa8kh1E0NcWjoo=
+github.com/zachpmanson/docket/gmail v0.0.0-20260910235321-3968e88c4549/go.mod h1:+8GYJATXSYNZKunN/I6mFs/SFMI7nkQtNRpBmDk+Hcg=
 go.opentelemetry.io/auto/sdk v1.2.1 h1:jXsnJ4Lmnqd11kwkBV2LgLoFMZKizbCi5fNZ/ipaZ64=
 go.opentelemetry.io/auto/sdk v1.2.1/go.mod h1:KRTj+aOaElaLi+wW1kO/DZRXwkF4C5xPbEe3ZiIhN7Y=
 go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0 h1:OyrsyzuttWTSur2qN/Lm0m2a8yqyIjUVBZcxFPuXq2o=
