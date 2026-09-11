@@ -20,8 +20,8 @@ export function Rendered({ spec, onBack, onRefresh, onAdd, onAccept, report, ref
   spec: Spec;
   onBack?: () => void;
   onRefresh?: () => void;
-  /** add a set of chains found by a fresh search, by root ext id */
-  onAdd?: (ids: string[]) => void;
+  /** add a set of chains found by a fresh search, by root ext id, with the query that found them */
+  onAdd?: (ids: string[], query: string) => void;
   /** accept a set of proposed chains by root ext id; supplied together with report in the app */
   onAccept?: (ids: string[]) => void;
   /** the last refresh's report, held so its proposals can be evaluated */
@@ -136,7 +136,7 @@ export function Rendered({ spec, onBack, onRefresh, onAdd, onAccept, report, ref
       {showSpec ? <SpecView spec={filtered} onClose={() => setShowSpec(false)} /> : null}
       {showAdd && onAdd ? (
         <AddEmailsModal onClose={() => setShowAdd(false)}
-                        onAdd={(ids) => { onAdd(ids); setShowAdd(false); }} />
+                        onAdd={(ids, q) => { onAdd(ids, q); setShowAdd(false); }} />
       ) : null}
       {report?.chainsProposed?.length ? (
         <ProposalsModal
@@ -158,10 +158,16 @@ export function Rendered({ spec, onBack, onRefresh, onAdd, onAccept, report, ref
  * path the refresh's proposals use (POST /v1/refresh accept=), so a chain the
  * recorded queries never find can join the page anyway — being found once is
  * all it takes to name it.
+ *
+ * The query goes back with them, because this is the one place a search exists
+ * that the page does not record. Without it the chain would sit on the page
+ * with no provenance: nothing would explain where it came from, and no later
+ * refresh could find it again. The server records it before re-deriving, so it
+ * is re-run like any recorded search from here on.
  */
 function AddEmailsModal({ onClose, onAdd }: {
   onClose: () => void;
-  onAdd: (ids: string[]) => void;
+  onAdd: (ids: string[], query: string) => void;
 }) {
   const [q, setQ] = useState("");
   const [asked, setAsked] = useState<string | null>(null);
@@ -244,7 +250,12 @@ function AddEmailsModal({ onClose, onAdd }: {
         ) : null}
         <div className="proposals-foot">
           <button className="tbtn" type="button" disabled={chosen.length === 0}
-                  onClick={() => onAdd([...chosen])}>
+                  onClick={() => {
+                    // asked, not the text box: the box may have been edited since
+                    // the search ran, and the page records the search that found
+                    // the chain, not whatever is typed after it.
+                    if (asked) onAdd([...chosen], asked);
+                  }}>
             {`add ${chosen.length} to page`}
           </button>
           <button className="tbtn" type="button" onClick={onClose}>

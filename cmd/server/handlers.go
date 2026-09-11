@@ -615,6 +615,10 @@ func specTitleOf(path string) string {
 // a quoted copy stored before its mailbox original arrived is one message
 // stored twice, and a page re-derived over them would show it twice. The
 // sweep refuses rather than guesses, so a corpus with no twins is untouched.
+//
+// The other thing a caller can change is the page's record of searches: a
+// chain found by the page's own add-email search was found by a query the
+// spec does not hold, so accepting it and recording that query are one call.
 func (s *server) refresh(w http.ResponseWriter, r *http.Request) {
 	var req refreshRequest
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequestBody))
@@ -656,6 +660,7 @@ func (s *server) refresh(w http.ResponseWriter, r *http.Request) {
 		Me:         req.Me,
 		IncludeNew: req.IncludeNew,
 		Accept:     req.Accept,
+		Queries:    req.Queries,
 		Uploads:    s.uploads,
 		// Fetch stays false: this server cannot reach the mailbox, on purpose.
 		Fetch: false,

@@ -501,7 +501,7 @@
     "/v1/refresh": {
       "post": {
         "summary": "Bring a previously built page up to date.",
-        "description": "Refresh stage, and deliberately the read half of the CLI's `refresh` command. The caller posts the previous spec (as POST /v1/spec returned it) and any selection overrides; the server re-derives the page from the corpus — a chain already on the page that gained entries is grown, a new chain the recorded queries find is proposed rather than included — and returns the regenerated spec alongside a report of what changed.\n\nThe server never reaches the mailbox, on purpose: fetching what arrived is `corpus ingest`'s job and belongs to the CLI and the cron, not a browser. So this refresh is corpus-only. What it cannot see, it cannot propose from fed to it by the mailbox later.",
+        "description": "Refresh stage, and deliberately the read half of the CLI's `refresh` command. The caller posts the previous spec (as POST /v1/spec returned it) and any selection overrides; the server re-derives the page from the corpus — a chain already on the page that gained entries is grown, a new chain the recorded queries find is proposed rather than included — and returns the regenerated spec alongside a report of what changed.\n\nMembership is only ever added to: `accept` names chains to take from the proposals, and a chain found by a search the spec does not record comes with that search in `queries`, so the page keeps the provenance and can find the chain again.\n\nThe server never reaches the mailbox, on purpose: fetching what arrived is `corpus ingest`'s job and belongs to the CLI and the cron, not a browser. So this refresh is corpus-only. What it cannot see, it cannot propose from fed to it by the mailbox later.",
         "operationId": "refreshSpec",
         "requestBody": {
           "required": true,
@@ -1174,7 +1174,7 @@
       },
       "RefreshRequest": {
         "type": "object",
-        "description": "The previous run being brought up to date. The spec itself is authoritative for what stays on the page; the other fields narrow or rename how that membership is reproduced, and accept takes proposed chains the report returns.",
+        "description": "The previous run being brought up to date. The spec itself is authoritative for what stays on the page; the other fields narrow or rename how that membership is reproduced, accept takes proposed chains the report returns, and queries records the search a newly accepted chain came from.",
         "required": [
           "spec"
         ],
@@ -1220,13 +1220,26 @@
           },
           "accept": {
             "type": "array",
-            "description": "Chain roots to accept, as the report's chainsProposed names them. Accepting is idempotent: a chain accepted once is not proposed again.",
+            "description": "Chain roots to accept, as the report's chainsProposed names them. Accepting is idempotent: a chain accepted once is not proposed again. A chain found by a search the spec does not record — the page's own add-email search — is accepted by the same handle and comes with its query in `queries`.",
             "items": {
               "type": "string",
               "description": "A rootExtId as the report prints it."
             },
             "example": [
               "mail:<c0ffee-1@loomworks.example>"
+            ]
+          },
+          "queries": {
+            "type": "array",
+            "description": "Searches to record on the page, on top of the ones the spec already records. A chain can be found by a query the page does not hold, and accepting it without that query would leave the page unable to explain or re-find it. The queries are recorded before either pass runs, so they are re-run like any other recorded search — what they newly find is proposed, and the next refresh re-finds what they found. A query the spec already records is kept as it stands rather than recorded twice.",
+            "items": {
+              "$ref": "#/components/schemas/SpecQuery"
+            },
+            "example": [
+              {
+                "q": "warehouse lease",
+                "note": "add-email search, mode=hybrid"
+              }
             ]
           },
           "name": {
@@ -1254,7 +1267,7 @@
       },
       "RefreshReport": {
         "type": "object",
-        "description": "What moved between the previous run and this one. A chain is in exactly one list: added (new to the page), grown (was there and gained entries), proposed (found but not accepted) or unranked (kept, but its query no longer finds it).",
+        "description": "What moved between the previous run and this one. A chain is in exactly one list: added (new to the page), grown (was there and gained entries), proposed (found but not accepted) or unranked (kept, but its query no longer finds it). queriesRecorded is not a chain but a change to the page's record.",
         "required": [
           "entriesBefore",
           "entriesAfter",
@@ -1273,6 +1286,14 @@
           "twinsCollapsed": {
             "type": "integer",
             "description": "Stored twin pairs the refresh collapsed before redrawing: a quoted copy and the mailbox message it was recovered from, one message stored twice. Absent when none."
+          },
+          "queriesRecorded": {
+            "type": "array",
+            "description": "Searches this refresh added to the page's record (the request's queries), absent when none. Recording a search changes the page as surely as adding a chain does, so a refresh that recorded one does not report itself as nothing new.",
+            "items": {
+              "type": "string",
+              "description": "The query text."
+            }
           },
           "chainsAdded": {
             "type": "array",
@@ -1305,7 +1326,7 @@
           },
           "nothingNew": {
             "type": "boolean",
-            "description": "The refresh looked and found nothing to store, grow, add or propose. Distinct from an error: a report existing at all means the refresh actually ran."
+            "description": "The refresh looked and found nothing to store, grow, add, propose or record. Distinct from an error: a report existing at all means the refresh actually ran."
           }
         }
       },

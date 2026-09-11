@@ -275,18 +275,21 @@ func toChainHit(c corpus.ChainHit) chainHit {
 // overrides the CLI would take. The spec itself is authoritative for
 // membership; title, person, since, limit and me only narrow or rename how
 // that membership is reproduced. accept accepts proposed chains by root ext
-// id, the same handle POST /v1/spec takes. name, when set, saves the
+// id, the same handle POST /v1/spec takes, and queries records the search a
+// chain came from when the spec does not record it yet — the page's own
+// add-email search, which nobody else can name. name, when set, saves the
 // refreshed page back under /view/<name> so a reload lands on the new run.
 type refreshRequest struct {
-	Spec       spec.Spec `json:"spec"`
-	Title      string    `json:"title,omitempty"`
-	Person     string    `json:"person,omitempty"`
-	Since      string    `json:"since,omitempty"`
-	Limit      int       `json:"limit,omitempty"`
-	Me         []string  `json:"me,omitempty"`
-	IncludeNew bool      `json:"includeNew,omitempty"`
-	Accept     []string  `json:"accept,omitempty"`
-	Name       string    `json:"name,omitempty"`
+	Spec       spec.Spec    `json:"spec"`
+	Title      string       `json:"title,omitempty"`
+	Person     string       `json:"person,omitempty"`
+	Since      string       `json:"since,omitempty"`
+	Limit      int          `json:"limit,omitempty"`
+	Me         []string     `json:"me,omitempty"`
+	IncludeNew bool         `json:"includeNew,omitempty"`
+	Accept     []string     `json:"accept,omitempty"`
+	Queries    []spec.Query `json:"queries,omitempty"`
+	Name       string       `json:"name,omitempty"`
 }
 
 // refreshResponse is the regenerated spec alongside what the refresh decided.
@@ -303,16 +306,19 @@ type refreshResponse struct {
 // entriesBefore, entriesAfter, nothingNew }. A chain cannot be in two lists:
 // added means it was not on the page before, grown means it was and gained
 // entries, proposed means it was found but not accepted, unranked means it is
-// kept but its query no longer returns it.
+// kept but its query no longer returns it. queriesRecorded is not a chain but a
+// change to the page's record, and says why a refresh that only recorded a
+// search is not a nothing-new one.
 type refreshReport struct {
-	EntriesBefore  int               `json:"entriesBefore"`
-	EntriesAfter   int               `json:"entriesAfter"`
-	TwinsCollapsed int               `json:"twinsCollapsed,omitempty"`
-	ChainsAdded    []chainGrowth     `json:"chainsAdded,omitempty"`
-	ChainsGrown    []chainGrowth     `json:"chainsGrown,omitempty"`
-	ChainsProposed []candidateReport `json:"chainsProposed,omitempty"`
-	ChainsUnranked []string          `json:"chainsUnranked,omitempty"`
-	NothingNew     bool              `json:"nothingNew"`
+	EntriesBefore   int               `json:"entriesBefore"`
+	EntriesAfter    int               `json:"entriesAfter"`
+	TwinsCollapsed  int               `json:"twinsCollapsed,omitempty"`
+	QueriesRecorded []string          `json:"queriesRecorded,omitempty"`
+	ChainsAdded     []chainGrowth     `json:"chainsAdded,omitempty"`
+	ChainsGrown     []chainGrowth     `json:"chainsGrown,omitempty"`
+	ChainsProposed  []candidateReport `json:"chainsProposed,omitempty"`
+	ChainsUnranked  []string          `json:"chainsUnranked,omitempty"`
+	NothingNew      bool              `json:"nothingNew"`
 }
 
 // growthReport is one chain whose membership changed. before is absent when
@@ -373,10 +379,11 @@ func toPeopleResponse(ps []corpus.PersonSummary) peopleResponse {
 
 func toRefreshReport(r refresh.Report) refreshReport {
 	out := refreshReport{
-		EntriesBefore:  r.EntriesBefore,
-		EntriesAfter:   r.EntriesAfter,
-		TwinsCollapsed: r.TwinsCollapsed,
-		NothingNew:     r.NothingNew(),
+		EntriesBefore:   r.EntriesBefore,
+		EntriesAfter:    r.EntriesAfter,
+		TwinsCollapsed:  r.TwinsCollapsed,
+		QueriesRecorded: r.QueriesRecorded,
+		NothingNew:      r.NothingNew(),
 	}
 	for _, g := range r.ChainsAdded {
 		out.ChainsAdded = append(out.ChainsAdded, chainGrowth{

@@ -278,6 +278,8 @@ export interface paths {
          * Bring a previously built page up to date.
          * @description Refresh stage, and deliberately the read half of the CLI's `refresh` command. The caller posts the previous spec (as POST /v1/spec returned it) and any selection overrides; the server re-derives the page from the corpus — a chain already on the page that gained entries is grown, a new chain the recorded queries find is proposed rather than included — and returns the regenerated spec alongside a report of what changed.
          *
+         *     Membership is only ever added to: `accept` names chains to take from the proposals, and a chain found by a search the spec does not record comes with that search in `queries`, so the page keeps the provenance and can find the chain again.
+         *
          *     The server never reaches the mailbox, on purpose: fetching what arrived is `corpus ingest`'s job and belongs to the CLI and the cron, not a browser. So this refresh is corpus-only. What it cannot see, it cannot propose from fed to it by the mailbox later.
          */
         post: operations["refreshSpec"];
@@ -579,7 +581,7 @@ export interface components {
             /** @description Entries they were a to: or cc: on. Sent 0 with received above 0 is a recipient-only participant, which is a quarter of a real cast. */
             received: number;
         };
-        /** @description The previous run being brought up to date. The spec itself is authoritative for what stays on the page; the other fields narrow or rename how that membership is reproduced, and accept takes proposed chains the report returns. */
+        /** @description The previous run being brought up to date. The spec itself is authoritative for what stays on the page; the other fields narrow or rename how that membership is reproduced, accept takes proposed chains the report returns, and queries records the search a newly accepted chain came from. */
         RefreshRequest: {
             /** @description The previous spec, as POST /v1/spec returned it. Must carry at least one message; a fresh page has nothing to refresh. */
             spec: components["schemas"]["TimelineSpec"];
@@ -604,12 +606,22 @@ export interface components {
             /** @description Accept every chain the queries propose, without naming them one by one. Defaults to false: a curated page is not re-widened on every refresh. */
             includeNew?: boolean;
             /**
-             * @description Chain roots to accept, as the report's chainsProposed names them. Accepting is idempotent: a chain accepted once is not proposed again.
+             * @description Chain roots to accept, as the report's chainsProposed names them. Accepting is idempotent: a chain accepted once is not proposed again. A chain found by a search the spec does not record — the page's own add-email search — is accepted by the same handle and comes with its query in `queries`.
              * @example [
              *       "mail:<c0ffee-1@loomworks.example>"
              *     ]
              */
             accept?: string[];
+            /**
+             * @description Searches to record on the page, on top of the ones the spec already records. A chain can be found by a query the page does not hold, and accepting it without that query would leave the page unable to explain or re-find it. The queries are recorded before either pass runs, so they are re-run like any other recorded search — what they newly find is proposed, and the next refresh re-finds what they found. A query the spec already records is kept as it stands rather than recorded twice.
+             * @example [
+             *       {
+             *         "q": "warehouse lease",
+             *         "note": "add-email search, mode=hybrid"
+             *       }
+             *     ]
+             */
+            queries?: components["schemas"]["SpecQuery"][];
             /** @description When set, saves the refreshed page back under /view/<name>, rewriting the file POST /v1/spec wrote, so a reload lands on this run. The same name rules as a build: letters, digits, '.', '_', '-'; no slashes and no '..'. */
             name?: string;
         };
@@ -618,7 +630,7 @@ export interface components {
             spec: components["schemas"]["TimelineSpec"];
             report: components["schemas"]["RefreshReport"];
         };
-        /** @description What moved between the previous run and this one. A chain is in exactly one list: added (new to the page), grown (was there and gained entries), proposed (found but not accepted) or unranked (kept, but its query no longer finds it). */
+        /** @description What moved between the previous run and this one. A chain is in exactly one list: added (new to the page), grown (was there and gained entries), proposed (found but not accepted) or unranked (kept, but its query no longer finds it). queriesRecorded is not a chain but a change to the page's record. */
         RefreshReport: {
             /** @description Messages on the page when the refresh started. */
             entriesBefore: number;
@@ -626,6 +638,8 @@ export interface components {
             entriesAfter: number;
             /** @description Stored twin pairs the refresh collapsed before redrawing: a quoted copy and the mailbox message it was recovered from, one message stored twice. Absent when none. */
             twinsCollapsed?: number;
+            /** @description Searches this refresh added to the page's record (the request's queries), absent when none. Recording a search changes the page as surely as adding a chain does, so a refresh that recorded one does not report itself as nothing new. */
+            queriesRecorded?: string[];
             /** @description Chains now on the page that were not on it before. Absent when none. */
             chainsAdded?: components["schemas"]["ChainGrowth"][];
             /** @description Chains on the page before that gained entries. Absent when none. */
@@ -634,7 +648,7 @@ export interface components {
             chainsProposed?: components["schemas"]["RefreshCandidate"][];
             /** @description Chains still on the page that no recorded query returns anymore. They are kept — dropping one would delete entries somebody has already read. */
             chainsUnranked?: string[];
-            /** @description The refresh looked and found nothing to store, grow, add or propose. Distinct from an error: a report existing at all means the refresh actually ran. */
+            /** @description The refresh looked and found nothing to store, grow, add, propose or record. Distinct from an error: a report existing at all means the refresh actually ran. */
             nothingNew: boolean;
         };
         /** @description One chain whose membership changed. before is absent when the chain is new to the page; after is what the page now holds. */

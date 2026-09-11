@@ -575,6 +575,7 @@ describe("adding another email to a page", () => {
             chainsGrown: [],
             chainsProposed: [],
             unranked: [],
+            queriesRecorded: ["lease"],
           },
         });
       if (p === "/auth/status") return json(200, { signed_in: true });
@@ -608,11 +609,16 @@ describe("adding another email to a page", () => {
     );
     expect(body.name).toBe("loom-cutover");
     expect(body.accept).toEqual(["mail:<lease-renewal-1@example.fed>"]);
+    // The search that found the chain goes with it, so the page records where
+    // the chain came from rather than gaining an unexplained one.
+    expect(body.queries).toEqual([{ q: "lease", note: "add-email search, mode=hybrid" }]);
     // The modal closed once the add was sent.
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Add another email" })).toBeNull());
 
-    // The refreshed page reports the growth like any other refresh.
+    // The refreshed page reports the growth like any other refresh, and says
+    // the search was recorded with it.
     await screen.findByText(/1 added/);
+    await screen.findByText(/1 search recorded/);
   });
 });
 

@@ -420,6 +420,72 @@ func TestRefreshBringsABuiltPageUpToDate(t *testing.T) {
 	}
 }
 
+// The page's own add-email search finds a chain by a query the spec does not
+// record. Ticking it sends the chain (accept) and the search (queries) in one
+// call, and the page keeps both: without the query the chain would be on the
+// page with nothing to explain it, and no later refresh could find it again.
+func TestRefreshRecordsTheSearchAChainWasAddedBy(t *testing.T) {
+	srv, api := testServer(t), loadAPI(t)
+
+	// A page holding the solar thread, and nothing else.
+	built := srv.do(t, "POST", "/v1/spec", specBody(extAda1))
+	if built.status != 200 {
+		t.Fatalf("build: status = %d: %s", built.status, built.body)
+	}
+
+	// The fence chain was found by a search the build never recorded, so the
+	// reader's tick carries both.
+	body, _ := json.Marshal(refreshRequest{
+		Spec:    decode[spec.Spec](t, built),
+		Accept:  []string{extOther},
+		Queries: []spec.Query{{Q: "fence panels", Note: "add-email search, mode=hybrid"}},
+	})
+	res := srv.do(t, "POST", "/v1/refresh", body)
+	if res.status != 200 {
+		t.Fatalf("status = %d: %s", res.status, res.body)
+	}
+	api.assert(t, "RefreshResponse", res.body)
+
+	got := decode[struct {
+		Spec struct {
+			Title   string
+			Queries []spec.Query
+			Threads []struct{ ID string }
+		}
+		Report struct {
+			QueriesRecorded []string `json:"queriesRecorded"`
+			NothingNew      bool     `json:"nothingNew"`
+			ChainsAdded     []struct {
+				ID string `json:"id"`
+			} `json:"chainsAdded"`
+		} `json:"report"`
+	}](t, res)
+
+	// The chain is on the page...
+	var containers []string
+	for _, th := range got.Spec.Threads {
+		containers = append(containers, th.ID)
+	}
+	if strings.Join(containers, ",") != "T1,T9" {
+		t.Errorf("threads = %v, want the built chain and the one that was added", containers)
+	}
+	// ...and so is the search that found it, note and all.
+	if len(got.Spec.Queries) != 1 || got.Spec.Queries[0].Q != "fence panels" ||
+		got.Spec.Queries[0].Note != "add-email search, mode=hybrid" {
+		t.Errorf("queries = %+v, want the search that was sent", got.Spec.Queries)
+	}
+	// The report says so, and is not a nothing-new refresh: both halves landed.
+	if len(got.Report.QueriesRecorded) != 1 || got.Report.QueriesRecorded[0] != "fence panels" {
+		t.Errorf("queriesRecorded = %v", got.Report.QueriesRecorded)
+	}
+	if len(got.Report.ChainsAdded) != 1 || got.Report.ChainsAdded[0].ID != "T9" {
+		t.Errorf("chainsAdded = %+v, want the accepted chain", got.Report.ChainsAdded)
+	}
+	if got.Report.NothingNew {
+		t.Error("a chain and a search arrived; nothingNew is not the honest answer")
+	}
+}
+
 // The refresh surface is corpus-only, so accepting a proposed chain is the way
 // a page grows. There is no fetching: that is the CLI's, not this server's. A
 // spec carrying an unknown chain is still rejected on the input side.

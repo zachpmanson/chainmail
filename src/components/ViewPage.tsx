@@ -7,9 +7,10 @@ import { Rendered } from "./Rendered";
 
 /**
  * One line saying what a refresh did. NothingNew is the calm default: a page
- * that was already current should not read as if it changed. The other four
- * states are the four lists the report can hold, joined by comma, and a page
- * that changed only its counts (entries) is still reported — those are the
+ * that was already current should not read as if it changed. The other states
+ * are the four chain lists the report can hold, joined by comma, plus the
+ * searches it recorded (the add-email search) and any twins it collapsed. A
+ * page that changed only its counts (entries) is still reported — those are the
  * chains a reader can see grew.
  */
 function refreshSummary(r: RefreshReport): string {
@@ -19,6 +20,10 @@ function refreshSummary(r: RefreshReport): string {
   if (r.chainsGrown?.length) parts.push(`${r.chainsGrown.length} grew`);
   if (r.chainsProposed?.length) parts.push(`${r.chainsProposed.length} proposed`);
   if (r.chainsUnranked?.length) parts.push(`${r.chainsUnranked.length} unranked`);
+  if (r.queriesRecorded?.length)
+    parts.push(
+      `${r.queriesRecorded.length} search${r.queriesRecorded.length === 1 ? "" : "es"} recorded`,
+    );
   if (r.twinsCollapsed)
     parts.push(`${r.twinsCollapsed} twin ${r.twinsCollapsed === 1 ? "copy" : "copies"} collapsed`);
   return parts.length ? `refresh: ${parts.join(", ")}` : "refresh: nothing changed";
@@ -103,8 +108,20 @@ export function ViewPage() {
       onAccept={(ids) =>
         refresh.mutate({ body: { spec, name, accept: ids } })
       }
-      onAdd={(ids) =>
-        refresh.mutate({ body: { spec, name, accept: ids } })
+      // Adding a chain by hand sends the search that found it as well, so the
+      // page records it: an accepted chain whose query the spec does not hold
+      // is one nothing can explain or re-find. The server dedupes it against
+      // what the spec already records, so re-adding from the same search is
+      // harmless. The modal searches hybrid, and says so in the note.
+      onAdd={(ids, query) =>
+        refresh.mutate({
+          body: {
+            spec,
+            name,
+            accept: ids,
+            queries: [{ q: query, note: "add-email search, mode=hybrid" }],
+          },
+        })
       }
       report={report}
       refreshing={refresh.isPending}
