@@ -470,6 +470,28 @@ const specsHandler: Handler = (c) =>
     ? json(200, SPECS)
     : json(500, { error: `unexpected call to ${c.method} ${pathOf(c)}` });
 
+/**
+ * The site nav is a header now, not a footer: one set of cross-links at the top
+ * of every route, above the page's own header. The point of the test is the
+ * move — the shell cannot quietly grow a footer again, and every link stays
+ * reachable without scrolling to the end of a long transcript.
+ */
+describe("the site navigation", () => {
+  it("is the header above the page's own, and nothing renders a footer", async () => {
+    handler = () => json(200, { signed_in: true });
+    await mountApp("/");
+
+    const site = document.querySelector("header.sitehead");
+    if (!site) throw new Error("the shell rendered no site header");
+    // Document order is the claim: the site nav is the first thing on the page.
+    expect(document.querySelectorAll("header")[0]).toBe(site);
+    for (const name of ["Home", "Browse saved specs", "Services", "Ops"]) {
+      expect(within(site as HTMLElement).getByRole("link", { name })).toBeTruthy();
+    }
+    expect(document.querySelector("footer")).toBeNull();
+  });
+});
+
 describe("the specs index /specs", () => {
   it("lists every saved page, linked to its view route, ordered by saved-at", async () => {
     handler = specsHandler;

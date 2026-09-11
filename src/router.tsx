@@ -169,9 +169,11 @@ function RootLayout() {
     );
   return (
     <>
-      <Outlet />
-      <SignInBar />
-      <footer className="sitefoot">
+      {/* The site nav is the header: the same cross-links that used to sit in
+          the footer, at the top of every page instead — above the sign-in
+          banner and the page's own header, so it is the first thing read and
+          the one place site-level navigation lives. */}
+      <header className="sitehead">
         <Link to="/">Home</Link>
         <span className="sep">·</span>
         <Link to="/specs">Browse saved specs</Link>
@@ -179,7 +181,9 @@ function RootLayout() {
         <Link to="/status">Services</Link>
         <span className="sep">·</span>
         <Link to="/ops">Ops</Link>
-      </footer>
+      </header>
+      <SignInBar />
+      <Outlet />
     </>
   );
 }
