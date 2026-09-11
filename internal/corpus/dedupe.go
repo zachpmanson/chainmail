@@ -103,11 +103,7 @@ func Dedupe(s *Store, apply bool) (DedupePlan, error) {
 	}
 
 	for _, m := range plan.Merges {
-		reason := m.Rule
-		if m.Evidence != "" {
-			reason += " (" + m.Evidence + ")"
-		}
-		if err := mergeWithReason(s, m.KeepID, m.DropID, reason); err != nil {
+		if err := MergePlanned(s, m); err != nil {
 			return plan, fmt.Errorf("merging %d into %d: %w", m.DropID, m.KeepID, err)
 		}
 	}
@@ -116,6 +112,20 @@ func Dedupe(s *Store, apply bool) (DedupePlan, error) {
 		return plan, err
 	}
 	return plan, nil
+}
+
+// MergePlanned carries out one planned merge exactly as Dedupe(apply=true)
+// would: the reason person_merges records is the rule plus the evidence in the
+// parenthetical, so `corpus dedupe` output, the ops review UI and the audit
+// trail all name the same thing. The ops UI re-derives the plan and then calls
+// this, which is why a merge approved in the browser audits identically to one
+// the CLI applies.
+func MergePlanned(s *Store, m PlannedMerge) error {
+	reason := m.Rule
+	if m.Evidence != "" {
+		reason += " (" + m.Evidence + ")"
+	}
+	return mergeWithReason(s, m.KeepID, m.DropID, reason)
 }
 
 // planPlaceholders is RepairTruncatedNames' decision generalised from the values

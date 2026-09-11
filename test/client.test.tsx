@@ -729,3 +729,124 @@ describe("a quoter's edit in the transcript", () => {
     expect(screen.getByText("Invoice")).toBeTruthy();
   });
 });
+
+/**
+ * The /ops review surface. Every name, address and id is invented, with the
+ * same .example domains the backend fixtures use — the ops screen shows people
+ * data, so nothing here may be a real person's.
+ */
+const OPS_PLAN_BEFORE = {
+  people: 5,
+  merges: [
+    {
+      rule: "dedupe:same-display-name",
+      keepId: 7,
+      keepName: "Ada Okoye",
+      keepIdentities: ["email:ada@loomworks.example"],
+      dropId: 8,
+      dropName: "Ada Okoye",
+      dropIdentities: ["display_name:ada okoye"],
+      evidence: "name-only person, and the kept person is on every entry they are",
+      applicable: true,
+    },
+    {
+      rule: "dedupe:first-name-and-org",
+      keepId: 9,
+      keepName: "Camille Vaughn",
+      keepIdentities: ["email:camille.vaughn@millrace.example"],
+      dropId: 10,
+      dropName: "Camille Vaughn",
+      dropIdentities: ["email:camille@quarry.example"],
+      evidence: "first name camille at millrace.example",
+      applicable: false,
+    },
+  ],
+  refusals: [
+    {
+      rule: "dedupe:same-display-name",
+      subject: "dai rhys",
+      reason: "two people of that name fit the evidence equally",
+      people: [11, 12, 13],
+    },
+  ],
+  candidates: [
+    {
+      aId: 14,
+      aName: "Bryn Lowther",
+      aAddresses: ["bryn@quarry.example"],
+      bId: 15,
+      bName: "Bryn Lowther",
+      bAddresses: ["bryn.lowther@millrace.example"],
+      reason: "same local part, different domain",
+      suggest: "corpus alias -from quarry.example -to millrace.example",
+    },
+  ],
+  twinsDeclined: [{ reason: "no other copy within a plausible offset of its stated clock", count: 612 }],
+  trail: [],
+};
+
+const OPS_RECORD = {
+  keepId: 7,
+  keepName: "Ada Okoye",
+  dropId: 8,
+  dropName: "Ada Okoye",
+  reason: "dedupe:same-display-name (name-only person, and the kept person is on every entry they are)",
+  mergedAt: "2026-08-22T15:04:00Z",
+};
+
+const OPS_PLAN_AFTER = {
+  ...OPS_PLAN_BEFORE,
+  people: 4,
+  merges: OPS_PLAN_BEFORE.merges.filter((m) => m.dropId !== 8),
+  trail: [OPS_RECORD],
+};
+
+describe("the ops route /ops", () => {
+  it("shows the plan with the evidence, and applies one pair behind a confirm", async () => {
+    let applied = false;
+    handler = (c) => {
+      const p = pathOf(c);
+      if (p === "/v1/ops/plan") return json(200, applied ? OPS_PLAN_AFTER : OPS_PLAN_BEFORE);
+      if (p === "/v1/ops/merge" && c.method === "POST") {
+        applied = true;
+        return json(200, { merge: OPS_RECORD });
+      }
+      return json(500, { error: `unexpected call to ${c.method} ${p}` });
+    };
+    await mountApp("/ops");
+
+    // The applicable pair: the evidence is on screen, and so is its button.
+    expect(
+      await screen.findByText(/name-only person, and the kept person is on every entry they are/),
+    ).toBeTruthy();
+    expect(screen.getByText("apply")).toBeTruthy();
+    expect(screen.getByText("read-only")).toBeTruthy();
+    // The first-name-and-org tier is listed but has no apply button: exactly one
+    // Merge exists, for the same-name pair.
+    expect(screen.getAllByRole("button", { name: "Merge" })).toHaveLength(1);
+
+    // The reads: the refusal, the twins aggregate, the empty trail.
+    expect(await screen.findByText(/two people of that name fit the evidence equally/)).toBeTruthy();
+    expect(screen.getByText(/twins pass declined 612 entries/)).toBeTruthy();
+    expect(screen.getByText("0 merges recorded — the person_merges trail")).toBeTruthy();
+
+    // First click asks for confirmation; nothing has left the browser yet.
+    click(screen.getByRole("button", { name: "Merge" }));
+    expect(await screen.findByText(/This cannot be undone/)).toBeTruthy();
+    expect(calls.some((c) => pathOf(c) === "/v1/ops/merge")).toBe(false);
+
+    // The confirming click names the pair and sends it.
+    click(screen.getByRole("button", { name: "Merge #8 into #7" }));
+    await waitFor(() =>
+      expect(calls.some((c) => pathOf(c) === "/v1/ops/merge" && c.method === "POST")).toBe(true),
+    );
+    const post = calls.find((c) => pathOf(c) === "/v1/ops/merge");
+    expect(JSON.parse(post!.body ?? "{}")).toEqual({ keepId: 7, dropId: 8 });
+
+    // Success: the note names the merged pair, the plan was refetched, and the
+    // only merge left on screen is the read-only tier, without a button.
+    expect(await screen.findByText("merged #8 into #7 — the plan below is the current one.")).toBeTruthy();
+    await waitFor(() => expect(screen.queryAllByRole("button", { name: "Merge" })).toHaveLength(0));
+    expect(screen.getByText("1 merge recorded — the person_merges trail")).toBeTruthy();
+  });
+});

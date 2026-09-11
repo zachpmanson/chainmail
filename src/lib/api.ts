@@ -132,6 +132,12 @@ export type RefreshReport = components["schemas"]["RefreshReport"];
 
 export type RefreshCandidate = components["schemas"]["RefreshCandidate"];
 
+export type OpsPlanResponse = components["schemas"]["OpsPlanResponse"];
+
+export type OpsMerge = components["schemas"]["OpsMerge"];
+
+export type OpsMergeRecord = components["schemas"]["OpsMergeRecord"];
+
 /** Every input that changes the result set, before the blanks are dropped. */
 export interface SearchParams {
   q: string;

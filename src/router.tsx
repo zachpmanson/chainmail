@@ -18,6 +18,7 @@ import { NotFound } from "./components/NotFound";
 import { Rendered } from "./components/Rendered";
 import { StatusView } from "./components/StatusView";
 import { SpecsView } from "./components/SpecsView";
+import { OpsView } from "./components/OpsView";
 import type { SearchMode } from "./lib/api";
 
 /**
@@ -35,6 +36,9 @@ import type { SearchMode } from "./lib/api";
  *   "/status"      — which backends the corpus reads through are logged in.
  *   "/specs"      — every page saved under /view/<name>, newest first, so a
  *                     saved build can be reopened without remembering its name.
+ *   "/ops"        — the people-merge review surface: the dedupe plan, shown
+ *                     with the evidence, applied one pair at a time behind a
+ *                     confirm. Read-only here means read-only there.
  *   "*"            — the client's own 404. Unknown paths reach the shell too,
  *                    so the client (which knows every route) is the one that
  *                    can truthfully say "no page here".
@@ -173,6 +177,8 @@ function RootLayout() {
         <Link to="/specs">Browse saved specs</Link>
         <span className="sep">·</span>
         <Link to="/status">Services</Link>
+        <span className="sep">·</span>
+        <Link to="/ops">Ops</Link>
       </footer>
     </>
   );
@@ -207,13 +213,19 @@ const specsRoute = createRoute({
   component: SpecsView,
 });
 
+const opsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/ops",
+  component: OpsView,
+});
+
 const viewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/view/$name",
   component: ViewPage,
 });
 
-const routeTree = rootRoute.addChildren([searchRoute, statusRoute, specsRoute, viewRoute]);
+const routeTree = rootRoute.addChildren([searchRoute, statusRoute, specsRoute, opsRoute, viewRoute]);
 
 /** The app's router, bound to the browser's history. */
 export const router = createRouter({
