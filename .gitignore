@@ -18,4 +18,4 @@ fixtures/*
 !fixtures/minimal.json
 !fixtures/eval.synthetic.json
 result
-corpus
+/corpus
