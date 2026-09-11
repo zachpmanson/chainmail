@@ -51,7 +51,7 @@
           pname = "chainmail";
           version = "0.1.0";
           src = self;
-          vendorHash = "sha256-6heEoAWE5LM2jMIj5jgSTiv4vQSMuFL71xsofzv3HHQ=";
+          vendorHash = "sha256-vdirEu+q48Fku3clw4egCtVHXJ2iP7zNccBNxpviMyg=";
 
           # copy the vite-built client into the Go source so go:embed finds it.
           preBuild = ''

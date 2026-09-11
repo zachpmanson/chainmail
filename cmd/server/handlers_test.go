@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -665,10 +666,26 @@ func writeSnapshot(t *testing.T, path string, blob []byte) {
 // the status report, the redirect with its PKCE shape, and that a callback
 // with no pending flow falls through to the web shell rather than answering
 // with the API's JSON error shape.
+//
+// The docket lib stores config + token under XDG dirs (falling back to
+// $HOME/.config and $HOME/.local/state), and the nix sandbox's HOME is an
+// unwritable /homeless-shelter. Point the XDG vars at a fresh tempdir per
+// test so the suite stays HOME-independent, exactly as the flake promises.
+func isolateAuthDirs(t *testing.T) {
+	t.Helper()
+	base := t.TempDir()
+	if err := os.Setenv("XDG_CONFIG_HOME", filepath.Join(base, "config")); err != nil {
+		t.Fatalf("setting XDG_CONFIG_HOME: %v", err)
+	}
+	if err := os.Setenv("XDG_STATE_HOME", filepath.Join(base, "state")); err != nil {
+		t.Fatalf("setting XDG_STATE_HOME: %v", err)
+	}
+}
 
 func TestAuthStatusReportsUnsignedWhenNoTokenStore(t *testing.T) {
-	// HOME is sandboxed per-test, so the token path resolves to a file that
-	// cannot exist; status must answer "no" rather than fail.
+	// Fresh XDG dirs mean the token path cannot exist; status must answer
+	// "no" rather than fail.
+	isolateAuthDirs(t)
 	srv := testServer(t)
 	res := srv.do(t, "GET", "/auth/status", nil)
 	if res.status != 200 {
@@ -683,6 +700,7 @@ func TestAuthStatusReportsUnsignedWhenNoTokenStore(t *testing.T) {
 }
 
 func TestAuthLoginRedirectsToGoogleWithPKCEAndPathlessRedirect(t *testing.T) {
+	isolateAuthDirs(t)
 	srv := testServer(t)
 	res := srv.do(t, "GET", "/auth/login", nil)
 	// The Thunderbird client's registered redirect URI is a pathless
