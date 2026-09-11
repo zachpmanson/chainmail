@@ -380,6 +380,37 @@
         }
       }
     },
+    "/auth/status": {
+      "get": {
+        "summary": "Whether the server is signed in to Google for the work mailbox.",
+        "description": "Reports whether the token the hourly slurp reads is present in the server's store. Shallow on purpose: a file check, not a live token refresh.",
+        "operationId": "getAuthStatus",
+        "responses": {
+          "200": {
+            "description": "The sign-in state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthStatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "get": {
+        "summary": "Start a Google authorization-code login for the work mailbox.",
+        "description": "Redirects the browser to Google's consent page. On completion the token lands in the store the hourly slurp reads, and /auth/status starts answering signed_in=true.",
+        "operationId": "getAuthLogin",
+        "responses": {
+          "302": {
+            "description": "Redirect to Google's consent page."
+          }
+        }
+      }
+    },
     "/v1/status": {
       "get": {
         "summary": "Which backend services are logged in, as the operator last probed them.",
@@ -441,6 +472,16 @@
   },
   "components": {
     "schemas": {
+      "AuthStatusResponse": {
+        "type": "object",
+        "required": ["signed_in"],
+        "properties": {
+          "signed_in": {
+            "type": "boolean",
+            "description": "True when the token the slurps read is present."
+          }
+        }
+      },
       "SearchResponse": {
         "type": "object",
         "description": "Ranked candidates. Exactly one of chains or entries is present, decided by the `entries` parameter; neither is present when nothing matched, and an empty array is returned rather than omitted in that case.",

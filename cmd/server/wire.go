@@ -93,6 +93,10 @@ type chainResponse struct {
 	Entries   []corpusEntry `json:"entries"`
 }
 
+type authStatusResponse struct {
+	SignedIn bool `json:"signed_in"`
+}
+
 type statsResponse struct {
 	Entries    int64             `json:"entries"`
 	BySource   map[string]int64  `json:"bySource"`

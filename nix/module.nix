@@ -111,6 +111,11 @@ in {
         # restart (the beltino-sharing 0770 era is over; see the machine config).
         StateDirectoryMode = "0700";
         WorkingDirectory = cfg.stateDir;
+        # The server hosts the /auth/google served sign-in (chainmail#75): as
+        # a system user with no home, HOME must point at the StateDirectory or
+        # the OAuth flow would write the token where the slurps cannot read it
+        # (the /v1/status + gmail-backend slurps read the very same store).
+        Environment = "HOME=${cfg.stateDir}";
         # No network namespace beyond loopback and whatever a later slurper
         # needs; ProtectSystem=strict makes the store and /etc read-only.
         ProtectSystem = "strict";

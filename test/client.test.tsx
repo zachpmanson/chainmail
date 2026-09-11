@@ -155,6 +155,9 @@ const buildHandler: Handler = (c) => {
   if (p === "/v1/spec" && c.method === "POST") return json(200, SPEC);
   if (p === "/v1/specs/loom-cutover") return json(200, SPEC);
   if (p === "/v1/search") return json(200, { mode: "lexical", chains: CHAINS });
+  // The shell's sign-in banner probes auth on every route; answer it signed in
+  // so tests exercise the app, not the banner.
+  if (p === "/auth/status") return json(200, { signed_in: true });
   return json(500, { error: `unexpected call to ${c.method} ${p}` });
 };
 
@@ -416,7 +419,10 @@ describe("a spec named on the URL", () => {
     await mountApp("/?spec=/synthetic.json");
 
     await screen.findByText("Loom cutover");
-    expect(calls.map((c) => new URL(c.url).pathname)).toEqual(["/synthetic.json"]);
+    // The spec file is fetched, and only the spec file: the banner's auth
+    // probe is filtered out, since it is a shell concern, not this route's.
+    const specCalls = calls.filter((c) => pathOf(c) === "/synthetic.json");
+    expect(specCalls.map((c) => new URL(c.url).pathname)).toEqual(["/synthetic.json"]);
   });
 });
 
@@ -544,7 +550,10 @@ describe("the render route /view/<name>", () => {
     await mountApp("/viwe/typo");
 
     expect(await screen.findByText(/No page at/)).toBeTruthy();
-    expect(calls.length).toBe(0);
+    // The 404 route itself must not touch the API; the shell's auth probe is
+    // a separate concern and answered signed in by the shared handler.
+    const routeCalls = calls.filter((c) => pathOf(c) !== "/auth/status");
+    expect(routeCalls.length).toBe(0);
   });
 });
 

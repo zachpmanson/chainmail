@@ -659,3 +659,67 @@ func writeSnapshot(t *testing.T, path string, blob []byte) {
 		t.Fatalf("writing the snapshot: %v", err)
 	}
 }
+
+// Auth endpoints — served sign-in (chainmail#75). These deliberately do NOT
+// complete a real Google consent round-trip; they pin the surface behaviour:
+// the status report, the redirect with its PKCE shape, and that a callback
+// with no pending flow falls through to the web shell rather than answering
+// with the API's JSON error shape.
+
+func TestAuthStatusReportsUnsignedWhenNoTokenStore(t *testing.T) {
+	// HOME is sandboxed per-test, so the token path resolves to a file that
+	// cannot exist; status must answer "no" rather than fail.
+	srv := testServer(t)
+	res := srv.do(t, "GET", "/auth/status", nil)
+	if res.status != 200 {
+		t.Fatalf("status = %d, want 200: %s", res.status, res.body)
+	}
+	got := decode[struct {
+		SignedIn bool `json:"signed_in"`
+	}](t, res)
+	if got.SignedIn {
+		t.Errorf("signed_in = true, want false (no token store in this sandbox)")
+	}
+}
+
+func TestAuthLoginRedirectsToGoogleWithPKCEAndPathlessRedirect(t *testing.T) {
+	srv := testServer(t)
+	res := srv.do(t, "GET", "/auth/login", nil)
+	// The Thunderbird client's registered redirect URI is a pathless
+	// http://localhost:<port>; the server must present exactly that, or Google
+	// refuses the redirect back. This is the one property the whole flow turns
+	// on, so it is pinned even though the URL is not.
+	if res.status != 302 {
+		t.Fatalf("status = %d, want 302: %s", res.status, res.body)
+	}
+	loc := res.header.Get("Location")
+	u, err := url.Parse(loc)
+	if err != nil {
+		t.Fatalf("Location is not a URL: %v (%s)", err, loc)
+	}
+	if u.Scheme != "https" || u.Host != "accounts.google.com" {
+		t.Errorf("redirect host = %s://%s, want Google's consent", u.Scheme, u.Host)
+	}
+	q := u.Query()
+	if got := q.Get("redirect_uri"); got != "http://localhost:9876" {
+		t.Errorf("redirect_uri = %q, want the pathless http://localhost:9876", got)
+	}
+	if q.Get("response_type") != "code" || q.Get("state") == "" {
+		t.Errorf("authorization request missing response_type=code or state")
+	}
+	if q.Get("code_challenge") == "" || q.Get("code_challenge_method") != "S256" {
+		t.Errorf("authorization request missing the PKCE challenge")
+	}
+}
+
+func TestAuthCallbackWithNoPendingFlowFallsThroughToTheShell(t *testing.T) {
+	// A stray ?code=/&state= on the root — a reload of a finished login, an
+	// old callback, a spoof attempt — must not be answered as if a flow were
+	// in flight: the shell (or a client route) owns every other root request.
+	srv := testServer(t)
+	res := srv.do(t, "GET", "/?code=fake&state=nope", nil)
+	if strings.HasPrefix(string(res.body), "<!doctype html>") {
+		return
+	}
+	t.Errorf("stray callback answered with %d %s instead of the shell", res.status, res.body)
+}

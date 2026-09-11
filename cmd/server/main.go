@@ -62,6 +62,13 @@ func run(args []string) error {
 		return err
 	}
 
+	// The bound port names the Google redirect URI (/auth/login): pathless
+	// http://localhost:<port>, the shape the Thunderbird client accepts.
+	_, port, err := net.SplitHostPort(*addr)
+	if err != nil {
+		return err
+	}
+
 	store, err := corpus.Open(*path)
 	if err != nil {
 		return err
@@ -75,6 +82,7 @@ func run(args []string) error {
 		statusPath: status.FileName(*path),
 		specSlots:  make(chan struct{}, specConcurrency),
 		slotWait:   specSlotWait,
+		loginPort:  port,
 		embedder: func() *mailembed.Ollama {
 			return &mailembed.Ollama{BaseURL: *url, Name: *model, Dimension: *dim,
 				Client: &http.Client{Timeout: *timeout}}

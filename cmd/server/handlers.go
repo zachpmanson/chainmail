@@ -24,6 +24,8 @@ import (
 	"github.com/zachpmanson/chainmail/internal/refresh"
 	"github.com/zachpmanson/chainmail/internal/spec"
 	"github.com/zachpmanson/chainmail/internal/status"
+
+	docketauth "github.com/zachpmanson/docket/gmail/auth"
 )
 
 // The built web client, embedded so one binary serves both the API and the UI.
@@ -74,6 +76,16 @@ type server struct {
 	slotWait  time.Duration
 	embedder  func() *mailembed.Ollama
 	embedWait time.Duration
+
+	// login holds a pending authorization-code flow started by /auth/login.
+	// A process can host only one at a time by construction: starting another
+	// while one is pending replaces it (single admin, 10-minute consent
+	// window, and the callback verifies state before touching it).
+	login        *docketauth.Pending
+	loginExpires time.Time
+	// loginPort is the port this server bound, used to spell the Google-
+	// accepted pathless redirect URI http://localhost:<port>.
+	loginPort string
 }
 
 // routes maps the surface api/openapi.json declares, and nothing else.
@@ -96,7 +108,9 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("/v1/chains/{rootExtId}", get(s.chain))
 	mux.HandleFunc("/v1/stats", get(s.stats))
 	mux.HandleFunc("/v1/people", get(s.people))
-	mux.HandleFunc("/", s.webRoot())
+	mux.HandleFunc("/auth/status", get(s.authStatus))
+	mux.HandleFunc("/auth/login", get(s.authLogin))
+	mux.HandleFunc("/", s.authCallbackOr(s.webRoot()))
 	return mux
 }
 
@@ -150,6 +164,107 @@ func (s *server) webRoot() http.HandlerFunc {
 		// answers and the client decides what belongs there.
 		shell(w, r)
 	}
+}
+
+// authStatus reports whether a Google token is present in the store the
+// slurps read (chainmail's own store — HOME=/var/lib/chainmail in the nix
+// module). Deliberately shallow: a file check, not a live refresh, so the
+// endpoint never reaches the network or blocks on a token exchange.
+func (s *server) authStatus(w http.ResponseWriter, r *http.Request) {
+	path, err := docketauth.TokenPath()
+	signedIn := false
+	if err == nil {
+		if _, err := os.Stat(path); err == nil {
+			signedIn = true
+		}
+	}
+	send(w, http.StatusOK, authStatusResponse{SignedIn: signedIn})
+}
+
+// loginWindow is how long a pending authorization flow stays usable before
+// the callback is refused.
+const loginWindow = 10 * time.Minute
+
+// authLogin starts a Google authorization-code flow for the work mailbox and
+// redirects the browser to Google's consent page. The token lands in the same
+// store the hourly slurp reads — chainmail's own — so once the callback
+// completes, the next slurp runs with it.
+//
+// The redirect URI is a pathless http://localhost:<port>: Google matches
+// loopback redirects by host+port for the Thunderbird client docket's config
+// registers, so the callback arrives at this server's root with
+// ?code=&state=. See docket-design.md §3.
+func (s *server) authLogin(w http.ResponseWriter, r *http.Request) {
+	cfg, err := docketauth.LoadConfig()
+	if err != nil {
+		fail(w, http.StatusInternalServerError,
+			fmt.Errorf("loading docket config: %w", err))
+		return
+	}
+	pending, err := docketauth.BeginLogin(cfg.Provider,
+		fmt.Sprintf("http://localhost:%s", s.loginPort))
+	if err != nil {
+		fail(w, http.StatusInternalServerError,
+			fmt.Errorf("starting authorization flow: %w", err))
+		return
+	}
+	s.login = pending
+	s.loginExpires = time.Now().Add(loginWindow)
+	w.Header().Set("Location", pending.AuthURL())
+	http.Error(w, "redirecting to Google…", http.StatusFound)
+}
+
+// authCallbackOr answers a Google consent callback when one is in flight and
+// defers everything else to fallback. The callback is a GET on this server's
+// root (?code=&state=...); every other root request — the shell, index.html,
+// a client route — must fall through untouched.
+func (s *server) authCallbackOr(fallback http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		code := q.Get("code")
+		denied := q.Get("error")
+		pending := s.login
+		valid := pending != nil && q.Get("state") == pending.State &&
+			time.Now().Before(s.loginExpires)
+		if (code != "" || denied != "") && valid {
+			s.finishLogin(w, code, denied)
+			return
+		}
+		fallback(w, r)
+	}
+}
+
+// finishLogin exchanges the code the consent page returned, persists the
+// token into the store the slurps read, and shows a done page. state was
+// already verified by authCallbackOr.
+func (s *server) finishLogin(w http.ResponseWriter, code string, denied string) {
+	pending := s.login
+	s.login = nil
+	if denied != "" {
+		http.Error(w, "authorization denied: "+denied, http.StatusBadRequest)
+		return
+	}
+	tok, err := docketauth.ExchangeCode(context.Background(), pending, code)
+	if err != nil {
+		fail(w, http.StatusInternalServerError,
+			fmt.Errorf("exchanging code: %w", err))
+		return
+	}
+	path, err := docketauth.TokenPath()
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	if err := docketauth.SaveToken(tok, path); err != nil {
+		fail(w, http.StatusInternalServerError,
+			fmt.Errorf("saving token: %w", err))
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintf(w,
+		"<!doctype html><meta charset=\"utf-8\"><title>chainmail</title>"+
+			"<p>Signed in to Google. You can close this tab.</p>")
 }
 
 func get(h http.HandlerFunc) http.HandlerFunc  { return method(http.MethodGet, h) }
