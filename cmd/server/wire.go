@@ -1,6 +1,7 @@
 package main
 
 import (
+	"sort"
 	"time"
 
 	"github.com/zachpmanson/chainmail/internal/corpus"
@@ -125,6 +126,97 @@ type personSummary struct {
 	Identities  []string `json:"identities,omitempty"`
 	Sent        int64    `json:"sent"`
 	Received    int64    `json:"received"`
+}
+
+// opsPlanResponse is everything the ops screen shows to review people merges,
+// in one read-only shot: the dedupe plan the CLI's dry run prints (merges and
+// refusals), the pairs MergeCandidates offers a human glance at, the twins
+// pass's declined entries aggregated by reason, and the person_merges trail of
+// merges so far. People is the current person count, so a screen can state how
+// much the merges below would shrink the corpus.
+type opsPlanResponse struct {
+	People        int64            `json:"people"`
+	Merges        []opsMerge       `json:"merges"`
+	Refusals      []opsRefusal     `json:"refusals"`
+	Candidates    []opsCandidate   `json:"candidates"`
+	TwinsDeclined []twinsDecline   `json:"twinsDeclined"`
+	Trail         []opsMergeRecord `json:"trail"`
+}
+
+// opsMerge is one pair the dedupe pass would fold. Applicable is the boundary
+// the review UI is drawn to: the same-name/same-thread tiers may be posted to
+// POST /v1/ops/merge, everything else is shown and read-only. The identities
+// are what a reviewer judges — a name-only placeholder carries none, which is
+// the whole finding.
+type opsMerge struct {
+	Rule           string   `json:"rule"`
+	KeepID         int64    `json:"keepId"`
+	KeepName       string   `json:"keepName"`
+	KeepIdentities []string `json:"keepIdentities,omitempty"`
+	DropID         int64    `json:"dropId"`
+	DropName       string   `json:"dropName"`
+	DropIdentities []string `json:"dropIdentities,omitempty"`
+	Evidence       string   `json:"evidence,omitempty"`
+	Applicable     bool     `json:"applicable"`
+}
+
+// opsRefusal is a group the dedupe pass would not decide, exactly as the CLI's
+// dry run prints it — read-only in every UI, on purpose.
+type opsRefusal struct {
+	Rule    string  `json:"rule"`
+	Subject string  `json:"subject"`
+	Reason  string  `json:"reason"`
+	People  []int64 `json:"people"`
+}
+
+// opsCandidate is a pair worth a human glance that nothing proved one way (the
+// CLI's `corpus candidates`), with the command that would settle it.
+type opsCandidate struct {
+	AID        int64    `json:"aId"`
+	AName      string   `json:"aName"`
+	AAddresses []string `json:"aAddresses,omitempty"`
+	BID        int64    `json:"bId"`
+	BName      string   `json:"bName"`
+	BAddresses []string `json:"bAddresses,omitempty"`
+	Reason     string   `json:"reason"`
+	Suggest    string   `json:"suggest,omitempty"`
+}
+
+// twinsDecline is one reason the twins pass left entries alone, with how many
+// entries it did. Aggregated rather than listed: on this corpus the pass
+// declines hundreds of entries a run, and the per-entry list is what the CLI's
+// `corpus twins -declined` flag is for.
+type twinsDecline struct {
+	Reason string `json:"reason"`
+	Count  int    `json:"count"`
+}
+
+// opsMergeRecord is one row of the person_merges trail: a merge that happened,
+// who it folded into whom, and on what evidence. This is the audit record, not
+// an undo handle — a merge is not reversible.
+type opsMergeRecord struct {
+	KeepID   int64  `json:"keepId"`
+	KeepName string `json:"keepName,omitempty"`
+	DropID   int64  `json:"dropId"`
+	DropName string `json:"dropName,omitempty"`
+	Reason   string `json:"reason,omitempty"`
+	MergedAt string `json:"mergedAt"`
+}
+
+// opsMergeRequest names a pair to merge, as the shown plan names it: the
+// keeper first. The pair must be in the current dedupe plan AND in an
+// applicable tier — the server re-derives the plan at apply time, so a stale
+// screen cannot merge a pair the plan no longer makes.
+type opsMergeRequest struct {
+	KeepID int64 `json:"keepId"`
+	DropID int64 `json:"dropId"`
+}
+
+// opsMergeResponse is the person_merges row the merge wrote, so a client can
+// show the same record the trail will list. The plan must be refetched after;
+// this response deliberately carries no updated plan.
+type opsMergeResponse struct {
+	Merge opsMergeRecord `json:"merge"`
 }
 
 // specListResponse is the answer to GET /v1/specs: every page POST /v1/spec
@@ -252,6 +344,31 @@ type candidateReport struct {
 	Similarity float64 `json:"similarity,omitempty"`
 	Semantic   bool    `json:"semantic,omitempty"`
 	Lexical    bool    `json:"lexical,omitempty"`
+}
+
+// topTwinsDeclines sorts the reason counts the way the CLI's count line would
+// be read: most frequent first.
+func topTwinsDeclines(byReason map[string]int) []twinsDecline {
+	out := make([]twinsDecline, 0, len(byReason))
+	for reason := range byReason {
+		out = append(out, twinsDecline{Reason: reason, Count: byReason[reason]})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Count > out[j].Count ||
+			(out[i].Count == out[j].Count && out[i].Reason < out[j].Reason)
+	})
+	return out
+}
+
+func toPeopleResponse(ps []corpus.PersonSummary) peopleResponse {
+	out := peopleResponse{People: make([]personSummary, 0, len(ps))}
+	for _, p := range ps {
+		out.People = append(out.People, personSummary{
+			PersonID: p.PersonID, DisplayName: p.DisplayName,
+			Identities: p.Identities, Sent: p.Sent, Received: p.Received,
+		})
+	}
+	return out
 }
 
 func toRefreshReport(r refresh.Report) refreshReport {

@@ -125,3 +125,45 @@
 .stdl dt { font-size:.76rem; color:var(--muted); text-transform:uppercase;
   letter-spacing:.06em; padding-right:1rem; }
 .stdl dd { margin:0; font-size:.86rem; font-variant-numeric:tabular-nums; }
+
+/* The /ops screen: the people-merge review surface. Same visual family as the
+   status screen — a browser-only control surface, and one that writes, so the
+   apply buttons are the only thing here styled to be pressed. */
+.opswrap { max-width:60rem; }
+.ophead { font-size:.7rem; text-transform:uppercase; letter-spacing:.1em;
+  color:var(--muted); margin:1.1rem 0 .1rem; }
+.opnote { font-size:.74rem; color:var(--muted); margin:.35rem 0 .5rem; }
+.oplist { list-style:none; margin:.5rem 0 0; padding:0; }
+.oprow { padding:.55rem .7rem; border:1px solid var(--line); border-radius:9px;
+  background:var(--card); }
+.oprow + .oprow { margin-top:.45rem; }
+.opmerge .opmrule { font-size:.68rem; font-weight:700; letter-spacing:.05em;
+  color:var(--muted); margin:0 0 .4rem; text-transform:uppercase; }
+.opmerge .opmrule .opbad { margin-left:.5rem; }
+.opbad { font:inherit; font-size:.62rem; font-weight:700; padding:.06rem .4rem;
+  border:1px solid currentColor; border-radius:99px; white-space:nowrap; }
+.op-apply { color:#2e7d32; }
+.op-ro { color:var(--muted); }
+.opmside { margin:.15rem 0; font-size:.84rem; line-height:1.35; }
+.opmside code { font-size:.74rem; overflow-wrap:anywhere; }
+.opmevidence { font-size:.74rem; color:var(--muted); margin:.3rem 0 .5rem; }
+.opbtn { font:inherit; font-size:.74rem; font-weight:650; margin-top:.45rem;
+  padding:.3rem .7rem; border:1px solid var(--line); border-radius:6px;
+  background:var(--mine); color:var(--fg); cursor:pointer; }
+.opbtn:hover:not(:disabled) { color:var(--accent); border-color:var(--accent); }
+.opbtn:disabled { opacity:.45; cursor:default; }
+.opbtn-after { background:var(--card); border-color:crimson; color:crimson; }
+.opbtn-after:hover:not(:disabled) { background:var(--card); }
+.opmconfirm { font-size:.76rem; line-height:1.5; margin:.45rem 0 .15rem;
+  padding:.45rem .6rem; border:1px solid var(--line); border-radius:6px;
+  background:var(--quote); color:var(--fg); }
+.opmconfirm strong { color:crimson; }
+.oprefs { list-style:none; margin:.3rem 0 0; padding:0; }
+.oprefs li { font-size:.78rem; line-height:1.45; padding:.2rem 0; }
+.oprefs li code { font-size:.72rem; }
+.opwhy { color:var(--muted); }
+.oparrow { color:var(--muted); }
+.opwhen { font-size:.72rem; color:var(--muted); }
+.optrails { list-style:none; margin:.3rem 0 0; padding:0; }
+.optrails li { font-size:.8rem; line-height:1.5; padding:.3rem 0; }
+.optrails li .opwhy { display:block; font-size:.72rem; color:var(--muted); }

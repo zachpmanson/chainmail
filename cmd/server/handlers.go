@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -99,6 +100,8 @@ func (s *server) routes() http.Handler {
 	// wrong one answers with the same JSON error shape as everything else
 	// instead of ServeMux's plain text.
 	mux.HandleFunc("/v1/refresh", post(s.refresh))
+	mux.HandleFunc("/v1/ops/plan", get(s.opsPlan))
+	mux.HandleFunc("/v1/ops/merge", post(s.opsMerge))
 	mux.HandleFunc("/v1/search", get(s.search))
 	mux.HandleFunc("/v1/status", get(s.status))
 	mux.HandleFunc("/v1/spec", post(s.spec))
@@ -679,6 +682,205 @@ func (s *server) refresh(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	send(w, http.StatusOK, refreshResponse{Spec: next, Report: toRefreshReport(rep)})
+}
+
+// opsPlan is the review surface for people merges, all read-only: the dedupe
+// plan the CLI's dry run prints (merges and refusals), the pairs MergeCandidates
+// offers a human glance at, the twins pass's declined entries aggregated by
+// reason, and the person_merges trail of merges so far. Nothing here changes
+// the corpus, so a browser refetch is always a fresh view; the one mutation
+// this surface owns is POST /v1/ops/merge, and the UI must call that for an
+// apply.
+func (s *server) opsPlan(w http.ResponseWriter, r *http.Request) {
+	plan, err := corpus.Dedupe(s.store, false)
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	out := opsPlanResponse{
+		People:        int64(plan.Before),
+		Merges:        make([]opsMerge, 0, len(plan.Merges)),
+		Refusals:      make([]opsRefusal, 0, len(plan.Refusals)),
+		Candidates:    make([]opsCandidate, 0, 8),
+		TwinsDeclined: make([]twinsDecline, 0, 8),
+		Trail:         make([]opsMergeRecord, 0, 8),
+	}
+	for _, m := range plan.Merges {
+		out.Merges = append(out.Merges, opsMerge{
+			Rule: m.Rule, KeepID: m.KeepID, KeepName: m.KeepName,
+			KeepIdentities: m.KeepIDs, DropID: m.DropID, DropName: m.DropName,
+			DropIdentities: m.DropIDs, Evidence: m.Evidence,
+			Applicable: opsApplicable(m.Rule),
+		})
+	}
+	for _, rf := range plan.Refusals {
+		out.Refusals = append(out.Refusals, opsRefusal{
+			Rule: rf.Rule, Subject: rf.Subject, Reason: rf.Reason, People: rf.People})
+	}
+	cs, _, err := corpus.MergeCandidates(s.store)
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	for _, c := range cs {
+		out.Candidates = append(out.Candidates, opsCandidate{
+			AID: c.AID, AName: c.AName, AAddresses: c.AAddresses,
+			BID: c.BID, BName: c.BName, BAddresses: c.BAddresses,
+			Reason: c.Reason, Suggest: c.Suggest})
+	}
+	tps, err := corpus.CollapseTwins(s.store, false)
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	byReason := map[string]int{}
+	for _, d := range tps.Declined {
+		byReason[d.Reason]++
+	}
+	out.TwinsDeclined = topTwinsDeclines(byReason)
+	rows, err := s.store.DB().Query(`
+		select pm.kept_id, p.display_name, pm.dropped_id, pm.dropped_name,
+		       pm.reason, pm.merged_at
+		  from person_merges pm left join people p on p.id = pm.kept_id
+		 order by pm.merged_at desc, pm.kept_id desc`)
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		rec, ok, err := readMergeRecord(rows)
+		if err != nil {
+			fail(w, http.StatusInternalServerError, err)
+			return
+		}
+		if ok {
+			out.Trail = append(out.Trail, rec)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	send(w, http.StatusOK, out)
+}
+
+// opsMerge applies exactly one planned merge, and only one the current plan
+// would make: the plan is re-derived here (a dry run and an apply of the same
+// corpus produce the same plan, by the property documented on Dedupe), so a
+// pair that is not in it — already applied, or the corpus changed since the
+// screen loaded — is a 409 telling the client to refetch, not a retry.
+//
+// The apply surface is enforced server-side (see opsApplicable), so the
+// same-name/same-thread boundary holds even against a hand-rolled request.
+func (s *server) opsMerge(w http.ResponseWriter, r *http.Request) {
+	var req opsMergeRequest
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequestBody))
+	// A misspelled field is a caller reading a different contract; a plan that
+	// was half-understood must not apply a merge.
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		fail(w, http.StatusBadRequest, fmt.Errorf("reading the request body: %w", err))
+		return
+	}
+	if req.KeepID == 0 || req.DropID == 0 {
+		fail(w, http.StatusBadRequest,
+			errors.New("keepId and dropId are required, and neither may be 0"))
+		return
+	}
+	plan, err := corpus.Dedupe(s.store, false)
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	var m *corpus.PlannedMerge
+	for i := range plan.Merges {
+		if plan.Merges[i].KeepID == req.KeepID && plan.Merges[i].DropID == req.DropID {
+			m = &plan.Merges[i]
+		}
+	}
+	if m == nil {
+		fail(w, http.StatusConflict, fmt.Errorf(
+			"%d <- %d is not in the current dedupe plan — already merged, or the "+
+				"corpus changed since this screen loaded; GET /v1/ops/plan for the plan now",
+			req.KeepID, req.DropID))
+		return
+	}
+	if !opsApplicable(m.Rule) {
+		fail(w, http.StatusConflict, fmt.Errorf(
+			"%s needs a human reading the whole corpus; the ops screen shows that tier "+
+				"read-only", m.Rule))
+		return
+	}
+	if err := corpus.MergePlanned(s.store, *m); err != nil {
+		fail(w, http.StatusConflict, err)
+		return
+	}
+	// The record person_merges just wrote, for the trail and the response. The
+	// pair is unambiguous: the dropped row is gone, so a second write of the
+	// same pair is impossible.
+	rows, err := s.store.DB().Query(`
+		select pm.kept_id, p.display_name, pm.dropped_id, pm.dropped_name,
+		       pm.reason, pm.merged_at
+		  from person_merges pm left join people p on p.id = pm.kept_id
+		 where pm.kept_id=? and pm.dropped_id=?`, req.KeepID, req.DropID)
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		rows.Close()
+		fail(w, http.StatusInternalServerError,
+			errors.New("the merge wrote no person_merges row — nothing happened"))
+		return
+	}
+	rec, ok, err := readMergeRecord(rows)
+	rows.Close()
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	if !ok {
+		fail(w, http.StatusInternalServerError,
+			errors.New("the merge wrote no person_merges row — nothing happened"))
+		return
+	}
+	send(w, http.StatusOK, opsMergeResponse{Merge: rec})
+}
+
+// opsApplicable is the boundary the review UI's apply surface is drawn to: the
+// two same-name tiers whose evidence a browser can hold up for a human. The
+// first-name-and-org tier needs a human reading the whole corpus by design and
+// the webmail tier is kept out beside it; both are shown read-only, and every
+// tier stays one command away in the CLI (`corpus dedupe -apply`).
+func opsApplicable(rule string) bool {
+	return rule == corpus.RuleSameName || rule == corpus.RuleNameInThread
+}
+
+// readMergeRecord reads one person_merges row joined with its survivor's
+// current display name. ok is false only for a NULL kept_id, which a left join
+// yields when the survivor was deleted by hand — a record whose left side no
+// longer exists is still part of the trail, so it is skipped rather than fatal.
+func readMergeRecord(rows *sql.Rows) (opsMergeRecord, bool, error) {
+	var rec opsMergeRecord
+	var at int64
+	var dropName, reason sql.NullString
+	if err := rows.Scan(&rec.KeepID, &rec.KeepName, &rec.DropID,
+		&dropName, &reason, &at); err != nil {
+		return rec, false, err
+	}
+	if rec.KeepID == 0 {
+		return rec, false, nil
+	}
+	if dropName.Valid {
+		rec.DropName = dropName.String
+	}
+	if reason.Valid {
+		rec.Reason = reason.String
+	}
+	rec.MergedAt = stamp(time.Unix(at, 0))
+	return rec, true, nil
 }
 
 // noMailbox is the browser-surface's mailbox: the one that cannot reach the
