@@ -59,7 +59,7 @@ type Result struct {
 	Seen      int
 	Created   int
 	Changed   int
-	Drafts    int // skipped: Gmail labels them DRAFT, so they were never sent
+	Drafts    int   // skipped: Gmail labels them DRAFT, so they were never sent
 	Resolved  int64 // parent edges linked after this batch
 	Truncated int   // bodies docket still had to cut — should always be zero
 	// Stop is why the walk ended. Read it, not Seen: a run that saw exactly its
