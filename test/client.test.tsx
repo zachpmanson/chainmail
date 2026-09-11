@@ -778,6 +778,17 @@ const OPS_PLAN_BEFORE = {
       applicable: true,
     },
     {
+      rule: "dedupe:same-display-name-in-thread",
+      keepId: 21,
+      keepName: "Bo Halvorsen",
+      keepIdentities: ["email:bo@fjordline.example"],
+      dropId: 22,
+      dropName: "Bo Halvorsen",
+      dropIdentities: ["display_name:bo halvorsen"],
+      evidence: "name-only person, and the kept person is in every thread they appear in",
+      applicable: true,
+    },
+    {
       rule: "dedupe:first-name-and-org",
       keepId: 9,
       keepName: "Camille Vaughn",
@@ -822,15 +833,28 @@ const OPS_RECORD = {
   mergedAt: "2026-08-22T15:04:00Z",
 };
 
-const OPS_PLAN_AFTER = {
-  ...OPS_PLAN_BEFORE,
-  people: 4,
-  merges: OPS_PLAN_BEFORE.merges.filter((m) => m.dropId !== 8),
-  trail: [OPS_RECORD],
+const OPS_RECORD_2 = {
+  keepId: 21,
+  keepName: "Bo Halvorsen",
+  dropId: 22,
+  dropName: "Bo Halvorsen",
+  reason:
+    "dedupe:same-display-name-in-thread (name-only person, and the kept person is in every thread they appear in)",
+  mergedAt: "2026-08-22T15:05:00Z",
 };
 
+/** The plan as the server re-derives it once the named people are folded in. */
+const planAfter = (drops: number[], trail: unknown[] = []) => ({
+  ...OPS_PLAN_BEFORE,
+  people: OPS_PLAN_BEFORE.people - drops.length,
+  merges: OPS_PLAN_BEFORE.merges.filter((m) => !drops.includes(m.dropId)),
+  trail,
+});
+
+const OPS_PLAN_AFTER = planAfter([8], [OPS_RECORD]);
+
 describe("the ops route /ops", () => {
-  it("shows the plan with the evidence, and applies one pair behind a confirm", async () => {
+  it("shows the plan with the evidence, and folds one ticked pair behind a confirm", async () => {
     let applied = false;
     handler = (c) => {
       const p = pathOf(c);
@@ -843,38 +867,130 @@ describe("the ops route /ops", () => {
     };
     await mountApp("/ops");
 
-    // The applicable pair: the evidence is on screen, and so is its button.
+    // The applicable pairs: the evidence is on screen, and so is a checkbox.
     expect(
       await screen.findByText(/name-only person, and the kept person is on every entry they are/),
     ).toBeTruthy();
-    expect(screen.getByText("apply")).toBeTruthy();
+    expect(screen.getAllByText("apply")).toHaveLength(2);
     expect(screen.getByText("read-only")).toBeTruthy();
-    // The first-name-and-org tier is listed but has no apply button: exactly one
-    // Merge exists, for the same-name pair.
-    expect(screen.getAllByRole("button", { name: "Merge" })).toHaveLength(1);
+    // Two applicable pairs and the select-all; the read-only tier gets none,
+    // because the server refuses it whatever this screen renders.
+    expect(screen.getAllByRole("checkbox")).toHaveLength(3);
+    expect(screen.queryByLabelText(/Select folding #10/)).toBeNull();
+    expect(
+      (screen.getByRole("button", { name: "merge 0 selected" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
 
     // The reads: the refusal, the twins aggregate, the empty trail.
     expect(await screen.findByText(/two people of that name fit the evidence equally/)).toBeTruthy();
     expect(screen.getByText(/twins pass declined 612 entries/)).toBeTruthy();
     expect(screen.getByText("0 merges recorded — the person_merges trail")).toBeTruthy();
 
-    // First click asks for confirmation; nothing has left the browser yet.
-    click(screen.getByRole("button", { name: "Merge" }));
+    // Ticking asks for a confirm; nothing has left the browser yet.
+    click(screen.getByLabelText("Select folding #8 Ada Okoye into #7 Ada Okoye"));
+    click(screen.getByRole("button", { name: "merge 1 selected" }));
     expect(await screen.findByText(/This cannot be undone/)).toBeTruthy();
     expect(calls.some((c) => pathOf(c) === "/v1/ops/merge")).toBe(false);
 
     // The confirming click names the pair and sends it.
-    click(screen.getByRole("button", { name: "Merge #8 into #7" }));
+    click(screen.getByRole("button", { name: "merge this pair" }));
     await waitFor(() =>
       expect(calls.some((c) => pathOf(c) === "/v1/ops/merge" && c.method === "POST")).toBe(true),
     );
     const post = calls.find((c) => pathOf(c) === "/v1/ops/merge");
     expect(JSON.parse(post!.body ?? "{}")).toEqual({ keepId: 7, dropId: 8 });
 
-    // Success: the note names the merged pair, the plan was refetched, and the
-    // only merge left on screen is the read-only tier, without a button.
-    expect(await screen.findByText("merged #8 into #7 — the plan below is the current one.")).toBeTruthy();
-    await waitFor(() => expect(screen.queryAllByRole("button", { name: "Merge" })).toHaveLength(0));
+    // Success: the note counts the batch, the plan was refetched, and the folded
+    // pair is gone from the list — the other applicable pair is still offered.
+    expect(await screen.findByText("merged 1 pair — the plan below is the current one.")).toBeTruthy();
+    await waitFor(() => expect(screen.queryByLabelText(/Select folding #8/)).toBeNull());
+    expect(screen.getByLabelText(/Select folding #22/)).toBeTruthy();
     expect(screen.getByText("1 merge recorded — the person_merges trail")).toBeTruthy();
+  });
+
+  it("folds several ticked pairs behind one confirm, dropping each as it applies", async () => {
+    const drops: number[] = [];
+    handler = (c) => {
+      const p = pathOf(c);
+      if (p === "/v1/ops/plan")
+        return json(
+          200,
+          drops.length
+            ? planAfter(drops, [OPS_RECORD, OPS_RECORD_2].slice(0, drops.length))
+            : OPS_PLAN_BEFORE,
+        );
+      if (p === "/v1/ops/merge" && c.method === "POST") {
+        const body = JSON.parse(c.body ?? "{}") as { dropId: number };
+        drops.push(body.dropId);
+        return json(200, { merge: body.dropId === 8 ? OPS_RECORD : OPS_RECORD_2 });
+      }
+      return json(500, { error: `unexpected call to ${c.method} ${p}` });
+    };
+    await mountApp("/ops");
+    await screen.findByLabelText(/Select folding #8/);
+
+    // Select-all ticks every applicable pair, and only those.
+    click(screen.getByLabelText("select all 2 applicable"));
+    click(screen.getByRole("button", { name: "merge 2 selected" }));
+    expect(await screen.findByText(/These 2 pairs will be folded/)).toBeTruthy();
+    // The confirm names them, so the irreversible batch is readable first.
+    expect(screen.getByText("#8 Ada Okoye")).toBeTruthy();
+    expect(screen.getByText("#22 Bo Halvorsen")).toBeTruthy();
+
+    click(screen.getByRole("button", { name: "merge these 2 pairs" }));
+    // One POST per pair, in the order the plan lists them: the endpoint's
+    // contract is a single pair, and the server re-derives the plan for each.
+    await waitFor(() =>
+      expect(calls.filter((c) => pathOf(c) === "/v1/ops/merge").length).toBe(2),
+    );
+    expect(
+      calls.filter((c) => pathOf(c) === "/v1/ops/merge").map((c) => JSON.parse(c.body ?? "{}")),
+    ).toEqual([
+      { keepId: 7, dropId: 8 },
+      { keepId: 21, dropId: 22 },
+    ]);
+
+    // Both are gone: no checkbox left for either, no action bar (nothing
+    // applicable remains), and the read-only tier is still listed.
+    expect(await screen.findByText("merged 2 pairs — the plan below is the current one.")).toBeTruthy();
+    await waitFor(() => expect(screen.queryAllByRole("checkbox")).toHaveLength(0));
+    expect(screen.getByText("read-only")).toBeTruthy();
+    expect(screen.getByText("2 merges recorded — the person_merges trail")).toBeTruthy();
+  });
+
+  it("stops the batch at a refusal and says how far it got", async () => {
+    const drops: number[] = [];
+    handler = (c) => {
+      const p = pathOf(c);
+      if (p === "/v1/ops/plan")
+        return json(200, drops.length ? planAfter(drops, [OPS_RECORD]) : OPS_PLAN_BEFORE);
+      if (p === "/v1/ops/merge" && c.method === "POST") {
+        const body = JSON.parse(c.body ?? "{}") as { dropId: number };
+        if (body.dropId === 22)
+          return json(409, {
+            error:
+              "21 <- 22 is not in the current dedupe plan — already merged, or the corpus changed since this screen loaded",
+          });
+        drops.push(body.dropId);
+        return json(200, { merge: OPS_RECORD });
+      }
+      return json(500, { error: `unexpected call to ${c.method} ${p}` });
+    };
+    await mountApp("/ops");
+    await screen.findByLabelText(/Select folding #8/);
+    click(screen.getByLabelText("select all 2 applicable"));
+    click(screen.getByRole("button", { name: "merge 2 selected" }));
+    click(await screen.findByRole("button", { name: "merge these 2 pairs" }));
+
+    // The first pair applied, the second was refused, and the message says which
+    // — a batch reporting only "failed" would hide that one merge had landed.
+    expect(
+      await screen.findByText(/1 of 2 merged, then folding #22 into #21 was refused/),
+    ).toBeTruthy();
+    expect(screen.getByText(/not in the current dedupe plan/)).toBeTruthy();
+    expect(calls.filter((c) => pathOf(c) === "/v1/ops/merge").length).toBe(2);
+    // The pair that did apply is gone from the list all the same.
+    await waitFor(() => expect(screen.queryByLabelText(/Select folding #8/)).toBeNull());
+    expect(screen.getByLabelText(/Select folding #22/)).toBeTruthy();
   });
 });

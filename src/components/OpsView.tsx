@@ -28,28 +28,34 @@ function when(stamp: string): string {
 }
 
 /** One merge the plan would make. The apply surface is drawn server-side; the
- *  client only renders a button where the plan says applicable, so a request
+ *  client only offers a checkbox where the plan says applicable, so a request
  *  cannot talk past the boundary. */
 function MergeCard({
   m,
-  confirming,
+  selected,
   busy,
-  onConfirm,
-  onCancel,
-  onApply,
+  onSelect,
 }: {
   m: OpsMerge;
-  confirming: boolean;
+  selected: boolean;
   busy: boolean;
-  onConfirm: () => void;
-  onCancel: () => void;
-  onApply: () => void;
+  onSelect: (picked: boolean) => void;
 }) {
   const keep = `#${m.keepId} ${m.keepName}` + (m.keepIdentities?.length ? ` · ${m.keepIdentities.join(", ")}` : "");
   const drop = `#${m.dropId} ${m.dropName}` + (m.dropIdentities?.length ? ` · ${m.dropIdentities.join(", ")}` : "");
   return (
     <article className="opmerge">
       <p className="opmrule">
+        {m.applicable ? (
+          <input
+            type="checkbox"
+            className="opcheck"
+            checked={selected}
+            disabled={busy}
+            onChange={(e) => onSelect(e.target.checked)}
+            aria-label={`Select folding #${m.dropId} ${m.dropName} into #${m.keepId} ${m.keepName}`}
+          />
+        ) : null}
         {ruleLabel(m.rule)}
         {m.applicable ? <span className="opbad op-apply">apply</span> : <span className="opbad op-ro">read-only</span>}
       </p>
@@ -60,23 +66,6 @@ function MergeCard({
         drop&nbsp;<code>{drop}</code>
       </p>
       {m.evidence ? <p className="opmevidence">{m.evidence}.</p> : null}
-      {m.applicable &&
-        (confirming ? (
-          <p className="opmconfirm">
-            Fold the dropped person into the keeper.{" "}
-            <strong>This cannot be undone</strong> — a merge is recorded, never reversed.
-            <button type="button" className="opbtn opbtn-after" disabled={busy} onClick={onApply}>
-              {busy ? "Merging…" : `Merge #${m.dropId} into #${m.keepId}`}
-            </button>
-            <button type="button" className="opbtn" disabled={busy} onClick={onCancel}>
-              Cancel
-            </button>
-          </p>
-        ) : (
-          <button type="button" className="opbtn" onClick={onConfirm}>
-            Merge
-          </button>
-        ))}
     </article>
   );
 }
@@ -96,34 +85,87 @@ function OneTrail(t: OpsMergeRecord) {
  * The /ops route: the human loop for people merges, served over the same
  * loopback+tunnel boundary as everything else. The dedupe pass computes the
  * same plan the CLI's dry run prints, but here each pair is reviewed against
- * the evidence string and applied individually behind a confirm — there is
- * deliberately no apply-all. Tiers the plan shows read-only (first-name-and-org,
- * webmail) have no button; the server refuses them anyway, so the boundary does
- * not depend on this screen's good behaviour.
+ * the evidence string and applied individually behind a confirm. Ticking
+ * several pairs is one confirm, not one plan: every POST still names a single
+ * pair and the server re-derives the plan for each, so a pair an earlier merge
+ * in the same batch made moot is refused with the reason rather than assumed to
+ * still hold. Tiers the plan shows read-only (first-name-and-org, webmail) have
+ * no checkbox; the server refuses them anyway, so the boundary does not depend
+ * on this screen's good behaviour.
  */
 export function OpsView() {
   const qc = useQueryClient();
   const plan = $api.useQuery("get", "/v1/ops/plan", {});
-  // The dropId whose pair is past the first click, waiting on the confirm.
-  const [confirming, setConfirming] = useState<number | null>(null);
+  // Ticked pairs, by the id of the person they drop (unique in a plan).
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  // The ticked batch is past its first click, waiting on the confirm.
+  const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [last, setLast] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
+  // Pairs merged since this screen loaded. The refetched plan drops them (the
+  // dropped person is gone), and this keeps them from reappearing in the gap
+  // while that refetch is in flight.
+  const [applied, setApplied] = useState<Set<number>>(new Set());
   const apply = $api.useMutation("post", "/v1/ops/merge", {
-    onSuccess: (data) => {
-      setLast(`merged #${data.merge.dropId} into #${data.merge.keepId}`);
-      setConfirming(null);
-      // The plan changed: refetch it so the screen shows what is left, not what
-      // it applied.
-      qc.invalidateQueries({ queryKey: ["get", "/v1/ops/plan"] });
-    },
     onError: (e) => setError(errText(e)),
   });
 
   const data = plan.data;
   // Applicable pairs first: they are what this screen exists to act on.
   const merges = data
-    ? [...data.merges].sort((a, b) => Number(b.applicable) - Number(a.applicable))
+    ? [...data.merges]
+        .filter((m) => !applied.has(m.dropId))
+        .sort((a, b) => Number(b.applicable) - Number(a.applicable))
     : [];
+  const applicable = merges.filter((m) => m.applicable);
+  const chosen = merges.filter((m) => selected.has(m.dropId));
+  const allPicked = applicable.length > 0 && applicable.every((m) => selected.has(m.dropId));
+
+  function pick(id: number, picked: boolean) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (picked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
+  /**
+   * Apply the ticked pairs, one at a time, and stop at the first refusal. Each
+   * request re-derives the plan server-side, which is what makes a batch safe:
+   * a pair that stopped being applicable mid-batch comes back as a 409 naming
+   * why, and the merge after it is never sent.
+   */
+  async function mergeChosen() {
+    const batch = chosen;
+    setConfirming(false);
+    setError(null);
+    setBusy(true);
+    let done = 0;
+    for (const m of batch) {
+      setProgress(`${done + 1} of ${batch.length}`);
+      try {
+        await apply.mutateAsync({ body: { keepId: m.keepId, dropId: m.dropId } });
+      } catch (e) {
+        setError(
+          `${done} of ${batch.length} merged, then folding #${m.dropId} into #${m.keepId} `+
+            `was refused: ${errText(e)}`,
+        );
+        break;
+      }
+      done += 1;
+      setApplied((prev) => new Set(prev).add(m.dropId));
+    }
+    setSelected(new Set());
+    setBusy(false);
+    setProgress(null);
+    if (done > 0) setLast(done === 1 ? "merged 1 pair" : `merged ${done} pairs`);
+    // Refetch either way: what applied is gone, and a refusal is a statement
+    // about the plan, so the screen should show the plan as it is now.
+    await qc.invalidateQueries({ queryKey: ["get", "/v1/ops/plan"] });
+  }
   return (
     <div className="wrap opswrap">
       <header className="top">
@@ -147,6 +189,80 @@ export function OpsView() {
       {last ? <p className="opnote">{last} — the plan below is the current one.</p> : null}
 
       <h2 className="ophead">Merge plan</h2>
+      {applicable.length > 0 ? (
+        <div className="opactions">
+          <label className="opselectall">
+            <input
+              type="checkbox"
+              checked={allPicked}
+              disabled={busy}
+              ref={(el) => {
+                // Some ticked is neither of the two states a checkbox has, and
+                // an empty box over a half-selected batch reads as "none".
+                if (el) el.indeterminate = selected.size > 0 && !allPicked;
+              }}
+              onChange={(e) =>
+                setSelected(
+                  e.target.checked ? new Set(applicable.map((m) => m.dropId)) : new Set(),
+                )
+              }
+            />
+            select all {applicable.length} applicable
+          </label>
+          <button
+            type="button"
+            className="opbtn opbtn-batch"
+            disabled={selected.size === 0 || busy}
+            onClick={() => {
+              setError(null);
+              setConfirming(true);
+            }}
+          >
+            {busy
+              ? `merging ${progress ?? ""}`
+              : `merge ${selected.size} selected`}
+          </button>
+        </div>
+      ) : null}
+      {confirming && chosen.length > 0 ? (
+        <div className="opmconfirm">
+          <p className="opmwarn">
+            <strong>This cannot be undone</strong> — a merge is recorded, never
+            reversed. {chosen.length === 1 ? "This pair" : `These ${chosen.length} pairs`} will
+            be folded into their keepers now:
+          </p>
+          <ul className="opmpairs">
+            {chosen.map((m) => (
+              <li key={m.dropId}>
+                <code>#{m.dropId} {m.dropName}</code> <span className="oparrow">→</span>{" "}
+                <code>#{m.keepId} {m.keepName}</code>
+              </li>
+            ))}
+          </ul>
+          <div className="opmact">
+            <button
+              type="button"
+              className="opbtn opbtn-after"
+              disabled={busy}
+              onClick={mergeChosen}
+            >
+              {busy
+                ? "merging…"
+                : chosen.length === 1
+                  ? "merge this pair"
+                  : `merge these ${chosen.length} pairs`}
+            </button>
+            <button
+              type="button"
+              className="opbtn"
+              disabled={busy}
+              onClick={() => setConfirming(false)}
+            >
+              cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
       {!data ? (
         <p className="opnote">{plan.isPending ? "Reading the plan…" : "No plan."}</p>
       ) : merges.length === 0 ? (
@@ -160,16 +276,9 @@ export function OpsView() {
             <li key={m.dropId} className="oprow">
               <MergeCard
                 m={m}
-                confirming={confirming === m.dropId}
-                busy={apply.isPending}
-                onConfirm={() => {
-                  setError(null);
-                  setConfirming(m.dropId);
-                }}
-                onCancel={() => setConfirming(null)}
-                onApply={() =>
-                  apply.mutate({ body: { keepId: m.keepId, dropId: m.dropId } })
-                }
+                selected={selected.has(m.dropId)}
+                busy={busy}
+                onSelect={(picked) => pick(m.dropId, picked)}
               />
             </li>
           ))}
