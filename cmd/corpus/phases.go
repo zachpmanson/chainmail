@@ -328,8 +328,8 @@ func runIngestMail(path string, o mailOpts) (mailingest.Result, error) {
 	if err != nil {
 		return r, err
 	}
-	fmt.Printf("saw %d over %d page(s), created %d, changed %d, resolved %d parent edges\n",
-		r.Seen, r.Pages, r.Created, r.Changed, r.Resolved)
+	fmt.Printf("saw %d over %d page(s), created %d, changed %d, skipped %d draft(s), resolved %d parent edges\n",
+		r.Seen, r.Pages, r.Created, r.Changed, r.Drafts, r.Resolved)
 	switch r.Stop {
 	case mailingest.StopExhausted:
 		fmt.Println("complete: docket had no further page")
