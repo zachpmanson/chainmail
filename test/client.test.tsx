@@ -496,6 +496,18 @@ describe("the render route /view/<name>", () => {
     expect(screen.queryByRole("button", { name: /Back/ })).toBeNull();
   });
 
+  it("names the browser tab after the loaded spec's title", async () => {
+    handler = (c) =>
+      pathOf(c) === "/v1/specs/loom-cutover"
+        ? json(200, SPEC)
+        : json(500, { error: "unexpected call" });
+    await mountApp("/view/loom-cutover");
+    await screen.findByText("Loom cutover");
+
+    // The shell serves one static <title>; the spec replaces it with its own.
+    await waitFor(() => expect(document.title).toBe("Loom cutover — Chainmail"));
+  });
+
   it("moves the address bar to /view/<name> when a page is built", async () => {
     handler = buildHandler;
     const router = await mountApp("/");
