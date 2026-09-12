@@ -31,11 +31,9 @@ npm install      # JS dependencies, from the committed lockfile
 Four external pieces; only the first is required — without Slack you have a mail corpus,
 without ollama you have lexical search.
 
-**1. Gmail.** Mail is read through
-[`docket`](https://github.com/zachpmanson/docket)'s library in this process: chainmail
-keeps its own OAuth grant and reads the mailbox directly (`-backend gmail`, the default).
-Provisioning is the app's own **Sign in with Google** bar; the next `corpus slurp` reads
-mail as that account. `-backend docket` shells out to the docket CLI instead.
+**1. Gmail.** Mail is read in-process: chainmail keeps its own OAuth grant and reads the
+mailbox directly. Provisioning is the app's own **Sign in with Google** bar; the next
+`corpus slurp` reads mail as that account.
 
 **2. Slack, via [slackdump](https://github.com/rusq/slackdump).** Slack's app limit is per
 workspace, so a workspace at its cap has no slot for a reader app — slackdump needs none.
