@@ -179,6 +179,38 @@ export function attach(doc: Document = document): () => void {
     for (const l of links) l.classList.remove("chn");
   };
 
+  /* The panel follows the page, but the reader can take it back. Centring on
+     the spied entry on every light would undo a scroll the reader just made in
+     the panel itself — they scroll down, the panel snaps back. So it is centred
+     once per entry, and not at all for a moment after the reader scrolls the
+     panel: a wheel or a drag in there means they are looking somewhere else. */
+  let centred: string | null = null;
+  let readerTouchedAt = 0;
+  const READER_GRACE_MS = 2500;
+  /* The offset we last wrote into a scroller, so the scroll event our own write
+     fires is not mistaken for the reader's. */
+  const ours = new Map<HTMLElement, [number, number]>();
+  const readerTookOver = (id: string) =>
+    id !== centred && Date.now() - readerTouchedAt > READER_GRACE_MS;
+  if (mini) {
+    for (const scroller of mini.querySelectorAll<HTMLElement>(".mbody")) {
+      const touched = () => {
+        const [top, left] = ours.get(scroller) ?? [NaN, NaN];
+        if (Math.abs(scroller.scrollTop - top) > 1 || Math.abs(scroller.scrollLeft - left) > 1)
+          readerTouchedAt = Date.now();
+      };
+      for (const ev of ["wheel", "touchmove", "keydown", "scroll"] as const)
+        on(scroller, ev, touched);
+    }
+  }
+
+  /** Move a scroller along time's axis, remembering the offset as ours. */
+  const nudge = (scroller: HTMLElement, horizontal: boolean, by: number) => {
+    if (horizontal) scroller.scrollLeft += by;
+    else scroller.scrollTop += by;
+    ours.set(scroller, [scroller.scrollTop, scroller.scrollLeft]);
+  };
+
   const light = (id: string, hover: boolean) => {
     if (!mini) return;
     const chain = new Set<string>();
@@ -198,15 +230,18 @@ export function attach(doc: Document = document): () => void {
     const scroller = mini.querySelector<HTMLElement>(
       body.classList.contains("tree-h") ? ".hrow .mbody" : ".vrow .mbody",
     );
-    if (el && scroller) {
+    if (el && scroller && readerTookOver(id)) {
       const r = el.getBoundingClientRect();
       const b = scroller.getBoundingClientRect();
-      if (body.classList.contains("tree-h")) {
+      const horizontal = body.classList.contains("tree-h");
+      if (horizontal) {
         if (r.left < b.left + 24 || r.right > b.right - 24) {
-          scroller.scrollLeft += r.left - b.left - scroller.clientWidth / 2;
+          centred = id;
+          nudge(scroller, true, r.left - b.left - scroller.clientWidth / 2);
         }
       } else if (r.top < b.top + 24 || r.bottom > b.bottom - 24) {
-        scroller.scrollTop += r.top - b.top - scroller.clientHeight / 2;
+        centred = id;
+        nudge(scroller, false, r.top - b.top - scroller.clientHeight / 2);
       }
     }
   };
