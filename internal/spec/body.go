@@ -18,6 +18,10 @@ import (
 // bodyStyle. Text is escaped before any markup is added and the only tags
 // emitted are the ones written in this file; markup taken from a sender's own
 // html part is a separate matter, and htmlbody.go says what is done with it.
+//
+// Every body that leaves this file passes an allowlist last (sanitise.go). The
+// renderer is the dumb side of that boundary: it may render anything the
+// allowlist lets through and nothing else.
 
 // bodyHTML renders one entry's stored body as the HTML the schema expects, or
 // "" when the entry genuinely has no text — a Slack file-only post, a forward
@@ -38,8 +42,9 @@ import (
 // see htmlbody.go and htmlrecover.go for what makes it decline — and declining
 // lands here, on the text, which is plain but never wrong.
 //
-// The markup is emitted unsanitised. That is stated where the choice is made,
-// at the top of htmlbody.go, and tracked as issue #14.
+// The allowlist in sanitise.go is what stands between this file's output and
+// the page: a sender's own markup reaches the renderer only as re-serialised
+// survivors of that pass, whatever path produced it.
 //
 // It records on r whether it folded a signature or a disclaimer. Only this pass
 // knows — the fold can be detected and then declined, at the seam of a markup
@@ -51,7 +56,7 @@ func bodyHTML(r *entryRow) string {
 	if r.BodyHTML != "" {
 		if s, folded := htmlBody(r.BodyHTML, st, bf); s != "" {
 			r.Folded = folded
-			return s
+			return sanitiseBody(s)
 		}
 	} else if !r.Direct {
 		// Only for an entry that was never in the mailbox. A message that was
@@ -59,7 +64,7 @@ func bodyHTML(r *entryRow) string {
 		// quoting client wrapped it in later is that client's, not the sender's.
 		if s, folded := recoverHTML(r.BodyText, r.HostHTML, bf); s != "" {
 			r.Folded = folded
-			return s
+			return sanitiseBody(s)
 		}
 	}
 	s, folded := textToHTML(r.BodyText, st, r.Fold)
@@ -71,10 +76,10 @@ func bodyHTML(r *entryRow) string {
 		// emptiness is, in its own editorial voice (the schema's
 		// <p class="ed">).
 		if gloss := blankGloss(r); gloss != "" {
-			return gloss
+			return sanitiseBody(gloss)
 		}
 	}
-	return s
+	return sanitiseBody(s)
 }
 
 // blankGloss explains a body that rendered empty, or "" when the emptiness

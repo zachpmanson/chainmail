@@ -4,6 +4,7 @@ import { normalise } from "../src/lib/normalise";
 import { entryId } from "../src/lib/anchors";
 import { order, zones, tzMinutes } from "../src/lib/chronological";
 import { layout, isMeta } from "../src/lib/lanes";
+import { avatarURL } from "../src/lib/derive";
 import type { Entry } from "../src/lib/spec";
 
 const load = (f: string) => normalise(JSON.parse(readFileSync(`fixtures/${f}.json`, "utf8")));
@@ -217,5 +218,31 @@ describe("chain filtering", () => {
       // excluding whole chains can never orphan a parent
       expect(kept.filter((e) => e.parent && !ids.has(e.parent))).toEqual([]);
     }
+  });
+});
+
+describe("avatarURL — the avatar value's boundary before it is emitted into url()", () => {
+  it("keeps data: images and http(s) URLs", () => {
+    expect(avatarURL("data:image/png;base64,iVBORw0KGgo=")).toBe("data:image/png;base64,iVBORw0KGgo=");
+    expect(avatarURL("https://faces.example/ada.png?size=48")).toBe("https://faces.example/ada.png?size=48");
+    expect(avatarURL("http://faces.example/bo.jpg")).toBe("http://faces.example/bo.jpg");
+  });
+
+  it("refuses schemes a page should never load", () => {
+    expect(avatarURL("javascript:alert(1)")).toBeNull();
+    expect(avatarURL("data:text/html;base64,PHNjcmlwdD4=")).toBeNull();
+    expect(avatarURL("file:///etc/passwd")).toBeNull();
+    expect(avatarURL("vbscript:msgbox(1)")).toBeNull();
+    expect(avatarURL("/relative/pic.png")).toBeNull();
+    expect(avatarURL("//evil.example/x.png")).toBeNull();
+  });
+
+  it("refuses bytes that could end or escape the url() token", () => {
+    expect(avatarURL('https://e.example/x.png" onerror="alert(1)')).toBeNull();
+    expect(avatarURL("https://e.example/x.png)")).toBeNull();
+    expect(avatarURL("https://e.example/x.png\\")).toBeNull();
+    expect(avatarURL("https://e.example/ x.png")).toBeNull();
+    expect(avatarURL("https://e.example/x.png\n}")).toBeNull();
+    expect(avatarURL("https://e.example/<script>")).toBeNull();
   });
 });

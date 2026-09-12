@@ -94,8 +94,9 @@ npm run dev             # vite, proxying /v1 to the server
 
 Search, tick the chains that belong, build a page from them. `/status` reports whichever
 backends the operator's last probe (`make status`) saw. The server refuses a non-loopback
-bind before opening the database: this is personal mail, and a spec carries the sender's
-own HTML unsanitised (issue #14).
+bind before opening the database: this is personal mail and there is no authentication,
+though spec HTML is allowlist-sanitised at the boundary (issue #14), so the bind is an
+access-control question rather than an XSS one.
 
 Without the server, a spec on disk still renders:
 

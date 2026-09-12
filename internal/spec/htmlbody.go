@@ -17,17 +17,17 @@ import (
 // where there is no markup to render.
 //
 // Stated plainly, once: nothing in this file sanitises. What it emits is the
-// sender's markup with the document chrome taken off, and it reaches the page
-// through dangerouslySetInnerHTML (src/components/Timeline.tsx). An on* handler,
-// a javascript: href, an <svg onload> all pass through untouched. That is a
-// deliberate decision for what this tool currently is: one person's own mailbox,
-// rendered to a local file, opened in their own browser, holding markup their
-// mail client already rendered once. Issue #14 tracks the sanitiser.
+// sender's markup with the document chrome taken off, which is exactly what
+// surviving here means — every body that reaches the page passes the allowlist
+// in sanitise.go at bodyHTML, so a script, an on* handler or a javascript:
+// href is gone by the time this file's output is what the renderer sees. The
+// work this file does is presentation (what a reader sees and is spared), and
+// the safety boundary sits one step later, at the exit of bodyHTML.
 //
-// The decision rests entirely on the reader being the person whose mail it is.
-// Serving a generated page, or sharing one (issue #10), turns every entry into
-// stored XSS delivered by whoever sent the mail: the trust is the mailbox
-// owner's to give and a visitor never gave it. #14 has to land before #10.
+// Serving a generated page, or sharing one (issue #10), used to turn every
+// entry into stored XSS delivered by whoever sent the mail. The sanitiser
+// (issue #14) is what closed that: whatever the trust of the reader, the page
+// holds nothing that can act.
 
 // htmlBody renders a stored text/html part, or "" when it holds nothing to show.
 //
@@ -433,8 +433,9 @@ func cutFrom(stop, n *html.Node) {
 // refresh, and the rest have no rendition in a transcript at all.
 //
 // Dropping <script> is not sanitisation and must not be read as any: it is
-// removed on the same ground as <style>, and the executable surface that stays
-// is stated at the top of this file.
+// removed on the same ground as <style>, because it has no rendition in a
+// transcript. The executable surface is closed by the allowlist in
+// sanitise.go, one pass later, at the exit of bodyHTML.
 var droppedTags = map[atom.Atom]bool{
 	atom.Style:    true,
 	atom.Link:     true,

@@ -61,7 +61,7 @@ func TestChatKeepsTheTextPath(t *testing.T) {
 	r := &entryRow{Source: "slack", Direct: true,
 		BodyText: "pushed the fix for the demand guesser to the branch just now\nwill deploy after lunch"}
 	got := bodyHTML(r)
-	if !strings.Contains(got, "just now<br>will deploy") {
+	if !strings.Contains(got, "just now<br/>will deploy") {
 		t.Errorf("body = %q, want the author's own break kept", got)
 	}
 }
