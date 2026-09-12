@@ -78,12 +78,17 @@ export function treeSvgString(o: TreeExport): string {
   const legend = ["message", "note", "starts chain", "reconstructed"];
 
   const M = 14; // outer margin
-  const TITLE_H = 44; // title row + divider; the tree's top offset
+  // Title and divider sit on their own offsets (RULE_Y = label + 10); the tree
+  // starts on its own TREE_TOP so the gaps above and below the rule can be
+  // tuned independently of each other. Similarly the footer divider floats
+  // close under the tree while the footer text keeps its own offset.
+  const RULE_Y = 34; // the title rule, between the label and the tree
+  const TREE_TOP = 48; // first row's centre: title + rule + room under it
   const ROW_H = 17; // footer row pitch
   const tallyCol = Math.max(...tally.map(([n, l]) => `${n} ${l}`.length)) * CHAR_W;
   const legendCol = Math.max(...legend.map((s) => s.length)) * CHAR_W + 22;
   const W = Math.round(Math.max(treeW, tallyCol + 24 + legendCol) + M * 2);
-  const treeBottom = TITLE_H + treeH - Y0;
+  const treeBottom = TREE_TOP + treeH - Y0;
   const footerY = treeBottom + 24; // divider + breathing room; first row baseline
   const H = Math.round(footerY + 4 * ROW_H + 6);
 
@@ -109,11 +114,11 @@ export function treeSvgString(o: TreeExport): string {
       `fill="${pal.muted}" opacity=".75">${o.rows.length}</text>`,
   );
   line(
-    `<line x1="${M}" y1="${TITLE_H - 10}" x2="${W - M}" y2="${TITLE_H - 10}" stroke="${pal.line}" stroke-width="1"/>`,
+    `<line x1="${M}" y1="${RULE_Y}" x2="${W - M}" y2="${RULE_Y}" stroke="${pal.line}" stroke-width="1"/>`,
   );
 
   // the graph, exactly as the panel draws it
-  line(`<g transform="translate(${M - X0} ${TITLE_H - Y0})">`);
+  line(`<g transform="translate(${M - X0} ${TREE_TOP - Y0})">`);
   for (const r of o.rows) {
     const n = byId.get(r.id)!;
     if (!n.parent) continue;
@@ -158,7 +163,7 @@ export function treeSvgString(o: TreeExport): string {
 
   // footer: divider, then the tally and legend side by side, as on the panel
   line(
-    `<line x1="${M}" y1="${treeBottom + 10}" x2="${W - M}" y2="${treeBottom + 10}" stroke="${pal.line}" stroke-width="1"/>`,
+    `<line x1="${M}" y1="${treeBottom + 6}" x2="${W - M}" y2="${treeBottom + 6}" stroke="${pal.line}" stroke-width="1"/>`,
   );
   tally.forEach(([n, label], i) => {
     const yy = footerY + i * ROW_H;
