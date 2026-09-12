@@ -404,6 +404,10 @@
     text-transform:uppercase; letter-spacing:.09em; color:var(--muted);
     border-bottom:1px solid var(--line); display:flex; align-items:center; gap:.4rem; }
   .mini h3 span.ct { margin-left:auto; font-weight:600; opacity:.75; }
+  .mini h3 .xsvg { display:inline-flex; align-items:center; padding:.05rem .18rem;
+    font:inherit; color:var(--muted); background:transparent;
+    border:1px solid transparent; border-radius:4px; cursor:pointer; }
+  .mini h3 .xsvg:hover { color:var(--accent); border-color:var(--line); background:var(--card); }
   .mini .mbody { overflow:auto; padding:.45rem .3rem .8rem; flex:1 1 auto; }
   .mini svg { display:block; }
   .mini .lk { fill:none; stroke:var(--line); stroke-width:1.3; }
