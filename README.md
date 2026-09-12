@@ -78,11 +78,10 @@ make doctor                      # what is in it, and what is missing
 mail is paged with a resumable cursor. `-only`/`-skip` choose phases; a phase whose
 prerequisite this host lacks is reported as a skip, not a failure. The `settle` phases
 collapse duplicates and repair identities — `twins` and `repair` refuse rather than
-guess, and `dedupe` prints a **dry run**. Applying it is a separate, irreversible
-decision:
+guess, and `dedupe` prints a **dry run**:
 
 ```bash
-corpus dedupe -apply     # back up first: make backup
+corpus dedupe -apply     # irreversible; back up first with make backup
 ```
 
 Every slurp re-probes the backends and rewrites the connection snapshot beside the
@@ -96,9 +95,9 @@ npm run dev             # vite, proxying /v1 to the server
 ```
 
 Search, tick the chains that belong, build a page from them. `/status` reports whichever
-backends the operator's last probe (`make status`) saw — the server is read-only and never
-contacts Gmail or slackdump. It refuses a non-loopback bind before opening the database:
-this is personal mail, and a spec carries the sender's own HTML unsanitised (issue #14).
+backends the operator's last probe (`make status`) saw. The server refuses a non-loopback
+bind before opening the database: this is personal mail, and a spec carries the sender's
+own HTML unsanitised (issue #14).
 
 Without the server, a spec on disk still renders:
 
@@ -126,24 +125,22 @@ render new.json -o page.html --since page.prev.html
 `--since` reports what is **new** (no counterpart last pass) and **revised** (same
 anchor, changed words, or the same words at a corrected timestamp).
 
-`corpus refresh` runs two passes, because the spec records two kinds of thing. `threads`
-is membership: every recorded chain is regenerated whole, which is the only way a reply
-carrying none of the query's words arrives. `queries` is discovery: new chains are printed
-as proposals rather than included (`-include-new` takes all, `-accept <root>` takes one),
+`corpus refresh` restores every recorded chain whole — the only way a reply carrying none
+of the query's words arrives — and re-runs the recorded queries, whose new chains are
+printed as proposals rather than included (`-include-new`, or `-accept <root>` for one),
 so a curated page cannot re-widen on every refresh. A chain the queries no longer return
-stays on the page and is reported, since dropping it would delete permalinked entries.
-The mailbox is only touched with `-fetch`. `make repage P=page.html` runs the loop.
+stays on the page and is reported. The mailbox is only touched with `-fetch`.
+`make repage P=page.html` runs the loop.
 
 ## The contract
 
 Input is a **timeline spec**: JSON conforming to `schema/timeline.schema.json`. A
 collector produces it (today the `mail-timeline` Claude Code skill); chainmail only
-renders — collection needs judgement about what a mail trail means, rendering does not.
-Two fields carry the most weight. **`parent`**, the entry each entry replies to, drives
-ordering, lanes, the reply tree and the reply links. **`tz`**, the zone the source stated,
-matters because ordering is by *absolute* time: a 09:51 NZST send correctly precedes a
-09:20 AEST reply. A missing zone is inferred from what that sender stated elsewhere and
-never allowed to invert a reply chain.
+renders. Two fields carry the most weight. **`parent`**, the entry each entry replies to,
+drives ordering, lanes, the reply tree and the reply links. **`tz`**, the zone the source
+stated, matters because ordering is by *absolute* time: a 09:51 NZST send correctly
+precedes a 09:20 AEST reply. A missing zone is inferred from what that sender stated
+elsewhere and never allowed to invert a reply chain.
 
 ## Development
 
@@ -157,17 +154,17 @@ npm run gen:types    # regenerate src/lib/spec.d.ts from the schema
 npm run gen:api      # regenerate src/lib/api.d.ts from openapi.json
 ```
 
-The Go side has **no direct dependencies** (all `// indirect`; the service is `net/http`
-and `encoding/json`), and the JS side has three at runtime: `react`,
+The Go side has **no direct dependencies** (all `// indirect`); the HTTP service is
+`net/http` and `encoding/json`, and the JS side has three packages at runtime: `react`,
 `@tanstack/react-query`, `openapi-fetch`. Keep it that way unless a dependency earns
-itself. The generated files are never hand-edited, and a test asserts the service's
-inlined timeline schema has not drifted.
+itself. Generated files are never hand-edited, and a test asserts the service's inlined
+timeline schema has not drifted.
 
 `fixtures/synthetic.json` is a full-complexity trail — 58 entries, 7 chains sharing 4
 lanes, 51 reply edges, 37 stated and 18 inferred timezones — a real trail's structure with
 the content rewritten, so the renderer is exercised at real scale by a committable file.
-`fixtures/minimal.json` is the 1-entry degenerate case. Real trails are sensitive: keep
-them untracked at `fixtures/local.json` and load them with `?spec=`.
+Real trails are sensitive: keep them untracked at `fixtures/local.json`, loaded with
+`?spec=`.
 
 `corpus eval` scores two retrieval configurations over one judged query set and prints the
 delta, because a retrieval number on its own says nothing:
@@ -179,5 +176,5 @@ corpus eval -set fixtures/eval.local.json \
 
 Each spec takes `name db mode model url dim topk minsim noprefix`; `db` lets the two
 configurations search different corpora, which is what makes a change to *stored* vectors
-measurable. Judged sets over real correspondence stay untracked at
-`fixtures/eval.local.json`; `fixtures/eval.synthetic.json` is the committed example.
+measurable. Judged sets over real correspondence stay untracked at `fixtures/eval.local.json`;
+`fixtures/eval.synthetic.json` is the committed example.
