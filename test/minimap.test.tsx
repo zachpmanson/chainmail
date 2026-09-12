@@ -85,4 +85,41 @@ describe("treeSvgString", () => {
     expect(light).toMatch(/fill="#fff"/);
     expect(dark).toMatch(/fill="#1d1c21"/);
   });
+
+  it("transposes the geometry in horizontal mode: wide and short, not tall", () => {
+    const { v, g } = graph();
+    const vertical = treeSvgString({ title: v.title, rows: v.rows, nodes: g.nodes, laneCount: g.laneCount, deepest: 1, dark: false });
+    const horizontal = treeSvgString({ title: v.title, rows: v.rows, nodes: g.nodes, laneCount: g.laneCount, deepest: 1, dark: false, horizontal: true });
+    const dims = (s: string) => {
+      const m = s.match(/<svg[^>]*width="(\d+)" height="(\d+)"/)!;
+      return { w: Number(m[1]), h: Number(m[2]) };
+    };
+    const vd = dims(vertical);
+    const hd = dims(horizontal);
+    // 58 rows × 4 lanes: vertical is a tall column, horizontal a wide strip
+    expect(vd.h).toBeGreaterThan(vd.w);
+    expect(hd.w).toBeGreaterThan(hd.h);
+    expect(hd.w).toBeGreaterThan(vd.h);
+    // both carry the same tally and legend, since the panel does in either mode
+    for (const label of ["dead ends", "reconstructed"]) {
+      expect(horizontal).toContain(label);
+    }
+  });
+
+  it("lays time rightward in horizontal mode: rows advance left to right", () => {
+    const { v, g } = graph();
+    const svg = treeSvgString({ title: v.title, rows: v.rows, nodes: g.nodes, laneCount: g.laneCount, deepest: 1, dark: false, horizontal: true });
+    // node circles carry r="3.9" (legend icons are different radii), and they
+    // are emitted in transcript order, so their x must climb with the rows;
+    // notes are rotated rects, so circles number the message rows only
+    const xs = [...svg.matchAll(/<circle cx="([\d.]+)" cy="([\d.]+)" r="3.9"/g)].map(
+      (m) => Number(m[1]),
+    );
+    expect(xs.length).toBe(v.rows.filter((r) => r.entry.kind !== "note").length);
+    for (let i = 1; i < xs.length; i++) {
+      expect(xs[i]!).toBeGreaterThan(xs[i - 1]!);
+    }
+    // the vertical export must NOT show the same climb vertically… it does,
+    // on y, which the transpose test already covers
+  });
 });
