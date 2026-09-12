@@ -52,6 +52,14 @@ func run(args []string) error {
 	timeout := fs.Duration("embed-timeout", 2*time.Minute, "how long to wait for the model")
 	serveRemote := fs.Bool(unsafeBindFlag, false,
 		"permit a non-loopback -addr; read what it prints before you use it")
+	slurp := fs.Bool("slurp", false,
+		"permit POST /v1/slurp: reach the work mailbox and ingest it. Off by "+
+			"default — the surface stays read-most and never touches the mailbox "+
+			"until this is switched on. The grant it uses is the mail credential "+
+			"this unit already reads (HOME's docket token store), so switching it "+
+			"on hands the page no access the host had not already given this user.")
+	slurpTimeout := fs.Duration("slurp-timeout", 15*time.Minute,
+		"upper bound on one /v1/slurp ingest")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -62,6 +70,13 @@ func run(args []string) error {
 		return err
 	}
 
+	// The bound port names the Google redirect URI (/auth/login): pathless
+	// http://localhost:<port>, the shape the Thunderbird client accepts.
+	_, port, err := net.SplitHostPort(*addr)
+	if err != nil {
+		return err
+	}
+
 	store, err := corpus.Open(*path)
 	if err != nil {
 		return err
@@ -69,12 +84,17 @@ func run(args []string) error {
 	defer store.Close()
 
 	srv := &server{
-		store:      store,
-		uploads:    *uploads,
-		specs:      filepath.Join(filepath.Dir(*path), "specs"),
-		statusPath: status.FileName(*path),
-		specSlots:  make(chan struct{}, specConcurrency),
-		slotWait:   specSlotWait,
+		store:        store,
+		uploads:      *uploads,
+		corpusPath:   *path,
+		specs:        filepath.Join(filepath.Dir(*path), "specs"),
+		statusPath:   status.FileName(*path),
+		slurpEnabled: *slurp,
+		slurpTimeout: *slurpTimeout,
+		runSlurp:     defaultSlurp(),
+		specSlots:    make(chan struct{}, specConcurrency),
+		slotWait:     specSlotWait,
+		loginPort:    port,
 		embedder: func() *mailembed.Ollama {
 			return &mailembed.Ollama{BaseURL: *url, Name: *model, Dimension: *dim,
 				Client: &http.Client{Timeout: *timeout}}

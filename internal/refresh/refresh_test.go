@@ -281,6 +281,171 @@ func TestANewChainIsProposedRatherThanIncluded(t *testing.T) {
 	}
 }
 
+// The page's own add-email search is a search the spec does not record. Ticking
+// a chain it found sends the chain and the search together, because accepting
+// the chain alone would put it on the page with no provenance: nothing would
+// explain where it came from, and no later refresh could re-find it.
+func TestAnAcceptedChainRecordsTheSearchThatFoundIt(t *testing.T) {
+	s := store(t)
+	put(t, s, msg("m1", "here is the paddock survey we agreed"))
+	prev := prevRun(t, s, "thread-hedge", "paddock survey")
+
+	// Words the page's recorded query does not hold, in a chain of its own: only
+	// the reader's search finds this one.
+	put(t, s, msg("m9", "the fence line needs a survey before the north block",
+		subject("North block"), inThread("thread-north"),
+		on("Tue, 03 Feb 2026 11:00:00 +1100")))
+
+	add := spec.Query{Q: "fence line", Note: "add-email search, mode=hybrid"}
+
+	// What the reader saw before ticking it, and how the report names it.
+	rep, _ := run(t, s, newMailbox(), prev, Options{Queries: []spec.Query{add}})
+	if len(rep.ChainsProposed) != 1 {
+		t.Fatalf("proposed = %+v, want the chain the search found", rep.ChainsProposed)
+	}
+	root := rep.ChainsProposed[0].RootExtID
+
+	rep, next := run(t, s, newMailbox(), prev, Options{
+		Accept:  []string{root},
+		Queries: []spec.Query{add},
+	})
+	if len(rep.ChainsAdded) != 1 {
+		t.Errorf("chainsAdded = %+v, want the accepted chain", rep.ChainsAdded)
+	}
+	if len(rep.QueriesRecorded) != 1 || rep.QueriesRecorded[0] != "fence line" {
+		t.Errorf("queriesRecorded = %v, want the search that found the chain", rep.QueriesRecorded)
+	}
+	if rep.NothingNew() {
+		t.Error("a chain and a search both landed on the page; this is not nothing new")
+	}
+	if got := strings.Join(queryTexts(next), "|"); got != "paddock survey|fence line" {
+		t.Errorf("the page records %q, want the build's search and the one that added the chain", got)
+	}
+	if next.Queries[1].Note != "add-email search, mode=hybrid" {
+		t.Errorf("the recorded search keeps its provenance: %+v", next.Queries[1])
+	}
+
+	// Recorded means re-run: the next refresh finds what this one did, and the
+	// chain it found is on the page rather than proposed again.
+	rep2, next2 := run(t, s, newMailbox(), next, Options{})
+	if len(rep2.ChainsProposed) != 0 {
+		t.Errorf("proposed = %+v; the chain that search found is already on the page", rep2.ChainsProposed)
+	}
+	if len(rep2.QueriesRecorded) != 0 {
+		t.Errorf("queriesRecorded = %v; a search the page already records is not recorded twice",
+			rep2.QueriesRecorded)
+	}
+	if len(next2.Queries) != 2 {
+		t.Errorf("the page carries %d searches, want 2", len(next2.Queries))
+	}
+
+	// Membership, not the search, is what keeps the chain there: it is a
+	// recorded chain now, so it survives every later refresh whether or not any
+	// query still ranks it — and it grows like any other, since a reply needs no
+	// query to have found it.
+	if len(next2.Threads) != 2 {
+		t.Errorf("threads = %+v; the added chain must still be on the page", next2.Threads)
+	}
+	put(t, s, msg("m10", "sounds good, friday then", replyTo("m9"),
+		inThread("thread-north"), on("Wed, 04 Feb 2026 09:00:00 +1100")))
+	rep3, next3 := run(t, s, newMailbox(), next2, Options{})
+	if len(rep3.ChainsGrown) != 1 {
+		t.Errorf("chainsGrown = %+v; a reply in an added chain belongs on the page",
+			rep3.ChainsGrown)
+	}
+	if len(next3.Threads) != 2 {
+		t.Errorf("threads = %+v, want both chains after a refresh that grew one", next3.Threads)
+	}
+}
+
+// Recording a search changes the page even when the chain it found is already
+// on it, so a refresh that only did that must not report itself as having found
+// nothing: the reader would be told their page did not change when its record
+// did.
+func TestASearchRecordedOnItsOwnIsNotNothingNew(t *testing.T) {
+	s := store(t)
+	put(t, s, msg("m1", "here is the paddock survey we agreed"))
+	prev := prevRun(t, s, "thread-hedge", "paddock survey")
+
+	// The query's chain is already on the page, so nothing is added or proposed:
+	// the search is the whole of this refresh's work.
+	add := spec.Query{Q: "paddock", Note: "add-email search, mode=hybrid"}
+	rep, next := run(t, s, newMailbox(), prev, Options{Queries: []spec.Query{add}})
+
+	if len(rep.ChainsAdded)+len(rep.ChainsGrown)+len(rep.ChainsProposed) != 0 {
+		t.Fatalf("added = %+v, grown = %+v, proposed = %+v; this test's premise is that no chain moved",
+			rep.ChainsAdded, rep.ChainsGrown, rep.ChainsProposed)
+	}
+	if len(rep.QueriesRecorded) != 1 || rep.QueriesRecorded[0] != "paddock" {
+		t.Errorf("queriesRecorded = %v, want the search that was taken on", rep.QueriesRecorded)
+	}
+	if rep.NothingNew() {
+		t.Error("a recorded search is a change to the page; reporting it as nothing new is a lie")
+	}
+	if len(next.Queries) != 2 {
+		t.Errorf("the page records %d searches, want the build's and this one", len(next.Queries))
+	}
+
+	// Asking twice is asking once: the search is already recorded, and the page
+	// does not grow a second copy of it.
+	rep2, next2 := run(t, s, newMailbox(), next, Options{Queries: []spec.Query{add}})
+	if len(rep2.QueriesRecorded) != 0 {
+		t.Errorf("queriesRecorded = %v on a re-sent search", rep2.QueriesRecorded)
+	}
+	if len(next2.Queries) != 2 {
+		t.Errorf("the page records %d searches after re-sending one", len(next2.Queries))
+	}
+
+	// A blank query is a caller's empty field, not a search: refused rather than
+	// recorded as an entry that says nothing.
+	rep3, next3 := run(t, s, newMailbox(), next, Options{Queries: []spec.Query{{Q: "   "}}})
+	if len(rep3.QueriesRecorded) != 0 || len(next3.Queries) != 2 {
+		t.Errorf("recorded = %v, searches = %d; a blank query is not a search",
+			rep3.QueriesRecorded, len(next3.Queries))
+	}
+}
+
+// A page can record nothing to re-run — a hand-written spec, or one built by a
+// tool that named its chains and no searches. That is exactly the page the
+// add-email search exists for, and one call gives it both halves: the chain, and
+// the search that found it, which is the thing left to re-run.
+func TestAPageWithNoProvenanceCanBeGivenOne(t *testing.T) {
+	s := store(t)
+	put(t, s, msg("m9", "the fence line needs a survey before the north block",
+		subject("North block"), inThread("thread-north")))
+	bare := spec.Spec{Title: "Fence line", Messages: []spec.Entry{{Date: "2 Feb 2026", Body: "x"}}}
+
+	// Nothing to re-run and nothing brought: still a refusal.
+	if _, _, err := Run(s, newMailbox(), bare, Options{}); err == nil {
+		t.Fatal("a spec that records nothing, given nothing, must be refused")
+	}
+
+	rep, next := run(t, s, newMailbox(), bare, Options{
+		Accept:  []string{"mail:<m9@example.com>"},
+		Queries: []spec.Query{{Q: "fence line", Note: "add-email search, mode=hybrid"}},
+	})
+	if len(rep.QueriesRecorded) != 1 || len(rep.ChainsAdded) != 1 {
+		t.Fatalf("recorded = %v, added = %+v; both halves were asked for",
+			rep.QueriesRecorded, rep.ChainsAdded)
+	}
+	if got := strings.Join(queryTexts(next), "|"); got != "fence line" {
+		t.Errorf("the page records %q, want the search that was brought", got)
+	}
+	if next.Title != "Fence line" {
+		t.Errorf("title = %q; the page's own title survives", next.Title)
+	}
+}
+
+// queryTexts is the page's searches in order, which is what a caller comparing
+// two runs of a page wants: the record, not the entries.
+func queryTexts(sp spec.Spec) []string {
+	out := make([]string, 0, len(sp.Queries))
+	for _, q := range sp.Queries {
+		out = append(out, q.Q)
+	}
+	return out
+}
+
 // Without -fetch the corpus is the only source, which is the ordinary case: a
 // plain `corpus ingest` filled it and refresh re-derives the page from it.
 func TestRefreshWithoutFetchStillGrowsFromTheCorpus(t *testing.T) {

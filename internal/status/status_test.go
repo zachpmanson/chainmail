@@ -41,7 +41,7 @@ func TestParseFillsKnownBackendsThatWereOmitted(t *testing.T) {
 	blob, _ := json.Marshal(map[string]any{
 		"checkedAt": "2026-08-22T15:04:00Z",
 		"services": []any{
-			map[string]any{"id": "mail", "label": "Gmail (docket)", "status": OK, "detail": "fine"},
+			map[string]any{"id": "mail", "label": "Gmail", "status": OK, "detail": "fine"},
 			map[string]any{"id": "widget", "label": "Unknown", "status": OK},
 		},
 	})
@@ -73,7 +73,7 @@ func TestParseFillsKnownBackendsThatWereOmitted(t *testing.T) {
 // Marshal writes the known order and omits nothing a probe ran for.
 func TestMarshalRoundTripsThroughParse(t *testing.T) {
 	in := Snapshot{CheckedAt: "2026-08-22T15:04:00Z", Services: []Service{
-		{ID: "mail", Label: "Gmail (docket)", Status: OK},
+		{ID: "mail", Label: "Gmail", Status: OK},
 		{ID: "embed", Label: "Embedding daemon (ollama)", Status: Down, Detail: "start it"},
 	}}
 	back := Parse(in.Marshal())

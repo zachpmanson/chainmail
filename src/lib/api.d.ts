@@ -26,6 +26,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/slurp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reach the work mailbox and ingest it.
+         * @description Runs `corpus slurp` against the corpus — reaching the work mailbox through the scoped docket access the host grants this unit — so a subsequent /v1/refresh can build over mail that arrived since the last ingest. The phases are the ones the chainmail-slurp unit runs (mail, twins, repair, dedupe as a dry run, embed), and the ingest's own transcript is returned.
+         *
+         *     Opt-in and off by default: a server started without -slurp answers 403, keeping the surface read-most and never touching the mailbox.
+         */
+        post: operations["slurp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/spec": {
         parameters: {
             query?: never;
@@ -148,6 +170,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/ops/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Everything the ops screen shows to review people merges, read-only.
+         * @description The dedupe plan the CLI's dry run prints (merges and refusals), the pairs MergeCandidates offers a human glance at, the twins pass's declined entries aggregated by reason, and the person_merges trail of merges so far. Nothing here changes the corpus: the one mutation this surface owns is POST /v1/ops/merge, called per pair behind a confirm.
+         */
+        get: operations["getOpsPlan"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ops/merge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply exactly one planned people merge.
+         * @description The pair must be in the current dedupe plan AND in an applicable tier: the same-name/same-thread rules (dedupe:same-display-name, dedupe:same-display-name-in-thread). The plan is re-derived at apply time, so a stale screen cannot merge a pair the plan no longer makes, and the first-name-and-org and webmail tiers are shown read-only even against a hand-rolled request. The merge is irreversible: person_merges records that it happened and why, not how to undo it. There is deliberately no apply-all.
+         */
+        post: operations["applyOpsMerge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/people": {
         parameters: {
             query?: never;
@@ -157,6 +219,46 @@ export interface paths {
         };
         /** Everyone in the corpus, with their identities. */
         get: operations["getPeople"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Whether the server is signed in to Google for the work mailbox.
+         * @description Reports whether the token the hourly slurp reads is present in the server's store. Shallow on purpose: a file check, not a live token refresh.
+         */
+        get: operations["getAuthStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Start a Google authorization-code login for the work mailbox.
+         * @description Redirects the browser to Google's consent page. On completion the token lands in the store the hourly slurp reads, and /auth/status starts answering signed_in=true.
+         */
+        get: operations["getAuthLogin"];
         put?: never;
         post?: never;
         delete?: never;
@@ -198,6 +300,8 @@ export interface paths {
          * Bring a previously built page up to date.
          * @description Refresh stage, and deliberately the read half of the CLI's `refresh` command. The caller posts the previous spec (as POST /v1/spec returned it) and any selection overrides; the server re-derives the page from the corpus — a chain already on the page that gained entries is grown, a new chain the recorded queries find is proposed rather than included — and returns the regenerated spec alongside a report of what changed.
          *
+         *     Membership is only ever added to: `accept` names chains to take from the proposals, and a chain found by a search the spec does not record comes with that search in `queries`, so the page keeps the provenance and can find the chain again.
+         *
          *     The server never reaches the mailbox, on purpose: fetching what arrived is `corpus ingest`'s job and belongs to the CLI and the cron, not a browser. So this refresh is corpus-only. What it cannot see, it cannot propose from fed to it by the mailbox later.
          */
         post: operations["refreshSpec"];
@@ -211,6 +315,10 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AuthStatusResponse: {
+            /** @description True when the token the slurps read is present. */
+            signed_in: boolean;
+        };
         /** @description Ranked candidates. Exactly one of chains or entries is present, decided by the `entries` parameter; neither is present when nothing matched, and an empty array is returned rather than omitted in that case. */
         SearchResponse: {
             /**
@@ -495,7 +603,7 @@ export interface components {
             /** @description Entries they were a to: or cc: on. Sent 0 with received above 0 is a recipient-only participant, which is a quarter of a real cast. */
             received: number;
         };
-        /** @description The previous run being brought up to date. The spec itself is authoritative for what stays on the page; the other fields narrow or rename how that membership is reproduced, and accept takes proposed chains the report returns. */
+        /** @description The previous run being brought up to date. The spec itself is authoritative for what stays on the page; the other fields narrow or rename how that membership is reproduced, accept takes proposed chains the report returns, and queries records the search a newly accepted chain came from. */
         RefreshRequest: {
             /** @description The previous spec, as POST /v1/spec returned it. Must carry at least one message; a fresh page has nothing to refresh. */
             spec: components["schemas"]["TimelineSpec"];
@@ -520,12 +628,22 @@ export interface components {
             /** @description Accept every chain the queries propose, without naming them one by one. Defaults to false: a curated page is not re-widened on every refresh. */
             includeNew?: boolean;
             /**
-             * @description Chain roots to accept, as the report's chainsProposed names them. Accepting is idempotent: a chain accepted once is not proposed again.
+             * @description Chain roots to accept, as the report's chainsProposed names them. Accepting is idempotent: a chain accepted once is not proposed again. A chain found by a search the spec does not record — the page's own add-email search — is accepted by the same handle and comes with its query in `queries`.
              * @example [
              *       "mail:<c0ffee-1@loomworks.example>"
              *     ]
              */
             accept?: string[];
+            /**
+             * @description Searches to record on the page, on top of the ones the spec already records. A chain can be found by a query the page does not hold, and accepting it without that query would leave the page unable to explain or re-find it. The queries are recorded before either pass runs, so they are re-run like any other recorded search — what they newly find is proposed, and the next refresh re-finds what they found. A query the spec already records is kept as it stands rather than recorded twice.
+             * @example [
+             *       {
+             *         "q": "warehouse lease",
+             *         "note": "add-email search, mode=hybrid"
+             *       }
+             *     ]
+             */
+            queries?: components["schemas"]["SpecQuery"][];
             /** @description When set, saves the refreshed page back under /view/<name>, rewriting the file POST /v1/spec wrote, so a reload lands on this run. The same name rules as a build: letters, digits, '.', '_', '-'; no slashes and no '..'. */
             name?: string;
         };
@@ -534,7 +652,7 @@ export interface components {
             spec: components["schemas"]["TimelineSpec"];
             report: components["schemas"]["RefreshReport"];
         };
-        /** @description What moved between the previous run and this one. A chain is in exactly one list: added (new to the page), grown (was there and gained entries), proposed (found but not accepted) or unranked (kept, but its query no longer finds it). */
+        /** @description What moved between the previous run and this one. A chain is in exactly one list: added (new to the page), grown (was there and gained entries), proposed (found but not accepted) or unranked (kept, but its query no longer finds it). queriesRecorded is not a chain but a change to the page's record. */
         RefreshReport: {
             /** @description Messages on the page when the refresh started. */
             entriesBefore: number;
@@ -542,6 +660,8 @@ export interface components {
             entriesAfter: number;
             /** @description Stored twin pairs the refresh collapsed before redrawing: a quoted copy and the mailbox message it was recovered from, one message stored twice. Absent when none. */
             twinsCollapsed?: number;
+            /** @description Searches this refresh added to the page's record (the request's queries), absent when none. Recording a search changes the page as surely as adding a chain does, so a refresh that recorded one does not report itself as nothing new. */
+            queriesRecorded?: string[];
             /** @description Chains now on the page that were not on it before. Absent when none. */
             chainsAdded?: components["schemas"]["ChainGrowth"][];
             /** @description Chains on the page before that gained entries. Absent when none. */
@@ -550,7 +670,7 @@ export interface components {
             chainsProposed?: components["schemas"]["RefreshCandidate"][];
             /** @description Chains still on the page that no recorded query returns anymore. They are kept — dropping one would delete entries somebody has already read. */
             chainsUnranked?: string[];
-            /** @description The refresh looked and found nothing to store, grow, add or propose. Distinct from an error: a report existing at all means the refresh actually ran. */
+            /** @description The refresh looked and found nothing to store, grow, add, propose or record. Distinct from an error: a report existing at all means the refresh actually ran. */
             nothingNew: boolean;
         };
         /** @description One chain whose membership changed. before is absent when the chain is new to the page; after is what the page now holds. */
@@ -603,6 +723,123 @@ export interface components {
              * @example mode "semantic": no embedding daemon reachable at http://localhost:11434: start it with `ollama serve`
              */
             error: string;
+        };
+        /** @description A pair worth a human glance that nothing proved one way (the CLI's `corpus candidates`), with the command that would settle it. */
+        OpsCandidate: {
+            /** @description First person id. */
+            aId: number;
+            /** @description First person's display name. */
+            aName: string;
+            /** @description First person's email identities. Absent when they hold none. */
+            aAddresses?: string[];
+            /** @description Second person id. */
+            bId: number;
+            /** @description Second person's display name. */
+            bName: string;
+            /** @description Second person's email identities. Absent when they hold none. */
+            bAddresses?: string[];
+            /**
+             * @description Why the pair is worth a glance.
+             * @example same local part, different domain
+             */
+            reason: string;
+            /** @description The command that would settle the pair, as the CLI prints it. */
+            suggest?: string;
+        };
+        /** @description One pair the dedupe pass would fold, both sides named wholly because that is all a reviewer has to go on. Applicable is the boundary the review UI is drawn to: only the same-name/same-thread tiers (dedupe:same-display-name, dedupe:same-display-name-in-thread) may be posted to POST /v1/ops/merge; every other tier is shown read-only. */
+        OpsMerge: {
+            /**
+             * @description The dedupe rule that proved the pair, as person_merges.reason will record it.
+             * @example dedupe:same-display-name
+             */
+            rule: string;
+            /** @description Person id that would survive. */
+            keepId: number;
+            /** @description Survivor's display name. */
+            keepName: string;
+            /** @description Survivor's identities, which are what make them the survivor. */
+            keepIdentities?: string[];
+            /** @description Person id that would be folded away and deleted. */
+            dropId: number;
+            /** @description Merged-away person's display name. */
+            dropName: string;
+            /** @description Merged-away person's identities; a name-only placeholder holds none, which is the finding. */
+            dropIdentities?: string[];
+            /** @description The evidence string, the same text the CLI's dry run prints beside the pair. */
+            evidence?: string;
+            /** @description Whether POST /v1/ops/merge will accept the pair. Everything the plan makes is listed; only the same-name/same-thread tiers are applicable. */
+            applicable: boolean;
+        };
+        /** @description One row of the person_merges trail: a merge that happened, who it folded into whom, and on what evidence. This is the audit record, not an undo handle — a merge is not reversible. */
+        OpsMergeRecord: {
+            /** @description The survivor, as currently resolved — later merges repoint it. */
+            keepId: number;
+            /** @description The survivor's current display name. */
+            keepName?: string;
+            /** @description The merged-away person. The row is gone, so this is not a foreign key. */
+            dropId: number;
+            /** @description The merged-away person's display name at the time. */
+            dropName?: string;
+            /**
+             * @description Why the merge happened: the rule, plus the evidence in parentheses where the plan had it.
+             * @example dedupe:same-display-name (name-only person, and the kept person is on every entry they are)
+             */
+            reason?: string;
+            /**
+             * Format: date-time
+             * @description UTC RFC3339 stamp of the merge.
+             */
+            mergedAt: string;
+        };
+        /** @description A pair to merge, as the shown plan names it: the keeper first. The pair must be in the current dedupe plan and in an applicable tier; the server re-derives the plan at apply time, so a stale screen cannot merge a pair the plan no longer makes. */
+        OpsMergeRequest: {
+            /** @description The person to keep, from the shown plan's keepId. */
+            keepId: number;
+            /** @description The person to fold away, from the shown plan's dropId. */
+            dropId: number;
+        };
+        /** @description The person_merges row the merge wrote, so a client can show the same record the trail will list. The plan must be refetched after; this response deliberately carries no updated plan. */
+        OpsMergeResponse: {
+            merge: components["schemas"]["OpsMergeRecord"];
+        };
+        /** @description Everything the ops screen shows to review people merges, in one read-only shot. People is the current person count, so a screen can state how much the merges below would shrink the corpus. */
+        OpsPlanResponse: {
+            /** @description People in the corpus right now. */
+            people: number;
+            /** @description Pairs the dedupe pass would fold, as the CLI's dry run prints them. Merges the screen may apply come first in the client, but the server makes no ordering promise. */
+            merges: components["schemas"]["OpsMerge"][];
+            /** @description Groups the pass would not decide, exactly as the dry run prints them. Read-only in every UI, on purpose. */
+            refusals: components["schemas"]["OpsRefusal"][];
+            /** @description Pairs worth a human glance, from the CLI's `corpus candidates`. */
+            candidates: components["schemas"]["OpsCandidate"][];
+            /** @description Twins-pass declines aggregated by reason, most frequent first. The per-entry list stays CLI-only (`corpus twins -declined`). */
+            twinsDeclined: components["schemas"]["TwinsDecline"][];
+            /** @description Merges so far, newest first — the person_merges audit trail. */
+            trail: components["schemas"]["OpsMergeRecord"][];
+        };
+        /** @description A group the dedupe pass would not decide, exactly as the CLI's dry run prints it: the people who share the subject, and why the evidence could not pick one. */
+        OpsRefusal: {
+            /**
+             * @description Which rule declined.
+             * @example dedupe:same-display-name
+             */
+            rule: string;
+            /** @description The name, or first-name@organisation, that grouped them. */
+            subject: string;
+            /** @description Why they stay two people, sometimes naming the command that would settle them. */
+            reason: string;
+            /** @description The people in the group, including the one the refusal was about. */
+            people: number[];
+        };
+        /** @description One reason the twins pass left entries alone, with how many entries it did. Aggregated rather than listed: the pass declines hundreds of entries a run, and the per-entry list is what the CLI's `corpus twins -declined` flag is for. */
+        TwinsDecline: {
+            /**
+             * @description The decline reason, as the CLI prints it.
+             * @example no other copy within a plausible offset of its stated clock
+             */
+            reason: string;
+            /** @description How many entries declined for this reason. */
+            count: number;
         };
         /** @description One saved page, as the index lists it: enough to reopen it without fetching the whole page. */
         SavedSpec: {
@@ -765,6 +1002,11 @@ export interface components {
                 previewH?: number;
             }[];
         };
+        /** @description The outcome of POST /v1/slurp: the ingest's own transcript. Returned rather than only logged, because what was fetched is the reason someone pressed the button. */
+        SlurpResponse: {
+            /** @description The per-phase lines the ingest printed. */
+            report: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -834,6 +1076,44 @@ export interface operations {
             };
             /** @description The embedding daemon did not answer in time. */
             504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    slurp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The ingest transcript. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SlurpResponse"];
+                };
+            };
+            /** @description Slurping is disabled: the server was started without -slurp. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The ingest failed, at the mailbox or over the corpus. */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1048,6 +1328,68 @@ export interface operations {
             };
         };
     };
+    getOpsPlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The review surface, always present and current. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpsPlanResponse"];
+                };
+            };
+        };
+    };
+    applyOpsMerge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpsMergeRequest"];
+            };
+        };
+        responses: {
+            /** @description The person_merges row the merge wrote. Refetch the plan for the new state. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpsMergeResponse"];
+                };
+            };
+            /** @description Malformed body, or keepId/dropId missing or zero. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The pair is not in the current plan (already merged, or the corpus changed), its rule is outside the apply surface, or the merge could not be applied. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     getPeople: {
         parameters: {
             query?: never;
@@ -1065,6 +1407,44 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["PeopleResponse"];
                 };
+            };
+        };
+    };
+    getAuthStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The sign-in state. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthStatusResponse"];
+                };
+            };
+        };
+    };
+    getAuthLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redirect to Google's consent page. */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

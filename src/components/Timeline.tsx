@@ -399,14 +399,18 @@ export interface TimelineProps {
   onShowSpec?: () => void;
   /** app-only: brings a saved page up to date from the corpus (refresh.go). */
   onRefresh?: () => void;
+  /** app-only: opens a search to add another email's chain to this page. */
+  onAdd?: () => void;
   /** app-only: opens the proposal evaluator, when the last refresh proposed chains. */
   onEval?: () => void;
   refreshing?: boolean;
   /** a one-line report of what the last refresh did, or why it failed */
   refreshNote?: string | null;
+  /** the ingest transcript from the slurp that preceded the refresh, if any */
+  slurpNote?: string | null;
 }
 
-export function Timeline({ spec, marks, prevLabel, filter, onShowSpec, onRefresh, onEval, refreshing, refreshNote }: TimelineProps) {
+export function Timeline({ spec, marks, prevLabel, filter, onShowSpec, onRefresh, onAdd, onEval, refreshing, refreshNote, slurpNote }: TimelineProps) {
   const v = derive(spec);
   const s = v.spec;
   // gmailId -> the id of the row that carries it, so an unspooled source line
@@ -433,6 +437,12 @@ export function Timeline({ spec, marks, prevLabel, filter, onShowSpec, onRefresh
             {refreshing ? "refreshing…" : "refresh"}
           </button>
         ) : null}
+        {onAdd ? (
+          <button className="tbtn" type="button" onClick={onAdd}
+                  aria-label="Search the corpus for another email to add to this page">
+            add email
+          </button>
+        ) : null}
         {onEval ? (
           <button className="tbtn" type="button" onClick={onEval}
                   aria-label="Evaluate chains the queries proposed">eval</button>
@@ -442,7 +452,18 @@ export function Timeline({ spec, marks, prevLabel, filter, onShowSpec, onRefresh
         <button className="tbtn" id="plaintog" type="button" aria-pressed="false"
                 aria-label="Ignore the sender's own formatting">plain</button>
       </div>
-      {refreshNote ? <p className="refreshed">{refreshNote}</p> : null}
+      {slurpNote || refreshNote ? (
+        <p className="refreshed">
+          {/* One click, two things to say, and the fetch is the earlier of them:
+              the transcript of what the ingest walked, then the verdict on the
+              rebuild. Both live in this one box — a second .refreshed would sit
+              on top of the first, since the class is fixed to that corner.
+              Pre-wrapped because the ingest prints a line per phase. */}
+          {slurpNote ? <span style={{ whiteSpace: "pre-wrap" }}>{slurpNote}</span> : null}
+          {slurpNote && refreshNote ? <br /> : null}
+          {refreshNote}
+        </p>
+      ) : null}
       <div className="wrap">
       <header className="top">
         <h1>

@@ -3,7 +3,7 @@
   "info": {
     "title": "chainmail API",
     "version": "1.0.0",
-    "description": "Read-only HTTP over a local chainmail corpus: search for candidate chains, choose which belong on a page, then build the timeline spec the renderer consumes.\n\nTwo stages on purpose. Search selects; POST /v1/spec renders a chosen set. A spec built straight from a query takes whatever the query returned, and then the only way to remove a thread is to regenerate the page.\n\nThis serves personal mail and has no authentication of any kind. It binds to loopback and refuses a non-loopback address unless explicitly overridden, and spec bodies carry unsanitised sender HTML (issue #14) \u2014 so the loopback bind is what makes the whole surface safe, not a default to be relaxed.\n\nOperator commands \u2014 ingest, embed, eval, dedupe, twins, repair, merge, alias, refresh \u2014 are absent in their mailbox-touching forms; that reach belongs to the CLI and the cron. POST /v1/refresh is the one exception and it stays local: it re-derives a saved page from the corpus and, before redrawing, collapses stored twin copies (one message stored twice) with the same refusal-based sweep the CLI's slurp runs."
+    "description": "Read-only HTTP over a local chainmail corpus: search for candidate chains, choose which belong on a page, then build the timeline spec the renderer consumes.\n\nTwo stages on purpose. Search selects; POST /v1/spec renders a chosen set. A spec built straight from a query takes whatever the query returned, and then the only way to remove a thread is to regenerate the page.\n\nThis serves personal mail and has no authentication of any kind. It binds to loopback and refuses a non-loopback address unless explicitly overridden, and spec bodies carry unsanitised sender HTML (issue #14) \u2014 so the loopback bind is what makes the whole surface safe, not a default to be relaxed.\n\nOperator commands \u2014 ingest, embed, eval, dedupe, twins, repair, merge, alias, refresh \u2014 are absent in their mailbox-touching forms; that reach belongs to the CLI and the cron, with one opt-in exception: POST /v1/slurp runs the same ingest the cron runs, and answers 403 unless the server was started with -slurp. Two local exceptions, both refusal-based and both carrying the audit trail: POST /v1/refresh re-derives a saved page and, before redrawing, collapses stored twin copies with the same sweep the CLI's slurp runs; GET /v1/ops/plan and POST /v1/ops/merge review people merges, the one write applying a single pair from the re-derived plan, never a whole plan."
   },
   "servers": [
     {
@@ -120,6 +120,45 @@
           },
           "504": {
             "description": "The embedding daemon did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/slurp": {
+      "post": {
+        "summary": "Reach the work mailbox and ingest it.",
+        "description": "Runs `corpus slurp` against the corpus — reading the work mailbox through the mail credential this unit already holds — so a subsequent /v1/refresh can build over mail that arrived since the last ingest. The phases are the ones the chainmail-slurp unit runs (mail, twins, repair, dedupe as a dry run, embed), and the ingest's own transcript is returned.\n\nOpt-in and off by default: a server started without -slurp answers 403, keeping the surface read-most and never touching the mailbox.",
+        "operationId": "slurp",
+        "responses": {
+          "200": {
+            "description": "The ingest transcript.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SlurpResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Slurping is disabled: the server was started without -slurp.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The ingest failed, at the mailbox or over the corpus.",
             "content": {
               "application/json": {
                 "schema": {
@@ -362,6 +401,74 @@
         }
       }
     },
+    "/v1/ops/plan": {
+      "get": {
+        "summary": "Everything the ops screen shows to review people merges, read-only.",
+        "description": "The dedupe plan the CLI's dry run prints (merges and refusals), the pairs MergeCandidates offers a human glance at, the twins pass's declined entries aggregated by reason, and the person_merges trail of merges so far. Nothing here changes the corpus: the one mutation this surface owns is POST /v1/ops/merge, called per pair behind a confirm.",
+        "operationId": "getOpsPlan",
+        "responses": {
+          "200": {
+            "description": "The review surface, always present and current.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpsPlanResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ops/merge": {
+      "post": {
+        "summary": "Apply exactly one planned people merge.",
+        "description": "The pair must be in the current dedupe plan AND in an applicable tier: the same-name/same-thread rules (dedupe:same-display-name, dedupe:same-display-name-in-thread). The plan is re-derived at apply time, so a stale screen cannot merge a pair the plan no longer makes, and the first-name-and-org and webmail tiers are shown read-only even against a hand-rolled request. The merge is irreversible: person_merges records that it happened and why, not how to undo it. There is deliberately no apply-all.",
+        "operationId": "applyOpsMerge",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpsMergeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The person_merges row the merge wrote. Refetch the plan for the new state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpsMergeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed body, or keepId/dropId missing or zero.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The pair is not in the current plan (already merged, or the corpus changed), its rule is outside the apply surface, or the merge could not be applied.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/people": {
       "get": {
         "summary": "Everyone in the corpus, with their identities.",
@@ -376,6 +483,37 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/auth/status": {
+      "get": {
+        "summary": "Whether the server is signed in to Google for the work mailbox.",
+        "description": "Reports whether the token the hourly slurp reads is present in the server's store. Shallow on purpose: a file check, not a live token refresh.",
+        "operationId": "getAuthStatus",
+        "responses": {
+          "200": {
+            "description": "The sign-in state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthStatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "get": {
+        "summary": "Start a Google authorization-code login for the work mailbox.",
+        "description": "Redirects the browser to Google's consent page. On completion the token lands in the store the hourly slurp reads, and /auth/status starts answering signed_in=true.",
+        "operationId": "getAuthLogin",
+        "responses": {
+          "302": {
+            "description": "Redirect to Google's consent page."
           }
         }
       }
@@ -402,7 +540,7 @@
     "/v1/refresh": {
       "post": {
         "summary": "Bring a previously built page up to date.",
-        "description": "Refresh stage, and deliberately the read half of the CLI's `refresh` command. The caller posts the previous spec (as POST /v1/spec returned it) and any selection overrides; the server re-derives the page from the corpus — a chain already on the page that gained entries is grown, a new chain the recorded queries find is proposed rather than included — and returns the regenerated spec alongside a report of what changed.\n\nThe server never reaches the mailbox, on purpose: fetching what arrived is `corpus ingest`'s job and belongs to the CLI and the cron, not a browser. So this refresh is corpus-only. What it cannot see, it cannot propose from fed to it by the mailbox later.",
+        "description": "Refresh stage, and deliberately the read half of the CLI's `refresh` command. The caller posts the previous spec (as POST /v1/spec returned it) and any selection overrides; the server re-derives the page from the corpus — a chain already on the page that gained entries is grown, a new chain the recorded queries find is proposed rather than included — and returns the regenerated spec alongside a report of what changed.\n\nMembership is only ever added to: `accept` names chains to take from the proposals, and a chain found by a search the spec does not record comes with that search in `queries`, so the page keeps the provenance and can find the chain again.\n\nThe server never reaches the mailbox, on purpose: fetching what arrived is `corpus ingest`'s job and belongs to the CLI and the cron, not a browser. So this refresh is corpus-only. What it cannot see, it cannot propose from fed to it by the mailbox later.",
         "operationId": "refreshSpec",
         "requestBody": {
           "required": true,
@@ -441,6 +579,16 @@
   },
   "components": {
     "schemas": {
+      "AuthStatusResponse": {
+        "type": "object",
+        "required": ["signed_in"],
+        "properties": {
+          "signed_in": {
+            "type": "boolean",
+            "description": "True when the token the slurps read is present."
+          }
+        }
+      },
       "SearchResponse": {
         "type": "object",
         "description": "Ranked candidates. Exactly one of chains or entries is present, decided by the `entries` parameter; neither is present when nothing matched, and an empty array is returned rather than omitted in that case.",
@@ -1065,7 +1213,7 @@
       },
       "RefreshRequest": {
         "type": "object",
-        "description": "The previous run being brought up to date. The spec itself is authoritative for what stays on the page; the other fields narrow or rename how that membership is reproduced, and accept takes proposed chains the report returns.",
+        "description": "The previous run being brought up to date. The spec itself is authoritative for what stays on the page; the other fields narrow or rename how that membership is reproduced, accept takes proposed chains the report returns, and queries records the search a newly accepted chain came from.",
         "required": [
           "spec"
         ],
@@ -1111,13 +1259,26 @@
           },
           "accept": {
             "type": "array",
-            "description": "Chain roots to accept, as the report's chainsProposed names them. Accepting is idempotent: a chain accepted once is not proposed again.",
+            "description": "Chain roots to accept, as the report's chainsProposed names them. Accepting is idempotent: a chain accepted once is not proposed again. A chain found by a search the spec does not record — the page's own add-email search — is accepted by the same handle and comes with its query in `queries`.",
             "items": {
               "type": "string",
               "description": "A rootExtId as the report prints it."
             },
             "example": [
               "mail:<c0ffee-1@loomworks.example>"
+            ]
+          },
+          "queries": {
+            "type": "array",
+            "description": "Searches to record on the page, on top of the ones the spec already records. A chain can be found by a query the page does not hold, and accepting it without that query would leave the page unable to explain or re-find it. The queries are recorded before either pass runs, so they are re-run like any other recorded search — what they newly find is proposed, and the next refresh re-finds what they found. A query the spec already records is kept as it stands rather than recorded twice.",
+            "items": {
+              "$ref": "#/components/schemas/SpecQuery"
+            },
+            "example": [
+              {
+                "q": "warehouse lease",
+                "note": "add-email search, mode=hybrid"
+              }
             ]
           },
           "name": {
@@ -1145,7 +1306,7 @@
       },
       "RefreshReport": {
         "type": "object",
-        "description": "What moved between the previous run and this one. A chain is in exactly one list: added (new to the page), grown (was there and gained entries), proposed (found but not accepted) or unranked (kept, but its query no longer finds it).",
+        "description": "What moved between the previous run and this one. A chain is in exactly one list: added (new to the page), grown (was there and gained entries), proposed (found but not accepted) or unranked (kept, but its query no longer finds it). queriesRecorded is not a chain but a change to the page's record.",
         "required": [
           "entriesBefore",
           "entriesAfter",
@@ -1164,6 +1325,14 @@
           "twinsCollapsed": {
             "type": "integer",
             "description": "Stored twin pairs the refresh collapsed before redrawing: a quoted copy and the mailbox message it was recovered from, one message stored twice. Absent when none."
+          },
+          "queriesRecorded": {
+            "type": "array",
+            "description": "Searches this refresh added to the page's record (the request's queries), absent when none. Recording a search changes the page as surely as adding a chain does, so a refresh that recorded one does not report itself as nothing new.",
+            "items": {
+              "type": "string",
+              "description": "The query text."
+            }
           },
           "chainsAdded": {
             "type": "array",
@@ -1196,7 +1365,7 @@
           },
           "nothingNew": {
             "type": "boolean",
-            "description": "The refresh looked and found nothing to store, grow, add or propose. Distinct from an error: a report existing at all means the refresh actually ran."
+            "description": "The refresh looked and found nothing to store, grow, add, propose or record. Distinct from an error: a report existing at all means the refresh actually ran."
           }
         }
       },
@@ -1298,6 +1467,299 @@
           }
         }
       },
+      "OpsCandidate": {
+        "type": "object",
+        "description": "A pair worth a human glance that nothing proved one way (the CLI's `corpus candidates`), with the command that would settle it.",
+        "required": [
+          "aId",
+          "aName",
+          "bId",
+          "bName",
+          "reason"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "aId": {
+            "type": "integer",
+            "description": "First person id."
+          },
+          "aName": {
+            "type": "string",
+            "description": "First person's display name."
+          },
+          "aAddresses": {
+            "type": "array",
+            "description": "First person's email identities. Absent when they hold none.",
+            "items": {
+              "type": "string",
+              "description": "An address."
+            }
+          },
+          "bId": {
+            "type": "integer",
+            "description": "Second person id."
+          },
+          "bName": {
+            "type": "string",
+            "description": "Second person's display name."
+          },
+          "bAddresses": {
+            "type": "array",
+            "description": "Second person's email identities. Absent when they hold none.",
+            "items": {
+              "type": "string",
+              "description": "An address."
+            }
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why the pair is worth a glance.",
+            "example": "same local part, different domain"
+          },
+          "suggest": {
+            "type": "string",
+            "description": "The command that would settle the pair, as the CLI prints it."
+          }
+        }
+      },
+      "OpsMerge": {
+        "type": "object",
+        "description": "One pair the dedupe pass would fold, both sides named wholly because that is all a reviewer has to go on. Applicable is the boundary the review UI is drawn to: only the same-name/same-thread tiers (dedupe:same-display-name, dedupe:same-display-name-in-thread) may be posted to POST /v1/ops/merge; every other tier is shown read-only.",
+        "required": [
+          "rule",
+          "keepId",
+          "keepName",
+          "dropId",
+          "dropName",
+          "applicable"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "rule": {
+            "type": "string",
+            "description": "The dedupe rule that proved the pair, as person_merges.reason will record it.",
+            "example": "dedupe:same-display-name"
+          },
+          "keepId": {
+            "type": "integer",
+            "description": "Person id that would survive."
+          },
+          "keepName": {
+            "type": "string",
+            "description": "Survivor's display name."
+          },
+          "keepIdentities": {
+            "type": "array",
+            "description": "Survivor's identities, which are what make them the survivor.",
+            "items": {
+              "type": "string",
+              "description": "An identity, as kind:value."
+            }
+          },
+          "dropId": {
+            "type": "integer",
+            "description": "Person id that would be folded away and deleted."
+          },
+          "dropName": {
+            "type": "string",
+            "description": "Merged-away person's display name."
+          },
+          "dropIdentities": {
+            "type": "array",
+            "description": "Merged-away person's identities; a name-only placeholder holds none, which is the finding.",
+            "items": {
+              "type": "string",
+              "description": "An identity, as kind:value."
+            }
+          },
+          "evidence": {
+            "type": "string",
+            "description": "The evidence string, the same text the CLI's dry run prints beside the pair."
+          },
+          "applicable": {
+            "type": "boolean",
+            "description": "Whether POST /v1/ops/merge will accept the pair. Everything the plan makes is listed; only the same-name/same-thread tiers are applicable."
+          }
+        }
+      },
+      "OpsMergeRecord": {
+        "type": "object",
+        "description": "One row of the person_merges trail: a merge that happened, who it folded into whom, and on what evidence. This is the audit record, not an undo handle \u2014 a merge is not reversible.",
+        "required": [
+          "keepId",
+          "dropId",
+          "mergedAt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "keepId": {
+            "type": "integer",
+            "description": "The survivor, as currently resolved \u2014 later merges repoint it."
+          },
+          "keepName": {
+            "type": "string",
+            "description": "The survivor's current display name."
+          },
+          "dropId": {
+            "type": "integer",
+            "description": "The merged-away person. The row is gone, so this is not a foreign key."
+          },
+          "dropName": {
+            "type": "string",
+            "description": "The merged-away person's display name at the time."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why the merge happened: the rule, plus the evidence in parentheses where the plan had it.",
+            "example": "dedupe:same-display-name (name-only person, and the kept person is on every entry they are)"
+          },
+          "mergedAt": {
+            "type": "string",
+            "description": "UTC RFC3339 stamp of the merge.",
+            "format": "date-time"
+          }
+        }
+      },
+      "OpsMergeRequest": {
+        "type": "object",
+        "description": "A pair to merge, as the shown plan names it: the keeper first. The pair must be in the current dedupe plan and in an applicable tier; the server re-derives the plan at apply time, so a stale screen cannot merge a pair the plan no longer makes.",
+        "required": [
+          "keepId",
+          "dropId"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "keepId": {
+            "type": "integer",
+            "description": "The person to keep, from the shown plan's keepId."
+          },
+          "dropId": {
+            "type": "integer",
+            "description": "The person to fold away, from the shown plan's dropId."
+          }
+        }
+      },
+      "OpsMergeResponse": {
+        "type": "object",
+        "description": "The person_merges row the merge wrote, so a client can show the same record the trail will list. The plan must be refetched after; this response deliberately carries no updated plan.",
+        "required": [
+          "merge"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "merge": {
+            "$ref": "#/components/schemas/OpsMergeRecord"
+          }
+        }
+      },
+      "OpsPlanResponse": {
+        "type": "object",
+        "description": "Everything the ops screen shows to review people merges, in one read-only shot. People is the current person count, so a screen can state how much the merges below would shrink the corpus.",
+        "required": [
+          "people",
+          "merges",
+          "refusals",
+          "candidates",
+          "twinsDeclined",
+          "trail"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "people": {
+            "type": "integer",
+            "description": "People in the corpus right now."
+          },
+          "merges": {
+            "type": "array",
+            "description": "Pairs the dedupe pass would fold, as the CLI's dry run prints them. Merges the screen may apply come first in the client, but the server makes no ordering promise.",
+            "items": {
+              "$ref": "#/components/schemas/OpsMerge"
+            }
+          },
+          "refusals": {
+            "type": "array",
+            "description": "Groups the pass would not decide, exactly as the dry run prints them. Read-only in every UI, on purpose.",
+            "items": {
+              "$ref": "#/components/schemas/OpsRefusal"
+            }
+          },
+          "candidates": {
+            "type": "array",
+            "description": "Pairs worth a human glance, from the CLI's `corpus candidates`.",
+            "items": {
+              "$ref": "#/components/schemas/OpsCandidate"
+            }
+          },
+          "twinsDeclined": {
+            "type": "array",
+            "description": "Twins-pass declines aggregated by reason, most frequent first. The per-entry list stays CLI-only (`corpus twins -declined`).",
+            "items": {
+              "$ref": "#/components/schemas/TwinsDecline"
+            }
+          },
+          "trail": {
+            "type": "array",
+            "description": "Merges so far, newest first \u2014 the person_merges audit trail.",
+            "items": {
+              "$ref": "#/components/schemas/OpsMergeRecord"
+            }
+          }
+        }
+      },
+      "OpsRefusal": {
+        "type": "object",
+        "description": "A group the dedupe pass would not decide, exactly as the CLI's dry run prints it: the people who share the subject, and why the evidence could not pick one.",
+        "required": [
+          "rule",
+          "subject",
+          "reason",
+          "people"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "rule": {
+            "type": "string",
+            "description": "Which rule declined.",
+            "example": "dedupe:same-display-name"
+          },
+          "subject": {
+            "type": "string",
+            "description": "The name, or first-name@organisation, that grouped them."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why they stay two people, sometimes naming the command that would settle them."
+          },
+          "people": {
+            "type": "array",
+            "description": "The people in the group, including the one the refusal was about.",
+            "items": {
+              "type": "integer",
+              "description": "A person id."
+            }
+          }
+        }
+      },
+      "TwinsDecline": {
+        "type": "object",
+        "description": "One reason the twins pass left entries alone, with how many entries it did. Aggregated rather than listed: the pass declines hundreds of entries a run, and the per-entry list is what the CLI's `corpus twins -declined` flag is for.",
+        "required": [
+          "reason",
+          "count"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "The decline reason, as the CLI prints it.",
+            "example": "no other copy within a plausible offset of its stated clock"
+          },
+          "count": {
+            "type": "integer",
+            "description": "How many entries declined for this reason."
+          }
+        }
+      },
       "SavedSpec": {
         "type": "object",
         "description": "One saved page, as the index lists it: enough to reopen it without fetching the whole page.",
@@ -1306,7 +1768,6 @@
           "title",
           "savedAt"
         ],
-        "additionalProperties": false,
         "properties": {
           "name": {
             "type": "string",
@@ -1694,6 +2155,20 @@
             }
           }
         }
+      },
+      "SlurpResponse": {
+        "type": "object",
+        "description": "The outcome of POST /v1/slurp: the ingest's own transcript. Returned rather than only logged, because what was fetched is the reason someone pressed the button.",
+        "required": [
+          "report"
+        ],
+        "properties": {
+          "report": {
+            "type": "string",
+            "description": "The per-phase lines the ingest printed."
+          }
+        },
+        "additionalProperties": false
       }
     }
   }

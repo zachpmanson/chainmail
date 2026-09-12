@@ -59,6 +59,7 @@ type Result struct {
 	Seen      int
 	Created   int
 	Changed   int
+	Drafts    int   // skipped: Gmail labels them DRAFT, so they were never sent
 	Resolved  int64 // parent edges linked after this batch
 	Truncated int   // bodies docket still had to cut — should always be zero
 	// Stop is why the walk ended. Read it, not Seen: a run that saw exactly its
@@ -164,6 +165,8 @@ walk:
 				return r, err
 			}
 			switch {
+			case res.Skipped:
+				r.Drafts++
 			case res.Created:
 				r.Created++
 			case res.Changed:
@@ -235,6 +238,8 @@ func IngestIDs(store *corpus.Store, c Mailbox, ids []string) (Result, error) {
 			return r, err
 		}
 		switch {
+		case res.Skipped:
+			r.Drafts++
 		case res.Created:
 			r.Created++
 		case res.Changed:
@@ -249,8 +254,26 @@ func IngestIDs(store *corpus.Store, c Mailbox, ids []string) (Result, error) {
 	return r, nil
 }
 
+// isDraft reports whether Gmail labels a message DRAFT: composed and never
+// sent. The slurp walks 'in:anywhere', which reaches the drafts box, and a
+// draft reads exactly like the message it would have been — same sender, same
+// thread, a quoting client's full history below — so without the gate it joins
+// the timeline as first-class mail. Put is the single choke point both ingest
+// paths (a query walk and an explicit id list) pass through.
+func isDraft(labels []string) bool {
+	for _, l := range labels {
+		if strings.ToLower(strings.TrimSpace(l)) == "draft" {
+			return true
+		}
+	}
+	return false
+}
+
 // Put converts one docket message into an entry and stores it.
 func Put(store *corpus.Store, msg Message) (corpus.PutResult, error) {
+	if isDraft(msg.Labels) {
+		return corpus.PutResult{Skipped: true}, nil
+	}
 	ts, tz, off := parseDate(msg.Date)
 
 	// A message with no Message-ID is unusual but legal; fall back to the Gmail

@@ -1,11 +1,16 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/zachpmanson/chainmail/internal/spec"
 	"github.com/zachpmanson/chainmail/internal/status"
@@ -20,6 +25,107 @@ func decode[T any](t *testing.T, res *response) T {
 		t.Fatalf("decoding the response: %v\n%s", err, res.body)
 	}
 	return v
+}
+
+func TestSlurpDisabledDefaultsToForbidden(t *testing.T) {
+	// The read-most posture is the default: a server that was not told -slurp
+	// must not expose a door to the work mailbox, even though it holds the
+	// corpus. No harness override here; a fresh one leaves slurpEnabled=false,
+	// which is the state every deployed unit starts in.
+	h := testServer(t)
+	res := h.do(t, "POST", "/v1/slurp", nil)
+	if res.status != http.StatusForbidden {
+		t.Fatalf("disabled slurp status = %d, want 403", res.status)
+	}
+	if got := res.errText(t); !strings.Contains(got, "-slurp") {
+		t.Errorf("error = %q, want it to name the -slurp switch that would enable it", got)
+	}
+}
+
+func TestSlurpEnabledRunsAndReturnsTheReport(t *testing.T) {
+	h := testServer(t)
+	h.slurpEnabled = true
+	h.slurpTimeout = 5 * time.Second
+	h.corpusPath = "/tmp/chainmail-test.db"
+	h.runSlurp = func(_ context.Context, corpusPath string) ([]byte, error) {
+		if corpusPath != "/tmp/chainmail-test.db" {
+			t.Errorf("runSlurp got corpusPath = %q, want the server's own, so the "+
+				"subprocess ingests the database this process has open", corpusPath)
+		}
+		return []byte("[1/5] mail: created 2, changed 0\n[2/5] twins: duplicate copies collapsed\n"), nil
+	}
+	res := h.do(t, "POST", "/v1/slurp", nil)
+	if res.status != http.StatusOK {
+		t.Fatalf("slurp status = %d, want 200: %s", res.status, res.body)
+	}
+	got := decode[slurpResponse](t, res)
+	if !strings.Contains(got.Report, "[1/5] mail") {
+		t.Errorf("report = %q, want the ingest transcript echoed back", got.Report)
+	}
+}
+
+func TestSlurpFailureIsBadGatewayWithTheError(t *testing.T) {
+	h := testServer(t)
+	h.slurpEnabled = true
+	h.slurpTimeout = 5 * time.Second
+	h.runSlurp = func(_ context.Context, _ string) ([]byte, error) {
+		return nil, errors.New("opening gmail library client: no token on disk")
+	}
+	res := h.do(t, "POST", "/v1/slurp", nil)
+	if res.status != http.StatusBadGateway {
+		t.Fatalf("failed slurp status = %d, want 502", res.status)
+	}
+	// The mailbox's own refusal is the useful part of the message: a 502 that
+	// only said "slurp failed" would send the reader to the server's logs to
+	// find out that the credential is the thing to look at.
+	if got := res.errText(t); !strings.Contains(got, "no token on disk") {
+		t.Errorf("error = %q, want the ingest failure echoed", got)
+	}
+}
+
+// What the server passes the CLI is a contract, so it is pinned against a real
+// sibling: the phases a human's button is allowed to run, and no transport flag
+// at all. The ingest and the server are one package reading one credential, so a
+// -bin docket shim here would name access this unit has no reason to want.
+func TestSlurpRunsTheSiblingCLIWithThePipelinePhases(t *testing.T) {
+	dir := t.TempDir()
+	record := filepath.Join(dir, "args")
+	// Whatever PATH resolves `corpus` to is what the server asks; recording argv
+	// is the whole of what this one has to do.
+	script := "#!/bin/sh\n: > " + record + "\nfor a in \"$@\"; do printf '%s\\n' \"$a\" >> " + record + "; done\n" +
+		"printf 'env:%s\\n' \"$CHAINMAIL_CORPUS\" >> " + record + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "corpus"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	out, err := defaultSlurp()(context.Background(), "/tmp/chainmail-test.db")
+	if err != nil {
+		t.Fatalf("running the sibling: %v (output %q)", err, out)
+	}
+	recorded, err := os.ReadFile(record)
+	if err != nil {
+		t.Fatalf("the CLI recorded nothing: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(recorded)), "\n")
+	if len(lines) == 0 || lines[len(lines)-1] != "env:/tmp/chainmail-test.db" {
+		t.Errorf("argv = %q, want CHAINMAIL_CORPUS to pin the database this process has open", lines)
+	}
+	args := lines[:len(lines)-1]
+	if len(args) == 0 || args[0] != "slurp" {
+		t.Fatalf("argv = %q, want it to run the slurp subcommand", args)
+	}
+	joined := strings.Join(args, " ")
+	for _, want := range []string{"-q in:anywhere", "-only mail,twins,repair,dedupe,embed"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("argv = %q, want it to carry %q", args, want)
+		}
+	}
+	for _, unwanted := range []string{"-bin", "-backend"} {
+		if strings.Contains(joined, unwanted) {
+			t.Errorf("argv = %q, want no %s: the mail credential is the unit's own", args, unwanted)
+		}
+	}
 }
 
 func TestSearchReturnsTheChainsAQueryHits(t *testing.T) {
@@ -419,6 +525,72 @@ func TestRefreshBringsABuiltPageUpToDate(t *testing.T) {
 	}
 }
 
+// The page's own add-email search finds a chain by a query the spec does not
+// record. Ticking it sends the chain (accept) and the search (queries) in one
+// call, and the page keeps both: without the query the chain would be on the
+// page with nothing to explain it, and no later refresh could find it again.
+func TestRefreshRecordsTheSearchAChainWasAddedBy(t *testing.T) {
+	srv, api := testServer(t), loadAPI(t)
+
+	// A page holding the solar thread, and nothing else.
+	built := srv.do(t, "POST", "/v1/spec", specBody(extAda1))
+	if built.status != 200 {
+		t.Fatalf("build: status = %d: %s", built.status, built.body)
+	}
+
+	// The fence chain was found by a search the build never recorded, so the
+	// reader's tick carries both.
+	body, _ := json.Marshal(refreshRequest{
+		Spec:    decode[spec.Spec](t, built),
+		Accept:  []string{extOther},
+		Queries: []spec.Query{{Q: "fence panels", Note: "add-email search, mode=hybrid"}},
+	})
+	res := srv.do(t, "POST", "/v1/refresh", body)
+	if res.status != 200 {
+		t.Fatalf("status = %d: %s", res.status, res.body)
+	}
+	api.assert(t, "RefreshResponse", res.body)
+
+	got := decode[struct {
+		Spec struct {
+			Title   string
+			Queries []spec.Query
+			Threads []struct{ ID string }
+		}
+		Report struct {
+			QueriesRecorded []string `json:"queriesRecorded"`
+			NothingNew      bool     `json:"nothingNew"`
+			ChainsAdded     []struct {
+				ID string `json:"id"`
+			} `json:"chainsAdded"`
+		} `json:"report"`
+	}](t, res)
+
+	// The chain is on the page...
+	var containers []string
+	for _, th := range got.Spec.Threads {
+		containers = append(containers, th.ID)
+	}
+	if strings.Join(containers, ",") != "T1,T9" {
+		t.Errorf("threads = %v, want the built chain and the one that was added", containers)
+	}
+	// ...and so is the search that found it, note and all.
+	if len(got.Spec.Queries) != 1 || got.Spec.Queries[0].Q != "fence panels" ||
+		got.Spec.Queries[0].Note != "add-email search, mode=hybrid" {
+		t.Errorf("queries = %+v, want the search that was sent", got.Spec.Queries)
+	}
+	// The report says so, and is not a nothing-new refresh: both halves landed.
+	if len(got.Report.QueriesRecorded) != 1 || got.Report.QueriesRecorded[0] != "fence panels" {
+		t.Errorf("queriesRecorded = %v", got.Report.QueriesRecorded)
+	}
+	if len(got.Report.ChainsAdded) != 1 || got.Report.ChainsAdded[0].ID != "T9" {
+		t.Errorf("chainsAdded = %+v, want the accepted chain", got.Report.ChainsAdded)
+	}
+	if got.Report.NothingNew {
+		t.Error("a chain and a search arrived; nothingNew is not the honest answer")
+	}
+}
+
 // The refresh surface is corpus-only, so accepting a proposed chain is the way
 // a page grows. There is no fetching: that is the CLI's, not this server's. A
 // spec carrying an unknown chain is still rejected on the input side.
@@ -613,8 +785,8 @@ func TestStatusServesTheSnapshotTheProbeWrote(t *testing.T) {
 	blob, _ := json.Marshal(map[string]any{
 		"checkedAt": "2026-08-22T15:04:00Z",
 		"services": []any{
-			map[string]any{"id": "mail", "label": "Gmail (docket)",
-				"status": "ok", "detail": "docket answered"},
+			map[string]any{"id": "mail", "label": "Gmail",
+				"status": "ok", "detail": "in-process Gmail backend answered"},
 			map[string]any{"id": "embed", "label": "Embeddings (ollama)",
 				"status": "down", "detail": "no daemon"},
 		},
@@ -658,4 +830,85 @@ func writeSnapshot(t *testing.T, path string, blob []byte) {
 	if err := os.WriteFile(path, blob, 0o600); err != nil {
 		t.Fatalf("writing the snapshot: %v", err)
 	}
+}
+
+// Auth endpoints — served sign-in (chainmail#75). These deliberately do NOT
+// complete a real Google consent round-trip; they pin the surface behaviour:
+// the status report, the redirect with its PKCE shape, and that a callback
+// with no pending flow falls through to the web shell rather than answering
+// with the API's JSON error shape.
+//
+// The docket lib stores config + token under XDG dirs (falling back to
+// $HOME/.config and $HOME/.local/state), and the nix sandbox's HOME is an
+// unwritable /homeless-shelter. Point the XDG vars at a fresh tempdir per
+// test so the suite stays HOME-independent, exactly as the flake promises.
+func isolateAuthDirs(t *testing.T) {
+	t.Helper()
+	base := t.TempDir()
+	if err := os.Setenv("XDG_CONFIG_HOME", filepath.Join(base, "config")); err != nil {
+		t.Fatalf("setting XDG_CONFIG_HOME: %v", err)
+	}
+	if err := os.Setenv("XDG_STATE_HOME", filepath.Join(base, "state")); err != nil {
+		t.Fatalf("setting XDG_STATE_HOME: %v", err)
+	}
+}
+
+func TestAuthStatusReportsUnsignedWhenNoTokenStore(t *testing.T) {
+	// Fresh XDG dirs mean the token path cannot exist; status must answer
+	// "no" rather than fail.
+	isolateAuthDirs(t)
+	srv := testServer(t)
+	res := srv.do(t, "GET", "/auth/status", nil)
+	if res.status != 200 {
+		t.Fatalf("status = %d, want 200: %s", res.status, res.body)
+	}
+	got := decode[struct {
+		SignedIn bool `json:"signed_in"`
+	}](t, res)
+	if got.SignedIn {
+		t.Errorf("signed_in = true, want false (no token store in this sandbox)")
+	}
+}
+
+func TestAuthLoginRedirectsToGoogleWithPKCEAndPathlessRedirect(t *testing.T) {
+	isolateAuthDirs(t)
+	srv := testServer(t)
+	res := srv.do(t, "GET", "/auth/login", nil)
+	// The Thunderbird client's registered redirect URI is a pathless
+	// http://localhost:<port>; the server must present exactly that, or Google
+	// refuses the redirect back. This is the one property the whole flow turns
+	// on, so it is pinned even though the URL is not.
+	if res.status != 302 {
+		t.Fatalf("status = %d, want 302: %s", res.status, res.body)
+	}
+	loc := res.header.Get("Location")
+	u, err := url.Parse(loc)
+	if err != nil {
+		t.Fatalf("Location is not a URL: %v (%s)", err, loc)
+	}
+	if u.Scheme != "https" || u.Host != "accounts.google.com" {
+		t.Errorf("redirect host = %s://%s, want Google's consent", u.Scheme, u.Host)
+	}
+	q := u.Query()
+	if got := q.Get("redirect_uri"); got != "http://localhost:9876" {
+		t.Errorf("redirect_uri = %q, want the pathless http://localhost:9876", got)
+	}
+	if q.Get("response_type") != "code" || q.Get("state") == "" {
+		t.Errorf("authorization request missing response_type=code or state")
+	}
+	if q.Get("code_challenge") == "" || q.Get("code_challenge_method") != "S256" {
+		t.Errorf("authorization request missing the PKCE challenge")
+	}
+}
+
+func TestAuthCallbackWithNoPendingFlowFallsThroughToTheShell(t *testing.T) {
+	// A stray ?code=/&state= on the root — a reload of a finished login, an
+	// old callback, a spoof attempt — must not be answered as if a flow were
+	// in flight: the shell (or a client route) owns every other root request.
+	srv := testServer(t)
+	res := srv.do(t, "GET", "/?code=fake&state=nope", nil)
+	if strings.HasPrefix(string(res.body), "<!doctype html>") {
+		return
+	}
+	t.Errorf("stray callback answered with %d %s instead of the shell", res.status, res.body)
 }

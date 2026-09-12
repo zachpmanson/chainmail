@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -24,6 +26,8 @@ import (
 	"github.com/zachpmanson/chainmail/internal/refresh"
 	"github.com/zachpmanson/chainmail/internal/spec"
 	"github.com/zachpmanson/chainmail/internal/status"
+
+	docketauth "github.com/zachpmanson/docket/gmail/auth"
 )
 
 // The built web client, embedded so one binary serves both the API and the UI.
@@ -63,17 +67,45 @@ type server struct {
 	// the write lock, and fails outright against a read-only copy.
 	store   *corpus.Store
 	uploads string
-	specs   string // dir for saved pages (POST /v1/spec writes here, GET /v1/specs reads)
+	// corpusPath is the path passed to corpus.Open, kept so the slurp subprocess
+	// can point CHAINMAIL_CORPUS at the same database this process has open.
+	corpusPath string
+	specs      string // dir for saved pages (POST /v1/spec writes here, GET /v1/specs reads)
 	// statusPath is the connection snapshot the operator's probe wrote; the
 	// server serves it read-only, so the credential checks stay where the
 	// credentials are.
 	statusPath string
+
+	// slurpEnabled enables POST /v1/slurp: reach the work mailbox and ingest it,
+	// so a page's refresh can build over mail that arrived since the hourly cron
+	// run. Opt-in (`-slurp`), and when off the surface stays read-most and never
+	// touches the mailbox. See defaultSlurp for the boundary the switch crosses.
+	slurpEnabled bool
+	// slurpTimeout bounds one ingest. A slurp walks the mail query, then twins,
+	// repair, dedupe (reported, never applied) and embed, so it takes minutes
+	// rather than seconds — and a request that ends must not leave that walk
+	// half-done, which is what the context carries.
+	slurpTimeout time.Duration
+	// runSlurp is the mailbox-reaching operation, injected so the handler can be
+	// tested without a mailbox. The real one delegates to the sibling `corpus`
+	// binary (see defaultSlurp), so every phase and its ordering stays there.
+	runSlurp func(ctx context.Context, corpusPath string) ([]byte, error)
 
 	specSlots chan struct{}
 	// slotWait is how long a caller waits for a slot before being told to retry.
 	slotWait  time.Duration
 	embedder  func() *mailembed.Ollama
 	embedWait time.Duration
+
+	// login holds a pending authorization-code flow started by /auth/login.
+	// A process can host only one at a time by construction: starting another
+	// while one is pending replaces it (single admin, 10-minute consent
+	// window, and the callback verifies state before touching it).
+	login        *docketauth.Pending
+	loginExpires time.Time
+	// loginPort is the port this server bound, used to spell the Google-
+	// accepted pathless redirect URI http://localhost:<port>.
+	loginPort string
 }
 
 // routes maps the surface api/openapi.json declares, and nothing else.
@@ -87,7 +119,10 @@ func (s *server) routes() http.Handler {
 	// wrong one answers with the same JSON error shape as everything else
 	// instead of ServeMux's plain text.
 	mux.HandleFunc("/v1/refresh", post(s.refresh))
+	mux.HandleFunc("/v1/ops/plan", get(s.opsPlan))
+	mux.HandleFunc("/v1/ops/merge", post(s.opsMerge))
 	mux.HandleFunc("/v1/search", get(s.search))
+	mux.HandleFunc("/v1/slurp", post(s.slurp))
 	mux.HandleFunc("/v1/status", get(s.status))
 	mux.HandleFunc("/v1/spec", post(s.spec))
 	mux.HandleFunc("/v1/specs", get(s.savedSpecs))
@@ -96,7 +131,9 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("/v1/chains/{rootExtId}", get(s.chain))
 	mux.HandleFunc("/v1/stats", get(s.stats))
 	mux.HandleFunc("/v1/people", get(s.people))
-	mux.HandleFunc("/", s.webRoot())
+	mux.HandleFunc("/auth/status", get(s.authStatus))
+	mux.HandleFunc("/auth/login", get(s.authLogin))
+	mux.HandleFunc("/", s.authCallbackOr(s.webRoot()))
 	return mux
 }
 
@@ -150,6 +187,107 @@ func (s *server) webRoot() http.HandlerFunc {
 		// answers and the client decides what belongs there.
 		shell(w, r)
 	}
+}
+
+// authStatus reports whether a Google token is present in the store the
+// slurps read (chainmail's own store — HOME=/var/lib/chainmail in the nix
+// module). Deliberately shallow: a file check, not a live refresh, so the
+// endpoint never reaches the network or blocks on a token exchange.
+func (s *server) authStatus(w http.ResponseWriter, r *http.Request) {
+	path, err := docketauth.TokenPath()
+	signedIn := false
+	if err == nil {
+		if _, err := os.Stat(path); err == nil {
+			signedIn = true
+		}
+	}
+	send(w, http.StatusOK, authStatusResponse{SignedIn: signedIn})
+}
+
+// loginWindow is how long a pending authorization flow stays usable before
+// the callback is refused.
+const loginWindow = 10 * time.Minute
+
+// authLogin starts a Google authorization-code flow for the work mailbox and
+// redirects the browser to Google's consent page. The token lands in the same
+// store the hourly slurp reads — chainmail's own — so once the callback
+// completes, the next slurp runs with it.
+//
+// The redirect URI is a pathless http://localhost:<port>: Google matches
+// loopback redirects by host+port for the Thunderbird client docket's config
+// registers, so the callback arrives at this server's root with
+// ?code=&state=. See docket-design.md §3.
+func (s *server) authLogin(w http.ResponseWriter, r *http.Request) {
+	cfg, err := docketauth.LoadConfig()
+	if err != nil {
+		fail(w, http.StatusInternalServerError,
+			fmt.Errorf("loading docket config: %w", err))
+		return
+	}
+	pending, err := docketauth.BeginLogin(cfg.Provider,
+		fmt.Sprintf("http://localhost:%s", s.loginPort))
+	if err != nil {
+		fail(w, http.StatusInternalServerError,
+			fmt.Errorf("starting authorization flow: %w", err))
+		return
+	}
+	s.login = pending
+	s.loginExpires = time.Now().Add(loginWindow)
+	w.Header().Set("Location", pending.AuthURL())
+	http.Error(w, "redirecting to Google…", http.StatusFound)
+}
+
+// authCallbackOr answers a Google consent callback when one is in flight and
+// defers everything else to fallback. The callback is a GET on this server's
+// root (?code=&state=...); every other root request — the shell, index.html,
+// a client route — must fall through untouched.
+func (s *server) authCallbackOr(fallback http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		code := q.Get("code")
+		denied := q.Get("error")
+		pending := s.login
+		valid := pending != nil && q.Get("state") == pending.State &&
+			time.Now().Before(s.loginExpires)
+		if (code != "" || denied != "") && valid {
+			s.finishLogin(w, code, denied)
+			return
+		}
+		fallback(w, r)
+	}
+}
+
+// finishLogin exchanges the code the consent page returned, persists the
+// token into the store the slurps read, and shows a done page. state was
+// already verified by authCallbackOr.
+func (s *server) finishLogin(w http.ResponseWriter, code string, denied string) {
+	pending := s.login
+	s.login = nil
+	if denied != "" {
+		http.Error(w, "authorization denied: "+denied, http.StatusBadRequest)
+		return
+	}
+	tok, err := docketauth.ExchangeCode(context.Background(), pending, code)
+	if err != nil {
+		fail(w, http.StatusInternalServerError,
+			fmt.Errorf("exchanging code: %w", err))
+		return
+	}
+	path, err := docketauth.TokenPath()
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	if err := docketauth.SaveToken(tok, path); err != nil {
+		fail(w, http.StatusInternalServerError,
+			fmt.Errorf("saving token: %w", err))
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintf(w,
+		"<!doctype html><meta charset=\"utf-8\"><title>chainmail</title>"+
+			"<p>Signed in to Google. You can close this tab.</p>")
 }
 
 func get(h http.HandlerFunc) http.HandlerFunc  { return method(http.MethodGet, h) }
@@ -482,21 +620,108 @@ func specTitleOf(path string) string {
 	return meta.Title
 }
 
+// slurp reaches the work mailbox and ingests it into the corpus, so a
+// subsequent /v1/refresh can build a page over mail that arrived since the last
+// ingest. It is the browser surface's door to `corpus slurp`, and it is the one
+// thing here that writes to the corpus.
+//
+// Opt-in and off by default. Without -slurp the server keeps its read-most,
+// never-touches-the-mailbox posture and this answers 403: handing a page the
+// ability to fire a real mailbox ingest is switching that off, deliberately and
+// per host (see defaultSlurp for what the switch crosses).
+func (s *server) slurp(w http.ResponseWriter, r *http.Request) {
+	if !s.slurpEnabled {
+		fail(w, http.StatusForbidden, fmt.Errorf(
+			"slurping is disabled: this server was started without -slurp, so it "+
+				"cannot reach the work mailbox. A restart with -slurp enables POST /v1/slurp."))
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), s.slurpTimeout)
+	defer cancel()
+	out, err := s.runSlurp(ctx, s.corpusPath)
+	if err != nil {
+		fail(w, http.StatusBadGateway, fmt.Errorf("slurp failed: %w", err))
+		return
+	}
+	send(w, http.StatusOK, slurpResponse{Report: string(out)})
+}
+
+// slurpResponse is the outcome of POST /v1/slurp: the ingest's own text, the
+// per-phase lines the CLI prints. It is returned rather than logged because the
+// page shows it — what was fetched is the reason someone pressed the button,
+// and a phase that found nothing is worth seeing too.
+type slurpResponse struct {
+	Report string `json:"report"`
+}
+
+// defaultSlurp returns a function that runs `corpus slurp` against the corpus
+// and returns the ingest transcript.
+//
+// It delegates to the sibling `corpus` binary rather than re-implementing the
+// phases: the ingest order, fail-closed threading check, dedupe-as-dry-run,
+// embed-skip reporting and connection-snapshot probe all live there, and the
+// server shares none of that logic. The sibling ships beside this binary in the
+// same nix package (corpus lands next to chainmail-server in $out/bin).
+//
+// Mail reaches the mailbox the way every other ingest on this host does — the
+// in-process library reading the OAuth grant in this unit's own HOME, which the
+// nix module points at the state directory the server and the slurp units share.
+// That is what makes the switch cheap to grant: -slurp asks for no credential
+// the server did not already have, and `-backend` needs no spelling out because
+// the ingest and the server are one package with one default.
+//
+// Which phases run matches the chainmail-slurp unit (mail, twins, repair,
+// dedupe, embed): a human pressed this button, so the dedupe plan is worth
+// showing — it stays a dry run in slurp regardless. CHAINMAIL_CORPUS pins the
+// same database this process has open; being WAL, the ingest writes beside the
+// reader.
+func defaultSlurp() func(ctx context.Context, corpusPath string) ([]byte, error) {
+	return func(ctx context.Context, corpusPath string) ([]byte, error) {
+		corpus, err := siblingBin("corpus")
+		if err != nil {
+			return nil, err
+		}
+		args := []string{"slurp", "-q", "in:anywhere",
+			"-only", "mail,twins,repair,dedupe,embed"}
+		cmd := exec.CommandContext(ctx, corpus, args...)
+		cmd.Env = append(os.Environ(), "CHAINMAIL_CORPUS="+corpusPath)
+		return cmd.CombinedOutput()
+	}
+}
+
+// siblingBin resolves a command installed beside this server's own binary — in
+// the nix package both `corpus` and `chainmail-server` land in $out/bin — so
+// the server can hand the ingest to the real CLI wherever it is installed.
+// Falls back to PATH, for a `go run` dev build with no sibling.
+func siblingBin(name string) (string, error) {
+	if exe, err := os.Executable(); err == nil {
+		if p, err := exec.LookPath(filepath.Join(filepath.Dir(exe), name)); err == nil {
+			return p, nil
+		}
+	}
+	if p, err := exec.LookPath(name); err == nil {
+		return p, nil
+	}
+	return "", fmt.Errorf("cannot find the %q binary to run slurp; it is not beside this server and not on PATH", name)
+}
+
 // refresh brings a page that has already been built up to date: the caller
 // posts the previous spec (as POST /v1/spec returned it) and any selection
 // overrides, and the server regenerates the page from the corpus.
 //
 // This is the read half of the CLI's `refresh` command. The fetching half is
 // deliberately absent here: reaching the mailbox is `corpus ingest`'s job and
-// that belongs to the CLI and the cron, not a browser. So the refresh here is
-// corpus-only — it re-derives the page, grows the chains that gained entries,
-// and proposes new chains from the recorded queries, but never asks the
-// mailbox for what arrived.
+// that belongs to the CLI, the cron, or POST /v1/slurp when -slurp is on — not
+// to a refresh, which only re-derives what the corpus already holds.
 //
 // One mutation it does perform is the same twins sweep `corpus slurp` runs:
 // a quoted copy stored before its mailbox original arrived is one message
 // stored twice, and a page re-derived over them would show it twice. The
 // sweep refuses rather than guesses, so a corpus with no twins is untouched.
+//
+// The other thing a caller can change is the page's record of searches: a
+// chain found by the page's own add-email search was found by a query the
+// spec does not hold, so accepting it and recording that query are one call.
 func (s *server) refresh(w http.ResponseWriter, r *http.Request) {
 	var req refreshRequest
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequestBody))
@@ -538,6 +763,7 @@ func (s *server) refresh(w http.ResponseWriter, r *http.Request) {
 		Me:         req.Me,
 		IncludeNew: req.IncludeNew,
 		Accept:     req.Accept,
+		Queries:    req.Queries,
 		Uploads:    s.uploads,
 		// Fetch stays false: this server cannot reach the mailbox, on purpose.
 		Fetch: false,
@@ -564,6 +790,205 @@ func (s *server) refresh(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	send(w, http.StatusOK, refreshResponse{Spec: next, Report: toRefreshReport(rep)})
+}
+
+// opsPlan is the review surface for people merges, all read-only: the dedupe
+// plan the CLI's dry run prints (merges and refusals), the pairs MergeCandidates
+// offers a human glance at, the twins pass's declined entries aggregated by
+// reason, and the person_merges trail of merges so far. Nothing here changes
+// the corpus, so a browser refetch is always a fresh view; the one mutation
+// this surface owns is POST /v1/ops/merge, and the UI must call that for an
+// apply.
+func (s *server) opsPlan(w http.ResponseWriter, r *http.Request) {
+	plan, err := corpus.Dedupe(s.store, false)
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	out := opsPlanResponse{
+		People:        int64(plan.Before),
+		Merges:        make([]opsMerge, 0, len(plan.Merges)),
+		Refusals:      make([]opsRefusal, 0, len(plan.Refusals)),
+		Candidates:    make([]opsCandidate, 0, 8),
+		TwinsDeclined: make([]twinsDecline, 0, 8),
+		Trail:         make([]opsMergeRecord, 0, 8),
+	}
+	for _, m := range plan.Merges {
+		out.Merges = append(out.Merges, opsMerge{
+			Rule: m.Rule, KeepID: m.KeepID, KeepName: m.KeepName,
+			KeepIdentities: m.KeepIDs, DropID: m.DropID, DropName: m.DropName,
+			DropIdentities: m.DropIDs, Evidence: m.Evidence,
+			Applicable: opsApplicable(m.Rule),
+		})
+	}
+	for _, rf := range plan.Refusals {
+		out.Refusals = append(out.Refusals, opsRefusal{
+			Rule: rf.Rule, Subject: rf.Subject, Reason: rf.Reason, People: rf.People})
+	}
+	cs, _, err := corpus.MergeCandidates(s.store)
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	for _, c := range cs {
+		out.Candidates = append(out.Candidates, opsCandidate{
+			AID: c.AID, AName: c.AName, AAddresses: c.AAddresses,
+			BID: c.BID, BName: c.BName, BAddresses: c.BAddresses,
+			Reason: c.Reason, Suggest: c.Suggest})
+	}
+	tps, err := corpus.CollapseTwins(s.store, false)
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	byReason := map[string]int{}
+	for _, d := range tps.Declined {
+		byReason[d.Reason]++
+	}
+	out.TwinsDeclined = topTwinsDeclines(byReason)
+	rows, err := s.store.DB().Query(`
+		select pm.kept_id, p.display_name, pm.dropped_id, pm.dropped_name,
+		       pm.reason, pm.merged_at
+		  from person_merges pm left join people p on p.id = pm.kept_id
+		 order by pm.merged_at desc, pm.kept_id desc`)
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		rec, ok, err := readMergeRecord(rows)
+		if err != nil {
+			fail(w, http.StatusInternalServerError, err)
+			return
+		}
+		if ok {
+			out.Trail = append(out.Trail, rec)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	send(w, http.StatusOK, out)
+}
+
+// opsMerge applies exactly one planned merge, and only one the current plan
+// would make: the plan is re-derived here (a dry run and an apply of the same
+// corpus produce the same plan, by the property documented on Dedupe), so a
+// pair that is not in it — already applied, or the corpus changed since the
+// screen loaded — is a 409 telling the client to refetch, not a retry.
+//
+// The apply surface is enforced server-side (see opsApplicable), so the
+// same-name/same-thread boundary holds even against a hand-rolled request.
+func (s *server) opsMerge(w http.ResponseWriter, r *http.Request) {
+	var req opsMergeRequest
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequestBody))
+	// A misspelled field is a caller reading a different contract; a plan that
+	// was half-understood must not apply a merge.
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		fail(w, http.StatusBadRequest, fmt.Errorf("reading the request body: %w", err))
+		return
+	}
+	if req.KeepID == 0 || req.DropID == 0 {
+		fail(w, http.StatusBadRequest,
+			errors.New("keepId and dropId are required, and neither may be 0"))
+		return
+	}
+	plan, err := corpus.Dedupe(s.store, false)
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	var m *corpus.PlannedMerge
+	for i := range plan.Merges {
+		if plan.Merges[i].KeepID == req.KeepID && plan.Merges[i].DropID == req.DropID {
+			m = &plan.Merges[i]
+		}
+	}
+	if m == nil {
+		fail(w, http.StatusConflict, fmt.Errorf(
+			"%d <- %d is not in the current dedupe plan — already merged, or the "+
+				"corpus changed since this screen loaded; GET /v1/ops/plan for the plan now",
+			req.KeepID, req.DropID))
+		return
+	}
+	if !opsApplicable(m.Rule) {
+		fail(w, http.StatusConflict, fmt.Errorf(
+			"%s needs a human reading the whole corpus; the ops screen shows that tier "+
+				"read-only", m.Rule))
+		return
+	}
+	if err := corpus.MergePlanned(s.store, *m); err != nil {
+		fail(w, http.StatusConflict, err)
+		return
+	}
+	// The record person_merges just wrote, for the trail and the response. The
+	// pair is unambiguous: the dropped row is gone, so a second write of the
+	// same pair is impossible.
+	rows, err := s.store.DB().Query(`
+		select pm.kept_id, p.display_name, pm.dropped_id, pm.dropped_name,
+		       pm.reason, pm.merged_at
+		  from person_merges pm left join people p on p.id = pm.kept_id
+		 where pm.kept_id=? and pm.dropped_id=?`, req.KeepID, req.DropID)
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		rows.Close()
+		fail(w, http.StatusInternalServerError,
+			errors.New("the merge wrote no person_merges row — nothing happened"))
+		return
+	}
+	rec, ok, err := readMergeRecord(rows)
+	rows.Close()
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	if !ok {
+		fail(w, http.StatusInternalServerError,
+			errors.New("the merge wrote no person_merges row — nothing happened"))
+		return
+	}
+	send(w, http.StatusOK, opsMergeResponse{Merge: rec})
+}
+
+// opsApplicable is the boundary the review UI's apply surface is drawn to: the
+// two same-name tiers whose evidence a browser can hold up for a human. The
+// first-name-and-org tier needs a human reading the whole corpus by design and
+// the webmail tier is kept out beside it; both are shown read-only, and every
+// tier stays one command away in the CLI (`corpus dedupe -apply`).
+func opsApplicable(rule string) bool {
+	return rule == corpus.RuleSameName || rule == corpus.RuleNameInThread
+}
+
+// readMergeRecord reads one person_merges row joined with its survivor's
+// current display name. ok is false only for a NULL kept_id, which a left join
+// yields when the survivor was deleted by hand — a record whose left side no
+// longer exists is still part of the trail, so it is skipped rather than fatal.
+func readMergeRecord(rows *sql.Rows) (opsMergeRecord, bool, error) {
+	var rec opsMergeRecord
+	var at int64
+	var dropName, reason sql.NullString
+	if err := rows.Scan(&rec.KeepID, &rec.KeepName, &rec.DropID,
+		&dropName, &reason, &at); err != nil {
+		return rec, false, err
+	}
+	if rec.KeepID == 0 {
+		return rec, false, nil
+	}
+	if dropName.Valid {
+		rec.DropName = dropName.String
+	}
+	if reason.Valid {
+		rec.Reason = reason.String
+	}
+	rec.MergedAt = stamp(time.Unix(at, 0))
+	return rec, true, nil
 }
 
 // noMailbox is the browser-surface's mailbox: the one that cannot reach the

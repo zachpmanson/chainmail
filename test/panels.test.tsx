@@ -77,7 +77,8 @@ describe("static export", () => {
 
   it("still renders the whole transcript and the tree", () => {
     const html = renderToStaticMarkup(<Timeline spec={spec} />);
-    expect(html.match(/class="hit"/g)).toHaveLength(58);
+    // both orientations are in the DOM; CSS shows the live one
+    expect(html.match(/class="hit"/g)).toHaveLength(58 * 2);
     expect(html.match(/class="chdr"/g)).toHaveLength(7);
     expect(html.match(/<a class="par"/g)).toHaveLength(51);
   });

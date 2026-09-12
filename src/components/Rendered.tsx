@@ -4,7 +4,8 @@ import { attach } from "../client/behaviour";
 import { derive } from "../lib/derive";
 import { SpecView } from "./SpecView";
 import { ChainPreview } from "./ChainPreview";
-import type { RefreshCandidate, RefreshReport } from "../lib/api";
+import { ChainRow } from "./Select";
+import { $api, searchQuery, type ChainHit, type RefreshCandidate, type RefreshReport } from "../lib/api";
 import type { Timeline as Spec } from "../lib/spec";
 
 /**
@@ -15,19 +16,24 @@ import type { Timeline as Spec } from "../lib/spec";
  * Rendered is the shared presentational half of the two page routes and the
  * two legacy ways in (?spec=, drag-drop); whoever owns the spec owns this.
  */
-export function Rendered({ spec, onBack, onRefresh, onAccept, report, refreshing, refreshNote }: {
+export function Rendered({ spec, onBack, onRefresh, onAdd, onAccept, report, refreshing, refreshNote, slurpNote }: {
   spec: Spec;
   onBack?: () => void;
   onRefresh?: () => void;
+  /** add a set of chains found by a fresh search, by root ext id, with the query that found them */
+  onAdd?: (ids: string[], query: string) => void;
   /** accept a set of proposed chains by root ext id; supplied together with report in the app */
   onAccept?: (ids: string[]) => void;
   /** the last refresh's report, held so its proposals can be evaluated */
   report?: RefreshReport | null;
   refreshing?: boolean;
   refreshNote?: string | null;
+  /** the transcript of the last slurp, when the server could run one */
+  slurpNote?: string | null;
 }) {
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [showSpec, setShowSpec] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
   const [dismissed, setDismissed] = useState(false);
 
   // Auto-open the proposal evaluator whenever a fresh report brings proposals,
@@ -38,6 +44,19 @@ export function Rendered({ spec, onBack, onRefresh, onAccept, report, refreshing
     if (!report?.chainsProposed?.length) setDismissed(false);
   }, [report]);
   const showProposals = Boolean(report?.chainsProposed?.length) && !dismissed;
+
+  // Every spec names its own tab title: the shell serves one static <title>
+  // for every route, and the spec is the only thing that knows what it holds.
+  // Restoring the previous title on unload keeps the next page from inheriting
+  // this one's name.
+  useEffect(() => {
+    const previous = document.title;
+    const own = (spec.title ?? "").trim();
+    document.title = own ? `${own} — Chainmail` : "Chainmail";
+    return () => {
+      document.title = previous;
+    };
+  }, [spec.title]);
 
   // chains of the UNFILTERED trail, so an excluded one stays listed and checkable
   const all = useMemo(() => derive(spec), [spec]);
@@ -112,10 +131,16 @@ export function Rendered({ spec, onBack, onRefresh, onAccept, report, refreshing
         filter={{ chains, excluded, onToggle }}
         onShowSpec={() => setShowSpec(true)}
         onRefresh={onRefresh}
+        onAdd={onAdd ? () => setShowAdd(true) : undefined}
         refreshing={refreshing}
         refreshNote={refreshNote}
+        slurpNote={slurpNote}
       />
       {showSpec ? <SpecView spec={filtered} onClose={() => setShowSpec(false)} /> : null}
+      {showAdd && onAdd ? (
+        <AddEmailsModal onClose={() => setShowAdd(false)}
+                        onAdd={(ids, q) => { onAdd(ids, q); setShowAdd(false); }} />
+      ) : null}
       {report?.chainsProposed?.length ? (
         <ProposalsModal
           proposals={report.chainsProposed}
@@ -125,6 +150,124 @@ export function Rendered({ spec, onBack, onRefresh, onAccept, report, refreshing
           onAccept={(ids) => { onAccept?.(ids); setDismissed(true); }}
         />
       ) : null}
+    </>
+  );
+}
+
+/**
+ * The "add email" search: find another chain in the corpus by a fresh query
+ * and add it to this page. This is the home-page chain selection, scoped to a
+ * page instead of a build: the chosen roots go back through the same accept
+ * path the refresh's proposals use (POST /v1/refresh accept=), so a chain the
+ * recorded queries never find can join the page anyway — being found once is
+ * all it takes to name it.
+ *
+ * The query goes back with them, because this is the one place a search exists
+ * that the page does not record. Without it the chain would sit on the page
+ * with no provenance: nothing would explain where it came from, and no later
+ * refresh could find it again. The server records it before re-deriving, so it
+ * is re-run like any recorded search from here on.
+ */
+function AddEmailsModal({ onClose, onAdd }: {
+  onClose: () => void;
+  onAdd: (ids: string[], query: string) => void;
+}) {
+  const [q, setQ] = useState("");
+  const [asked, setAsked] = useState<string | null>(null);
+  const [chosen, setChosen] = useState<string[]>([]);
+  const [preview, setPreview] = useState<ChainHit | null>(null);
+
+  const results = $api.useQuery(
+    "get",
+    "/v1/search",
+    { params: { query: asked ? searchQuery({ q: asked, mode: "hybrid" }) : {} } },
+    { enabled: asked !== null },
+  );
+
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const submit = (ev: React.FormEvent) => {
+    ev.preventDefault();
+    const t = q.trim();
+    if (!t) return;
+    // A new search invalidates the selection, same rule as the home page: the
+    // ids were chosen out of the old candidate list.
+    setChosen([]);
+    setAsked(t);
+  };
+
+  const toggle = (root: string) =>
+    setChosen((prev) => (prev.includes(root) ? prev.filter((r) => r !== root) : [...prev, root]));
+
+  const chains = results.data?.chains ?? [];
+  return (
+    <>
+      <div className="proposals" role="dialog" aria-modal="true" aria-label="Add another email" onClick={onClose}>
+      <div className="proposals-panel" onClick={(e) => e.stopPropagation()}>
+        <div className="proposals-head">
+          <b>add email</b>
+          <span className="note">search the corpus for a chain to add to this page</span>
+        </div>
+        <form className="addform" onSubmit={submit}>
+          <label>
+            <span>Query</span>
+            <input
+              autoFocus
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="words, a name, an id"
+              aria-label="Search query"
+            />
+          </label>
+          <button type="submit" disabled={!q.trim()}>
+            Search
+          </button>
+        </form>
+        {results.isError ? (
+          <p className="selnote" role="alert">
+            {results.error instanceof Error ? results.error.message : String(results.error)}
+          </p>
+        ) : null}
+        {results.isFetching ? <p className="selnote">Searching…</p> : null}
+        {asked && !results.isFetching && !results.isError && chains.length === 0 ? (
+          <p className="selnote">No chain matched.</p>
+        ) : null}
+        {chains.length > 0 ? (
+          <ul className="proposals-list">
+            {chains.map((c) => (
+              <ChainRow
+                key={c.rootExtId}
+                chain={c}
+                checked={chosen.includes(c.rootExtId)}
+                onToggle={() => toggle(c.rootExtId)}
+                onPreview={() => setPreview(c)}
+              />
+            ))}
+          </ul>
+        ) : null}
+        <div className="proposals-foot">
+          <button className="tbtn" type="button" disabled={chosen.length === 0}
+                  onClick={() => {
+                    // asked, not the text box: the box may have been edited since
+                    // the search ran, and the page records the search that found
+                    // the chain, not whatever is typed after it.
+                    if (asked) onAdd([...chosen], asked);
+                  }}>
+            {`add ${chosen.length} to page`}
+          </button>
+          <button className="tbtn" type="button" onClick={onClose}>
+            close
+          </button>
+        </div>
+        </div>
+      </div>
+      {preview ? <ChainPreview chain={preview} onClose={() => setPreview(null)} /> : null}
     </>
   );
 }

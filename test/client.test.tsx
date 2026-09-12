@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { $api, searchQuery } from "../src/lib/api";
@@ -155,6 +155,9 @@ const buildHandler: Handler = (c) => {
   if (p === "/v1/spec" && c.method === "POST") return json(200, SPEC);
   if (p === "/v1/specs/loom-cutover") return json(200, SPEC);
   if (p === "/v1/search") return json(200, { mode: "lexical", chains: CHAINS });
+  // The shell's sign-in banner probes auth on every route; answer it signed in
+  // so tests exercise the app, not the banner.
+  if (p === "/auth/status") return json(200, { signed_in: true });
   return json(500, { error: `unexpected call to ${c.method} ${p}` });
 };
 
@@ -163,7 +166,7 @@ const STATUS = {
   checkedAt: "2026-08-22T15:04:00Z",
   nextSlurpAt: "2026-08-22T16:00:00Z",
   services: [
-    { id: "mail", label: "Gmail (docket)", status: "ok" },
+    { id: "mail", label: "Gmail", status: "ok" },
     { id: "slack", label: "Slack (slackdump)", status: "needs-auth", detail: "run the slackdump import" },
     { id: "embed", label: "Embedding daemon (ollama)", status: "down", detail: "start it with `ollama serve`" },
   ],
@@ -416,7 +419,10 @@ describe("a spec named on the URL", () => {
     await mountApp("/?spec=/synthetic.json");
 
     await screen.findByText("Loom cutover");
-    expect(calls.map((c) => new URL(c.url).pathname)).toEqual(["/synthetic.json"]);
+    // The spec file is fetched, and only the spec file: the banner's auth
+    // probe is filtered out, since it is a shell concern, not this route's.
+    const specCalls = calls.filter((c) => pathOf(c) === "/synthetic.json");
+    expect(specCalls.map((c) => new URL(c.url).pathname)).toEqual(["/synthetic.json"]);
   });
 });
 
@@ -432,7 +438,7 @@ describe("the status route /status", () => {
     expect(await screen.findByText("logged in")).toBeTruthy();
     expect(await screen.findByText("needs auth")).toBeTruthy();
     expect(await screen.findByText("down")).toBeTruthy();
-    expect(await screen.findByText("Gmail (docket)")).toBeTruthy();
+    expect(await screen.findByText("Gmail")).toBeTruthy();
     // The detail under a not-ok row says what the fix is.
     expect(await screen.findByText("start it with `ollama serve`")).toBeTruthy();
 
@@ -464,6 +470,28 @@ const specsHandler: Handler = (c) =>
     ? json(200, SPECS)
     : json(500, { error: `unexpected call to ${c.method} ${pathOf(c)}` });
 
+/**
+ * The site nav is a header now, not a footer: one set of cross-links at the top
+ * of every route, above the page's own header. The point of the test is the
+ * move — the shell cannot quietly grow a footer again, and every link stays
+ * reachable without scrolling to the end of a long transcript.
+ */
+describe("the site navigation", () => {
+  it("is the header above the page's own, and nothing renders a footer", async () => {
+    handler = () => json(200, { signed_in: true });
+    await mountApp("/");
+
+    const site = document.querySelector("header.sitehead");
+    if (!site) throw new Error("the shell rendered no site header");
+    // Document order is the claim: the site nav is the first thing on the page.
+    expect(document.querySelectorAll("header")[0]).toBe(site);
+    for (const name of ["Home", "Browse", "Services", "Ops"]) {
+      expect(within(site as HTMLElement).getByRole("link", { name })).toBeTruthy();
+    }
+    expect(document.querySelector("footer")).toBeNull();
+  });
+});
+
 describe("the specs index /specs", () => {
   it("lists every saved page, linked to its view route, ordered by saved-at", async () => {
     handler = specsHandler;
@@ -494,6 +522,18 @@ describe("the render route /view/<name>", () => {
     // No back button: a page under /view/<name> just is, it was not the result
     // of a search.
     expect(screen.queryByRole("button", { name: /Back/ })).toBeNull();
+  });
+
+  it("names the browser tab after the loaded spec's title", async () => {
+    handler = (c) =>
+      pathOf(c) === "/v1/specs/loom-cutover"
+        ? json(200, SPEC)
+        : json(500, { error: "unexpected call" });
+    await mountApp("/view/loom-cutover");
+    await screen.findByText("Loom cutover");
+
+    // The shell serves one static <title>; the spec replaces it with its own.
+    await waitFor(() => expect(document.title).toBe("Loom cutover — Chainmail"));
   });
 
   it("moves the address bar to /view/<name> when a page is built", async () => {
@@ -532,7 +572,155 @@ describe("the render route /view/<name>", () => {
     await mountApp("/viwe/typo");
 
     expect(await screen.findByText(/No page at/)).toBeTruthy();
-    expect(calls.length).toBe(0);
+    // The 404 route itself must not touch the API; the shell's auth probe is
+    // a separate concern and answered signed in by the shared handler.
+    const routeCalls = calls.filter((c) => pathOf(c) !== "/auth/status");
+    expect(routeCalls.length).toBe(0);
+  });
+});
+
+describe("pressing refresh on a saved page", () => {
+  // One line per phase, in the CLI's own shape: this is a transcript, and the
+  // page shows it as one.
+  const TRANSCRIPT = "[1/5] mail: created 2, changed 0\n[2/5] twins: no duplicates\n";
+
+  const refreshHandler = (opts: { slurp: () => Response }) =>
+    ((c: Call) => {
+      const p = pathOf(c);
+      if (p === "/v1/specs/loom-cutover") return json(200, SPEC);
+      if (p === "/v1/slurp" && c.method === "POST") return opts.slurp();
+      if (p === "/v1/refresh" && c.method === "POST")
+        return json(200, {
+          spec: SPEC,
+          report: {
+            entriesBefore: 4,
+            entriesAfter: 4,
+            nothingNew: true,
+            chainsAdded: [],
+            chainsGrown: [],
+            chainsProposed: [],
+            unranked: [],
+          },
+        });
+      return json(500, { error: `unexpected call to ${c.method} ${p}` });
+    }) as Handler;
+
+  it("fetches from the mailbox before it re-derives, and shows what came back", async () => {
+    handler = refreshHandler({ slurp: () => json(200, { report: TRANSCRIPT }) });
+    await mountApp("/view/loom-cutover");
+    await screen.findByText("Loom cutover");
+
+    click(screen.getByRole("button", { name: "Re-derive this page from the corpus" }));
+
+    // The order is the contract: re-deriving before the ingest would rebuild the
+    // page from the very corpus the fetch was supposed to extend.
+    await waitFor(() =>
+      expect(calls.filter((c) => c.method === "POST").map(pathOf)).toEqual([
+        "/v1/slurp",
+        "/v1/refresh",
+      ]),
+    );
+    // The rebuild still reports itself, and the fetch's own transcript survives
+    // alongside it rather than being overwritten by the summary.
+    await screen.findByText(/already up to date/);
+    expect(screen.getByText(/\[1\/5\] mail: created 2/)).toBeTruthy();
+  });
+
+  it("re-derives anyway on a host with no mailbox reach, and says so", async () => {
+    // The deployed default: no -slurp, so the endpoint refuses. A 403 here is
+    // not a failure of the button, it is the read-most fallback.
+    handler = refreshHandler({
+      slurp: () =>
+        json(403, {
+          error: "slurping is disabled: this server was started without -slurp, so it cannot reach the work mailbox.",
+        }),
+    });
+    await mountApp("/view/loom-cutover");
+    await screen.findByText("Loom cutover");
+
+    click(screen.getByRole("button", { name: "Re-derive this page from the corpus" }));
+
+    await screen.findByText(/no mailbox reach on this host/);
+    await screen.findByText(/already up to date/);
+  });
+
+  it("reports a failed ingest without swallowing it", async () => {
+    handler = refreshHandler({
+      slurp: () => json(502, { error: "slurp failed: docket refused: no threading headers" }),
+    });
+    await mountApp("/view/loom-cutover");
+    await screen.findByText("Loom cutover");
+
+    click(screen.getByRole("button", { name: "Re-derive this page from the corpus" }));
+
+    // A failure that is not "disabled" is worth reading, so the server's own
+    // words are what the page shows.
+    await screen.findByText(/docket refused: no threading headers/);
+  });
+});
+
+describe("adding another email to a page", () => {
+  it("searches the corpus from the toolbar and adds the chosen chain by accept", async () => {
+    handler = (c) => {
+      const p = pathOf(c);
+      if (p === "/v1/specs/loom-cutover") return json(200, SPEC);
+      if (p === "/v1/search")
+        return json(200, { mode: "hybrid", chains: [CHAINS[1]] });
+      if (p === "/v1/refresh" && c.method === "POST")
+        return json(200, {
+          spec: SPEC,
+          report: {
+            entriesBefore: 1,
+            entriesAfter: 5,
+            nothingNew: false,
+            chainsAdded: ["mail:<lease-renewal-1@example.fed>"],
+            chainsGrown: [],
+            chainsProposed: [],
+            unranked: [],
+            queriesRecorded: ["lease"],
+          },
+        });
+      if (p === "/auth/status") return json(200, { signed_in: true });
+      return json(500, { error: `unexpected call to ${c.method} ${p}` });
+    };
+    await mountApp("/view/loom-cutover");
+    await screen.findByText("Loom cutover");
+
+    // The toolbar button only appears where a refresh can accept the choice.
+    click(screen.getByRole("button", { name: "Search the corpus for another email to add to this page" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add another email" });
+
+    // A fresh corpus search, scoped to the page, not a build.
+    typeInto("Search query", "lease");
+    const button = screen.getByRole("button", { name: "Search" }) as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    fireEvent.submit(button.closest("form")!);
+    await waitFor(() => expect(searchCalls().length).toBeGreaterThan(0));
+    await screen.findByText("Warehouse lease renewal");
+
+    // One tick, then the add goes back through the same accept path a proposal
+    // uses: re-run the refresh with the roots named. The checkbox is scoped to
+    // the dialog — the page behind has exclusion checkboxes of its own.
+    click(within(dialog).getAllByRole("checkbox")[0]!);
+    click(within(dialog).getByRole("button", { name: "add 1 to page" }));
+    await waitFor(() =>
+      expect(calls.some((c) => pathOf(c) === "/v1/refresh")).toBe(true),
+    );
+    const body = JSON.parse(
+      calls.find((c) => pathOf(c) === "/v1/refresh")!.body!,
+    );
+    expect(body.name).toBe("loom-cutover");
+    expect(body.accept).toEqual(["mail:<lease-renewal-1@example.fed>"]);
+    // The search that found the chain goes with it, so the page records where
+    // the chain came from rather than gaining an unexplained one.
+    expect(body.queries).toEqual([{ q: "lease", note: "add-email search, mode=hybrid" }]);
+    // The modal closed once the add was sent.
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Add another email" })).toBeNull());
+
+    // The refreshed page reports the growth like any other refresh, and says
+    // the search was recorded with it.
+    await screen.findByText(/1 added/);
+    await screen.findByText(/1 search recorded/);
   });
 });
 
@@ -647,5 +835,242 @@ describe("a quoter's edit in the transcript", () => {
     expect(headerText).toContain("original from Charles XPTO");
     expect(headerText).toContain("at Fri 21 Aug 2026 09:00");
     expect(screen.getByText("Invoice")).toBeTruthy();
+  });
+});
+
+/**
+ * The /ops review surface. Every name, address and id is invented, with the
+ * same .example domains the backend fixtures use — the ops screen shows people
+ * data, so nothing here may be a real person's.
+ */
+const OPS_PLAN_BEFORE = {
+  people: 5,
+  merges: [
+    {
+      rule: "dedupe:same-display-name",
+      keepId: 7,
+      keepName: "Ada Okoye",
+      keepIdentities: ["email:ada@loomworks.example"],
+      dropId: 8,
+      dropName: "Ada Okoye",
+      dropIdentities: ["display_name:ada okoye"],
+      evidence: "name-only person, and the kept person is on every entry they are",
+      applicable: true,
+    },
+    {
+      rule: "dedupe:same-display-name-in-thread",
+      keepId: 21,
+      keepName: "Bo Halvorsen",
+      keepIdentities: ["email:bo@fjordline.example"],
+      dropId: 22,
+      dropName: "Bo Halvorsen",
+      dropIdentities: ["display_name:bo halvorsen"],
+      evidence: "name-only person, and the kept person is in every thread they appear in",
+      applicable: true,
+    },
+    {
+      rule: "dedupe:first-name-and-org",
+      keepId: 9,
+      keepName: "Camille Vaughn",
+      keepIdentities: ["email:camille.vaughn@millrace.example"],
+      dropId: 10,
+      dropName: "Camille Vaughn",
+      dropIdentities: ["email:camille@quarry.example"],
+      evidence: "first name camille at millrace.example",
+      applicable: false,
+    },
+  ],
+  refusals: [
+    {
+      rule: "dedupe:same-display-name",
+      subject: "dai rhys",
+      reason: "two people of that name fit the evidence equally",
+      people: [11, 12, 13],
+    },
+  ],
+  candidates: [
+    {
+      aId: 14,
+      aName: "Bryn Lowther",
+      aAddresses: ["bryn@quarry.example"],
+      bId: 15,
+      bName: "Bryn Lowther",
+      bAddresses: ["bryn.lowther@millrace.example"],
+      reason: "same local part, different domain",
+      suggest: "corpus alias -from quarry.example -to millrace.example",
+    },
+  ],
+  twinsDeclined: [{ reason: "no other copy within a plausible offset of its stated clock", count: 612 }],
+  trail: [],
+};
+
+const OPS_RECORD = {
+  keepId: 7,
+  keepName: "Ada Okoye",
+  dropId: 8,
+  dropName: "Ada Okoye",
+  reason: "dedupe:same-display-name (name-only person, and the kept person is on every entry they are)",
+  mergedAt: "2026-08-22T15:04:00Z",
+};
+
+const OPS_RECORD_2 = {
+  keepId: 21,
+  keepName: "Bo Halvorsen",
+  dropId: 22,
+  dropName: "Bo Halvorsen",
+  reason:
+    "dedupe:same-display-name-in-thread (name-only person, and the kept person is in every thread they appear in)",
+  mergedAt: "2026-08-22T15:05:00Z",
+};
+
+/** The plan as the server re-derives it once the named people are folded in. */
+const planAfter = (drops: number[], trail: unknown[] = []) => ({
+  ...OPS_PLAN_BEFORE,
+  people: OPS_PLAN_BEFORE.people - drops.length,
+  merges: OPS_PLAN_BEFORE.merges.filter((m) => !drops.includes(m.dropId)),
+  trail,
+});
+
+const OPS_PLAN_AFTER = planAfter([8], [OPS_RECORD]);
+
+describe("the ops route /ops", () => {
+  it("shows the plan with the evidence, and folds one ticked pair behind a confirm", async () => {
+    let applied = false;
+    handler = (c) => {
+      const p = pathOf(c);
+      if (p === "/v1/ops/plan") return json(200, applied ? OPS_PLAN_AFTER : OPS_PLAN_BEFORE);
+      if (p === "/v1/ops/merge" && c.method === "POST") {
+        applied = true;
+        return json(200, { merge: OPS_RECORD });
+      }
+      return json(500, { error: `unexpected call to ${c.method} ${p}` });
+    };
+    await mountApp("/ops");
+
+    // The applicable pairs: the evidence is on screen, and so is a checkbox.
+    expect(
+      await screen.findByText(/name-only person, and the kept person is on every entry they are/),
+    ).toBeTruthy();
+    expect(screen.getAllByText("apply")).toHaveLength(2);
+    expect(screen.getByText("read-only")).toBeTruthy();
+    // Two applicable pairs and the select-all; the read-only tier gets none,
+    // because the server refuses it whatever this screen renders.
+    expect(screen.getAllByRole("checkbox")).toHaveLength(3);
+    expect(screen.queryByLabelText(/Select folding #10/)).toBeNull();
+    expect(
+      (screen.getByRole("button", { name: "merge 0 selected" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+
+    // The reads: the refusal, the twins aggregate, the empty trail.
+    expect(await screen.findByText(/two people of that name fit the evidence equally/)).toBeTruthy();
+    expect(screen.getByText(/twins pass declined 612 entries/)).toBeTruthy();
+    expect(screen.getByText("0 merges recorded — the person_merges trail")).toBeTruthy();
+
+    // Ticking asks for a confirm; nothing has left the browser yet.
+    click(screen.getByLabelText("Select folding #8 Ada Okoye into #7 Ada Okoye"));
+    click(screen.getByRole("button", { name: "merge 1 selected" }));
+    expect(await screen.findByText(/This cannot be undone/)).toBeTruthy();
+    expect(calls.some((c) => pathOf(c) === "/v1/ops/merge")).toBe(false);
+
+    // The confirming click names the pair and sends it.
+    click(screen.getByRole("button", { name: "merge this pair" }));
+    await waitFor(() =>
+      expect(calls.some((c) => pathOf(c) === "/v1/ops/merge" && c.method === "POST")).toBe(true),
+    );
+    const post = calls.find((c) => pathOf(c) === "/v1/ops/merge");
+    expect(JSON.parse(post!.body ?? "{}")).toEqual({ keepId: 7, dropId: 8 });
+
+    // Success: the note counts the batch, the plan was refetched, and the folded
+    // pair is gone from the list — the other applicable pair is still offered.
+    expect(await screen.findByText("merged 1 pair — the plan below is the current one.")).toBeTruthy();
+    await waitFor(() => expect(screen.queryByLabelText(/Select folding #8/)).toBeNull());
+    expect(screen.getByLabelText(/Select folding #22/)).toBeTruthy();
+    expect(screen.getByText("1 merge recorded — the person_merges trail")).toBeTruthy();
+  });
+
+  it("folds several ticked pairs behind one confirm, dropping each as it applies", async () => {
+    const drops: number[] = [];
+    handler = (c) => {
+      const p = pathOf(c);
+      if (p === "/v1/ops/plan")
+        return json(
+          200,
+          drops.length
+            ? planAfter(drops, [OPS_RECORD, OPS_RECORD_2].slice(0, drops.length))
+            : OPS_PLAN_BEFORE,
+        );
+      if (p === "/v1/ops/merge" && c.method === "POST") {
+        const body = JSON.parse(c.body ?? "{}") as { dropId: number };
+        drops.push(body.dropId);
+        return json(200, { merge: body.dropId === 8 ? OPS_RECORD : OPS_RECORD_2 });
+      }
+      return json(500, { error: `unexpected call to ${c.method} ${p}` });
+    };
+    await mountApp("/ops");
+    await screen.findByLabelText(/Select folding #8/);
+
+    // Select-all ticks every applicable pair, and only those.
+    click(screen.getByLabelText("select all 2 applicable"));
+    click(screen.getByRole("button", { name: "merge 2 selected" }));
+    expect(await screen.findByText(/These 2 pairs will be folded/)).toBeTruthy();
+    // The confirm names them, so the irreversible batch is readable first.
+    expect(screen.getByText("#8 Ada Okoye")).toBeTruthy();
+    expect(screen.getByText("#22 Bo Halvorsen")).toBeTruthy();
+
+    click(screen.getByRole("button", { name: "merge these 2 pairs" }));
+    // One POST per pair, in the order the plan lists them: the endpoint's
+    // contract is a single pair, and the server re-derives the plan for each.
+    await waitFor(() =>
+      expect(calls.filter((c) => pathOf(c) === "/v1/ops/merge").length).toBe(2),
+    );
+    expect(
+      calls.filter((c) => pathOf(c) === "/v1/ops/merge").map((c) => JSON.parse(c.body ?? "{}")),
+    ).toEqual([
+      { keepId: 7, dropId: 8 },
+      { keepId: 21, dropId: 22 },
+    ]);
+
+    // Both are gone: no checkbox left for either, no action bar (nothing
+    // applicable remains), and the read-only tier is still listed.
+    expect(await screen.findByText("merged 2 pairs — the plan below is the current one.")).toBeTruthy();
+    await waitFor(() => expect(screen.queryAllByRole("checkbox")).toHaveLength(0));
+    expect(screen.getByText("read-only")).toBeTruthy();
+    expect(screen.getByText("2 merges recorded — the person_merges trail")).toBeTruthy();
+  });
+
+  it("stops the batch at a refusal and says how far it got", async () => {
+    const drops: number[] = [];
+    handler = (c) => {
+      const p = pathOf(c);
+      if (p === "/v1/ops/plan")
+        return json(200, drops.length ? planAfter(drops, [OPS_RECORD]) : OPS_PLAN_BEFORE);
+      if (p === "/v1/ops/merge" && c.method === "POST") {
+        const body = JSON.parse(c.body ?? "{}") as { dropId: number };
+        if (body.dropId === 22)
+          return json(409, {
+            error:
+              "21 <- 22 is not in the current dedupe plan — already merged, or the corpus changed since this screen loaded",
+          });
+        drops.push(body.dropId);
+        return json(200, { merge: OPS_RECORD });
+      }
+      return json(500, { error: `unexpected call to ${c.method} ${p}` });
+    };
+    await mountApp("/ops");
+    await screen.findByLabelText(/Select folding #8/);
+    click(screen.getByLabelText("select all 2 applicable"));
+    click(screen.getByRole("button", { name: "merge 2 selected" }));
+    click(await screen.findByRole("button", { name: "merge these 2 pairs" }));
+
+    // The first pair applied, the second was refused, and the message says which
+    // — a batch reporting only "failed" would hide that one merge had landed.
+    expect(
+      await screen.findByText(/1 of 2 merged, then folding #22 into #21 was refused/),
+    ).toBeTruthy();
+    expect(screen.getByText(/not in the current dedupe plan/)).toBeTruthy();
+    expect(calls.filter((c) => pathOf(c) === "/v1/ops/merge").length).toBe(2);
+    // The pair that did apply is gone from the list all the same.
+    await waitFor(() => expect(screen.queryByLabelText(/Select folding #8/)).toBeNull());
+    expect(screen.getByLabelText(/Select folding #22/)).toBeTruthy();
   });
 });

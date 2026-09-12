@@ -42,8 +42,12 @@ type Snapshot struct {
 // reports all of them; the server falls back to all of them when it has no
 // file. Anything outside this list is dropped, so an older snapshot can never
 // smuggle a service onto a newer screen and vice versa.
+//
+// The mail row names the service, not the transport: a probe reports which
+// transport it asked in the detail, and this fallback shows before any probe has
+// run, when that is not yet known.
 var Known = []Service{
-	{ID: "mail", Label: "Gmail (docket)", Status: Unchecked},
+	{ID: "mail", Label: "Gmail", Status: Unchecked},
 	{ID: "slack", Label: "Slack (slackdump)", Status: Unchecked},
 	{ID: "embed", Label: "Embedding daemon (ollama)", Status: Unchecked},
 }

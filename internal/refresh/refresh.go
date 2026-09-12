@@ -97,6 +97,20 @@ type Options struct {
 	IncludeNew bool
 	Accept     []string
 
+	// Queries are searches to record on the page, on top of the ones the spec
+	// already records. A chain can be found by a search the page does not
+	// record — the page's own add-email search is exactly that — and accepting
+	// it without the search would leave the page unable to explain where the
+	// chain came from or to re-find it.
+	//
+	// They are recorded before either pass runs, so a search brought this way
+	// takes part in the refresh exactly as a recorded one does: it is re-run
+	// against the corpus (and, with Fetch, the mailbox), what it newly finds is
+	// proposed like any other candidate, and the next refresh re-finds what this
+	// one did. A query the spec already records is left as it stands rather than
+	// recorded twice, notes and all.
+	Queries []spec.Query
+
 	// Embed carries the embedding model that produces hybrid proposal
 	// discovery. Unset keeps the query pass lexical-only — the recorded queries
 	// are matched by words, and a chain the words find is proposed as today.
@@ -209,6 +223,12 @@ type Report struct {
 	Queries []QueryPass
 	Threads []ThreadPass
 
+	// QueriesRecorded are the searches this refresh added to the page's record,
+	// from Options.Queries and not already there. Recording a search changes the
+	// page as surely as adding a chain does, so it keeps a refresh that recorded
+	// one from reporting itself as nothing new.
+	QueriesRecorded []string
+
 	EntriesBefore int
 	EntriesAfter  int
 	// TwinsCollapsed is how many duplicate pairs the refresh collapsed before
@@ -265,13 +285,21 @@ func (r Report) NothingNew() bool {
 	return r.Created() == 0 && r.Changed() == 0 &&
 		r.EntriesAfter == r.EntriesBefore && r.TwinsCollapsed == 0 &&
 		len(r.ChainsAdded) == 0 && len(r.ChainsGrown) == 0 &&
-		len(r.ChainsProposed) == 0
+		len(r.ChainsProposed) == 0 && len(r.QueriesRecorded) == 0
 }
 
 // Run performs both passes and regenerates the spec.
 func Run(store *corpus.Store, mb Mailbox, prev spec.Spec, opts Options) (Report, spec.Spec, error) {
 	rep := Report{Fetched: opts.Fetch}
 	opts = opts.merge(prev)
+
+	// A search the caller brings is recorded before either pass runs, so it is
+	// re-run like any other recorded query and the page keeps it for the next
+	// refresh to re-find. Recorded rather than merely accepted, because a chain
+	// whose search went unrecorded is one no later refresh can explain — and a
+	// page whose record is empty and whose chains are named by hand becomes a
+	// page with provenance.
+	prev, rep.QueriesRecorded = record(prev, opts.Queries)
 
 	if len(prev.Queries) == 0 && len(prev.Threads) == 0 {
 		return rep, spec.Spec{}, fmt.Errorf("the spec records neither a query nor a thread, " +
@@ -375,6 +403,40 @@ func Run(store *corpus.Store, mb Mailbox, prev spec.Spec, opts Options) (Report,
 
 	rep.fill(prev, next)
 	return rep, next, nil
+}
+
+// record adds the searches a caller brought to the ones the spec already
+// records, returning the spec to re-derive the page from and the query texts it
+// newly took on. A query already recorded is kept as it stands: the spec's entry
+// carries where it was run, and a later caller naming the same words is the same
+// search, not a second one. Blank queries are refused here because a search of
+// nothing is not a search — it can only have been a caller's empty field.
+func record(prev spec.Spec, add []spec.Query) (spec.Spec, []string) {
+	if len(add) == 0 {
+		return prev, nil
+	}
+	// A copy, not append on the caller's slice: the spec arrived by value but its
+	// slice is shared with whoever posted it, and appending in place would write
+	// this refresh's queries into their copy of the previous page.
+	queries := make([]spec.Query, len(prev.Queries), len(prev.Queries)+len(add))
+	copy(queries, prev.Queries)
+
+	have := make(map[string]bool, len(queries)+len(add))
+	for _, q := range queries {
+		have[strings.TrimSpace(q.Q)] = true
+	}
+	var recorded []string
+	for _, q := range add {
+		text := strings.TrimSpace(q.Q)
+		if text == "" || have[text] {
+			continue
+		}
+		have[text] = true
+		queries = append(queries, spec.Query{Q: text, Note: q.Note})
+		recorded = append(recorded, text)
+	}
+	prev.Queries = queries
+	return prev, recorded
 }
 
 // merge fills the options a spec already answers, so a refresh needs no flags

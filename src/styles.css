@@ -29,9 +29,9 @@
     font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; }
   .wrap { max-width:76rem; margin:0 auto; padding:1.75rem 1.25rem 3.5rem; }
   header.top { border-bottom:1px solid var(--line); padding-bottom:.7rem; margin-bottom:.25rem; }
-  footer.sitefoot { max-width:76rem; margin:2.25rem auto 0; padding:1rem 1.25rem 1.5rem;
-    border-top:1px solid var(--line); color:var(--muted); font-size:.86rem; }
-  footer.sitefoot .sep { margin:0 .45rem; color:var(--line); }
+  header.sitehead { max-width:76rem; margin:0 auto; padding:1rem 1.25rem .85rem;
+    border-bottom:1px solid var(--line); color:var(--muted); font-size:.86rem; }
+  header.sitehead .sep { margin:0 .45rem; color:var(--line); }
   h1 { font-size:1.3rem; margin:0 0 .2rem; letter-spacing:-.01em; }
   h1 .hash { color:var(--muted); font-weight:400; }
   .sub { color:var(--muted); font-size:.86rem; margin:0 0 .5rem; }
@@ -404,6 +404,10 @@
     text-transform:uppercase; letter-spacing:.09em; color:var(--muted);
     border-bottom:1px solid var(--line); display:flex; align-items:center; gap:.4rem; }
   .mini h3 span.ct { margin-left:auto; font-weight:600; opacity:.75; }
+  .mini h3 .xsvg { display:inline-flex; align-items:center; padding:.05rem .18rem;
+    font:inherit; color:var(--muted); background:transparent;
+    border:1px solid transparent; border-radius:4px; cursor:pointer; }
+  .mini h3 .xsvg:hover { color:var(--accent); border-color:var(--line); background:var(--card); }
   .mini .mbody { overflow:auto; padding:.45rem .3rem .8rem; flex:1 1 auto; }
   .mini svg { display:block; }
   .mini .lk { fill:none; stroke:var(--line); stroke-width:1.3; }
@@ -459,6 +463,29 @@
   .mini .foot2 .legend div { display:flex; align-items:center; gap:.34rem; }
   .mini .foot2 .legend svg.lg { width:.7em; height:.7em; flex:none; }
   .mini .foot2 .legend dt { margin:0; color:var(--muted); }
+  .mini .vrow { display:flex; flex-direction:column; flex:1 1 auto; min-height:0; }
+  /* the horizontal strip is kept in the DOM (behaviour.js binds both sets of
+     nodes and links) but hidden until body.tree-h swaps it in */
+  .mini .hrow { display:none; }
+  /* --- horizontal tree: a strip pinned to the bottom of the viewport --- */
+  body.tree-h .mini {
+    top:auto; bottom:0; left:0; right:0; width:auto; max-width:none; height:auto;
+    max-height:55vh; border-left:0; border-top:1px solid var(--line);
+    background:var(--card);
+  }
+  body.tree-h .mini .vrow { display:none; }
+  body.tree-h .mini .hrow { display:flex; flex:1 1 auto; min-height:0; }
+  /* only the tree scrolls, and only along time: the strip moves lengthwise */
+  body.tree-h .mini .hrow .mbody {
+    overflow-x:auto; overflow-y:hidden; display:flex; align-items:center;
+    flex:1 1 auto; padding:.3rem .45rem;
+  }
+  /* the tally + legend detach from the tree and stand beside it, pinned */
+  body.tree-h .mini .hrow .foot2 {
+    flex:none; border-top:0; border-left:1px solid var(--line);
+    padding:.3rem .7rem; justify-content:center; gap:.3rem;
+  }
+
   /* Panel width lives in one variable; the toolbar and the content margin both
      derive from it, so hiding the tree cannot leave a button stranded over it. */
   body { --panel:0rem; padding-right:var(--panel); }
@@ -591,3 +618,21 @@
     color:var(--muted); margin:0 0 .6rem; }
   footer.end ul { margin:0; padding-left:1.15rem; }
   footer.end li { margin:.2rem 0; font-size:.89rem; }
+  /* --- sign-in banner --- */
+  .authbar { max-width:76rem; margin:1.1rem auto .25rem; padding:.6rem .9rem;
+    background:var(--card); border:1px solid var(--accent); border-radius:8px;
+    font-size:.88rem; color:var(--muted); }
+  .authbar a { color:var(--accent); font-weight:600; }
+  /* add-email search: one compact form row inside the proposals modal chrome */
+  .addform { display:flex; align-items:center; gap:.5rem; padding:.45rem .8rem;
+    border-bottom:1px solid var(--line); }
+  .addform label { display:flex; align-items:center; gap:.4rem; flex:1 1 auto;
+    min-width:0; font-size:.7rem; color:var(--muted); }
+  .addform input { font:inherit; font-size:.78rem; padding:.3rem .5rem; flex:1 1 auto;
+    min-width:0; border:1px solid var(--line); border-radius:5px;
+    background:var(--bg); color:var(--fg); }
+  .addform button { font:inherit; font-size:.72rem; font-weight:650;
+    padding:.3rem .7rem; border:1px solid var(--line); border-radius:5px;
+    background:var(--bg); color:var(--fg); cursor:pointer; }
+  .addform button:hover:not(:disabled) { color:var(--accent); border-color:var(--accent); }
+  .addform button:disabled { opacity:.45; cursor:default; }

@@ -32,7 +32,7 @@ function chainSimilarity(chain: ChainHit): number {
   return best;
 }
 
-function ChainRow({
+export function ChainRow({
   chain,
   checked,
   onToggle,

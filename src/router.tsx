@@ -11,12 +11,14 @@ import { useEffect, useState } from "react";
 import type { Timeline } from "./lib/spec";
 import { loadSpec } from "./lib/loadSpec";
 import { normalise } from "./lib/normalise";
+import { $api } from "./lib/api";
 import { SelectView } from "./components/Select";
 import { ViewPage } from "./components/ViewPage";
 import { NotFound } from "./components/NotFound";
 import { Rendered } from "./components/Rendered";
 import { StatusView } from "./components/StatusView";
 import { SpecsView } from "./components/SpecsView";
+import { OpsView } from "./components/OpsView";
 import type { SearchMode } from "./lib/api";
 
 /**
@@ -34,6 +36,9 @@ import type { SearchMode } from "./lib/api";
  *   "/status"      — which backends the corpus reads through are logged in.
  *   "/specs"      — every page saved under /view/<name>, newest first, so a
  *                     saved build can be reopened without remembering its name.
+ *   "/ops"        — the people-merge review surface: the dedupe plan, shown
+ *                     with the evidence, applied one pair at a time behind a
+ *                     confirm. Read-only here means read-only there.
  *   "*"            — the client's own 404. Unknown paths reach the shell too,
  *                    so the client (which knows every route) is the one that
  *                    can truthfully say "no page here".
@@ -66,6 +71,25 @@ function validateSearchParams(search: Record<string, unknown>): SearchParams {
     person: typeof search.person === "string" ? search.person : undefined,
     since: typeof search.since === "string" ? search.since : undefined,
   };
+}
+
+/**
+ * The sign-in banner. A fresh install has no Google token yet; rather than a
+ * dead-end "needs auth" the whole app stays usable and this bar offers the
+ * step that unlocks the hourly slurp. Signed-in state is the same store the
+ * server's own /auth/status reports, so a completed login flips it on its
+ * own refetch.
+ */
+function SignInBar() {
+  const auth = $api.useQuery("get", "/auth/status", {});
+  if (auth.isPending || auth.isError) return null;
+  if (auth.data?.signed_in) return null;
+  return (
+    <div className="authbar">
+      Not signed in to Google — the hourly slurp is paused.{" "}
+      <a href="/auth/login">Sign in with Google</a>.
+    </div>
+  );
 }
 
 /** The full screen is the app shell; this root owns the legacy ways in. */
@@ -145,14 +169,21 @@ function RootLayout() {
     );
   return (
     <>
-      <Outlet />
-      <footer className="sitefoot">
+      {/* The site nav is the header: the same cross-links that used to sit in
+          the footer, at the top of every page instead — above the sign-in
+          banner and the page's own header, so it is the first thing read and
+          the one place site-level navigation lives. */}
+      <header className="sitehead">
         <Link to="/">Home</Link>
         <span className="sep">·</span>
-        <Link to="/specs">Browse saved specs</Link>
+        <Link to="/specs">Browse</Link>
         <span className="sep">·</span>
         <Link to="/status">Services</Link>
-      </footer>
+        <span className="sep">·</span>
+        <Link to="/ops">Ops</Link>
+      </header>
+      <SignInBar />
+      <Outlet />
     </>
   );
 }
@@ -186,13 +217,19 @@ const specsRoute = createRoute({
   component: SpecsView,
 });
 
+const opsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/ops",
+  component: OpsView,
+});
+
 const viewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/view/$name",
   component: ViewPage,
 });
 
-const routeTree = rootRoute.addChildren([searchRoute, statusRoute, specsRoute, viewRoute]);
+const routeTree = rootRoute.addChildren([searchRoute, statusRoute, specsRoute, opsRoute, viewRoute]);
 
 /** The app's router, bound to the browser's history. */
 export const router = createRouter({

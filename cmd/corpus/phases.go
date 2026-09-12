@@ -20,6 +20,7 @@ import (
 
 	"github.com/zachpmanson/chainmail/internal/corpus"
 	"github.com/zachpmanson/chainmail/internal/embed"
+	"github.com/zachpmanson/chainmail/internal/gmailclient"
 	"github.com/zachpmanson/chainmail/internal/mailingest"
 	"github.com/zachpmanson/chainmail/internal/slackingest"
 )
@@ -283,11 +284,34 @@ func runDedupe(path string, apply bool) error {
 	return nil
 }
 
+// The two mail transports. -backend takes exactly these and the ingest and the
+// status probe both switch on them; the library is the default, because it is
+// what every host reads mail through now — the docket CLI is the legacy path,
+// kept for a machine that has not moved.
+const (
+	backendGmail  = "gmail"  // in-process, through the shared docket library
+	backendDocket = "docket" // a docket subprocess, via -bin
+)
+
+// validBackend refuses a -backend that names neither transport, so a typo cannot
+// silently pick one: "gmailx" would read as gmail and a legacy host would be told
+// its credential is missing rather than that it mistyped a flag. An empty value
+// is the default, which is gmail.
+func validBackend(b string) error {
+	if b == "" || b == backendGmail || b == backendDocket {
+		return nil
+	}
+	return fmt.Errorf("-backend %q: want %q or %q", b, backendGmail, backendDocket)
+}
+
 type mailOpts struct {
 	query string
 	ids   []string
 	bound mailingest.Bound
 	bin   string // docket binary/shim; "" uses "docket" on PATH
+	// backend selects the mail transport: "gmail" (in-process, through the shared
+	// docket library) or "docket" (shell out to bin, legacy). Empty means gmail.
+	backend string
 	// twins ends the walk with the same sweep the slurp pipeline gives its own
 	// mail phase: a late mailbox copy alongside a quote already recovered from
 	// it is one message stored twice, so collapsing it now is part of ingesting
@@ -303,6 +327,19 @@ type mailOpts struct {
 // summary, where an operator reading a timer's log will see it.
 func runIngestMail(path string, o mailOpts) (mailingest.Result, error) {
 	var r mailingest.Result
+	if err := validBackend(o.backend); err != nil {
+		return r, err
+	}
+	if o.backend != backendDocket {
+		gc, err := gmailclient.New()
+		if err != nil {
+			return r, fmt.Errorf("opening gmail library client: %w", err)
+		}
+		// The library backend carries threading headers by construction — the
+		// lib's envelope is the same shape the CLI emits, so there is no old
+		// binary to probe and nothing to fail closed on.
+		return runWithMailbox(path, o, *gc)
+	}
 	c := mailingest.Client{Bin: o.bin}
 	ok, err := c.SupportsThreadingHeaders()
 	if err != nil {
@@ -313,7 +350,13 @@ func runIngestMail(path string, o mailOpts) (mailingest.Result, error) {
 			"(Message-ID/In-Reply-To/References) — the corpus would have no reply " +
 			"graph; update docket first")
 	}
+	return runWithMailbox(path, o, c)
+}
 
+// runWithMailbox walks one query, or reads the ids it is given, against any
+// Mailbox — subprocess docket or in-process library — and says how far it got.
+func runWithMailbox(path string, o mailOpts, c mailingest.Mailbox) (mailingest.Result, error) {
+	var r mailingest.Result
 	s, err := corpus.Open(path)
 	if err != nil {
 		return r, err
@@ -328,8 +371,8 @@ func runIngestMail(path string, o mailOpts) (mailingest.Result, error) {
 	if err != nil {
 		return r, err
 	}
-	fmt.Printf("saw %d over %d page(s), created %d, changed %d, resolved %d parent edges\n",
-		r.Seen, r.Pages, r.Created, r.Changed, r.Resolved)
+	fmt.Printf("saw %d over %d page(s), created %d, changed %d, skipped %d draft(s), resolved %d parent edges\n",
+		r.Seen, r.Pages, r.Created, r.Changed, r.Drafts, r.Resolved)
 	switch r.Stop {
 	case mailingest.StopExhausted:
 		fmt.Println("complete: docket had no further page")

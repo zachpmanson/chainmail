@@ -77,7 +77,9 @@ const usage = `usage: corpus <command> [flags]
                            -page-size how far one walk goes, -archive names the
                            slackdump archive and -slackdump=false ingests it
                            without refreshing it first, -model -url -dim the
-                           embedding model. -only and -skip choose phases by
+                           embedding model, -backend docket to read mail by
+                           shelling out to -bin instead of the library. -only
+                           and -skip choose phases by
                            name, or "settle" for twins, repair and dedupe
                            together; a phase whose prerequisite this host does
                            not have is skipped and reported, not failed. The
@@ -130,7 +132,10 @@ const usage = `usage: corpus <command> [flags]
                            -full prints each block whole; -chrono orders them by
                            the date each states and names what cannot be true
   stats                    counts, coverage and what is missing
-  status                   probe each backend and write the connection snapshot
+  status        [-backend gmail|docket]
+                           probe each backend and write the connection snapshot
+                           the /status screen serves; -backend defaults to gmail,
+                           the in-process library the ingest reads through as well
   people                   everyone in the corpus, with their identities
   candidates               probable duplicate identities, unmerged, each with the
                            command that would settle it; role mailboxes shared by
@@ -168,7 +173,7 @@ const usage = `usage: corpus <command> [flags]
 // that flags exist, which is the same as telling them nothing.
 const ingestUsage = `usage: corpus ingest <mail|slack> [flags]
 
-  ingest mail   -q <gmail query> | -id <id,...>   [-limit N] [-page-size N] [-bin docket-suffix]
+  ingest mail   -q <gmail query> | -id <id,...>   [-limit N] [-page-size N] [-backend gmail|docket] [-bin <docket-suffix>]
   ingest slack  [-archive <path to slackdump.sqlite>]
 `
 
@@ -765,7 +770,9 @@ func run(args []string) error {
 		// The operator's probe: ask each backend, shallowly, whether it is
 		// logged in, and write the snapshot the server's /v1/status serves.
 		fs := flag.NewFlagSet("status", flag.ContinueOnError)
-		bin := fs.String("bin", "", "docket binary, for the mail probe (default \"docket\")")
+		backend := fs.String("backend", backendGmail,
+			"mail backend to probe: gmail (in-process library) or docket (shell out to -bin)")
+		bin := fs.String("bin", "", "docket binary, for the docket mail probe (default \"docket\")")
 		archive := fs.String("archive", defaultSlackArchive(), "slackdump archive to probe")
 		url := fs.String("url", embed.DefaultBaseURL, "ollama endpoint to probe")
 		model := fs.String("model", embed.DefaultModel, "embedding model the daemon should hold")
@@ -774,7 +781,7 @@ func run(args []string) error {
 			return err
 		}
 		return runStatus(path, statusOpts{
-			bin: *bin, archive: *archive, url: *url, model: *model, out: *out})
+			backend: *backend, bin: *bin, archive: *archive, url: *url, model: *model, out: *out})
 
 	case "stats":
 		s, err := corpus.Open(path)
@@ -844,6 +851,8 @@ func run(args []string) error {
 		pageSize := fs.Int("page-size", 0,
 			"messages per docket request; 0 uses docket's cap")
 		bin := fs.String("bin", "", "docket binary/shim for the mail phase (default \"docket\" on PATH)")
+		backend := fs.String("backend", backendGmail,
+			"mail transport: gmail (in-process library) or docket (shell out to -bin)")
 		archive := fs.String("archive", defaultSlackArchive(),
 			"slackdump sqlite archive to read")
 		slackdump := fs.Bool("slackdump", true,
@@ -858,6 +867,7 @@ func run(args []string) error {
 		}
 		o := slurpOpts{
 			query: *q, since: *since, limit: *limit, pageSz: *pageSize, bin: *bin,
+			backend: *backend,
 			archive: *archive, slackdump: *slackdump,
 			only: splitList(*only), skip: splitList(*skip),
 			embedModel: *model, embedURL: *url, embedDim: *dim,
@@ -884,16 +894,19 @@ func run(args []string) error {
 			"messages per docket request; 0 uses docket's cap")
 		ids := fs.String("id", "", "comma-separated message ids, instead of a query")
 		bin := fs.String("bin", "", "docket binary/shim to shell out to (default \"docket\" on PATH)")
+		backend := fs.String("backend", backendGmail,
+			"mail transport: gmail (in-process library) or docket (shell out to -bin)")
 		if err := fs.Parse(args[2:]); err != nil {
 			return err
 		}
 		if *query == "" && *ids == "" {
 			return errors.New("usage: corpus ingest mail -q <gmail query> | -id <id,...>  " +
-				"[-limit N] [-page-size N] [-bin <docket-binary>]")
+				"[-limit N] [-page-size N] [-backend gmail|docket] [-bin <docket-binary>]")
 		}
 
 		_, err := runIngestMail(path, mailOpts{query: *query, ids: splitList(*ids),
-			bound: mailingest.Bound{Max: *limit, PageSize: *pageSize}, bin: *bin, twins: true})
+			bound: mailingest.Bound{Max: *limit, PageSize: *pageSize}, bin: *bin,
+			backend: *backend, twins: true})
 		return err
 	}
 	return fmt.Errorf("unknown command %q", args[0])
