@@ -78,7 +78,7 @@ export function treeSvgString(o: TreeExport): string {
   const legend = ["message", "note", "starts chain", "reconstructed"];
 
   const M = 14; // outer margin
-  const TITLE_H = 40; // title row + divider; the tree's top offset
+  const TITLE_H = 44; // title row + divider; the tree's top offset
   const ROW_H = 17; // footer row pitch
   const tallyCol = Math.max(...tally.map(([n, l]) => `${n} ${l}`.length)) * CHAR_W;
   const legendCol = Math.max(...legend.map((s) => s.length)) * CHAR_W + 22;
@@ -109,7 +109,7 @@ export function treeSvgString(o: TreeExport): string {
       `fill="${pal.muted}" opacity=".75">${o.rows.length}</text>`,
   );
   line(
-    `<line x1="${M}" y1="${TITLE_H - 6}" x2="${W - M}" y2="${TITLE_H - 6}" stroke="${pal.line}" stroke-width="1"/>`,
+    `<line x1="${M}" y1="${TITLE_H - 10}" x2="${W - M}" y2="${TITLE_H - 10}" stroke="${pal.line}" stroke-width="1"/>`,
   );
 
   // the graph, exactly as the panel draws it
