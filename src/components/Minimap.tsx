@@ -1,13 +1,20 @@
 import { graphLanes, type GraphNode } from "../lib/lanes";
 import type { Row, View } from "../lib/derive";
 
-const PITCH = 12;
-const IND = 11;
+/* The tree panel's two live geometries. Time runs down the page in vertical
+   mode (the right-edge panel) and rightward in horizontal mode (the bottom
+   strip); step is the pitch along time, across the pitch between lanes. The
+   horizontal lane pitch is larger because a bottom strip has the depth to
+   spare and crossing-branch links want the room. */
 const X0 = 11;
 const Y0 = 9;
+const STEP = { v: 12, h: 14 } as const;
+const ACROSS = { v: 11, h: 16 } as const;
 /* keep just enough floor for a single chain lane to stay readable; the svg is
    otherwise sized to its lane count so the overlay panel can hug the tree */
 const MIN_W = 96;
+
+export type Orient = "v" | "h";
 
 /**
  * The tree panel's palette as concrete hex, for the standalone export. The
@@ -45,25 +52,61 @@ export interface TreeExport {
   /** maximum reply depth (inclusive), the panel's "deep" stat */
   deepest: number;
   dark: boolean;
+  /** horizontal mode lays time rightward instead of downward */
+  horizontal?: boolean;
+}
+
+/* Shared geometry: node position, panel size, link path and root cap for an
+   orientation. The two orientations are transposes of each other — row (time)
+   and lane (across) swap axes — so one pair of functions covers both. */
+
+const pos = (o: Orient, row: number, lane: number): [number, number] =>
+  o === "v"
+    ? [X0 + lane * ACROSS.v, Y0 + row * STEP.v]
+    : [X0 + row * STEP.h, Y0 + lane * ACROSS.h];
+
+const size = (o: Orient, rows: number, laneCount: number): [number, number] =>
+  o === "v"
+    ? [Math.max(X0 + (laneCount - 1) * ACROSS.v + 13, MIN_W), Y0 + (rows - 1) * STEP.v + 10]
+    : [X0 + (rows - 1) * STEP.h + 13, Y0 + (laneCount - 1) * ACROSS.h + 10];
+
+/** The connector from a parent node to one of its children. Vertical mode
+ *  descends then jogs across; horizontal mode runs right then jogs down. */
+function linkD(o: Orient, xp: number, yp: number, xc: number, yc: number): string {
+  if (o === "v") {
+    return Math.abs(xp - xc) < 0.5
+      ? `M${xp} ${yp + 4.4} V${yc - 4.4}`
+      : `M${xp} ${yp + 4.4} V${yc - 4.5} Q${xp} ${yc} ${xp + 4.5} ${yc} H${xc - 4}`;
+  }
+  return Math.abs(yp - yc) < 0.5
+    ? `M${xp + 4.4} ${yp} H${xc - 4.4}`
+    : `M${xp + 4.4} ${yp} H${xc - 4.5} Q${xc} ${yp} ${xc} ${yp + 4.5} V${yc - 4}`;
+}
+
+/** The cap marking a chain start: a bar above the node vertically, beside it
+ *  (upstream, on the time side) horizontally. */
+function capD(o: Orient, cx: number, cy: number): string {
+  return o === "v"
+    ? `M${cx - 4.6} ${cy - 6.6} H${cx + 4.6}`
+    : `M${cx - 6.6} ${cy - 4.6} V${cy + 4.6}`;
 }
 
 /**
  * A standalone SVG of the whole reply-tree panel — the graph, the tally
  * (chains / lanes / deep / forks / dead ends) and the legend (message, note,
  * starts chain, reconstructed) — with every style baked in, since a downloaded
- * .svg carries no page CSS.
+ * .svg carries no page CSS. Horizontal mode lays the tree out left-to-right,
+ * matching the bottom strip.
  */
 export function treeSvgString(o: TreeExport): string {
   const pal: Palette = PALETTES[o.dark ? "dark" : "light"];
+  const orient: Orient = o.horizontal ? "h" : "v";
   const byId = new Map(o.nodes.map((n) => [n.id, n]));
   const rowOf = new Map(o.rows.map((r, i) => [r.id, i]));
-  const y = (id: string) => Y0 + rowOf.get(id)! * PITCH;
-  const x = (id: string) => X0 + byId.get(id)!.lane * IND;
+  const at = (id: string): [number, number] =>
+    pos(orient, rowOf.get(id)!, byId.get(id)!.lane);
 
-  // same geometry as the on-screen panel: the tree is drawn in its own
-  // coordinates then translated so its X0/Y0 margins land on the export's
-  const treeW = Math.max(X0 + (o.laneCount - 1) * IND + 13, MIN_W);
-  const treeH = Y0 + (o.rows.length - 1) * PITCH + 10;
+  const [treeW, treeH] = size(orient, o.rows.length, o.laneCount);
 
   const roots = o.nodes.filter((n) => n.isRoot).length;
   const forks = o.nodes.filter((n) => n.isFork).length;
@@ -122,27 +165,20 @@ export function treeSvgString(o: TreeExport): string {
   for (const r of o.rows) {
     const n = byId.get(r.id)!;
     if (!n.parent) continue;
-    const x1 = x(n.parent);
-    const y1 = y(n.parent);
-    const x2 = x(r.id);
-    const y2 = y(r.id);
+    const [x1, y1] = at(n.parent);
+    const [x2, y2] = at(r.id);
     const attrs = n.isFork
       ? `stroke="${pal.o4}" stroke-width="1.6"`
       : `stroke="${pal.line}" stroke-width="1.3"`;
-    const d =
-      Math.abs(x1 - x2) < 0.5
-        ? `M${x1} ${y1 + 4.4} V${y2 - 4.4}`
-        : `M${x1} ${y1 + 4.4} V${y2 - 4.5} Q${x1} ${y2} ${x1 + 4.5} ${y2} H${x2 - 4}`;
-    line(`<path d="${d}" fill="none" ${attrs}/>`);
+    line(`<path d="${linkD(orient, x1, y1, x2, y2)}" fill="none" ${attrs}/>`);
   }
   for (const r of o.rows) {
     const n = byId.get(r.id)!;
     const note = r.entry.kind === "note";
-    const cx = x(r.id);
-    const cy = y(r.id);
+    const [cx, cy] = at(r.id);
     if (n.isRoot) {
       line(
-        `<path d="M${cx - 4.6} ${cy - 6.6} H${cx + 4.6}" stroke="${pal.muted}" stroke-width="1.6" opacity=".85"/>`,
+        `<path d="${capD(orient, cx, cy)}" stroke="${pal.muted}" stroke-width="1.6" opacity=".85"/>`,
       );
     }
     if (note) {
@@ -208,9 +244,11 @@ function fileName(title: string): string {
 }
 
 /**
- * A sticky index of the reply graph. Down is time — rows follow the transcript's
- * own order, so the panel is row-aligned with the page. Across is only lane
- * allocation: concurrently-live chains, and somewhere for a fork to go.
+ * A sticky index of the reply graph, in either orientation. Vertical: down is
+ * time, so rows follow the transcript's own order and the panel is
+ * row-aligned with the page. Horizontal: right is time; the panel is a bottom
+ * strip and scrolls lengthwise. Across (lanes) is only lane allocation in
+ * both: concurrently-live chains, and somewhere for a fork to go.
  */
 export function Minimap({ v }: { v: View }) {
   const g = graphLanes(
@@ -219,11 +257,6 @@ export function Minimap({ v }: { v: View }) {
   );
   const byId = new Map(g.nodes.map((n) => [n.id, n]));
   const rowOf = new Map(v.rows.map((r, i) => [r.id, i]));
-  const y = (id: string) => Y0 + rowOf.get(id)! * PITCH;
-  const x = (id: string) => X0 + byId.get(id)!.lane * IND;
-
-  const width = Math.max(X0 + (g.laneCount - 1) * IND + 13, MIN_W);
-  const height = Y0 + (v.rows.length - 1) * PITCH + 10;
   const deepest = Math.max(
     ...v.rows.map((r) => {
       let d = 0;
@@ -241,6 +274,9 @@ export function Minimap({ v }: { v: View }) {
       laneCount: g.laneCount,
       deepest,
       dark: prefersDark(),
+      // the export follows the live panel: the horizontal strip exports the
+      // rotated geometry, the right-edge panel the vertical one
+      horizontal: document.body.classList.contains("tree-h"),
     });
     const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -252,6 +288,112 @@ export function Minimap({ v }: { v: View }) {
     a.remove();
     URL.revokeObjectURL(url);
   };
+
+  /** The reply graph as an svg element for one orientation. */
+  const treeSvg = (o: Orient) => {
+    const [width, height] = size(o, v.rows.length, g.laneCount);
+    return (
+      <svg
+        width={width}
+        height={height}
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label={`Reply tree of ${v.rows.length} entries, ${
+          o === "v" ? "time downward" : "time rightward"
+        }`}
+      >
+        {/* hit strips first: the hover band paints behind the dots, and .nd/.lk
+            are pointer-events:none so the strip always receives the pointer.
+            A strip spans the whole panel across time's axis — the full row
+            vertically, the full column horizontally. */}
+        {v.rows.map((r) => {
+          const n = byId.get(r.id)!;
+          const [cx, cy] = pos(o, rowOf.get(r.id)!, n.lane);
+          const [w2, h2] = o === "v"
+            ? [width, STEP.v]
+            : [STEP.h, height];
+          const [x2, y2] = o === "v"
+            ? [0, cy - STEP.v / 2]
+            : [cx - STEP.h / 2, 0];
+          return (
+            <rect
+              key={`hit-${o}-${r.id}`}
+              className="hit"
+              data-id={r.id}
+              x={x2}
+              y={y2}
+              width={w2}
+              height={h2}
+            >
+              <title>
+                {`${r.entry.kind === "note" ? r.entry.label : r.entry.sender} — ` +
+                  [r.entry.date, r.entry.time].filter(Boolean).join(" ") +
+                  (n.isRoot ? " · starts a chain (no parent)" : "")}
+              </title>
+            </rect>
+          );
+        })}
+
+        {v.rows.map((r) => {
+          const n = byId.get(r.id)!;
+          if (!n.parent) return null;
+          const [x1, y1] = pos(o, rowOf.get(n.parent)!, byId.get(n.parent)!.lane);
+          const [x2, y2] = pos(o, rowOf.get(r.id)!, n.lane);
+          const cls = `lk${n.isFork ? " fk" : ""}`;
+          return <path key={`lk-${o}-${r.id}`} className={cls} data-c={r.id} d={linkD(o, x1, y1, x2, y2)} />;
+        })}
+
+        {v.rows.map((r) => {
+          const n = byId.get(r.id)!;
+          const note = r.entry.kind === "note";
+          const cls = [
+            "nd",
+            r.orgSlot,
+            note && "sysn",
+            r.entry.quoted && "qd",
+            n.isRoot && "rt",
+          ]
+            .filter(Boolean)
+            .join(" ");
+          const [cx, cy] = pos(o, rowOf.get(r.id)!, n.lane);
+          return (
+            <g key={`nd-${o}-${r.id}`} className={cls} data-id={r.id} data-p={n.parent ?? ""}>
+              {n.isRoot ? <path className="rtcap" d={capD(o, cx, cy)} /> : null}
+              {note ? (
+                <rect
+                  x={cx - 3.5}
+                  y={cy - 3.5}
+                  width={7}
+                  height={7}
+                  transform={`rotate(45 ${cx} ${cy})`}
+                />
+              ) : (
+                <circle cx={cx} cy={cy} r={3.9} />
+              )}
+            </g>
+          );
+        })}
+      </svg>
+    );
+  };
+
+  const tallyLegend = (
+    <div className="foot2">
+      <div className="tally">
+        <div><b>{g.roots}</b> chains</div>
+        <div><b>{g.laneCount}</b> lanes</div>
+        <div><b>{deepest}</b> deep</div>
+        <div><b>{g.forks}</b> forks</div>
+        <div><b>{g.leaves}</b> dead ends</div>
+      </div>
+      <dl className="legend">
+        <div><svg className="lg" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="2.9" fill="currentColor"/></svg><dt>message</dt></div>
+        <div><svg className="lg" viewBox="0 0 10 10" aria-hidden="true"><rect x="2.6" y="2.6" width="4.8" height="4.8" fill="currentColor" transform="rotate(45 5 5)"/></svg><dt>note</dt></div>
+        <div><svg className="lg" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 2.6 H8" stroke="currentColor" strokeWidth="1.1"/><circle cx="5" cy="5.5" r="2.5" fill="currentColor"/></svg><dt>starts chain</dt></div>
+        <div><svg className="lg" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="2.9" fill="none" stroke="currentColor" strokeWidth="1.2"/></svg><dt>reconstructed</dt></div>
+      </dl>
+    </div>
+  );
 
   return (
     <aside className="mini" id="mini">
@@ -272,98 +414,15 @@ export function Minimap({ v }: { v: View }) {
           </svg>
         </button>
       </h3>
-      <div className="mbody">
-        <svg
-          width={width}
-          height={height}
-          viewBox={`0 0 ${width} ${height}`}
-          role="img"
-          aria-label={`Reply tree of ${v.rows.length} entries, time downward`}
-        >
-          {/* hit strips first: the hover band paints behind the dots, and .nd/.lk
-              are pointer-events:none so the strip always receives the pointer */}
-          {v.rows.map((r) => (
-            <rect
-              key={`hit-${r.id}`}
-              className="hit"
-              data-id={r.id}
-              x={0}
-              y={y(r.id) - PITCH / 2}
-              width={width}
-              height={PITCH}
-            >
-              <title>
-                {`${r.entry.kind === "note" ? r.entry.label : r.entry.sender} — ` +
-                  [r.entry.date, r.entry.time].filter(Boolean).join(" ") +
-                  (byId.get(r.id)!.isRoot ? " · starts a chain (no parent)" : "")}
-              </title>
-            </rect>
-          ))}
-
-          {v.rows.map((r) => {
-            const n = byId.get(r.id)!;
-            if (!n.parent) return null;
-            const x1 = x(n.parent);
-            const y1 = y(n.parent);
-            const x2 = x(r.id);
-            const y2 = y(r.id);
-            const cls = `lk${n.isFork ? " fk" : ""}`;
-            const d =
-              Math.abs(x1 - x2) < 0.5
-                ? `M${x1} ${y1 + 4.4} V${y2 - 4.4}`
-                : `M${x1} ${y1 + 4.4} V${y2 - 4.5} Q${x1} ${y2} ${x1 + 4.5} ${y2} H${x2 - 4}`;
-            return <path key={`lk-${r.id}`} className={cls} data-c={r.id} d={d} />;
-          })}
-
-          {v.rows.map((r) => {
-            const n = byId.get(r.id)!;
-            const note = r.entry.kind === "note";
-            const cls = [
-              "nd",
-              r.orgSlot,
-              note && "sysn",
-              r.entry.quoted && "qd",
-              n.isRoot && "rt",
-            ]
-              .filter(Boolean)
-              .join(" ");
-            const cx = x(r.id);
-            const cy = y(r.id);
-            return (
-              <g key={`nd-${r.id}`} className={cls} data-id={r.id} data-p={n.parent ?? ""}>
-                {n.isRoot ? (
-                  <path className="rtcap" d={`M${cx - 4.6} ${cy - 6.6} H${cx + 4.6}`} />
-                ) : null}
-                {note ? (
-                  <rect
-                    x={cx - 3.5}
-                    y={cy - 3.5}
-                    width={7}
-                    height={7}
-                    transform={`rotate(45 ${cx} ${cy})`}
-                  />
-                ) : (
-                  <circle cx={cx} cy={cy} r={3.9} />
-                )}
-              </g>
-            );
-          })}
-        </svg>
+      {/* both orientations are in the DOM; CSS shows the live one (body.tree-h
+          swaps to the horizontal row) so behaviour.js needs no React state */}
+      <div className="vrow">
+        <div className="mbody">{treeSvg("v")}</div>
+        {tallyLegend}
       </div>
-      <div className="foot2">
-        <div className="tally">
-          <div><b>{g.roots}</b> chains</div>
-          <div><b>{g.laneCount}</b> lanes</div>
-          <div><b>{deepest}</b> deep</div>
-          <div><b>{g.forks}</b> forks</div>
-          <div><b>{g.leaves}</b> dead ends</div>
-        </div>
-        <dl className="legend">
-          <div><svg className="lg" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="2.9" fill="currentColor"/></svg><dt>message</dt></div>
-          <div><svg className="lg" viewBox="0 0 10 10" aria-hidden="true"><rect x="2.6" y="2.6" width="4.8" height="4.8" fill="currentColor" transform="rotate(45 5 5)"/></svg><dt>note</dt></div>
-          <div><svg className="lg" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 2.6 H8" stroke="currentColor" strokeWidth="1.1"/><circle cx="5" cy="5.5" r="2.5" fill="currentColor"/></svg><dt>starts chain</dt></div>
-          <div><svg className="lg" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="2.9" fill="none" stroke="currentColor" strokeWidth="1.2"/></svg><dt>reconstructed</dt></div>
-        </dl>
+      <div className="hrow">
+        <div className="mbody">{treeSvg("h")}</div>
+        {tallyLegend}
       </div>
     </aside>
   );

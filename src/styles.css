@@ -463,6 +463,29 @@
   .mini .foot2 .legend div { display:flex; align-items:center; gap:.34rem; }
   .mini .foot2 .legend svg.lg { width:.7em; height:.7em; flex:none; }
   .mini .foot2 .legend dt { margin:0; color:var(--muted); }
+  .mini .vrow { display:flex; flex-direction:column; flex:1 1 auto; min-height:0; }
+  /* the horizontal strip is kept in the DOM (behaviour.js binds both sets of
+     nodes and links) but hidden until body.tree-h swaps it in */
+  .mini .hrow { display:none; }
+  /* --- horizontal tree: a strip pinned to the bottom of the viewport --- */
+  body.tree-h .mini {
+    top:auto; bottom:0; left:0; right:0; width:auto; max-width:none; height:auto;
+    max-height:55vh; border-left:0; border-top:1px solid var(--line);
+    background:var(--card);
+  }
+  body.tree-h .mini .vrow { display:none; }
+  body.tree-h .mini .hrow { display:flex; flex:1 1 auto; min-height:0; }
+  /* only the tree scrolls, and only along time: the strip moves lengthwise */
+  body.tree-h .mini .hrow .mbody {
+    overflow-x:auto; overflow-y:hidden; display:flex; align-items:center;
+    flex:1 1 auto; padding:.3rem .45rem;
+  }
+  /* the tally + legend detach from the tree and stand beside it, pinned */
+  body.tree-h .mini .hrow .foot2 {
+    flex:none; border-top:0; border-left:1px solid var(--line);
+    padding:.3rem .7rem; justify-content:center; gap:.3rem;
+  }
+
   /* Panel width lives in one variable; the toolbar and the content margin both
      derive from it, so hiding the tree cannot leave a button stranded over it. */
   body { --panel:0rem; padding-right:var(--panel); }

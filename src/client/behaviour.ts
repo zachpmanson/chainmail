@@ -59,30 +59,49 @@ export function attach(doc: Document = document): () => void {
    */
   const syncPanel = () => {
     if (!mini) return;
-    if (body.classList.contains("mapoff")) body.style.removeProperty("--panel");
+    // the horizontal strip spans the viewport, so it reserves no column; only
+    // the right-edge vertical panel does
+    if (body.classList.contains("mapoff") || body.classList.contains("tree-h"))
+      body.style.removeProperty("--panel");
     else body.style.setProperty("--panel", `${Math.round(mini.offsetWidth)}px`);
   };
 
-  /**
-   * Panels are shown by default, so the body class marks the HIDDEN state and the
-   * button's pressed state is its inverse. One table rather than three near-copies.
-   */
-  const HIDEABLE: Array<[btn: string, cls: string, key: string]> = [
-    ["maptog", "mapoff", "cm-tree"],
-  ];
-  for (const [id, cls, key] of HIDEABLE) {
-    const btn = doc.getElementById(id) as HTMLButtonElement | null;
-    if (!btn) continue;
-    const apply = (hid: boolean) => {
-      body.classList.toggle(cls, hid);
-      btn.setAttribute("aria-pressed", hid ? "false" : "true");
-      try { localStorage.setItem(key, hid ? "1" : "0"); } catch { /* private mode */ }
+  /** The tree button's three states, in click order. */
+  const TREE_MODES = ["v", "h", "off"] as const;
+  type TreeMode = (typeof TREE_MODES)[number];
+  /** The button names each state, so the mode is visible without the panel. */
+  const treeLabel = (m: TreeMode) =>
+    m === "v"
+      ? "Reply tree: vertical — click for horizontal"
+      : m === "h"
+        ? "Reply tree: horizontal — click to hide"
+        : "Reply tree: off — click for vertical";
+
+  const maptog = doc.getElementById("maptog") as HTMLButtonElement | null;
+  if (maptog) {
+    let mode: TreeMode = "v";
+    const fromStored = (s: string | null): TreeMode => {
+      if (s === "v" || s === "h") return s;
+      // the old key stored "1"/"0" (hidden/shown); migrate "1" to off
+      if (s === "off" || s === "1") return "off";
+      return "v";
+    };
+    const apply = (m: TreeMode) => {
+      mode = m;
+      body.classList.toggle("mapoff", m === "off");
+      body.classList.toggle("tree-h", m === "h");
+      maptog.setAttribute("aria-pressed", m === "off" ? "false" : "true");
+      maptog.setAttribute("aria-label", treeLabel(m));
+      try { localStorage.setItem("cm-tree", m); } catch { /* private mode */ }
       syncPanel();
     };
     let stored: string | null = null;
-    try { stored = localStorage.getItem(key); } catch { /* ignore */ }
-    apply(stored === "1");
-    on(btn, "click", () => apply(!body.classList.contains(cls)));
+    try { stored = localStorage.getItem("cm-tree"); } catch { /* ignore */ }
+    apply(fromStored(stored));
+    on(maptog, "click", () => {
+      const i = TREE_MODES.indexOf(mode);
+      apply(TREE_MODES[(i + 1) % TREE_MODES.length]!);
+    });
   }
   if (mini) { on(window, "resize", syncPanel); syncPanel(); }
 
@@ -173,11 +192,20 @@ export function attach(doc: Document = document): () => void {
     for (const l of links) l.classList.toggle("anc", chain.has(l.dataset.c!));
     mini.classList.add("spy");
     const el = nodeById.get(id);
-    const scroller = mini.querySelector<HTMLElement>(".mbody");
+    // the strip that is live depends on the mode: the vertical panel scrolls
+    // its rows into view, the horizontal one its columns. Either way the node
+    // is nudged toward the middle of the viewport, along the axis time runs.
+    const scroller = mini.querySelector<HTMLElement>(
+      body.classList.contains("tree-h") ? ".hrow .mbody" : ".vrow .mbody",
+    );
     if (el && scroller) {
       const r = el.getBoundingClientRect();
       const b = scroller.getBoundingClientRect();
-      if (r.top < b.top + 24 || r.bottom > b.bottom - 24) {
+      if (body.classList.contains("tree-h")) {
+        if (r.left < b.left + 24 || r.right > b.right - 24) {
+          scroller.scrollLeft += r.left - b.left - scroller.clientWidth / 2;
+        }
+      } else if (r.top < b.top + 24 || r.bottom > b.bottom - 24) {
         scroller.scrollTop += r.top - b.top - scroller.clientHeight / 2;
       }
     }
