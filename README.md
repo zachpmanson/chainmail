@@ -3,133 +3,67 @@
 Read an email trail as one chronological transcript, with its reply structure made
 visible.
 
-A mail thread hides its own history: a single forward can carry months of exchange
-that never appears as separate messages in a mailbox. Chainmail takes a trail that
-has been **unspooled** into a flat list of entries — every quoted message broken out
-as its own entry, with provenance — and renders it as a transcript you can navigate:
-chronological by absolute time, annotated with who replied to what, and with the
-chains it is actually made of shown as lanes.
+A mail thread hides its own history: a forward can carry months of exchange that never
+appear as separate messages. Chainmail takes a trail **unspooled** into a flat list of
+entries — every quoted message broken out with provenance — and renders it as a
+navigable transcript: chronological by absolute time, annotated with who replied to
+what, the chains it is made of shown as lanes.
 
-## Status
-
-Working end to end: mail and Slack are slurped into one SQLite corpus, searched
-lexically and semantically, selected from, and rendered as a transcript. The
-renderer was ported out of a single 1300-line Python script (half of which was CSS
-and JS trapped in string literals) into real files with real tests.
-
-- [x] `schema/timeline.schema.json` — the spec contract, versioned
-- [x] Generated TypeScript types + a normaliser that still accepts legacy specs
-- [x] Ordering, lane allocation and chain/meta classification, with tests
-- [x] View: transcript, chain columns, reply-tree minimap, participants and
-      sources panels, reply links, permalinks
-- [x] `render <spec> -o page.html [--since prev.html]` — one self-contained file
-- [x] Dev app: load a spec by path, URL or drag-and-drop
-- [x] Corpus persistence: every message from every source, with the reply graph
-      materialised, and lexical search over two FTS5 tokenizers
-- [x] Semantic search: one vector per entry via a local model, fused into the
-      lexical ranking. `corpus embed` fills them in; `corpus search -mode
-      semantic|hybrid` uses them. Needs `ollama pull nomic-embed-text` — the
-      corpus is personal mail, so nothing is sent anywhere
-- [x] Retrieval evaluation: `corpus eval` scores two configurations over one
-      judged set of queries, so a change to indexing or ranking is measured
-      rather than argued about
-- [x] Quoted-block extraction: a message quoted inside a forward becomes its own
-      entry, deduped across every place it was seen, with its own markup recovered
-      from whichever host message carried it
-- [x] Identity: one person across several addresses, a rebrand, plus-addressing and
-      Slack, with every merge audited and ambiguity refused rather than guessed
-- [x] `corpus refresh <spec|page>` — re-run a page's own queries and chains, apply
-      what belongs to chains already on it, propose what is new
-- [x] HTTP service (`chainmail-server`, loopback only) described by
-      `api/openapi.json`, and a React client that searches, selects and builds
-
-Structural parity with the original Python renderer is verified against a real
-58-entry trail: 25 of 25 counted properties match (entries, chains, spines, reply
-links, permalinks, timezone labels, minimap nodes, participants, panels, diff
-marks), with no dangling internal links.
+Mail and Slack are slurped into one SQLite corpus, searched lexically and semantically,
+curated, and rendered as a self-contained page.
 
 ## Install
 
-Two binaries and a web app. `corpus` owns the database and every operation on it;
-`chainmail-server` exposes the read paths over HTTP AND serves the web client
-(from the same port — the client is embedded into the binary via go:embed, so a
-single `chainmail-server` process is the whole product over one loopback port).
+`corpus` owns the database and every operation on it; `chainmail-server` exposes the
+read paths over HTTP *and* serves the web client from the same loopback port (embedded
+with `go:embed`).
 
 ```bash
-nix develop              # go, node 22, npm — or bring your own
-make install             # builds corpus and chainmail-server into ~/.local/bin
-npm install              # JS dependencies, from the committed lockfile
+nix develop      # go, node 22, npm — or bring your own
+make install     # builds corpus and chainmail-server into ~/.local/bin
+npm install      # JS dependencies, from the committed lockfile
 ```
 
-`make help` lists every operating command. Nothing below needs the flake if you
-already have Go and Node on the same versions.
+`make help` lists every operating command.
 
 ## Setup
 
-Four external pieces, in the order they are needed. Only the first is required —
-without Slack you have a mail corpus, and without ollama you have lexical search.
+Four external pieces; only the first is required — without Slack you have a mail corpus,
+without ollama you have lexical search.
 
-### 1. Gmail — mail
+**1. Gmail.** Mail is read through
+[`docket`](https://github.com/zachpmanson/docket)'s library in this process: chainmail
+keeps its own OAuth grant and reads the mailbox directly (`-backend gmail`, the default).
+Provisioning is the app's own **Sign in with Google** bar; the next `corpus slurp` reads
+mail as that account. `-backend docket` shells out to the docket CLI instead.
 
-Mail is read through [`docket`](https://github.com/zachpmanson/docket)'s library,
-in this process: chainmail keeps its own OAuth grant and reads the mailbox
-directly, so no other principal sits in the data path and no CLI has to be on
-`PATH`. This is the default (`-backend gmail`).
-
-You do not provision it by hand: the server's own sign-in writes the grant into
-the store the pipeline reads (`docket`'s token file, under
-the state directory of whoever the server runs as). Open the app, use the
-**Sign in with Google** bar, and the next `corpus slurp` reads mail as that
-account.
-
-The older path, `-backend docket`, shells out to the `docket` CLI and inherits
-that CLI's session instead. It needs a build exposing threading headers, the HTML
-part and attachment bytes; `corpus ingest mail` fails closed if the threading
-headers are missing rather than silently building a corpus with no reply graph.
-
-### 2. slackdump — Slack
-
-Slack's app limit is per workspace, so on a workspace at its cap there is no slot
-left to create a reader app in. [`slackdump`](https://github.com/rusq/slackdump)
-needs no app at all.
-
-Its browser login drives a bundled Firefox that a package-managed build usually
-has not downloaded, in which case authentication fails with a misleading
-"workspace not found". Importing the credentials your browser already holds avoids
-it entirely:
+**2. Slack, via [slackdump](https://github.com/rusq/slackdump).** Slack's app limit is per
+workspace, so a workspace at its cap has no slot for a reader app — slackdump needs none.
+Its browser login drives a bundled Firefox a package-managed build usually has not
+downloaded, so import the credentials your browser already holds:
 
 - **token** — devtools console on a logged-in Slack tab:
-  `JSON.parse(localStorage.localConfig_v2).teams` → your workspace's `token`
-  (`xoxc-…`)
-- **cookie** — devtools → Application (Chrome) or Storage (Firefox) → Cookies →
-  `https://app.slack.com` → the cookie named `d` (`xoxd-…`). It is `HttpOnly`, so
-  the console cannot read it; it has to come from that panel.
+  `JSON.parse(localStorage.localConfig_v2).teams` → your workspace's `token` (`xoxc-…`)
+- **cookie** — devtools → Application/Storage → Cookies → `https://app.slack.com` → the
+  cookie named `d` (`xoxd-…`). `HttpOnly`, so the console cannot read it.
 
 ```bash
 printf 'SLACK_TOKEN=%s\nSLACK_COOKIE=%s\n' "$TOKEN" "$COOKIE" > slack.env
-slackdump workspace import slack.env && rm slack.env
+slackdump workspace import slack.env && rm slack.env   # full-read credential: delete it
 slackdump archive -o ~/.local/state/chainmail/slack
 ```
 
-Delete the env file afterwards: it is a full-read credential for the whole
-workspace, DMs included. `slackdump resume <dir>` is incremental from then on, and
-credentials persist until the cookie expires — months, typically, but it does.
+`slackdump resume <dir>` is incremental from then on.
 
-### 3. ollama — semantic search
-
-Needed at **query time**, not only when indexing: a search embeds the query, so the
-daemon must be running to use `-mode semantic` or `hybrid`. Lexical search needs
-nothing.
+**3. ollama.** Needed at **query time**, not only when indexing — a search embeds its
+query, so the daemon must be running for `-mode semantic` or `hybrid`.
 
 ```bash
 OLLAMA_KEEP_ALIVE=-1 ollama serve &     # -1 keeps the model resident
 ollama pull nomic-embed-text
 ```
 
-Without `KEEP_ALIVE`, ollama unloads an idle model after five minutes and the next
-search pays a cold load of a few seconds.
-
-### 4. The corpus
+**4. The corpus.**
 
 ```bash
 export CHAINMAIL_CORPUS=~/.local/state/chainmail/corpus.db   # this is the default
@@ -140,28 +74,18 @@ corpus slurp -since 2026-08-01   # slack, then mail, then settle, then embed
 make doctor                      # what is in it, and what is missing
 ```
 
-`corpus slurp` is the whole sequence, so a host with the binaries and no checkout
-runs it too — `make slurp` is a call to it. It is safe to re-run: ingest is keyed on
-a content hash, so an unchanged message is skipped, and mail is paged to the end of
-its query with a cursor that resumes rather than repeats. `-only` and `-skip` choose
-phases (`-skip slack` for a mailbox-only corpus, `-skip embed` when ollama is not
-up), and a phase whose prerequisite this host does not have is reported as a skip
-rather than failing the run, so only a real breakage exits non-zero.
-
-The `settle` phases collapse duplicates and repair identities. `twins` and `repair`
-refuse rather than guess, then `dedupe` is printed as a **dry run** — those merges
-weigh evidence and cannot be undone, so applying them is a separate decision, and
-no `slurp` flag will do it for you:
+`slurp` is the whole sequence and safe to re-run: ingest is keyed on a content hash and
+mail is paged with a resumable cursor. `-only`/`-skip` choose phases; a phase whose
+prerequisite this host lacks is reported as a skip, not a failure. The `settle` phases
+collapse duplicates and repair identities — `twins` and `repair` refuse rather than
+guess, and `dedupe` prints a **dry run**:
 
 ```bash
-corpus dedupe -apply
+corpus dedupe -apply     # irreversible; back up first with make backup
 ```
 
-Back the database up first (`make backup`) if you are going to.
-
-Every slurp ends by re-probing the backends and rewriting the connection
-snapshot beside the corpus — the same probe `corpus status` runs by hand — so
-the /status screen is never staler than the last slurp.
+Every slurp re-probes the backends and rewrites the connection snapshot beside the
+corpus, so /status is never staler than the last slurp.
 
 ## Running it
 
@@ -170,180 +94,87 @@ chainmail-server &      # 127.0.0.1:8765, loopback only
 npm run dev             # vite, proxying /v1 to the server
 ```
 
-Then search, tick the chains that belong, and build a page from them.
+Search, tick the chains that belong, build a page from them. `/status` reports whichever
+backends the operator's last probe (`make status`) saw. The server refuses a non-loopback
+bind before opening the database: this is personal mail, and a spec carries the sender's
+own HTML unsanitised (issue #14).
 
-`/status` shows which backends this machine is logged into. The server is
-read-only on purpose and never contacts Gmail or slackdump, so the answer is
-whatever the operator's probe last wrote beside the corpus:
-
-```bash
-make status   # corpus status: the Gmail backend, slackdump, ollama
-```
-
-The probe asks the mail backend the ingest reads through (`-backend`, gmail by
-default), so a host reading mail through the library is never told that a docket
-CLI is missing.
-
-Run that whenever a credential changes and the screen reflects it. Before the
-first probe the screen shows every backend as *unchecked*, which is the honest
-first boot rather than an error.
-
-The server refuses a non-loopback bind before it even opens the database. This is
-personal mail, and a spec carries the sender's own HTML unsanitised — see the note
-on the bind, and issue #14.
-
-To work without the server, a spec on disk still renders directly:
+Without the server, a spec on disk still renders:
 
 ```bash
 make page Q="the query"                       # writes a spec and a page
 corpus spec -q "…" -o spec.json               # or by hand
 npm run render -- spec.json -o page.html
-corpus refresh spec.json -o spec.json         # pull in anything new since
 ```
 
-## Views
-
-**Timeline** — one chronological column. **Columns** — one lane per reply chain,
-where the grid row is still the chronological index, so reading down stays in time
-order while each chain keeps its own lane. Lanes are recycled once a chain ends, so
-a dead chain does not hold a column open.
-
-The **reply tree** panel indexes the whole trail by structure: down is time, across
-is only lane allocation. It scroll-spies the entry you are reading and lights its
-ancestry back to the chain start, which is the one thing a chronological transcript
-cannot show.
+**Timeline** is one chronological column. **Columns** gives one lane per reply chain,
+with the grid row still the chronological index, so reading down stays in time order.
+The **reply tree** panel indexes the trail by structure and lights the ancestry of the
+entry you are reading.
 
 ## Re-running
 
-Every rendered page embeds the spec that produced it, so a later pass reloads exact
-structured input instead of scraping HTML:
+Every rendered page embeds the spec that produced it, so a later pass reloads structured
+input instead of scraping HTML:
 
 ```bash
 corpus refresh page.html -o new.json     # what has arrived since
 render new.json -o page.html --since page.prev.html
 ```
 
-`render --since` reports what is **new** (no counterpart in the previous pass) and
-what is **revised** (same anchor, changed words — or the same words at a corrected
-timestamp, which would otherwise read as one deleted plus one new). Diffing a page
-against itself reports nothing, so a re-run that claims changes means the input
-really changed.
+`--since` reports what is **new** (no counterpart last pass) and **revised** (same
+anchor, changed words, or the same words at a corrected timestamp).
 
-`corpus refresh` produces the input for that, from a spec or from a page. It has
-two passes over two different kinds of thing, because the spec records both:
-
-- **`threads` is membership.** A chain list is a decision — search, then check off
-  what belongs — so every recorded chain is regenerated whole. This is the half
-  that matters: a reply carrying none of the query's words ("sounds good, Friday
-  then") is invisible to any search and arrives only this way.
-- **`queries` is discovery.** Re-running them finds chains the page does not have,
-  which are printed as proposals and left out. `-include-new` takes all of them,
-  `-accept <root>` takes one by the chain root the report names. Including them
-  automatically would let a curated page re-widen on every refresh, which would
-  make the curation meaningless.
-
-A chain the queries no longer return stays on the page and is reported, since
-dropping it would delete entries somebody has already read and permalinked — and
-`--since` would not say so, because that diff marks what is new and revised, not
-what is gone.
-
-The mailbox is not touched unless you ask. Filling the corpus is `corpus ingest`'s
-job, and a refresh against the corpus alone already picks up whatever a later
-ingest brought in. `-fetch` adds a pass that asks: each query narrowed to `after:`
-the previous run's date, and each mail thread by id with no date bound at all,
-since that call returns every envelope anyway and the ids are checked against the
-corpus before anything is read.
-
-Nothing-new is an outcome, not a silence. The per-pass lines print either way —
-what was asked, how many envelopes came back, how many were already stored — so
-"nothing new" is legible as proof it looked rather than as a refresh that broke.
-
-`make repage P=page.html` runs the whole loop.
+`corpus refresh` restores every recorded chain whole — the only way a reply carrying none
+of the query's words arrives — and re-runs the recorded queries, whose new chains are
+printed as proposals rather than included (`-include-new`, or `-accept <root>` for one),
+so a curated page cannot re-widen on every refresh. A chain the queries no longer return
+stays on the page and is reported. The mailbox is only touched with `-fetch`.
+`make repage P=page.html` runs the loop.
 
 ## The contract
 
 Input is a **timeline spec**: JSON conforming to `schema/timeline.schema.json`. A
-collector produces it (today, the `mail-timeline` Claude Code skill, which searches
-the mailbox and unspools quoted chains); chainmail only renders. That boundary is
-the point — collection needs judgement about what a mail trail means, rendering does
-not.
-
-The two fields that carry the most weight:
-
-- **`parent`** — the id of the entry each entry replies to. It drives ordering,
-  lane allocation, the reply tree and the reply links. Coverage here is what makes
-  the rest work.
-- **`tz`** — the zone the source stated. Ordering is by *absolute* time, so a
-  09:51 NZST send correctly precedes an 09:20 AEST reply the same morning. Where a
-  zone is absent one is inferred from what that sender stated elsewhere, marked as
-  inferred in the output, and never allowed to invert a reply chain.
+collector produces it (today the `mail-timeline` Claude Code skill); chainmail only
+renders. Two fields carry the most weight. **`parent`**, the entry each entry replies to,
+drives ordering, lanes, the reply tree and the reply links. **`tz`**, the zone the source
+stated, matters because ordering is by *absolute* time: a 09:51 NZST send correctly
+precedes a 09:20 AEST reply. A missing zone is inferred from what that sender stated
+elsewhere and never allowed to invert a reply chain.
 
 ## Development
 
-A flake provides the toolchain, pinned to the same nixpkgs channel as the machine
-config so it does not drift a release ahead of the system:
+A flake provides the toolchain, pinned to the machine config's nixpkgs channel; JS
+dependencies come from `npm install` against the committed lockfile.
 
 ```bash
 nix develop          # go, node 22, npm, typescript-language-server
-direnv allow         # or enter it automatically on cd
+make check           # go test + vet + gofmt, vitest, typecheck — everything
+npm run gen:types    # regenerate src/lib/spec.d.ts from the schema
+npm run gen:api      # regenerate src/lib/api.d.ts from openapi.json
 ```
 
-Nix supplies the toolchain only; JS dependencies still come from `npm install`
-against the committed lockfile.
+The Go side has **no direct dependencies** (all `// indirect`); the HTTP service is
+`net/http` and `encoding/json`, and the JS side has three packages at runtime: `react`,
+`@tanstack/react-query`, `openapi-fetch`. Keep it that way unless a dependency earns
+itself. Generated files are never hand-edited, and a test asserts the service's inlined
+timeline schema has not drifted.
 
-```bash
-make check         # go test + vet + gofmt, vitest, typecheck — everything
-make test          # the two test suites alone
+`fixtures/synthetic.json` is a full-complexity trail — 58 entries, 7 chains sharing 4
+lanes, 51 reply edges, 37 stated and 18 inferred timezones — a real trail's structure with
+the content rewritten, so the renderer is exercised at real scale by a committable file.
+Real trails are sensitive: keep them untracked at `fixtures/local.json`, loaded with
+`?spec=`.
 
-npm install
-npm run dev        # vite, against fixtures/synthetic.json unless ?spec= says otherwise
-npm run gen:types  # regenerate src/lib/spec.d.ts from schema/timeline.schema.json
-npm run gen:api    # regenerate src/lib/api.d.ts from api/openapi.json
-```
-
-The Go side has **no direct dependencies** — everything in `go.mod` is `// indirect`,
-and the HTTP service is `net/http` and `encoding/json`. The JS side has three at
-runtime: `react`, `@tanstack/react-query` and `openapi-fetch`. Keep it that way
-unless a dependency earns itself.
-
-Two generated files, neither hand-edited: `src/lib/spec.d.ts` from the timeline
-schema, and `src/lib/api.d.ts` from the OpenAPI document. The service inlines the
-timeline schema into its own document, and a test asserts the copy has not drifted —
-so the spec has one definition even though two documents describe it.
-
-`fixtures/synthetic.json` is a full-complexity trail: 58 entries across 7 chains
-(sharing 4 lanes), 51 reply edges, 37 stated and 18 inferred timezones, 3 meeting
-notices, 11 @mentions, 6 tables, 37 internal cross-links, 5 avatars, 15
-participants and 17 open items. It mirrors a real trail's structure exactly —
-same timestamps, same reply graph, same interlinking — with the cast and content
-rewritten, so the renderer is exercised at real scale by a file that is safe to
-commit. `fixtures/minimal.json` is the 1-entry degenerate case.
-
-Real mail trails are sensitive and are never committed. Keep them untracked at
-`fixtures/local.json` and load them with `?spec=`.
-
-### Measuring retrieval
-
-`corpus eval` scores two retrieval configurations over one set of judged queries
-and prints the delta, because a retrieval number on its own says nothing:
+`corpus eval` scores two retrieval configurations over one judged query set and prints the
+delta, because a retrieval number on its own says nothing:
 
 ```bash
 corpus eval -set fixtures/eval.local.json \
-  -a "name=lexical,mode=lexical" \
-  -b "name=hybrid,mode=hybrid" -cases
+  -a "name=lexical,mode=lexical" -b "name=hybrid,mode=hybrid" -cases
 ```
 
-Each `-a`/`-b` spec takes `name db mode model url dim topk minsim noprefix`.
-`db` lets the two configurations search different corpora, which is what makes a
-change to *stored* vectors measurable: prefixed and unprefixed documents cannot
-coexist under one model name, so the comparison is between two copies. `-floor`
-prints the two cosine distributions a similarity floor has to separate — the
-scores of judged-correct results against the scores of queries the corpus cannot
-answer — which is how the floor in `embed.Traits` was chosen.
-
-The judged set that means anything is judgements about real correspondence, so it
-stays untracked at `fixtures/eval.local.json`; a query is a paraphrase of what a
-thread is about and an `ext_id` is a durable pointer into a real mailbox, so the
-pair is a labelled index of somebody's inbox even with no body text in it.
-`fixtures/eval.synthetic.json` is the committed example, judged against a corpus
-`internal/eval`'s tests build, and it carries the mechanical tests.
+Each spec takes `name db mode model url dim topk minsim noprefix`; `db` lets the two
+configurations search different corpora, which is what makes a change to *stored* vectors
+measurable. Judged sets over real correspondence stay untracked at `fixtures/eval.local.json`;
+`fixtures/eval.synthetic.json` is the committed example.
