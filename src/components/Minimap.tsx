@@ -78,7 +78,7 @@ export function treeSvgString(o: TreeExport): string {
   const legend = ["message", "note", "starts chain", "reconstructed"];
 
   const M = 14; // outer margin
-  const TITLE_H = 34; // title row + divider; the tree's top offset
+  const TITLE_H = 40; // title row + divider; the tree's top offset
   const ROW_H = 17; // footer row pitch
   const tallyCol = Math.max(...tally.map(([n, l]) => `${n} ${l}`.length)) * CHAR_W;
   const legendCol = Math.max(...legend.map((s) => s.length)) * CHAR_W + 22;
@@ -101,11 +101,11 @@ export function treeSvgString(o: TreeExport): string {
 
   // title row: name left, entry count right, matching the panel's header
   line(
-    `<text x="${M}" y="${M + 12}" font-size="12" font-weight="700" fill="${pal.muted}" ` +
+    `<text x="${M}" y="${M + 10}" font-size="12" font-weight="700" fill="${pal.muted}" ` +
       `letter-spacing="1.1" text-transform="uppercase">Reply tree</text>`,
   );
   line(
-    `<text x="${W - M}" y="${M + 12}" text-anchor="end" font-size="12" font-weight="600" ` +
+    `<text x="${W - M}" y="${M + 10}" text-anchor="end" font-size="12" font-weight="600" ` +
       `fill="${pal.muted}" opacity=".75">${o.rows.length}</text>`,
   );
   line(
