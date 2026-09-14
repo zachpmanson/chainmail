@@ -511,25 +511,19 @@
      stays reachable so the overlay is dismissible. */
   @media (max-width:1024px) {
     /* overlay: the panel no longer reserves a column, so the stream runs out
-       to the edge under it. --panel still holds the measured width so the
-       refresh verdict clears the panel's left edge. */
+       to the edge under it. The toolbar flushes to the true edge here too;
+       --panel is only for the reserved-column layout, where the buttons clear
+       the panel's left edge. */
     body.hasmap { padding-right:0; }
     .mini { top:2.4rem; width:max-content; max-width:16.5rem;
       background:color-mix(in srgb, var(--card) 86%, transparent); }
     #maptog { display:inline-block; }
     /* The panel floats as an overlay now (no reserved column), so the toolbar
        buttons sit at the stream's true right edge rather than clearing a
-       panel that is no longer beside them. The verdict below is the one that
-       still needs --panel, to stay clear of the panel's left edge. */
+       panel that is no longer beside them. */
     .toolbar { right:.6rem; }
-    .refreshed { right:calc(var(--panel) + .6rem); }
   }
   @media print { .mini, .toolbar { display:none; } body.hasmap { padding-right:0; } }
-  /* one-line verdict from a refresh, under the toolbar (matches .top layout) */
-  .refreshed { position:fixed; top:2.1rem; right:calc(var(--panel) + .6rem); z-index:30;
-    max-width:min(28rem, 60vw); margin:0; padding:.2rem .5rem;
-    font-size:.66rem; line-height:1.35; color:var(--muted); background:var(--card);
-    border:1px solid var(--line); border-radius:6px; }
   .tbtn:disabled { opacity:.55; cursor:default; }
   .tbtn:disabled:hover { color:var(--muted); border-color:var(--line); }
   /* --- chain columns: one column per reply chain, grid row = chronological

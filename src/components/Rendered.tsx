@@ -16,7 +16,7 @@ import type { Timeline as Spec } from "../lib/spec";
  * Rendered is the shared presentational half of the two page routes and the
  * two legacy ways in (?spec=, drag-drop); whoever owns the spec owns this.
  */
-export function Rendered({ spec, onBack, onRefresh, onAdd, onAccept, report, refreshing, refreshNote, slurpNote }: {
+export function Rendered({ spec, onBack, onRefresh, onAdd, onAccept, report, refreshing }: {
   spec: Spec;
   onBack?: () => void;
   onRefresh?: () => void;
@@ -27,9 +27,6 @@ export function Rendered({ spec, onBack, onRefresh, onAdd, onAccept, report, ref
   /** the last refresh's report, held so its proposals can be evaluated */
   report?: RefreshReport | null;
   refreshing?: boolean;
-  refreshNote?: string | null;
-  /** the transcript of the last slurp, when the server could run one */
-  slurpNote?: string | null;
 }) {
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [showSpec, setShowSpec] = useState(false);
@@ -133,8 +130,6 @@ export function Rendered({ spec, onBack, onRefresh, onAdd, onAccept, report, ref
         onRefresh={onRefresh}
         onAdd={onAdd ? () => setShowAdd(true) : undefined}
         refreshing={refreshing}
-        refreshNote={refreshNote}
-        slurpNote={slurpNote}
       />
       {showSpec ? <SpecView spec={filtered} onClose={() => setShowSpec(false)} /> : null}
       {showAdd && onAdd ? (

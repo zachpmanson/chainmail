@@ -52,33 +52,28 @@ export function ViewPage() {
   });
   // A local, refreshed spec that wins over the stale cached fetch, plus the
   // report that produced it. The report is kept so proposals can be shown and
-  // accepted (a count alone would hide what was found; see refreshNote).
+  // accepted (a count alone would hide what was found).
   const [local, setLocal] = useState<Timeline | null>(null);
-  const [refreshNote, setRefreshNote] = useState<string | null>(null);
   const [report, setReport] = useState<RefreshReport | null>(null);
-  // The transcript of the last slurp, kept apart from the refresh note: the
-  // refresh overwrites that line the moment it lands, and what the fetch brought
-  // back is half of why the button was pressed.
-  const [slurpNote, setSlurpNote] = useState<string | null>(null);
 
   // A different page means a different run: drop the refreshed copy and any
-  // note and report from the previous one.
+  // report from the previous one.
   useEffect(() => {
     setLocal(null);
-    setRefreshNote(null);
     setReport(null);
-    setSlurpNote(null);
   }, [name]);
 
   const refresh = $api.useMutation("post", "/v1/refresh", {
     onSuccess: (data) => {
       setLocal(normalise(data.spec));
       setReport(data.report);
-      setRefreshNote(refreshSummary(data.report));
+      // The verdict used to float in a corner box that outlived the click; it
+      // is console-only now — the page's job is the page, the log's is the log.
+      console.log(refreshSummary(data.report));
     },
     onError: (e) => {
       setReport(null);
-      setRefreshNote(e instanceof Error ? e.message : String(e));
+      console.error("refresh failed:", e instanceof Error ? e.message : String(e));
     },
   });
 
@@ -91,9 +86,10 @@ export function ViewPage() {
   // null-check narrows `spec`, so the click snapshots it into a ref first.
   const specRef = useRef<Timeline | null>(null);
   const slurp = $api.useMutation("post", "/v1/slurp", {
-    onSuccess: (data) => setSlurpNote(data.report?.trim() || "slurp: nothing to report"),
+    onSuccess: (data) =>
+      console.log(data.report?.trim() || "slurp: nothing to report"),
     onError: (e) =>
-      setSlurpNote(
+      console.error(
         e instanceof ApiError && e.status === 403
           ? "no mailbox reach on this host (the server was started without -slurp), so this re-derives what the corpus already holds"
           : `slurp failed: ${e instanceof Error ? e.message : String(e)}`,
@@ -152,8 +148,6 @@ export function ViewPage() {
       }
       report={report}
       refreshing={slurp.isPending || refresh.isPending}
-      refreshNote={refreshNote}
-      slurpNote={slurpNote}
     />
   );
 }

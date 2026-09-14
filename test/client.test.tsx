@@ -606,8 +606,8 @@ describe("pressing refresh on a saved page", () => {
     }) as Handler;
 
   it("fetches from the mailbox before it re-derives, and shows what came back", async () => {
-    handler = refreshHandler({ slurp: () => json(200, { report: TRANSCRIPT }) });
-    await mountApp("/view/loom-cutover");
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    handler = refreshHandler({ slurp: () => json(200, { report: TRANSCRIPT }) });    await mountApp("/view/loom-cutover");
     await screen.findByText("Loom cutover");
 
     click(screen.getByRole("button", { name: "Re-derive this page from the corpus" }));
@@ -621,14 +621,20 @@ describe("pressing refresh on a saved page", () => {
       ]),
     );
     // The rebuild still reports itself, and the fetch's own transcript survives
-    // alongside it rather than being overwritten by the summary.
-    await screen.findByText(/already up to date/);
-    expect(screen.getByText(/\[1\/5\] mail: created 2/)).toBeTruthy();
+    // alongside it — in the console now, not a corner box.
+    await waitFor(() =>
+      expect(log.mock.calls.map((c) => c[0])).toEqual([
+        TRANSCRIPT.trim(),
+        "already up to date",
+      ]),
+    );
   });
 
   it("re-derives anyway on a host with no mailbox reach, and says so", async () => {
     // The deployed default: no -slurp, so the endpoint refuses. A 403 here is
     // not a failure of the button, it is the read-most fallback.
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
     handler = refreshHandler({
       slurp: () =>
         json(403, {
@@ -640,11 +646,18 @@ describe("pressing refresh on a saved page", () => {
 
     click(screen.getByRole("button", { name: "Re-derive this page from the corpus" }));
 
-    await screen.findByText(/no mailbox reach on this host/);
-    await screen.findByText(/already up to date/);
+    await waitFor(() =>
+      expect(err).toHaveBeenCalledWith(
+        expect.stringMatching(/no mailbox reach on this host/),
+      ),
+    );
+    await waitFor(() =>
+      expect(log.mock.calls.map((c) => c[0])).toEqual(["already up to date"]),
+    );
   });
 
   it("reports a failed ingest without swallowing it", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
     handler = refreshHandler({
       slurp: () => json(502, { error: "slurp failed: docket refused: no threading headers" }),
     });
@@ -654,13 +667,18 @@ describe("pressing refresh on a saved page", () => {
     click(screen.getByRole("button", { name: "Re-derive this page from the corpus" }));
 
     // A failure that is not "disabled" is worth reading, so the server's own
-    // words are what the page shows.
-    await screen.findByText(/docket refused: no threading headers/);
+    // words are what the console shows.
+    await waitFor(() =>
+      expect(err).toHaveBeenCalledWith(
+        expect.stringMatching(/docket refused: no threading headers/),
+      ),
+    );
   });
 });
 
 describe("adding another email to a page", () => {
   it("searches the corpus from the toolbar and adds the chosen chain by accept", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
     handler = (c) => {
       const p = pathOf(c);
       if (p === "/v1/specs/loom-cutover") return json(200, SPEC);
@@ -717,10 +735,11 @@ describe("adding another email to a page", () => {
     // The modal closed once the add was sent.
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Add another email" })).toBeNull());
 
-    // The refreshed page reports the growth like any other refresh, and says
-    // the search was recorded with it.
-    await screen.findByText(/1 added/);
-    await screen.findByText(/1 search recorded/);
+    // The refreshed page reports the growth like any other refresh — console
+    // only — and says the search was recorded with it.
+    await waitFor(() =>
+      expect(log).toHaveBeenCalledWith("refresh: 1 added, 1 search recorded"),
+    );
   });
 });
 
