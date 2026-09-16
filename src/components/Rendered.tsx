@@ -16,7 +16,7 @@ import type { Timeline as Spec } from "../lib/spec";
  * Rendered is the shared presentational half of the two page routes and the
  * two legacy ways in (?spec=, drag-drop); whoever owns the spec owns this.
  */
-export function Rendered({ spec, onBack, onRefresh, onAdd, onAccept, onPull, pulling, report, refreshing }: {
+export function Rendered({ spec, onBack, onRefresh, onAdd, onAccept, onPull, pulling, mediaBase, report, refreshing }: {
   spec: Spec;
   onBack?: () => void;
   onRefresh?: () => void;
@@ -28,6 +28,8 @@ export function Rendered({ spec, onBack, onRefresh, onAdd, onAccept, onPull, pul
   onPull?: (extId: string) => void;
   /** the ext id whose files are being fetched, so its button says so */
   pulling?: string | null;
+  /** where stored attachment bytes are served; absent in the static export */
+  mediaBase?: string;
   /** the last refresh's report, held so its proposals can be evaluated */
   report?: RefreshReport | null;
   refreshing?: boolean;
@@ -145,6 +147,7 @@ export function Rendered({ spec, onBack, onRefresh, onAdd, onAccept, onPull, pul
         onAdd={onAdd ? () => setShowAdd(true) : undefined}
         onPull={onPull}
         pulling={pulling}
+        mediaBase={mediaBase}
         refreshing={refreshing}
       />
       {showSpec ? <SpecView spec={filtered} onClose={() => setShowSpec(false)} /> : null}

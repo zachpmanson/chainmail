@@ -3,7 +3,7 @@ import type { Entry } from "../lib/spec";
 import { derive, initials, type Row, type RowEdit, type View } from "../lib/derive";
 import type { Timeline as Spec } from "../lib/spec";
 import { COLLAPSE_FROM, msgCount, provenance, type SourceId } from "../lib/sources";
-import { attHref, hasPreview } from "../lib/attachments";
+import { attHref, hasPreview, isSkipped, localHref, skipNote } from "../lib/attachments";
 import { DiffPanel, Legend, ParticipantsPanel, SourcesPanel, type ChainFilter } from "./Panels";
 import { Minimap } from "./Minimap";
 import { trimBody } from "../lib/trimBody";
@@ -145,26 +145,30 @@ function Edits({ edits, v }: { edits?: RowEdit[]; v: View }) {
   );
 }
 
-function Attachments({ e, onPull, pulling }: {
+function Attachments({ e, onPull, pulling, mediaBase }: {
   e: Entry;
   /** fetch this message's files, where a host will do it at all */
   onPull?: (extId: string) => void;
   /** the message whose files are being fetched, so its button can say so */
   pulling?: string | null;
+  /** where the corpus serves stored bytes; empty in the static export, which has no server */
+  mediaBase?: string;
 }) {
   if (!e.attachments?.length) return null;
   // The button is offered only where there is something to fetch and somebody
   // able to fetch it: a host started without -media never passes onPull, a page
   // rendered to a file never does, and a message whose files are all already in
-  // the corpus is done with the question. A file that was declined keeps the
-  // button, because the corpus records the reason rather than the answer.
-  const pending = e.attachments.some((a) => !a.blobSha);
+  // the corpus is done with the question. A file the corpus has DECLINED is done
+  // with it too — the reason is recorded, not the answer — so it cannot keep the
+  // button alive on a message that has nothing left to ask for.
+  const pending = e.attachments.some((a) => !a.blobSha && !isSkipped(a));
   return (
     <div className="atts">
       <span className="clip">attached</span>
       {e.attachments.map((a, i) => {
-        const href = attHref(a);
-        const thumb = hasPreview(a) ? (
+        const local = localHref(a, mediaBase ?? "");
+        const href = attHref(a, mediaBase);
+       const thumb = hasPreview(a) ? (
           <img
             className="athumb"
             src={a.preview}
@@ -187,18 +191,34 @@ function Attachments({ e, onPull, pulling }: {
         // The chip stays the same link it always was, and the popover is layered
         // onto it by script. That is deliberate: no new control appears, the
         // trigger is already in the tab order, and with scripting unavailable
-        // the click still opens the attachment at its source rather than doing
-        // nothing. data-pop marks which chips script should intercept.
+        // the click still opens the attachment rather than doing nothing.
+        //
+        // Once the bytes are local, where the click goes changes but the shape
+        // does not: the chip is still one link, and the server decides whether it
+        // downloads or opens by the same `open` rule. A file the reader is TAKING
+        // opens in no tab at all — the browser saves it and the page stays put,
+        // which is what a download should do. One they are LOOKING at opens
+        // beside the page, so the transcript is still there behind it.
+        const beside = !local || a.open !== "download";
+        // A file the corpus has refused says so where the reader is already
+        // looking, rather than in a console they will not open. It is a tooltip
+        // and not more chip text: the chip is a list of files, and a sentence in
+        // the middle of it would push the next file off the line.
+        const note = skipNote(a);
         return href ? (
           <a
             key={i}
             className={thumb ? "att haspop" : "att"}
             href={href}
-            target="_blank"
-            rel="noopener"
+            {...(note ? { title: note } : {})}
+            {...(beside ? { target: "_blank", rel: "noopener" } : {})}
             {...(thumb
               ? { "data-pop": a.name, "aria-haspopup": "dialog" as const }
               : {})}
+            /* The popover's save control reads this, not the href: a Slack chip's
+               href is a permalink and a body picture has no href at all, so the
+               presence of the local URL is what says "these bytes are here". */
+            {...(local ? { "data-get": local } : {})}
           >
             {label}
           </a>
@@ -207,7 +227,7 @@ function Attachments({ e, onPull, pulling }: {
           // is the only thing here that says what the file actually is. It gets
           // no popover, though: the only way to offer one would be a control
           // that does nothing at all without scripting.
-          <span key={i} className="att nolink">
+          <span key={i} className="att nolink" {...(note ? { title: note } : {})}>
             {label}
           </span>
         );
@@ -315,13 +335,14 @@ function Source({ e, anchorByGmail }: { e: Entry; anchorByGmail: Map<string, str
   );
 }
 
-function EntryBlock({ row, v, mark, anchorByGmail, onPull, pulling }: {
+function EntryBlock({ row, v, mark, anchorByGmail, onPull, pulling, mediaBase }: {
   row: Row;
   v: View;
   mark?: "new" | "revised";
   anchorByGmail: Map<string, string>;
   onPull?: (extId: string) => void;
   pulling?: string | null;
+  mediaBase?: string;
 }) {
   const e = row.entry;
   const grid = { gridColumn: row.lane + 1, gridRow: row.row };
@@ -380,7 +401,7 @@ function EntryBlock({ row, v, mark, anchorByGmail, onPull, pulling }: {
           ) : null}
           <div className="bd" dangerouslySetInnerHTML={html(trimBody(e.body))} />
           <Edits edits={row.edits} v={v} />
-          <Attachments e={e} onPull={onPull} pulling={pulling} />
+          <Attachments e={e} onPull={onPull} pulling={pulling} mediaBase={mediaBase} />
           <div className="foot">
             <span className="to">to {e.to ?? "—"}</span>
             <ReplyLink row={row} v={v} />
@@ -444,10 +465,15 @@ export interface TimelineProps {
   onPull?: (extId: string) => void;
   /** the ext id whose files are being fetched, so its button says so and no second pull starts */
   pulling?: string | null;
+  /**
+   * Where the app serves stored attachment bytes. Absent in the static export,
+   * which has no server to serve them: a shared page keeps its source links.
+   */
+  mediaBase?: string;
   refreshing?: boolean;
 }
 
-export function Timeline({ spec, marks, prevLabel, filter, onShowSpec, onRefresh, onAdd, onEval, onPull, pulling, refreshing }: TimelineProps) {
+export function Timeline({ spec, marks, prevLabel, filter, onShowSpec, onRefresh, onAdd, onEval, onPull, pulling, mediaBase, refreshing }: TimelineProps) {
   const v = derive(spec);
   const s = v.spec;
   // gmailId -> the id of the row that carries it, so an unspooled source line
@@ -505,7 +531,7 @@ export function Timeline({ spec, marks, prevLabel, filter, onShowSpec, onRefresh
         <Chains v={v} />
         {v.rows.map((r) => (
           <EntryBlock key={r.id} row={r} v={v} mark={marks?.get(r.id)} anchorByGmail={anchorByGmail}
-                      onPull={onPull} pulling={pulling} />
+                      onPull={onPull} pulling={pulling} mediaBase={mediaBase} />
         ))}
       </div>
       {s.openItems?.length ? (

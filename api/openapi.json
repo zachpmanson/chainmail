@@ -380,6 +380,68 @@
         }
       }
     },
+    "/v1/attachments/{sha}": {
+      "get": {
+        "summary": "The bytes of a stored attachment, by digest.",
+        "description": "Serves the file itself, so a chip that names a digest can be opened rather than sent back to Gmail for a copy the corpus already holds. Content-Disposition follows the same rule as the attachment\u0027s open field \u2014 inline for a picture, a recording, a video or text, attachment for a PDF, a document or an archive \u2014 and markup (HTML, SVG) is never served inline. The digest is the content, so the response is immutable and cacheable.",
+        "operationId": "getAttachment",
+        "parameters": [
+          {
+            "name": "sha",
+            "in": "path",
+            "description": "Hex sha256 of the bytes, as the timeline\u0027s blobSha carries it.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": ""
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The file.",
+            "headers": {
+              "Content-Disposition": {
+                "description": "inline or attachment, with the sender\u0027s filename (RFC 6266).",
+                "schema": {
+                  "type": "string",
+                  "description": ""
+                }
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": ""
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The path is not a digest.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nothing is filed under that digest: never pulled, or pruned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/entries/{extId}": {
       "get": {
         "summary": "One entry, with its provenance and every sighting of it.",
@@ -2238,6 +2300,10 @@
                     "download"
                   ],
                   "description": "What a click should do with bytes we hold, decided by the server from the stored MIME — the same rule that sets Content-Disposition when the file is served, because the two must not be able to disagree. Absent when there is nothing local to open, which is what gmailId and link are for."
+                },
+                "skip": {
+                  "type": "string",
+                  "description": "Why the corpus does not hold these bytes, recorded when a pull decided it never will: too large, gone from the sender's copy, nothing to fetch by. Present means the file is not coming, so a page can explain the chip and stop offering to fetch it. The value is the corpus's own word; the page owns the phrasing."
                 },
                 "previewW": {
                   "type": "integer",

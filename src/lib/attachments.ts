@@ -3,15 +3,42 @@ import type { Entry } from "./spec";
 export type Attachment = NonNullable<Entry["attachments"]>[number];
 
 /**
- * Where an attachment opens at its source, or undefined when nothing can open it.
+ * Where the app serves bytes the corpus holds: GET /v1/attachments/{sha}.
  *
- * Gmail wins over the source link because a mail attachment is reached through
+ * The static export passes no base at all rather than this constant, which is how
+ * a shared page keeps pointing at Gmail — it is a file, not a reader, and there is
+ * no server behind it that could answer.
+ */
+export const MEDIA_BASE = "/v1/attachments";
+
+/**
+ * The local copy's URL, where the corpus holds this attachment's bytes and the
+ * renderer has somewhere to serve them from. Undefined otherwise — the digest
+ * without a base is a static export, and the base without a digest is a file that
+ * was never pulled.
+ */
+export function localHref(a: Attachment, mediaBase: string): string | undefined {
+  return mediaBase && a.blobSha ? `${mediaBase}/${a.blobSha}` : undefined;
+}
+
+/**
+ * Where an attachment opens, or undefined when nothing can open it.
+ *
+ * Local bytes win over every source link, and that is the point of pulling a file
+ * into the corpus: a reader stops leaving the page for something the page already
+ * has. A stored file is served inline or as a download according to the `open`
+ * rule the server decided it by, so what the click does is not the page's to
+ * guess — see nothing here that branches on the type.
+ *
+ * Gmail then wins over the source link because a mail attachment is reached through
  * its message, and the message is the more useful place to land: it carries the
  * thread the file arrived in. Slack records a permalink per file and has no
  * equivalent, so it uses that. An attachment recovered from quoted text has
  * neither, and stays a label — there is nowhere honest to send the reader.
  */
-export function attHref(a: Attachment): string | undefined {
+export function attHref(a: Attachment, mediaBase = ""): string | undefined {
+  const local = localHref(a, mediaBase);
+  if (local) return local;
   if (a.gmailId) return `https://mail.google.com/mail/u/0/#all/${a.gmailId}`;
   return a.link || undefined;
 }
@@ -27,4 +54,44 @@ export function attHref(a: Attachment): string | undefined {
  */
 export function hasPreview(a: Attachment): boolean {
   return typeof a.preview === "string" && a.preview.startsWith("data:image/");
+}
+
+/**
+ * Whether the corpus has decided it will never hold these bytes.
+ *
+ * Distinct from "not fetched yet": a skip is a recorded answer, so there is
+ * nothing left to ask for. The page uses this both to explain the chip and to
+ * leave the fetch button off a message whose files are all accounted for.
+ */
+export function isSkipped(a: Attachment): boolean {
+  return Boolean(a.skip);
+}
+
+/**
+ * Why a file is not in the corpus, in words.
+ *
+ * The wire carries the corpus's own word so the same state reads the same way in
+ * the CLI report as it does here; the sentence belongs to the page, because a
+ * chip has to say this in a few words and a log has room for more. An unknown
+ * value — a corpus newer than this client — is reported as what it is rather than
+ * guessed at.
+ */
+export function skipNote(a: Attachment): string | undefined {
+  if (!a.skip) return undefined;
+  switch (a.skip) {
+    case "too_large":
+      return "not stored: larger than the fetch cap";
+    case "unavailable":
+      return "not stored: empty in the message";
+    case "part_not_found":
+      return "not stored: not in the message any more";
+    case "no_source_ref":
+      return "not stored: nothing to fetch it by";
+    case "no_message_id":
+      return "not stored: no mailbox message to ask";
+    case "no_bytes":
+      return "not stored: missing from the archive";
+    default:
+      return `not stored (${a.skip})`;
+  }
 }

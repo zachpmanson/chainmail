@@ -138,6 +138,7 @@ func (s *server) routes() http.Handler {
 	// instead of ServeMux's plain text.
 	mux.HandleFunc("/v1/refresh", post(s.refresh))
 	mux.HandleFunc("/v1/media/pull", post(s.mediaPull))
+	mux.HandleFunc("/v1/attachments/{sha}", get(s.attachment))
 	mux.HandleFunc("/v1/ops/plan", get(s.opsPlan))
 	mux.HandleFunc("/v1/ops/merge", post(s.opsMerge))
 	mux.HandleFunc("/v1/search", get(s.search))

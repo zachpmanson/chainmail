@@ -156,6 +156,16 @@ type Attachment struct {
 	// Empty when there is nothing local to open, which is the case the Gmail link
 	// above exists for. See attachmentOpen.
 	Open string `json:"open,omitempty"`
+	// Skip is why the corpus does not hold these bytes, when that was decided and
+	// recorded: a file the pull declined as too large, or a part the source no
+	// longer has. Present means asking again is pointless — the corpus keeps the
+	// reason instead of re-asking every pass — so a page can both explain the dead
+	// chip and leave its fetch button off.
+	//
+	// The value is the corpus's own word (too_large, no_bytes, …), not a sentence:
+	// the page owns the phrasing, so the same state reads the same way in the CLI
+	// report and in the browser.
+	Skip string `json:"skip,omitempty"`
 	// Preview is a thumbnail as a data: URI, present only where the archive kept
 	// the bytes and the picture is content rather than decoration. Never a URL:
 	// the page must render without a network. See preview.go.

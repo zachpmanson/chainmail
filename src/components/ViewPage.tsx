@@ -3,6 +3,7 @@ import { Link, useParams } from "@tanstack/react-router";
 import { ApiError, $api, type MediaPull, type RefreshReport } from "../lib/api";
 import { normalise } from "../lib/normalise";
 import type { Timeline } from "../lib/spec";
+import { MEDIA_BASE } from "../lib/attachments";
 import { Rendered } from "./Rendered";
 
 /**
@@ -210,6 +211,10 @@ export function ViewPage() {
         pull.mutate({ body: { entry: extId } });
       }}
       pulling={pulling}
+      // The endpoint stored bytes come from. Named here and nowhere else,
+      // because this component is the app: the static export renders Timeline
+      // without it, and a shared page has no server to point at.
+      mediaBase={MEDIA_BASE}
       report={report}
       refreshing={slurp.isPending || refresh.isPending}
     />

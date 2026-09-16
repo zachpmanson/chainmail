@@ -362,6 +362,7 @@ function attachPopover(doc: Document, on: On): () => void {
   let host: HTMLElement | null = null;
   let shot: HTMLImageElement;
   let cap: HTMLElement;
+  let save: HTMLAnchorElement;
   let closeBtn: HTMLButtonElement;
   let opener: HTMLElement | null = null;
 
@@ -376,10 +377,12 @@ function attachPopover(doc: Document, on: On): () => void {
     host.hidden = true;
     host.innerHTML =
       '<div class="popbox"><img class="popimg" alt=""><div class="popbar">' +
-      '<span class="popcap"></span><button type="button" class="popx">Close</button>' +
+      '<span class="popcap"></span><a class="popget" download hidden>save</a>' +
+      '<button type="button" class="popx">Close</button>' +
       "</div></div>";
     shot = host.querySelector<HTMLImageElement>(".popimg")!;
     cap = host.querySelector<HTMLElement>(".popcap")!;
+    save = host.querySelector<HTMLAnchorElement>(".popget")!;
     closeBtn = host.querySelector<HTMLButtonElement>(".popx")!;
     doc.body.appendChild(host);
 
@@ -390,11 +393,15 @@ function attachPopover(doc: Document, on: On): () => void {
     on(host, "keydown", (ev: Event) => {
       const k = ev as KeyboardEvent;
       if (k.key === "Escape") { k.preventDefault(); close(); return; }
-      // Close is the only focusable thing inside, so the trap is Tab staying put
-      // rather than a cycle through a list. Written as a wrap anyway: it stays
-      // correct if the popover ever gains a second control.
+      // Close and save are the only focusable things inside, so the trap is Tab
+      // staying put rather than a cycle through a list. Written as a wrap anyway:
+      // it stays correct with the save link showing as well. `hidden` is excluded
+      // rather than left to fail, because a hidden element is in this list and
+      // cannot take focus — the trap would land on nothing and Tab would stop
+      // moving.
       if (k.key !== "Tab") return;
-      const stops = [...host!.querySelectorAll<HTMLElement>("button, [href]")];
+      const stops = [...host!.querySelectorAll<HTMLElement>(
+        "button:not([hidden]), [href]:not([hidden])")];
       if (!stops.length) return;
       const edge = k.shiftKey ? stops[0]! : stops[stops.length - 1]!;
       if (doc.activeElement === edge || !host!.contains(doc.activeElement)) {
@@ -419,6 +426,15 @@ function attachPopover(doc: Document, on: On): () => void {
     build();
     shot.src = src;
     cap.textContent = caption;
+    // The save control, for a chip whose bytes this host holds. The popover is
+    // reached by clicking a chip, and that click is intercepted — so without this
+    // there would be no route to the original file at all, only to the thumbnail
+    // the spec embedded. `download` is what makes it a save rather than a view:
+    // the response is inline for a picture, and the attribute overrides that, with
+    // the filename still coming from the Content-Disposition header.
+    const get = from.dataset.get;
+    save.hidden = !get;
+    if (get) save.href = get;
     host!.hidden = false;
     // The overlay covers the viewport, so a pointer cannot reach the transcript
     // anyway; inert is what says the same thing to a screen reader and to the

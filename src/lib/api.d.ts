@@ -144,6 +144,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/attachments/{sha}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The bytes of a stored attachment, by digest.
+         * @description Serves the file itself, so a chip that names a digest can be opened rather than sent back to Gmail for a copy the corpus already holds. Content-Disposition follows the same rule as the attachment's open field — inline for a picture, a recording, a video or text, attachment for a PDF, a document or an archive — and markup (HTML, SVG) is never served inline. The digest is the content, so the response is immutable and cacheable.
+         */
+        get: operations["getAttachment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/entries/{extId}": {
         parameters: {
             query?: never;
@@ -1365,6 +1385,49 @@ export interface operations {
                 };
             };
             /** @description No page was ever saved under that name. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getAttachment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Hex sha256 of the bytes, as the timeline's blobSha carries it. */
+                sha: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file. */
+            200: {
+                headers: {
+                    /** @description inline or attachment, with the sender's filename (RFC 6266). */
+                    "Content-Disposition"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description The path is not a digest. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Nothing is filed under that digest: never pulled, or pruned. */
             404: {
                 headers: {
                     [name: string]: unknown;
