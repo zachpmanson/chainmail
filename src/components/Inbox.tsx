@@ -276,7 +276,12 @@ export function Inbox() {
       // draws, and re-reading the thread for it would be a request per click on
       // a control that has nothing to do with the thread.
       if (variables.body?.me !== undefined) {
-        setTypedMe(null);
+        const saved = variables.body.me[0] ?? "";
+        // The field shows what was stored from here on — the tidied form, which
+        // is what the reader should see kept — unless they have gone on typing
+        // while the write was in flight. Dropping that would be a keystroke the
+        // app ate, and the field is the one place they can see what they said.
+        setTypedMe((typed) => (typed === saved ? null : typed));
         void queryClient.invalidateQueries({ queryKey: ["get", "/v1/chains/{rootExtId}"] });
       }
     },
