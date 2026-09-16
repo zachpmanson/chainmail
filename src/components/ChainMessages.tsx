@@ -69,6 +69,17 @@ function formatOffset(mins: number): string {
  *  part of. */
 const anchor = (i: number) => `entry-${i}`;
 
+/** What hovering the sender says: their name and the address the mail came from,
+ *  e.g. "Lane Whittaker <lane@whittaker.example>". The same string a page build
+ *  makes for the same entry (see derive.ts's whoTitle), because a reader reading
+ *  one thread in two places should be told the same thing about it. */
+function senderTitle(e: CorpusEntry): string {
+  const name = e.author ?? "";
+  if (!e.fromEmail) return name;
+  if (!name) return e.fromEmail;
+  return `${name} <${e.fromEmail}>`;
+}
+
 export function ChainMessages({ chain }: { chain: { rootExtId: string } }) {
   const fetched = $api.useQuery("get", "/v1/chains/{rootExtId}", {
     params: { path: { rootExtId: chain.rootExtId } },
@@ -88,6 +99,12 @@ export function ChainMessages({ chain }: { chain: { rootExtId: string } }) {
           id={anchor(i)}
           body={e.html ?? ""}
           sender={e.author}
+          // Hovering the name (or the avatar) names the person fully: the address
+          // the entry came from, as a page build's own title does. A recovered
+          // entry has no address of its own, and then the name stands alone
+          // rather than borrowing one from the people table — the same rule the
+          // page follows, so the two cannot name two addresses for one message.
+          senderTitle={senderTitle(e)}
           // No org on a chain read yet, so no colour can be claimed: `o5` is the
           // stylesheet's unknown slot, the same one the page uses for a sender
           // whose org nothing established.
