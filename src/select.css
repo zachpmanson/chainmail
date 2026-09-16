@@ -23,6 +23,11 @@
   border-radius:9px; background:var(--card); overflow:hidden; }
 .selrow { display:flex; align-items:center; gap:.4rem; }
 .selrow + .selrow { border-top:1px solid var(--line); }
+/* The candidate the pane is reading. The same left rule the inbox's open row
+   carries, so "this is the one on the right" reads the same on both pages. No
+   background: a row can already be a strong match (`selhot`), and the mark has
+   to be the one thing that never varies. */
+.selrow.sel { box-shadow:inset 2px 0 0 var(--accent); }
 .selrow > .chk { display:flex; gap:.5rem; padding:.5rem .7rem; cursor:pointer;
   flex:1 1 auto; min-width:0; }
 .selrow:hover { background:var(--quote); }
@@ -352,16 +357,21 @@
 
      `body.inbox` is added by the page (see Inbox) rather than guessed at in CSS:
      "this page is a workspace" is something the page knows about itself, and it is
-     the same way a transcript says `body.chains`. */
-  body.inbox { height:100vh; overflow:hidden; }
+     the same way a transcript says `body.chains`. The search page is the second
+     workspace — candidates, and the one being read beside them — so it says
+     `body.search` and is named here. */
+  body.inbox, body.search { height:100vh; overflow:hidden; }
   /* The shell is a flex column *here only*: the nav keeps its height, the page
      takes the rest, and the page's own columns split that. Everywhere else #root
      stays a block, because a flex item with `margin:0 auto` is sized to its
      content — which is how this rule, applied to every page, narrowed the search,
      saved pages, services and ops down to a centred column. */
-  body.inbox #root { display:flex; flex-direction:column; height:100%; min-height:0; }
-  .wrap.ibwrap { flex:1 1 auto; min-height:0;
+  body.inbox #root, body.search #root { display:flex; flex-direction:column; height:100%; min-height:0; }
+  .wrap.ibwrap, .wrap.selwrap { flex:1 1 auto; min-height:0;
     display:flex; flex-direction:column; }
+  /* The search reaches the window's edges like the inbox does: the form keeps its
+     own margin, and the build bar's `bottom` is the one thing below the split. */
+  .wrap.selwrap { padding-top:0; padding-bottom:0; }
   /* The list is bounded and the pane takes whatever is left: a row is skimmed,
      a thread is read, so the width goes where the reading is. Bounded by the
      grid until the reader drags the border — `--listw` is their width, and its
@@ -396,6 +406,11 @@
     scrollbar-gutter: stable;
     border:1px solid var(--line); border-radius:9px; background:var(--card); }
   .iblistwrap .iblist { border:0; border-radius:0; background:none; }
+  /* The search's list is the same box as the inbox's once it is in the wrapper:
+     the wrapper is the edge, and the list inside it is rows and nothing else.
+     `margin:0` because the standalone list carried the space the form used to
+     leave above it. */
+  .iblistwrap .sellist { border:0; border-radius:0; background:none; margin:0; }
   /* The pane scrolls the same way for the same reason: a thread that outgrows its
      screen would otherwise rewrap every bubble once, on the way in. */
   .ibread { overflow:auto; scrollbar-gutter: stable; }

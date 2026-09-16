@@ -32,7 +32,8 @@
      with `margin:0 auto` is sized to its *content*, because auto margins take
      precedence over `align-items:stretch` — so /specs, /status, /ops and the
      search page all shrank to a centred column on a wide screen. The shell is a
-     flex column only where a page has to fill the window: body.inbox, below. */
+     flex column only where a page has to fill the window: the workspaces,
+     body.inbox and body.search, below. */
   /* The document measure. A transcript is read, so it keeps a readable width on
      a wide screen; column mode drops it (see body.chains — a workspace is laid
      out, not read), and the app's own pages opt out below, because a list and a

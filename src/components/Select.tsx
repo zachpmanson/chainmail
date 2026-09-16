@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { $api, searchQuery, type ChainHit, type SearchMode, type SearchParams } from "../lib/api";
-import { ChainPreview, Failure } from "./ChainPreview";
+import { ChainReading, Failure, type PreviewableChain } from "./ChainPreview";
 import { useBuildPage } from "../lib/build";
+import { SplitPane } from "./SplitPane";
 
 // The default-first order is what the dropdown shows: hybrid is the default
 // search style — lexical and semantic fused — and the order says so.
@@ -35,18 +36,22 @@ function chainSimilarity(chain: ChainHit): number {
 export function ChainRow({
   chain,
   checked,
+  current,
   onToggle,
   onPreview,
 }: {
   chain: ChainHit;
   checked: boolean;
+  /** Whether this is the chain the pane is reading. Absent where the row is
+   *  read in a modal instead — a list with no pane has nothing to mark. */
+  current?: boolean;
   onToggle: () => void;
   onPreview: () => void;
 }) {
   const sim = chainSimilarity(chain);
   const hot = sim > HIGHLIGHT_FLOOR;
   return (
-    <li className={`selrow${hot ? " selhot" : ""}`}>
+    <li className={`selrow${hot ? " selhot" : ""}${current ? " sel" : ""}`}>
       <label className="chk">
         <input type="checkbox" checked={checked} onChange={onToggle} />
         <span className="seld">
@@ -81,9 +86,11 @@ export function ChainRow({
       </label>
       {/* Preview reads the chain as data — cheap, no spec assembly — so a
           candidate can be judged on its entries before it is committed to a
-          page. The button is kept out of the checkbox label, so ticking a row
-          and previewing it never fight over one hit area. */}
-      <button type="button" className="selpvbtn" aria-haspopup="dialog" onClick={onPreview}>
+          page. It reads it in the pane beside the list rather than in a modal
+          over it: judging a candidate is comparing it with the others, which a
+          dialog hides. The button is kept out of the checkbox label, so ticking
+          a row and reading it never fight over one hit area. */}
+      <button type="button" className="selpvbtn" onClick={onPreview}>
         Preview
       </button>
     </li>
@@ -120,8 +127,25 @@ export function SelectView() {
       : null,
   );
   const [chosen, setChosen] = useState<string[]>([]);
-  // The chain being previewed, by root ext id. Null when no modal is open.
-  const [preview, setPreview] = useState<ChainHit | null>(null);
+
+  // This page is a workspace too: a list to pick candidates out of and a pane to
+  // read them in, each scrolling inside the window rather than the page scrolling
+  // under them. A fact about the page, so it is said on the body and taken off
+  // when the reader leaves.
+  useEffect(() => {
+    document.body.classList.add("search");
+    return () => document.body.classList.remove("search");
+  }, []);
+
+  // Which candidate the pane is reading. The URL's, for the same reason the
+  // inbox's is: a reload, a shared address or the browser's Back should land on
+  // the chain that was being read, not at the top of the results again. Absent
+  // means nothing was picked, and then the pane reads the first result — the top
+  // of a ranked list is what the reader is looking at anyway.
+  const opened = useSearch({ from: "/" }).open;
+  const openChain = (root: string) =>
+    navigate({ to: "/", search: (prev) => ({ ...prev, open: root }) });
+  const closeChain = () => navigate({ to: "/", search: (prev) => ({ ...prev, open: undefined }) });
 
   // The idle init is never sent: it stands in until a search is submitted, so
   // the key it derives is a key nothing was ever fetched under.
@@ -185,6 +209,16 @@ export function SelectView() {
     .map((a) => a.trim())
     .filter((a) => a !== "");
 
+  // The address may name a chain these results do not hold — a candidate read,
+  // then a reload before the answer came back, or an address carried over from
+  // another search. The pane reads it from the id either way (the chain is
+  // fetched by id), so its head says what is known rather than inventing a
+  // subject or a count. With no id at all the pane reads the top of the ranked
+  // list, which is what the reader is looking at anyway.
+  const picked = chains.find((c) => c.rootExtId === opened);
+  const reading: PreviewableChain | null =
+    picked ?? (opened ? { rootExtId: opened } : chains[0]) ?? null;
+
   return (
     <div className="wrap selwrap">
       <form className="selform" onSubmit={submit}>
@@ -223,7 +257,56 @@ export function SelectView() {
 
       {chains.length > 0 ? (
         <>
-          <div className="selbuild">
+          {/* Candidates on the left, the one being read on the right: the same
+              split the inbox uses, because judging a candidate is comparing it
+              with the others — which a modal over the list hides. */}
+          <SplitPane
+            hasChoice={Boolean(opened)}
+            list={
+              <div className="iblistwrap">
+                <ul className="sellist">
+                  {chains.map((c) => (
+                    <ChainRow
+                      key={c.rootExtId}
+                      chain={c}
+                      checked={chosen.includes(c.rootExtId)}
+                      current={reading?.rootExtId === c.rootExtId}
+                      onToggle={() => toggle(c.rootExtId)}
+                      onPreview={() => openChain(c.rootExtId)}
+                    />
+                  ))}
+                </ul>
+              </div>
+            }
+            pane={
+              <aside className="ibread" aria-label="The candidate being read">
+                {reading ? (
+                  <>
+                    <div className="ibread-head">
+                      <button type="button" className="ibback" onClick={closeChain}>
+                        ← Results
+                      </button>
+                      <span className="ibread-subj">{reading.subject || "(no subject)"}</span>
+                      <span className="note">
+                        {reading.entries
+                          ? `${reading.entries} entr${reading.entries === 1 ? "y" : "ies"}`
+                          : ""}
+                      </span>
+                    </div>
+                    <ChainReading chain={reading} />
+                  </>
+                ) : (
+                  <p className="selnote">Nothing to read yet.</p>
+                )}
+              </aside>
+            }
+          />
+
+          {/* The build bar at the foot of the workspace: the search is above,
+              the candidates are in the middle, and what to do with the ticked
+              ones is the last thing on the page — where the inbox puts its
+              own. */}
+          <div className="selbuild ibbuild">
             <label className="self">
               <span>Page title</span>
               <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="optional" />
@@ -261,19 +344,6 @@ export function SelectView() {
             ) : null}
             {build.isError ? <Failure error={build.error} /> : null}
           </div>
-
-          <ul className="sellist">
-            {chains.map((c) => (
-              <ChainRow
-                key={c.rootExtId}
-                chain={c}
-                checked={chosen.includes(c.rootExtId)}
-                onToggle={() => toggle(c.rootExtId)}
-                onPreview={() => setPreview(c)}
-              />
-            ))}
-          </ul>
-          {preview ? <ChainPreview chain={preview} onClose={() => setPreview(null)} /> : null}
         </>
       ) : null}
     </div>
