@@ -249,6 +249,20 @@
 .ibcol { min-width:0; }
 .iblistwrap { min-width:0; }
 
+/* The border between the panels, which is also the control that moves it. Eight
+   pixels of target for a one-pixel line: a drag handle the reader has to aim at
+   is a drag handle they will miss. Only where there are two panels to divide —
+   in the single-column layout the list steps aside instead of being narrowed. */
+.ibdrag { display:none; touch-action:none; cursor:col-resize; position:relative;
+  /* The row's own height, not its content's: the items are aligned to the top, and
+     a border between two columns has to run the length of both of them. */
+  align-self:stretch; }
+.ibdrag::before { content:""; position:absolute; inset:0; margin:0 auto; width:1px;
+  background:var(--line); }
+.ibdrag:hover::before, .ibdrag:focus-visible::before, .ibsplit.dragging .ibdrag::before {
+  width:2px; background:var(--accent); }
+.ibdrag:focus-visible { outline:none; }
+
 /* The folder button: one control above the list saying which folder the list is
    showing. It sits outside the list's own scroller — a popup drawn inside a
    scrolling box is a popup clipped by it — and the column is not narrowed by it,
@@ -295,8 +309,12 @@
 .ibread > .selnote { margin:.7rem .8rem 0; }
 @media (min-width:60rem) {
   /* The list is bounded and the pane takes whatever is left: a row is skimmed,
-     a thread is read, so the width goes where the reading is. */
-  .ibsplit { grid-template-columns:minmax(15rem, 24rem) minmax(0, 1fr); align-items:start; }
+     a thread is read, so the width goes where the reading is. Bounded by the
+     grid until the reader drags the border — `--listw` is their width, and its
+     absence is this minmax(), which is the layout's own answer for this screen. */
+  .ibsplit { grid-template-columns:var(--listw, minmax(15rem, 24rem)) .55rem minmax(0, 1fr);
+    align-items:start; }
+  .ibdrag { display:block; }
   /* Both columns are viewport-tall and scroll themselves, so a long list runs
      past a thread that keeps its heading — a mail client, not a page that grows
      until the reader loses where they were. The list's box moves out to the
