@@ -32,6 +32,11 @@
   header.sitehead { max-width:76rem; margin:0 auto; padding:1rem 1.25rem .85rem;
     border-bottom:1px solid var(--line); color:var(--muted); font-size:.86rem; }
   header.sitehead .sep { margin:0 .45rem; color:var(--line); }
+  /* The site's name, and the link home: it is the one nav item that is not a
+     page, so it is weighted like a title and sits in the same bar. */
+  header.sitehead a.brand { color:var(--fg); font-weight:700; font-size:.92rem;
+    letter-spacing:-.01em; text-decoration:none; }
+  header.sitehead a.brand:hover { color:var(--accent); }
   h1 { font-size:1.3rem; margin:0 0 .2rem; letter-spacing:-.01em; }
   h1 .hash { color:var(--muted); font-weight:400; }
   .sub { color:var(--muted); font-size:.86rem; margin:0 0 .5rem; }

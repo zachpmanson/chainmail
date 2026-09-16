@@ -59,15 +59,38 @@ export interface PreviewableChain {
   entries: number;
 }
 
-/** A candidate chain read as data, in a modal. This is deliberately NOT the
- * rendered transcript: reading a chain is a different act from rendering one,
- * and the /v1/chains endpoint returns plain entries without paying for spec
- * assembly. The modal shows enough to judge a candidate before committing it
- * to a page — who said what, in what order. */
-export function ChainPreview({ chain, onClose }: { chain: PreviewableChain; onClose: () => void }) {
+/** A candidate chain read as data. This is deliberately NOT the rendered
+ * transcript: reading a chain is a different act from rendering one, and the
+ * /v1/chains endpoint returns plain entries without paying for spec assembly.
+ * It shows enough to judge a candidate before committing it to a page — who said
+ * what, in what order — and it is the same reading in either place it appears:
+ * the search page's modal, and the inbox's right-hand pane. */
+export function ChainReading({ chain }: { chain: PreviewableChain }) {
   const fetched = $api.useQuery("get", "/v1/chains/{rootExtId}", {
     params: { path: { rootExtId: chain.rootExtId } },
   });
+  const entries = fetched.data?.entries ?? [];
+  return (
+    <>
+      {fetched.isError ? <Failure error={fetched.error} /> : null}
+      {fetched.isFetching ? <p className="selnote">Loading the chain…</p> : null}
+      {!fetched.isFetching && !fetched.isError && entries.length === 0 ? (
+        <p className="selnote">No entries to show.</p>
+      ) : null}
+      {entries.length > 0 ? (
+        <div className="selpv-list">
+          {entries.map((e) => (
+            <EntryCard key={e.extId} e={e} />
+          ))}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+/** The same reading, in a modal: for a candidate being judged from the search
+ * page, where there is no room to put it beside the list. */
+export function ChainPreview({ chain, onClose }: { chain: PreviewableChain; onClose: () => void }) {
   // Escape closes the modal, matching the transcript's dialog habits; the
   // listener lives here because the modal only exists while it is open.
   useEffect(() => {
@@ -78,7 +101,6 @@ export function ChainPreview({ chain, onClose }: { chain: PreviewableChain; onCl
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const entries = fetched.data?.entries ?? [];
   return (
     <div className="selpv" role="dialog" aria-modal="true" aria-label="Chain preview" onClick={onClose}>
       <div className="selpv-panel" onClick={(e) => e.stopPropagation()}>
@@ -89,18 +111,7 @@ export function ChainPreview({ chain, onClose }: { chain: PreviewableChain; onCl
             Close
           </button>
         </div>
-        {fetched.isError ? <Failure error={fetched.error} /> : null}
-        {fetched.isFetching ? <p className="selnote">Loading the chain…</p> : null}
-        {!fetched.isFetching && !fetched.isError && entries.length === 0 ? (
-          <p className="selnote">No entries to show.</p>
-        ) : null}
-        {entries.length > 0 ? (
-          <div className="selpv-list">
-            {entries.map((e) => (
-              <EntryCard key={e.extId} e={e} />
-            ))}
-          </div>
-        ) : null}
+        <ChainReading chain={chain} />
       </div>
     </div>
   );

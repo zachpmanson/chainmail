@@ -79,13 +79,6 @@ export function StatusView() {
 
   return (
     <div className="wrap statuswrap">
-      <header className="top">
-        <h1>chainmail</h1>
-        <p className="sub">
-          Which services this machine is logged into, and what the corpus holds.
-        </p>
-      </header>
-
       <h2 className="sthead">Logged in</h2>
       <p className="stnote">
         Run <code>corpus status</code> to re-measure.

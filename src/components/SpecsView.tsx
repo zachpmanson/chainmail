@@ -35,14 +35,6 @@ export function SpecsView() {
 
   return (
     <div className="wrap statuswrap">
-      <header className="top">
-        <h1>chainmail</h1>
-        <p className="sub">
-          Saved pages, newest first. Each name is its URL — pick one to reopen a
-          build.
-        </p>
-      </header>
-
       {list.isError ? (
         <p className="selfail" role="alert">
           {errText(list.error)}

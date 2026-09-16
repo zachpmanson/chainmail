@@ -470,7 +470,9 @@ const specsHandler: Handler = (c) =>
  * The site nav is a header now, not a footer: one set of cross-links at the top
  * of every route, above the page's own header. The point of the test is the
  * move — the shell cannot quietly grow a footer again, and every link stays
- * reachable without scrolling to the end of a long transcript.
+ * reachable without scrolling to the end of a long transcript. The site's name
+ * is the first link, and the way home: the pages it heads no longer repeat it in
+ * a title block of their own.
  */
 describe("the site navigation", () => {
   it("is the header above the page's own, and nothing renders a footer", async () => {
@@ -481,10 +483,21 @@ describe("the site navigation", () => {
     if (!site) throw new Error("the shell rendered no site header");
     // Document order is the claim: the site nav is the first thing on the page.
     expect(document.querySelectorAll("header")[0]).toBe(site);
-    for (const name of ["Home", "Browse", "Services", "Ops"]) {
+    for (const name of ["chainmail", "Browse", "Services", "Ops"]) {
       expect(within(site as HTMLElement).getByRole("link", { name })).toBeTruthy();
     }
     expect(document.querySelector("footer")).toBeNull();
+  });
+
+  it("names the site, and that name is the link home", async () => {
+    handler = () => json(200, { signed_in: true });
+    // A page away from home, so the brand is not simply where we already are.
+    await mountApp("/status");
+
+    const brand = document.querySelector("header.sitehead a.brand") as HTMLAnchorElement | null;
+    if (!brand) throw new Error("no site name in the nav");
+    expect(brand.textContent).toBe("chainmail");
+    expect(new URL(brand.href).pathname).toBe("/");
   });
 });
 

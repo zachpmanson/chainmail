@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { $api, type ChainHit, type EntryHit } from "../lib/api";
 import { useBuildPage } from "../lib/build";
-import { ChainPreview, Failure, type PreviewableChain } from "./ChainPreview";
+import { ChainReading, Failure } from "./ChainPreview";
 
 /**
  * The home page with nothing asked of it: the corpus in the order it arrived,
@@ -14,6 +14,11 @@ import { ChainPreview, Failure, type PreviewableChain } from "./ChainPreview";
  * Typing a query does not filter this list: it leaves for the search route,
  * where chains are ranked and the ones that belong are ticked. The two are one
  * URL apart, which is why the search box here only navigates.
+ *
+ * Two panels, as a mail client reads: the list on the left, the chosen chain on
+ * the right. The reading pane is the same reading the search page shows in a
+ * modal — here there is room to put it beside the list, and putting it beside
+ * the list is the point of an inbox.
  */
 
 /** Rows per page. Wide enough that the first screen is a real list, narrow
@@ -65,18 +70,20 @@ function newest(chain: ChainHit): EntryHit | undefined {
 function InboxRow({
   chain,
   checked,
+  current,
   onToggle,
   onOpen,
 }: {
   chain: ChainHit;
   checked: boolean;
+  current: boolean;
   onToggle: () => void;
   onOpen: () => void;
 }) {
   const last = newest(chain);
   const subject = chain.subject || "(no subject)";
   return (
-    <li className="ibrow">
+    <li className={`ibrow${current ? " sel" : ""}`}>
       {/* The tick is the selection a page is built from, and the row body is the
           thread itself, so one hit area cannot mean both. */}
       <label className="ibchk" title="include this chain in a page">
@@ -87,7 +94,15 @@ function InboxRow({
           aria-label={`Select ${subject}`}
         />
       </label>
-      <button type="button" className="ibopen" onClick={onOpen} aria-label={subject}>
+      {/* aria-current, not a second class: the row the pane is showing is the
+          current row, and a screen reader should hear it as one. */}
+      <button
+        type="button"
+        className="ibopen"
+        onClick={onOpen}
+        aria-label={subject}
+        aria-current={current ? "true" : undefined}
+      >
         <span className="ibwho">{last?.person || "unknown sender"}</span>
         <span className="ibwhen">{whenShort(last?.ts ?? chain.last)}</span>
         <span className="ibsubj">{subject}</span>
@@ -106,7 +121,12 @@ export function Inbox() {
   const navigate = useNavigate();
   const [q, setQ] = useState("");
   const [chosen, setChosen] = useState<string[]>([]);
-  const [preview, setPreview] = useState<PreviewableChain | null>(null);
+  // Which chain the reading pane is showing. Null until a row is clicked, and
+  // the pane then defaults to the newest — the top of a list is what a reader is
+  // looking at anyway, and an empty pane would be a state nothing can be read
+  // from. The distinction matters on a narrow screen, where the choice is what
+  // switches panels: `chosenRoot` says the reader picked, the default does not.
+  const [chosenRoot, setChosenRoot] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [me, setMe] = useState("");
   const { build, start } = useBuildPage();
@@ -174,15 +194,10 @@ export function Inbox() {
     navigate({ to: "/", search: { q: q.trim() } });
   };
 
-  return (
-    <div className="wrap selwrap">
-      <header className="top">
-        <h1>chainmail</h1>
-        <p className="sub">
-          Mail in the order it arrived. Search to find the chains a page should be built from.
-        </p>
-      </header>
+  const selected = rows.find((c) => c.rootExtId === chosenRoot) ?? rows[0] ?? null;
 
+  return (
+    <div className="wrap ibwrap">
       <form className="ibsearch" onSubmit={submit}>
         <input
           value={q}
@@ -203,30 +218,60 @@ export function Inbox() {
         </p>
       ) : null}
 
-      {rows.length > 0 ? (
-        <ul className="iblist">
-          {rows.map((c) => (
-            <InboxRow
-              key={c.rootExtId}
-              chain={c}
-              checked={chosen.includes(c.rootExtId)}
-              onToggle={() => toggle(c.rootExtId)}
-              onOpen={() => setPreview(c)}
-            />
-          ))}
-        </ul>
-      ) : null}
+      <div className={`ibsplit${chosenRoot ? " has-choice" : ""}`}>
+        <div className="iblistwrap">
+          {rows.length > 0 ? (
+            <ul className="iblist">
+              {rows.map((c) => (
+                <InboxRow
+                  key={c.rootExtId}
+                  chain={c}
+                  checked={chosen.includes(c.rootExtId)}
+                  current={selected?.rootExtId === c.rootExtId}
+                  onToggle={() => toggle(c.rootExtId)}
+                  onOpen={() => setChosenRoot(c.rootExtId)}
+                />
+              ))}
+            </ul>
+          ) : null}
 
-      {inbox.hasNextPage ? (
-        <button
-          type="button"
-          className="ibmore"
-          onClick={() => inbox.fetchNextPage()}
-          disabled={inbox.isFetchingNextPage}
-        >
-          {inbox.isFetchingNextPage ? "Loading…" : "Load older"}
-        </button>
-      ) : null}
+          {inbox.hasNextPage ? (
+            <button
+              type="button"
+              className="ibmore"
+              onClick={() => inbox.fetchNextPage()}
+              disabled={inbox.isFetchingNextPage}
+            >
+              {inbox.isFetchingNextPage ? "Loading…" : "Load older"}
+            </button>
+          ) : null}
+        </div>
+
+        {/* The pane heads itself so a narrow screen can get back to the list: the
+            back button is CSS-hidden where both panels fit side by side. */}
+        <aside className="ibread" aria-label="The selected chain">
+          {selected ? (
+            <>
+              <div className="ibread-head">
+                <button
+                  type="button"
+                  className="ibback"
+                  onClick={() => setChosenRoot(null)}
+                >
+                  ← List
+                </button>
+                <span className="ibread-subj">{selected.subject || "(no subject)"}</span>
+                <span className="note">
+                  {selected.entries} entr{selected.entries === 1 ? "y" : "ies"}
+                </span>
+              </div>
+              <ChainReading chain={selected} />
+            </>
+          ) : (
+            <p className="selnote">Nothing in the corpus to read yet.</p>
+          )}
+        </aside>
+      </div>
 
       {/* The build bar appears only once something is ticked: until then a page
           has nothing to be built from, and the form would be an instruction with
@@ -259,8 +304,6 @@ export function Inbox() {
           {build.isError ? <Failure error={build.error} /> : null}
         </div>
       ) : null}
-
-      {preview ? <ChainPreview chain={preview} onClose={() => setPreview(null)} /> : null}
     </div>
   );
 }

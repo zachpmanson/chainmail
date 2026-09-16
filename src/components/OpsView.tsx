@@ -168,14 +168,6 @@ export function OpsView() {
   }
   return (
     <div className="wrap opswrap">
-      <header className="top">
-        <h1>ops</h1>
-        <p className="sub">
-          People merges the dedupe pass would make — reviewed and applied here,
-          never by an unattended pass.
-        </p>
-      </header>
-
       {plan.isError ? (
         <p className="selfail" role="alert">
           {errText(plan.error)}

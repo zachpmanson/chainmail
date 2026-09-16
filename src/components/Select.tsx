@@ -187,11 +187,6 @@ export function SelectView() {
 
   return (
     <div className="wrap selwrap">
-      <header className="top">
-        <h1>chainmail</h1>
-        <p className="sub">Search the corpus, choose the chains that belong, then build the page.</p>
-      </header>
-
       <form className="selform" onSubmit={submit}>
         <label className="self">
           <span>Query</span>
