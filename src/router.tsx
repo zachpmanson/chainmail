@@ -23,6 +23,7 @@ import { StatusView } from "./components/StatusView";
 import { SpecsView } from "./components/SpecsView";
 import { OpsView } from "./components/OpsView";
 import { DeployStamp } from "./components/DeployStamp";
+import { NavReading } from "./components/NavReading";
 import type { SearchMode } from "./lib/api";
 
 /**
@@ -251,6 +252,10 @@ function RootLayout() {
         <Link to="/status">Services</Link>
         <span className="sep">·</span>
         <Link to="/ops">Ops</Link>
+        {/* The corpus being read is the one statement in the nav that is not a
+            destination, so it carries no separator and sits where the links
+            end. It is not in the right-hand group: see NavReading. */}
+        <NavReading />
         {/* The stamp and the search box travel together: the stamp is about the
             build this page was served from, and the search is the app's one way
             in — both are site-level, both sit at the end of the nav. */}

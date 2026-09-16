@@ -57,6 +57,13 @@
   .navright { margin-left:auto; display:flex; align-items:center; gap:.85rem;
     flex-wrap:wrap; padding-top:.15rem; }
   .navsearch { display:flex; align-items:center; gap:.4rem; }
+  /* The corpus being read. A status rather than a destination, so it is quieter
+     than the links beside it and carries no separator: the space is what says it
+     is not a link. Reads at the size of the deploy stamp, which is the nav's
+     other piece of small print, and never wraps — a phrase broken across two
+     lines in a nav row reads as two facts. */
+  .reading { margin-left:1.1rem; font-size:.74rem; color:var(--muted);
+    white-space:nowrap; }
   /* The deploy stamp. Quiet: a date and a revision, read only when something is
      being checked, so it sits at the fainter weight and monospaced where the
      hash is. The gap spaces the `@` between them as well as the two facts; the
