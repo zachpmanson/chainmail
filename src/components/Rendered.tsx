@@ -102,7 +102,17 @@ export function Rendered({ spec, onBack, onRefresh, onAdd, onAccept, report, ref
     // second pass does not stack duplicate listeners
     const detach = attach(document);
     document.body.classList.add("hasmap");
-    return detach;
+    return () => {
+      detach();
+      // The reserved column belongs to the transcript that is on screen. Left on
+      // <body>, it reserves the minimap's width — `--panel`, fed from the panel's
+      // own offsetWidth — on every page visited afterwards for the rest of the
+      // session: a picker, the inbox, the status screen, all of them with a
+      // couple of hundred pixels of nothing down the right edge and no tree to
+      // account for it.
+      document.body.classList.remove("hasmap");
+      document.body.style.removeProperty("--panel");
+    };
   }, [filtered, empty]);
 
   if (empty) {
