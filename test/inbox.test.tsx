@@ -362,6 +362,20 @@ describe("the home page with no query", () => {
     );
   });
 
+  it("says on the body that this page is a workspace, and takes it off again", async () => {
+    handler = buildHandler;
+    const router = await mountApp("/");
+    await screen.findByText("Loom cutover schedule");
+    // The layout itself is a browser's business — jsdom lays nothing out, and the
+    // height chain was checked in Chromium — but who claims the class, and that it
+    // is given back, is this page's own promise.
+    expect(document.body.classList.contains("inbox")).toBe(true);
+    await act(async () => {
+      router.navigate({ to: "/specs" });
+    });
+    await waitFor(() => expect(document.body.classList.contains("inbox")).toBe(false));
+  });
+
   it("reads the newest chain in the pane before a row is clicked", async () => {
     handler = buildHandler;
     await mountApp("/");

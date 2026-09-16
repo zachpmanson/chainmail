@@ -235,6 +235,16 @@ export function Inbox() {
   const [me, setMe] = useState("");
   const { build, start } = useBuildPage();
 
+  // This page is a workspace: one window, with the list and the thread scrolling
+  // inside it rather than the page scrolling under them. That is a fact about the
+  // page, so it is said on the body — the way a transcript says `chains` — and
+  // taken off when the reader leaves, so the next page scrolls like a document
+  // again. A class a page adds is that page's to remove.
+  useEffect(() => {
+    document.body.classList.add("inbox");
+    return () => document.body.classList.remove("inbox");
+  }, []);
+
   // Which chain the reading pane is showing. It is the URL's, not this
   // component's: a reader who reloads, or sends themselves the address, means to
   // land on the thread they were reading rather than at the top of the list —
