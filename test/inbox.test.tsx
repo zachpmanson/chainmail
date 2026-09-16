@@ -333,7 +333,7 @@ describe("the home page with no query", () => {
     const router = await mountApp("/");
     await screen.findByText("Loom cutover schedule");
 
-    const box = screen.getByLabelText("Search the corpus");
+    const box = screen.getByRole("textbox", { name: "Search the corpus" });
     fireEvent.change(box, { target: { value: "cutover" } });
     fireEvent.submit(box.closest("form")!);
 
@@ -341,7 +341,14 @@ describe("the home page with no query", () => {
     // The search page's own fields, not the list's: the query is what turns one
     // into the other.
     expect(await screen.findByLabelText("Query")).toBeTruthy();
-    expect(screen.queryByLabelText("Search the corpus")).toBeNull();
+    // The nav's box is the only search box now, and it holds the query the
+    // address carries — an empty box above a filtered list would be a lie about
+    // what is on screen.
+    await waitFor(() =>
+      expect((screen.getByRole("textbox", { name: "Search the corpus" }) as HTMLInputElement).value).toBe(
+        "cutover",
+      ),
+    );
   });
 
   it("reads the newest chain in the pane before a row is clicked", async () => {

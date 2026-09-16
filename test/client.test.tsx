@@ -148,7 +148,7 @@ const searchCalls = () => calls.filter((c) => pathOf(c) === "/v1/search");
  * the one that writes the query into the URL the search page reads.
  */
 async function searchFromInbox(text: string) {
-  const box = screen.getByLabelText("Search the corpus");
+  const box = screen.getByRole("textbox", { name: "Search the corpus" });
   fireEvent.change(box, { target: { value: text } });
   fireEvent.submit(box.closest("form")!);
   await screen.findByLabelText("Query");
@@ -600,7 +600,7 @@ describe("the render route /view/<name>", () => {
     });
     await waitFor(() => expect(screen.queryByText("Loom cutover")).toBeNull());
     expect(router.state.location.pathname).toBe("/");
-    expect(screen.getByLabelText("Search the corpus")).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "Search the corpus" })).toBeTruthy();
   });
 
   it("renders the client's own 404 view for a URL that is not a route", async () => {

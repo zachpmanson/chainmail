@@ -14,10 +14,10 @@
 .self:first-child { flex:1 1 18rem; }
 .self:first-child input { width:100%; }
 
-.selform button, .selbuild button, .ibsearch button { font:inherit; font-size:.82rem; font-weight:650;
-  padding:.4rem .8rem; border:1px solid var(--line); border-radius:6px;
+.selform button, .selbuild button, .navsearch button { font:inherit; font-size:.78rem; font-weight:650;
+  padding:.32rem .7rem; border:1px solid var(--line); border-radius:6px;
   background:var(--mine); color:var(--fg); cursor:pointer; }
-.selform button:disabled, .selbuild button:disabled, .ibsearch button:disabled { opacity:.45; cursor:default; }
+.selform button:disabled, .selbuild button:disabled, .navsearch button:disabled { opacity:.45; cursor:default; }
 
 .sellist { list-style:none; margin:.8rem 0 0; padding:0; border:1px solid var(--line);
   border-radius:9px; background:var(--card); overflow:hidden; }
@@ -192,24 +192,23 @@
 /* The inbox: the home page with no query. Same file as the selection stage for
    the same reason — these controls exist only in the browser, and the static
    transcript ships this stylesheet minus none of it. */
-.ibsearch { display:flex; align-items:center; gap:.5rem; margin:0 0 .2rem; }
-.ibsearch input { flex:1 1 auto; font:inherit; font-size:.9rem; padding:.45rem .6rem;
-  border:1px solid var(--line); border-radius:6px; background:var(--card); color:var(--fg); }
 .iblist { list-style:none; margin:0; padding:0; border:1px solid var(--line);
   border-radius:9px; background:var(--card); overflow:hidden; }
-.ibrow { display:grid; grid-template-columns:auto minmax(0, 1fr); align-items:stretch; }
+.ibrow { display:grid; grid-template-columns:minmax(0, 1fr) auto; align-items:stretch; }
 .ibrow + .ibrow { border-top:1px solid var(--line); }
 .ibrow:hover { background:var(--quote); }
 /* The row the pane is showing. Marked with the same left rule the selected
    candidates use, so "this one is open" reads the same on both pages. */
 .ibrow.sel { background:var(--quote); box-shadow:inset 2px 0 0 var(--accent); }
-.ibchk { display:flex; align-items:center; padding:0 .15rem 0 .7rem; cursor:pointer; }
+.ibchk { display:flex; align-items:flex-start; padding:.62rem .6rem 0 .35rem; cursor:pointer; }
 .ibchk input { margin:0; cursor:pointer; }
 /* The row body is the thread, so it is one hit area of its own: a click opens
-   the chain, and the tick beside it is only ever a selection. */
+   the chain, and the tick beside it is only ever a selection. The tick follows
+   the row rather than leading it, which puts it on the right of the time — the
+   line a reader scans down while picking threads out of a list. */
 .ibopen { font:inherit; text-align:left; color:inherit; background:none; border:0;
   cursor:pointer; width:100%; display:grid; grid-template-columns:minmax(0, 1fr) auto;
-  gap:.12rem .8rem; padding:.55rem .8rem .6rem .45rem; }
+  gap:.12rem .8rem; padding:.55rem .35rem .6rem .8rem; }
 .ibwho { grid-area:1/1; font-size:.88rem; font-weight:650; overflow-wrap:anywhere; }
 .ibwhen { grid-area:1/2; font-size:.72rem; color:var(--muted); white-space:nowrap;
   justify-self:end; font-variant-numeric:tabular-nums; }
@@ -304,25 +303,37 @@
 .ibback { font:inherit; font-size:.78rem; font-weight:650; padding:.2rem .5rem;
   border:1px solid var(--line); border-radius:6px; background:var(--card);
   color:var(--fg); cursor:pointer; }
-/* Flush: the pane's edge is the messages' edge. */
-.ibread > .stream { padding:0; }
+/* Flush: the pane's edge is the messages' edge. The gap above the first message
+   is the gap between messages, so the heading reads as a heading rather than as
+   part of the first email. */
+.ibread > .stream { padding:.5rem 0 0; }
 .ibread > .selnote { margin:.7rem .8rem 0; }
 @media (min-width:60rem) {
+  /* The inbox is one window, not a page that grows: the nav at the top, two
+     columns that end at the bottom edge, and only the columns scroll. So the nav,
+     the folder button and the separator never leave the screen. The height comes
+     from the shell — #root is the viewport and this page is what is left of it
+     after the nav — rather than from a guess at what the chrome above costs,
+     which is what `calc(100vh - 12rem)` was and why it stopped fitting when the
+     search box moved out of the page. */
+  .wrap.ibwrap { flex:1 1 auto; min-height:0; padding-bottom:1rem;
+    display:flex; flex-direction:column; }
   /* The list is bounded and the pane takes whatever is left: a row is skimmed,
      a thread is read, so the width goes where the reading is. Bounded by the
      grid until the reader drags the border — `--listw` is their width, and its
      absence is this minmax(), which is the layout's own answer for this screen. */
   .ibsplit { grid-template-columns:var(--listw, minmax(15rem, 24rem)) .55rem minmax(0, 1fr);
-    align-items:start; }
+    align-items:stretch; flex:1 1 auto; min-height:0; }
   .ibdrag { display:block; }
-  /* Both columns are viewport-tall and scroll themselves, so a long list runs
-     past a thread that keeps its heading — a mail client, not a page that grows
-     until the reader loses where they were. The list's box moves out to the
-     wrapper, which is what scrolls, so its edges stay put. */
-  .iblistwrap { max-height:calc(100vh - 12rem); overflow-y:auto;
+  /* Both columns are the height of the window's remainder and scroll themselves,
+     so a long list runs past a thread that keeps its heading — a mail client, not
+     a page that grows until the reader loses where they were. The list's box
+     moves out to the wrapper, which is what scrolls, so its edges stay put. */
+  .ibcol, .ibread { min-height:0; }
+  .iblistwrap { height:100%; overflow-y:auto;
     border:1px solid var(--line); border-radius:9px; background:var(--card); }
   .iblistwrap .iblist { border:0; border-radius:0; background:none; }
-  .ibread { position:sticky; top:1rem; max-height:calc(100vh - 12rem); overflow:auto; }
+  .ibread { height:100%; overflow:auto; }
   .ibback { display:none; }
 }
 @media (max-width:59.99rem) {

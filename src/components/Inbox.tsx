@@ -215,16 +215,6 @@ function InboxRow({
   const subject = chain.subject || "(no subject)";
   return (
     <li className={`ibrow${current ? " sel" : ""}`}>
-      {/* The tick is the selection a page is built from, and the row body is the
-          thread itself, so one hit area cannot mean both. */}
-      <label className="ibchk" title="include this chain in a page">
-        <input
-          type="checkbox"
-          checked={checked}
-          onChange={onToggle}
-          aria-label={`Select ${subject}`}
-        />
-      </label>
       {/* aria-current, not a second class: the row the pane is showing is the
           current row, and a screen reader should hear it as one. */}
       <button
@@ -244,13 +234,25 @@ function InboxRow({
           </span>
         ) : null}
       </button>
+      {/* The tick is the selection a page is built from, and the row body is the
+          thread itself, so one hit area cannot mean both — which is why it
+          follows the row rather than living inside it. It sits on the first line,
+          beside the time it belongs with, because that is the line a reader scans
+          down when they are picking threads out of a list. */}
+      <label className="ibchk" title="include this chain in a page">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={onToggle}
+          aria-label={`Select ${subject}`}
+        />
+      </label>
     </li>
   );
 }
 
 export function Inbox() {
   const navigate = useNavigate();
-  const [q, setQ] = useState("");
   const [chosen, setChosen] = useState<string[]>([]);
   const [title, setTitle] = useState("");
   const [me, setMe] = useState("");
@@ -316,6 +318,14 @@ export function Inbox() {
   const latest = useRef<number | null>(listw);
   const [dragging, setDragging] = useState(false);
   const [, remeasure] = useState(0);
+  // What the list is drawn at, as of the last commit. A render happens while the
+  // DOM still shows the previous layout, so a width read *during* a render is the
+  // one that was just replaced — a reset to the grid's own width left the
+  // separator announcing 630 while the list had gone back to 384.
+  const [shown, setShown] = useState(0);
+  useEffect(() => {
+    setShown(drawn());
+  });
   useEffect(() => {
     const again = () => remeasure((n) => n + 1);
     window.addEventListener("resize", again);
@@ -446,14 +456,6 @@ export function Inbox() {
     .map((a) => a.trim())
     .filter((a) => a !== "");
 
-  const submit = (ev: React.FormEvent) => {
-    ev.preventDefault();
-    if (!q.trim()) return;
-    // Only the query is carried over: mode, person and since have no defaults
-    // worth imposing from here, and the search route applies its own.
-    navigate({ to: "/", search: { q: q.trim() } });
-  };
-
   // The address may name a chain this page of the list does not hold — an old
   // thread opened, then reloaded, comes back before the list has been paged that
   // far. The pane reads it from the id either way (it fetches the chain by id),
@@ -487,18 +489,6 @@ export function Inbox() {
 
   return (
     <div className="wrap ibwrap">
-      <form className="ibsearch" onSubmit={submit}>
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search the corpus"
-          aria-label="Search the corpus"
-        />
-        <button type="submit" disabled={!q.trim()}>
-          Search
-        </button>
-      </form>
-
       {/* A failure with nothing to show is the whole page's; one with rows already
           on screen belongs at the end of the list, where the reader is. */}
       {inbox.isError && !inbox.data ? <Failure error={inbox.error} /> : null}
@@ -576,7 +566,7 @@ export function Inbox() {
           role="separator"
           aria-orientation="vertical"
           aria-label="Resize the list"
-          aria-valuenow={Math.round(width ?? drawn())}
+          aria-valuenow={Math.round(width ?? shown)}
           aria-valuemin={LIST_MIN}
           aria-valuemax={Math.round(bounds().hi)}
           title="Drag to resize the list — double-click to reset"
