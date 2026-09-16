@@ -161,6 +161,33 @@ func restoreMediaLinks(tx *sql.Tx, entryID int64, links []mediaLink) error {
 	return nil
 }
 
+// BlobName is the filename to hand a filed blob back under, and the MIME the
+// corpus recorded for it, taken from an attachment row that points at the bytes.
+//
+// Deliberately a row and not the blob: the MIME a chip was labelled and judged
+// with is the attachment's, and the header that serves the file has to be the
+// same judgement. Bytes are filed once and may be referenced by several rows — a
+// screenshot forwarded five times is five chips and one blob — so this is one of
+// the names, not the name: the newest, which is the row a reader who just
+// pressed the button came from.
+//
+// Not-found is an ordinary answer rather than an error. A blob can outlive the
+// rows that pointed at it (a re-slurp moved a part id, a twin was collapsed),
+// and the bytes are still worth serving under whatever MIME was fetched.
+func (s *Store) BlobName(sha string) (name, mime string, ok bool) {
+	err := s.db.QueryRow(`
+		select coalesce(a.name,''), coalesce(a.mime,'')
+		from attachments a
+		join entries e on e.id = a.entry_id
+		where a.blob_sha=?
+		order by e.ts desc, a.rowid
+		limit 1`, sha).Scan(&name, &mime)
+	if err != nil {
+		return "", "", false
+	}
+	return name, mime, true
+}
+
 // BlobBytes is the read the renderer makes, where a missing blob is an ordinary
 // "no preview" rather than an error worth a failure path. An empty digest is
 // "this attachment was never pulled", which is the common case.

@@ -244,5 +244,9 @@ export interface Entry {
      * What a click should do with bytes we hold, decided by the server from the stored MIME — the same rule that sets Content-Disposition when the file is served, because the two must not be able to disagree. Absent when there is nothing local to open, which is what gmailId and link are for.
      */
     open?: "popup" | "download";
+    /**
+     * Why the corpus does not hold these bytes, recorded when a pull decided it never will: too large, gone from the sender's copy, nothing to fetch by. Present means the file is not coming, so a page can explain the chip and stop offering to fetch it. The value is the corpus's own word; the page owns the phrasing.
+     */
+    skip?: string;
   }[];
 }

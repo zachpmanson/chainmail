@@ -74,6 +74,22 @@ func attachmentOpen(mime, name string, stored bool) string {
 	return OpenDownload
 }
 
+// Disposition is the Content-Disposition for bytes the corpus holds, decided by
+// the same rule that put `open` on the chip.
+//
+// One rule, asked twice, rather than two rules that agree: the server that serves
+// the file and the page that promises what a click does must not be able to
+// disagree, and the way to guarantee that is for the header to be derived from
+// this function and nothing else. `inline` is refused for markup because
+// attachmentOpen refuses it first, which is the part that matters — served from
+// the app's own origin, a sender's HTML is script.
+func Disposition(mime, name string) string {
+	if attachmentOpen(mime, name, true) == OpenDownload {
+		return "attachment"
+	}
+	return "inline"
+}
+
 // attachmentKind is the short human label shown on the chip. Derived from the
 // MIME type, falling back to the file extension, because a MIME type of
 // application/octet-stream is common and says nothing.

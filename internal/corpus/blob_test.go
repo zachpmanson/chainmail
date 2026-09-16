@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"testing"
+	"time"
 )
 
 func atts(names ...string) []Attachment {
@@ -275,5 +276,53 @@ func TestMediaStatsCountsWhatIsFiledAndWhyNot(t *testing.T) {
 	}
 	if tally.SkippedRows != 1 || tally.Skips[MediaSkipTooLarge] != 1 {
 		t.Errorf("skips: %+v", tally.Skips)
+	}
+}
+
+// A digest's name comes from an attachment row, because that is where names live:
+// bytes are filed once and referenced by every chip that points at them, so the
+// answer is one of the names rather than the name.
+func TestBlobNameComesFromARowThatPointsAtTheBytes(t *testing.T) {
+	s := open(t)
+	data := []byte("the same screenshot, forwarded twice")
+	if err := s.PutBlob(Blob{Bytes: data, Mime: "image/png", Source: SourceMail}); err != nil {
+		t.Fatalf("PutBlob: %v", err)
+	}
+	sha := BlobSHA(data)
+	if _, err := s.Put(entry("mail:<old@x>", "first"), nil, atts("first.png")); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	newer := entry("mail:<new@x>", "second")
+	newer.TS = newer.TS.Add(24 * time.Hour)
+	if _, err := s.Put(newer, nil, atts("second.png")); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	for _, e := range []string{"mail:<old@x>", "mail:<new@x>"} {
+		if n, err := s.LinkBlob(e, "part-"+map[string]string{"mail:<old@x>": "first.png", "mail:<new@x>": "second.png"}[e], sha); err != nil || n != 1 {
+			t.Fatalf("LinkBlob %s: n=%d err=%v", e, n, err)
+		}
+	}
+
+	// Two rows, one blob: the newest name is what a reader who just pressed the
+	// button came from, and which one it is must not depend on insert order.
+	name, mime, ok := s.BlobName(sha)
+	if !ok || name != "second.png" || mime != "image/png" {
+		t.Errorf("BlobName = %q, %q, %v; want the newest row's name and type", name, mime, ok)
+	}
+
+	// Bytes whose rows are gone still have bytes: a re-slurp can move a part id
+	// out from under a link, and the file is still worth serving.
+	if _, err := s.DB().Exec(`update attachments set blob_sha=null where source_ref='part-second.png'`); err != nil {
+		t.Fatalf("unlinking: %v", err)
+	}
+	name, _, ok = s.BlobName(sha)
+	if !ok || name != "first.png" {
+		t.Errorf("after unlinking the newest row: BlobName = %q, %v; want the other row", name, ok)
+	}
+	if _, err := s.DB().Exec(`update attachments set blob_sha=null`); err != nil {
+		t.Fatalf("unlinking everything: %v", err)
+	}
+	if name, mime, ok := s.BlobName(sha); ok || name != "" || mime != "" {
+		t.Errorf("BlobName with no rows = %q, %q, %v; want not-found", name, mime, ok)
 	}
 }

@@ -26,6 +26,17 @@ const (
 	extNone  = "mail:<no-such-entry@loomworks.example>"
 )
 
+// shedBytes is the fixture attachment's content, filed as a blob so that the
+// corpus holds one file: GET /v1/attachments/{sha} needs something real to serve,
+// and the documented-path walk substitutes this digest — an unrouted path answers
+// 404, while an unsubstituted placeholder could only ever be a 400.
+const (
+	shedBytes = "shed,readings\nnorth,42\n"
+	shedPart  = "1" // the part id the fixture's attachment carries
+)
+
+var shedSHA = corpus.BlobSHA([]byte(shedBytes))
+
 type harness struct {
 	*server
 	handler http.Handler
@@ -86,7 +97,7 @@ func testServer(t *testing.T) *harness {
 		from:      "Ada Okoye <ada@loomworks.example>",
 		to:        "Bo Halvorsen <bo@fjordline.example>",
 		text:      "Can you quote the solar install for the north shed?",
-		atts:      []corpus.Attachment{{Name: "shed.csv", Mime: "text/csv", Size: 512}},
+		atts:      []corpus.Attachment{{Name: "shed.csv", Mime: "text/csv", Size: 512, SourceRef: shedPart}},
 	})
 	b := putMail(t, s, mailFixture{
 		ext: extBo2, ts: "2026-03-02T23:40:00+01:00", tz: "+0100",
@@ -119,6 +130,13 @@ func testServer(t *testing.T) *harness {
 	}
 	if _, err := s.ResolveParents(); err != nil {
 		t.Fatalf("ResolveParents: %v", err)
+	}
+	// The one file the fixture corpus holds, linked to the part it arrived as.
+	if err := s.PutBlob(corpus.Blob{SHA: shedSHA, Bytes: []byte(shedBytes), Mime: "text/csv", Source: "mail"}); err != nil {
+		t.Fatalf("PutBlob: %v", err)
+	}
+	if n, err := s.LinkBlob(extAda1, shedPart, shedSHA); err != nil || n != 1 {
+		t.Fatalf("LinkBlob: %d rows, %v", n, err)
 	}
 
 	// Seeded so the documented-path walk can GET /v1/specs/{name} without a

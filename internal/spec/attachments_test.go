@@ -1,6 +1,10 @@
 package spec
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/zachpmanson/chainmail/internal/corpus"
+)
 
 // What a click does is the server's decision, made once from the stored MIME,
 // because the same rule has to set Content-Disposition when the file is served
@@ -73,5 +77,92 @@ func TestAttachmentOpenFallsBackToTheName(t *testing.T) {
 func TestAttachmentOpenTrustsATypedMimeOverTheName(t *testing.T) {
 	if got := attachmentOpen("application/pdf", "report.png", true); got != OpenDownload {
 		t.Errorf("a pdf named .png opened as %q", got)
+	}
+}
+
+// The chip and the served file are one decision asked twice, and this is the test
+// that says so: whatever `open` a chip carries, the header the same file is
+// served under must agree with it. A chip promising a window over the page, handed
+// a download instead (or worse, markup handed back inline), is a broken window —
+// and it is the kind of drift no single handler test can catch, because each side
+// looks right on its own.
+func TestDispositionIsTheSameDecisionAsOpen(t *testing.T) {
+	names := []string{"shot.png", "walkthrough.mp4", "quote.pdf", "plan.docx", "page.html",
+		"logo.svg", "notes.txt", "data.csv", "archive.zip", "unlabelled"}
+	mimes := []string{"image/png", "video/mp4", "audio/mpeg", "text/plain", "text/csv",
+		"text/html", "application/xhtml+xml", "image/svg+xml", "application/pdf",
+		"application/zip", "application/json", "application/octet-stream", ""}
+	for _, mime := range mimes {
+		for _, name := range names {
+			open := attachmentOpen(mime, name, true)
+			disp := Disposition(mime, name)
+			want := "inline"
+			if open == OpenDownload {
+				want = "attachment"
+			}
+			if disp != want {
+				t.Errorf("%s (%s): open=%q but Content-Disposition=%q, want %q",
+					name, mime, open, disp, want)
+			}
+			// The one case that would be a security bug rather than a broken
+			// window: a sender's markup answered inline from the app's origin.
+			if disp == "inline" {
+				switch mime {
+				case "text/html", "application/xhtml+xml", "image/svg+xml":
+					t.Errorf("%s (%s): markup served inline from the app's origin is script", name, mime)
+				}
+			}
+		}
+	}
+}
+
+// The chip has to be able to say why a file is not here. The words are the
+// page's; the fact is the spec's.
+func TestASkippedAttachmentCarriesWhyAndNotABlob(t *testing.T) {
+	s := trail(t)
+	// No source_ref on the fixture's attachment, which is the case the reason
+	// exists for: nothing to fetch it by, and re-deciding that every pass would
+	// re-report it forever.
+	if err := s.MarkMediaSkip("mail:<a@loomworks>", "", corpus.MediaSkipTooLarge); err != nil {
+		t.Fatalf("MarkMediaSkip: %v", err)
+	}
+	sp := generate(t, s, Options{Containers: []string{"T1"}})
+	att := sp.Messages[0].Attachments[0]
+	if att.Skip != corpus.MediaSkipTooLarge {
+		t.Errorf("skip = %q, want the corpus's own word for it", att.Skip)
+	}
+	// A reason and bytes are exclusive states: nothing local to open, and no
+	// digest for a client to fetch.
+	if att.BlobSHA != "" || att.Open != "" {
+		t.Errorf("a skipped attachment carries blobSha=%q open=%q", att.BlobSHA, att.Open)
+	}
+}
+
+// And the other side of it: once the bytes are here, the digest and the click
+// outcome travel, and the reason is gone.
+func TestAPulledAttachmentCarriesItsDigestAndOutcome(t *testing.T) {
+	s := trail(t)
+	if _, err := s.DB().Exec(
+		`update attachments set source_ref='part-1' where name='plan.csv'`); err != nil {
+		t.Fatalf("giving the fixture a part id: %v", err)
+	}
+	data := []byte("shed,readings\n")
+	if err := s.PutBlob(corpus.Blob{Bytes: data, Mime: "text/csv", Source: corpus.SourceMail}); err != nil {
+		t.Fatalf("PutBlob: %v", err)
+	}
+	sha := corpus.BlobSHA(data)
+	if n, err := s.LinkBlob("mail:<a@loomworks>", "part-1", sha); err != nil || n != 1 {
+		t.Fatalf("LinkBlob: n=%d err=%v", n, err)
+	}
+	sp := generate(t, s, Options{Containers: []string{"T1"}})
+	att := sp.Messages[0].Attachments[0]
+	if att.BlobSHA != sha {
+		t.Errorf("blobSha = %q, want %q", att.BlobSHA, sha)
+	}
+	if att.Open != OpenPopup {
+		t.Errorf("open = %q, want %q for a CSV", att.Open, OpenPopup)
+	}
+	if att.Skip != "" {
+		t.Errorf("skip = %q on an attachment we hold the bytes of", att.Skip)
 	}
 }
