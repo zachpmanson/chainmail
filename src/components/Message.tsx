@@ -252,18 +252,28 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
             </span>
           </>
         );
-        // A picture opens over the page, and there are two ways to have one: the
-        // preview the builder embedded, or bytes this host holds for something the
-        // server called an image. The second is what a small picture has instead of
-        // a preview — the builder embeds one only above a size floor, so a 17 KB
-        // screenshot arrives as a bare chip with only its bytes — and that is the
-        // case this used to miss, leaving the one chip that navigated away to a
-        // bare image in a tab rather than popping it up. Anything the server said
-        // to download is left alone: that call decides Content-Disposition too, and
-        // a window over the page for a file handed over as an attachment would be
-        // a promise the server does not keep.
-        const opens =
-          a.open !== "download" && (thumb !== null || (Boolean(local) && a.kind === "image"));
+        // What shows these bytes in the window over the page, when anything can:
+        // the preview the builder embedded — a picture by definition — or the
+        // server's `view` for bytes this host holds. The preview comes first
+        // because a thumbnail from the archive has a picture here and no bytes of
+        // ours to fetch.
+        //
+        // `view` is asked separately from `open` and not derived from it, because
+        // they answer different questions: `open` is what a click does with the
+        // link, `view` is what the window contains. The PDF is where they differ
+        // — a click takes it (Content-Disposition `attachment`) and the window
+        // still frames it. A file with no view can only be taken: an archive, a
+        // document, markup (a frame is a document, so a sender's HTML framed here
+        // would be script in our origin), and media, which plays in a tab.
+        // A picture is a picture whether or not the spec that carried it knew the
+        // word for one: a page saved before `view` existed still holds bytes and a
+        // kind, and re-deriving it must not be the price of enlarging something.
+        // Everything else is the server's `view`, which a fresh derivation
+        // carries and an old one cannot — so a PDF in an old page stays a chip
+        // until the page is rebuilt.
+        const showsImage = thumb !== null || (Boolean(local) && a.kind === "image");
+        const view = showsImage ? "image" : Boolean(local) ? a.view ?? "" : "";
+        const opens = view !== "";
         // The chip stays the same link it always was, and the popover is layered
         // onto it by script. That is deliberate: no new control appears, the
         // trigger is already in the tab order, and with scripting unavailable
@@ -289,7 +299,11 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
             {...(note ? { title: note } : {})}
             {...(beside ? { target: "_blank", rel: "noopener" } : {})}
             {...(opens
-              ? { "data-pop": a.name, "aria-haspopup": "dialog" as const }
+              ? {
+                  "data-pop": a.name,
+                  "data-view": view,
+                  "aria-haspopup": "dialog" as const,
+                }
               : {})}
             /* The popover's save control reads this, not the href: a Slack chip's
                href is a permalink and a body picture has no href at all, so the

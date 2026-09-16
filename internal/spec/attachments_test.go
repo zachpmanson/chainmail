@@ -166,3 +166,89 @@ func TestAPulledAttachmentCarriesItsDigestAndOutcome(t *testing.T) {
 		t.Errorf("skip = %q on an attachment we hold the bytes of", att.Skip)
 	}
 }
+
+// Which element the window over the page builds. A different question from what a
+// click does, and these cases exist to keep the two from being confused for one
+// another: the PDF is a download AND a framed document.
+func TestAttachmentViewPicksTheElement(t *testing.T) {
+	cases := []struct {
+		name, mime string
+		stored     bool
+		want       string
+		why        string
+	}{
+		{"a screenshot", "image/png", true, ViewImage, "pictures go in an img"},
+		{"a log", "text/plain", true, ViewText, "text goes in a pre"},
+		{"a CSV", "application/csv", true, ViewText, "text that does not say text/"},
+		{"a JSON payload", "application/json", true, ViewText, "so does a JSON one"},
+		{"a typed mime with parameters", "text/plain; charset=utf-8", true, ViewText,
+			"parameters are not part of the type"},
+		{"a PDF", "application/pdf", true, ViewPDF, "the browser frames a PDF"},
+
+		// Markup is the security case here too, and one step sharper: a frame is a
+		// document, so framing a sender's HTML would run it in our origin.
+		{"an html body", "text/html", true, "", "markup is script in our origin"},
+		{"an xhtml part", "application/xhtml+xml", true, "", "the same problem, another label"},
+		{"an SVG", "image/svg+xml", true, "", "an SVG is markup wearing an image's type"},
+
+		// Nothing to show at all: the chip is a file to take.
+		{"a spreadsheet", "application/vnd.ms-excel", true, "", "a document we cannot frame"},
+		{"a zip", "application/zip", true, "", "an archive has no view"},
+		{"video", "video/mp4", true, "", "media has its own controls and a tab"},
+		{"audio", "audio/mpeg", true, "", "so does a recording"},
+		{"an unnamed binary", "application/octet-stream", true, "", "nothing says what it is"},
+
+		// Nothing local, nothing to show.
+		{"a picture we never pulled", "image/png", false, "",
+			"no bytes here to put in the window"},
+	}
+
+	for _, c := range cases {
+		if got := attachmentView(c.mime, c.name, c.stored); got != c.want {
+			t.Errorf("%s (%s): got %q, want %q — %s", c.name, c.mime, got, c.want, c.why)
+		}
+	}
+}
+
+// An unlabelled file, where the name is the only evidence there is. A PDF or a
+// picture a sender did not type still goes in the window.
+func TestAttachmentViewFallsBackToTheName(t *testing.T) {
+	cases := []struct {
+		name, want string
+	}{
+		{"screenshot.png", ViewImage},
+		{"shot.JPEG", ViewImage},
+		{"notes.txt", ViewText},
+		{"data.csv", ViewText},
+		{"report.pdf", ViewPDF},
+		{"holiday.mov", ""},
+		{"archive.tgz", ""},
+		{"noextension", ""},
+	}
+	for _, c := range cases {
+		if got := attachmentView("application/octet-stream", c.name, true); got != c.want {
+			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
+// A view that is not "" means the page has source to put in the window, so a chip
+// has to lead there — and markup is never framed, whatever its name says. The
+// converse does not hold and is not asserted: a file can read in a tab (video,
+// audio, an untyped blob) without having an element here.
+func TestAViewMeansThereIsAWindowToShowItIn(t *testing.T) {
+	mimes := []string{"image/png", "text/plain", "application/pdf", "application/zip",
+		"text/html", "image/svg+xml", "application/octet-stream", ""}
+	names := []string{"shot.png", "notes.txt", "quote.pdf", "archive.zip", "page.html", "unlabelled"}
+	for _, mime := range mimes {
+		for _, name := range names {
+			view := attachmentView(mime, name, true)
+			if view != "" && attachmentOpen(mime, name, true) == "" {
+				t.Errorf("%s (%s): view=%q with nothing to open", name, mime, view)
+			}
+			if view != "" && isMarkup(baseMime(mime)) {
+				t.Errorf("%s (%s): markup framed as %q", name, mime, view)
+			}
+		}
+	}
+}
