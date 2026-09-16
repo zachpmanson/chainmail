@@ -864,3 +864,137 @@ describe("the default folder", () => {
     expect(here.getAttribute("aria-checked")).toBe("false");
   });
 });
+
+/**
+ * Resizing the two panels by dragging the border between them.
+ *
+ * jsdom lays nothing out — every rect is zero — so the splitter's arithmetic has
+ * no numbers to work with unless a test supplies them. The stub answers by
+ * class, which is what the splitter itself reads: the split's width is what the
+ * pane is left with, and the column's is where the arrow keys start.
+ */
+describe("resizing the panels", () => {
+  const WIDE = 1200;
+  const MIN = 15 * 16; // the list's floor
+  const MOST = WIDE - 26 * 16; // and what leaves the pane its own minimum
+  let restore: (() => void) | null;
+
+  const stubLayout = (column = 300) => {
+    const real = Element.prototype.getBoundingClientRect;
+    const box = (w: number) =>
+      ({
+        x: 0,
+        y: 0,
+        left: 0,
+        top: 0,
+        right: w,
+        bottom: 100,
+        width: w,
+        height: 100,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      if (this.classList?.contains("ibsplit")) return box(WIDE);
+      if (this.classList?.contains("ibcol")) return box(column);
+      return real.call(this);
+    };
+    restore = () => {
+      Element.prototype.getBoundingClientRect = real;
+      restore = null;
+    };
+  };
+
+  beforeEach(() => localStorage.clear());
+  afterEach(() => restore?.());
+
+  const border = () => screen.getByRole("separator", { name: "Resize the list" });
+  const listw = () =>
+    (document.querySelector(".ibsplit") as HTMLElement).style.getPropertyValue("--listw");
+
+  it("moves the border, and the list with it", async () => {
+    stubLayout();
+    handler = buildHandler;
+    await mountApp("/");
+    await screen.findByText("Loom cutover schedule");
+
+    fireEvent.pointerDown(border(), { button: 0, clientX: 280 });
+    fireEvent.pointerMove(window, { clientX: 520 });
+    expect(listw()).toBe("520px");
+    // Still following the pointer: a drag is not a single jump.
+    fireEvent.pointerMove(window, { clientX: 610 });
+    expect(listw()).toBe("610px");
+
+    // And the width is the reader's, so it outlives the visit.
+    fireEvent.pointerUp(window);
+    expect(localStorage.getItem("cm-list")).toBe("610");
+  });
+
+  it("holds the border where both panels can still be read", async () => {
+    stubLayout();
+    handler = buildHandler;
+    await mountApp("/");
+    await screen.findByText("Loom cutover schedule");
+
+    fireEvent.pointerDown(border(), { button: 0, clientX: 300 });
+    // Off the left edge of the window entirely.
+    fireEvent.pointerMove(window, { clientX: -400 });
+    expect(listw()).toBe(`${MIN}px`);
+    // And shoved right, where the list would otherwise have the thread's width.
+    fireEvent.pointerMove(window, { clientX: 2000 });
+    expect(listw()).toBe(`${MOST}px`);
+    fireEvent.pointerUp(window);
+  });
+
+  it("opens where the reader last left the border", async () => {
+    stubLayout();
+    localStorage.setItem("cm-list", "480");
+    handler = buildHandler;
+    await mountApp("/");
+    await screen.findByText("Loom cutover schedule");
+
+    expect(listw()).toBe("480px");
+  });
+
+  it("gives the layout's own width back when the border is double-clicked", async () => {
+    stubLayout();
+    localStorage.setItem("cm-list", "480");
+    handler = buildHandler;
+    await mountApp("/");
+    await screen.findByText("Loom cutover schedule");
+    expect(listw()).toBe("480px");
+
+    fireEvent.doubleClick(border());
+    // No custom property at all: the grid's own minmax() decides again, which is
+    // a different thing from a width of zero.
+    expect(listw()).toBe("");
+    expect(localStorage.getItem("cm-list")).toBeNull();
+  });
+
+  it("moves the border for a reader who cannot drag it", async () => {
+    stubLayout(300);
+    handler = buildHandler;
+    await mountApp("/");
+    await screen.findByText("Loom cutover schedule");
+
+    // Where the arrow keys start from is where the layout put the column, and the
+    // separator says so rather than claiming a width nobody chose.
+    await waitFor(() => expect(border().getAttribute("aria-valuenow")).toBe("300"));
+    expect(border().getAttribute("aria-valuemin")).toBe(String(MIN));
+    expect(border().getAttribute("aria-valuemax")).toBe(String(MOST));
+
+    fireEvent.keyDown(border(), { key: "ArrowRight" });
+    expect(listw()).toBe("316px");
+    fireEvent.keyDown(border(), { key: "ArrowLeft" });
+    fireEvent.keyDown(border(), { key: "ArrowLeft" });
+    expect(listw()).toBe("284px");
+    fireEvent.keyDown(border(), { key: "End" });
+    expect(listw()).toBe(`${MOST}px`);
+    fireEvent.keyDown(border(), { key: "Home" });
+    expect(listw()).toBe(`${MIN}px`);
+    // A key press is a decision of its own, so it is kept.
+    expect(localStorage.getItem("cm-list")).toBe(String(MIN));
+    // And a key the separator does not take moves nothing.
+    fireEvent.keyDown(border(), { key: "PageDown" });
+    expect(listw()).toBe(`${MIN}px`);
+  });
+});
