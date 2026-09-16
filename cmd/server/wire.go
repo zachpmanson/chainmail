@@ -76,7 +76,12 @@ type corpusEntry struct {
 	// To is the recipient line a page build prints under the bubble, e.g.
 	// "Bo Halvorsen, cc Cy Okafor". Absent where the entry stated no recipients,
 	// which is every entry recovered from someone else's quote.
-	To           string        `json:"to,omitempty"`
+	To string `json:"to,omitempty"`
+	// FromEmail is the address the entry came from, so a client can name the
+	// sender fully on hover. Absent where the entry has no From header of its own.
+	// The same expression a page build uses, so the two cannot name two addresses
+	// for one message.
+	FromEmail    string        `json:"fromEmail,omitempty"`
 	Container    string        `json:"container,omitempty"`
 	Permalink    string        `json:"permalink,omitempty"`
 	Parent       string        `json:"parent,omitempty"`
@@ -454,8 +459,9 @@ func toCorpusEntry(s corpus.Shown, r spec.Rendered) corpusEntry {
 	e := corpusEntry{
 		ExtID: s.ExtID, Source: s.Source, Quoted: s.Quoted, TS: stamp(s.TS),
 		TZ: s.TZ, TZOffsetMinutes: s.TZOffset, Author: s.Author, Subject: s.Subject,
-		Body: s.Body, HTML: r.HTML, To: r.To, Container: s.Container, Permalink: s.Permalink,
-		Parent: s.Parent, ParentRef: s.ParentRef,
+		Body: s.Body, HTML: r.HTML, To: r.To, FromEmail: r.FromEmail, Container: s.Container,
+		Permalink: s.Permalink,
+		Parent:    s.Parent, ParentRef: s.ParentRef,
 	}
 	for _, g := range s.Sightings {
 		e.Sightings = append(e.Sightings, sighting{Kind: g.Kind, SeenIn: g.SeenIn, Detail: g.Detail})

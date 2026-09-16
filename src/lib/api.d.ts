@@ -532,6 +532,8 @@ export interface components {
             html?: string;
             /** @description The recipient line a page build prints under the bubble, e.g. `Bo Halvorsen, cc Cy Okafor`. Absent where the entry stated no recipients — every entry recovered from someone else's quote has no headers of its own. */
             to?: string;
+            /** @description The address the entry was sent from, lowercased, as a page build's own entry carries it. Absent where the entry has no From header of its own, which is every entry recovered from someone else's quote. */
+            fromEmail?: string;
             /** @description Mail thread id or Slack channel id. Absent when the source stated none. */
             container?: string;
             /** @description Opens the entry at its source. Absent when the source gave none. */

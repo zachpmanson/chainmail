@@ -7,10 +7,10 @@ import (
 )
 
 // Rendered is one entry as a view that is not a page needs it: the body as HTML a
-// page build would produce, and the recipient line it would print under the
-// bubble.
+// page build would produce, the recipient line it would print under the bubble,
+// and the address it came from.
 //
-// Two fields rather than one because they come out of the same load. A caller
+// Three fields rather than one because they come out of the same load. A caller
 // that asked for the HTML and then had to ask again for the recipients would pay
 // twice for the rows, the host documents and the attachment attribution that
 // decide both — and the second answer could disagree with the first.
@@ -22,6 +22,12 @@ type Rendered struct {
 	// every recovered entry, since it has no headers of its own. Empty renders as
 	// unknown, and nothing may guess at it.
 	To string
+	// FromEmail is the address the entry was sent from, lowercased, as the page's
+	// own Entry carries it. Empty where the entry has no From header of its own —
+	// a message recovered from someone else's quote — and empty is the answer: the
+	// pane hangs it on the sender's name so a reader can see who they are actually
+	// reading, and naming the wrong address would be worse than naming none.
+	FromEmail string
 }
 
 // RenderTrail renders the named entries as the entries a page build would draw,
@@ -91,8 +97,9 @@ func RenderTrail(store *corpus.Store, extIDs []string) (map[string]Rendered, err
 	attributeAttachments(rows)
 	for _, r := range rows {
 		out[extOf[r.ID]] = Rendered{
-			HTML: bodyHTML(r),
-			To:   recipientsOf(r, part[r.ID]),
+			HTML:      bodyHTML(r),
+			To:        recipientsOf(r, part[r.ID]),
+			FromEmail: parseAddr(r.From).Address,
 		}
 	}
 	return out, nil

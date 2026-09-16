@@ -407,10 +407,11 @@ func TestChainIsWholeFromAnyMember(t *testing.T) {
 		got := decode[struct {
 			RootExtID string `json:"rootExtId"`
 			Entries   []struct {
-				ExtID string `json:"extId"`
-				TS    string `json:"ts"`
-				HTML  string `json:"html"`
-				To    string `json:"to"`
+				ExtID     string `json:"extId"`
+				TS        string `json:"ts"`
+				HTML      string `json:"html"`
+				To        string `json:"to"`
+				FromEmail string `json:"fromEmail"`
 			}
 		}](t, res)
 		if got.RootExtID != from {
@@ -440,6 +441,11 @@ func TestChainIsWholeFromAnyMember(t *testing.T) {
 			// "to —" here means the pane is showing a gap the corpus could fill.
 			if e.To == "" {
 				t.Errorf("from %s: %s arrived with no recipient line", from, e.ExtID)
+			}
+			// And the address the message came from, so hovering its sender can name
+			// them. These messages all arrived with a From header of their own.
+			if e.FromEmail == "" {
+				t.Errorf("from %s: %s arrived with no sender address", from, e.ExtID)
 			}
 		}
 	}

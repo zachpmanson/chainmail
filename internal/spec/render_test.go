@@ -44,6 +44,14 @@ func TestRenderedEntriesAreTheEntriesAPageBuilds(t *testing.T) {
 			t.Errorf("%s: the pane and the page write different recipients\n pane: %q\n page: %q",
 				m.ExtID, got.To, m.To)
 		}
+		// The address behind the sender's name, which is what a hover names. The
+		// pane has no other way to know it: a page build reads it off the same row
+		// this does, and a pane that offered none (or a different one) would be the
+		// same divergence wearing a smaller hat.
+		if got.FromEmail != m.FromEmail {
+			t.Errorf("%s: the pane and the page name different sender addresses\n pane: %q\n page: %q",
+				m.ExtID, got.FromEmail, m.FromEmail)
+		}
 	}
 }
 

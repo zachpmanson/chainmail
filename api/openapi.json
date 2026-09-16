@@ -1055,6 +1055,10 @@
             "type": "string",
             "description": "The recipient line a page build prints under the bubble, e.g. `Bo Halvorsen, cc Cy Okafor`. Absent where the entry stated no recipients — every entry recovered from someone else's quote has no headers of its own."
           },
+          "fromEmail": {
+            "type": "string",
+            "description": "The address the entry was sent from, lowercased, as a page build's own entry carries it. Absent where the entry has no From header of its own, which is every entry recovered from someone else's quote."
+          },
           "container": {
             "type": "string",
             "description": "Mail thread id or Slack channel id. Absent when the source stated none."

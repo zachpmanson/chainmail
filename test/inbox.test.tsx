@@ -171,7 +171,16 @@ const pageOf = (chains: unknown[]) => json(200, { mode: "lexical", chains });
  *  markup the text does not, which is how a test can tell them apart. */
 const CHAIN_BODIES: Record<
   string,
-  { author: string; subject: string; body: string; html: string; to?: string; tz: string; tzOffsetMinutes: number }
+  {
+    author: string;
+    subject: string;
+    body: string;
+    html: string;
+    to?: string;
+    fromEmail?: string;
+    tz: string;
+    tzOffsetMinutes: number;
+  }
 > = {
   "mail:<fence-panel-9@example.fed>": {
     author: "Ada Okoye",
@@ -179,6 +188,7 @@ const CHAIN_BODIES: Record<
     body: "Unrelated: the fence panels arrived, and the gate needs a new hinge.",
     html: "<p>Unrelated: the fence panels arrived, and the gate needs a new hinge. <b>Regards, Ada</b></p>",
     to: "Bo Halvorsen, cc Cy Okafor",
+    fromEmail: "ada@okoye.example",
     tz: "AEST",
     tzOffsetMinutes: 600,
   },
@@ -188,6 +198,7 @@ const CHAIN_BODIES: Record<
     body: "Roof access is fine from the 14th.",
     html: "<p>Roof access is fine from the 14th.</p>",
     to: "Ada Okoye",
+    fromEmail: "bo@halvorsen.example",
     tz: "AEST",
     tzOffsetMinutes: 600,
   },
@@ -479,6 +490,35 @@ describe("the home page with no query", () => {
     // The recipient line the message itself stated. It is the same footer the
     // page prints, filled from the chain read rather than left as "to —".
     expect(pane().querySelector(".msg .foot .to")?.textContent).toBe("to Bo Halvorsen, cc Cy Okafor");
+  });
+
+  it("names the sender's address on hover, and only where the entry has one", async () => {
+    handler = buildHandler;
+    await mountApp("/");
+    await screen.findByText("Loom cutover schedule");
+
+    // The name and the avatar both say who this is: "Ada Okoye" alone is a name
+    // the reader cannot check against anything.
+    const named = await waitFor(() => {
+      const el = pane().querySelector(".msg .hdr .nm");
+      if (el?.getAttribute("title") !== "Ada Okoye <ada@okoye.example>") {
+        throw new Error(`the name still reads ${JSON.stringify(el?.getAttribute("title"))}`);
+      }
+      return el;
+    });
+    expect(named.parentElement?.querySelector(".av")?.getAttribute("title")).toBe(
+      "Ada Okoye <ada@okoye.example>",
+    );
+  });
+
+  it("offers no address for a recovered entry, which has none", async () => {
+    handler = buildHandler;
+    await mountApp("/?open=quote%3A9f2c1ab4e77d");
+
+    await waitFor(() => expect(pane().querySelector(".msg .hdr .nm")?.textContent).toBe("Dana Reyes"));
+    // The name, and nothing more: an address borrowed from the people table
+    // would be a claim about who sent it, and the entry does not say.
+    expect(pane().querySelector(".msg .hdr .nm")?.getAttribute("title")).toBe("Dana Reyes");
   });
 
   it("says a recovered entry named no recipients instead of leaving the gap dark", async () => {
