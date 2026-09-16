@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { $api, type ChainHit, type EntryHit } from "../lib/api";
 import { useBuildPage } from "../lib/build";
-import { ChainReading, Failure } from "./ChainPreview";
+import { ChainReading, Failure, type PreviewableChain } from "./ChainPreview";
 
 /**
  * The home page with nothing asked of it: the corpus in the order it arrived,
@@ -121,15 +121,26 @@ export function Inbox() {
   const navigate = useNavigate();
   const [q, setQ] = useState("");
   const [chosen, setChosen] = useState<string[]>([]);
-  // Which chain the reading pane is showing. Null until a row is clicked, and
-  // the pane then defaults to the newest — the top of a list is what a reader is
-  // looking at anyway, and an empty pane would be a state nothing can be read
-  // from. The distinction matters on a narrow screen, where the choice is what
-  // switches panels: `chosenRoot` says the reader picked, the default does not.
-  const [chosenRoot, setChosenRoot] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [me, setMe] = useState("");
   const { build, start } = useBuildPage();
+
+  // Which chain the reading pane is showing. It is the URL's, not this
+  // component's: a reader who reloads, or sends themselves the address, means to
+  // land on the thread they were reading rather than at the top of the list —
+  // and the browser's own Back then steps from a thread to the list it was
+  // opened from, which no amount of local state can offer.
+  //
+  // Absent means nothing was picked, and then the pane shows the newest: the top
+  // of a list is what a reader is looking at anyway, and an empty pane would be a
+  // state nothing can be read from. The distinction still matters on a narrow
+  // screen, where being picked is what switches panels.
+  const opened = useSearch({ from: "/" }).open;
+  const openChain = (root: string) =>
+    // Merged onto whatever else the address carries, so opening a thread cannot
+    // silently drop a parameter someone put there.
+    navigate({ to: "/", search: (prev) => ({ ...prev, open: root }) });
+  const closeChain = () => navigate({ to: "/", search: (prev) => ({ ...prev, open: undefined }) });
 
   // Pages accumulate in one cache entry, keyed on the request: the cursor is
   // injected by pageParamName as `before`, so each page asks for what is older
@@ -194,7 +205,13 @@ export function Inbox() {
     navigate({ to: "/", search: { q: q.trim() } });
   };
 
-  const selected = rows.find((c) => c.rootExtId === chosenRoot) ?? rows[0] ?? null;
+  // The address may name a chain this page of the list does not hold — an old
+  // thread opened, then reloaded, comes back before the list has been paged that
+  // far. The pane reads it from the id either way (it fetches the chain by id),
+  // so the head says what is known rather than inventing a subject or a count.
+  const onlyID: PreviewableChain = { rootExtId: opened ?? "" };
+  const selected: PreviewableChain | null =
+    rows.find((c) => c.rootExtId === opened) ?? (opened ? onlyID : null) ?? rows[0] ?? null;
 
   // Reading to the end of the list is the request for more of it: a reader who
   // keeps scrolling keeps getting rows, where a button made them say so after
@@ -243,7 +260,7 @@ export function Inbox() {
         </p>
       ) : null}
 
-      <div className={`ibsplit${chosenRoot ? " has-choice" : ""}`}>
+      <div className={`ibsplit${opened ? " has-choice" : ""}`}>
         <div className="iblistwrap">
           {rows.length > 0 ? (
             <ul className="iblist">
@@ -254,7 +271,7 @@ export function Inbox() {
                   checked={chosen.includes(c.rootExtId)}
                   current={selected?.rootExtId === c.rootExtId}
                   onToggle={() => toggle(c.rootExtId)}
-                  onOpen={() => setChosenRoot(c.rootExtId)}
+                  onOpen={() => openChain(c.rootExtId)}
                 />
               ))}
             </ul>
@@ -288,13 +305,15 @@ export function Inbox() {
                 <button
                   type="button"
                   className="ibback"
-                  onClick={() => setChosenRoot(null)}
+                  onClick={closeChain}
                 >
                   ← List
                 </button>
                 <span className="ibread-subj">{selected.subject || "(no subject)"}</span>
                 <span className="note">
-                  {selected.entries} entr{selected.entries === 1 ? "y" : "ies"}
+                  {selected.entries
+                    ? `${selected.entries} entr${selected.entries === 1 ? "y" : "ies"}`
+                    : ""}
                 </span>
               </div>
               <ChainReading chain={selected} />

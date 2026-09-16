@@ -61,6 +61,12 @@ export interface SearchParams {
   mode?: SearchMode;
   person?: string;
   since?: string;
+  /** The chain the inbox has open. Not a filter — the search route answers it
+   *  nothing — but it lives in the URL for the same reason the query does: a
+   *  reader who reloads, or sends the address to themselves, means to come back
+   *  to that thread rather than to the top of the list. Optional, so `/` is the
+   *  inbox with nothing open yet. */
+  open?: string;
 }
 
 const isMode = (m: unknown): m is SearchMode =>
@@ -72,6 +78,7 @@ function validateSearchParams(search: Record<string, unknown>): SearchParams {
     mode: isMode(search.mode) ? search.mode : undefined,
     person: typeof search.person === "string" ? search.person : undefined,
     since: typeof search.since === "string" ? search.since : undefined,
+    open: typeof search.open === "string" ? search.open : undefined,
   };
 }
 
