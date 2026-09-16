@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { $api, type ServiceStatus, type Stats } from "../lib/api";
 import { when } from "../lib/stamp";
 
@@ -113,6 +115,7 @@ function CorpusStats({ s }: { s: Stats }) {
  * it serves what the CLI wrote.
  */
 export function StatusView() {
+  const queryClient = useQueryClient();
   const status = $api.useQuery("get", "/v1/status", {});
   const stats = $api.useQuery("get", "/v1/stats", {});
   const settings = $api.useQuery("get", "/v1/settings", {});
@@ -124,14 +127,57 @@ export function StatusView() {
   // own: only the field being changed is named, and the rest are left as they
   // stand.
   const save = $api.useMutation("post", "/v1/settings", {
-    onSuccess: () => {
+    onSuccess: (_stored, variables) => {
       void settings.refetch();
       // The next sweep is computed from the cadence, so a change to one is a
       // change to the other: without this the line under the control would keep
       // naming the old schedule until the page was reloaded.
       void status.refetch();
+      // The pane's marks are resolved from the stored addresses, so a write that
+      // names them has to redraw the open thread: without this the reader says
+      // who they are and the thread they are looking at keeps showing their own
+      // mail unmarked until they reload. The other settings change nothing the
+      // pane draws, and re-reading a thread for one would be a request per click
+      // on a control that has nothing to do with threads.
+      if (variables.body?.me !== undefined) {
+        const saved = variables.body.me[0] ?? "";
+        // The field shows what was stored from here on — the tidied form, which
+        // is what the reader should see kept — unless they have gone on typing
+        // while the write was in flight. Dropping that would be a keystroke the
+        // app ate, and the field is the one place they can see what they said.
+        setTypedMe((typed) => (typed === saved ? null : typed));
+        void queryClient.invalidateQueries({ queryKey: ["get", "/v1/chains/{rootExtId}"] });
+      }
     },
   });
+  // The addresses, as the field stands: null until the reader types, which is not
+  // the same as an empty field — it is what lets the stored setting seed the input
+  // without an effect. An effect that re-seeded the field whenever the settings
+  // query answered would be re-seeding it after every save and every reconnect,
+  // overwriting the address the reader is halfway through typing with the one
+  // they last stored.
+  const [typedMe, setTypedMe] = useState<string | null>(null);
+  // The field shows what the setting holds until the reader types, and their own
+  // text from then on. The stored list is written back in the form it was typed
+  // in — comma separated — because that is the form the field is in: a reader who
+  // wrote "ada@x, bo@y" should not find it rewritten as something else the next
+  // time they open the page.
+  const storedMe = (settings.data?.me ?? []).join(", ");
+  const me = typedMe ?? storedMe;
+
+  // Persist the field. Sent as the whole current value rather than as the parsed
+  // list, so what is stored is what the reader wrote: the server trims it, drops
+  // the blanks and de-duplicates it in one place (corpus.JoinAddresses), and a
+  // client that did that first would be a second answer to who the reader is.
+  //
+  // Nothing is sent when the field was never touched or already matches what is
+  // stored — a write that changes nothing but invalidates the pane's thread is a
+  // refetch per blur. And the body names only `me`: the server writes the fields
+  // it is given, which is what leaves the cadence and the folder as they stand.
+  const saveMe = () => {
+    if (typedMe === null || typedMe === storedMe) return;
+    save.mutate({ body: { me: [typedMe] } });
+  };
   const every = settings.data?.slurpEvery ?? "";
   const folder = settings.data?.defaultFolder ?? "";
   const labels = folders.data?.labels ?? [];
@@ -158,7 +204,7 @@ export function StatusView() {
         )}
       </ul>
 
-      {/* The settings: the two things about reading this corpus that are the
+      {/* The settings: the things about reading this corpus that are the
           reader's rather than the mail's, each written where it is read. They
           belong next to the backends they decide the reading of, and they are
           the only controls on this screen — everything else here reports. */}
@@ -210,6 +256,28 @@ export function StatusView() {
           ))}
         </select>
         .
+      </p>
+      {/* Who the reader is. A setting rather than a field on the page being built:
+          the same addresses decide which messages are marked as the reader's
+          wherever mail is read — the pane, a built page, every thread — and most
+          of those have no build anywhere near them. Nothing in the corpus records
+          which mailbox it was collected from, so this can only be told.
+
+          Written on blur rather than per keystroke, and as the whole field's text
+          rather than a parsed list: the server is where it is trimmed, blanked
+          and de-duplicated, so what is stored is what the reader wrote. */}
+      <p className="stnote">
+        Your own mail is marked as yours when it came from{" "}
+        <input
+          className="staddr"
+          aria-label="Your addresses"
+          value={me}
+          disabled={busy}
+          onChange={(e) => setTypedMe(e.target.value)}
+          onBlur={saveMe}
+          placeholder="comma separated"
+        />{" "}
+        — comma separated, and nothing else about you is stored.
       </p>
       {save.isError ? (
         <p className="selfail" role="alert">

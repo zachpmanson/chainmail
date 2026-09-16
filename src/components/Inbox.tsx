@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { $api, type ChainHit } from "../lib/api";
-import { useBuildPage } from "../lib/build";
+import { BuildBar } from "./BuildBar";
 import { ChainPane } from "./ChainPane";
 import { ChainRow } from "./ChainRow";
 import { Failure, type PreviewableChain } from "./ChainPreview";
@@ -153,17 +152,7 @@ function Folders({
 
 export function Inbox() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const [chosen, setChosen] = useState<string[]>([]);
-  const [title, setTitle] = useState("");
-  // The reader's own addresses, as the field stands: null until they type, which
-  // is not the same as an empty field — it is what lets the stored setting seed
-  // the input (below) without an effect. An effect that re-seeded the field
-  // whenever the settings query answered would be re-seeding it after every save
-  // and every reconnect, overwriting the address the reader is halfway through
-  // typing with the one they last stored.
-  const [typedMe, setTypedMe] = useState<string | null>(null);
-  const { build, start } = useBuildPage();
 
   // This page is a workspace: one window, with the list and the thread scrolling
   // inside it rather than the page scrolling under them. That is a fact about the
@@ -181,55 +170,18 @@ export function Inbox() {
   // and the browser's own Back then steps from a thread to the list it was
   // opened from, which no amount of local state can offer.
   //
-  // Absent means nothing was picked, and then the pane shows the newest: the top
-  // of a list is what a reader is looking at anyway, and an empty pane would be a
-  // state nothing can be read from. The distinction still matters on a narrow
-  // screen, where being picked is what switches panels.
+  // Absent means nothing was picked, and then nothing is open: the pane waits to
+  // be given a chain rather than filling itself in with the top of the list. What
+  // the address says still matters most on a narrow screen, where being picked is
+  // what switches panels.
   const opened = useSearch({ from: "/" }).open;
   const urlLabel = useSearch({ from: "/" }).label;
   const settings = $api.useQuery("get", "/v1/settings", {});
   const save = $api.useMutation("post", "/v1/settings", {
-    onSuccess: (_stored, variables) => {
+    onSuccess: () => {
       void settings.refetch();
-      // The pane's marks are resolved from the stored addresses, so a write that
-      // names them has to redraw the open thread: without this the reader says
-      // who they are and the thread they are looking at keeps showing their own
-      // mail unmarked until they reload. A folder save changes nothing the pane
-      // draws, and re-reading the thread for it would be a request per click on
-      // a control that has nothing to do with the thread.
-      if (variables.body?.me !== undefined) {
-        const saved = variables.body.me[0] ?? "";
-        // The field shows what was stored from here on — the tidied form, which
-        // is what the reader should see kept — unless they have gone on typing
-        // while the write was in flight. Dropping that would be a keystroke the
-        // app ate, and the field is the one place they can see what they said.
-        setTypedMe((typed) => (typed === saved ? null : typed));
-        void queryClient.invalidateQueries({ queryKey: ["get", "/v1/chains/{rootExtId}"] });
-      }
     },
   });
-
-  // The field shows what the setting holds until the reader types, and their own
-  // text from then on. The stored list is written back in the form it was typed
-  // in — comma separated — because that is the form the field is in: a reader
-  // who wrote "ada@x, bo@y" should not find it rewritten as something else the
-  // next time they open the page.
-  const storedMe = (settings.data?.me ?? []).join(", ");
-  const me = typedMe ?? storedMe;
-
-  // Persist the field. Sent as the whole current value rather than as the parsed
-  // list, so what is stored is what the reader wrote: the server trims it, drops
-  // the blanks and de-duplicates it in one place (corpus.JoinAddresses), and a
-  // client that did that first would be a second answer to who the reader is.
-  //
-  // Nothing is sent when the field was never touched or already matches what is
-  // stored — a write that changes nothing but invalidates the pane's thread is a
-  // refetch per blur. And the body names only `me`: the server writes the fields
-  // it is given, which is what leaves the folder exactly as it stands.
-  const saveMe = () => {
-    if (typedMe === null || typedMe === storedMe) return;
-    save.mutate({ body: { me: [typedMe] } });
-  };
 
   // Where the list opens, and the one place the reader's own default is read.
   //
@@ -307,10 +259,9 @@ export function Inbox() {
   const toggle = (root: string) =>
     setChosen((prev) => (prev.includes(root) ? prev.filter((r) => r !== root) : [...prev, root]));
 
-  const addresses = me
-    .split(",")
-    .map((a) => a.trim())
-    .filter((a) => a !== "");
+  // Who the reader is, for the pane's own marks, is not this page's business:
+  // the addresses are a setting (see the services page) and the pane is drawn
+  // from the thread the chain read returns.
 
   // The address may name a chain this page of the list does not hold — an old
   // thread opened, then reloaded, comes back before the list has been paged that
@@ -424,53 +375,12 @@ export function Inbox() {
         }
       />
 
-      {/* The build bar appears only once something is ticked: until then a page
-          has nothing to be built from, and the form would be an instruction with
-          no object. */}
-      {chosen.length > 0 ? (
-        <div className="selbuild ibbuild">
-          <label className="self">
-            <span>Page title</span>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="optional" />
-          </label>
-          <label className="self">
-            <span>Your addresses</span>
-            <input
-              value={me}
-              onChange={(e) => setTypedMe(e.target.value)}
-              // On blur, because that is when the reader has finished saying it:
-              // a write per keystroke would be a request per letter, and each one
-              // would redraw the pane.
-              onBlur={saveMe}
-              placeholder="comma separated"
-            />
-          </label>
-          <button
-            type="button"
-            disabled={build.isPending}
-            onClick={() => {
-              // The addresses are recorded as a preference as well as handed to
-              // the build. The build paints the page it writes; the stored
-              // setting is what marks the pane, here and after a reload, so a
-              // reader who has just named themselves should not have to say it
-              // twice.
-              saveMe();
-              start({ chains: chosen, title, me: addresses });
-            }}
-          >
-            {build.isPending
-              ? "Building…"
-              : `Build page from ${chosen.length} chain${chosen.length === 1 ? "" : "s"}`}
-          </button>
-          {build.isPending ? (
-            <p className="selnote" role="status">
-              Recovering HTML and detecting boilerplate across {chosen.length} chain
-              {chosen.length === 1 ? "" : "s"}. This takes a few seconds.
-            </p>
-          ) : null}
-          {build.isError ? <Failure error={build.error} /> : null}
-        </div>
-      ) : null}
+      {/* The bar that builds the page, which appears once something is ticked:
+          until then a page has nothing to be built from, and the form would be an
+          instruction with no object. The same bar the search page shows, because
+          what it does is ask for the chains that were ticked rather than
+          anything about the list they were ticked in. */}
+      <BuildBar chosen={chosen} />
     </div>
   );
 }
