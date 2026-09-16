@@ -350,10 +350,18 @@
      not two things each taking 100%, so the list gets what the button leaves. */
   .ibcol, .ibread { min-height:0; height:100%; }
   .ibcol { display:flex; flex-direction:column; }
+  /* Both scrollers reserve their scrollbar, whether or not it is there. A gutter
+     that appears as the list grows past one screen takes ~15px off every row the
+     moment it arrives — the timestamps jump left and the subject lines rewrap,
+     which reads as the list changing under the pointer. `stable` keeps the gap
+     reserved, so the first scroll and the fifth look the same. */
   .iblistwrap { flex:1 1 auto; min-height:0; overflow-y:auto;
+    scrollbar-gutter: stable;
     border:1px solid var(--line); border-radius:9px; background:var(--card); }
   .iblistwrap .iblist { border:0; border-radius:0; background:none; }
-  .ibread { overflow:auto; }
+  /* The pane scrolls the same way for the same reason: a thread that outgrows its
+     screen would otherwise rewrap every bubble once, on the way in. */
+  .ibread { overflow:auto; scrollbar-gutter: stable; }
   .ibback { display:none; }
 }
 @media (max-width:59.99rem) {
