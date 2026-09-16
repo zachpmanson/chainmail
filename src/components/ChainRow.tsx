@@ -80,6 +80,61 @@ export function RankMeta({ chain }: { chain: ChainHit }) {
  *  sent without one. */
 export const subjectOf = (chain: { subject?: string }) => chain.subject || "(no subject)";
 
+/**
+ * The two counts a chain wears, as glyphs: how many people are in it, and how
+ * many messages. Shared by the list row and the head of the pane reading the same
+ * chain, so one fact is one mark wherever it is read — a reader scanning the list
+ * and then the pane beside it is comparing one chain with itself.
+ *
+ * Zero is printed rather than hidden: a chain of recovered quotes has no address
+ * to count, and that is an answer.
+ */
+export function PeopleCount({ people }: { people: number }) {
+  return (
+    <span className="ibppl" title={`${people} people in this chain — senders and recipients`}>
+      <svg
+        viewBox="0 0 16 16"
+        width="11"
+        height="11"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        aria-hidden="true"
+      >
+        <circle cx="8" cy="4.8" r="2.7" />
+        <path d="M3.2 13.6c0-2.7 2.1-4.4 4.8-4.4s4.8 1.7 4.8 4.4" />
+      </svg>
+      {people}
+    </span>
+  );
+}
+
+/** The messages in the chain. The row prints it only when there is more than one
+ *  — a list row's subject is its own count — but the pane's head always does,
+ *  because there it is the head's own answer rather than a row's flourish. */
+export function MailCount({ entries }: { entries: number }) {
+  return (
+    <span className="ibcount" title={`${entries} messages in this chain`}>
+      <svg
+        viewBox="0 0 16 16"
+        width="11"
+        height="11"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <rect x="1.8" y="3.6" width="12.4" height="8.8" rx="1.2" />
+        <path d="M2.2 4.8 8 9.2l5.8-4.4" />
+      </svg>
+      {entries}
+    </span>
+  );
+}
+
 export function ChainRow({
   chain,
   checked,
@@ -133,54 +188,20 @@ export function ChainRow({
           ) : null}
           <span className="ibsubj">{subject}</span>
           {/* The tail of the line: how many people are in the chain, and how many
-              messages. Both are counts a reader picks by, so both are numbers
-              rather than words — the person is what the glyph says, and the
-              chain's number of messages is bare beside it for the same reason.
+              messages (see PeopleCount and MailCount — the pane's head wears the
+              same two marks for the chain it is reading). Both are counts a
+              reader picks by, so both are numbers rather than words: the person
+              is what the glyph says, and the mail is the glyph a mail client
+              already uses for a message.
 
               The people count is on every row on every page: it is a fact about
               the chain, not about the search that found it, and a chain holding
               five people reads differently from one holding one whoever asked.
-              Zero is printed rather than hidden — a chain of recovered quotes has
-              no address to count, and that is an answer. */}
+              The mail count is only drawn above one, because on a row it is the
+              subject that says the thread is a single message. */}
           <span className="ibtail">
-            <span
-              className="ibppl"
-              title={`${chain.people} people in this chain — senders and recipients`}
-            >
-              <svg
-                viewBox="0 0 16 16"
-                width="11"
-                height="11"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                aria-hidden="true"
-              >
-                <circle cx="8" cy="4.8" r="2.7" />
-                <path d="M3.2 13.6c0-2.7 2.1-4.4 4.8-4.4s4.8 1.7 4.8 4.4" />
-              </svg>
-              {chain.people}
-            </span>
-            {chain.entries > 1 ? (
-              <span className="ibcount" title={`${chain.entries} messages in this chain`}>
-                <svg
-                  viewBox="0 0 16 16"
-                  width="11"
-                  height="11"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <rect x="1.8" y="3.6" width="12.4" height="8.8" rx="1.2" />
-                  <path d="M2.2 4.8 8 9.2l5.8-4.4" />
-                </svg>
-                {chain.entries}
-              </span>
-            ) : null}
+            <PeopleCount people={chain.people} />
+            {chain.entries > 1 ? <MailCount entries={chain.entries} /> : null}
           </span>
         </span>
         <span className="ibsnippet">{last?.snippet ?? ""}</span>
