@@ -484,6 +484,8 @@ export interface components {
             subject?: string;
             /** @description The entry's own plain text. Absent when the source carried no text body. */
             body?: string;
+            /** @description The body rendered for reading, by the same conversion a page build uses. `body` stays the raw text: it is what the corpus holds, and what anything matching text should read. Absent when there is nothing to render. */
+            html?: string;
             /** @description Mail thread id or Slack channel id. Absent when the source stated none. */
             container?: string;
             /** @description Opens the entry at its source. Absent when the source gave none. */
@@ -1057,6 +1059,8 @@ export interface components {
                  * @enum {string}
                  */
                 open?: "popup" | "download";
+                /** @description Why the corpus does not hold these bytes, recorded when a pull decided it never will: too large, gone from the sender's copy, nothing to fetch by. Present means the file is not coming, so a page can explain the chip and stop offering to fetch it. The value is the corpus's own word; the page owns the phrasing. */
+                skip?: string;
                 previewW?: number;
                 previewH?: number;
             }[];

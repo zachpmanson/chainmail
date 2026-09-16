@@ -60,21 +60,25 @@ type entryHit struct {
 }
 
 type corpusEntry struct {
-	ExtID           string        `json:"extId"`
-	Source          string        `json:"source"`
-	Quoted          bool          `json:"quoted"`
-	TS              string        `json:"ts"`
-	TZ              string        `json:"tz,omitempty"`
-	TZOffsetMinutes *int          `json:"tzOffsetMinutes,omitempty"`
-	Author          string        `json:"author,omitempty"`
-	Subject         string        `json:"subject,omitempty"`
-	Body            string        `json:"body,omitempty"`
-	Container       string        `json:"container,omitempty"`
-	Permalink       string        `json:"permalink,omitempty"`
-	Parent          string        `json:"parent,omitempty"`
-	ParentRef       string        `json:"parentRef,omitempty"`
-	Sightings       []sighting    `json:"sightings,omitempty"`
-	Participants    []participant `json:"participants,omitempty"`
+	ExtID           string `json:"extId"`
+	Source          string `json:"source"`
+	Quoted          bool   `json:"quoted"`
+	TS              string `json:"ts"`
+	TZ              string `json:"tz,omitempty"`
+	TZOffsetMinutes *int   `json:"tzOffsetMinutes,omitempty"`
+	Author          string `json:"author,omitempty"`
+	Subject         string `json:"subject,omitempty"`
+	Body            string `json:"body,omitempty"`
+	// HTML is the body rendered for reading, by the same conversion a page build
+	// uses (spec.RenderBodies); Body stays the plain text, which is what the
+	// corpus holds and what anything matching text should read.
+	HTML         string        `json:"html,omitempty"`
+	Container    string        `json:"container,omitempty"`
+	Permalink    string        `json:"permalink,omitempty"`
+	Parent       string        `json:"parent,omitempty"`
+	ParentRef    string        `json:"parentRef,omitempty"`
+	Sightings    []sighting    `json:"sightings,omitempty"`
+	Participants []participant `json:"participants,omitempty"`
 }
 
 type sighting struct {
@@ -405,11 +409,11 @@ func toRefreshReport(r refresh.Report) refreshReport {
 	return out
 }
 
-func toCorpusEntry(s corpus.Shown) corpusEntry {
+func toCorpusEntry(s corpus.Shown, html string) corpusEntry {
 	e := corpusEntry{
 		ExtID: s.ExtID, Source: s.Source, Quoted: s.Quoted, TS: stamp(s.TS),
 		TZ: s.TZ, TZOffsetMinutes: s.TZOffset, Author: s.Author, Subject: s.Subject,
-		Body: s.Body, Container: s.Container, Permalink: s.Permalink,
+		Body: s.Body, HTML: html, Container: s.Container, Permalink: s.Permalink,
 		Parent: s.Parent, ParentRef: s.ParentRef,
 	}
 	for _, g := range s.Sightings {
