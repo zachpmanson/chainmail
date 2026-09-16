@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"os"
@@ -1002,4 +1003,72 @@ func TestAuthCallbackWithNoPendingFlowFallsThroughToTheShell(t *testing.T) {
 		return
 	}
 	t.Errorf("stray callback answered with %d %s instead of the shell", res.status, res.body)
+}
+
+// A folder is a label, and the list it filters is the inbox: same rows, same
+// order, fewer of them. It is not the ranking under another name — a chain is
+// returned when *any* of its messages carries the label, which is the reading a
+// mail client has: the reply that went out under SENT does not take the thread
+// out of the inbox its first message landed in.
+func TestLabelSelectsTheChainsInAFolder(t *testing.T) {
+	srv := testServer(t)
+	for _, tc := range []struct {
+		query string
+		want  []string
+	}{
+		// Both chains have a message in the inbox. The solar thread's newest
+		// message is its SENT reply, and it is still an inbox thread.
+		{"/v1/search?label=INBOX", []string{extOther, extAda1}},
+		// Only the solar thread: one outbound message is enough.
+		{"/v1/search?label=SENT", []string{extAda1}},
+		{"/v1/search?label=CATEGORY_PROMOTIONS", []string{extOther}},
+		// A folder nobody filed anything in is empty, not an error and not
+		// everything.
+		{"/v1/search?label=RECEIPTS", nil},
+		// A blank label is not a filter on a label nobody has: it is no filter
+		// at all, which is the difference between an empty list and the inbox.
+		{"/v1/search?label=", []string{extOther, extAda1}},
+	} {
+		res := srv.do(t, "GET", tc.query, nil)
+		if res.status != 200 {
+			t.Fatalf("%s: status = %d: %s", tc.query, res.status, res.body)
+		}
+		var got searchResponse
+		if err := json.Unmarshal(res.body, &got); err != nil {
+			t.Fatalf("%s: decoding: %v", tc.query, err)
+		}
+		var roots []string
+		if got.Chains != nil {
+			for _, c := range *got.Chains {
+				roots = append(roots, c.RootExtID)
+			}
+		}
+		if strings.Join(roots, ",") != strings.Join(tc.want, ",") {
+			t.Errorf("%s: chains = %v, want %v", tc.query, roots, tc.want)
+		}
+	}
+}
+
+// The folder list is the mailbox's own, with its own counts. Messages rather
+// than chains: a mail client's sidebar counts messages, and the number has to
+// mean something a reader can check against the mailbox.
+func TestLabelsListsTheFoldersWithTheirCounts(t *testing.T) {
+	srv := testServer(t)
+	res := srv.do(t, "GET", "/v1/labels", nil)
+	if res.status != 200 {
+		t.Fatalf("status = %d, want 200: %s", res.status, res.body)
+	}
+	var got labelsResponse
+	if err := json.Unmarshal(res.body, &got); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	var lines []string
+	for _, l := range got.Labels {
+		lines = append(lines, fmt.Sprintf("%s=%d", l.Name, l.Messages))
+	}
+	// Busiest first, ties broken by name: the same list on every read.
+	want := "INBOX=3,CATEGORY_PROMOTIONS=1,IMPORTANT=1,SENT=1"
+	if strings.Join(lines, ",") != want {
+		t.Errorf("labels = %v, want %s", lines, want)
+	}
 }
