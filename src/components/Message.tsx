@@ -252,6 +252,18 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
             </span>
           </>
         );
+        // A picture opens over the page, and there are two ways to have one: the
+        // preview the builder embedded, or bytes this host holds for something the
+        // server called an image. The second is what a small picture has instead of
+        // a preview — the builder embeds one only above a size floor, so a 17 KB
+        // screenshot arrives as a bare chip with only its bytes — and that is the
+        // case this used to miss, leaving the one chip that navigated away to a
+        // bare image in a tab rather than popping it up. Anything the server said
+        // to download is left alone: that call decides Content-Disposition too, and
+        // a window over the page for a file handed over as an attachment would be
+        // a promise the server does not keep.
+        const opens =
+          a.open !== "download" && (thumb !== null || (Boolean(local) && a.kind === "image"));
         // The chip stays the same link it always was, and the popover is layered
         // onto it by script. That is deliberate: no new control appears, the
         // trigger is already in the tab order, and with scripting unavailable
@@ -272,11 +284,11 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
         return href ? (
           <a
             key={i}
-            className={thumb ? "att haspop" : "att"}
+            className={opens ? "att haspop" : "att"}
             href={href}
             {...(note ? { title: note } : {})}
             {...(beside ? { target: "_blank", rel: "noopener" } : {})}
-            {...(thumb
+            {...(opens
               ? { "data-pop": a.name, "aria-haspopup": "dialog" as const }
               : {})}
             /* The popover's save control reads this, not the href: a Slack chip's

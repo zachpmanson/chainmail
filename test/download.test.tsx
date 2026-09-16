@@ -56,6 +56,9 @@ const storedShot = {
 };
 const storedPdf = { name: "quote.pdf", kind: "PDF", size: "88 KB", gmailId: "18f0", blobSha: "b".repeat(64), open: "download" as const };
 const storedText = { name: "readings.csv", kind: "CSV", size: "18 KB", gmailId: "18f0", blobSha: "c".repeat(64), open: "popup" as const };
+/** A small picture: the bytes are here, but the builder embedded no preview. */
+const BARE = "d".repeat(64);
+const storedSmall = { name: "image001.png", kind: "image", size: "17 KB", gmailId: "18f0", blobSha: BARE, open: "popup" as const };
 /** A thumbnail from the Slack archive: the bytes are on disk but this host does not serve them. */
 const archivedShot = { name: "board.png", kind: "image", size: "41 KB", link: "https://chat.example/files/F001/board.png", preview: PIXEL, previewW: 320, previewH: 200 };
 
@@ -132,9 +135,76 @@ const mount = (messages: Entry[]) => {
     detach,
     chips,
     pop: () => document.querySelector<HTMLElement>(".pop"),
+    shot: () => document.querySelector<HTMLImageElement>(".popimg"),
     save: () => document.querySelector<HTMLAnchorElement>(".popget"),
   };
 };
+
+describe("enlarging a picture over the page", () => {
+  it("pops up a stored picture that has no thumbnail", () => {
+    // The case this was built for: a small screenshot is bytes with no preview —
+    // the builder embeds one only above a size floor — so the chip had nothing to
+    // arm it and the click left the page for a bare image in a tab.
+    const s = strip(page([entry({ attachments: [storedSmall] })], MEDIA_BASE));
+    expect(s).toContain('class="att haspop"');
+    expect(s).not.toContain("athumb");
+    expect(s).toContain(`data-pop="${storedSmall.name}"`);
+
+    const m = mount([entry({ attachments: [storedSmall] })]);
+    m.chips[0]!.click();
+    expect(m.pop()!.hidden).toBe(false);
+    expect(m.shot()!.getAttribute("src")).toBe(`${MEDIA_BASE}/${BARE}`);
+    // The bytes are this host's, so the modal carries the route to the original
+    // as well — which for a chip with no thumbnail is the only thing showing it.
+    expect(m.save()!.hidden).toBe(false);
+    m.detach();
+  });
+
+  it("shows the original rather than the embedded preview", () => {
+    // The preview is 640 pixels on its long edge: enlarged to fill a screen it is
+    // a blur, and the whole reason for pulling the bytes is that the real picture
+    // is now here.
+    const m = mount([entry({ attachments: [storedShot] })]);
+    m.chips[0]!.click();
+    expect(m.shot()!.getAttribute("src")).toBe(`${MEDIA_BASE}/${SHA}`);
+    expect(m.shot()!.getAttribute("src")).not.toBe(PIXEL);
+    m.detach();
+  });
+
+  it("falls back to the preview when the bytes are no longer served", () => {
+    // A saved page outlives the bytes it points at: the corpus prunes what
+    // nothing references, and a 404 must not leave the modal empty-handed.
+    const m = mount([entry({ attachments: [storedShot] })]);
+    m.chips[0]!.click();
+    const shot = m.shot()!;
+    shot.dispatchEvent(new Event("error"));
+    expect(shot.getAttribute("src")).toBe(PIXEL);
+    m.detach();
+  });
+
+  it("keeps showing the thumbnail for a picture this host does not serve", () => {
+    const m = mount([entry({ attachments: [archivedShot] })]);
+    m.chips[0]!.click();
+    expect(m.shot()!.getAttribute("src")).toBe(PIXEL);
+    expect(m.save()!.hidden).toBe(true);
+    m.detach();
+  });
+
+  it("leaves a file the server hands over as an attachment alone", () => {
+    // `open` is the same call that sets Content-Disposition; a window over the
+    // page for a file served as an attachment would be a promise not kept.
+    const s = strip(page([entry({ attachments: [storedPdf] })], MEDIA_BASE));
+    expect(s).not.toContain("data-pop");
+    expect(s).not.toContain("haspop");
+  });
+
+  it("does not enlarge text, however the server would open it", () => {
+    // A CSV is readable in a window over the page but is not a picture, and the
+    // modal has no way to show one.
+    const s = strip(page([entry({ attachments: [storedText] })], MEDIA_BASE));
+    expect(s).not.toContain("data-pop");
+  });
+});
 
 describe("getting the original out of the popover", () => {
   it("offers the file itself, not just the thumbnail", () => {

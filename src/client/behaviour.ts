@@ -335,7 +335,8 @@ function withTransition(doc: Document, apply: () => void) {
 
 /**
  * Click-to-enlarge for attachment thumbnails, and for pictures the sender put
- * in the body.
+ * in the body: one modal over the page, still called `pop` after the popover it
+ * grew out of.
  *
  * Not a `<details>`: a disclosure reveals content in place and leaves the
  * document readable around it, which is right for the panels and the signature
@@ -422,19 +423,35 @@ function attachPopover(doc: Document, on: On): () => void {
     opener = null;
   }
 
-  const open = (src: string, caption: string, from: HTMLElement) => {
+  /**
+   * Enlarge one picture over the page.
+   *
+   * A chip whose bytes this host holds is shown from those bytes — the original,
+   * at its real size — rather than from the preview the builder embedded, which
+   * is capped at 640 pixels on its long edge and reads as a blur when it is
+   * blown up to fill a screen. The preview is what is shown when those bytes
+   * cannot be fetched: the corpus prunes bytes nothing points at, and a saved
+   * page can outlive them.
+   */
+  const open = (from: HTMLElement, caption: string, preview: string, full: string) => {
     build();
-    shot.src = src;
     cap.textContent = caption;
-    // The save control, for a chip whose bytes this host holds. The popover is
+    shot.alt = caption;
+    // The save control, for a chip whose bytes this host holds. The modal is
     // reached by clicking a chip, and that click is intercepted — so without this
-    // there would be no route to the original file at all, only to the thumbnail
+    // there would be no route to the original file at all, only to the picture
     // the spec embedded. `download` is what makes it a save rather than a view:
     // the response is inline for a picture, and the attribute overrides that, with
     // the filename still coming from the Content-Disposition header.
-    const get = from.dataset.get;
-    save.hidden = !get;
-    if (get) save.href = get;
+    save.hidden = !full;
+    if (full) save.href = full;
+    // A 404 — bytes pruned since the page was saved — must not leave the modal
+    // empty-handed when there is a thumbnail to fall back to.
+    shot.onerror = () => {
+      shot.onerror = null;
+      if (preview) shot.src = preview;
+    };
+    shot.src = full || preview;
     host!.hidden = false;
     // The overlay covers the viewport, so a pointer cannot reach the transcript
     // anyway; inert is what says the same thing to a screen reader and to the
@@ -445,9 +462,16 @@ function attachPopover(doc: Document, on: On): () => void {
     closeBtn.focus();
   };
 
-  /** Wire one picture up, once it is known to be worth enlarging. */
-  const arm = (t: HTMLElement, img: HTMLImageElement, isChip: boolean) => {
-    const label = isChip ? t.dataset.pop! : img.getAttribute("alt") || "";
+  /** Wire one picture up, once it is known to be worth enlarging.
+   *
+   *  `thumb` is the chip's embedded preview, when it has one: null for a small
+   *  stored picture, whose bytes the corpus holds but never embedded. The chip's
+   *  own `data-get` is then the only src there is, which is why a chip with
+   *  neither is not armed at all.
+   */
+  const arm = (t: HTMLElement, thumb: HTMLImageElement | null, isChip: boolean) => {
+    if (isChip && !thumb && !t.dataset.get) return;
+    const label = isChip ? t.dataset.pop! : thumb?.getAttribute("alt") || "";
     // The keyboard has to reach whatever already takes focus. A chip is the link
     // itself; a body picture may be wrapped in one, and the wrapper is the tab
     // stop, so a listener on the picture would never see the Enter key.
@@ -455,7 +479,11 @@ function attachPopover(doc: Document, on: On): () => void {
     if (trig === t && !isChip && !t.hasAttribute("tabindex")) t.tabIndex = 0;
     trig.setAttribute("aria-haspopup", "dialog");
 
-    const show = () => open(img.currentSrc || img.src, label, trig);
+    // Resolved at open time: the thumbnail is what is on screen to start with,
+    // and the local bytes are what the modal actually shows.
+    const show = () =>
+      open(trig, label, thumb ? thumb.currentSrc || thumb.src : "",
+        isChip ? trig.dataset.get ?? "" : "");
     on(trig, "click", (ev) => {
       const m = ev as MouseEvent;
       // A modified click is the reader asking for a new tab or a download, and
@@ -478,14 +506,16 @@ function attachPopover(doc: Document, on: On): () => void {
 
   for (const t of triggers) {
     const isChip = t.classList.contains("att");
-    const img = isChip ? t.querySelector<HTMLImageElement>(".athumb") : (t as HTMLImageElement);
-    if (!img) continue;
-    // A chip's thumbnail was already judged worth showing where the bytes were,
-    // so it is not judged again.
     if (isChip) {
-      arm(t, img, true);
+      // Armed by the renderer, which knows what this browser can be shown: the
+      // embedded preview, or bytes this host holds. A small picture is the second
+      // case — no preview, because the builder embeds one only above a size floor
+      // — so the thumbnail is optional here rather than required, and its absence
+      // is what used to leave these chips navigating away instead of popping up.
+      arm(t, t.querySelector<HTMLImageElement>(".athumb"), true);
       continue;
     }
+    const img = t as HTMLImageElement;
     // A body picture has had no such filter: it is whatever the sender's markup
     // contained, which on a real mail page is mostly letterhead, wordmarks and
     // tracking pixels — 21 of 29 on one. Nothing is armed until the picture is

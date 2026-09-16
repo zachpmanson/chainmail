@@ -353,16 +353,23 @@
     object-position:top left; border-radius:3px; border:1px solid var(--line); }
   .att.haspop::after { content:"\2922"; font-size:.7rem; color:var(--muted); }
   .att.haspop:hover::after, .att.haspop:focus-visible::after { color:var(--accent); }
-  /* Enlarged preview. Above the spec viewer's siblings but below it: the spec
-     viewer replaces the page, and a picture floating over it would be orphaned. */
+  /* Enlarged picture. Above the spec viewer's siblings but below it: the spec
+     viewer replaces the page, and a picture floating over it would be orphaned.
+     The veil is opaque enough to read as a different layer rather than as part
+     of the transcript: a picture at its real size is often larger than the
+     column it came from, and the reader needs to see that it is over the page
+     and not in it. */
   .pop { position:fixed; inset:0; z-index:55; display:flex; align-items:center;
-    justify-content:center; padding:1.25rem;
-    background:color-mix(in srgb, var(--bg) 82%, transparent);
-    backdrop-filter:blur(2px); }
+    justify-content:center; padding:1.5rem;
+    background:color-mix(in srgb, var(--bg) 92%, transparent);
+    backdrop-filter:blur(3px); }
   .pop[hidden] { display:none; }
   .popbox { display:flex; flex-direction:column; gap:.4rem; max-width:100%;
     max-height:100%; }
-  .popimg { max-width:100%; max-height:calc(100vh - 5rem); width:auto; height:auto;
+  /* Room is left for the bar underneath, so the caption and the controls are not
+     the first thing a tall picture pushes off the screen. Never scaled up: a
+     picture is shown at the size it was sent, and a small one stays small. */
+  .popimg { max-width:100%; max-height:calc(100vh - 6rem); width:auto; height:auto;
     object-fit:contain; border:1px solid var(--line); border-radius:6px;
     background:var(--card); }
   .popbar { display:flex; align-items:center; gap:.7rem; }
