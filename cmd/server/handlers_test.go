@@ -409,6 +409,7 @@ func TestChainIsWholeFromAnyMember(t *testing.T) {
 				ExtID string `json:"extId"`
 				TS    string `json:"ts"`
 				HTML  string `json:"html"`
+				To    string `json:"to"`
 			}
 		}](t, res)
 		if got.RootExtID != from {
@@ -433,6 +434,11 @@ func TestChainIsWholeFromAnyMember(t *testing.T) {
 			// that genuinely says nothing.
 			if e.HTML == "" {
 				t.Errorf("from %s: %s arrived with no rendered html", from, e.ExtID)
+			}
+			// And the same for the recipient line. These are addressed messages, so
+			// "to —" here means the pane is showing a gap the corpus could fill.
+			if e.To == "" {
+				t.Errorf("from %s: %s arrived with no recipient line", from, e.ExtID)
 			}
 		}
 	}

@@ -1219,24 +1219,23 @@ func (s *server) entry(w http.ResponseWriter, r *http.Request) {
 		failLookup(w, err)
 		return
 	}
-	html, err := s.rendered(shown.ExtID)
+	drawing, err := s.rendered(shown.ExtID)
 	if err != nil {
 		fail(w, http.StatusInternalServerError, err)
 		return
 	}
-	send(w, http.StatusOK, toCorpusEntry(shown, html))
+	send(w, http.StatusOK, toCorpusEntry(shown, drawing))
 }
 
-// rendered is one entry's body HTML, as a page build would put it in a bubble.
-// The failure is returned rather than written because the two handlers that ask
-// for it report it differently: one is answering for a trail, the other for a
-// single entry.
-func (s *server) rendered(extID string) (string, error) {
-	bodies, err := spec.RenderBodies(s.store, []string{extID})
+// rendered is one entry as a page build would draw it. The failure is returned
+// rather than written because the two handlers that ask for it report it
+// differently: one is answering for a trail, the other for a single entry.
+func (s *server) rendered(extID string) (spec.Rendered, error) {
+	entries, err := spec.RenderTrail(s.store, []string{extID})
 	if err != nil {
-		return "", fmt.Errorf("rendering %s: %w", extID, err)
+		return spec.Rendered{}, fmt.Errorf("rendering %s: %w", extID, err)
 	}
-	return bodies[extID], nil
+	return entries[extID], nil
 }
 
 func (s *server) chain(w http.ResponseWriter, r *http.Request) {
@@ -1257,16 +1256,16 @@ func (s *server) chain(w http.ResponseWriter, r *http.Request) {
 	// per entry, but the queries behind it are not, and a trail is read as a unit.
 	// A failure here fails the request: the trail's whole purpose is to be read,
 	// and a client that asks for it and gets entries it cannot draw would be
-	// shown a broken thread instead of a retryable error. See RenderBodies for
+	// shown a broken thread instead of a retryable error. See RenderTrail for
 	// what this deliberately does not do (no zone inference, no participation).
-	bodies, err := spec.RenderBodies(s.store, ids)
+	rendered, err := spec.RenderTrail(s.store, ids)
 	if err != nil {
 		fail(w, http.StatusInternalServerError, fmt.Errorf("rendering the trail: %w", err))
 		return
 	}
 	out := chainResponse{RootExtID: id, Entries: make([]corpusEntry, 0, len(shown))}
 	for _, sh := range shown {
-		out.Entries = append(out.Entries, toCorpusEntry(sh, bodies[sh.ExtID]))
+		out.Entries = append(out.Entries, toCorpusEntry(sh, rendered[sh.ExtID]))
 	}
 	send(w, http.StatusOK, out)
 }

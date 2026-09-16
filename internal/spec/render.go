@@ -6,11 +6,29 @@ import (
 	"github.com/zachpmanson/chainmail/internal/corpus"
 )
 
-// RenderBodies renders the named entries' bodies as the HTML a page build would
-// put in them, keyed by ext id. An id the corpus does not hold is absent from the
-// result rather than an error: a caller rendering a trail is rendering what it
-// found, and refusing the whole trail over one missing entry would lose the
-// messages it does have.
+// Rendered is one entry as a view that is not a page needs it: the body as HTML a
+// page build would produce, and the recipient line it would print under the
+// bubble.
+//
+// Two fields rather than one because they come out of the same load. A caller
+// that asked for the HTML and then had to ask again for the recipients would pay
+// twice for the rows, the host documents and the attachment attribution that
+// decide both — and the second answer could disagree with the first.
+type Rendered struct {
+	// HTML is the body as rendered for reading, already sanitised.
+	HTML string
+	// To is the "to …" line: the recipients as the message stated them, names
+	// deduplicated, cc marked, and empty where the entry stated none — which is
+	// every recovered entry, since it has no headers of its own. Empty renders as
+	// unknown, and nothing may guess at it.
+	To string
+}
+
+// RenderTrail renders the named entries as the entries a page build would draw,
+// keyed by ext id. An id the corpus does not hold is absent from the result
+// rather than an error: a caller rendering a trail is rendering what it found,
+// and refusing the whole trail over one missing entry would lose the messages it
+// does have.
 //
 // This exists so a view that shows messages without building a page — the inbox's
 // reading pane — can draw the same bubbles a page draws, from the same
@@ -21,13 +39,18 @@ import (
 // them are properties of a message; rendering a body is per-entry work, and a
 // caller pays for the entries it asked about.
 //
+// The recipient line is made here rather than in the corpus because it is a
+// presentation decision — names rather than addresses, cc folded in, duplicates
+// dropped — and this is where the page makes it (recipientLine). The corpus keeps
+// the header text as it arrived, which is the only thing it can honestly keep.
+//
 // It loads through the same `load` a build does, and attributes inline images
 // before converting a body for the same reason a build does: the pass decides
 // which message placed a cid image, and a chip under the wrong message is a claim
 // about who sent what. Same rows, same order, same function — so the HTML here is
 // the HTML there, which is the whole point.
-func RenderBodies(store *corpus.Store, extIDs []string) (map[string]string, error) {
-	out := make(map[string]string, len(extIDs))
+func RenderTrail(store *corpus.Store, extIDs []string) (map[string]Rendered, error) {
+	out := make(map[string]Rendered, len(extIDs))
 	if len(extIDs) == 0 {
 		return out, nil
 	}
@@ -60,7 +83,10 @@ func RenderBodies(store *corpus.Store, extIDs []string) (map[string]string, erro
 	}
 	attributeAttachments(rows)
 	for _, r := range rows {
-		out[extOf[r.ID]] = bodyHTML(r)
+		out[extOf[r.ID]] = Rendered{
+			HTML: bodyHTML(r),
+			To:   recipientLine(parseAddrList(r.To), parseAddrList(r.Cc)),
+		}
 	}
 	return out, nil
 }

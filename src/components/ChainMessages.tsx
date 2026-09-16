@@ -14,11 +14,11 @@ import { Message, type StampData } from "./Message";
  * same conversion a build uses, so a bubble here is a bubble there.
  *
  * What is drawn but not yet filled in, because the chain read does not carry it:
- * the org (and so the org colour — every bubble here is on the unknown slot),
- * the "to" line, and attachments. Those live in the spec's per-entry pipeline
- * today. The gaps show as gaps rather than as guesses: an unknown org is the
- * stylesheet's unknown colour, which is what the page shows for a sender whose
- * org nothing established.
+ * the org (and so the org colour — every bubble here is on the unknown slot) and
+ * attachments. Those live in the spec's per-entry pipeline today. The gaps show
+ * as gaps rather than as guesses: an unknown org is the stylesheet's unknown
+ * colour, which is what the page shows for a sender whose org nothing
+ * established.
  */
 
 /** The transcript's clock, written the way the spec writes it ("Mon 2 Jan 2006",
@@ -93,6 +93,11 @@ export function ChainMessages({ chain }: { chain: { rootExtId: string } }) {
           // whose org nothing established.
           orgSlot="o5"
           quoted={e.quoted}
+          // The recipients the message itself stated, or nothing: a recovered
+          // entry has no headers, and the line reads "to —" rather than naming
+          // whoever the page guessed. The corpus makes this string with the same
+          // function a page build does.
+          to={e.to}
           stamp={stampOf(e)}
           // The corpus entry as it arrived, so a bubble that renders wrong can be
           // pasted somewhere and read whole — the same affordance, and the same
