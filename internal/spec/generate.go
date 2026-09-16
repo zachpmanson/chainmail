@@ -253,7 +253,10 @@ func (b *builder) add(r *entryRow) {
 		Quoted:   !r.Direct,
 		Me:       b.me[from.Address],
 		Source:   b.source(r),
-		GmailID:  r.GmailID,
+		// The corpus's handle for the entry, carried so a client can act on the
+		// message it is looking at (POST /v1/media/pull takes one of these).
+		ExtID:   r.ExtID,
+		GmailID: r.GmailID,
 		// A mail entry's container *is* its thread id; mail_detail has no column
 		// of its own for it.
 		ThreadID: r.Container,

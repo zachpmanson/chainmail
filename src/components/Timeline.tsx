@@ -145,8 +145,20 @@ function Edits({ edits, v }: { edits?: RowEdit[]; v: View }) {
   );
 }
 
-function Attachments({ e }: { e: Entry }) {
+function Attachments({ e, onPull, pulling }: {
+  e: Entry;
+  /** fetch this message's files, where a host will do it at all */
+  onPull?: (extId: string) => void;
+  /** the message whose files are being fetched, so its button can say so */
+  pulling?: string | null;
+}) {
   if (!e.attachments?.length) return null;
+  // The button is offered only where there is something to fetch and somebody
+  // able to fetch it: a host started without -media never passes onPull, a page
+  // rendered to a file never does, and a message whose files are all already in
+  // the corpus is done with the question. A file that was declined keeps the
+  // button, because the corpus records the reason rather than the answer.
+  const pending = e.attachments.some((a) => !a.blobSha);
   return (
     <div className="atts">
       <span className="clip">attached</span>
@@ -200,6 +212,20 @@ function Attachments({ e }: { e: Entry }) {
           </span>
         );
       })}
+      {onPull && pending && e.extId ? (
+        // A button, not a chip: a chip goes to where the file already is, and
+        // this one goes and gets it. Plain text, because the row is already a
+        // run of framed chips and a second frame would read as another file.
+        <button
+          type="button"
+          className="attget"
+          disabled={pulling != null}
+          title="Fetch this message's attached files into the corpus, so they can be shown here"
+          onClick={() => onPull(e.extId!)}
+        >
+          {pulling === e.extId ? "fetching…" : "fetch files"}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -289,7 +315,14 @@ function Source({ e, anchorByGmail }: { e: Entry; anchorByGmail: Map<string, str
   );
 }
 
-function EntryBlock({ row, v, mark, anchorByGmail }: { row: Row; v: View; mark?: "new" | "revised"; anchorByGmail: Map<string, string> }) {
+function EntryBlock({ row, v, mark, anchorByGmail, onPull, pulling }: {
+  row: Row;
+  v: View;
+  mark?: "new" | "revised";
+  anchorByGmail: Map<string, string>;
+  onPull?: (extId: string) => void;
+  pulling?: string | null;
+}) {
   const e = row.entry;
   const grid = { gridColumn: row.lane + 1, gridRow: row.row };
   const start = row.isChainStart ? " chstart" : "";
@@ -347,7 +380,7 @@ function EntryBlock({ row, v, mark, anchorByGmail }: { row: Row; v: View; mark?:
           ) : null}
           <div className="bd" dangerouslySetInnerHTML={html(trimBody(e.body))} />
           <Edits edits={row.edits} v={v} />
-          <Attachments e={e} />
+          <Attachments e={e} onPull={onPull} pulling={pulling} />
           <div className="foot">
             <span className="to">to {e.to ?? "—"}</span>
             <ReplyLink row={row} v={v} />
@@ -403,10 +436,18 @@ export interface TimelineProps {
   onAdd?: () => void;
   /** app-only: opens the proposal evaluator, when the last refresh proposed chains. */
   onEval?: () => void;
+  /**
+   * app-only, and only on a host that was started with -media: fetch one
+   * message's attachment bytes, so a chip under it can become the file rather
+   * than a link back to Gmail for it.
+   */
+  onPull?: (extId: string) => void;
+  /** the ext id whose files are being fetched, so its button says so and no second pull starts */
+  pulling?: string | null;
   refreshing?: boolean;
 }
 
-export function Timeline({ spec, marks, prevLabel, filter, onShowSpec, onRefresh, onAdd, onEval, refreshing }: TimelineProps) {
+export function Timeline({ spec, marks, prevLabel, filter, onShowSpec, onRefresh, onAdd, onEval, onPull, pulling, refreshing }: TimelineProps) {
   const v = derive(spec);
   const s = v.spec;
   // gmailId -> the id of the row that carries it, so an unspooled source line
@@ -463,7 +504,8 @@ export function Timeline({ spec, marks, prevLabel, filter, onShowSpec, onRefresh
       <div className="stream" id="stream" style={{ ["--nch" as string]: v.layout.laneCount }}>
         <Chains v={v} />
         {v.rows.map((r) => (
-          <EntryBlock key={r.id} row={r} v={v} mark={marks?.get(r.id)} anchorByGmail={anchorByGmail} />
+          <EntryBlock key={r.id} row={r} v={v} mark={marks?.get(r.id)} anchorByGmail={anchorByGmail}
+                      onPull={onPull} pulling={pulling} />
         ))}
       </div>
       {s.openItems?.length ? (

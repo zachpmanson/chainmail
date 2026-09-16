@@ -52,6 +52,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/media/pull": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Fetch the files one message's attachments need.
+         * @description The deliberate half of the media design, and what the button under a message's chips presses: the bytes behind one message's attachments are fetched into the corpus, so the page can show the picture instead of sending the reader to Gmail for it.
+         *
+         *     One message per call, by construction. Each attachment is a mailbox round trip, so a pull is a per-conversation decision — a thread-sized sweep is the CLI's (`corpus media pull -container`). Nothing here fetches media by itself: it runs because a reader asked.
+         *
+         *     A part too large, a part the sender's account no longer holds and a part the metadata names but the message does not contain are each recorded with their reason and reported, so a later attempt does not pay for the same answer again. A transport failure is left unrecorded and stays retryable.
+         *
+         *     Opt-in and off by default: a server started without -media answers 403. A pull spends the mail credential this unit already holds, so switching it on hands the page no access the host had not already given this user — what changes is when the fetch runs, not what it may touch.
+         */
+        post: operations["pullMedia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/spec": {
         parameters: {
             query?: never;
@@ -943,6 +969,8 @@ export interface components {
             kind?: "message" | "note";
             /** @description Stable anchor. Omit to derive from date+time+sender; content-derived ids survive inserting entries mid-trail. */
             id?: string;
+            /** @description The corpus's own handle for this entry, e.g. 'mail:<...>'. What an endpoint that acts on a message takes (GET /v1/entries/{extId}, POST /v1/media/pull). Absent on an entry the page invented; 'id' is a page anchor and will not do instead. */
+            extId?: string;
             /** @description As displayed, e.g. 'Thu 16 Jul 2026'. Not normalised. */
             date: string;
             /** @description As displayed, e.g. '11:35'. Absent for undated notes. */
@@ -1012,6 +1040,39 @@ export interface components {
                 previewW?: number;
                 previewH?: number;
             }[];
+        };
+        /** @description One message to fetch the files for. */
+        MediaPullRequest: {
+            /** @description The message's ext id, as the spec's `extId` field carries it, e.g. 'mail:<...>'. */
+            entry: string;
+        };
+        /** @description What a pull did: the files this message still needed, and how each one ended. A file already in the corpus, and one already declined, are both absent — the first needs nothing, and the second has a recorded reason that asking again would not change. */
+        MediaPullResponse: {
+            /** @description Attachments still needing bytes: everything the call considered. A file already stored and one already declined are both excluded, because neither has anything left to decide. */
+            wanted: number;
+            /** @description Files whose bytes are now in the corpus. */
+            pulled: number;
+            /** @description Files declined for a reason worth recording: too large, gone from the sender's account, not present in the message. Each carries its reason below, and none of them is asked for again. */
+            skipped: number;
+            /** @description Files whose fetch failed in a way worth retrying. Nothing is recorded for these, so a later pull tries again. */
+            failed: number;
+            /** @description Bytes stored by this pull. */
+            bytes: number;
+            /** @description One row per file considered, in the order they were walked. */
+            files: components["schemas"]["MediaFile"][];
+        };
+        /** @description One attachment's outcome within a pull. */
+        MediaFile: {
+            name: string;
+            /** @enum {string} */
+            source?: "mail" | "slack";
+            /** @description Digest of the stored bytes. Absent for anything that was not pulled. */
+            sha?: string;
+            bytes?: number;
+            /** @description Short word for a skip: too_large, unavailable, part_not_found, no_source_ref, no_message_id, no_bytes. */
+            reason?: string;
+            /** @description What a retryable failure said. */
+            error?: string;
         };
         /** @description The outcome of POST /v1/slurp: the ingest's own transcript. Returned rather than only logged, because what was fetched is the reason someone pressed the button. */
         SlurpResponse: {
@@ -1129,6 +1190,66 @@ export interface operations {
                 };
             };
             /** @description The ingest failed, at the mailbox or over the corpus. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    pullMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MediaPullRequest"];
+            };
+        };
+        responses: {
+            /** @description What was fetched, and why anything else was not. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaPullResponse"];
+                };
+            };
+            /** @description No entry named, or a malformed body. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Pulling is disabled: the server was started without -media. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No entry with that ext id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The pull could not run at all — a corpus it could not read, say. A single file's failure is a 200 carrying its reason. */
             502: {
                 headers: {
                     [name: string]: unknown;

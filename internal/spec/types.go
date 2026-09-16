@@ -99,8 +99,17 @@ type SourceNote struct {
 
 // Entry is one message or note in the transcript.
 type Entry struct {
-	Kind        string       `json:"kind,omitempty"`
-	ID          string       `json:"id,omitempty"`
+	Kind string `json:"kind,omitempty"`
+	ID   string `json:"id,omitempty"`
+	// ExtID is the corpus's own handle for this entry — `mail:<message-id>` for a
+	// message, a channel-scoped id for a Slack file — and it is what an endpoint
+	// that acts on a message takes: GET /v1/entries/{extId}, POST /v1/media/pull.
+	// ID will not do instead. It is a page anchor, derived from sender and clock,
+	// so two messages from one person in one minute share its shape, and it is
+	// absent on an entry the page invented. A client that needs to *name* a
+	// message back to the server needs this one, and only an ingested entry has
+	// it.
+	ExtID       string       `json:"extId,omitempty"`
 	Date        string       `json:"date"`
 	Time        string       `json:"time,omitempty"`
 	TZ          string       `json:"tz,omitempty"`

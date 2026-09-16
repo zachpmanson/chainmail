@@ -310,6 +310,18 @@
     background:var(--quote); color:var(--fg); }
   .att:hover { border-color:var(--accent); }
   .att.nolink { opacity:.6; }
+  /* The fetch control: the one thing in this row that goes and gets the file
+     rather than linking to where it already is. So it is not a chip — the row is
+     already a run of framed names, and a second frame would read as another
+     file. Text only, muted, and it underlines on hover the way a link does, so
+     the row keeps saying the same thing at a glance. */
+  .attget { font:inherit; font-size:.64rem; text-transform:uppercase;
+    letter-spacing:.08em; font-weight:700; color:var(--muted); background:none;
+    border:0; padding:0 .1rem; cursor:pointer; text-decoration:underline dotted;
+    text-underline-offset:.18em; }
+  .attget::before { content:"\2193  "; }
+  .attget:hover:enabled { color:var(--accent); }
+  .attget:disabled { opacity:.55; cursor:default; }
   /* A chip with a thumbnail centres on the picture instead of the text baseline,
      which is what the other chips align to. Left as its own rule rather than
      changing .att, so a chip without a picture keeps sitting on the baseline of

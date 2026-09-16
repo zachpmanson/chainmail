@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "@tanstack/react-router";
-import { ApiError, $api, type RefreshReport } from "../lib/api";
+import { ApiError, $api, type MediaPull, type RefreshReport } from "../lib/api";
 import { normalise } from "../lib/normalise";
 import type { Timeline } from "../lib/spec";
 import { Rendered } from "./Rendered";
@@ -30,6 +30,29 @@ function refreshSummary(r: RefreshReport): string {
 }
 
 /**
+ * One line saying what a pull did. The response carries counts and one row per
+ * file, and the rows are the part a person needs: "nothing was fetched" is not
+ * an answer when one file was too large and another has moved out of the
+ * sender's mailbox. Console-only, like the refresh verdict — the page's job is
+ * the page, and a chip that became a picture says the rest.
+ */
+function pullSummary(media: MediaPull): string {
+  if (!media.wanted) return "no files needed fetching";
+  const parts = [`${media.pulled}/${media.wanted} files fetched`];
+  const declined = media.files.filter((f) => f.reason);
+  if (declined.length)
+    parts.push(
+      `${declined.length} declined (${declined.map((f) => `${f.name}: ${f.reason}`).join(", ")})`,
+    );
+  const failed = media.files.filter((f) => f.error);
+  if (failed.length)
+    parts.push(
+      `${failed.length} failed, will retry (${failed.map((f) => `${f.name}: ${f.error}`).join(", ")})`,
+    );
+  return parts.join(", ");
+}
+
+/**
  * The page route /view/<name>: load the page POST /v1/spec saved under that
  * name, and offer refresh — the read half of the CLI's `refresh` command,
  * available only here, where the name lets the server rewrite the file too, so
@@ -55,6 +78,9 @@ export function ViewPage() {
   // accepted (a count alone would hide what was found).
   const [local, setLocal] = useState<Timeline | null>(null);
   const [report, setReport] = useState<RefreshReport | null>(null);
+  // The message whose files are being fetched: its button says so, and every
+  // other one is held until this pull and the rebuild behind it have finished.
+  const [pulling, setPulling] = useState<string | null>(null);
 
   // A different page means a different run: drop the refreshed copy and any
   // report from the previous one.
@@ -104,6 +130,38 @@ export function ViewPage() {
     },
   });
 
+  // Fetch one message's attachment bytes, then re-derive: the pull writes into
+  // the corpus and the page is a picture of the corpus, so the pictures appear
+  // by rebuilding the page rather than by patching a chip. That is the same
+  // re-derive the refresh button does, without the slurp — nothing here asks the
+  // mailbox for mail, only for the files of a message already on the page.
+  //
+  // `pulling` is cleared only when the rebuild has settled, so the button cannot
+  // be pressed twice in a row and start a second pull against a spec that is
+  // already being replaced.
+  const pull = $api.useMutation("post", "/v1/media/pull", {
+    onSuccess: (data) => {
+      console.log(`fetch: ${pullSummary(data)}`);
+      const s = specRef.current;
+      if (!s) {
+        setPulling(null);
+        return;
+      }
+      refresh.mutate(
+        { body: { spec: s, name, includeNew: false } },
+        { onSettled: () => setPulling(null) },
+      );
+    },
+    onError: (e) => {
+      setPulling(null);
+      console.error(
+        e instanceof ApiError && e.status === 403
+          ? "no media fetch on this host (the server was started without -media), so there is nothing to ask for"
+          : `fetch failed: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    },
+  });
+
   // Accept, by root ext id, a chain the queries proposed but did not include.
   // Re-running the refresh with accept is how a proposal becomes membership.
   // Defined where `spec` is known non-null (the guard below narrows it).
@@ -146,6 +204,12 @@ export function ViewPage() {
           },
         })
       }
+      onPull={(extId) => {
+        specRef.current = spec;
+        setPulling(extId);
+        pull.mutate({ body: { entry: extId } });
+      }}
+      pulling={pulling}
       report={report}
       refreshing={slurp.isPending || refresh.isPending}
     />

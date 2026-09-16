@@ -22,6 +22,13 @@
 # fetch new mail before a page refresh. Off by default, and the option alone
 # grants nothing: the mailbox access is a scoped sudo the machine config
 # supplies, and without it the endpoint fails to find its runner.
+#
+# A second reach, opt-in the same way: enableMedia passes -media, which turns
+# POST /v1/media/pull into one message's attachment fetch — the button under a
+# message's chips, and the way a page shows a file instead of linking back to
+# Gmail for it. Off by default because it spends mailbox round trips, and
+# because a host that has not granted the flag should answer 403 rather than
+# quietly fetching. Nothing here fetches media by itself.
 self: { config, lib, pkgs, ... }:
 
 let
@@ -98,6 +105,24 @@ in {
       default = "15m";
       description = "Upper bound on one /v1/slurp ingest, as a wall-clock duration string.";
     };
+
+    enableMedia = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Permit POST /v1/media/pull: fetch one message's attachment bytes into
+        the corpus, so a page can show the file instead of sending the reader to
+        Gmail for it. This is what a button under a message's chips presses.
+        Off by default, like enableSlurp, and for the same reason: it is the
+        other surface that reaches the mailbox — once per attachment part.
+
+        The grant is the one this unit already holds: HOME points at the state
+        directory, the mail token lives there, and the pull reads it in-process
+        through the same library the ingest uses. Switching this on hands a page
+        no access the host had not already given this user — what changes is
+        when a fetch runs, not what it may touch.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -130,7 +155,8 @@ in {
           "-corpus ${cfg.corpus}" +
           lib.optionalString (cfg.uploads != "") " -uploads ${cfg.uploads}" +
           lib.optionalString cfg.enableSlurp (
-            " -slurp -slurp-timeout ${cfg.slurpTimeout}");
+            " -slurp -slurp-timeout ${cfg.slurpTimeout}") +
+          lib.optionalString cfg.enableMedia " -media";
         User = cfg.user;
         Group = cfg.user;
         StateDirectory = "chainmail";

@@ -181,6 +181,75 @@
         }
       }
     },
+    "/v1/media/pull": {
+      "post": {
+        "summary": "Fetch the files one message's attachments need.",
+        "description": "The deliberate half of the media design, and what the button under a message's chips presses: the bytes behind one message's attachments are fetched into the corpus, so the page can show the picture instead of sending the reader to Gmail for it.\n\nOne message per call, by construction. Each attachment is a mailbox round trip, so a pull is a per-conversation decision \u2014 a thread-sized sweep is the CLI's (\u0060corpus media pull -container\u0060). Nothing here fetches media by itself: it runs because a reader asked.\n\nA part too large, a part the sender's account no longer holds and a part the metadata names but the message does not contain are each recorded with their reason and reported, so a later attempt does not pay for the same answer again. A transport failure is left unrecorded and stays retryable.\n\nOpt-in and off by default: a server started without -media answers 403. A pull spends the mail credential this unit already holds, so switching it on hands the page no access the host had not already given this user \u2014 what changes is when the fetch runs, not what it may touch.",
+        "operationId": "pullMedia",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaPullRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "What was fetched, and why anything else was not.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaPullResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No entry named, or a malformed body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Pulling is disabled: the server was started without -media.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No entry with that ext id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The pull could not run at all \u2014 a corpus it could not read, say. A single file's failure is a 200 carrying its reason.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/spec": {
       "post": {
         "summary": "Build a timeline spec from a chosen set of chains.",
@@ -2031,6 +2100,10 @@
             "type": "string",
             "description": "Stable anchor. Omit to derive from date+time+sender; content-derived ids survive inserting entries mid-trail."
           },
+          "extId": {
+            "type": "string",
+            "description": "The corpus's own handle for this entry, e.g. 'mail:<...>'. What an endpoint that acts on a message takes (GET /v1/entries/{extId}, POST /v1/media/pull). Absent on an entry the page invented; 'id' is a page anchor and will not do instead."
+          },
           "date": {
             "type": "string",
             "description": "As displayed, e.g. 'Thu 16 Jul 2026'. Not normalised."
@@ -2178,6 +2251,97 @@
             }
           }
         }
+      },
+      "MediaPullRequest": {
+        "type": "object",
+        "description": "One message to fetch the files for.",
+        "required": [
+          "entry"
+        ],
+        "properties": {
+          "entry": {
+            "type": "string",
+            "description": "The message's ext id, as the spec's \u0060extId\u0060 field carries it, e.g. 'mail:<...>'."
+          }
+        },
+        "additionalProperties": false
+      },
+      "MediaPullResponse": {
+        "type": "object",
+        "description": "What a pull did: the files this message still needed, and how each one ended. A file already in the corpus, and one already declined, are both absent \u2014 the first needs nothing, and the second has a recorded reason that asking again would not change.",
+        "required": [
+          "wanted",
+          "pulled",
+          "skipped",
+          "failed",
+          "bytes",
+          "files"
+        ],
+        "properties": {
+          "wanted": {
+            "type": "integer",
+            "description": "Attachments still needing bytes: everything the call considered. A file already stored and one already declined are both excluded, because neither has anything left to decide."
+          },
+          "pulled": {
+            "type": "integer",
+            "description": "Files whose bytes are now in the corpus."
+          },
+          "skipped": {
+            "type": "integer",
+            "description": "Files declined for a reason worth recording: too large, gone from the sender's account, not present in the message. Each carries its reason below, and none of them is asked for again."
+          },
+          "failed": {
+            "type": "integer",
+            "description": "Files whose fetch failed in a way worth retrying. Nothing is recorded for these, so a later pull tries again."
+          },
+          "bytes": {
+            "type": "integer",
+            "description": "Bytes stored by this pull."
+          },
+          "files": {
+            "type": "array",
+            "description": "One row per file considered, in the order they were walked.",
+            "items": {
+              "$ref": "#/components/schemas/MediaFile"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "MediaFile": {
+        "type": "object",
+        "description": "One attachment's outcome within a pull.",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "mail",
+              "slack"
+            ]
+          },
+          "sha": {
+            "type": "string",
+            "description": "Digest of the stored bytes. Absent for anything that was not pulled."
+          },
+          "bytes": {
+            "type": "integer"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Short word for a skip: too_large, unavailable, part_not_found, no_source_ref, no_message_id, no_bytes."
+          },
+          "error": {
+            "type": "string",
+            "description": "What a retryable failure said."
+          }
+        },
+        "additionalProperties": false
       },
       "SlurpResponse": {
         "type": "object",
