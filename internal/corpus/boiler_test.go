@@ -243,3 +243,82 @@ func TestARewrittenBodyIsReducedAgain(t *testing.T) {
 // rewrittenAda is a different body from adaBody, with the same two-line sign-off:
 // the lines have to come from the new text, not from the row's old reduction.
 const rewrittenAda = "Roof access moves to the 21st.\n\nRegards,\nAda\n"
+
+// cached is how many bodies the reduction cache holds, which is the only thing
+// warming is supposed to change.
+func cached(s *Store) int {
+	s.bodiesMu.Lock()
+	defer s.bodiesMu.Unlock()
+	return len(s.bodies)
+}
+
+// Warming has to reduce everything, not just the bodies some earlier selection
+// happened to bring in: the point of it is that the *next* request, whose groups
+// are not known yet, finds its work already done.
+func TestWarmingReducesEveryBodyInTheCorpus(t *testing.T) {
+	s := signedCorpus(t)
+	var bodies int
+	if err := s.DB().QueryRow(`
+		select count(*) from entries
+		where source = 'mail' and body_text is not null and body_text != ''`).Scan(&bodies); err != nil {
+		t.Fatalf("counting mail bodies: %v", err)
+	}
+	if bodies == 0 {
+		t.Fatal("the fixture has no mail bodies, so warming proves nothing")
+	}
+	if got := cached(s); got != 0 {
+		t.Fatalf("the cache holds %d bodies before warming", got)
+	}
+
+	w, err := s.WarmFolds()
+	if err != nil {
+		t.Fatalf("warming: %v", err)
+	}
+	if got := cached(s); got != bodies {
+		t.Errorf("after warming the cache holds %d bodies, want all %d", got, bodies)
+	}
+	if w.Bodies == 0 || w.Lines == 0 {
+		t.Errorf("warm reported %d bodies and %d lines, want both counted", w.Bodies, w.Lines)
+	}
+	if w.Bodies > bodies {
+		t.Errorf("warm kept %d bodies from a corpus of %d", w.Bodies, bodies)
+	}
+}
+
+// A warm cache is not a second opinion. The verdict for a selection is the
+// corpus-wide verdict before warming and after it, and the same one both times —
+// which is what lets the warm be moved to whenever it is cheapest.
+func TestWarmingChangesNothingButTheCost(t *testing.T) {
+	s := signedCorpus(t)
+	ids := []int64{idOf(t, s, "mail:<ada-1@weave.example>"), idOf(t, s, "mail:<loom-1@loom.example>")}
+
+	before, err := s.BoilerplateFor(ids)
+	if err != nil {
+		t.Fatalf("folding a selection: %v", err)
+	}
+	if len(before) == 0 {
+		t.Fatal("the selection folded to nothing, so the comparison is empty")
+	}
+	w, err := s.WarmFolds()
+	if err != nil {
+		t.Fatalf("warming: %v", err)
+	}
+	after, err := s.BoilerplateFor(ids)
+	if err != nil {
+		t.Fatalf("folding the same selection again: %v", err)
+	}
+	if !reflect.DeepEqual(before, after) {
+		t.Errorf("warming changed the verdict: %v then %v", before, after)
+	}
+
+	// And warming twice is not two passes' worth of anything: every body is
+	// already reduced, so the second warm only reads.
+	again, err := s.WarmFolds()
+	if err != nil {
+		t.Fatalf("warming twice: %v", err)
+	}
+	if again.Bodies != w.Bodies || again.Lines != w.Lines {
+		t.Errorf("second warm reported %d bodies / %d lines, first %d / %d",
+			again.Bodies, again.Lines, w.Bodies, w.Lines)
+	}
+}
