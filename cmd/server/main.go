@@ -128,6 +128,12 @@ func run(args []string) error {
 	}
 	fmt.Fprintf(os.Stderr, "server: %s on http://%s\n", *path, ln.Addr())
 
+	// The fold cache is per-process and empty at every start. The socket is bound
+	// and nothing is being served yet, so this is the one moment the work can be
+	// done without a request waiting on it — and the request that would have paid
+	// is a person opening a thread. See warmFolds.
+	srv.warmFolds()
+
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	errs := make(chan error, 1)

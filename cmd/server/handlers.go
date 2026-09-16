@@ -684,6 +684,11 @@ func (s *server) slurp(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadGateway, fmt.Errorf("slurp failed: %w", err))
 		return
 	}
+	// The ingest just changed the corpus the fold cache is evidence about — and the
+	// cache is keyed on bodies, so what arrived has to be reduced. Doing it here
+	// means the button that filled the mailbox does not hand the next reader the
+	// cost of reading it. See warmFolds.
+	s.warmFolds()
 	send(w, http.StatusOK, slurpResponse{Report: string(out)})
 }
 
