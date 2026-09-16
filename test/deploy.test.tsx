@@ -63,12 +63,12 @@ describe("the deploy stamp", () => {
   it("names the revision and the day it started, and links to the commit", async () => {
     await mountApp();
     const stamp = await screen.findByRole("link", { name: /abcdef1/ });
-    // The short hash is what a reader compares; the date is the process's start,
-    // which for a deploy is the day it went live. Loose on the day itself: the
-    // fixture's instant is UTC and the reader's own zone decides which day that
-    // falls on, which is the point of formatting it here rather than in Go.
-    expect(stamp.textContent).toContain("abcdef1");
-    expect(stamp.textContent).toMatch(/2026-09-1[56]/);
+    // The day comes first and the hash after an `@`, as in penultimate-guitar's
+    // footer: the date is the half a reader compares against "today", and the
+    // hash is the half they go and look up. The date is loose — the fixture's
+    // instant is UTC and the reader's own zone decides which day that falls on,
+    // which is the point of formatting it here rather than in Go.
+    expect(stamp.textContent).toMatch(/2026-09-1[56] @ abcdef1/);
     expect(stamp.getAttribute("href")).toBe(
       `https://github.com/zachpmanson/chainmail/commit/${REV}`,
     );

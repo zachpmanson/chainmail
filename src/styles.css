@@ -57,10 +57,12 @@
   .navright { margin-left:auto; display:flex; align-items:center; gap:.85rem;
     flex-wrap:wrap; padding-top:.15rem; }
   .navsearch { display:flex; align-items:center; gap:.4rem; }
-  /* The deploy stamp. Quiet: a revision and a date, read only when something is
+  /* The deploy stamp. Quiet: a date and a revision, read only when something is
      being checked, so it sits at the fainter weight and monospaced where the
-     hash is. It links to the commit, which is the one thing a hash is useful
-     for — see DeployStamp for why it is served rather than baked in. */
+     hash is. The gap spaces the `@` between them as well as the two facts; the
+     order matches penultimate-guitar's footer. It links to the commit, which is
+     the one thing a hash is useful for — see DeployStamp for why it is served
+     rather than baked in. */
   .deploy { display:flex; align-items:baseline; gap:.35rem; font-size:.74rem;
     color:var(--muted); text-decoration:none; white-space:nowrap; }
   .deploy code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace;

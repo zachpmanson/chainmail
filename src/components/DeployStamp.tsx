@@ -20,6 +20,11 @@ import { isoDay, when } from "../lib/stamp";
  * the stamp is the entry point to "what changed", and a hash is a search away
  * from being nothing.
  *
+ * The two are written in penultimate-guitar's order and shape — date, then `@`,
+ * then the revision — so the same fact reads the same across both apps. It is the
+ * order the sentence wants anyway: a date is what a reader has to compare against
+ * "today", and the hash is the part they go and look up.
+ *
  * Nothing is rendered when the server reports no revision, or before it answers.
  * A build nobody labelled shows no stamp rather than a placeholder — a nav that
  * says "loading…" in the corner where a commit hash belongs is noise on every
@@ -45,7 +50,7 @@ export function DeployStamp() {
     >
       {/* A hash is read character by character only when something looks wrong,
           so it is monospaced and quiet: a fainter face beside the links. */}
-      <code>{rev.slice(0, 7)}</code> <span>{on}</span>
+      <span>{on}</span> @ <code>{rev.slice(0, 7)}</code>
     </a>
   );
 }
