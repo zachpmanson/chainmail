@@ -142,10 +142,16 @@ function submitSearch() {
 
 const searchCalls = () => calls.filter((c) => pathOf(c) === "/v1/search");
 
-async function searchFor(text: string) {
-  typeInto("Query", text);
-  submitSearch();
-  await waitFor(() => expect(searchCalls().length).toBeGreaterThan(0));
+/**
+ * Search from the inbox. "/" with nothing asked of it is the list, and the box
+ * on it is the way to the search page: the journey a person actually takes, and
+ * the one that writes the query into the URL the search page reads.
+ */
+async function searchFromInbox(text: string) {
+  const box = screen.getByLabelText("Search the corpus");
+  fireEvent.change(box, { target: { value: text } });
+  fireEvent.submit(box.closest("form")!);
+  await screen.findByLabelText("Query");
 }
 
 /** The common building mocks: search answers with the two chains, a build with
@@ -191,8 +197,7 @@ const statusHandler: Handler = (c) => {
 describe("searching for chains", () => {
   it("lists each candidate with the matched-of-total ratio", async () => {
     handler = () => json(200, { mode: "lexical", chains: CHAINS });
-    await mountApp("/");
-    await searchFor("cutover");
+    await mountApp("/?q=cutover");
 
     await screen.findByText("Loom cutover schedule");
     expect(await screen.findByText("3 of 4 matched")).toBeTruthy();
@@ -207,9 +212,9 @@ describe("searching for chains", () => {
 
   it("passes the mode and drops the filters left blank", async () => {
     handler = () => json(200, { mode: "lexical", chains: CHAINS });
-    await mountApp("/");
-    typeInto("Mode", "hybrid");
-    await searchFor("cutover");
+    // The mode comes from the URL here, as it does for a reload or a Back:
+    // the inbox's own box carries only the query.
+    await mountApp("/?q=cutover&mode=hybrid");
 
     const url = new URL(searchCalls()[0]!.url);
     expect(url.searchParams.get("q")).toBe("cutover");
@@ -224,8 +229,7 @@ describe("searching for chains", () => {
         mode: new URL(c.url).searchParams.get("mode") === "semantic" ? "semantic" : "lexical",
         chains: new URL(c.url).searchParams.get("mode") === "semantic" ? [CHAINS[1]] : [CHAINS[0]],
       });
-    await mountApp("/");
-    await searchFor("cutover");
+    await mountApp("/?q=cutover");
     await screen.findByText("Loom cutover schedule");
 
     // hold the semantic answer open: whatever is on screen mid-flight is the
@@ -274,9 +278,7 @@ describe("declining", () => {
       json(503, {
         error: 'mode "semantic": no embedding daemon reachable at http://localhost:11434',
       });
-    await mountApp("/");
-    typeInto("Mode", "semantic");
-    await searchFor("cutover");
+    await mountApp("/?q=cutover&mode=semantic");
 
     await screen.findByText(/no embedding daemon reachable/);
     // a 503 here is a fact about the operator's machine, not a hiccup; retrying
@@ -287,15 +289,13 @@ describe("declining", () => {
 
   it("tells a rejected query apart from a name that matches nothing", async () => {
     handler = () => json(400, { error: "unbalanced quote in query" });
-    await mountApp("/");
-    await searchFor('"cutover');
+    await mountApp("/?q=" + encodeURIComponent('"cutover'));
     expect((await screen.findByRole("alert")).textContent).toContain("Rejected (400)");
 
     cleanup();
     calls = [];
     handler = () => json(404, { error: "no entry carries id mail:<nothing@example.fed>" });
-    await mountApp("/");
-    await searchFor("mail:<nothing@example.fed>");
+    await mountApp("/?q=" + encodeURIComponent("mail:<nothing@example.fed>"));
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("Not found (404)");
     expect(alert.textContent).toContain("no entry carries id mail:<nothing@example.fed>");
@@ -305,8 +305,7 @@ describe("declining", () => {
 describe("building a page from the chosen set", () => {
   it("posts exactly the ticked chains and lands on the page", async () => {
     handler = buildHandler;
-    const router = await mountApp("/");
-    await searchFor("cutover");
+    const router = await mountApp("/?q=cutover");
     await screen.findByText("Loom cutover schedule");
 
     const boxes = screen.getAllByRole("checkbox");
@@ -346,8 +345,7 @@ describe("building a page from the chosen set", () => {
       if (p === "/v1/search") return json(200, { mode: "lexical", chains: CHAINS });
       return json(500, { error: "unexpected" });
     };
-    const router = await mountApp("/");
-    await searchFor("cutover");
+    const router = await mountApp("/?q=cutover");
     await screen.findByText("Loom cutover schedule");
     click(screen.getAllByRole("checkbox")[0]!);
     typeInto("Page title", "Loom cutover");
@@ -368,8 +366,7 @@ describe("building a page from the chosen set", () => {
       if (pathOf(c) === "/v1/search") return json(200, { mode: "lexical", chains: CHAINS });
       return json(500, { error: "unexpected" });
     };
-    await mountApp("/");
-    await searchFor("cutover");
+    await mountApp("/?q=cutover");
     await screen.findByText("Loom cutover schedule");
     click(screen.getAllByRole("checkbox")[0]!);
     click(screen.getByRole("button", { name: /Build page/ }));
@@ -389,8 +386,7 @@ describe("building a page from the chosen set", () => {
       if (p === "/v1/search") return json(200, { mode: "lexical", chains: CHAINS });
       return json(500, { error: "unexpected" });
     };
-    await mountApp("/");
-    await searchFor("cutover");
+    await mountApp("/?q=cutover");
     await screen.findByText("Loom cutover schedule");
 
     click(screen.getAllByRole("checkbox")[0]!);
@@ -538,9 +534,7 @@ describe("the render route /view/<name>", () => {
 
   it("moves the address bar to /view/<name> when a page is built", async () => {
     handler = buildHandler;
-    const router = await mountApp("/");
-
-    await searchFor("cutover");
+    const router = await mountApp("/?q=cutover");
     await screen.findByText("Loom cutover schedule");
     typeInto("Page title", "Loom cutover");
     click(screen.getAllByRole("checkbox")[0]!);
@@ -550,7 +544,7 @@ describe("the render route /view/<name>", () => {
     await screen.findByText("Loom cutover");
   });
 
-  it("goes back to the search when the page is left", async () => {
+  it("goes back to the inbox when the page is left", async () => {
     handler = (c) =>
       pathOf(c) === "/v1/specs/loom-cutover"
         ? json(200, SPEC)
@@ -564,7 +558,7 @@ describe("the render route /view/<name>", () => {
     });
     await waitFor(() => expect(screen.queryByText("Loom cutover")).toBeNull());
     expect(router.state.location.pathname).toBe("/");
-    expect(screen.getByRole("button", { name: "Search" })).toBeTruthy();
+    expect(screen.getByLabelText("Search the corpus")).toBeTruthy();
   });
 
   it("renders the client's own 404 view for a URL that is not a route", async () => {
@@ -761,11 +755,10 @@ describe("the search lives in the URL", () => {
   it("writes the search to the URL, and Back from a built page lands on it", async () => {
     handler = buildHandler;
     const router = await mountApp("/");
-
-    await searchFor("cutover");
+    await searchFromInbox("cutover");
     // The default mode is omitted from the URL — the canonical home search is
     // plain /.q=cutover, not a URL that spells out the default.
-    expect(router.state.location.searchStr).toBe("?q=cutover");
+    await waitFor(() => expect(router.state.location.searchStr).toBe("?q=cutover"));
 
     await screen.findByText("Loom cutover schedule");
     typeInto("Page title", "Loom cutover");

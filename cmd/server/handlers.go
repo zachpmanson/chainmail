@@ -308,13 +308,15 @@ func method(want string, h http.HandlerFunc) http.HandlerFunc {
 func (s *server) search(w http.ResponseWriter, r *http.Request) {
 	p := r.URL.Query()
 	text, person, since := p.Get("q"), p.Get("person"), p.Get("since")
-	// An empty q is meaningful alongside person or since ("everything involving
-	// X"), but with no filter at all the answer is an arbitrary slice of the
-	// corpus that reads like a ranked one.
-	if text == "" && person == "" && since == "" {
-		fail(w, http.StatusBadRequest, errors.New("give at least one of q, person or since"))
-		return
-	}
+	before := p.Get("before")
+	// With no filter at all this is the inbox: the corpus in the order it
+	// arrived, which is a list a reader can act on without typing anything.
+	// Deliberately not a ranking — the store orders a query with no ranking
+	// input by each chain's newest message (corpus.Query.ranked) — and the
+	// ranking modes still refuse it, because there is nothing to be similar to.
+	// The old refusal here existed to stop an arbitrary slice of the corpus
+	// coming back dressed as a ranked answer; as a list in time order it is not
+	// dressed as anything.
 	limit, err := intParam(p, "limit", defaultLimit, 1, maxLimit)
 	if err != nil {
 		fail(w, http.StatusBadRequest, err)
@@ -333,6 +335,22 @@ func (s *server) search(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		q.Since = t
+	}
+	if before != "" {
+		t, err := time.Parse(time.RFC3339, before)
+		if err != nil {
+			fail(w, http.StatusBadRequest,
+				fmt.Errorf("before %q: want an RFC 3339 timestamp", before))
+			return
+		}
+		// The cursor includes its own second. Two chains can end in the same one
+		// (a message and its twin, a pair of scheduled notifications), and a
+		// strictly-older bound would drop whichever of them the page did not
+		// reach — the failure that shows nothing at all, rather than the same
+		// thread twice. Entries are stamped to the second, so a half-open
+		// [., Until) one second later is exactly "ts <= before", and a caller
+		// paging on the last row's `last` loses nothing.
+		q.Until = t.Add(time.Second)
 	}
 	if person != "" {
 		// Involving, not People: a cc-only participant is invisible to an

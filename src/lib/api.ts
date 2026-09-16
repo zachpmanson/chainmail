@@ -120,6 +120,10 @@ export type SearchMode = "lexical" | "semantic" | "hybrid";
 
 export type ChainHit = components["schemas"]["ChainHit"];
 
+/** One matching entry, as a chain carries it: the evidence for a chain's place
+ * in a list. A browse's entries are the chain's newest messages. */
+export type EntryHit = components["schemas"]["EntryHit"];
+
 export type CorpusEntry = components["schemas"]["CorpusEntry"];
 
 export type ServiceStatus = components["schemas"]["ServiceStatus"];
@@ -144,6 +148,10 @@ export interface SearchParams {
   mode: SearchMode;
   person?: string;
   since?: string;
+  /** The inbox's cursor: only chains whose newest message is at or before this
+   * instant. A full timestamp rather than a date, because a page boundary
+   * inside a day would otherwise repeat or drop that day's threads. */
+  before?: string;
   limit?: number;
   entries?: boolean;
 }
@@ -161,6 +169,7 @@ export function searchQuery(p: SearchParams) {
     mode: p.mode,
     ...(p.person ? { person: p.person } : {}),
     ...(p.since ? { since: p.since } : {}),
+    ...(p.before ? { before: p.before } : {}),
     ...(p.limit ? { limit: p.limit } : {}),
     ...(p.entries ? { entries: true } : {}),
   };
