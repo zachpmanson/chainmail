@@ -165,26 +165,37 @@ func (s *server) recordSlurp(at time.Time) {
 	}
 }
 
-// nextSlurpAt is when the next sweep is due, as a UTC RFC3339 stamp, or "" when
-// nothing will sweep at all — no -slurp grant on this host, or a cadence of off.
+// dueAt is when the next sweep may run: the cadence measured from the last time
+// the mailbox was reached, or from when this process started on a corpus that
+// has never been swept.
 //
-// Due at, not started at: the loop reads the clock every sweepTick, so the run
-// itself lands within half a minute of this. A host that has never swept counts
-// from its own start, which is the one base that makes a fresh corpus swept
-// rather than due the moment it boots.
-func (s *server) nextSlurpAt() string {
-	if !s.slurpEnabled {
-		return ""
-	}
-	every := s.slurpEvery()
-	if every <= 0 {
-		return ""
-	}
+// One rule, and the loop and the page both ask it. They are the same question —
+// "when does this sweep next?" — and two answers to it are two answers that
+// drift: the page would name a time the loop did not honour, for as long as it
+// took the loop to catch up with its own base. A fresh corpus counts from the
+// server's own start, which is the base that makes a corpus swept a cadence after
+// it came up rather than the moment it boots.
+func (s *server) dueAt() time.Time {
 	base := s.lastSlurp()
 	if base.IsZero() {
 		base = s.startedAt
 	}
-	return base.Add(every).UTC().Format(time.RFC3339)
+	return base.Add(s.slurpEvery())
+}
+
+// nextSlurpAt is when the next sweep is due, as a UTC RFC3339 stamp, or "" when
+// nothing will sweep at all — no -slurp grant on this host, or a cadence of off.
+//
+// Due at, not started at: the loop reads the clock every sweepTick, so the run
+// itself lands within half a minute of this.
+func (s *server) nextSlurpAt() string {
+	if !s.slurpEnabled {
+		return ""
+	}
+	if s.slurpEvery() <= 0 {
+		return ""
+	}
+	return s.dueAt().UTC().Format(time.RFC3339)
 }
 
 // slurpOnce runs one ingest: the whole of what the manual button and the
@@ -257,11 +268,10 @@ func (s *server) sweepLoop(ctx context.Context) {
 // decides on its own, and a queued sweep would only be a second walk of the same
 // mailbox that the first has just finished.
 func (s *server) sweepIfDue(ctx context.Context) {
-	every := s.slurpEvery()
-	if every <= 0 {
+	if s.slurpEvery() <= 0 {
 		return
 	}
-	if last := s.lastSlurp(); !last.IsZero() && time.Since(last) < every {
+	if time.Now().Before(s.dueAt()) {
 		return
 	}
 	out, err := s.slurpOnce(ctx, s.runSweep)
