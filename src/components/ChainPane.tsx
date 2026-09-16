@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError, $api } from "../lib/api";
 import { ChainMessages } from "./ChainMessages";
+import { MailCount, PeopleCount } from "./ChainRow";
 import type { PreviewableChain } from "./ChainPreview";
 
 /**
@@ -75,10 +76,14 @@ export function ChainPane({
               {backLabel}
             </button>
             <span className="ibread-subj">{chain.subject || "(no subject)"}</span>
-            <span className="note">
-              {chain.entries
-                ? `${chain.entries} entr${chain.entries === 1 ? "y" : "ies"}`
-                : ""}
+            {/* How much mail is in the chain, and how many people, worn the way
+                the row that opened it wears them: the same glyphs, the same
+                numbers, the same classes. The head used to say "4 entries" in
+                words, which made the pane and the list describe one chain in two
+                vocabularies — and it is the same reader, a moment later. */}
+            <span className="ibread-counts">
+              {chain.people !== undefined ? <PeopleCount people={chain.people} /> : null}
+              {chain.entries !== undefined ? <MailCount entries={chain.entries} /> : null}
             </span>
             {/* The read-state control, and the only explicit one: nothing is
                 marked by looking at it. A pane opens the top of the list by

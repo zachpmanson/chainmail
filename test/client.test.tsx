@@ -431,6 +431,35 @@ describe("reading a candidate beside the results", () => {
     expect(rowOf("Loom cutover schedule").classList.contains("sel")).toBe(false);
   });
 
+  it("wears the chain's counts in the pane's head, as the row wears them", async () => {
+    handler = () => json(200, { mode: "lexical", chains: CHAINS });
+    await mountApp("/?q=cutover");
+    await screen.findByText("Warehouse lease renewal", { selector: ".ibsubj" });
+    click(
+      within(rowOf("Warehouse lease renewal")).getByRole("button", {
+        name: "Warehouse lease renewal",
+      }),
+    );
+    await waitFor(() =>
+      expect(pane().querySelector(".ibread-subj")!.textContent).toBe("Warehouse lease renewal"),
+    );
+
+    // The mail count and the participant count, as the glyphs the list uses —
+    // not "180 entries" in words. Two vocabularies for one chain is what this
+    // replaces; the numbers are asserted on both the head and the row so they
+    // are the same numbers.
+    const counts = pane().querySelector(".ibread-counts")!;
+    expect(counts.querySelector(".ibcount")!.textContent!.trim()).toBe("180");
+    expect(counts.querySelector(".ibppl")!.textContent!.trim()).toBe("12");
+    expect(counts.querySelector(".ibcount svg")).toBeTruthy();
+    expect(counts.querySelector(".ibppl svg")).toBeTruthy();
+    expect(counts.textContent).not.toContain("entr");
+
+    const row = rowOf("Warehouse lease renewal");
+    expect(row.querySelector(".ibcount")!.textContent!.trim()).toBe("180");
+    expect(row.querySelector(".ibppl")!.textContent!.trim()).toBe("12");
+  });
+
   it("reads a candidate named on the URL, and hands the list back when it is closed", async () => {
     handler = () => json(200, { mode: "lexical", chains: CHAINS });
     const router = await mountApp(

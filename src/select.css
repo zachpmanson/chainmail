@@ -371,6 +371,11 @@
   border-bottom:1px solid var(--line); background:var(--mine); }
 .ibread-subj { font-weight:650; font-size:.86rem; overflow-wrap:anywhere; }
 .ibread-head .note { margin-left:auto; font-size:.72rem; color:var(--muted); white-space:nowrap; }
+/* The chain's counts in the pane's head, drawn with the row's own `.ibppl` and
+   `.ibcount` (see PeopleCount / MailCount): the same marks the list scrolled past
+   to get here. It takes the free space the way the row's tail does, so the pair
+   stays together at the right of the strip, before the read control. */
+.ibread-counts { margin-left:auto; display:flex; align-items:center; gap:.5rem; }
 .ibback { font:inherit; font-size:.78rem; font-weight:650; padding:.2rem .5rem;
   border:1px solid var(--line); border-radius:6px; background:var(--card);
   color:var(--fg); cursor:pointer; }
