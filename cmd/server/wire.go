@@ -145,6 +145,21 @@ type labelsResponse struct {
 	Labels []labelSummary `json:"labels"`
 }
 
+// settingsResponse is the reader's own choices, which are not facts about the
+// mail. Absent means the choice has not been made — a folder the home page opens
+// in by default, or no such folder — so a client cannot mistake "unset" for a
+// default of nothing.
+type settingsResponse struct {
+	DefaultFolder *string `json:"defaultFolder,omitempty"`
+}
+
+// settingsRequest is the same shape written back. A pointer so a missing field
+// clears the setting: there is one writer, and defaulting an absent field to
+// "leave it alone" leaves no way to unset it.
+type settingsRequest struct {
+	DefaultFolder *string `json:"defaultFolder,omitempty"`
+}
+
 type labelSummary struct {
 	Name     string `json:"name"`
 	Messages int    `json:"messages"`

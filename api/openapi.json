@@ -640,6 +640,52 @@
         }
       }
     },
+    "/v1/settings": {
+      "get": {
+        "summary": "The reader's own choices, which are not facts about the mail.",
+        "description": "Currently one: the mailbox label the home page opens in. Served with the absence of a choice preserved \u2014 defaultFolder is omitted when nothing has been chosen, because a client has to be able to tell \"no default\" from \"a default of nothing\". Stored server-side rather than in the browser: the reader has more than one browser, and the point of \"open in this folder\" is that it is true on the phone as well.",
+        "operationId": "getSettings",
+        "responses": {
+          "200": {
+            "description": "The settings as they stand.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Set the reader's own choices.",
+        "description": "The body is the whole set of preferences, so a field that is missing is cleared rather than preserved: this is the only writer, and \"I did not mention it\" and \"I want it gone\" being two states is how a setting becomes impossible to turn off. The folder is not validated against the label list \u2014 it may be one the next slurp brings in \u2014 so a folder that is not there shows an empty list under its own name rather than being refused. Answers with the settings as they now stand, not with what was asked for.",
+        "operationId": "setSettings",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The settings as they now stand.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/people": {
       "get": {
         "summary": "Everyone in the corpus, with their identities.",
@@ -1326,6 +1372,28 @@
           "messages": {
             "type": "integer",
             "description": "Messages carrying this label. Messages rather than chains: a chain count is a walk over the reply graph, and a mail client's sidebar counts messages."
+          }
+        }
+      },
+      "SettingsResponse": {
+        "type": "object",
+        "description": "The reader's own choices. Absent means the choice has not been made.",
+        "additionalProperties": false,
+        "properties": {
+          "defaultFolder": {
+            "type": "string",
+            "description": "A mailbox label the home page opens in. Omitted when nothing has been chosen \u2014 no default is a state, not a default of nothing."
+          }
+        }
+      },
+      "SettingsRequest": {
+        "type": "object",
+        "description": "The same shape written back. A missing field clears the setting.",
+        "additionalProperties": false,
+        "properties": {
+          "defaultFolder": {
+            "type": "string",
+            "description": "The label to open in, or an empty string for no default."
           }
         }
       },

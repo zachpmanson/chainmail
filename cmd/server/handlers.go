@@ -151,6 +151,12 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("/v1/chains/{rootExtId}", get(s.chain))
 	mux.HandleFunc("/v1/stats", get(s.stats))
 	mux.HandleFunc("/v1/labels", get(s.labels))
+	// GET reads the settings, POST writes them: one path, because a preference is
+	// one resource rather than a collection of endpoints.
+	mux.HandleFunc("/v1/settings", methods(map[string]http.HandlerFunc{
+		http.MethodGet:  s.getSettings,
+		http.MethodPost: s.setSettings,
+	}))
 	mux.HandleFunc("/v1/people", get(s.people))
 	mux.HandleFunc("/auth/status", get(s.authStatus))
 	mux.HandleFunc("/auth/login", get(s.authLogin))
@@ -320,6 +326,28 @@ func method(want string, h http.HandlerFunc) http.HandlerFunc {
 			w.Header().Set("Allow", want)
 			fail(w, http.StatusMethodNotAllowed,
 				fmt.Errorf("%s takes %s, not %s", r.URL.Path, want, r.Method))
+			return
+		}
+		h(w, r)
+	}
+}
+
+// methods routes one path's verbs, for the first path that answers more than
+// one. The Allow header lists them in a fixed order so a caller reading it gets
+// the same answer twice, and a verb not taken gets the same JSON error shape
+// method does.
+func methods(m map[string]http.HandlerFunc) http.HandlerFunc {
+	allow := make([]string, 0, len(m))
+	for verb := range m {
+		allow = append(allow, verb)
+	}
+	sort.Strings(allow)
+	return func(w http.ResponseWriter, r *http.Request) {
+		h, ok := m[r.Method]
+		if !ok {
+			w.Header().Set("Allow", strings.Join(allow, ", "))
+			fail(w, http.StatusMethodNotAllowed,
+				fmt.Errorf("%s takes %s, not %s", r.URL.Path, strings.Join(allow, " or "), r.Method))
 			return
 		}
 		h(w, r)
@@ -1335,6 +1363,55 @@ func (s *server) labels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	send(w, http.StatusOK, toLabelsResponse(ls))
+}
+
+// getSettings reads the choices that are about the reader rather than about the
+// mail. Only one so far — the folder the home page opens in — and it is served
+// with the absence of a choice preserved: a client has to be able to tell "no
+// default" from "a default of nothing", and an omitted key is how that is said.
+func (s *server) getSettings(w http.ResponseWriter, r *http.Request) {
+	folder, ok, err := s.store.Setting(corpus.SettingDefaultFolder)
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	out := settingsResponse{}
+	if ok && folder != "" {
+		out.DefaultFolder = &folder
+	}
+	send(w, http.StatusOK, out)
+}
+
+// setSettings records them. The body is the whole set of preferences, so a
+// missing field clears it rather than preserving it: this is the only writer,
+// and "I did not mention it" and "I want it gone" being two states is how a
+// setting becomes impossible to turn off.
+//
+// Nothing is validated against the label list. A folder may be one the next
+// slurp brings in, and refusing it would be the corpus arguing with the reader
+// about a mailbox it is behind on; a folder that is not there shows an empty
+// list under its own name, which is exactly true and one click from being fixed.
+func (s *server) setSettings(w http.ResponseWriter, r *http.Request) {
+	var in settingsRequest
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequestBody))
+	// A misspelled field is a caller reading a different contract, and storing a
+	// preference they did not ask for is worse than refusing.
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&in); err != nil {
+		fail(w, http.StatusBadRequest, fmt.Errorf("reading the request body: %w", err))
+		return
+	}
+	folder := ""
+	if in.DefaultFolder != nil {
+		folder = strings.TrimSpace(*in.DefaultFolder)
+	}
+	if err := s.store.PutSetting(corpus.SettingDefaultFolder, folder); err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	// The settings as they now stand, so a caller sees what it stored rather than
+	// what it asked for.
+	s.getSettings(w, r)
 }
 
 func (s *server) people(w http.ResponseWriter, r *http.Request) {
