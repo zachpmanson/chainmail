@@ -1,8 +1,8 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { $api, searchQuery, type ChainHit, type SearchMode, type SearchParams } from "../lib/api";
 import { ChainPreview, Failure } from "./ChainPreview";
-import { slug, untitledName } from "../lib/route";
+import { useBuildPage } from "../lib/build";
 
 // The default-first order is what the dropdown shows: hybrid is the default
 // search style — lexical and semantic fused — and the order says so.
@@ -146,26 +146,12 @@ export function SelectView() {
    * Normalising here rather than around the request still reports a spec that
    * will not normalise as the build's own failure, which is where a person
    * looking at the button expects to be told.
+   *
+   * Naming the page, sending the request and pushing the URL all live in
+   * useBuildPage, because the inbox builds pages too and one of the two views
+   * deciding its own name is how they would drift apart.
    */
-  // The name is settled at click time, in one place, so the URL that is pushed
-  // and the file the server saves can never disagree. A clock name for an
-  // untitled page is generated per click for the same reason: two builds must
-  // not overwrite each other silently.
-  const pendingName = useRef("");
-  const build = $api.useMutation("post", "/v1/spec", {
-    // The saved page's URL is the name the client chose, always: the server
-    // saves exactly `name` from the request and returns it as the title (it may
-    // borrow a subject when none was given, but that borrows a title, not a
-    // file name). Reslugging the returned title would point the address bar at
-    // a file that was never written — a titleless build saves under the clock
-    // name but announces the borrowed subject's slug. The request name IS the
-    // saved file, so it IS the URL.
-    onSuccess: () =>
-      navigate({
-        to: "/view/$name",
-        params: { name: pendingName.current },
-      }),
-  });
+  const { build, start } = useBuildPage();
 
   const submit = (ev: React.FormEvent) => {
     ev.preventDefault();
@@ -257,22 +243,16 @@ export function SelectView() {
             <button
               type="button"
               disabled={chosen.length === 0 || build.isPending}
-              onClick={() => {
-                pendingName.current = slug(title.trim()) || untitledName();
-                build.mutate({
-                  body: {
-                    chains: chosen,
-                    name: pendingName.current,
-                    ...(title.trim() ? { title: title.trim() } : {}),
-                    ...(addresses.length ? { me: addresses } : {}),
-                    // Recorded on the page so a refresh can propose the chains
-                    // this query would find now but did not when it was curated.
-                    ...(asked
-                      ? { queries: [{ q: asked.q, note: `corpus search, mode=${asked.mode}` }] }
-                      : {}),
-                  },
-                });
-              }}
+              onClick={() =>
+                start({
+                  chains: chosen,
+                  title,
+                  me: addresses,
+                  // Recorded on the page so a refresh can propose the chains
+                  // this query would find now but did not when it was curated.
+                  queries: asked ? [{ q: asked.q, note: `corpus search, mode=${asked.mode}` }] : [],
+                })
+              }
             >
               {build.isPending ? "Building…" : `Build page from ${chosen.length} chain${chosen.length === 1 ? "" : "s"}`}
             </button>

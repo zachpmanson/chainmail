@@ -6,6 +6,7 @@ import {
   Link,
   Outlet,
   useRouterState,
+  useSearch,
 } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import type { Timeline } from "./lib/spec";
@@ -13,6 +14,7 @@ import { loadSpec } from "./lib/loadSpec";
 import { normalise } from "./lib/normalise";
 import { $api } from "./lib/api";
 import { SelectView } from "./components/Select";
+import { Inbox } from "./components/Inbox";
 import { ViewPage } from "./components/ViewPage";
 import { NotFound } from "./components/NotFound";
 import { Rendered } from "./components/Rendered";
@@ -198,11 +200,25 @@ const rootRoute = createRootRoute({
   notFoundComponent: NotFound,
 });
 
+/**
+ * The home page, which is two pages: with a query it is the selection stage,
+ * and with none of q, person or since it is the inbox — the corpus in the order
+ * it arrived. One route and one rule, so Back and a reload land where the person
+ * was, and neither page needs a URL of its own to be shareable.
+ */
+function Home() {
+  const urlSearch = useSearch({ from: "/" });
+  const asking = Boolean(
+    urlSearch.q?.trim() || urlSearch.person?.trim() || urlSearch.since?.trim(),
+  );
+  return asking ? <SelectView /> : <Inbox />;
+}
+
 const searchRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
   validateSearch: validateSearchParams,
-  component: SelectView,
+  component: Home,
 });
 
 const statusRoute = createRoute({

@@ -301,8 +301,16 @@ func TestStructuralOnlyQueryNeedsNoText(t *testing.T) {
 	if len(hits) != 1 || hits[0].ExtID != "mail:<new@example.com>" {
 		t.Fatalf("filter with no text: got %v", ids(hits))
 	}
-	if hits[0].Snippet != "" {
-		t.Errorf("structural-only hit has a snippet %q; nothing matched to highlight", hits[0].Snippet)
+	// Nothing matched, so nothing is highlighted — no bracketed run that would
+	// claim a term the caller never typed. The snippet is still the entry's
+	// opening, the same substitute a semantic hit gets: it is what a row shows
+	// under the subject where a preview belongs, and an empty line there is the
+	// one thing a list of these rows cannot do without.
+	if strings.Contains(hits[0].Snippet, snippetOpen) {
+		t.Errorf("structural-only hit highlights a term nothing matched: %q", hits[0].Snippet)
+	}
+	if !strings.Contains(hits[0].Snippet, "second") {
+		t.Errorf("structural-only hit has no opening excerpt: %q", hits[0].Snippet)
 	}
 }
 
@@ -838,4 +846,103 @@ func keysOf(m map[string]bool) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// A browse of the corpus is ordered by time, and the failure this pins down is
+// the one that made the home page unusable: with nothing to rank against, the
+// damped score is a count of how much of a thread sits near the top of the pool,
+// so a chatty trail from last month outranks a single message from this morning.
+func TestBrowsingTheCorpusOrdersChainsByTheirNewestMessage(t *testing.T) {
+	s := open(t)
+	// A four-entry trail that ends in June: every entry lands near the top of
+	// the recency pool, so the sum of damped positions is large.
+	put(t, s, msg{id: "<busy1@example.com>", subject: "Busy trail", body: "first", ts: may})
+	put(t, s, msg{id: "<busy2@example.com>", parent: "<busy1@example.com>", body: "second", ts: may})
+	put(t, s, msg{id: "<busy3@example.com>", parent: "<busy2@example.com>", body: "third", ts: june})
+	put(t, s, msg{id: "<busy4@example.com>", parent: "<busy3@example.com>", body: "fourth", ts: june})
+	// One message, after all of them.
+	put(t, s, msg{id: "<quiet1@example.com>", subject: "Newer and quieter", body: "last word", ts: july})
+	if _, err := s.ResolveParents(); err != nil {
+		t.Fatal(err)
+	}
+
+	chains, err := s.SearchChains(Query{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(chains) != 2 {
+		t.Fatalf("got %d chains, want 2: %+v", len(chains), chains)
+	}
+	if chains[0].RootExtID != "mail:<quiet1@example.com>" {
+		t.Fatalf("browse order: got %q first, want the chain whose last message is newest",
+			chains[0].RootExtID)
+	}
+	// The whole page is non-increasing in Last, not just the first row: an
+	// order that is right at the top and wrong below it is still wrong.
+	for i := 1; i < len(chains); i++ {
+		if chains[i].Last.After(chains[i-1].Last) {
+			t.Errorf("chain %d ends %v, after chain %d's %v",
+				i, chains[i].Last, i-1, chains[i-1].Last)
+		}
+	}
+	// The order is settled before the cut. Sorting the page afterwards would
+	// pass the assertions above and still answer the wrong question: the top one
+	// by score here is the busy June trail, so a limit applied first would put it
+	// on a page of one.
+	one, err := s.SearchChains(Query{Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(one) != 1 || one[0].RootExtID != "mail:<quiet1@example.com>" {
+		t.Errorf("Limit=1 returned %+v, want the newest chain", one)
+	}
+}
+
+// A browse's rows carry the opening of the newest message, because there is no
+// matched term for the index to excerpt around. Without it every row of the
+// inbox has an empty preview line — the one thing a message list cannot do.
+func TestABrowsedChainCarriesItsOpeningLines(t *testing.T) {
+	s := open(t)
+	put(t, s, msg{id: "<lead1@example.com>", subject: "Statement copy",
+		body: "The paperwork follows shortly, once the account is reconciled."})
+
+	chains, err := s.SearchChains(Query{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(chains) != 1 {
+		t.Fatalf("got %d chains, want 1", len(chains))
+	}
+	if len(chains[0].Best) == 0 {
+		t.Fatal("the chain carries no entries to excerpt")
+	}
+	if got := chains[0].Best[0].Snippet; !strings.Contains(got, "paperwork follows") {
+		t.Errorf("snippet %q does not open the message", got)
+	}
+}
+
+// A text query still ranks by relevance: the browse order must not leak into
+// the answer to a question.
+func TestATextQueryIsStillRankedByRelevance(t *testing.T) {
+	s := open(t)
+	put(t, s, msg{id: "<about1@example.com>", subject: "Rebate reconciliation",
+		body: "the rebate is the point", ts: may})
+	put(t, s, msg{id: "<about2@example.com>", parent: "<about1@example.com>",
+		body: "rebate rebate rebate", ts: may})
+	put(t, s, msg{id: "<passing1@example.com>", subject: "Meter swap",
+		body: "a passing rebate mention", ts: july})
+	if _, err := s.ResolveParents(); err != nil {
+		t.Fatal(err)
+	}
+
+	chains, err := s.SearchChains(Query{Text: "rebate"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(chains) != 2 {
+		t.Fatalf("got %d chains, want 2", len(chains))
+	}
+	if chains[0].RootExtID != "mail:<about1@example.com>" {
+		t.Errorf("a search is ranked by relevance: got %q first", chains[0].RootExtID)
+	}
 }

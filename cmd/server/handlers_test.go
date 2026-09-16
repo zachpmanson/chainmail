@@ -214,26 +214,103 @@ func TestSearchEntriesSwitchesWhichArrayIsPopulated(t *testing.T) {
 	}
 }
 
-// With no filter at all the answer is an arbitrary slice of the corpus that
-// reads exactly like a ranked one, which is worse than a refusal.
-func TestSearchWithNoFilterIsRefused(t *testing.T) {
+// An empty query is the inbox: the corpus in the order it arrived, which is the
+// one question a reader can answer without typing anything.
+//
+// The fixture is the proof that this is not the ranking under another name. Under
+// the damped sum the three-message solar thread outscores the single April
+// message (three positions near the top of the pool against one), so a list that
+// ranked would put March first.
+func TestAnEmptyQueryListsChainsByTheirNewestMessage(t *testing.T) {
 	srv := testServer(t)
 	res := srv.do(t, "GET", "/v1/search", nil)
-	if res.status != 400 {
-		t.Fatalf("status = %d, want 400: %s", res.status, res.body)
+	if res.status != 200 {
+		t.Fatalf("status = %d, want 200: %s", res.status, res.body)
 	}
-	if msg := res.errText(t); !strings.Contains(msg, "q") {
-		t.Errorf("the message does not name what to pass: %q", msg)
+	var got searchResponse
+	if err := json.Unmarshal(res.body, &got); err != nil {
+		t.Fatalf("decoding: %v", err)
 	}
+	if got.Chains == nil || len(*got.Chains) != 2 {
+		t.Fatalf("chains = %v, want both chains", got.Chains)
+	}
+	chains := *got.Chains
+	if chains[0].RootExtID != extOther {
+		t.Errorf("list order: got %q first, want the chain whose last message is newest",
+			chains[0].RootExtID)
+	}
+	for i := 1; i < len(chains); i++ {
+		if chains[i].Last > chains[i-1].Last {
+			t.Errorf("chain %d ends %s, after chain %d's %s", i, chains[i].Last, i-1, chains[i-1].Last)
+		}
+	}
+	// A row is only worth reading if it says who wrote last and what they said:
+	// no ranking found these entries, so the excerpt is the message's opening.
+	if len(chains[0].Best) == 0 {
+		t.Fatalf("the newest chain carries no entries: %+v", chains[0])
+	}
+	if chains[0].Best[0].Person != "Ada Okoye" {
+		t.Errorf("newest entry author = %q, want the sender of the last message",
+			chains[0].Best[0].Person)
+	}
+	if !strings.Contains(chains[0].Best[0].Snippet, "fence panels arrived") {
+		t.Errorf("newest entry snippet = %q, want the opening of the message",
+			chains[0].Best[0].Snippet)
+	}
+}
+
+// Paging the inbox with the last row's `last` reaches the chains the first page
+// did not, and nothing newer than the cursor can appear on a later page.
+func TestPagingTheInboxReachesTheOlderChains(t *testing.T) {
+	srv := testServer(t)
+	first := inboxPage(t, srv, "/v1/search?limit=1")
+	if len(first) != 1 || first[0].RootExtID != extOther {
+		t.Fatalf("first page = %+v, want the newest chain alone", first)
+	}
+	cursor := first[0].Last
+
+	second := inboxPage(t, srv, "/v1/search?limit=10&before="+url.QueryEscape(cursor))
+	for _, c := range second {
+		if c.Last > cursor {
+			t.Errorf("chain %s ends %s, after the cursor %s", c.RootExtID, c.Last, cursor)
+		}
+	}
+	// The chain page one never reached is on page two. The cursor includes its
+	// own second, so the boundary thread may appear again — a repeated row the
+	// client drops by root, against a dropped chain nobody would ever see.
+	seen := map[string]bool{}
+	for _, c := range append(first, second...) {
+		seen[c.RootExtID] = true
+	}
+	if !seen[extAda1] {
+		t.Errorf("paging lost the older chain: pages held %v", seen)
+	}
+}
+
+func inboxPage(t *testing.T, srv *harness, path string) []chainHit {
+	t.Helper()
+	res := srv.do(t, "GET", path, nil)
+	if res.status != 200 {
+		t.Fatalf("%s: status = %d: %s", path, res.status, res.body)
+	}
+	var got searchResponse
+	if err := json.Unmarshal(res.body, &got); err != nil {
+		t.Fatalf("%s: decoding: %v", path, err)
+	}
+	if got.Chains == nil {
+		t.Fatalf("%s: no chains array: %s", path, res.body)
+	}
+	return *got.Chains
 }
 
 func TestMalformedSearchParametersAreRefusedWithAUsableMessage(t *testing.T) {
 	cases := map[string]string{
-		"/v1/search?q=solar&limit=lots":       "limit",
-		"/v1/search?q=solar&limit=100000":     "limit",
-		"/v1/search?q=solar&entries=yes":      "entries",
-		"/v1/search?q=solar&since=last+March": "since",
-		"/v1/search?q=solar&mode=vibes":       "mode",
+		"/v1/search?q=solar&limit=lots":          "limit",
+		"/v1/search?q=solar&limit=100000":        "limit",
+		"/v1/search?q=solar&entries=yes":         "entries",
+		"/v1/search?q=solar&since=last+March":    "since",
+		"/v1/search?q=solar&before=last+Tuesday": "before",
+		"/v1/search?q=solar&mode=vibes":          "mode",
 	}
 	srv := testServer(t)
 	for path, want := range cases {

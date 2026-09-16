@@ -12,10 +12,14 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Ranked chains for a query — the selection candidates.
-         * @description Selection stage. Lexical by default: FTS5 wins decisively on the tokens a mail corpus is dense with (invoice numbers, account ids, Message-IDs), and the structural half of a real question is a filter rather than something a similarity score encodes.
+         * Chains for a query — or, with no query at all, the corpus in the order it arrived.
+         * @description Two questions, one row shape. With q, person or since, this is the selection stage: chains ranked by how much of each is about the query — lexical by default, because FTS5 wins decisively on the tokens a mail corpus is dense with (invoice numbers, account ids, Message-IDs), and the structural half of a real question is a filter rather than something a similarity score encodes.
          *
-         *     At least one of q, person or since must be given. With no filter at all an arbitrary slice of the corpus would come back reading like a ranked answer, so that is a 400.
+         *     With none of them, it is the inbox: every chain, newest message first, no score involved. A chain is ordered by its last message rather than by the damped sum of its members' positions, because there is nothing to be relevant to — and the difference is visible: a three-message thread from March outranks a single message from April under a sum, and cannot under a list. Each row's `best` holds the newest entry, so a row has a sender, a date and an opening excerpt to show.
+         *
+         *     Paging is `before`. The cursor includes its own second, so a caller paging on the last row's `last` cannot lose a chain that ends in the same second as the boundary — the boundary thread itself may appear on both pages, which is the recoverable direction: a reader can ignore a row twice, not a chain that never appears.
+         *
+         *     mode=semantic and mode=hybrid still need q: there is nothing to be similar to.
          */
         get: operations["search"];
         put?: never;
@@ -37,7 +41,7 @@ export interface paths {
         put?: never;
         /**
          * Reach the work mailbox and ingest it.
-         * @description Runs `corpus slurp` against the corpus — reaching the work mailbox through the scoped docket access the host grants this unit — so a subsequent /v1/refresh can build over mail that arrived since the last ingest. The phases are the ones the chainmail-slurp unit runs (mail, twins, repair, dedupe as a dry run, embed), and the ingest's own transcript is returned.
+         * @description Runs `corpus slurp` against the corpus — reading the work mailbox through the mail credential this unit already holds — so a subsequent /v1/refresh can build over mail that arrived since the last ingest. The phases are the ones the chainmail-slurp unit runs (mail, twins, repair, dedupe as a dry run, embed), and the ingest's own transcript is returned.
          *
          *     Opt-in and off by default: a server started without -slurp answers 403, keeping the surface read-most and never touching the mailbox.
          */
@@ -392,7 +396,7 @@ export interface components {
             subject?: string;
             /** @description Opens the entry at its source. Absent when the source gave none. */
             permalink?: string;
-            /** @description Match excerpt with matched terms wrapped in square brackets. Absent for a structural-only query, which has nothing to highlight. */
+            /** @description Match excerpt with matched terms wrapped in square brackets. When nothing matched — a structural filter, a browse of the corpus, or an entry no keyword explains — this is the opening of the body instead, with nothing bracketed: the same substitute a semantic hit gets, and what a row shows where a preview belongs. */
             snippet?: string;
             /** @description Fused Reciprocal Rank Fusion score. Comparable within one response only. */
             score: number;
@@ -1034,6 +1038,11 @@ export interface operations {
                  * @example 2026-01-31
                  */
                 since?: string;
+                /**
+                 * @description The inbox's cursor: only entries at or before this instant. A caller pages by passing the oldest row's `last`, which is why this is a timestamp and not a date — a day-granular cursor would repeat or drop a whole day's boundary. The instant is inclusive, so a chain ending in the cursor's own second is returned rather than skipped, at the cost of that chain appearing on two pages.
+                 * @example 2026-03-11T17:40:00Z
+                 */
+                before?: string;
                 /** @description Retrieval. semantic and hybrid need vectors (`corpus embed`) AND a running local embedding daemon; without the daemon they return 503, never an empty result set. */
                 mode?: "lexical" | "semantic" | "hybrid";
                 /** @description How many chains (or entries) to return. */
@@ -1047,7 +1056,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Ranked candidates. */
+            /** @description Chains (or entries) in the order the request asked for: by relevance when there is something to be relevant to, by each chain's newest message when there is not. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1056,7 +1065,7 @@ export interface operations {
                     "application/json": components["schemas"]["SearchResponse"];
                 };
             };
-            /** @description No filter given, or a parameter could not be parsed. */
+            /** @description A parameter could not be parsed, or the ranking mode asked for needs a q there is not. */
             400: {
                 headers: {
                     [name: string]: unknown;

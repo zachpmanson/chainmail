@@ -168,6 +168,22 @@ func (q Query) withDefaults() Query {
 	return q
 }
 
+// ranked reports whether the query brought anything to be ranked against: free
+// text the indexes can match, or a query vector. With neither, candidates falls
+// through to byRecency — the zero Query is a browse of the whole corpus — and
+// every score in the response is a position, not a judgement.
+//
+// Callers use it to decide what the answer is ordered by, so it has to agree
+// with candidates exactly; both ask this one question rather than testing the
+// two fields separately.
+func (q Query) ranked() bool {
+	if q.Semantic != nil {
+		return true
+	}
+	prose, ident := MatchExpressions(q.Text)
+	return prose != "" || ident != ""
+}
+
 // EntryHit is one matching entry, with the excerpt that explains the match.
 type EntryHit struct {
 	ID        int64
@@ -180,8 +196,10 @@ type EntryHit struct {
 	Subject   string
 	Permalink string
 
-	// Snippet is the FTS5 excerpt, with matched terms wrapped in [ ]. Empty for
-	// a structural-only query, which has nothing to highlight.
+	// Snippet is the FTS5 excerpt, with matched terms wrapped in [ ]. It is the
+	// opening of the body when nothing matched — a structural filter, a browse of
+	// the corpus, or a hit no keyword explains — because an excerpt with nothing
+	// bracketed is still the honest answer to "what is this entry".
 	Snippet string
 
 	// Score is the fused RRF score. ProseRank, IdentRank and SemRank are the
@@ -320,10 +338,11 @@ func (s *Store) SearchChains(q Query) ([]ChainHit, error) {
 		scored = append(scored, scoredRoot{root: root, score: sum})
 	}
 	sort.SliceStable(scored, func(i, j int) bool { return scored[i].score > scored[j].score })
-	if len(scored) > q.Limit {
-		scored = scored[:q.Limit]
-	}
 
+	// Every root in the pool, summarised while the pool is still whole: a chain's
+	// last message is a property of the chain, not of the entries that happened to
+	// reach the pool, so the recency order below cannot be decided from the
+	// candidates alone.
 	rootIDs := make([]int64, len(scored))
 	for i, sr := range scored {
 		rootIDs[i] = sr.root
@@ -331,6 +350,30 @@ func (s *Store) SearchChains(q Query) ([]ChainHit, error) {
 	meta, err := s.chainMeta(rootIDs)
 	if err != nil {
 		return nil, err
+	}
+
+	// A query with no ranking input is a browse, and a browse is ordered by time.
+	// The damped score measures how much of a chain sits near the top of the
+	// pool, which answers a relevance question that was never asked: it lets a
+	// chatty thread from last week outrank a single message from this morning.
+	//
+	// The order is settled here, before the cut, and not by re-sorting the page
+	// afterwards — "the newest of the top fifty by score" is not "the newest
+	// fifty", and the difference is a thread that never appears on any page.
+	if !q.ranked() {
+		sort.SliceStable(scored, func(i, j int) bool {
+			a, b := meta[scored[i].root], meta[scored[j].root]
+			if !a.last.Equal(b.last) {
+				return a.last.After(b.last)
+			}
+			// Two chains can end in the same second (a mail and its twin, a pair of
+			// bots on the hour). Ids break the tie so paging past one of them cannot
+			// depend on map iteration order.
+			return a.extID < b.extID
+		})
+	}
+	if len(scored) > q.Limit {
+		scored = scored[:q.Limit]
 	}
 
 	// Hydrate only the entries actually returned.
@@ -416,7 +459,7 @@ func (s *Store) candidates(q Query) ([]candidate, error) {
 	if q.Semantic == nil || !q.Semantic.Only {
 		prose, ident = MatchExpressions(q.Text)
 	}
-	if prose == "" && ident == "" && q.Semantic == nil {
+	if !q.ranked() {
 		return s.byRecency(q, where, args)
 	}
 
@@ -848,11 +891,14 @@ func (s *Store) hydrate(cs []candidate) ([]EntryHit, error) {
 		h.Score, h.Snippet = c.score, c.snippet
 		h.ProseRank, h.IdentRank = c.proseRank, c.identRank
 		h.SemRank, h.Similarity = c.semRank, c.similarity
-		// A purely semantic hit has no matched term to highlight, so FTS5 offers
-		// no excerpt. The opening of the body is the honest substitute: it says
-		// what the entry is, which is the only question left once the reason it
-		// matched is "nothing you typed appears in it".
-		if h.Snippet == "" && c.semRank > 0 {
+		// No lexical ranking found this entry, so there is no matched term to
+		// highlight and FTS5 offers no excerpt: a purely semantic hit, or a browse
+		// with no query at all. The opening of the body is the honest substitute —
+		// it says what the entry is, which is the only question left once the
+		// reason it surfaced is "nothing you typed appears in it", or "nothing was
+		// typed". Without this an inbox row would have no preview line at all,
+		// which is the one thing a message list cannot do without.
+		if h.Snippet == "" && c.proseRank == 0 && c.identRank == 0 {
 			h.Snippet = oneLineExcerpt(lead[c.id])
 		}
 		out = append(out, h)
