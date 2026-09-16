@@ -109,6 +109,9 @@ describe("how a bubble says what it knows about its clock", () => {
   it("says an unplaced clock is unplaced, rather than leaving it bare", () => {
     const { container } = draw({ stamp: { date: "Mon 2 Mar 2026", zone: "unknown" } });
     expect(container.querySelector(".tz")!.className).toBe("tz tzu");
-    expect(container.querySelector(".tz")!.textContent).toBe(" zone unknown");
+    // One mark, and a tooltip that says why: an unplaced clock is common enough
+    // that a sentence at each one stops being read.
+    expect(container.querySelector(".tz")!.textContent).toBe(" ?");
+    expect(container.querySelector(".tz")!.getAttribute("title")).toMatch(/Zone unknown/);
   });
 });

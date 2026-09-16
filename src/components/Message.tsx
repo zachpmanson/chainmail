@@ -169,9 +169,11 @@ function CopyJson({ data }: { data: unknown }) {
  * A zone is shown three ways, because the reader's next move differs in each.
  * Stated is a fact and reads as one. Inferred is a claim and is dotted, dimmed
  * and suffixed so it cannot be mistaken for the source's own words. Unknown is
- * neither, and is said out loud rather than left as whitespace — an unlabelled
- * clock beside a labelled one silently invites the reader to compare them, and
- * on this page most clocks are unlabelled.
+ * neither, and is marked with a bare "?" rather than left as whitespace — an
+ * unlabelled clock beside a labelled one silently invites the reader to compare
+ * them, and on this page most clocks are unlabelled. The mark is the whole of it:
+ * "zone unknown" at every held-back message is a sentence the reader learns to
+ * skip, and the tooltip still says why.
  */
 function Stamp({ id, stamp }: { id: string; stamp: StampData }) {
   const { date, time, tz, zone } = stamp;
@@ -191,7 +193,7 @@ function Stamp({ id, stamp }: { id: string; stamp: StampData }) {
           className="tz tzu"
           title="Zone unknown — this source stated none and nothing available places it. The clock is a wall clock as quoted, so it cannot be compared with the times above and below it."
         >
-          {" zone unknown"}
+          {" ?"}
         </span>
       ) : null}
     </a>
