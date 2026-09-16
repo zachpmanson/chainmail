@@ -204,13 +204,15 @@ function InboxRow({
       >
         <span className="ibwho">{last?.person || "unknown sender"}</span>
         <span className="ibwhen">{whenShort(last?.ts ?? chain.last)}</span>
-        <span className="ibsubj">{subject}</span>
+        <span className="ibsubrow">
+          <span className="ibsubj">{subject}</span>
+          {chain.entries > 1 ? (
+            <span className="ibcount" title={`${chain.entries} messages in this chain`}>
+              {chain.entries}
+            </span>
+          ) : null}
+        </span>
         <span className="ibsnippet">{last?.snippet ?? ""}</span>
-        {chain.entries > 1 ? (
-          <span className="ibcount" title={`${chain.entries} messages in this chain`}>
-            {chain.entries}
-          </span>
-        ) : null}
       </button>
       {/* The tick is the selection a page is built from, and the row body is the
           thread itself, so one hit area cannot mean both — which is why it
