@@ -27,10 +27,20 @@
   html { scroll-behavior:smooth; }
   body { margin:0; background:var(--bg); color:var(--fg);
     font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; }
+  /* The document measure. A transcript is read, so it keeps a readable width on
+     a wide screen; column mode drops it (see body.chains — a workspace is laid
+     out, not read), and the app's own pages opt out below, because a list and a
+     reading pane are laid out too. */
   .wrap { max-width:76rem; margin:0 auto; padding:1.75rem 1.25rem 3.5rem; }
   header.top { border-bottom:1px solid var(--line); padding-bottom:.7rem; margin-bottom:.25rem; }
-  header.sitehead { max-width:76rem; margin:0 auto; padding:1rem 1.25rem .85rem;
+  /* The shell fills the window. A cap here put the nav in the middle of a wide
+     screen with a third of it empty to either side, on every page. */
+  header.sitehead { max-width:none; margin:0; padding:1rem 1.25rem .85rem;
     border-bottom:1px solid var(--line); color:var(--muted); font-size:.86rem; }
+  /* The app's own pages are workspaces, not documents: an inbox is a list and a
+     reading pane, and both want the width the window has. Anything not named
+     here — a 404, a dropped spec — keeps the measure above. */
+  .wrap.selwrap, .wrap.ibwrap, .wrap.statuswrap, .wrap.opswrap { max-width:none; }
   header.sitehead .sep { margin:0 .45rem; color:var(--line); }
   /* The site's name, and the link home: it is the one nav item that is not a
      page, so it is weighted like a title and sits in the same bar. */
@@ -618,7 +628,9 @@
   footer.end ul { margin:0; padding-left:1.15rem; }
   footer.end li { margin:.2rem 0; font-size:.89rem; }
   /* --- sign-in banner --- */
-  .authbar { max-width:76rem; margin:1.1rem auto .25rem; padding:.6rem .9rem;
+  /* Full width with the shell it sits in: a banner inset to the measure would
+     float in the middle of a page whose content starts at the window's edge. */
+  .authbar { max-width:none; margin:1.1rem 1.25rem .25rem; padding:.6rem .9rem;
     background:var(--card); border:1px solid var(--accent); border-radius:8px;
     font-size:.88rem; color:var(--muted); }
   .authbar a { color:var(--accent); font-weight:600; }

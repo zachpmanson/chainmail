@@ -1,8 +1,8 @@
 /* The selection stage. Kept out of styles.css because that file is the rendered
    transcript's stylesheet and ships inside every static page from
-   scripts/render.tsx, where none of these controls exist. */
-
-.selwrap { max-width:60rem; }
+   scripts/render.tsx, where none of these controls exist. The four app views —
+   selection, inbox, status, ops — fill the window rather than sitting in the
+   transcript's 76rem measure; that rule is in styles.css beside `.wrap`. */
 
 .selform, .selbuild { display:flex; flex-wrap:wrap; align-items:flex-end; gap:.6rem;
   margin:1rem 0 .4rem; }
@@ -103,7 +103,6 @@
 
 /* The /status screen. Same visual family as the selection stage: it, too, is a
    browser-only control surface that never ships inside a rendered transcript. */
-.statuswrap { max-width:60rem; }
 .sthead { font-size:.7rem; text-transform:uppercase; letter-spacing:.1em;
   color:var(--muted); margin:1.1rem 0 .1rem; }
 .stnote { font-size:.74rem; color:var(--muted); margin:.35rem 0 .5rem; }
@@ -129,7 +128,6 @@
 /* The /ops screen: the people-merge review surface. Same visual family as the
    status screen — a browser-only control surface, and one that writes, so the
    apply buttons are the only thing here styled to be pressed. */
-.opswrap { max-width:60rem; }
 .ophead { font-size:.7rem; text-transform:uppercase; letter-spacing:.1em;
   color:var(--muted); margin:1.1rem 0 .1rem; }
 .opnote { font-size:.74rem; color:var(--muted); margin:.35rem 0 .5rem; }
@@ -194,9 +192,6 @@
 /* The inbox: the home page with no query. Same file as the selection stage for
    the same reason — these controls exist only in the browser, and the static
    transcript ships this stylesheet minus none of it. */
-/* The shell's full width, not the selection stage's narrower column: two panels
-   need the room that one column of prose does not. */
-.ibwrap { max-width:76rem; }
 .ibsearch { display:flex; align-items:center; gap:.5rem; margin:0 0 .2rem; }
 .ibsearch input { flex:1 1 auto; font:inherit; font-size:.9rem; padding:.45rem .6rem;
   border:1px solid var(--line); border-radius:6px; background:var(--card); color:var(--fg); }
