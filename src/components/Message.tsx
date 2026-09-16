@@ -78,6 +78,13 @@ export interface MessageProps {
   /** reconstructed from quoted text; drawn dashed, since the page did not
    *  receive it as a standalone message */
   quoted?: boolean;
+  /** the message the pane landed on when this chain opened: the newest, which is
+   *  what the row that was clicked was a summary of. Drawn as a one-shot flash
+   *  (see .msg.landed), because landing is an arrival rather than a state the
+   *  message is in. */
+  landed?: boolean;
+  /** called when that flash finishes, so the caller can take the mark off. */
+  onLandedEnd?: () => void;
   /** people @-named in the body, shown above it */
   mentions?: string[];
   attachments?: Attachment[];
@@ -349,14 +356,26 @@ export function Message(p: MessageProps) {
   // and `me`/`quoted`/`isnew` are the same colour-and-state modifiers the
   // stylesheet already reads off this element.
   const cls = ["msg", p.orgSlot, p.me && "me", p.quoted && "q",
-    p.chainStart && "chstart", p.mark === "new" && "isnew"]
+    p.chainStart && "chstart", p.mark === "new" && "isnew", p.landed && "landed"]
     .filter(Boolean)
     .join(" ");
   // The name's hover title, and the avatar's: both name the person the same way,
   // and a caller that supplies no title gets the name it already gave us.
   const who = p.senderTitle ?? p.sender ?? "";
   return (
-    <div className={cls} id={p.id} data-ch={p.lane} style={p.style}>
+    <div
+      className={cls}
+      id={p.id}
+      data-ch={p.lane}
+      style={p.style}
+      // The flash is on the bubble (see .msg.landed), so it is the bubble's
+      // animation end that reaches this handler; the name is checked because an
+      // entry with any other animation must not clear a mark that is still
+      // running.
+      onAnimationEnd={(e) => {
+        if (e.animationName === "flash") p.onLandedEnd?.();
+      }}
+    >
       <div className="col">
         {/* The header is the bubble's disclosure, not a caption: the sender, the
             org, the clock and the reply the message answers are what a page is

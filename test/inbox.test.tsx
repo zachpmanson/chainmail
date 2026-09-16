@@ -219,8 +219,41 @@ const CHAIN_BODIES: Record<
   },
 };
 
+/** A chain of more than one, oldest first, where the newest entry is not the one
+ *  the list row starts from. A row is a summary of the newest message (see
+ *  ChainRow), so a pane that opens the thread at its top is the row's promise
+ *  broken — see the landing test below. */
+const MULTI_ROOT = "mail:<solar-trail-1@example.fed>";
+const MULTI_ENTRIES = [
+  {
+    extId: "mail:<solar-trail-2@example.fed>",
+    source: "mail",
+    quoted: false,
+    ts: "2026-03-02T09:15:00Z",
+    author: "Ada Okoye",
+    body: "Can you quote the north shed?",
+    html: "<p>Can you quote the north shed?</p>",
+    to: "Bo Halvorsen",
+    fromEmail: "ada@okoye.example",
+    tz: "AEST",
+    tzOffsetMinutes: 600,
+  },
+  {
+    extId: "mail:<solar-trail-4@example.fed>",
+    source: "mail",
+    quoted: true,
+    ts: "2026-03-11T17:40:00Z",
+    author: "Bo Halvorsen",
+    body: "Roof access is fine from the 14th.",
+    html: "<p>Roof access is fine from the 14th.</p>",
+    tz: "AEST",
+    tzOffsetMinutes: 600,
+  },
+];
+
 const chainHandler: Handler = (c) => {
   const root = decodeURIComponent(pathOf(c).slice("/v1/chains/".length));
+  if (root === MULTI_ROOT) return json(200, { rootExtId: root, entries: MULTI_ENTRIES });
   const b = CHAIN_BODIES[root];
   return b
     ? json(200, {
@@ -453,6 +486,31 @@ describe("the home page with no query", () => {
         "aria-current",
       ),
     ).toBe("true");
+  });
+
+  it("lands on the newest message of the thread it opens, and marks it", async () => {
+    handler = buildHandler;
+    // jsdom has no scrollIntoView, and the pane asks for one either way: which
+    // element it asks for is the whole claim, and a landing that cannot scroll
+    // is still a landing.
+    const scrolled: string[] = [];
+    const orig = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function () {
+      scrolled.push(this.id);
+    };
+    try {
+      await mountApp(`/?open=${encodeURIComponent(MULTI_ROOT)}`);
+      await waitFor(() => expect(pane().querySelector(".msg.landed")).not.toBeNull());
+      // The newest message is the one the row would have summarised, so it is the
+      // one marked and the one scrolled to — not the top of the thread.
+      expect(pane().querySelector(".msg.landed .nm")?.textContent).toBe("Bo Halvorsen");
+      expect(scrolled).toEqual(["entry-1"]);
+      // Landing is where the pane opens, not a filter on what it draws: the rest
+      // of the thread is still there, above it.
+      expect(within(pane()).getByText(/Can you quote the north shed/)).toBeTruthy();
+    } finally {
+      Element.prototype.scrollIntoView = orig;
+    }
   });
 
   it("opens a thread the loaded page does not hold, and claims nothing about it", async () => {

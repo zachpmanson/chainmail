@@ -390,6 +390,11 @@
    is the gap between messages, so the heading reads as a heading rather than as
    part of the first email. */
 .ibread > .stream { padding:.5rem 0 0; }
+/* Room for the pane's own sticky head when it lands on a message (see
+   ChainMessages): `scroll-margin-top` is what `scrollIntoView` leaves above the
+   target, and without it the head would sit on top of the message the reader
+   just arrived at. */
+.ibread .stream .msg { scroll-margin-top:2.6rem; }
 .ibread > .selnote { margin:.7rem .8rem 0; }
 @media (min-width:60rem) {
   /* The app is one window: the nav, and under it the two panels, which scroll

@@ -1,5 +1,7 @@
+import { useEffect, useRef, useState } from "react";
 import { $api, type CorpusEntry } from "../lib/api";
 import { orgOrder, slotsFor } from "../lib/derive";
+import { newest } from "../lib/newest";
 import { Failure } from "./ChainPreview";
 import { Message, type StampData } from "./Message";
 
@@ -108,10 +110,35 @@ export function ChainMessages({ chain }: { chain: { rootExtId: string } }) {
     params: { path: { rootExtId: chain.rootExtId } },
   });
 
+  const entries = fetched.data?.entries ?? [];
+
+  // Where the pane lands: the newest entry, which is the message the list row
+  // was a summary of (see newest). A chain is drawn oldest-first, because that is
+  // what makes it readable as a transcript — but the row that was clicked
+  // previewed the last message, and opening a five-screen trail to its top reads
+  // as the email not being there at all. Landing on it is the pane keeping the
+  // promise the row made, and the flash is so the arrival is visible on a thread
+  // longer than the screen.
+  //
+  // Once per chain, and never again: a refetch redraws the open thread (saving
+  // "who I am" invalidates it), and that must not drag a reader who has scrolled
+  // back to the start away from where they were reading.
+  const [landed, setLanded] = useState<string | null>(null);
+  const landedFor = useRef<string | null>(null);
+  const target = newest(entries);
+  useEffect(() => {
+    if (!target || landedFor.current === chain.rootExtId) return;
+    landedFor.current = chain.rootExtId;
+    const el = document.getElementById(anchor(entries.indexOf(target)));
+    // Absent in jsdom, and a landing that cannot scroll is still a landing: the
+    // mark is what the reader sees either way.
+    el?.scrollIntoView?.({ block: "start" });
+    setLanded(target.extId);
+  }, [chain.rootExtId, entries, target]);
+
   if (fetched.isError) return <Failure error={fetched.error} />;
   if (fetched.isPending) return <p className="selnote">Loading the chain…</p>;
 
-  const entries = fetched.data?.entries ?? [];
   if (entries.length === 0) return <p className="selnote">No entries to show.</p>;
 
   // One colour rule, two callers: the same function the page build uses, over the
@@ -157,6 +184,11 @@ export function ChainMessages({ chain }: { chain: { rootExtId: string } }) {
           // pasted somewhere and read whole — the same affordance, and the same
           // button, the page offers.
           copyJson={e}
+          // The message the pane landed on, flashed once and then let go. Only
+          // that one message is handed the end-of-flash callback: a thread is one
+          // landing, and every other bubble has no mark to take off.
+          landed={e.extId === landed}
+          onLandedEnd={e.extId === landed ? () => setLanded(null) : undefined}
         />
       ))}
     </div>

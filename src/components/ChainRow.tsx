@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import type { ChainHit, EntryHit } from "../lib/api";
+import type { ChainHit } from "../lib/api";
+import { newest } from "../lib/newest";
 import { whenShort } from "../lib/stamp";
 
 /**
@@ -58,22 +59,6 @@ export function RankMeta({ chain }: { chain: ChainHit }) {
   );
 }
 
-/**
- * The newest entry of a chain, which is what a row is a summary of: who wrote
- * last, and what they said. Read off the timestamps rather than taken as
- * `best[0]` — the entries attached to a chain are its top-scoring ones, and a
- * search's idea of "best" is not recency. On a browse the two coincide, and a
- * row that silently relied on that would show the wrong message the moment it
- * stopped being true.
- */
-export function newest(chain: ChainHit): EntryHit | undefined {
-  let out: EntryHit | undefined;
-  for (const e of chain.best ?? []) {
-    if (!out || e.ts > out.ts) out = e;
-  }
-  return out;
-}
-
 /** The chain's own name, or the fact that it has none — never an empty subject
  *  line, which reads as a rendering failure rather than as a message that was
  *  sent without one. */
@@ -98,7 +83,7 @@ export function ChainRow({
   onToggle: () => void;
   onOpen: () => void;
 }) {
-  const last = newest(chain);
+  const last = newest(chain.best ?? []);
   const subject = subjectOf(chain);
   return (
     <li

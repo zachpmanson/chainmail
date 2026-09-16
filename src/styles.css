@@ -543,6 +543,13 @@
                      to   { box-shadow:0 0 0 3px transparent; } }
   .msg:target .bub, .sys:target { animation:flash 1.4s ease-out 1;
     border-color:var(--accent); }
+  /* The message the pane opened on: the chain's newest, which is what the row
+     that was opened was a summary of. It flashes and then settles — the mark is
+     about the arrival, not a state the message is in — so the class is taken off
+     when the animation ends (see ChainMessages). It repeats the :target pair
+     above rather than reusing them, because landing is not following a permalink:
+     nothing is navigated to, and no anchor in the address names this message. */
+  .msg.landed .bub { animation:flash 1.6s ease-out 1; border-color:var(--accent); }
   /* --- reply-tree minimap: sticky structural index of the reply graph --- */
   .mini { position:fixed; top:0; right:0; bottom:0; width:max-content;
     max-width:16.5rem; z-index:30;
