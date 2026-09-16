@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { $api, searchQuery, type SearchMode, type SearchParams } from "../lib/api";
+import { BuildBar } from "./BuildBar";
 import { ChainPane } from "./ChainPane";
 import { ChainRow, RankMeta } from "./ChainRow";
 import { Failure, type PreviewableChain } from "./ChainPreview";
-import { useBuildPage } from "../lib/build";
 import { SplitPane } from "./SplitPane";
 
 // The default-first order is what the dropdown shows: hybrid is the default
@@ -31,8 +31,6 @@ export function SelectView() {
   const [mode, setMode] = useState<SearchMode>(urlSearch.mode ?? "hybrid");
   const [person, setPerson] = useState(urlSearch.person ?? "");
   const [since, setSince] = useState(urlSearch.since ?? "");
-  const [title, setTitle] = useState("");
-  const [me, setMe] = useState("");
   // A URL that already names a search (a reload, or Back from a built page)
   // runs it on mount instead of waiting for a submit.
   const [asked, setAsked] = useState<SearchParams | null>(() =>
@@ -89,12 +87,7 @@ export function SelectView() {
    * Normalising here rather than around the request still reports a spec that
    * will not normalise as the build's own failure, which is where a person
    * looking at the button expects to be told.
-   *
-   * Naming the page, sending the request and pushing the URL all live in
-   * useBuildPage, because the inbox builds pages too and one of the two views
-   * deciding its own name is how they would drift apart.
    */
-  const { build, start } = useBuildPage();
 
   const submit = (ev: React.FormEvent) => {
     ev.preventDefault();
@@ -123,10 +116,6 @@ export function SelectView() {
     setChosen((prev) => (prev.includes(root) ? prev.filter((r) => r !== root) : [...prev, root]));
 
   const chains = results.data?.chains ?? [];
-  const addresses = me
-    .split(",")
-    .map((a) => a.trim())
-    .filter((a) => a !== "");
 
   // The address may name a chain these results do not hold — a candidate read,
   // then a reload before the answer came back, or an address carried over from
@@ -226,48 +215,16 @@ export function SelectView() {
             }
           />
 
-          {/* The build bar at the foot of the workspace: the search is above,
-              the candidates are in the middle, and what to do with the ticked
-              ones is the last thing on the page — where the inbox puts its
-              own. */}
-          <div className="selbuild ibbuild">
-            <label className="self">
-              <span>Page title</span>
-              <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="optional" />
-            </label>
-            {/* Nothing in the corpus records which mailbox it was collected
-                from, so the reader's own messages can only be marked by being
-                told which addresses are theirs. */}
-            <label className="self">
-              <span>Your addresses</span>
-              <input value={me} onChange={(e) => setMe(e.target.value)} placeholder="comma separated" />
-            </label>
-            <button
-              type="button"
-              disabled={chosen.length === 0 || build.isPending}
-              onClick={() =>
-                start({
-                  chains: chosen,
-                  title,
-                  me: addresses,
-                  // Recorded on the page so a refresh can propose the chains
-                  // this query would find now but did not when it was curated.
-                  queries: asked ? [{ q: asked.q, note: `corpus search, mode=${asked.mode}` }] : [],
-                })
-              }
-            >
-              {build.isPending ? "Building…" : `Build page from ${chosen.length} chain${chosen.length === 1 ? "" : "s"}`}
-            </button>
-            {/* Seconds of silence reads as a broken page, so the wait says what
-                it is waiting on and how much of it there is. */}
-            {build.isPending ? (
-              <p className="selnote" role="status">
-                Recovering HTML and detecting boilerplate across {chosen.length} chain
-                {chosen.length === 1 ? "" : "s"}. This takes a few seconds.
-              </p>
-            ) : null}
-            {build.isError ? <Failure error={build.error} /> : null}
-          </div>
+          {/* The bar that builds the page out of the ticked candidates, at the
+              foot of the workspace: the search is above, the candidates are in
+              the middle, and what to do with the ticked ones is last — the same
+              bar, and the same rules, as the inbox's. What this page knows and
+              the inbox does not is the query that found them, which the page
+              records so a refresh can propose what it would find now. */}
+          <BuildBar
+            chosen={chosen}
+            queries={asked ? [{ q: asked.q, note: `corpus search, mode=${asked.mode}` }] : []}
+          />
         </>
       ) : null}
     </div>

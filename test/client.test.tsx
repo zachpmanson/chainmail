@@ -502,6 +502,25 @@ describe("declining", () => {
 });
 
 describe("building a page from the chosen set", () => {
+  it("shows the build bar only once something is ticked", async () => {
+    handler = buildHandler;
+    await mountApp("/?q=cutover");
+    await screen.findByText("Loom cutover schedule", { selector: ".ibsubj" });
+
+    // Nothing ticked is nothing to build from, so there is no bar — the same
+    // rule as the inbox, where the search page used to show a row of controls
+    // that could not do anything yet.
+    expect(screen.queryByLabelText("Page title")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Build page/ })).toBeNull();
+
+    click(screen.getAllByRole("checkbox")[0]!);
+    expect(await screen.findByLabelText("Page title")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Build page from 1 chain$/ })).toBeTruthy();
+    // And it is the one bar, so no field asking who the reader is: the addresses
+    // are a setting, written on the services page.
+    expect(screen.queryByLabelText("Your addresses")).toBeNull();
+  });
+
   it("posts exactly the ticked chains and lands on the page", async () => {
     handler = buildHandler;
     const router = await mountApp("/?q=cutover");
@@ -767,6 +786,73 @@ describe("the default folder on /status", () => {
   });
 });
 
+/**
+ * The reader's own addresses: which mail is theirs. They live here rather than
+ * beside the build button on the inbox and the search page, because they are not
+ * a fact about a page being built — they decide which messages are marked as the
+ * reader's wherever mail is read, including the threads nobody is building a page
+ * from. This screen is where the settings are, so it is where this one is set.
+ */
+describe("the addresses on /status", () => {
+  const settingsWrites = () => calls.filter((c) => pathOf(c) === "/v1/settings" && c.method === "POST");
+  const addressHandler = (initial: string[]): Handler => {
+    let stored = initial;
+    return (c) => {
+      const p = pathOf(c);
+      if (p === "/v1/settings") {
+        if (c.method === "POST") {
+          const body = JSON.parse(c.body ?? "{}") as { me?: string[] };
+          // The server's own rule: the value is trimmed, blanked and de-duplicated
+          // into the one comma-separated form it is served back in. That is what
+          // the field has to be seen to take back.
+          stored = (body.me?.[0] ?? "")
+            .split(",")
+            .map((a) => a.trim())
+            .filter((a) => a !== "");
+        }
+        return json(200, { slurpEvery: "10m", defaultFolder: "INBOX", ...(stored.length ? { me: stored } : {}) });
+      }
+      return statusHandler(c);
+    };
+  };
+
+  it("writes the addresses as they were typed, and shows back what was stored", async () => {
+    handler = addressHandler([]);
+    await mountApp("/status");
+
+    const field = (await screen.findByLabelText("Your addresses")) as HTMLInputElement;
+    await waitFor(() => expect(field.value).toBe(""));
+    expect(settingsWrites()).toHaveLength(0);
+
+    fireEvent.change(field, { target: { value: " ada@okoye.example , bo@halvorsen.example " } });
+    fireEvent.blur(field);
+
+    await waitFor(() => expect(settingsWrites()).toHaveLength(1));
+    // Written as the reader wrote it rather than as a parsed list: the server is
+    // where it is tidied, so what is stored is what was said. Only `me` is named,
+    // which is what leaves the cadence and the folder exactly as they stand.
+    expect(JSON.parse(settingsWrites()[0]!.body!)).toEqual({
+      me: [" ada@okoye.example , bo@halvorsen.example "],
+    });
+    // The stored form comes back into the field, so a reader can see what was
+    // kept rather than what they typed.
+    await waitFor(() => expect(field.value).toBe("ada@okoye.example, bo@halvorsen.example"));
+  });
+
+  it("opens on the addresses already stored, and reads them without writing them", async () => {
+    handler = addressHandler(["ada@okoye.example", "ada@work.example"]);
+    await mountApp("/status");
+
+    const field = (await screen.findByLabelText("Your addresses")) as HTMLInputElement;
+    // The form the setting is stored in: one comma-separated line, which is the
+    // form the reader typed them in.
+    await waitFor(() => expect(field.value).toBe("ada@okoye.example, ada@work.example"));
+    // Reading the setting is not writing it: a page load must not post back the
+    // value it just read.
+    expect(settingsWrites()).toHaveLength(0);
+  });
+});
+
 /** The /specs index: saved pages, newest first, each named by its URL. */
 const SPECS = {
   specs: [
@@ -894,8 +980,10 @@ describe("the render route /view/<name>", () => {
     handler = buildHandler;
     const router = await mountApp("/?q=cutover");
     await screen.findByText("Loom cutover schedule", { selector: ".ibsubj" });
-    typeInto("Page title", "Loom cutover");
+    // The bar appears with the first tick — nothing ticked is nothing to build
+    // from — so the title is typed after it.
     click(screen.getAllByRole("checkbox")[0]!);
+    typeInto("Page title", "Loom cutover");
     click(screen.getByRole("button", { name: /Build page from 1 chain$/ }));
 
     await waitFor(() => expect(router.state.location.pathname).toBe("/view/loom-cutover"));
@@ -1272,8 +1360,9 @@ describe("the search lives in the URL", () => {
     await waitFor(() => expect(router.state.location.searchStr).toBe("?q=cutover"));
 
     await screen.findByText("Loom cutover schedule", { selector: ".ibsubj" });
-    typeInto("Page title", "Loom cutover");
+    // The bar appears with the first tick, so the title waits for it.
     click(screen.getAllByRole("checkbox")[0]!);
+    typeInto("Page title", "Loom cutover");
     click(screen.getByRole("button", { name: /Build page from 1 chain$/ }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/view/loom-cutover"));
     await screen.findByText("Loom cutover");
