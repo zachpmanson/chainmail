@@ -36,6 +36,26 @@ func (f *fakeMailbox) SetUnread(id string, unread bool) ([]string, error) {
 	return corpus.SetUnread(f.base[id], unread), nil
 }
 
+// SetLabels is the same fake for the mail actions: what it records is the two
+// label sets it was handed, because "archived" is a claim about which labels came
+// off and only a fake that saw them can prove it.
+func (f *fakeMailbox) SetLabels(id string, add, remove []string) ([]string, error) {
+	f.calls = append(f.calls, id+":+"+strings.Join(add, "+")+":-"+strings.Join(remove, "-"))
+	if err := f.fail[id]; err != nil {
+		return nil, err
+	}
+	labels := append([]string(nil), f.base[id]...)
+	for _, drop := range remove {
+		labels = slices.DeleteFunc(labels, func(l string) bool { return l == drop })
+	}
+	for _, name := range add {
+		if !slices.Contains(labels, name) {
+			labels = append(labels, name)
+		}
+	}
+	return labels, nil
+}
+
 // readServer is the server over a corpus whose messages have mailbox copies: the
 // shape every other fixture lacks, because no other test writes to a mailbox.
 //
@@ -106,7 +126,7 @@ func readServer(t *testing.T) (*harness, *fakeMailbox) {
 			"g-3": {"SENT"},
 		},
 	}
-	h.openUnreadMailbox = func() (unreadMailbox, error) { return fake, nil }
+	h.openUnreadMailbox = func() (mailbox, error) { return fake, nil }
 	return h, fake
 }
 
@@ -172,7 +192,7 @@ func TestReadingIsRefusedWithoutTheGrant(t *testing.T) {
 	h, fake := readServer(t)
 	h.markReadEnabled = false
 	opened := false
-	h.openUnreadMailbox = func() (unreadMailbox, error) {
+	h.openUnreadMailbox = func() (mailbox, error) {
 		opened = true
 		return fake, nil
 	}
@@ -194,7 +214,7 @@ func TestReadingIsRefusedWithoutTheGrant(t *testing.T) {
 // mailbox grant can still be told so. The mailbox is not opened at all.
 func TestAChainWithNoMailboxCopyNeedsNoMailbox(t *testing.T) {
 	h, _ := readServer(t)
-	h.openUnreadMailbox = func() (unreadMailbox, error) {
+	h.openUnreadMailbox = func() (mailbox, error) {
 		t.Error("a chain of recovered text opened the mailbox")
 		return nil, errors.New("no mailbox")
 	}

@@ -300,6 +300,16 @@
 .ibbuild { position:sticky; bottom:.5rem; z-index:20; background:var(--card);
   border:1px solid var(--line); border-radius:9px; padding:.6rem .7rem;
   box-shadow:0 4px 18px rgba(0,0,0,.18); }
+/* The move control is the one field in the bar: the buttons before it are verbs,
+   and this is a verb with a place attached, so it is labelled like a field and
+   sized to the folder names rather than to the row. `.self:first-child` is the
+   title field's rule, and in this bar the first child is a button. */
+.ibbuild .self { flex:0 0 auto; }
+.ibbuild .self select { max-width:14rem; }
+/* The braid dialog's form lives inside a modal, where there is no list under it
+   to separate from: the margin the bar's form carries would push the dialog's
+   fields against its own head. */
+.braidform { margin:.7rem .8rem .2rem; }
 
 /* Two panels: the list, and the chain it is showing. One column until there is
    room for both — at that width the choice of a row is what changes panels, so

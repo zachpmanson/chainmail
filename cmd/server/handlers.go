@@ -118,11 +118,17 @@ type server struct {
 	// and the one switch here whose absence is a 403 rather than a missing
 	// feature — the read state lives in Gmail, and half of it is not a state.
 	markReadEnabled bool
-	// openUnreadMailbox opens the mailbox the write goes through, called once per
-	// request and only when the chain has something markable in it, so a chain of
-	// recovered text never needs a grant. Injected so the handler is testable
-	// without a mailbox (see unreadMailbox).
-	openUnreadMailbox func() (unreadMailbox, error)
+	// mailWriteEnabled is the -mail-write grant: whether POST /v1/mail may
+	// archive, trash or move the messages of a chain. Off unless the host says so,
+	// for the same reason and with the same 403: these change what is in the
+	// mailbox, and the difference between this and -mark-read is which field of
+	// the message changes rather than how far the server reaches.
+	mailWriteEnabled bool
+	// openUnreadMailbox opens the mailbox the writes go through, called once per
+	// request and only when the chain has something writable in it, so a chain of
+	// recovered text never needs a grant. Injected so the handlers are testable
+	// without a mailbox (see mailbox).
+	openUnreadMailbox func() (mailbox, error)
 	// runMediaPull is one message's pull, injected so the handler can be tested
 	// without a mailbox. The real one (defaultMediaPull) is the same
 	// internal/media walk the `corpus media pull` command runs, called in-process
@@ -166,6 +172,7 @@ func (s *server) routes() http.Handler {
 	// instead of ServeMux's plain text.
 	mux.HandleFunc("/v1/refresh", post(s.refresh))
 	mux.HandleFunc("/v1/read", post(s.markRead))
+	mux.HandleFunc("/v1/mail", post(s.mailAction))
 	mux.HandleFunc("/v1/media/pull", post(s.mediaPull))
 	mux.HandleFunc("/v1/attachments/{sha}", get(s.attachment))
 	mux.HandleFunc("/v1/ops/plan", get(s.opsPlan))
@@ -968,16 +975,23 @@ func (s *server) mediaPull(w http.ResponseWriter, r *http.Request) {
 	send(w, http.StatusOK, out)
 }
 
-// unreadMailbox is the mailbox write this server makes: mark one message read
-// or unread, and answer with the labels the mailbox reports afterwards.
+// mailbox is the mailbox write this server makes: mark one message read or
+// unread, or move it between labels — and in both cases answer with the labels
+// the mailbox reports afterwards.
 //
 // An interface rather than the concrete client, for the reason runMediaPull is a
 // field: the handler's own contract is which message changes and what is stored
 // afterwards, and that is testable without a mailbox, a grant or a network.
 // Returning the labels rather than taking them is the whole point — the local
 // copy is what the mailbox said, not what the caller assumed it would say.
-type unreadMailbox interface {
+//
+// One interface for both writes rather than two, because they are one power:
+// the server is allowed to change what is in the mailbox. Reading state and
+// folder are different fields of the same message, and a host that granted one
+// but not the other would be a distinction without a difference to the reader.
+type mailbox interface {
 	SetUnread(id string, unread bool) ([]string, error)
+	SetLabels(id string, add, remove []string) ([]string, error)
 }
 
 // markRead is the one write this server makes to the mailbox itself: every
@@ -1045,7 +1059,7 @@ func (s *server) markRead(w http.ResponseWriter, r *http.Request) {
 	// messages is answered without reaching the mailbox at all, which is also
 	// what keeps this endpoint usable on a host that has no grant but does have
 	// such a chain on screen.
-	var mb unreadMailbox
+	var mb mailbox
 	if markable > 0 {
 		if mb, err = s.openUnreadMailbox(); err != nil {
 			fail(w, http.StatusBadGateway, fmt.Errorf("opening the mailbox: %w", err))
@@ -1085,6 +1099,214 @@ func (s *server) markRead(w http.ResponseWriter, r *http.Request) {
 	send(w, http.StatusOK, out)
 }
 
+// mailAction is the second write this server makes to the mailbox: a chain's
+// messages are archived, trashed or moved to a label, and the labels the mailbox
+// returns are stored beside them in the same pass.
+//
+// Opt-in and off by default, like -mark-read and for the same reason, with its
+// own switch rather than the same one: the reader who wants the read circle to
+// work has not thereby asked the page to be able to delete their mail. A host
+// without -mail-write answers 403, naming the switch.
+//
+// Chain-level plural, because the bar acts on what is ticked and a reader who
+// ticked four threads meant four. Every chain is resolved *before* anything is
+// written: a set with one unknown id in it is a caller working from a stale list,
+// and half-applying that would leave the reader with a mailbox that matches
+// neither the list they were looking at nor the one they will see next.
+//
+// What each action means is the mailbox's own vocabulary, not this server's:
+// archive is the removal of INBOX and nothing else, trash is the Trash label,
+// and a move is the target label plus the way out of the inbox. A message that
+// already carries the label is changed by the same call and counts the same:
+// "it is in Work" is the outcome, and whether it was there before is not
+// something the reader asked.
+//
+// Messages with no mailbox copy — recovered from somebody's quote, or a Slack
+// post — are counted and reported, never failed, exactly as in /v1/read.
+func (s *server) mailAction(w http.ResponseWriter, r *http.Request) {
+	if !s.mailWriteEnabled {
+		fail(w, http.StatusForbidden, fmt.Errorf(
+			"changing mail is disabled: this server was started without -mail-write, so "+
+				"it will not archive, trash or move anything. A restart with -mail-write "+
+				"enables POST /v1/mail."))
+		return
+	}
+	var req mailActionRequest
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequestBody))
+	// A misspelled field is a caller reading a different contract, and this call
+	// changes a real mailbox — refusing is cheaper than guessing.
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		fail(w, http.StatusBadRequest, fmt.Errorf("reading the request body: %w", err))
+		return
+	}
+
+	action, ok := mailActions[req.Action]
+	if !ok {
+		fail(w, http.StatusBadRequest, fmt.Errorf(
+			"unknown action %q: POST /v1/mail takes one of archive, trash or move", req.Action))
+		return
+	}
+	// A move names where it goes. An empty label list is not an error to the
+	// mailbox — it is leaving the inbox with no destination — so it is refused
+	// here, where the message can say what to do instead.
+	if action.needsLabels && len(req.Labels) == 0 {
+		fail(w, http.StatusBadRequest, errors.New(
+			"a move needs labels: POST /v1/mail takes {\"chains\": [...], \"action\": "+
+				"\"move\", \"labels\": [\"Work\"]} — the word the mailbox knows, not a folder id"))
+		return
+	}
+	if len(req.Chains) == 0 {
+		fail(w, http.StatusBadRequest, errors.New(
+			"a mail change needs chains: POST /v1/mail takes the rootExtId of every chain "+
+				"hit that was ticked"))
+		return
+	}
+
+	add, remove := action.labels(req.Labels)
+
+	// Resolve every chain first. The mailbox is not touched until all of them are
+	// known to exist, so a stale id leaves the mailbox exactly as it was.
+	trail := make([][]corpus.ChainEntry, 0, len(req.Chains))
+	for _, chain := range req.Chains {
+		entries, err := s.store.ChainEntries(chain)
+		if err != nil {
+			fail(w, http.StatusInternalServerError, err)
+			return
+		}
+		if len(entries) == 0 {
+			fail(w, http.StatusNotFound, fmt.Errorf(
+				"no chain at %q: no entry has that extId, and nothing has been changed", chain))
+			return
+		}
+		trail = append(trail, entries)
+	}
+
+	// The mailbox is opened only when there is something in it to change: a set of
+	// chains that are all recovered text is answered without a grant and without a
+	// round trip, which is what keeps this usable on a mailbox-less host.
+	writable := 0
+	for _, entries := range trail {
+		for _, e := range entries {
+			if e.GmailID != "" {
+				writable++
+			}
+		}
+	}
+	var mb mailbox
+	if writable > 0 {
+		var err error
+		if mb, err = s.openUnreadMailbox(); err != nil {
+			fail(w, http.StatusBadGateway, fmt.Errorf("opening the mailbox: %w", err))
+			return
+		}
+	}
+
+	out := mailActionResponse{Action: req.Action, Chains: make([]mailActionChain, 0, len(req.Chains))}
+	if action.needsLabels {
+		out.Labels = append([]string(nil), req.Labels...)
+	}
+	for i, entries := range trail {
+		row := mailActionChain{RootExtID: req.Chains[i]}
+		for _, e := range entries {
+			if e.GmailID == "" {
+				row.Skipped++
+				out.Skipped++
+				continue
+			}
+			labels, err := mb.SetLabels(e.GmailID, add, remove)
+			if err != nil {
+				// The counts are in the error because a chain is more than one
+				// message, and because this call may be part way through several
+				// chains: "what has already changed" is the first thing the caller
+				// needs to know and the mailbox's error says nothing about it.
+				fail(w, http.StatusBadGateway, fmt.Errorf(
+					"the mailbox refused %s: %w (%d of %d messages changed before this, %d chains done)",
+					e.ExtID, err, out.Changed, writable, i))
+				return
+			}
+			if err := s.store.SetLabels(e.ID, labels); err != nil {
+				fail(w, http.StatusInternalServerError, fmt.Errorf(
+					"the mailbox changed %s but storing its labels failed: %w", e.ExtID, err))
+				return
+			}
+			row.Changed++
+			out.Changed++
+		}
+		out.Chains = append(out.Chains, row)
+	}
+
+	// Journaled like a media pull and a read-state write, and for the same reason:
+	// this changes the reader's real mailbox, so "did it run, and what did it say"
+	// has to be answerable from the host after the tab is gone. The labels are
+	// named for a move because which folder it went to is the whole question.
+	if action.needsLabels {
+		log.Printf("mail: %s %d chains labels=%s changed=%d skipped=%d",
+			req.Action, len(req.Chains), strings.Join(req.Labels, ","), out.Changed, out.Skipped)
+	} else {
+		log.Printf("mail: %s %d chains changed=%d skipped=%d",
+			req.Action, len(req.Chains), out.Changed, out.Skipped)
+	}
+	send(w, http.StatusOK, out)
+}
+
+// mailActionSpec is what one action does to a message, as label names in the
+// mailbox's own vocabulary (see gmailclient.InboxLabel). Every action removes
+// INBOX except trash, which puts the message in the Trash and takes it out of
+// the inbox in the same write — the two are not independent: a message can
+// carry both, and one that is in the Trash should not also be in the inbox.
+type mailActionSpec struct {
+	needsLabels bool
+	labels      func(labels []string) (add, remove []string)
+}
+
+// mailActions is the vocabulary of POST /v1/mail, spelled once: the handler's
+// validation, its 403 message and the contract in api/openapi.json all name
+// these words.
+var mailActions = map[string]mailActionSpec{
+	"archive": {labels: func([]string) ([]string, []string) {
+		return nil, []string{gmailclient.InboxLabel}
+	}},
+	"trash": {labels: func([]string) ([]string, []string) {
+		return []string{gmailclient.TrashLabel}, []string{gmailclient.InboxLabel}
+	}},
+	"move": {
+		needsLabels: true,
+		labels: func(labels []string) ([]string, []string) {
+			return labels, []string{gmailclient.InboxLabel}
+		},
+	},
+}
+
+// mailActionRequest is what a caller may say: which chains, what to do to them,
+// and — for a move — where. Labels are the mailbox's names, which is also what
+// /v1/labels serves, so a caller never has to know a folder id.
+type mailActionRequest struct {
+	Chains []string `json:"chains"`
+	Action string   `json:"action"`
+	Labels []string `json:"labels,omitempty"`
+}
+
+// mailActionResponse is the contract's MailActionResponse: what changed, in
+// total and per chain, and what could not be changed because it has no mailbox
+// copy. Per chain as well as in total because the reader ticked a set: a summary
+// that says 12 changed cannot tell them which of the four threads did not move.
+type mailActionResponse struct {
+	Action  string            `json:"action"`
+	Labels  []string          `json:"labels,omitempty"`
+	Changed int               `json:"changed"`
+	Skipped int               `json:"skipped"`
+	Chains  []mailActionChain `json:"chains"`
+}
+
+// mailActionChain is one chain's outcome: the root the caller named, and how
+// much of its trail the mailbox holds.
+type mailActionChain struct {
+	RootExtID string `json:"rootExtId"`
+	Changed   int    `json:"changed"`
+	Skipped   int    `json:"skipped"`
+}
+
 // markReadRequest is what a caller may say: which chain, and the state it wants
 // every mailbox message in it to be left in. No message list and no "mark all":
 // the chain IS the scope, and the store resolves it.
@@ -1115,8 +1337,8 @@ type markReadResponse struct {
 // reader makes, the label cache it loads is fresh on every pass, and a
 // long-lived token source in a process that may run for weeks is a worse trade
 // than one token read per click.
-func defaultUnreadMailbox() func() (unreadMailbox, error) {
-	return func() (unreadMailbox, error) { return gmailclient.New() }
+func defaultUnreadMailbox() func() (mailbox, error) {
+	return func() (mailbox, error) { return gmailclient.New() }
 }
 
 // mediaPullRequest is what a caller may say: which message, and — when the

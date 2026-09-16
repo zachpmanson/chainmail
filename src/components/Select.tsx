@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { $api, searchQuery, type SearchMode, type SearchParams } from "../lib/api";
-import { BuildBar } from "./BuildBar";
+import { ActionBar } from "./ActionBar";
 import { ChainPane } from "./ChainPane";
 import { ChainRow, RankMeta } from "./ChainRow";
 import { Failure, type PreviewableChain } from "./ChainPreview";
@@ -215,15 +215,16 @@ export function SelectView() {
             }
           />
 
-          {/* The bar that builds the page out of the ticked candidates, at the
-              foot of the workspace: the search is above, the candidates are in
-              the middle, and what to do with the ticked ones is last — the same
-              bar, and the same rules, as the inbox's. What this page knows and
-              the inbox does not is the query that found them, which the page
-              records so a refresh can propose what it would find now. */}
-          <BuildBar
+          {/* The bar of things to do with the ticked candidates, at the foot of
+              the workspace: the search is above, the candidates are in the
+              middle, and what to do with the ticked ones is last — the same bar,
+              and the same rules, as the inbox's. What this page knows and the
+              inbox does not is the query that found them, which the page records
+              so a refresh can propose what it would find now. */}
+          <ActionBar
             chosen={chosen}
             queries={asked ? [{ q: asked.q, note: `corpus search, mode=${asked.mode}` }] : []}
+            onDone={() => setChosen([])}
           />
         </>
       ) : null}

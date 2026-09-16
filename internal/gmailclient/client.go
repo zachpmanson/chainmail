@@ -134,13 +134,25 @@ func (c Client) UnreadMessageIDs() ([]string, error) {
 	return nil, fmt.Errorf("unread mail did not finish after %d pages: refusing to reconcile against a partial set", maxPages)
 }
 
-// unreadLabel is the mailbox's own name for "nobody has opened this yet".
-//
-// Spelled here rather than imported from the corpus: this package is a
-// transport and the corpus is a store, and a label name is the mailbox's
-// vocabulary, not either of theirs. The two spellings are the same system label
-// Gmail defines, which is why they cannot drift.
-const unreadLabel = "UNREAD"
+// Labels the mailbox itself defines, spelled here rather than imported from the
+// corpus: this package is a transport and the corpus is a store, and a label
+// name is the mailbox's vocabulary, not either of theirs. These are the system
+// labels Gmail defines, so the two spellings cannot drift.
+const (
+	// unreadLabel is the mailbox's own name for "nobody has opened this yet".
+	unreadLabel = "UNREAD"
+	// InboxLabel is the one label that decides whether a message is in the
+	// inbox: archiving is its removal and nothing else, which is why archiving
+	// is the one action the server offers that cannot be wrong about a folder.
+	// Exported because the server's action table names it, and a mailbox name
+	// spelled in two packages is a mailbox name that will drift.
+	InboxLabel = "INBOX"
+	// TrashLabel is Gmail's own Trash. A message carrying it is in the Trash and
+	// is deleted from the reader's point of view — recoverable for thirty days,
+	// which is why this is the server's word for "delete" rather than an
+	// irreversible expunge.
+	TrashLabel = "TRASH"
+)
 
 // SetUnread marks one message read or unread, and returns the labels the
 // mailbox reports afterwards.
@@ -150,11 +162,25 @@ const unreadLabel = "UNREAD"
 // from the mailbox on the one message it just wrote. A label removed by some
 // other client in the same second is carried back with it.
 func (c Client) SetUnread(id string, unread bool) ([]string, error) {
-	var add, remove []string
 	if unread {
-		add = []string{unreadLabel}
-	} else {
-		remove = []string{unreadLabel}
+		return c.SetLabels(id, []string{unreadLabel}, nil)
+	}
+	return c.SetLabels(id, nil, []string{unreadLabel})
+}
+
+// SetLabels adds and removes labels on one message, and returns the labels the
+// mailbox reports afterwards — the same contract as SetUnread, which is now
+// this with one label named.
+//
+// Label names are the mailbox's, and a name the mailbox does not have is the
+// caller's error rather than something to create: PrepareLabel resolves them
+// against Gmail's own label list, so a typo is refused before a write, and a
+// folder that only exists in the corpus cannot be written to.
+func (c Client) SetLabels(id string, add, remove []string) ([]string, error) {
+	if len(add) == 0 && len(remove) == 0 {
+		// A no-op write is still a round trip and a journal line; a caller with
+		// nothing to change is answered from the mailbox's own view of it.
+		return nil, fmt.Errorf("no label change asked for on message %q", id)
 	}
 	plan, err := mail.PrepareLabel(c.labels, id, add, remove)
 	if err != nil {

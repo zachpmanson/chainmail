@@ -323,6 +323,14 @@ async function mountApp(...initialEntries: string[]) {
 
 const click = (el: Element) => fireEvent.click(el);
 
+/** Braid the ticked chains into a page. The bar's button opens the dialog that
+ *  holds the title, and the builds below type none: an untitled page takes a
+ *  clock name rather than borrowing a subject's slug. */
+async function braid() {
+  click(screen.getByRole("button", { name: "Braid Threads" }));
+  click(await screen.findByRole("button", { name: "Braid" }));
+}
+
 /** The reading pane, so an assertion about the thread shown cannot be satisfied
  *  by the same text in a row. */
 const pane = () => document.querySelector(".ibread") as HTMLElement;
@@ -660,7 +668,7 @@ describe("the home page with no query", () => {
     await screen.findByRole("button", { name: "Fence panels" });
 
     click(screen.getByLabelText("Select Fence panels"));
-    click(screen.getByRole("button", { name: /Build page from 1 chain$/ }));
+    await braid();
     await waitFor(() => expect(calls.some((c) => pathOf(c) === "/v1/spec")).toBe(true));
 
     const post = JSON.parse(calls.find((c) => pathOf(c) === "/v1/spec")!.body!);
@@ -1329,7 +1337,7 @@ describe("the reader's own messages in the pane", () => {
     // pane did not read.
     expect(screen.queryByLabelText("Your addresses")).toBeNull();
 
-    click(screen.getByRole("button", { name: /Build page from 1 chain$/ }));
+    await braid();
 
     // The build marks the page from the setting. Nothing about the reader is
     // written from here: this bar asks for a page, it does not keep preferences.

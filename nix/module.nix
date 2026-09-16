@@ -31,7 +31,7 @@
 # because a host that has not granted the flag should answer 403 rather than
 # quietly fetching. Nothing here fetches media by itself.
 #
-# A third, and the only one that WRITES: enableMarkRead passes -mark-read, which
+# A third, and the first that WRITES: enableMarkRead passes -mark-read, which
 # turns POST /v1/read into a label change on a chain's messages — the pane's mark
 # read / mark unread button, and the reason the unread counts this server shows
 # are the same ones the reader's phone shows. Off by default for a stronger
@@ -39,6 +39,14 @@
 # in the mailbox. It writes nothing on its own: every change is a request a
 # person made, and the corpus's own copy of the label is reconciled from the
 # mailbox by the `unread` slurp phase rather than by guessing.
+#
+# A fourth, and the second writer: enableMailWrite passes -mail-write, which turns
+# POST /v1/mail into an archive, a delete (Gmail's own Trash) or a move for the
+# chains a reader ticked — the selection bar's three mail controls. A switch of
+# its own rather than folded into -mark-read: letting the read circle write is not
+# the same ask as letting the page move mail out of the inbox, and every action
+# here is the mailbox's own vocabulary rather than a folder model of this
+# server's.
 self: { config, lib, pkgs, ... }:
 
 let

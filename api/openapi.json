@@ -191,6 +191,75 @@
         }
       }
     },
+    "/v1/mail": {
+        "post": {
+          "summary": "Archive, trash or move a chain's messages in the mailbox itself.",
+          "description": "The second write this surface makes to the mailbox, beside /v1/read: the labels of every message in the named chains are changed, and the labels the mailbox answers with are stored beside them. What each action means is the mailbox's own vocabulary — archive is the removal of INBOX, trash is the Trash label, and a move is the target label plus the way out of the inbox — so nothing here invents a folder model of its own.\n\nPlural, because the bar acts on what a reader ticked: every chain is resolved before anything is written, and a set naming one unknown chain changes nothing at all rather than half of it.\n\nAn entry with no mailbox copy — a message recovered from somebody's quote, a Slack post — is counted in `skipped`, never failed, exactly as in /v1/read.\n\nOpt-in and off by default, with its own switch rather than -mark-read: a host that lets the read circle write has not thereby asked this server to be able to delete mail. A server started without -mail-write answers 403, naming the switch. The credential is the mail grant the unit already holds.",
+          "operationId": "mailAction",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailActionRequest"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "What changed, in total and per chain, and how much of each chain the mailbox does not hold.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/MailActionResponse"
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "No chains named, an unknown action, or a move with no labels.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/Error"
+                  }
+                }
+              }
+            },
+            "403": {
+              "description": "Changing mail is disabled: the server was started without -mail-write.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/Error"
+                  }
+                }
+              }
+            },
+            "404": {
+              "description": "No chain rooted at one of the ext ids named. Nothing was changed.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/Error"
+                  }
+                }
+              }
+            },
+            "502": {
+              "description": "The mailbox refused: the error names how many messages were changed before it did, and how many chains were finished.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/Error"
+                  }
+                }
+              }
+            }
+          }
+        }
+    },
     "/v1/media/pull": {
       "post": {
         "summary": "Fetch the files one message's attachments need.",
@@ -2905,6 +2974,110 @@
           }
         },
         "additionalProperties": false
+      },
+      "MailActionRequest": {
+          "type": "object",
+          "description": "What to do to which chains: one action, the chains it applies to, and where a move goes.",
+          "required": [
+            "chains",
+            "action"
+          ],
+          "properties": {
+            "chains": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "The root ext ids of the chains to change, as chain hits carry them in `rootExtId`. All of them, or none: an unknown id in the set leaves the mailbox as it was.",
+              "example": [
+                "mail:<c0ffee-1@example.com>"
+              ]
+            },
+            "action": {
+              "type": "string",
+              "enum": [
+                "archive",
+                "trash",
+                "move"
+              ],
+              "description": "What to do to every mailbox message in the chains: archive removes INBOX, trash puts the messages in the Trash and out of the inbox, and move adds the labels below and leaves the inbox. One action per call, because the counts in the answer are about one change."
+            },
+            "labels": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Where a move goes: label names, as /v1/labels serves them. Required for `move` and refused with it when empty; ignored by the other actions. A name the mailbox does not have is refused by the mailbox, not created.",
+              "example": [
+                "Work"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "MailActionResponse": {
+          "type": "object",
+          "description": "What the write did: how many messages changed, how many entries have no mailbox copy, and the same counts per chain — because the reader ticked a set, and a total cannot tell them which thread stayed put.",
+          "required": [
+            "action",
+            "changed",
+            "skipped",
+            "chains"
+          ],
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "archive",
+                "trash",
+                "move"
+              ],
+              "description": "The action that ran, echoed back so a client does not have to infer it from the request it sent."
+            },
+            "labels": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Where a move went. Absent for the actions that name no label."
+            },
+            "changed": {
+              "type": "integer",
+              "description": "Mailbox messages whose labels were changed and stored, across every chain."
+            },
+            "skipped": {
+              "type": "integer",
+              "description": "Entries with no mailbox copy, so there was nothing to change. Recovered text and Slack posts, normally."
+            },
+            "chains": {
+              "type": "array",
+              "description": "One row per chain named, in the order it was named.",
+              "items": {
+                "type": "object",
+                "required": [
+                  "rootExtId",
+                  "changed",
+                  "skipped"
+                ],
+                "properties": {
+                  "rootExtId": {
+                    "type": "string",
+                    "description": "The chain, as it was named."
+                  },
+                  "changed": {
+                    "type": "integer",
+                    "description": "Its mailbox messages that changed."
+                  },
+                  "skipped": {
+                    "type": "integer",
+                    "description": "Its entries with no mailbox copy."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
       },
       "MarkReadRequest": {
         "type": "object",

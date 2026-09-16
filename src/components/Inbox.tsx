@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { $api, type ChainHit } from "../lib/api";
-import { BuildBar } from "./BuildBar";
+import { ActionBar } from "./ActionBar";
 import { ChainPane } from "./ChainPane";
 import { ChainRow } from "./ChainRow";
 import { Failure, type PreviewableChain } from "./ChainPreview";
@@ -375,12 +375,13 @@ export function Inbox() {
         }
       />
 
-      {/* The bar that builds the page, which appears once something is ticked:
-          until then a page has nothing to be built from, and the form would be an
-          instruction with no object. The same bar the search page shows, because
-          what it does is ask for the chains that were ticked rather than
-          anything about the list they were ticked in. */}
-      <BuildBar chosen={chosen} />
+      {/* The bar of things to do with the ticked chains, which appears once
+          something is ticked: until then there is nothing to braid the page from
+          and nothing to archive, and the form would be an instruction with no
+          object. The same bar the search page shows, because what it acts on is
+          the chains that were ticked rather than anything about the list they
+          were ticked in. */}
+      <ActionBar chosen={chosen} onDone={() => setChosen([])} />
     </div>
   );
 }

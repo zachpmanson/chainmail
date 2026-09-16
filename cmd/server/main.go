@@ -74,6 +74,14 @@ func run(args []string) error {
 			"mailbox round trips, this changes what is in the mailbox. A host that does "+
 			"not grant it answers 403. The credential is the mail grant this unit "+
 			"already reads; what changes is that the server may now write.")
+	mailWrite := fs.Bool("mail-write", false,
+		"permit POST /v1/mail: archive, trash or move the messages of the chains a "+
+			"reader ticked, and store the labels the write comes back with. Off by "+
+			"default and gated separately from -mark-read, because a host that lets the "+
+			"read circle write has not thereby asked this server to be able to delete "+
+			"mail. A host that does not grant it answers 403. The credential is the mail "+
+			"grant this unit already reads; what changes is that the server may now move "+
+			"things in the mailbox.")
 	// The deploy stamp's revision, passed in by the unit that starts this binary.
 	// Empty is honest for a build nobody labelled: the header then shows nothing
 	// rather than a commit this code cannot know.
@@ -120,6 +128,7 @@ func run(args []string) error {
 		runMediaPull: defaultMediaPull(store, *uploads),
 
 		markReadEnabled:   *markRead,
+		mailWriteEnabled:  *mailWrite,
 		openUnreadMailbox: defaultUnreadMailbox(),
 		specSlots:         make(chan struct{}, specConcurrency),
 		slotWait:          specSlotWait,
