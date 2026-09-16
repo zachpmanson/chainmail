@@ -684,25 +684,32 @@ export function Inbox() {
                     clear the badge for mail nobody has read — and undoing that
                     is a second click nobody knows to make. Absent when the row
                     is not in the list yet, because then the count is unknown and
-                    the button could only guess which way it goes. */}
+                    the button could only guess which way it goes.
+
+                    Rightmost in the strip, past the count, so it is one place to
+                    reach for on every chain. The circle *is* the state — filled
+                    for unread, an outline for read, the same grammar the row
+                    badge uses — and the press is the other one: no label, because
+                    a word here would be a second thing to read on a line whose
+                    subject is the thing being read. */}
                 {selected.unread !== undefined ? (
                   <button
                     type="button"
-                    className="ibread-read"
+                    className={`ibread-read${selected.unread > 0 ? " unread" : ""}`}
                     disabled={read.isPending}
+                    aria-label={selected.unread > 0 ? "Mark read" : "Mark unread"}
+                    aria-pressed={selected.unread > 0}
                     title={
                       selected.unread > 0
-                        ? "Mark this chain read in the mailbox"
-                        : "Mark this chain unread in the mailbox"
+                        ? "Unread in the mailbox — mark this chain read"
+                        : "Read in the mailbox — mark this chain unread"
                     }
                     onClick={() =>
                       read.mutate({
                         body: { chain: selected.rootExtId, unread: selected.unread === 0 },
                       })
                     }
-                  >
-                    {read.isPending ? "…" : selected.unread > 0 ? "Mark read" : "Mark unread"}
-                  </button>
+                  />
                 ) : null}
               </div>
               {readNote ? (

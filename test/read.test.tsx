@@ -158,6 +158,11 @@ describe("what a chain's read state looks like", () => {
     // The count and the emphasis are one claim, so the row that has no unread
     // mail is not emphasised either.
     expect(document.querySelectorAll(".ibrow.unread")).toHaveLength(1);
+    // The pane's circle is the same claim in the toolbar: filled (and pressed)
+    // while the newest chain — the one the pane opens by itself — is unread.
+    const circle = pane().querySelector(".ibread-read") as HTMLElement;
+    expect(circle.className).toContain("unread");
+    expect(circle.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("offers the other state, and asks the server for it", async () => {
@@ -168,6 +173,30 @@ describe("what a chain's read state looks like", () => {
     fireEvent.click(button);
     await waitFor(() => expect(reads()).toHaveLength(1));
     expect(JSON.parse(reads()[0]!.body ?? "{}")).toEqual({ chain: ROOT, unread: false });
+  });
+
+  it("names the state it is in, and the action it would take", async () => {
+    // Unread in the pane: the press it offers is "mark read". A read chain
+    // offers the reverse — the control is the state, so it never labels itself
+    // with the state it already shows.
+    let answered = 0;
+    handler = server(() => {
+      answered += 1;
+      return json(200, { mode: "lexical", chains: [chain({ unread: answered > 1 ? 0 : 2 })] });
+    });
+    await mountApp();
+
+    const unread = (await screen.findByRole("button", { name: "Mark read" })) as HTMLElement;
+    expect(unread.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(unread);
+    await waitFor(() =>
+      expect((pane().querySelector(".ibread-read") as HTMLElement).getAttribute("aria-pressed")).toBe(
+        "false",
+      ),
+    );
+    const read = pane().querySelector(".ibread-read") as HTMLElement;
+    expect(read.getAttribute("aria-label")).toBe("Mark unread");
+    expect(read.className).not.toContain("unread");
   });
 
   it("reads the list again rather than patching the count itself", async () => {
@@ -185,6 +214,7 @@ describe("what a chain's read state looks like", () => {
     // reader would want next.
     expect(await screen.findByRole("button", { name: "Mark unread" })).toBeTruthy();
     await waitFor(() => expect(document.querySelectorAll(".ibunread")).toHaveLength(0));
+    expect(pane().querySelectorAll(".ibread-read.unread")).toHaveLength(0);
   });
 
   it("says so when the host cannot change the mailbox", async () => {

@@ -336,7 +336,15 @@
    is the heading strip, which is the pane's own toolbar rather than a frame
    around the mail. */
 .ibread { min-width:0; }
-.ibread-head { display:flex; align-items:baseline; gap:.5rem; padding:.5rem .7rem;
+/* The pane heads itself, and keeps heading itself: the strip stays at the top of
+   whatever scrolls it, so a long thread never leaves the reader without the
+   subject, the count, or the read control — the three things about the chain
+   rather than about the message under the pointer. Sticky rather than fixed so
+   it keeps its place in the flow: the first message starts below it, not under
+   it. It needs an opaque background for that (it has one), and a stacking order
+   above the cards it slides over. */
+.ibread-head { position:sticky; top:0; z-index:2;
+  display:flex; align-items:baseline; gap:.5rem; padding:.5rem .7rem;
   border-bottom:1px solid var(--line); background:var(--mine); }
 .ibread-subj { font-weight:650; font-size:.86rem; overflow-wrap:anywhere; }
 .ibread-head .note { margin-left:auto; font-size:.72rem; color:var(--muted); white-space:nowrap; }
@@ -344,13 +352,24 @@
   border:1px solid var(--line); border-radius:6px; background:var(--card);
   color:var(--fg); cursor:pointer; }
 /* The read-state control: the pane's toolbar is where a reader already is when
-   they have finished a thread. Same shape as the back button it shares the strip
-   with, and never the row's own count — that one is the state, this is the
-   action. */
-.ibread-read { font:inherit; font-size:.78rem; font-weight:650; padding:.2rem .5rem;
-  border:1px solid var(--line); border-radius:6px; background:var(--card);
-  color:var(--fg); cursor:pointer; white-space:nowrap; }
-.ibread-read:disabled { color:var(--muted); cursor:default; }
+   they have finished a thread. A circle, not a word — filled for unread, an
+   outline for read — so the state reads at a glance and the press is the opposite
+   of what is drawn. `align-self:center` because the strip aligns its text on the
+   baseline, which is not a line a circle sits on.
+
+   Sized in `rem` against the line rather than the text: the glyph is the whole
+   control, and a box that grew with the font would shrink the target on exactly
+   the screens this pane exists for. */
+.ibread-read { align-self:center; flex:none; width:1.05rem; height:1.05rem; padding:0;
+  border:1.5px solid var(--line); border-radius:50%; background:transparent;
+  cursor:pointer; }
+/* Filled is unread: the accent the row's badge already uses, so the strip and the
+   list agree about what the same chain looks like. */
+.ibread-read.unread { border-color:var(--accent); background:var(--accent); }
+.ibread-read:hover { border-color:var(--accent); }
+.ibread-read.unread:hover { background:color-mix(in srgb, var(--accent) 75%, var(--mine)); }
+.ibread-read:disabled { border-color:var(--line); background:transparent; cursor:default; }
+.ibread-read:disabled.unread { background:color-mix(in srgb, var(--accent) 45%, var(--mine)); border-color:transparent; }
 /* Flush: the pane's edge is the messages' edge. The gap above the first message
    is the gap between messages, so the heading reads as a heading rather than as
    part of the first email. */
