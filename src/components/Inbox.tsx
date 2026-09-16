@@ -137,6 +137,22 @@ function Folders({
 
       {open ? (
         <div className="ibpop" role="menu" aria-label="Folders">
+          {/* At the top, and stuck there, because it is not one of the folders: it
+              says what happens next time chainmail is opened, and a mailbox with
+              thirty labels would leave a control at the bottom below the fold of
+              a list it is not part of. */}
+          <button
+            type="button"
+            role="menuitemcheckbox"
+            aria-checked={isDefault}
+            className="ibfrow ibfdefault"
+            onClick={() => onDefault(!isDefault)}
+          >
+            <span className="ibfname">Open {here} by default</span>
+            <span className="ibfmark" aria-hidden="true">
+              {isDefault ? "✓" : ""}
+            </span>
+          </button>
           <button
             type="button"
             role="menuitem"
@@ -166,20 +182,6 @@ function Folders({
               so it is empty rather than invented.
             </p>
           ) : null}
-          {/* Below the folders, because it is not one: it is about what happens
-              next time chainmail is opened. */}
-          <button
-            type="button"
-            role="menuitemcheckbox"
-            aria-checked={isDefault}
-            className="ibfrow ibfdefault"
-            onClick={() => onDefault(!isDefault)}
-          >
-            <span className="ibfname">Open {here} by default</span>
-            <span className="ibfmark" aria-hidden="true">
-              {isDefault ? "✓" : ""}
-            </span>
-          </button>
         </div>
       ) : null}
     </div>
