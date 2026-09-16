@@ -36,7 +36,10 @@ type Options struct {
 	Params *RunParams
 
 	// Me lists the reader's own addresses, so their outbound messages can be
-	// marked. Nothing in the corpus knows which mailbox it was collected from.
+	// marked. Nothing in the corpus knows which mailbox it was collected from,
+	// so the reader says. One of their addresses is enough: the corpus has
+	// already merged the rest of them into the same person, and the mark is
+	// about the human rather than the string (see builder.isMine).
 	Me []string
 	// Orgs maps a mail domain to an organisation label, overriding the label
 	// derived from the domain itself.
@@ -95,6 +98,14 @@ func Generate(store *corpus.Store, opts Options) (Spec, error) {
 	for _, a := range opts.Me {
 		me[strings.ToLower(strings.TrimSpace(a))] = true
 	}
+	// The addresses resolve to the humans the corpus has already decided they
+	// are. A reader's mail arrives from addresses they did not name — a `+tag`
+	// of their own mailbox, a work address, an alias — and the corpus merged
+	// every one of those into one person long before this page was built.
+	mePeople, err := corpus.PeopleForAddresses(store, opts.Me)
+	if err != nil {
+		return Spec{}, fmt.Errorf("resolving the reader's addresses: %w", err)
+	}
 
 	part, addrs, err := loadParticipation(db, ids)
 	if err != nil {
@@ -104,6 +115,7 @@ func Generate(store *corpus.Store, opts Options) (Spec, error) {
 	b := &builder{
 		opts:        opts,
 		me:          me,
+		mePeople:    mePeople,
 		zones:       inferred,
 		zoneStats:   zoneStats,
 		ids:         newIDAllocator(),
@@ -173,6 +185,7 @@ func Generate(store *corpus.Store, opts Options) (Spec, error) {
 type builder struct {
 	opts     Options
 	me       map[string]bool
+	mePeople map[int64]bool // the same addresses, as the humans they belong to
 	ids      *idAllocator
 	idOf     map[int64]string    // corpus id -> spec id, for parent edges
 	rowByID  map[int64]*entryRow // every selected entry, for sighting lookups
@@ -251,7 +264,7 @@ func (b *builder) add(r *entryRow) {
 		TZ:       tz,
 		TZSource: tzSource,
 		Quoted:   !r.Direct,
-		Me:       b.me[from.Address],
+		Me:       b.isMine(r, from),
 		Source:   b.source(r),
 		// The corpus's handle for the entry, carried so a client can act on the
 		// message it is looking at (POST /v1/media/pull takes one of these).
@@ -360,6 +373,41 @@ func (b *builder) ref(person int64, name, address string) castRef {
 		address = known[0]
 	}
 	return castRef{person: person, address: address, name: name, others: known}
+}
+
+// isMine answers "did the reader write this?".
+//
+// Two ways to say yes. The From address is one of the addresses the reader
+// named, or the corpus has already resolved this entry's author to a human the
+// reader named.
+//
+// The second is not a convenience. A reader's mail arrives from addresses they
+// never list — every `+tag` of their own mailbox, each work address, each alias
+// — and the corpus merged all of them into one person when it ingested them,
+// which is exactly the claim a reader makes when they say those addresses are
+// theirs. Marking on the string alone meant that naming one address marked the
+// mail sent from that one address and left the rest of their own mail unmarked,
+// so the page contradicted the corpus about who the reader is.
+//
+// It is also the only way a recovered entry can ever be marked. An entry
+// reconstructed from a quote has no From header of its own, so its address is
+// empty and no list of addresses can match it — while the corpus knows
+// perfectly well who wrote it, because the quoting client's attribution said
+// so. That is the entry a reader is most likely to spot and least likely to
+// believe was written by someone else.
+//
+// An address the corpus has never seen resolves to nobody, and an entry whose
+// author is unknown has person 0, which is nobody's: both fall back to the
+// address test, so a reader naming a stranger's address marks that stranger's
+// mail as before.
+func (b *builder) isMine(r *entryRow, from addr) bool {
+	if b.me[from.Address] {
+		return true
+	}
+	if r.PersonID == 0 {
+		return false
+	}
+	return b.mePeople[r.PersonID]
 }
 
 // source records where an entry was found: the mailbox, or someone's quoted

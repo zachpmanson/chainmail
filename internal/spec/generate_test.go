@@ -933,3 +933,104 @@ func TestAQuotedEntryStatesTheRecipientsItsQuotersWrote(t *testing.T) {
 		t.Errorf("to = %q, which puts the sender in their own To line", quoted.To)
 	}
 }
+
+// The reader's own mail is marked by the human, not by the address string.
+//
+// The corpus merges a person's addresses into one person — that is what "these
+// addresses are all mine" means — so a page that named one of them used to mark
+// the mail sent from that one address and leave the reader's other mail
+// unmarked, contradicting the corpus about who the reader is. Recovered entries
+// could never be marked at all, since they have no From header for a list of
+// addresses to match.
+func TestTheReaderIsMarkedByTheHumanRatherThanTheAddress(t *testing.T) {
+	s := open(t)
+	reader := person(t, s, "Ada Byron", "ada@loomworks.example")
+	// A work address and a `+tag` of the mailbox: one human, three strings.
+	for _, a := range []string{"ada.byron@loomworks.example", "ada+salsa@loomworks.example"} {
+		if err := corpus.AddAlias(s, reader, "email", a, "test"); err != nil {
+			t.Fatalf("AddAlias %s: %v", a, err)
+		}
+	}
+	bo := person(t, s, "Bo Halvorsen", "bo@fjordline.example")
+
+	// From the one address the reader named.
+	put(t, s, msg{
+		ext: "mail:<named@loomworks>", ts: "2026-03-02T09:00:00+11:00", tz: "AEDT",
+		person: reader, container: "T1", subject: "Loom cutover",
+		messageID: "<named@loomworks>", from: "Ada Byron <ada@loomworks.example>",
+		to: "Bo Halvorsen <bo@fjordline.example>", gmail: "g-1",
+	})
+	// From another address of theirs, which the page was never told about.
+	put(t, s, msg{
+		ext: "mail:<work@loomworks>", ts: "2026-03-02T10:00:00+11:00", tz: "AEDT",
+		person: reader, container: "T1", subject: "Loom cutover",
+		messageID: "<work@loomworks>", inReplyTo: "<named@loomworks>",
+		from: "Ada Byron <ada.byron@loomworks.example>",
+		to:   "Bo Halvorsen <bo@fjordline.example>", gmail: "g-2",
+	})
+	// And from a `+tag` of their mailbox.
+	put(t, s, msg{
+		ext: "mail:<tagged@loomworks>", ts: "2026-03-02T10:30:00+11:00", tz: "AEDT",
+		person: reader, container: "T1", subject: "Loom cutover",
+		messageID: "<tagged@loomworks>", inReplyTo: "<work@loomworks>",
+		from: "Ada Byron <ada+salsa@loomworks.example>",
+		to:   "Bo Halvorsen <bo@fjordline.example>", gmail: "g-3",
+	})
+	// Somebody else, who is nobody the reader named.
+	put(t, s, msg{
+		ext: "mail:<bo@fjordline>", ts: "2026-03-02T11:00:00+11:00", tz: "AEDT",
+		person: bo, container: "T1", subject: "Loom cutover",
+		messageID: "<bo@fjordline>", inReplyTo: "<tagged@loomworks>",
+		from: "Bo Halvorsen <bo@fjordline.example>",
+		to:   "Ada Byron <ada@loomworks.example>", gmail: "g-4",
+	})
+	// A recovered entry: no headers, so no address for the list to match, and
+	// the corpus has known who wrote it since it was found.
+	ts, _ := time.Parse(time.RFC3339, "2026-03-02T08:00:00+11:00")
+	qid, _, err := s.PutQuoted(corpus.Entry{
+		Source: corpus.SourceMail, ExtID: "quote:sha-mine", TS: ts, TZ: "AEDT",
+		PersonID: reader, Container: "T1", Subject: "Loom cutover", BodyText: "invented body",
+	})
+	if err != nil {
+		t.Fatalf("PutQuoted: %v", err)
+	}
+	if err := s.Sight(qid, 0, "quoted", ""); err != nil {
+		t.Fatalf("Sight: %v", err)
+	}
+
+	sp := generate(t, s, Options{Containers: []string{"T1"}, Me: []string{"ada@loomworks.example"}})
+	mine := map[string]bool{}
+	for _, m := range sp.Messages {
+		mine[m.ExtID] = m.Me
+	}
+	for _, ext := range []string{
+		"mail:<named@loomworks>", "mail:<work@loomworks>",
+		"mail:<tagged@loomworks>", "quote:sha-mine",
+	} {
+		if !mine[ext] {
+			t.Errorf("%s is not marked as the reader's, who sent it", ext)
+		}
+	}
+	if mine["mail:<bo@fjordline>"] {
+		t.Error("a message from somebody else is marked as the reader's")
+	}
+
+	// The mark follows the human that was named, not the number of addresses a
+	// person happens to have: naming Bo marks Bo's mail and not Ada's.
+	sp = generate(t, s, Options{Containers: []string{"T1"}, Me: []string{"bo@fjordline.example"}})
+	for _, m := range sp.Messages {
+		want := m.ExtID == "mail:<bo@fjordline>"
+		if m.Me != want {
+			t.Errorf("%s: Me = %v, want %v (Bo was the reader named)", m.ExtID, m.Me, want)
+		}
+	}
+
+	// And an address the corpus has never seen marks nothing: the fallback is
+	// still the address test, and it matches no message here.
+	sp = generate(t, s, Options{Containers: []string{"T1"}, Me: []string{"nobody@nowhere.example"}})
+	for _, m := range sp.Messages {
+		if m.Me {
+			t.Errorf("%s is marked as the reader's, who named only an address the corpus has never seen", m.ExtID)
+		}
+	}
+}
