@@ -225,6 +225,9 @@ const buildHandler: Handler = withChains((c) => {
   if (p === "/v1/spec" && c.method === "POST") return json(200, SPEC);
   if (p.startsWith("/v1/specs/")) return json(200, SPEC);
   if (p === "/v1/search") return pageOf(CHAINS);
+  // No default folder unless a test says otherwise: the inbox opens on the
+  // whole corpus, which is what every list test below assumes.
+  if (p === "/v1/settings") return json(200, {});
   // The shell's sign-in banner probes auth on every route; answer it signed in
   // so a test exercises the app, not the banner.
   if (p === "/auth/status") return json(200, { signed_in: true });
@@ -374,7 +377,9 @@ describe("the home page with no query", () => {
     expect(within(pane()).queryByText(/and the gate needs a new hinge/)).toBeNull();
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(
-      screen.getByRole("button", { name: "Loom cutover schedule" }).getAttribute("aria-current"),
+      (await screen.findByRole("button", { name: "Loom cutover schedule" })).getAttribute(
+        "aria-current",
+      ),
     ).toBe("true");
     expect(screen.getByRole("button", { name: "Fence panels" }).getAttribute("aria-current")).toBeNull();
   });
@@ -403,7 +408,9 @@ describe("the home page with no query", () => {
     );
     expect(within(pane()).queryByText(/and the gate needs a new hinge/)).toBeNull();
     expect(
-      screen.getByRole("button", { name: "Loom cutover schedule" }).getAttribute("aria-current"),
+      (await screen.findByRole("button", { name: "Loom cutover schedule" })).getAttribute(
+        "aria-current",
+      ),
     ).toBe("true");
   });
 
@@ -429,7 +436,9 @@ describe("the home page with no query", () => {
     expect(head).not.toMatch(/entr(y|ies)/);
     // The one row is the loom thread, and it is not the one open.
     expect(
-      screen.getByRole("button", { name: "Loom cutover schedule" }).getAttribute("aria-current"),
+      (await screen.findByRole("button", { name: "Loom cutover schedule" })).getAttribute(
+        "aria-current",
+      ),
     ).toBeNull();
   });
 
@@ -652,6 +661,10 @@ describe("the folder button", () => {
         ],
       });
     }
+    if (p === "/v1/settings") {
+      const body = c.body ? (JSON.parse(c.body) as { defaultFolder?: string }) : {};
+      return json(200, body.defaultFolder ? body : {});
+    }
     if (p === "/v1/search") {
       switch (paramsOf(c).get("label")) {
         case "INBOX":
@@ -734,5 +747,120 @@ describe("the folder button", () => {
     await screen.findByRole("menu");
     fireEvent.keyDown(document, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+  });
+});
+
+/**
+ * The default folder: the one chainmail opens in, stored server-side rather than
+ * in the browser because the reader has more than one browser. The handler below
+ * keeps the setting the way the server does — the write answers with the state,
+ * and an empty folder is stored as no default at all.
+ */
+describe("the default folder", () => {
+  const foldersHandler = (initial: string): Handler => {
+    let stored = initial;
+    return withChains((c) => {
+      const p = pathOf(c);
+      if (p === "/v1/settings") {
+        if (c.method === "POST") {
+          stored = (JSON.parse(c.body ?? "{}") as { defaultFolder?: string }).defaultFolder ?? "";
+        }
+        return json(200, stored ? { defaultFolder: stored } : {});
+      }
+      if (p === "/v1/labels") return json(200, { labels: [{ name: "INBOX", messages: 1 }] });
+      if (p === "/v1/search") {
+        return paramsOf(c).get("label") === "INBOX" ? pageOf([CHAINS[0]]) : pageOf(CHAINS);
+      }
+      if (p === "/auth/status") return json(200, { signed_in: true });
+      return json(500, { error: `unexpected call to ${c.method} ${p}` });
+    });
+  };
+
+  it("opens the list in the reader's own folder", async () => {
+    handler = foldersHandler("INBOX");
+    await mountApp("/");
+    // A row that only INBOX holds, so "the default applied" is a claim about
+    // what is on screen rather than about a request being made.
+    await waitFor(() => expect(document.querySelectorAll(".ibrow")).toHaveLength(1));
+
+    expect(screen.getByRole("button", { name: /INBOX/ })).not.toBeNull();
+    const asked = calls.filter((c) => pathOf(c) === "/v1/search");
+    expect(paramsOf(asked[0]!).get("label")).toBe("INBOX");
+  });
+
+  it("waits for the setting before asking, rather than asking twice", async () => {
+    handler = foldersHandler("INBOX");
+    await mountApp("/");
+    await waitFor(() => expect(document.querySelectorAll(".ibrow")).toHaveLength(1));
+
+    // The default is read first and the list is asked once, for the folder. A
+    // filter that arrives after the first page is a correction to it, and the
+    // reader watches the list change under them.
+    const asked = calls.filter((c) => pathOf(c) === "/v1/search");
+    expect(asked).toHaveLength(1);
+  });
+
+  it("shows the folder it is in as the default, and turns it off", async () => {
+    handler = foldersHandler("INBOX");
+    await mountApp("/");
+    await waitFor(() => expect(document.querySelectorAll(".ibrow")).toHaveLength(1));
+
+    click(screen.getByRole("button", { name: /INBOX/ }));
+    const on = await screen.findByRole("menuitemcheckbox", { name: "Open INBOX by default" });
+    expect(on.getAttribute("aria-checked")).toBe("true");
+
+    click(on);
+    // The setting is the effect, not the request: an empty folder means no
+    // default, which is All mail — so the list loses its filter as well.
+    await waitFor(() => expect(document.querySelectorAll(".ibrow")).toHaveLength(2));
+    const posts = calls.filter((c) => c.method === "POST" && pathOf(c) === "/v1/settings");
+    expect(JSON.parse(posts[posts.length - 1]!.body!)).toEqual({ defaultFolder: "" });
+    expect(screen.getByRole("button", { name: /All mail/ })).not.toBeNull();
+  });
+
+  it("makes the folder the reader is in the default", async () => {
+    handler = foldersHandler("");
+    await mountApp("/");
+    await screen.findByText("Loom cutover schedule");
+
+    // Nothing chosen opens in All mail, and the control says so rather than
+    // leaving the question unanswered.
+    click(screen.getByRole("button", { name: /All mail/ }));
+    const all = await screen.findByRole("menuitemcheckbox", { name: "Open All mail by default" });
+    expect(all.getAttribute("aria-checked")).toBe("true");
+
+    // Go into a folder, then make it where chainmail opens.
+    click(await screen.findByRole("menuitem", { name: /INBOX/ }));
+    await waitFor(() => expect(document.querySelectorAll(".ibrow")).toHaveLength(1));
+    click(screen.getByRole("button", { name: /INBOX/ }));
+    click(await screen.findByRole("menuitemcheckbox", { name: "Open INBOX by default" }));
+
+    await waitFor(() => {
+      const posts = calls.filter((c) => c.method === "POST" && pathOf(c) === "/v1/settings");
+      expect(posts).toHaveLength(1);
+      expect(JSON.parse(posts[0]!.body!)).toEqual({ defaultFolder: "INBOX" });
+    });
+    // And it is now the folder the page opens in: the control agrees.
+    expect(
+      (await screen.findByRole("menuitemcheckbox", { name: "Open INBOX by default" }))
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+  });
+
+  it("lets the address override the default, including 'All mail'", async () => {
+    handler = foldersHandler("INBOX");
+    // An empty label is a choice of its own: every folder, deliberately. It is
+    // not the same as saying nothing, which is what the default is for.
+    await mountApp("/?label=");
+    await waitFor(() => expect(document.querySelectorAll(".ibrow")).toHaveLength(2));
+
+    expect(screen.getByRole("button", { name: /All mail/ })).not.toBeNull();
+    const asked = calls.filter((c) => pathOf(c) === "/v1/search");
+    expect(paramsOf(asked[0]!).get("label")).toBeNull();
+    // The default is still INBOX and the reader has stepped outside it, so the
+    // control is unticked: chainmail does not open where they are.
+    click(screen.getByRole("button", { name: /All mail/ }));
+    const here = await screen.findByRole("menuitemcheckbox", { name: "Open All mail by default" });
+    expect(here.getAttribute("aria-checked")).toBe("false");
   });
 });

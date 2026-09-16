@@ -76,7 +76,19 @@ function newest(chain: ChainHit): EntryHit | undefined {
  * column, and a folder list that is always open would cost the rows width to say
  * something that is read once and then acted on.
  */
-function Folders({ current, onPick }: { current?: string; onPick: (name?: string) => void }) {
+function Folders({
+  current,
+  isDefault,
+  onPick,
+  onDefault,
+}: {
+  // The folder the list is showing, or "" for every folder at once. Never
+  // undefined: by the time this is drawn the reader's default has been resolved.
+  current: string;
+  isDefault: boolean;
+  onPick: (name: string) => void;
+  onDefault: (on: boolean) => void;
+}) {
   const folders = $api.useQuery("get", "/v1/labels", {});
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement | null>(null);
@@ -100,10 +112,13 @@ function Folders({ current, onPick }: { current?: string; onPick: (name?: string
   }, [open]);
 
   const labels = folders.data?.labels ?? [];
-  const pick = (name?: string) => {
+  const pick = (name: string) => {
     setOpen(false);
     onPick(name);
   };
+  // Named for what it does rather than for what it is: the setting is "where
+  // does chainmail open", and the folder it would open in is the one on screen.
+  const here = current || "All mail";
 
   return (
     <div className="ibfolders" ref={box}>
@@ -114,7 +129,7 @@ function Folders({ current, onPick }: { current?: string; onPick: (name?: string
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
-        <span className="ibfname">{current ?? "All mail"}</span>
+        <span className="ibfname">{here}</span>
         <span className="ibfcaret" aria-hidden="true">
           ▾
         </span>
@@ -126,7 +141,7 @@ function Folders({ current, onPick }: { current?: string; onPick: (name?: string
             type="button"
             role="menuitem"
             className={`ibfrow${current ? "" : " sel"}`}
-            onClick={() => pick(undefined)}
+            onClick={() => pick("")}
           >
             All mail
           </button>
@@ -151,6 +166,20 @@ function Folders({ current, onPick }: { current?: string; onPick: (name?: string
               so it is empty rather than invented.
             </p>
           ) : null}
+          {/* Below the folders, because it is not one: it is about what happens
+              next time chainmail is opened. */}
+          <button
+            type="button"
+            role="menuitemcheckbox"
+            aria-checked={isDefault}
+            className="ibfrow ibfdefault"
+            onClick={() => onDefault(!isDefault)}
+          >
+            <span className="ibfname">Open {here} by default</span>
+            <span className="ibfmark" aria-hidden="true">
+              {isDefault ? "✓" : ""}
+            </span>
+          </button>
         </div>
       ) : null}
     </div>
@@ -228,11 +257,27 @@ export function Inbox() {
   // state nothing can be read from. The distinction still matters on a narrow
   // screen, where being picked is what switches panels.
   const opened = useSearch({ from: "/" }).open;
-  // The folder the list is showing. Also the URL's, and also for the reason the
-  // open thread is: the folder a reader was in is where a reload should land.
-  const label = useSearch({ from: "/" }).label;
-  const pickFolder = (name?: string) =>
+  const urlLabel = useSearch({ from: "/" }).label;
+  const settings = $api.useQuery("get", "/v1/settings", {});
+  const save = $api.useMutation("post", "/v1/settings", {
+    onSuccess: () => void settings.refetch(),
+  });
+
+  // Where the list opens, and the one place the reader's own default is read.
+  //
+  // The address wins when it says anything, including when it says "", which is
+  // All mail chosen on purpose. Only when it says nothing does the default
+  // apply — and a default that is still being read is not a decision, so the
+  // list waits for it (`enabled` below) rather than showing the whole corpus
+  // and then swapping it out from under the reader.
+  const label = urlLabel !== undefined ? urlLabel : (settings.data?.defaultFolder ?? "");
+  // Which folder chainmail opens in, as a state of the folder on screen: no
+  // default at all opens in All mail, so All mail is what is showing when there
+  // is nothing to tick.
+  const isDefault = (settings.data?.defaultFolder ?? "") === label;
+  const pickFolder = (name: string) =>
     navigate({ to: "/", search: (prev) => ({ ...prev, label: name }) });
+  const makeDefault = (on: boolean) => save.mutate({ body: { defaultFolder: on ? label : "" } });
   const openChain = (root: string) =>
     // Merged onto whatever else the address carries, so opening a thread cannot
     // silently drop a parameter someone put there.
@@ -247,6 +292,11 @@ export function Inbox() {
     "/v1/search",
     { params: { query: { limit: PAGE, ...(label ? { label } : {}) } } },
     {
+      // Held until the settings have settled, so a default folder arrives as the
+      // first page rather than as a correction to it. Settled, not successful: a
+      // settings read that failed still means "no default known", which is All mail
+      // — waiting for a success that is not coming would be waiting forever.
+      enabled: !settings.isPending,
       pageParamName: "before",
       initialPageParam: "",
       getNextPageParam: (last, pages, cursor) => {
@@ -365,7 +415,12 @@ export function Inbox() {
 
       <div className={`ibsplit${opened ? " has-choice" : ""}`}>
         <div className="ibcol">
-          <Folders current={label} onPick={pickFolder} />
+          <Folders
+            current={label}
+            isDefault={isDefault}
+            onPick={pickFolder}
+            onDefault={makeDefault}
+          />
           <div className="iblistwrap">
             {rows.length > 0 ? (
               <ul className="iblist">

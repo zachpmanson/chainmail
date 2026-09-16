@@ -280,6 +280,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The reader's own choices, which are not facts about the mail.
+         * @description Currently one: the mailbox label the home page opens in. Served with the absence of a choice preserved — defaultFolder is omitted when nothing has been chosen, because a client has to be able to tell "no default" from "a default of nothing". Stored server-side rather than in the browser: the reader has more than one browser, and the point of "open in this folder" is that it is true on the phone as well.
+         */
+        get: operations["getSettings"];
+        put?: never;
+        /**
+         * Set the reader's own choices.
+         * @description The body is the whole set of preferences, so a field that is missing is cleared rather than preserved: this is the only writer, and "I did not mention it" and "I want it gone" being two states is how a setting becomes impossible to turn off. The folder is not validated against the label list — it may be one the next slurp brings in — so a folder that is not there shows an empty list under its own name rather than being refused. Answers with the settings as they now stand, not with what was asked for.
+         */
+        post: operations["setSettings"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/people": {
         parameters: {
             query?: never;
@@ -643,6 +667,16 @@ export interface components {
             name: string;
             /** @description Messages carrying this label. Messages rather than chains: a chain count is a walk over the reply graph, and a mail client's sidebar counts messages. */
             messages: number;
+        };
+        /** @description The reader's own choices. Absent means the choice has not been made. */
+        SettingsResponse: {
+            /** @description A mailbox label the home page opens in. Omitted when nothing has been chosen — no default is a state, not a default of nothing. */
+            defaultFolder?: string;
+        };
+        /** @description The same shape written back. A missing field clears the setting. */
+        SettingsRequest: {
+            /** @description The label to open in, or an empty string for no default. */
+            defaultFolder?: string;
         };
         /** @description The connection snapshot the operator's probe wrote. checkedAt is omitted until some probe has run; services is always the full known set, so a missing snapshot reads as unchecked rather than empty. */
         StatusResponse: {
@@ -1649,6 +1683,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LabelsResponse"];
+                };
+            };
+        };
+    };
+    getSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The settings as they stand. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsResponse"];
+                };
+            };
+        };
+    };
+    setSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description The settings as they now stand. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsResponse"];
                 };
             };
         };

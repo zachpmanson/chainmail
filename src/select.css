@@ -310,3 +310,9 @@
 @media (max-width:59.99rem) {
   .ibsplit.has-choice .ibcol { display:none; }
 }
+/* The last row of the popup is not a folder, so it is set apart: a hairline,
+   and a tick column kept in every row's width so ticking it does not shift the
+   text under the pointer. */
+.ibfdefault { margin-top:.25rem; padding-top:.35rem; border-top:1px solid var(--line);
+  border-radius:0 0 6px 6px; color:var(--muted); }
+.ibfmark { flex:0 0 .8rem; text-align:right; color:var(--accent); font-weight:700; }
