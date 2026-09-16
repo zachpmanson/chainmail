@@ -185,15 +185,16 @@ function submitSearch() {
 const searchCalls = () => calls.filter((c) => pathOf(c) === "/v1/search");
 
 /**
- * Search from the inbox. "/" with nothing asked of it is the list, and the box
- * on it is the way to the search page: the journey a person actually takes, and
- * the one that writes the query into the URL the search page reads.
+ * Search from the inbox: the nav's button opens the search page, and the query is
+ * typed where that page keeps it. That is the journey a person takes, and the one
+ * that writes the query into the URL the search page reads.
  */
 async function searchFromInbox(text: string) {
-  const box = screen.getByRole("textbox", { name: "Search the corpus" });
+  click(screen.getByRole("button", { name: "Search the corpus" }));
+  const box = await screen.findByLabelText("Query");
   fireEvent.change(box, { target: { value: text } });
   fireEvent.submit(box.closest("form")!);
-  await screen.findByLabelText("Query");
+  await waitFor(() => expect((screen.getByLabelText("Query") as HTMLInputElement).value).toBe(text));
 }
 
 /** The common building mocks: search answers with the two chains, a build with
@@ -383,6 +384,24 @@ describe("reading a candidate beside the results", () => {
     expect(document.querySelector(".selpv")).toBeNull();
     // And the row it is reading says so, the way the inbox's open row does.
     expect(rowOf("Loom cutover schedule").classList.contains("sel")).toBe(true);
+  });
+
+  it("keeps the query and the filters when the nav is pressed from the search page", async () => {
+    handler = () => json(200, { mode: "lexical", chains: CHAINS });
+    const router = await mountApp("/?q=cutover&mode=semantic&person=ada");
+    await screen.findByText("Loom cutover schedule", { selector: ".ibsubj" });
+
+    // The nav carries the search it can see rather than replacing it: a button
+    // that cleared the query would throw away the search the person is in the
+    // middle of, and one that dropped the filters would answer a different
+    // question than the one on screen.
+    click(screen.getByRole("button", { name: "Search the corpus" }));
+    await waitFor(() =>
+      expect(router.state.location.searchStr).toContain("mode=semantic"),
+    );
+    expect(router.state.location.searchStr).toContain("q=cutover");
+    expect(router.state.location.searchStr).toContain("person=ada");
+    expect((screen.getByLabelText("Query") as HTMLInputElement).value).toBe("cutover");
   });
 
   it("opens the row that was pressed in the pane, and puts it in the URL", async () => {
@@ -897,7 +916,7 @@ describe("the render route /view/<name>", () => {
     });
     await waitFor(() => expect(screen.queryByText("Loom cutover")).toBeNull());
     expect(router.state.location.pathname).toBe("/");
-    expect(screen.getByRole("textbox", { name: "Search the corpus" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Search the corpus" })).toBeTruthy();
   });
 
   it("renders the client's own 404 view for a URL that is not a route", async () => {

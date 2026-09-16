@@ -48,16 +48,25 @@
   header.sitehead { max-width:none; margin:0; padding:1rem 1.25rem .85rem;
     border-bottom:1px solid var(--line); color:var(--muted); font-size:.86rem;
     display:flex; align-items:center; flex-wrap:wrap; }
-  /* The app's one way in, and the same box on every page: what it does is leave
-     the page you are on for the search. The address is where the query lives
-     (/?q=loom), so it shows the query it carries rather than sitting empty above
-     a filtered list. */
-  /* The nav's right end: the deploy stamp, then the search box, held together by
-     one `margin-left:auto` so the stamp stays immediately left of the box rather
+  /* The app's one way into the search, and the same button on every page: it
+     opens the page that owns the query. A single control rather than an input and
+     a button beside it, because a nav box and the search page's own box are two
+     places to type one query — and the nav's copy was never the one the results
+     answered. */
+  /* The nav's right end: the deploy stamp, then the search button, held together by
+     one `margin-left:auto` so the stamp stays immediately left of it rather
      than drifting into the middle of a wide screen. */
   .navright { margin-left:auto; display:flex; align-items:center; gap:.85rem;
     flex-wrap:wrap; padding-top:.15rem; }
-  .navsearch { display:flex; align-items:center; gap:.4rem; }
+  .navsearch { display:inline-flex; align-items:center; gap:.35rem; font:inherit;
+    font-size:.82rem; font-weight:600; padding:.34rem .65rem; cursor:pointer;
+    border:1px solid var(--line); border-radius:6px; background:var(--card);
+    color:var(--fg); }
+  .navsearch:hover { border-color:var(--accent); color:var(--accent); }
+  /* On the search page the button is the current item, so it is marked the way a
+     current nav item is: filled, and not offering to take you where you are. */
+  .navsearch[aria-current="page"] { background:var(--mine); border-color:var(--accent);
+    color:var(--accent); }
   /* The corpus being read. A status rather than a destination, so it is quieter
      than the links beside it and carries no separator: the space is what says it
      is not a link. Reads at the size of the deploy stamp, which is the nav's
@@ -76,9 +85,7 @@
   .deploy code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
     font-size:.72rem; }
   .deploy:hover { color:var(--accent); }
-  .navsearch input { font:inherit; font-size:.82rem; padding:.32rem .55rem;
-    width:15rem; max-width:100%; border:1px solid var(--line); border-radius:6px;
-    background:var(--card); color:var(--fg); }
+  .navsearch svg { flex:none; opacity:.8; }
   /* The app's own pages are workspaces, not documents: an inbox is a list and a
      reading pane, and both want the width the window has. Anything not named
      here — a 404, a dropped spec — keeps the measure above.

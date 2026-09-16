@@ -111,47 +111,48 @@ function SignInBar() {
 
 /** The full screen is the app shell; this root owns the legacy ways in. */
 /**
- * The corpus search, in the site nav rather than above the list.
+ * The corpus search, in the site nav: a button, not a box.
  *
- * It is the app's way in: the same box serves every page, because what it does
- * is leave the page you are on for the search. The address is where the query
- * lives (`/?q=loom`), so the box shows the query the address carries — an empty
- * box above a filtered list would be the page lying about what it is showing.
+ * The search is a page — a query, a mode, a person, a date, and a list of
+ * candidates to judge — and a nav box is not that page: a second place to type
+ * the same query is two boxes that disagree the moment either one changes, above
+ * a list that answers whichever of them was last submitted. So the nav opens the
+ * search and nothing more, and the typing happens in the one field that owns the
+ * query.
+ *
+ * It carries the query it can see rather than clearing it: pressing it from a
+ * built page opens the search page empty (there is no query anywhere on the
+ * address), and pressing it while you are already searching keeps the query and
+ * the filters you are in the middle of. `q` is written even when empty, which is
+ * what makes the address the search page rather than the inbox.
  */
 function NavSearch() {
   const navigate = useNavigate();
-  const url = useRouterState({
-    select: (s) => (s.location.search as { q?: string } | undefined)?.q ?? "",
+  const search = useRouterState({
+    select: (s) => (s.location.pathname === "/" ? (s.location.search as Record<string, unknown>) : {}),
   });
-  const [q, setQ] = useState(url);
-  // A link, a Back, or a reload can name a different query than the one typed
-  // here; typing does not change the address, so this only follows the address.
-  useEffect(() => setQ(url), [url]);
+  // What the address already asks. The nav's own state, so it is not the search
+  // page's form — a link, a Back or a reload has to move this too, which is why
+  // it is read from the location on every render rather than kept once.
+  const asking =
+    search.q !== undefined || search.person !== undefined || search.since !== undefined;
 
   return (
-    <form
+    <button
+      type="button"
       className="navsearch"
-      onSubmit={(ev) => {
-        ev.preventDefault();
-        if (!q.trim()) return;
-        // Only the query is carried over: mode, person and since have no defaults
-        // worth imposing from here, and the search route applies its own.
-        navigate({ to: "/", search: { q: q.trim() } });
-      }}
+      aria-label="Search the corpus"
+      aria-current={asking ? "page" : undefined}
+      onClick={() => navigate({ to: "/", search: (prev) => ({ ...prev, q: prev.q ?? "" }) })}
     >
-      <input
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="Search the corpus"
-        aria-label="Search the corpus"
-      />
-      {/* The visible word is the accessible name's own word: on the search page the
-          page's own form has a button saying "Search" too, and a screen reader
-          reading two of them cannot tell which is which. */}
-      <button type="submit" aria-label="Search the corpus" disabled={!q.trim()}>
-        Search
-      </button>
-    </form>
+      {/* A magnifier rather than a word alone: the nav's other items are words,
+          and this is the one that opens a page instead of being one. */}
+      <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+        <circle cx="7" cy="7" r="4.6" fill="none" stroke="currentColor" strokeWidth="1.5" />
+        <path d="M10.4 10.4 14.4 14.4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      </svg>
+      Search
+    </button>
   );
 }
 
@@ -288,9 +289,14 @@ const rootRoute = createRootRoute({
  */
 function Home() {
   const urlSearch = useSearch({ from: "/" });
-  const asking = Boolean(
-    urlSearch.q?.trim() || urlSearch.person?.trim() || urlSearch.since?.trim(),
-  );
+  // A query is being *composed* when the address carries one of the three fields
+  // that can ask a question — **including an empty one**. The nav opens the
+  // search page with `?q=` and nothing in it yet, and that is a query being
+  // typed rather than an inbox: the field it puts the caret in is the point.
+  // `mode` alone does not count, because a mode with nothing to ask is not a
+  // question, and `label`/`open` belong to the inbox.
+  const asking =
+    urlSearch.q !== undefined || urlSearch.person !== undefined || urlSearch.since !== undefined;
   return asking ? <SelectView /> : <Inbox />;
 }
 
