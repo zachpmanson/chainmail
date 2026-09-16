@@ -359,10 +359,19 @@ describe("reading a candidate beside the results", () => {
     await mountApp("/?q=cutover");
     await screen.findByText("Loom cutover schedule", { selector: ".ibsubj" });
 
-    // The pane is a column of the split, and the chain it is reading is the top
-    // result — waiting for a click would be a pane with nothing in it.
+    // The pane is a column of the split, and it starts empty: nothing is open
+    // until a result is clicked, exactly as on the inbox. A pane that filled
+    // itself in with the top of the ranking would be a candidate to dismiss.
     expect(document.querySelector(".ibsplit .ibread")).toBeTruthy();
-    expect(pane().querySelector(".ibread-subj")!.textContent).toBe("Loom cutover schedule");
+    expect(pane().querySelector(".msg")).toBeNull();
+    click(
+      within(rowOf("Loom cutover schedule")).getByRole("button", {
+        name: "Loom cutover schedule",
+      }),
+    );
+    await waitFor(() =>
+      expect(pane().querySelector(".ibread-subj")!.textContent).toBe("Loom cutover schedule"),
+    );
     await waitFor(() => expect(pane().textContent).toContain("Cutover goes ahead on the 11th."));
     // The transcripts' own bubbles, not the pane's old plain cards: the same
     // `Message` a built page draws for the same entry, over the corpus's

@@ -477,6 +477,11 @@
 }
 @media (max-width:59.99rem) {
   .ibsplit.has-choice .ibcol { display:none; }
+  /* And the other way round: with nothing chosen the pane is a column of nothing
+     under the list, so it steps aside until there is something in it. The list is
+     the whole page until a row is clicked, and clicking the open row again (which
+     closes it) puts the list back. */
+  .ibsplit:not(.has-choice) .ibread { display:none; }
 }
 /* The row that is not a folder: stuck to the top of the popup, because the
    folder list beneath it scrolls and a control about the next visit must not

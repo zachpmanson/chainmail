@@ -127,11 +127,13 @@ export function SelectView() {
   // then a reload before the answer came back, or an address carried over from
   // another search. The pane reads it from the id either way (the chain is
   // fetched by id), so its head says what is known rather than inventing a
-  // subject or a count. With no id at all the pane reads the top of the ranked
-  // list, which is what the reader is looking at anyway.
+  // subject or a count. With no id at all **nothing is open**: the pane starts
+  // empty and stays empty until a result is clicked. The top of the ranking is
+  // not a choice anyone made, and a pane that filled itself in would be a
+  // candidate the reader has to dismiss before judging any of them.
   const picked = chains.find((c) => c.rootExtId === opened);
   const reading: PreviewableChain | null =
-    picked ?? (opened ? { rootExtId: opened } : chains[0]) ?? null;
+    picked ?? (opened ? { rootExtId: opened } : null);
 
   return (
     <div className="wrap selwrap">
@@ -191,7 +193,7 @@ export function SelectView() {
                       // what it does on the inbox too: a ranked list is still a
                       // list of chains, and a second "Preview" control beside it
                       // was two ways to do the one thing.
-                      onOpen={() => openChain(c.rootExtId)}
+                      onOpen={() => (opened === c.rootExtId ? closeChain() : openChain(c.rootExtId))}
                     />
                   ))}
                 </ul>
@@ -202,7 +204,7 @@ export function SelectView() {
                 chain={reading}
                 label="The candidate being read"
                 backLabel="← Results"
-                empty="Nothing to read yet."
+                empty="Nothing open — pick a result from the list."
                 onClose={closeChain}
               />
             }

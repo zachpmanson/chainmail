@@ -316,9 +316,14 @@ export function Inbox() {
   // thread opened, then reloaded, comes back before the list has been paged that
   // far. The pane reads it from the id either way (it fetches the chain by id),
   // so the head says what is known rather than inventing a subject or a count.
+  //
+  // With the address naming nothing, **nothing is open**: the pane starts empty
+  // and stays empty until a row is clicked. The top of the list is not a choice
+  // anyone made, and a pane that filled itself in would be a thread the reader
+  // has to dismiss — the same reason nothing is marked read by being looked at.
   const onlyID: PreviewableChain = { rootExtId: opened ?? "" };
   const selected: PreviewableChain | null =
-    rows.find((c) => c.rootExtId === opened) ?? (opened ? onlyID : null) ?? rows[0] ?? null;
+    rows.find((c) => c.rootExtId === opened) ?? (opened ? onlyID : null);
 
   // Reading to the end of the list is the request for more of it: a reader who
   // keeps scrolling keeps getting rows, where a button made them say so after
@@ -382,7 +387,7 @@ export function Inbox() {
                       checked={chosen.includes(c.rootExtId)}
                       current={selected?.rootExtId === c.rootExtId}
                       onToggle={() => toggle(c.rootExtId)}
-                      onOpen={() => openChain(c.rootExtId)}
+                      onOpen={() => (opened === c.rootExtId ? closeChain() : openChain(c.rootExtId))}
                     />
                   ))}
                 </ul>
@@ -413,7 +418,7 @@ export function Inbox() {
             chain={selected}
             label="The selected chain"
             backLabel="← List"
-            empty="Nothing in the corpus to read yet."
+            empty="Nothing open — pick a chain from the list."
             onClose={closeChain}
           />
         }

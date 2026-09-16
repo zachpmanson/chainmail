@@ -145,6 +145,16 @@ async function mountApp(path = "/") {
  *  row that happens to carry the same words. */
 const pane = () => document.querySelector(".ibread") as HTMLElement;
 
+/** Open a row, which is how a chain reaches the pane now that the pane starts
+ *  empty — the circle only exists once there is a chain to be a state of. The
+ *  rows arrive with the list, so it waits for them the way a reader has to. */
+const openRow = async (n = 0) => {
+  await waitFor(() =>
+    expect(document.querySelectorAll(".ibrow button").length).toBeGreaterThan(n),
+  );
+  fireEvent.click(document.querySelectorAll(".ibrow button")[n] as HTMLElement);
+};
+
 describe("what a chain's read state looks like", () => {
   it("marks a chain with unread mail, and counts it", async () => {
     handler = server(page([chain({ unread: 2 }), chain({ rootExtId: OTHER, subject: "Fence panels", unread: 0 })]));
@@ -159,7 +169,9 @@ describe("what a chain's read state looks like", () => {
     // mail is not emphasised either.
     expect(document.querySelectorAll(".ibrow.unread")).toHaveLength(1);
     // The pane's circle is the same claim in the toolbar: filled (and pressed)
-    // while the newest chain — the one the pane opens by itself — is unread.
+    // while the chain it is reading is unread.
+    await openRow();
+    await waitFor(() => expect(pane().querySelector(".ibread-read")).toBeTruthy());
     const circle = pane().querySelector(".ibread-read") as HTMLElement;
     expect(circle.className).toContain("unread");
     expect(circle.getAttribute("aria-pressed")).toBe("true");
@@ -168,6 +180,7 @@ describe("what a chain's read state looks like", () => {
   it("offers the other state, and asks the server for it", async () => {
     handler = server(page([chain({ unread: 2 })]));
     await mountApp();
+    await openRow();
 
     const button = await screen.findByRole("button", { name: "Mark read" });
     fireEvent.click(button);
@@ -185,6 +198,7 @@ describe("what a chain's read state looks like", () => {
       return json(200, { mode: "lexical", chains: [chain({ unread: answered > 1 ? 0 : 2 })] });
     });
     await mountApp();
+    await openRow();
 
     const unread = (await screen.findByRole("button", { name: "Mark read" })) as HTMLElement;
     expect(unread.getAttribute("aria-pressed")).toBe("true");
@@ -208,6 +222,7 @@ describe("what a chain's read state looks like", () => {
       return json(200, { mode: "lexical", chains: [chain({ unread: answered > 1 ? 0 : 2 })] });
     });
     await mountApp();
+    await openRow();
 
     fireEvent.click(await screen.findByRole("button", { name: "Mark read" }));
     // The badge goes when the mail is read, and the button flips to the state a
@@ -222,6 +237,7 @@ describe("what a chain's read state looks like", () => {
       json(403, { error: "marking mail read is disabled: this server was started without -mark-read" }),
     );
     await mountApp();
+    await openRow();
 
     fireEvent.click(await screen.findByRole("button", { name: "Mark read" }));
     expect(await screen.findByText(/without -mark-read/)).toBeTruthy();
