@@ -5,6 +5,7 @@ import {
   createRouter,
   Link,
   Outlet,
+  useNavigate,
   useRouterState,
   useSearch,
 } from "@tanstack/react-router";
@@ -107,6 +108,51 @@ function SignInBar() {
 }
 
 /** The full screen is the app shell; this root owns the legacy ways in. */
+/**
+ * The corpus search, in the site nav rather than above the list.
+ *
+ * It is the app's way in: the same box serves every page, because what it does
+ * is leave the page you are on for the search. The address is where the query
+ * lives (`/?q=loom`), so the box shows the query the address carries — an empty
+ * box above a filtered list would be the page lying about what it is showing.
+ */
+function NavSearch() {
+  const navigate = useNavigate();
+  const url = useRouterState({
+    select: (s) => (s.location.search as { q?: string } | undefined)?.q ?? "",
+  });
+  const [q, setQ] = useState(url);
+  // A link, a Back, or a reload can name a different query than the one typed
+  // here; typing does not change the address, so this only follows the address.
+  useEffect(() => setQ(url), [url]);
+
+  return (
+    <form
+      className="navsearch"
+      onSubmit={(ev) => {
+        ev.preventDefault();
+        if (!q.trim()) return;
+        // Only the query is carried over: mode, person and since have no defaults
+        // worth imposing from here, and the search route applies its own.
+        navigate({ to: "/", search: { q: q.trim() } });
+      }}
+    >
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Search the corpus"
+        aria-label="Search the corpus"
+      />
+      {/* The visible word is the accessible name's own word: on the search page the
+          page's own form has a button saying "Search" too, and a screen reader
+          reading two of them cannot tell which is which. */}
+      <button type="submit" aria-label="Search the corpus" disabled={!q.trim()}>
+        Search
+      </button>
+    </form>
+  );
+}
+
 function RootLayout() {
   // ?spec= is read from the router's location, not declared on any route, so
   // it passes through on any path without a route schema having to know it.
@@ -204,6 +250,7 @@ function RootLayout() {
         <Link to="/status">Services</Link>
         <span className="sep">·</span>
         <Link to="/ops">Ops</Link>
+        <NavSearch />
       </header>
       <SignInBar />
       <Outlet />

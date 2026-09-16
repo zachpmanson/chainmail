@@ -27,6 +27,11 @@
   html { scroll-behavior:smooth; }
   body { margin:0; background:var(--bg); color:var(--fg);
     font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; }
+  /* The shell is the window: the nav at the top, the page under it. A document
+     page grows past the viewport and scrolls exactly as it did; a workspace
+     claims what is left (see .wrap.ibwrap), so its own columns scroll and the
+     nav stays where it was put. */
+  #root { display:flex; flex-direction:column; min-height:100vh; }
   /* The document measure. A transcript is read, so it keeps a readable width on
      a wide screen; column mode drops it (see body.chains — a workspace is laid
      out, not read), and the app's own pages opt out below, because a list and a
@@ -35,8 +40,21 @@
   header.top { border-bottom:1px solid var(--line); padding-bottom:.7rem; margin-bottom:.25rem; }
   /* The shell fills the window. A cap here put the nav in the middle of a wide
      screen with a third of it empty to either side, on every page. */
+  /* A row, so the corpus search can sit at its end: `margin-left:auto` is what
+     puts it on the right, and it drops to its own line on a screen too narrow to
+     hold the links and the box together. */
   header.sitehead { max-width:none; margin:0; padding:1rem 1.25rem .85rem;
-    border-bottom:1px solid var(--line); color:var(--muted); font-size:.86rem; }
+    border-bottom:1px solid var(--line); color:var(--muted); font-size:.86rem;
+    display:flex; align-items:center; flex-wrap:wrap; }
+  /* The app's one way in, and the same box on every page: what it does is leave
+     the page you are on for the search. The address is where the query lives
+     (/?q=loom), so it shows the query it carries rather than sitting empty above
+     a filtered list. */
+  .navsearch { margin-left:auto; display:flex; align-items:center; gap:.4rem;
+    padding-top:.15rem; }
+  .navsearch input { font:inherit; font-size:.82rem; padding:.32rem .55rem;
+    width:15rem; max-width:100%; border:1px solid var(--line); border-radius:6px;
+    background:var(--card); color:var(--fg); }
   /* The app's own pages are workspaces, not documents: an inbox is a list and a
      reading pane, and both want the width the window has. Anything not named
      here — a 404, a dropped spec — keeps the measure above. */
