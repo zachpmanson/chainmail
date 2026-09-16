@@ -256,6 +256,11 @@
 .ibback { font:inherit; font-size:.78rem; font-weight:650; padding:.2rem .5rem;
   border:1px solid var(--line); border-radius:6px; background:var(--card);
   color:var(--fg); cursor:pointer; }
+/* The pane holds a transcript: the same messages a page draws, in a panel rather
+   than a page. It brings its own padding because the pane's box is the outline
+   and the messages should not touch it. */
+.ibread > .stream { padding:.7rem .8rem 1.6rem; }
+.ibread > .selnote { margin:.7rem .8rem 0; }
 @media (min-width:60rem) {
   /* The list is bounded and the pane takes whatever is left: a row is skimmed,
      a thread is read, so the width goes where the reading is. */

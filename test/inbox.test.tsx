@@ -162,17 +162,29 @@ const pageOf = (chains: unknown[]) => json(200, { mode: "lexical", chains });
 
 /** The reading pane asks /v1/chains/<root> for whichever chain is selected, and
  *  every chain in the fixtures has a body of its own, so "the pane swapped" is a
- *  claim about what is on screen rather than about a call being made. */
-const CHAIN_BODIES: Record<string, { author: string; subject: string; body: string }> = {
+ *  claim about what is on screen rather than about a call being made.
+ *
+ *  The body arrives as the rendered `html` a build would put in the bubble (the
+ *  service renders it with the same conversion), and the plain text beside it:
+ *  the pane draws the html, and a test that asserted against the text alone would
+ *  pass just as well if it drew the wrong one. `Loom cutover`'s html carries
+ *  markup the text does not, which is how a test can tell them apart. */
+const CHAIN_BODIES: Record<string, { author: string; subject: string; body: string; html: string; tz: string; tzOffsetMinutes: number }> = {
   "mail:<fence-panel-9@example.fed>": {
     author: "Ada Okoye",
     subject: "Fence panels",
     body: "Unrelated: the fence panels arrived, and the gate needs a new hinge.",
+    html: "<p>Unrelated: the fence panels arrived, and the gate needs a new hinge. <b>Regards, Ada</b></p>",
+    tz: "AEST",
+    tzOffsetMinutes: 600,
   },
   "mail:<loom-cutover-1@example.fed>": {
     author: "Bo Halvorsen",
     subject: "Loom cutover schedule",
     body: "Roof access is fine from the 14th.",
+    html: "<p>Roof access is fine from the 14th.</p>",
+    tz: "AEST",
+    tzOffsetMinutes: 600,
   },
 };
 
@@ -408,7 +420,7 @@ describe("the home page with no query", () => {
   it("clears the address when the list is asked for again", async () => {
     handler = buildHandler;
     const router = await mountApp(`/?open=${encodeURIComponent("mail:<loom-cutover-1@example.fed>")}`);
-    await screen.findByText("Loom cutover schedule");
+    await screen.findByRole("button", { name: "Loom cutover schedule" });
 
     click(within(pane()).getByRole("button", { name: /List/ }));
     await waitFor(() => expect(router.state.location.search).not.toMatchObject({ open: expect.anything() }));
@@ -417,6 +429,21 @@ describe("the home page with no query", () => {
     await waitFor(() =>
       expect(within(pane()).getByText(/and the gate needs a new hinge/)).toBeTruthy(),
     );
+  });
+
+  it("draws the thread with the transcript's own message component", async () => {
+    handler = buildHandler;
+    await mountApp("/");
+    await screen.findByText("Loom cutover schedule");
+
+    // The page's classes, not the pane's own: one component draws a message in
+    // both places, so the bubble, the header and the footer are the same boxes.
+    await waitFor(() => expect(pane().querySelector(".msg .bub")).not.toBeNull());
+    expect(pane().querySelector(".msg .hdr .nm")?.textContent).toBe("Ada Okoye");
+    // And the body is the service's rendered html, not the plain text: the
+    // fixture's two differ by a <b> that only the html has.
+    expect(pane().querySelector(".bd b")?.textContent).toBe("Regards, Ada");
+    expect(pane().querySelector(".bd")?.textContent).not.toContain("<b>");
   });
 
   it("builds a page from the ticked chains, recording no query for it", async () => {
