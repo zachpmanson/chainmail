@@ -67,6 +67,13 @@ func run(args []string) error {
 			"reaches the mailbox, once per attachment part, and a host that does not "+
 			"grant it answers 403. The credential is the mail grant this unit already "+
 			"reads, so the switch changes when a fetch runs, not what it may touch.")
+	markRead := fs.Bool("mark-read", false,
+		"permit POST /v1/read: mark a chain's messages read or unread in the mailbox "+
+			"itself, and store the labels the write comes back with. Off by default, "+
+			"like -slurp and -media, and for a stronger reason than either: those spend "+
+			"mailbox round trips, this changes what is in the mailbox. A host that does "+
+			"not grant it answers 403. The credential is the mail grant this unit "+
+			"already reads; what changes is that the server may now write.")
 	// The deploy stamp's revision, passed in by the unit that starts this binary.
 	// Empty is honest for a build nobody labelled: the header then shows nothing
 	// rather than a commit this code cannot know.
@@ -110,11 +117,14 @@ func run(args []string) error {
 		runSlurp:     defaultSlurp(),
 		mediaEnabled: *mediaPull,
 		runMediaPull: defaultMediaPull(store, *uploads),
-		specSlots:    make(chan struct{}, specConcurrency),
-		slotWait:     specSlotWait,
-		rev:          *rev,
-		startedAt:    startedAt,
-		loginPort:    port,
+
+		markReadEnabled:   *markRead,
+		openUnreadMailbox: defaultUnreadMailbox(),
+		specSlots:         make(chan struct{}, specConcurrency),
+		slotWait:          specSlotWait,
+		rev:               *rev,
+		startedAt:         startedAt,
+		loginPort:         port,
 		embedder: func() *mailembed.Ollama {
 			return &mailembed.Ollama{BaseURL: *url, Name: *model, Dimension: *dim,
 				Client: &http.Client{Timeout: *timeout}}

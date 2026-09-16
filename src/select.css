@@ -241,6 +241,16 @@
    shortened the subject to reserve width nothing else uses. */
 .ibsubrow { grid-area:2/1 / 2/3; display:flex; align-items:baseline; gap:.6rem; }
 .ibsubj { font-size:.84rem; overflow-wrap:anywhere; min-width:0; }
+/* Unread mail, marked the way a mail client marks it: a count in the accent and
+   a heavier subject. The row keeps the same height whether or not it is unread —
+   a list that shifts when the reader opens something is a list that moves under
+   the pointer — so the count is a pill of fixed line height rather than anything
+   that adds a line. */
+.ibunread { flex:none; font-size:.68rem; font-weight:700; line-height:1.4;
+  min-width:1.15rem; padding:0 .3rem; border-radius:999px; text-align:center;
+  background:var(--accent); color:var(--card); font-variant-numeric:tabular-nums; }
+.ibrow.unread .ibsubj { font-weight:650; }
+.ibrow.unread .ibwho { font-weight:750; }
 .ibcount { margin-left:auto; flex:none; font-size:.68rem; font-weight:700;
   color:var(--muted); font-variant-numeric:tabular-nums; }
 /* One line, elided: a preview is a hint about what the message says, and a
@@ -333,6 +343,14 @@
 .ibback { font:inherit; font-size:.78rem; font-weight:650; padding:.2rem .5rem;
   border:1px solid var(--line); border-radius:6px; background:var(--card);
   color:var(--fg); cursor:pointer; }
+/* The read-state control: the pane's toolbar is where a reader already is when
+   they have finished a thread. Same shape as the back button it shares the strip
+   with, and never the row's own count — that one is the state, this is the
+   action. */
+.ibread-read { font:inherit; font-size:.78rem; font-weight:650; padding:.2rem .5rem;
+  border:1px solid var(--line); border-radius:6px; background:var(--card);
+  color:var(--fg); cursor:pointer; white-space:nowrap; }
+.ibread-read:disabled { color:var(--muted); cursor:default; }
 /* Flush: the pane's edge is the messages' edge. The gap above the first message
    is the gap between messages, so the heading reads as a heading rather than as
    part of the first email. */

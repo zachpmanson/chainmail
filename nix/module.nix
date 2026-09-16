@@ -13,9 +13,10 @@
 # chainmail's own mailbox token (not behind beltino's docket boundary).
 #
 # Operator commands (ingest, embed, dedupe, twins, repair, merge, alias,
-# refresh) stay CLI-only and are NOT exposed here: the HTTP surface is
-# read-only by design, and a browser is the wrong place to trigger a merge
-# that person_merges cannot reverse.
+# refresh) stay CLI-only and are NOT exposed here: the HTTP surface is read-most
+# by design, and a browser is the wrong place to trigger a merge that
+# person_merges cannot reverse. The one write it can be granted is a message's
+# read state, which is the mailbox's own and reversible from the same button.
 #
 # One reach is exposed, opt-in: enableSlurp passes -slurp, which turns POST
 # /v1/slurp into the same ingest the hourly unit runs — the browser's way to
@@ -29,6 +30,15 @@
 # Gmail for it. Off by default because it spends mailbox round trips, and
 # because a host that has not granted the flag should answer 403 rather than
 # quietly fetching. Nothing here fetches media by itself.
+#
+# A third, and the only one that WRITES: enableMarkRead passes -mark-read, which
+# turns POST /v1/read into a label change on a chain's messages — the pane's mark
+# read / mark unread button, and the reason the unread counts this server shows
+# are the same ones the reader's phone shows. Off by default for a stronger
+# reason than the other two: they spend mailbox round trips, this changes what is
+# in the mailbox. It writes nothing on its own: every change is a request a
+# person made, and the corpus's own copy of the label is reconciled from the
+# mailbox by the `unread` slurp phase rather than by guessing.
 self: { config, lib, pkgs, ... }:
 
 let
@@ -129,6 +139,24 @@ in {
         when a fetch runs, not what it may touch.
       '';
     };
+
+    enableMarkRead = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Permit POST /v1/read: mark a chain's messages read or unread in the
+        mailbox itself, and store the labels the mailbox answers with. This is
+        what the pane's mark read / mark unread button presses, and it is the
+        only switch here that lets the server CHANGE the mailbox rather than
+        read from it — which is why it is off by default even where the other
+        two are on.
+
+        Nothing is marked by itself: a message changes only because a person
+        pressed the button, and the corpus's own copy of the label is corrected
+        from the mailbox by the `unread` slurp phase, not by a guess. The
+        credential is the mail grant this unit already holds.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -163,7 +191,8 @@ in {
           lib.optionalString (cfg.uploads != "") " -uploads ${cfg.uploads}" +
           lib.optionalString cfg.enableSlurp (
             " -slurp -slurp-timeout ${cfg.slurpTimeout}") +
-          lib.optionalString cfg.enableMedia " -media";
+          lib.optionalString cfg.enableMedia " -media" +
+          lib.optionalString cfg.enableMarkRead " -mark-read";
         User = cfg.user;
         Group = cfg.user;
         StateDirectory = "chainmail";
@@ -191,8 +220,10 @@ in {
         # runner by the machine config, rather than to a blanket ability to
         # become root.
         NoNewPrivileges = !cfg.enableSlurp;
-        # The server opens the corpus WAL-mode but this unit is read-only;
-        # Restart is what keeps a transient failure from taking the tunnel down.
+        # The server opens the corpus WAL-mode. It writes the corpus only in the
+        # one way the flags above grant (a label change when -mark-read is on,
+        # beside a rebuild); Restart is what keeps a transient failure from
+        # taking the tunnel down.
         Restart = "on-failure";
         RestartSec = "5s";
       };

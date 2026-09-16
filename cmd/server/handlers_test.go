@@ -117,7 +117,7 @@ func TestSlurpRunsTheSiblingCLIWithThePipelinePhases(t *testing.T) {
 		t.Fatalf("argv = %q, want it to run the slurp subcommand", args)
 	}
 	joined := strings.Join(args, " ")
-	for _, want := range []string{"-q in:anywhere", "-only mail,twins,repair,dedupe,embed"} {
+	for _, want := range []string{"-q in:anywhere", "-only mail,twins,repair,dedupe,unread,embed"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("argv = %q, want it to carry %q", args, want)
 		}

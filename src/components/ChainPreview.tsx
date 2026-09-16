@@ -60,6 +60,10 @@ export interface PreviewableChain {
    *  id — the inbox read from an address bar, say — in which case no count is
    *  claimed rather than a zero. */
   entries?: number;
+  /** How many of its messages the mailbox still calls unread. Absent for the
+   *  same reason as entries: a caller holding only an id cannot say, and the
+   *  pane's read-state control hides rather than guesses. */
+  unread?: number;
 }
 
 /** A candidate chain read as data. This is deliberately NOT the rendered

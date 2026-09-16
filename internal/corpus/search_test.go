@@ -41,6 +41,7 @@ type msg struct {
 	container string
 	atts      []Attachment
 	labels    []string // the mailbox's own labels, as Gmail states them
+	gmail     string   // the Gmail message id, when this entry has a mailbox copy
 }
 
 func put(t *testing.T, s *Store, m msg) int64 {
@@ -53,7 +54,7 @@ func put(t *testing.T, s *Store, m msg) int64 {
 		PersonID: m.person, Container: m.container, ParentRef: m.parent,
 		Subject: m.subject, BodyText: m.body,
 	}
-	r, err := s.Put(e, &Mail{MessageID: m.id, From: "someone@example.com", To: m.to, Labels: m.labels}, m.atts)
+	r, err := s.Put(e, &Mail{MessageID: m.id, GmailID: m.gmail, From: "someone@example.com", To: m.to, Labels: m.labels}, m.atts)
 	if err != nil {
 		t.Fatalf("put %s: %v", m.id, err)
 	}

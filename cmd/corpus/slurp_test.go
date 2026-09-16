@@ -53,6 +53,7 @@ func (r *recorder) deps() slurpDeps {
 			r.dedupeApply = append(r.dedupeApply, apply)
 			return nil
 		},
+		unread: func() error { note("unread"); return nil },
 		embedReady: func() (bool, string) {
 			note("embed-ready")
 			return !r.embedDown, r.embedWhy
@@ -97,7 +98,7 @@ func TestPhasesRunInTheOrderThatFinishesTheWork(t *testing.T) {
 		t.Fatalf("runSlurp: %v", err)
 	}
 	want := []string{"refresh", "slack", "mail", "twins", "repair", "dedupe",
-		"embed-ready", "embed", "status"}
+		"unread", "embed-ready", "embed", "status"}
 	if got := strings.Join(r.calls, ","); got != strings.Join(want, ",") {
 		t.Errorf("phase order\n got %s\nwant %s", got, strings.Join(want, ","))
 	}
@@ -232,7 +233,7 @@ func TestAFailedPhaseIsNonZeroAndTheRestStillRun(t *testing.T) {
 	if !strings.Contains(err.Error(), "mail") {
 		t.Errorf("the error does not name the phase: %v", err)
 	}
-	if !strings.Contains(strings.Join(r.calls, ","), "twins,repair,dedupe") {
+	if !strings.Contains(strings.Join(r.calls, ","), "twins,repair,dedupe,unread") {
 		t.Errorf("a failure stopped the phases that were still worth running: %v", r.calls)
 	}
 	if !strings.Contains(out, "threading headers") {
@@ -249,9 +250,9 @@ func TestOnlyAndSkipChoosePhases(t *testing.T) {
 		{name: "mail only", only: []string{"mail"}, want: "mail,status"},
 		{name: "slack only", only: []string{"slack"}, want: "refresh,slack,status"},
 		{name: "no embedding", skip: []string{"embed"},
-			want: "refresh,slack,mail,twins,repair,dedupe,status"},
+			want: "refresh,slack,mail,twins,repair,dedupe,unread,status"},
 		{name: "settle is a group", only: []string{"settle"}, want: "twins,repair,dedupe,status"},
-		{name: "skip the group", skip: []string{"settle", "embed"},
+		{name: "skip the group", skip: []string{"settle", "embed", "unread"},
 			want: "refresh,slack,mail,status"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -275,7 +276,7 @@ func TestPhaseSelectionRefusesRatherThanGuesses(t *testing.T) {
 	}{
 		{name: "both", only: []string{"mail"}, skip: []string{"embed"}, want: "one"},
 		{name: "no such phase", only: []string{"settel"}, want: "no phase"},
-		{name: "nothing left", skip: []string{"slack", "mail", "settle", "embed"},
+		{name: "nothing left", skip: []string{"slack", "mail", "settle", "embed", "unread"},
 			want: "nothing to do"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

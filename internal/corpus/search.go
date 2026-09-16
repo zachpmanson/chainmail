@@ -251,6 +251,14 @@ type ChainHit struct {
 	// not just the authors of the hits.
 	People int
 
+	// Unread is how many of the chain's messages the mailbox still calls unread;
+	// 0 for a chain that has been read, one that never was unread, and one with
+	// no mailbox copy at all. A count rather than a flag because a chain is not
+	// one message: a twelve-message trail with four unread is a different row
+	// from one with twelve, and the number is what the sidebar's label count
+	// already means beside it.
+	Unread int
+
 	First time.Time
 	Last  time.Time
 
@@ -420,6 +428,7 @@ func (s *Store) SearchChains(q Query) ([]ChainHit, error) {
 			Last:      m.last,
 			Score:     sr.score,
 			People:    m.people,
+			Unread:    m.unread,
 		}
 		members := byRoot[sr.root]
 		if len(members) > q.PerChain {
@@ -811,6 +820,7 @@ type chainMetaRow struct {
 	first     time.Time
 	last      time.Time
 	people    int
+	unread    int
 }
 
 // chainMeta walks each root's descendants so a chain can report its true size
@@ -820,6 +830,14 @@ func (s *Store) chainMeta(roots []int64) (map[int64]chainMetaRow, error) {
 		return map[int64]chainMetaRow{}, nil
 	}
 	ph, args := placeholders(roots)
+	// The unread count is a count of entries, not of rows: the participant join
+	// multiplies a chain's rows by its cast, so counting the join would report a
+	// message unread once per person on it. count(distinct ...) is what keeps the
+	// number the same as the entries it is counting. The label membership test is
+	// the one Query.Labels uses — instr against a delimited copy, because a label
+	// is user text and like would read % and _ in it as wildcards. It is bound as
+	// the query's last argument, after the depth cap — placeholders bind in the
+	// order they appear in the text, and this one is in the outer select.
 	rows, err := s.db.Query(`
 		with recursive down(root, id, depth) as (
 		  select id, id, 0 from entries where id in (`+ph+`)
@@ -835,11 +853,14 @@ func (s *Store) chainMeta(roots []int64) (map[int64]chainMetaRow, error) {
 		       count(distinct d.id),
 		       min(e.ts), max(e.ts),
 		       group_concat(distinct e.source),
-		       count(distinct p.person_id)
+		       count(distinct p.person_id),
+		       count(distinct case when
+		         instr(',' || md.labels || ',', ',' || ? || ',') > 0 then d.id end)
 		from down d join entries e on e.id = d.id
 		     left join participants p on p.entry_id = e.id
+		     left join mail_detail md on md.entry_id = e.id
 		group by d.root`,
-		append(args, walkDepthCap)...)
+		append(args, walkDepthCap, UnreadLabel)...)
 	if err != nil {
 		return nil, fmt.Errorf("summarising chains: %w", err)
 	}
@@ -851,7 +872,7 @@ func (s *Store) chainMeta(roots []int64) (map[int64]chainMetaRow, error) {
 		var first, last int64
 		var srcs sql.NullString
 		if err := rows.Scan(&root, &m.extID, &m.subject, &m.container,
-			&m.entries, &first, &last, &srcs, &m.people); err != nil {
+			&m.entries, &first, &last, &srcs, &m.people, &m.unread); err != nil {
 			return nil, err
 		}
 		m.first = time.Unix(first, 0).UTC()

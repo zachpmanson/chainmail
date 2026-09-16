@@ -21,6 +21,7 @@
 //	corpus media pull -entry <id>     attachment bytes, on purpose, for one message
 //	corpus media stats|prune          what is filed, and what nothing points at
 //	corpus unnest <ext-id>            what extraction recovers from one message
+//	corpus unread                     correct the stored UNREAD label against the mailbox
 package main
 
 import (
@@ -71,8 +72,8 @@ const usage = `usage: corpus <command> [flags]
   ingest mail   -q <query> ingest Gmail results, with their quoted history
   ingest slack  [-archive] ingest a slackdump archive
   slurp                    every phase in the one order that finishes the most
-                           work: slack, mail, twins, repair, dedupe, embed,
-                           then a probe that refreshes the status screen.
+                           work: slack, mail, twins, repair, dedupe, unread,
+                           embed, then a probe that refreshes the status screen.
                            dedupe is REPORTED and never applied — its merges
                            cannot be undone, so nothing unattended may apply
                            them. -q or -since bounds the mail query, -limit
@@ -171,6 +172,11 @@ const usage = `usage: corpus <command> [flags]
                            RFC 5233 +tag, split the address out of a display name
                            that swallowed it, clean display names cut off at a
                            bracket, and fold the people that split apart
+  unread                   read the mailbox's unread set and correct every
+                           stored UNREAD label that disagrees with it. The ingest
+                           reads a message's labels once, at ingest, so a corpus
+                           that never runs this reports "unread when it arrived"
+                           as "unread"; needs a mailbox, and writes only labels
   reindex                  rebuild the full-text and identifier search indexes
                            from the entries table. Only needed after a manual
                            wipe of the shadow tables, or when snippet() reports
@@ -660,6 +666,9 @@ func run(args []string) error {
 
 	case "repair":
 		return runRepair(path)
+
+	case "unread":
+		return runUnread(path)
 
 	case "reindex":
 		return runReindex(path)
