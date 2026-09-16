@@ -213,7 +213,15 @@
 /* The row the pane is showing. Marked with the same left rule the selected
    candidates use, so "this one is open" reads the same on both pages. */
 .ibrow.sel { background:var(--quote); box-shadow:inset 2px 0 0 var(--accent); }
-.ibchk { display:flex; align-items:flex-start; padding:.62rem .6rem 0 .35rem; cursor:pointer; }
+/* The tick's own box, and only the tick's: the row is a grid with
+   `align-items:stretch`, so without `align-self` this label stretched to the
+   height of the row and the whole right-hand strip below the box — the column
+   the time sits in — was one hit area for the checkbox. It is the top-right
+   corner now, which is where the tick is drawn and where the eye already is.
+   Padding all round so the hit area is the tick plus a little, not the
+   glyph. */
+.ibchk { display:flex; align-items:flex-start; align-self:start;
+  padding:.6rem .6rem .35rem .35rem; cursor:pointer; }
 .ibchk input { margin:0; cursor:pointer; }
 /* The row body is the thread, so it is one hit area of its own: a click opens
    the chain, and the tick beside it is only ever a selection. The tick follows
