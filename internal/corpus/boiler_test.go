@@ -3,6 +3,7 @@ package corpus
 import (
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/zachpmanson/chainmail/internal/boiler"
 )
@@ -191,3 +192,54 @@ func TestTheFixturesAreFoldedAtAll(t *testing.T) {
 			got.Lines, got.Senders, got.Scope, boiler.Domain)
 	}
 }
+
+// The cache's one hazard, and the reason its key is the body rather than the row:
+// ingest rewrites a message it has already stored when the mailbox's copy of it
+// changes (Put upserts on source+ext_id), and the fold has to follow the text.
+func TestARewrittenBodyIsReducedAgain(t *testing.T) {
+	s := signedCorpus(t)
+	ext := "mail:<ada-1@weave.example>"
+	id := idOf(t, s, ext)
+
+	// Reduce it once, so the answer is in the cache.
+	if _, err := s.BoilerplateFor([]int64{id}); err != nil {
+		t.Fatalf("folding before the rewrite: %v", err)
+	}
+
+	// The same message, re-ingested with a different body: same row, new text.
+	ada := sender(t, s, "ada@weave.example", "Ada Okoye")
+	if _, err := s.Put(Entry{
+		Source: SourceMail, ExtID: ext, TS: time.Unix(1_700_000_000, 0),
+		PersonID: ada, BodyText: rewrittenAda, BodyHTML: "<p>rewritten</p>",
+	}, &Mail{From: "Ada Okoye <ada@weave.example>"}, nil); err != nil {
+		t.Fatalf("re-ingesting: %v", err)
+	}
+
+	msgs, err := s.MailBodies()
+	if err != nil {
+		t.Fatalf("reading bodies after the rewrite: %v", err)
+	}
+	var got []string
+	for _, m := range msgs {
+		if m.ID == id {
+			got = m.Lines
+		}
+	}
+	if len(got) == 0 {
+		t.Fatal("the rewritten message is missing from the pass")
+	}
+	// The whole body, from the new text: the old opening is gone and the new one
+	// is there, so this is not the row's first reduction coming back.
+	if got[0] != "Roof access moves to the 21st." || got[len(got)-1] != "Ada" {
+		t.Errorf("lines: got %q, want the rewritten body's", got)
+	}
+	for _, line := range got {
+		if line == "Roof access is fine from the 14th." {
+			t.Errorf("lines: %q still holds the body from before the rewrite", got)
+		}
+	}
+}
+
+// rewrittenAda is a different body from adaBody, with the same two-line sign-off:
+// the lines have to come from the new text, not from the row's old reduction.
+const rewrittenAda = "Roof access moves to the 21st.\n\nRegards,\nAda\n"

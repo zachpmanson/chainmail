@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -71,7 +72,14 @@ type Attachment struct {
 }
 
 // Store is a corpus database.
-type Store struct{ db *sql.DB }
+type Store struct {
+	db *sql.DB
+
+	// bodies holds each mail body's reduction, keyed by entry id and guarded by
+	// bodiesMu. See reduced for why the cache key is the body itself.
+	bodiesMu sync.Mutex
+	bodies   map[int64]reduction
+}
 
 // Open opens (creating if absent) a corpus at path and applies any pending
 // migrations. Pass ":memory:" for a throwaway.
