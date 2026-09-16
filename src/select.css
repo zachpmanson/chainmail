@@ -254,10 +254,17 @@
   border:1px solid var(--line); border-radius:6px; background:var(--card);
   color:var(--fg); cursor:pointer; }
 @media (min-width:60rem) {
-  .ibsplit { grid-template-columns:minmax(0, 1fr) minmax(0, 1.15fr); align-items:start; }
-  /* Sticky and internally scrollable: the list scrolls under a pane that stays
-     put, so reading a long thread never means losing the list. */
-  .ibread { position:sticky; top:1rem; max-height:calc(100vh - 11rem); overflow:auto; }
+  /* The list is bounded and the pane takes whatever is left: a row is skimmed,
+     a thread is read, so the width goes where the reading is. */
+  .ibsplit { grid-template-columns:minmax(15rem, 24rem) minmax(0, 1fr); align-items:start; }
+  /* Both columns are viewport-tall and scroll themselves, so a long list runs
+     past a thread that keeps its heading — a mail client, not a page that grows
+     until the reader loses where they were. The list's box moves out to the
+     wrapper, which is what scrolls, so its edges stay put. */
+  .iblistwrap { max-height:calc(100vh - 12rem); overflow-y:auto;
+    border:1px solid var(--line); border-radius:9px; background:var(--card); }
+  .iblistwrap .iblist { border:0; border-radius:0; background:none; }
+  .ibread { position:sticky; top:1rem; max-height:calc(100vh - 12rem); overflow:auto; }
   .ibback { display:none; }
 }
 @media (max-width:59.99rem) {
