@@ -81,7 +81,12 @@ type corpusEntry struct {
 	// sender fully on hover. Absent where the entry has no From header of its own.
 	// The same expression a page build uses, so the two cannot name two addresses
 	// for one message.
-	FromEmail    string        `json:"fromEmail,omitempty"`
+	FromEmail string `json:"fromEmail,omitempty"`
+	// Org is the sender's organisation, resolved by the same function a page build
+	// uses, so a bubble in the pane and a bubble on the page cannot disagree about
+	// one sender. Absent where nothing established one, which is drawn as the
+	// unknown colour rather than as a group of its own.
+	Org          string        `json:"org,omitempty"`
 	Container    string        `json:"container,omitempty"`
 	Permalink    string        `json:"permalink,omitempty"`
 	Parent       string        `json:"parent,omitempty"`
@@ -259,6 +264,65 @@ type opsCandidate struct {
 type twinsDecline struct {
 	Reason string `json:"reason"`
 	Count  int    `json:"count"`
+}
+
+// orgRuleRequest is one reader's answer about one domain, in the three states a
+// grouping can be in: named (and so grouped with every other domain of that
+// name), empty — an organisation-less domain, which is a decision and not an
+// absence — or absent, which drops the rule and puts the domain back to being
+// read from its own name. A pointer for the same reason settingsRequest has one:
+// "I did not mention it" and "I want no rule" are different answers, and the
+// difference is the whole of what the reader is saying.
+type orgRuleRequest struct {
+	Domain string  `json:"domain"`
+	Org    *string `json:"org,omitempty"`
+}
+
+// orgRuleResponse is one domain as the Ops screen shows it: how much mail is
+// drawn from it and what that mail is drawn as.
+type orgRuleResponse struct {
+	Domain string `json:"domain"`
+	// Messages and People are the mail behind the rule — the entries whose own
+	// From header names this domain, and the distinct senders they came from. Mail
+	// recovered from a quote has no domain of its own and so is counted under its
+	// sender, not here; a change to this domain's grouping still moves it, which is
+	// what the preview counts.
+	Messages int `json:"messages"`
+	People   int `json:"people"`
+	// Org is the label this domain's mail is drawn under — the stored rule, or the
+	// name the domain itself gives. Absent where there is no label at all, which is
+	// both "the reader said it is not an organisation" and "nobody has looked at a
+	// domain whose own name gives nothing"; Stored tells the two apart, because a
+	// screen has to be able to say which of them it is showing.
+	Org    string `json:"org,omitempty"`
+	Stored bool   `json:"stored"`
+	// Guess is what the domain would be called with no rule at all, so that an
+	// undecided domain can be shown as itself rather than as a decision nobody
+	// made. Absent when the guess is nothing (freemail, a hostname, an address
+	// nothing can be read out of), which is the honest answer rather than "".
+	Guess string `json:"guess,omitempty"`
+}
+
+type orgsResponse struct {
+	Domains []orgRuleResponse `json:"domains"`
+}
+
+// orgShiftResponse is what one proposed rule would redraw. The counts come from
+// the resolver that will apply the rule, not from a second estimate of it — see
+// spec.OrgShiftFor — so a reader agreeing to a number here is agreeing to the
+// change the corpus will actually make.
+type orgShiftResponse struct {
+	Domain string `json:"domain"`
+	// Messages is how many entries would be drawn under a different organisation.
+	Messages int `json:"messages"`
+	// People is how many distinct senders those entries belong to.
+	People int `json:"people"`
+	// Ambiguous is the entries left out of both counts: their sender's own mail
+	// names two organisations and they have no address of their own, so which one
+	// colours them depends on the order a trail is read in. Reported rather than
+	// silently dropped, because the sentence above reads as a claim about all of
+	// them otherwise.
+	Ambiguous int `json:"ambiguous"`
 }
 
 // opsMergeRecord is one row of the person_merges trail: a merge that happened,
@@ -479,7 +543,8 @@ func toCorpusEntry(s corpus.Shown, r spec.Rendered) corpusEntry {
 	e := corpusEntry{
 		ExtID: s.ExtID, Source: s.Source, Quoted: s.Quoted, TS: stamp(s.TS),
 		TZ: s.TZ, TZOffsetMinutes: s.TZOffset, Author: s.Author, Subject: s.Subject,
-		Body: s.Body, HTML: r.HTML, To: r.To, FromEmail: r.FromEmail, Container: s.Container,
+		Body: s.Body, HTML: r.HTML, To: r.To, FromEmail: r.FromEmail, Org: r.Org,
+		Container: s.Container,
 		Permalink: s.Permalink,
 		Parent:    s.Parent, ParentRef: s.ParentRef,
 	}

@@ -189,6 +189,19 @@
 .optrails li { font-size:.8rem; line-height:1.5; padding:.3rem 0; }
 .optrails li .opwhy { display:block; font-size:.72rem; color:var(--muted); }
 
+/* The organisation rules: a text field sized to a domain rather than to the row,
+   because the row also carries the counts and the badges and a full-width field
+   would push the buttons off the end of a long one. Free text on purpose — a
+   domain is not chosen from the corpus, and a rule about mail that has not
+   arrived yet has to be writable. */
+.oporginput { font:inherit; font-size:.74rem; min-width:0; flex:0 1 12rem;
+  margin-right:.45rem; padding:.2rem .4rem; color:var(--fg);
+  background:var(--card); border:1px solid var(--line); border-radius:5px; }
+.oporginput:disabled { opacity:.55; }
+.oporgadd { display:flex; align-items:center; flex-wrap:wrap; gap:.35rem;
+  margin:.6rem 0 0; padding-top:.6rem; border-top:1px solid var(--line); }
+.oporgadd .oporginput { margin-right:0; }
+
 /* The inbox: the home page with no query. Same file as the selection stage for
    the same reason — these controls exist only in the browser, and the static
    transcript ships this stylesheet minus none of it. */

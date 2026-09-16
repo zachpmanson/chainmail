@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { $api, type OpsMerge, type OpsMergeRecord } from "../lib/api";
+import { OpsOrgs } from "./OpsOrgs";
 import { when } from "../lib/stamp";
 
 function errText(e: unknown): string {
@@ -81,6 +82,11 @@ function OneTrail(t: OpsMergeRecord) {
  * still hold. Tiers the plan shows read-only (first-name-and-org, webmail) have
  * no checkbox; the server refuses them anyway, so the boundary does not depend
  * on this screen's good behaviour.
+ *
+ * Organisations come first: they are the one setting here, and a merge below
+ * changes which person a bubble is *from* while a rule changes what colour it is
+ * drawn in. Both are answers only the reader can give, and both are shown with
+ * their consequence before they are written.
  */
 export function OpsView() {
   const qc = useQueryClient();
@@ -168,6 +174,8 @@ export function OpsView() {
         </p>
       ) : null}
       {last ? <p className="opnote">{last} — the plan below is the current one.</p> : null}
+
+      <OpsOrgs />
 
       <h2 className="ophead">Merge plan</h2>
       {applicable.length > 0 ? (

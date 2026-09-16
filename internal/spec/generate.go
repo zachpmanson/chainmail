@@ -41,9 +41,6 @@ type Options struct {
 	// already merged the rest of them into the same person, and the mark is
 	// about the human rather than the string (see builder.isMine).
 	Me []string
-	// Orgs maps a mail domain to an organisation label, overriding the label
-	// derived from the domain itself.
-	Orgs map[string]string
 
 	// UploadDir is the archive's upload root, where the downloader that fed the
 	// corpus kept attachment bytes. It is the second source for a preview: the
@@ -112,23 +109,34 @@ func Generate(store *corpus.Store, opts Options) (Spec, error) {
 		return Spec{}, err
 	}
 
+	// The rules the reader has stored are the rules this page is built under.
+	// There is deliberately no option to build against a set nobody has stored:
+	// an organisation is the reader's answer about their own mail, and a page
+	// that disagreed with the pane beside it about one sender's colour would
+	// make the colour mean nothing. Previewing a grouping that is not saved yet
+	// is a different question, answered by OrgShiftFor over the same resolver.
+	orgs, err := store.OrgRules()
+	if err != nil {
+		return Spec{}, fmt.Errorf("reading the org rules: %w", err)
+	}
+
 	b := &builder{
-		opts:        opts,
-		me:          me,
-		mePeople:    mePeople,
-		zones:       inferred,
-		zoneStats:   zoneStats,
-		ids:         newIDAllocator(),
-		idOf:        map[int64]string{},
-		subjOf:      map[int64]string{},
-		rowByID:     map[int64]*entryRow{},
-		cast:        newCast(),
-		part:        part,
-		addrs:       addrs,
-		badZones:    map[string]int{},
-		zoneWhy:     map[string]string{},
-		orgByPerson: map[int64]string{},
-		prev:        &previewer{dir: opts.UploadDir, blob: opts.Blobs},
+		opts:      opts,
+		me:        me,
+		mePeople:  mePeople,
+		zones:     inferred,
+		zoneStats: zoneStats,
+		ids:       newIDAllocator(),
+		idOf:      map[int64]string{},
+		subjOf:    map[int64]string{},
+		rowByID:   map[int64]*entryRow{},
+		cast:      newCast(),
+		part:      part,
+		addrs:     addrs,
+		badZones:  map[string]int{},
+		zoneWhy:   map[string]string{},
+		orgs:      newOrgResolver(orgs, addrs),
+		prev:      &previewer{dir: opts.UploadDir, blob: opts.Blobs},
 	}
 	for _, r := range rows {
 		b.rowByID[r.ID] = r
@@ -136,13 +144,10 @@ func Generate(store *corpus.Store, opts Options) (Spec, error) {
 		// entry has no mail_detail row to take an address from — so 41 of 57
 		// entries on a real page had no org at all, while the same people's
 		// direct entries did. The person is known either way, so their org is
-		// carried across from wherever it was resolvable.
+		// carried across from wherever it was resolvable — which is what the
+		// resolver's recording half does.
 		if r.PersonID != 0 {
-			if _, ok := b.orgByPerson[r.PersonID]; !ok {
-				if org := orgOf(parseAddr(r.From).Address, opts.Orgs); org != "" {
-					b.orgByPerson[r.PersonID] = org
-				}
-			}
+			b.orgs.note(r.PersonID, parseAddr(r.From).Address)
 		}
 	}
 	// Attribute every inline (cid) image to the quoted message that placed it
@@ -200,11 +205,11 @@ type builder struct {
 	addrs map[int64][]string
 
 	badZones map[string]int // unresolvable zone label -> entries affected
-	// orgByPerson carries an org across a person's entries: their direct mail
-	// says which organisation they are at, and their quote-recovered entries
-	// have no address to say it again.
-	orgByPerson map[int64]string
-	orphans     int // entries naming a parent that is not in this spec
+	// orgs decides who is at which organisation, and carries an org across a
+	// person's entries — the one resolver the transcript's colours and the
+	// panel's grouping both go through.
+	orgs    *orgResolver
+	orphans int // entries naming a parent that is not in this spec
 
 	// zones is what each entry's clock turned out to mean, keyed by corpus id;
 	// zoneStats is the distribution, which is what the source notes report. A
@@ -729,37 +734,11 @@ func firstNonEmpty(vs ...string) string {
 	return ""
 }
 
-// orgFor names the organisation behind one appearance of a person, taking the
-// strongest evidence available: the address on this appearance, then an address
-// the same person used on another entry here, then any address the corpus holds
-// for them.
-//
-// It is the only resolver, and both the entry's colour and their participants row
-// go through it. Resolving a person's org twice is what drifts: the panel read
-// the corpus and a bubble read the header, so on the reference trail two people
-// were named at an org in the panel and left uncoloured in the transcript, and a
-// panel that disagrees with the page it is a key to is worse than no colour.
-//
-// The corpus step is what a quote-recovered entry needs, having no header of its
-// own. It never invents an org: every step reads a real address belonging to that
-// same person. Someone with no resolvable address anywhere stays without one,
-// which the renderer shows as the unknown slot.
-//
-// One person therefore has one org for the whole page. Someone who changed
-// employer mid-trail is shown at whichever of the two their mail resolved to
-// first, rather than switching colour partway down — an ordering artefact, and
-// the cost of being able to read the panel as the key to the transcript.
+// orgFor names the organisation behind one appearance of a person. The steps —
+// this appearance's own address, then the person's org as this trail first
+// established it, then any address the corpus holds for them — live in
+// orgResolver, so a page and the home pane cannot resolve the same sender twice
+// and disagree. See newOrgResolver.
 func (b *builder) orgFor(person int64, address string) string {
-	if org := orgOf(address, b.opts.Orgs); org != "" {
-		return org
-	}
-	if org := b.orgByPerson[person]; org != "" {
-		return org
-	}
-	for _, a := range b.addrs[person] {
-		if org := orgOf(a, b.opts.Orgs); org != "" {
-			return org
-		}
-	}
-	return ""
+	return b.orgs.org(person, address)
 }

@@ -3,6 +3,8 @@ package spec
 import (
 	"testing"
 	"time"
+
+	"github.com/zachpmanson/chainmail/internal/corpus"
 )
 
 // entryID must stay in lockstep with entryId in src/lib/anchors.ts: the ids
@@ -97,7 +99,7 @@ func TestStampRendersTheStatedZone(t *testing.T) {
 	}
 }
 
-func TestOrgOf(t *testing.T) {
+func TestOrgForDomain(t *testing.T) {
 	cases := []struct {
 		in, want string
 	}{
@@ -110,12 +112,19 @@ func TestOrgOf(t *testing.T) {
 		{"eve@localhost", ""},
 	}
 	for _, c := range cases {
-		if got := orgOf(c.in, nil); got != c.want {
-			t.Errorf("orgOf(%q) = %q, want %q", c.in, got, c.want)
+		if got, _ := OrgForDomain(corpus.MailDomain(c.in), nil); got != c.want {
+			t.Errorf("OrgForDomain(%q) = %q, want %q", c.in, got, c.want)
 		}
 	}
-	if got := orgOf("ada@loomworks.example", map[string]string{"loomworks.example": "The Loom"}); got != "The Loom" {
-		t.Errorf("override ignored: %q", got)
+	if got, _ := OrgForDomain(corpus.MailDomain("ada@loomworks.example"),
+		map[string]string{"loomworks.example": "The Loom"}); got != "The Loom" {
+		t.Errorf("a stored rule ignored: %q", got)
+	}
+	// A rule that names no organisation is a decision, not an absence: it is the
+	// difference between the reader having looked and the corpus guessing.
+	if got, decided := OrgForDomain(corpus.MailDomain("ada.doe@bigpond.com"),
+		map[string]string{"bigpond.com": ""}); got != "" || !decided {
+		t.Errorf("an empty rule = %q, decided %v; want it to stop the search", got, decided)
 	}
 }
 

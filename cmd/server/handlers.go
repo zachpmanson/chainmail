@@ -149,6 +149,15 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("/v1/attachments/{sha}", get(s.attachment))
 	mux.HandleFunc("/v1/ops/plan", get(s.opsPlan))
 	mux.HandleFunc("/v1/ops/merge", post(s.opsMerge))
+	// The colour rules: one path for the list and the write, because a rule is one
+	// resource and every write answers with the rules as they now stand. The
+	// preview beside it is a POST because it is a question about a set of rules
+	// nobody has stored — there is nothing to GET.
+	mux.HandleFunc("/v1/ops/orgs", methods(map[string]http.HandlerFunc{
+		http.MethodGet:  s.opsOrgs,
+		http.MethodPost: s.setOpsOrg,
+	}))
+	mux.HandleFunc("/v1/ops/orgs/preview", post(s.opsOrgsPreview))
 	mux.HandleFunc("/v1/search", get(s.search))
 	mux.HandleFunc("/v1/slurp", post(s.slurp))
 	mux.HandleFunc("/v1/status", get(s.status))
@@ -1295,6 +1304,134 @@ func (s *server) opsMerge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	send(w, http.StatusOK, opsMergeResponse{Merge: rec})
+}
+
+// opsOrgs lists every mail domain the corpus holds mail from, with the mail
+// behind it and the organisation that mail is drawn as.
+//
+// A separate endpoint from /v1/ops/plan because the two answer independently — a
+// colour rule does not move when a pair of people is merged — and this is much
+// the cheaper of the two: one pass over the mail the corpus holds, without the
+// dedupe or twins passes.
+func (s *server) opsOrgs(w http.ResponseWriter, r *http.Request) {
+	out, err := s.orgRules()
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	send(w, http.StatusOK, out)
+}
+
+// orgRules is the list as both halves of the surface answer it: a writer that
+// says what it stored in the same terms the reader read it in, and a reader that
+// sees the rules as they now stand rather than as it asked for them.
+func (s *server) orgRules() (orgsResponse, error) {
+	ds, err := s.store.SenderDomains()
+	if err != nil {
+		return orgsResponse{}, fmt.Errorf("listing the sender domains: %w", err)
+	}
+	out := orgsResponse{Domains: make([]orgRuleResponse, 0, len(ds))}
+	for _, d := range ds {
+		// The guess is what an undecided domain is drawn as. It is derived here
+		// rather than taken from a build's resolver because for a domain there is
+		// only the domain: the person-side half of a build's answer is about the
+		// trail, and this screen is about the corpus.
+		guess, _ := spec.OrgForDomain(d.Domain, nil)
+		org := guess
+		if d.Stored {
+			org = d.Org
+		}
+		out.Domains = append(out.Domains, orgRuleResponse{
+			Domain: d.Domain, Messages: d.Messages, People: d.People,
+			Org: org, Stored: d.Stored, Guess: guess,
+		})
+	}
+	return out, nil
+}
+
+// setOpsOrg records what one domain is: a named organisation, an organisation-less
+// domain, or nothing at all — the last of those putting the domain back to being
+// read from its own name.
+func (s *server) setOpsOrg(w http.ResponseWriter, r *http.Request) {
+	domain, org, ok := s.readOrgRule(w, r)
+	if !ok {
+		return
+	}
+	if org == nil {
+		if err := s.store.ClearOrgRule(domain); err != nil {
+			fail(w, http.StatusInternalServerError, err)
+			return
+		}
+	} else if err := s.store.PutOrgRule(domain, *org); err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	s.opsOrgs(w, r)
+}
+
+// opsOrgsPreview answers what one proposed rule would redraw, storing nothing.
+// This is the shape the rest of Ops is built on: the consequence is shown before
+// the write, and it is computed by the resolver that will do the work rather than
+// by a second estimate of it. See spec.OrgShiftFor.
+func (s *server) opsOrgsPreview(w http.ResponseWriter, r *http.Request) {
+	domain, org, ok := s.readOrgRule(w, r)
+	if !ok {
+		return
+	}
+	stored, err := s.store.OrgRules()
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	// A copy: a preview may not be able to change what is stored, and OrgShiftFor
+	// reads the stored set itself to know what the corpus is drawn as now.
+	proposed := make(map[string]string, len(stored)+1)
+	for d, o := range stored {
+		proposed[d] = o
+	}
+	if org == nil {
+		delete(proposed, domain)
+	} else {
+		proposed[domain] = *org
+	}
+	shift, err := spec.OrgShiftFor(s.store, proposed)
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	send(w, http.StatusOK, orgShiftResponse{
+		Domain: domain, Messages: shift.Messages, People: shift.People,
+		Ambiguous: shift.Ambiguous,
+	})
+}
+
+// readOrgRule decodes the one body both writes take. The domain is lowercased
+// and trimmed — a domain is case-insensitive, and "Termina.IO" and "termina.io"
+// being two rules is a pair that exists only to get out of step — and the label
+// is trimmed but not otherwise judged: a label is prose the reader chose, and the
+// corpus has no business correcting it.
+func (s *server) readOrgRule(w http.ResponseWriter, r *http.Request) (string, *string, bool) {
+	var in orgRuleRequest
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequestBody))
+	// A misspelled field is a caller reading a different contract, and storing a
+	// rule they did not ask for is worse than refusing.
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&in); err != nil {
+		fail(w, http.StatusBadRequest, fmt.Errorf("reading the request body: %w", err))
+		return "", nil, false
+	}
+	domain := strings.ToLower(strings.TrimSpace(in.Domain))
+	if domain == "" {
+		fail(w, http.StatusBadRequest, errors.New(
+			"a rule needs a domain: the domain is what a rule is about, and one about "+
+				"nothing has no mail to colour"))
+		return "", nil, false
+	}
+	if in.Org == nil {
+		return domain, nil, true
+	}
+	org := strings.TrimSpace(*in.Org)
+	return domain, &org, true
 }
 
 // opsApplicable is the boundary the review UI's apply surface is drawn to: the

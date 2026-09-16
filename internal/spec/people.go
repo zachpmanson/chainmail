@@ -172,35 +172,108 @@ var freemail = map[string]bool{
 	"bigpond.com": true, "bigpond.net.au": true, "xtra.co.nz": true,
 }
 
-// orgOf names the organisation behind an address. `org` drives nothing but
-// colour and the panel's grouping, and the mail domain is the only org evidence
-// the corpus holds — people.org exists but nothing populates it — so it is
-// derived from the domain: the label to the left of any public suffix,
-// capitalised. Options.Orgs overrides it wherever that guess reads badly
-// ("mail.acme-group.example" -> "Acme").
-func orgOf(address string, overrides map[string]string) string {
-	i := strings.LastIndex(address, "@")
-	if i < 0 {
-		return ""
+// OrgForDomain names the organisation a mail domain belongs to, and says
+// whether that is a decision.
+//
+// Three answers, and the third is not the second: a label; an empty label
+// because the domain is not an organisation (a stored rule saying so); or no
+// answer at all. The first two are decisions and stop the search — that is what
+// makes "bigpond.com is not an organisation" mean something rather than being
+// walked past on the way to the person's other address. The third, no answer,
+// lets the caller look elsewhere.
+//
+// A freemail domain is no answer rather than a decision. Gmail is not an
+// organisation and nothing should be coloured "Gmail"; but a person who also
+// mails from a work address is still at work, so freemail must not stop the
+// search. Only an explicit stored rule can.
+//
+// The derivation, for a domain nobody has ruled on: trim the public suffix —
+// two labels for the .co.nz / .com.au forms, one otherwise — and take the label
+// to its left, capitalised. A stored rule overrides it wherever that guess reads
+// badly ("mail.acme-group.example" -> "Acme").
+//
+// rules is the set of decisions in force, not necessarily the stored one: a
+// build passes what the reader has saved, and the Ops preview passes that set
+// with one proposed change in it, so the consequence of a rule is computed by
+// the same resolver that will apply it.
+func OrgForDomain(domain string, rules map[string]string) (org string, decided bool) {
+	domain = strings.ToLower(strings.TrimSpace(domain))
+	if domain == "" {
+		return "", false
 	}
-	domain := strings.ToLower(address[i+1:])
-	if org, ok := overrides[domain]; ok {
-		return org
+	if org, ok := rules[domain]; ok {
+		return org, true
 	}
 	if freemail[domain] {
-		return ""
+		return "", false
 	}
-	// Trim the public suffix — two labels for the .co.nz / .com.au forms, one
-	// otherwise — and take the label immediately to its left as the org name.
 	labels := strings.Split(domain, ".")
 	if len(labels) < 2 {
-		return ""
+		return "", false
 	}
 	labels = labels[:len(labels)-1]
 	if len(labels) > 1 && twoLevelSuffix[labels[len(labels)-1]] {
 		labels = labels[:len(labels)-1]
 	}
-	return capitalise(labels[len(labels)-1])
+	return capitalise(labels[len(labels)-1]), true
+}
+
+// orgResolver decides a person's organisation, once, for every surface that
+// colours a message.
+//
+// It exists because there are two such surfaces — a built page and the home
+// pane's chain read — and the rule has more than one step: this appearance's own
+// address, then the first org the person's own mail established, then any other
+// address the corpus holds for them. Written twice, the two would eventually
+// disagree about one sender, and the colour would mean nothing rather than
+// something.
+//
+// The recording half is what carries an org across a person's entries: their
+// direct mail says which organisation they are at, and their quote-recovered
+// entries have no address to say it again. It is first-appearance order, so
+// someone who changed employer mid-trail is shown at whichever of the two their
+// mail resolved to first rather than switching colour partway down — an
+// ordering artefact, and the price of being able to read one panel as the key to
+// the transcript.
+type orgResolver struct {
+	rules map[string]string
+	// addrs is every address the corpus holds for a person, not just the ones in
+	// this selection, so a person's colour does not move when the selection does.
+	addrs    map[int64][]string
+	byPerson map[int64]string
+}
+
+func newOrgResolver(rules map[string]string, addrs map[int64][]string) *orgResolver {
+	return &orgResolver{rules: rules, addrs: addrs, byPerson: map[int64]string{}}
+}
+
+// note resolves one appearance and records the first org this person's own mail
+// establishes. Call it in the order the trail is read in.
+func (r *orgResolver) note(person int64, address string) string {
+	if _, known := r.byPerson[person]; !known {
+		if org, decided := OrgForDomain(corpus.MailDomain(address), r.rules); decided && org != "" {
+			r.byPerson[person] = org
+		}
+	}
+	return r.org(person, address)
+}
+
+// org resolves one appearance without recording anything.
+func (r *orgResolver) org(person int64, address string) string {
+	if org, decided := OrgForDomain(corpus.MailDomain(address), r.rules); decided {
+		return org
+	}
+	if org := r.byPerson[person]; org != "" {
+		return org
+	}
+	for _, a := range r.addrs[person] {
+		// A rule saying one of the person's addresses is not an organisation is a
+		// rule about that address, so the loop keeps looking rather than stopping.
+		if org, decided := OrgForDomain(corpus.MailDomain(a), r.rules); decided && org != "" {
+			return org
+		}
+	}
+	return ""
 }
 
 // twoLevelSuffix lists the generic labels that only ever appear as the middle of
@@ -423,23 +496,44 @@ func loadParticipation(db *sql.DB, ids []int64) (map[int64][]partRow, map[int64]
 	if len(people) == 0 {
 		return byEntry, map[int64][]string{}, nil
 	}
-	ph, args = placeholders(keys(people))
-	addrs, err := db.Query(`
-		select person_id, value from identities
-		where kind = 'email' and person_id in (`+ph+`)
-		order by person_id, value`, args...)
+	byPerson, err := loadAddresses(db, people)
 	if err != nil {
-		return nil, nil, fmt.Errorf("loading the addresses of the cast: %w", err)
+		return nil, nil, err
 	}
-	defer addrs.Close()
+	return byEntry, byPerson, nil
+}
+
+// loadAddresses reads every email address the corpus holds for the given people,
+// in a stable order. Values are lowercased: an address here is compared, not
+// shown.
+//
+// A nil people map reads every person the corpus knows, which is what a
+// corpus-wide question needs (OrgShiftFor). It must be the corpus's whole record
+// rather than the addresses in some selection: this is the fallback a person's
+// colour is resolved from, and someone whose only address on one page is a
+// personal one is still at work if the corpus holds a work address of theirs.
+func loadAddresses(db *sql.DB, people map[int64]bool) (map[int64][]string, error) {
+	query := `select person_id, value from identities where kind = 'email'`
+	args := []any{}
+	if people != nil {
+		ph, vals := placeholders(keys(people))
+		query += ` and person_id in (` + ph + `)`
+		args = vals
+	}
+	query += ` order by person_id, value`
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("loading addresses: %w", err)
+	}
+	defer rows.Close()
 	byPerson := map[int64][]string{}
-	for addrs.Next() {
+	for rows.Next() {
 		var id int64
 		var v string
-		if err := addrs.Scan(&id, &v); err != nil {
-			return nil, nil, err
+		if err := rows.Scan(&id, &v); err != nil {
+			return nil, err
 		}
 		byPerson[id] = append(byPerson[id], strings.ToLower(v))
 	}
-	return byEntry, byPerson, addrs.Err()
+	return byPerson, rows.Err()
 }

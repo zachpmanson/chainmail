@@ -145,6 +145,11 @@ export type OpsMerge = components["schemas"]["OpsMerge"];
 
 export type OpsMergeRecord = components["schemas"]["OpsMergeRecord"];
 
+/** One domain's mail, as the organisations screen shows it: what the mail is drawn
+ *  as, whether that is the reader's own answer or the corpus's guess, and how much
+ *  mail is behind it. */
+export type OrgRule = components["schemas"]["OrgRuleResponse"];
+
 /** Every input that changes the result set, before the blanks are dropped. */
 export interface SearchParams {
   q: string;
