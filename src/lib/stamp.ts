@@ -17,8 +17,13 @@ const CLOCK = new Intl.DateTimeFormat("en-GB", {
   hour12: false,
 });
 
-const DAY = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" });
+const ISO_DAY = new Intl.DateTimeFormat("en-CA", {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
 
+const DAY = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" });
 const DAY_YEAR = new Intl.DateTimeFormat("en-GB", {
   day: "numeric",
   month: "short",
@@ -28,6 +33,18 @@ const DAY_YEAR = new Intl.DateTimeFormat("en-GB", {
 /** "20:51" — a clock, 24-hour, wherever the reader is. */
 export function clock(at: Date): string {
   return CLOCK.format(at);
+}
+
+/**
+ * "2026-09-16" — a date with nothing to interpret, in the reader's own zone.
+ *
+ * ISO order and padding, and `en-CA` because it is the one locale that prints a
+ * date that way. Used for the deploy stamp, where the date is a fact to match
+ * against a commit rather than a phrase to read: "16 Sept" is a nicer sentence
+ * and a worse thing to compare two of.
+ */
+export function isoDay(at: Date): string {
+  return ISO_DAY.format(at);
 }
 
 /** "16 Sep", or "16 Sep 2025" when it is not this year. */

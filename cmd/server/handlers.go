@@ -124,6 +124,14 @@ type server struct {
 	// loginPort is the port this server bound, used to spell the Google-
 	// accepted pathless redirect URI http://localhost:<port>.
 	loginPort string
+
+	// rev is the revision this binary was built from, passed in by whatever
+	// started it (`-rev`), and startedAt is when this process came up. Together
+	// they are the deploy stamp the header shows: what is running, and since when.
+	// Neither is a fact about the corpus, which is why they are fields on the
+	// server rather than anything the store is asked about.
+	rev       string
+	startedAt time.Time
 }
 
 // routes maps the surface api/openapi.json declares, and nothing else.
@@ -151,6 +159,11 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("/v1/chains/{rootExtId}", get(s.chain))
 	mux.HandleFunc("/v1/stats", get(s.stats))
 	mux.HandleFunc("/v1/labels", get(s.labels))
+	// The deploy stamp: what is running and since when. Served rather than baked
+	// into the bundle because the bundle is the same bytes across deploys of one
+	// revision — the thing that changes when a fix goes live is the process, and
+	// a stamp baked at build time could not say so.
+	mux.HandleFunc("/v1/version", get(s.version))
 	// GET reads the settings, POST writes them: one path, because a preference is
 	// one resource rather than a collection of endpoints.
 	mux.HandleFunc("/v1/settings", methods(map[string]http.HandlerFunc{
@@ -1470,6 +1483,22 @@ func (s *server) labels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	send(w, http.StatusOK, toLabelsResponse(ls))
+}
+
+// version is the deploy stamp. It reads two things the process knows about
+// itself and nothing about the mail: the revision it was started with, and when
+// it started.
+//
+// Deliberately not baked into the bundle. The bundle is byte-identical across
+// deploys of one revision, so a stamp built into it cannot distinguish "the new
+// code is live" from "my tab is still the old one" — which is the only question
+// this answers. StartedAt is the process's own clock: for a deploy that is when
+// it went live.
+func (s *server) version(w http.ResponseWriter, r *http.Request) {
+	send(w, http.StatusOK, versionResponse{
+		Rev:       s.rev,
+		StartedAt: s.startedAt.UTC().Format(time.RFC3339),
+	})
 }
 
 // getSettings reads the choices that are about the reader rather than about the

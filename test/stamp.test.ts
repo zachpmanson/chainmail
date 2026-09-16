@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clock, day, when, whenShort } from "../src/lib/stamp";
+import { clock, day, isoDay, when, whenShort } from "../src/lib/stamp";
 
 /**
  * The app's clocks, which are one shape on every surface.
@@ -52,8 +52,7 @@ describe("a stamp", () => {
   });
 });
 
-describe("a row's date", () => {
-  it("is a clock today, a word yesterday, and a date after that", () => {
+describe("a row's date", () => {  it("is a clock today, a word yesterday, and a date after that", () => {
     expect(whenShort(at(2026, 8, 16, 14, 30).toISOString(), now)).toBe("14:30");
     expect(whenShort(at(2026, 8, 15, 14, 30).toISOString(), now)).toBe("Yesterday");
     expect(whenShort(at(2026, 2, 11, 9, 0).toISOString(), now)).toBe("11 Mar");
@@ -66,5 +65,23 @@ describe("a row's date", () => {
     const justAfterMidnight = at(2026, 8, 17, 0, 10);
     expect(whenShort(at(2026, 8, 16, 23, 50).toISOString(), justAfterMidnight)).toBe("Yesterday");
     expect(whenShort(at(2026, 8, 17, 0, 5).toISOString(), justAfterMidnight)).toBe("00:05");
+  });
+});
+
+describe("an ISO date", () => {
+  it("is ordered and padded, so two stamps can be compared", () => {
+    // The deploy stamp's date: "16 Sept" is a nicer sentence and a worse thing to
+    // hold two of side by side.
+    expect(isoDay(at(2026, 8, 16, 23, 21))).toBe("2026-09-16");
+    expect(isoDay(at(2026, 0, 5, 0, 0))).toBe("2026-01-05");
+  });
+
+  it("is the reader's own day, not UTC's", () => {
+    // 13:21 UTC on the 16th is the 17th in Auckland and still the 16th in
+    // Melbourne, and the reader is shown their own day: a stamp is read at a
+    // desk. Built from a real instant so the shift is the zone's, not a fixture's.
+    const instant = new Date("2026-09-16T13:21:23Z");
+    const local = instant.toLocaleDateString("en-CA");
+    expect(isoDay(instant)).toBe(local);
   });
 });

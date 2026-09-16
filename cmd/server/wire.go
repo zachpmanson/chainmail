@@ -150,6 +150,26 @@ type labelsResponse struct {
 	Labels []labelSummary `json:"labels"`
 }
 
+// versionResponse is the deploy stamp the header shows: the revision this
+// process was built from, and when it started. The two are served together
+// because neither answers the question alone — a hash with no date cannot say
+// whether it is the build from a minute ago or from last week, and a date with
+// no hash cannot say what is running.
+type versionResponse struct {
+	// rev is the revision this binary was built from. Empty where nobody told the
+	// process which one it is — a `go run` under the devshell, a build outside
+	// nix — and empty is served as absent rather than as a guess: a stamp naming
+	// the wrong commit is worse than no stamp, because it is the thing a reader
+	// checks to decide whether a fix is live.
+	Rev string `json:"rev,omitempty"`
+	// StartedAt is when this process came up (RFC 3339). For a deploy that is
+	// when it went live, and for a restart it is when it restarted — which is why
+	// a changed date with an unchanged rev reads as a restart rather than as a
+	// deploy. The reader is shown the day this falls on in their own zone: a stamp
+	// is read at a desk, not on a server.
+	StartedAt string `json:"startedAt"`
+}
+
 // settingsResponse is the reader's own choices, which are not facts about the
 // mail. Absent means the choice has not been made — a folder the home page opens
 // in by default, or no such folder — so a client cannot mistake "unset" for a

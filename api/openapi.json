@@ -640,6 +640,25 @@
         }
       }
     },
+    "/v1/version": {
+      "get": {
+        "summary": "What is running, and since when.",
+        "description": "The deploy stamp: the revision this process was built from and when it started. Served rather than baked into the bundle, because the bundle is byte-identical across deploys of one revision \u2014 a stamp built into it could not tell \"the new code is live\" from \"this tab is still the old build\", which is the only question it answers. A changed startedAt with an unchanged rev is a restart, not a deploy. rev is omitted when nobody told the process which revision it is (a `go run` under the devshell), because a stamp naming the wrong commit is worse than no stamp.",
+        "operationId": "getVersion",
+        "responses": {
+          "200": {
+            "description": "The deploy stamp.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/settings": {
       "get": {
         "summary": "The reader's own choices, which are not facts about the mail.",
@@ -1357,6 +1376,24 @@
             "items": {
               "$ref": "#/components/schemas/LabelSummary"
             }
+          }
+        }
+      },
+      "VersionResponse": {
+        "type": "object",
+        "description": "The deploy stamp: what is running and since when, for the header.",
+        "required": [
+          "startedAt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "rev": {
+            "type": "string",
+            "description": "The revision this process was built from. Absent when nobody told the process which revision it is \u2014 the header then shows no stamp, rather than a commit this code cannot know."
+          },
+          "startedAt": {
+            "type": "string",
+            "description": "When this process came up, RFC 3339 in UTC. For a deploy that is when it went live; a changed value with an unchanged rev is a restart."
           }
         }
       },

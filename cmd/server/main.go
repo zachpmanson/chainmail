@@ -67,9 +67,18 @@ func run(args []string) error {
 			"reaches the mailbox, once per attachment part, and a host that does not "+
 			"grant it answers 403. The credential is the mail grant this unit already "+
 			"reads, so the switch changes when a fetch runs, not what it may touch.")
+	// The deploy stamp's revision, passed in by the unit that starts this binary.
+	// Empty is honest for a build nobody labelled: the header then shows nothing
+	// rather than a commit this code cannot know.
+	rev := fs.String("rev", "",
+		"revision this binary was built from, shown as the page's deploy stamp")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+
+	// When this process came up, read once: it is the deploy stamp's date, and a
+	// value re-read per request would drift away from the start it claims to be.
+	startedAt := time.Now()
 
 	// The bind is checked before the corpus is opened, so a refused address
 	// costs nothing and cannot half-start.
@@ -103,6 +112,8 @@ func run(args []string) error {
 		runMediaPull: defaultMediaPull(store, *uploads),
 		specSlots:    make(chan struct{}, specConcurrency),
 		slotWait:     specSlotWait,
+		rev:          *rev,
+		startedAt:    startedAt,
 		loginPort:    port,
 		embedder: func() *mailembed.Ollama {
 			return &mailembed.Ollama{BaseURL: *url, Name: *model, Dimension: *dim,

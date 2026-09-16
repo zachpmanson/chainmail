@@ -22,6 +22,7 @@ import { Rendered } from "./components/Rendered";
 import { StatusView } from "./components/StatusView";
 import { SpecsView } from "./components/SpecsView";
 import { OpsView } from "./components/OpsView";
+import { DeployStamp } from "./components/DeployStamp";
 import type { SearchMode } from "./lib/api";
 
 /**
@@ -250,7 +251,13 @@ function RootLayout() {
         <Link to="/status">Services</Link>
         <span className="sep">·</span>
         <Link to="/ops">Ops</Link>
-        <NavSearch />
+        {/* The stamp and the search box travel together: the stamp is about the
+            build this page was served from, and the search is the app's one way
+            in — both are site-level, both sit at the end of the nav. */}
+        <span className="navright">
+          <DeployStamp />
+          <NavSearch />
+        </span>
       </header>
       <SignInBar />
       <Outlet />

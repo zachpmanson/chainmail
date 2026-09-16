@@ -167,6 +167,12 @@ func testServer(t *testing.T) *harness {
 		embedWait: 2 * time.Second,
 		// The auth flows host the Google redirect on the bound port.
 		loginPort: "9876",
+		// A deploy stamp, so /v1/version has something to serve: a test that
+		// asserted an empty answer would pass just as happily against a handler
+		// that never filled the field in. startedAt is a fixed instant, not now(),
+		// so the test says nothing about when it ran.
+		rev:       "c0ffee1234567890abcdef1234567890abcdef12",
+		startedAt: time.Date(2026, 9, 16, 13, 21, 23, 0, time.UTC),
 		// Pointed at a port nothing listens on, so mode=semantic exercises the
 		// daemon-down path without needing ollama absent from the machine.
 		embedder: func() *embed.Ollama {
