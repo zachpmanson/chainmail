@@ -69,6 +69,11 @@
      none` could say otherwise. The same rule broke four document pages (#125). */
   .wrap.selwrap, .wrap.ibwrap, .wrap.statuswrap, .wrap.opswrap {
     max-width:none; width:100%; margin-left:0; margin-right:0; }
+  /* And no vertical padding. A workspace fills the window, so space above and
+     below its panels is space the panels could have had — the nav above and the
+     page's own horizontal margin are the only gaps it needs. The reading pane's
+     last message now lands on the bottom edge, which is where a scroller ends. */
+  .wrap.ibwrap { padding-top:0; padding-bottom:0; }
   header.sitehead .sep { margin:0 .45rem; color:var(--line); }
   /* The site's name, and the link home: it is the one nav item that is not a
      page, so it is weighted like a title and sits in the same bar. */
