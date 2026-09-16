@@ -61,6 +61,10 @@ export interface SearchParams {
   mode?: SearchMode;
   person?: string;
   since?: string;
+  /** The folder the list is showing: a mailbox label, and a filter rather than
+   *  a query — it narrows the same list the inbox shows and leaves the ordering
+   *  alone. Optional, so `/` is every folder at once. */
+  label?: string;
   /** The chain the inbox has open. Not a filter — the search route answers it
    *  nothing — but it lives in the URL for the same reason the query does: a
    *  reader who reloads, or sends the address to themselves, means to come back
@@ -78,6 +82,7 @@ function validateSearchParams(search: Record<string, unknown>): SearchParams {
     mode: isMode(search.mode) ? search.mode : undefined,
     person: typeof search.person === "string" ? search.person : undefined,
     since: typeof search.since === "string" ? search.since : undefined,
+    label: typeof search.label === "string" ? search.label : undefined,
     open: typeof search.open === "string" ? search.open : undefined,
   };
 }

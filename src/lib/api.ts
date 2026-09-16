@@ -151,6 +151,10 @@ export interface SearchParams {
   mode: SearchMode;
   person?: string;
   since?: string;
+  /** A mailbox label — a folder. It selects chains with a message carrying it
+   *  and nothing else: no ranking input, so the answer stays the inbox in time
+   *  order. */
+  label?: string;
   /** The inbox's cursor: only chains whose newest message is at or before this
    * instant. A full timestamp rather than a date, because a page boundary
    * inside a day would otherwise repeat or drop that day's threads. */
@@ -172,6 +176,7 @@ export function searchQuery(p: SearchParams) {
     mode: p.mode,
     ...(p.person ? { person: p.person } : {}),
     ...(p.since ? { since: p.since } : {}),
+    ...(p.label ? { label: p.label } : {}),
     ...(p.before ? { before: p.before } : {}),
     ...(p.limit ? { limit: p.limit } : {}),
     ...(p.entries ? { entries: true } : {}),

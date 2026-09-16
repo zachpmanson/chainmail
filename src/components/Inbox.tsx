@@ -66,6 +66,97 @@ function newest(chain: ChainHit): EntryHit | undefined {
   return out;
 }
 
+/**
+ * The folder button, and the popup it opens: the mailbox's own labels, which are
+ * what a reader means by a folder. Nothing here decides what a folder should be —
+ * the list is what Gmail filed the mail under, with the counts it carries, and
+ * the button says which one the list below is showing.
+ *
+ * A popup rather than a second sidebar column: the list is already the narrow
+ * column, and a folder list that is always open would cost the rows width to say
+ * something that is read once and then acted on.
+ */
+function Folders({ current, onPick }: { current?: string; onPick: (name?: string) => void }) {
+  const folders = $api.useQuery("get", "/v1/labels", {});
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement | null>(null);
+
+  // Closing on a click elsewhere and on Escape: a popup that closed only when
+  // its own button was found again is one a reader gets stuck behind.
+  useEffect(() => {
+    if (!open) return;
+    const away = (ev: MouseEvent) => {
+      if (box.current && !box.current.contains(ev.target as Node)) setOpen(false);
+    };
+    const esc = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", away);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", away);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [open]);
+
+  const labels = folders.data?.labels ?? [];
+  const pick = (name?: string) => {
+    setOpen(false);
+    onPick(name);
+  };
+
+  return (
+    <div className="ibfolders" ref={box}>
+      <button
+        type="button"
+        className="ibfbtn"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="ibfname">{current ?? "All mail"}</span>
+        <span className="ibfcaret" aria-hidden="true">
+          ▾
+        </span>
+      </button>
+
+      {open ? (
+        <div className="ibpop" role="menu" aria-label="Folders">
+          <button
+            type="button"
+            role="menuitem"
+            className={`ibfrow${current ? "" : " sel"}`}
+            onClick={() => pick(undefined)}
+          >
+            All mail
+          </button>
+          {folders.isPending ? <p className="ibfnote">Reading the mailbox…</p> : null}
+          {folders.isError ? <p className="ibfnote">The folder list could not be read.</p> : null}
+          {labels.map((l) => (
+            <button
+              key={l.name}
+              type="button"
+              role="menuitem"
+              aria-current={l.name === current ? "true" : undefined}
+              className={`ibfrow${l.name === current ? " sel" : ""}`}
+              onClick={() => pick(l.name)}
+            >
+              <span className="ibfname">{l.name}</span>
+              <span className="ibfcount">{l.messages}</span>
+            </button>
+          ))}
+          {!folders.isPending && !folders.isError && labels.length === 0 ? (
+            <p className="ibfnote">
+              No message carries a label yet — the mailbox's own labels are what this list is,
+              so it is empty rather than invented.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /** One conversation, Gmail-minimal: who, when, what it is called, what it says,
  * and how many messages are in it when there is more than one. */
 function InboxRow({
@@ -137,6 +228,11 @@ export function Inbox() {
   // state nothing can be read from. The distinction still matters on a narrow
   // screen, where being picked is what switches panels.
   const opened = useSearch({ from: "/" }).open;
+  // The folder the list is showing. Also the URL's, and also for the reason the
+  // open thread is: the folder a reader was in is where a reload should land.
+  const label = useSearch({ from: "/" }).label;
+  const pickFolder = (name?: string) =>
+    navigate({ to: "/", search: (prev) => ({ ...prev, label: name }) });
   const openChain = (root: string) =>
     // Merged onto whatever else the address carries, so opening a thread cannot
     // silently drop a parameter someone put there.
@@ -149,7 +245,7 @@ export function Inbox() {
   const inbox = $api.useInfiniteQuery(
     "get",
     "/v1/search",
-    { params: { query: { limit: PAGE } } },
+    { params: { query: { limit: PAGE, ...(label ? { label } : {}) } } },
     {
       pageParamName: "before",
       initialPageParam: "",
@@ -257,44 +353,53 @@ export function Inbox() {
       {inbox.isPending ? <p className="selnote">Reading the corpus…</p> : null}
       {!inbox.isPending && !inbox.isError && rows.length === 0 ? (
         <p className="selnote">
-          Nothing in the corpus yet — <code>corpus slurp</code> ingests the mailbox.
+          {label ? (
+            <>Nothing in {label}.</>
+          ) : (
+            <>
+              Nothing in the corpus yet — <code>corpus slurp</code> ingests the mailbox.
+            </>
+          )}
         </p>
       ) : null}
 
       <div className={`ibsplit${opened ? " has-choice" : ""}`}>
-        <div className="iblistwrap">
-          {rows.length > 0 ? (
-            <ul className="iblist">
-              {rows.map((c) => (
-                <InboxRow
-                  key={c.rootExtId}
-                  chain={c}
-                  checked={chosen.includes(c.rootExtId)}
-                  current={selected?.rootExtId === c.rootExtId}
-                  onToggle={() => toggle(c.rootExtId)}
-                  onOpen={() => openChain(c.rootExtId)}
-                />
-              ))}
-            </ul>
-          ) : null}
+        <div className="ibcol">
+          <Folders current={label} onPick={pickFolder} />
+          <div className="iblistwrap">
+            {rows.length > 0 ? (
+              <ul className="iblist">
+                {rows.map((c) => (
+                  <InboxRow
+                    key={c.rootExtId}
+                    chain={c}
+                    checked={chosen.includes(c.rootExtId)}
+                    current={selected?.rootExtId === c.rootExtId}
+                    onToggle={() => toggle(c.rootExtId)}
+                    onOpen={() => openChain(c.rootExtId)}
+                  />
+                ))}
+              </ul>
+            ) : null}
 
-          {paging ? (
-            <div className="ibend" ref={end}>
-              {inbox.isFetchingNextPage ? (
-                <p className="selnote" role="status">
-                  Reading further back…
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-          {inbox.isFetchNextPageError ? (
-            <>
-              <Failure error={inbox.error} />
-              <button type="button" className="ibmore" onClick={() => inbox.fetchNextPage()}>
-                Try again
-              </button>
-            </>
-          ) : null}
+            {paging ? (
+              <div className="ibend" ref={end}>
+                {inbox.isFetchingNextPage ? (
+                  <p className="selnote" role="status">
+                    Reading further back…
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+            {inbox.isFetchNextPageError ? (
+              <>
+                <Failure error={inbox.error} />
+                <button type="button" className="ibmore" onClick={() => inbox.fetchNextPage()}>
+                  Try again
+                </button>
+              </>
+            ) : null}
+          </div>
         </div>
 
         {/* The pane heads itself so a narrow screen can get back to the list: the
