@@ -1,6 +1,7 @@
 package corpus
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"strings"
 
@@ -193,17 +194,68 @@ func (s *Store) mailBodies(sc foldScope) ([]boiler.Message, error) {
 		if !sc.covers(m.Author, m.Domain) {
 			continue
 		}
-		lines, ok := boiler.Lines(text, direct)
+		lines, ok := s.reduced(m.ID, text, direct)
 		if !ok {
 			continue
 		}
-		m.Lines = boiler.Match(lines)
+		m.Lines = lines
 		if len(m.Lines) == 0 {
 			continue
 		}
 		out = append(out, m)
 	}
 	return out, rows.Err()
+}
+
+// reduction is one body's lines as boiler saw them, kept with the two things
+// that decide them: the text it was reduced from, and whether the entry's
+// provenance says its quoted history comes off.
+type reduction struct {
+	digest [sha256.Size]byte
+	direct bool
+	lines  []string
+	ok     bool
+}
+
+// reduced is the lines of one body as boiler counts them — Lines and then Match,
+// the whole of what the caller needs — over a cache whose key is the body itself.
+//
+// The reduction is a pure function of a body's text and its provenance, so keying
+// on the text's hash means nothing has to be invalidated: a rewritten body is a
+// different key. That matters more than the memory it spends, because this step
+// is the whole cost of the pass — measured on the live corpus, a chain whose
+// senders are on a narrow domain answers in ~80 ms, while one whose senders are at
+// gmail or termina, where most of the corpus lives, spent ~1.3 s reducing bodies
+// that had not changed since the last request.
+//
+// The scope around the caller bounds which bodies are worth reducing; this stops
+// the same ones being reduced twice.
+func (s *Store) reduced(id int64, text string, direct bool) ([]string, bool) {
+	digest := sha256.Sum256([]byte(text))
+
+	s.bodiesMu.Lock()
+	if r, ok := s.bodies[id]; ok && r.digest == digest && r.direct == direct {
+		s.bodiesMu.Unlock()
+		return r.lines, r.ok
+	}
+	s.bodiesMu.Unlock()
+
+	// Outside the lock: two callers reducing the same body get the same answer, so
+	// there is nothing to serialise but the write below.
+	var lines []string
+	ok := false
+	if raw, reducible := boiler.Lines(text, direct); reducible {
+		lines = boiler.Match(raw)
+		ok = true
+	}
+
+	s.bodiesMu.Lock()
+	if s.bodies == nil {
+		s.bodies = map[int64]reduction{}
+	}
+	s.bodies[id] = reduction{digest: digest, direct: direct, lines: lines, ok: ok}
+	s.bodiesMu.Unlock()
+	return lines, ok
 }
 
 // soleDomains is the one mail domain each person sends from, where there is
