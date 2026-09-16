@@ -1039,7 +1039,7 @@ export interface operations {
                  */
                 since?: string;
                 /**
-                 * @description The inbox's cursor: only entries at or before this instant. A caller pages by passing the oldest row's `last`, which is why this is a timestamp and not a date — a day-granular cursor would repeat or drop a whole day's boundary. The instant is inclusive, so a chain ending in the cursor's own second is returned rather than skipped, at the cost of that chain appearing on two pages.
+                 * @description The inbox's cursor: only entries at or before this instant. A caller pages by passing the oldest row's `last`, which is why this is a timestamp and not a date — a day-granular cursor would repeat or drop a whole day's boundary. The instant is inclusive, so a chain ending in the cursor's own second is returned rather than skipped, at the cost of that chain appearing on two pages. A chain whose entries straddle the cursor appears again for the same reason and more often: `last` is the whole chain's newest message, not the newest inside the window, so a long thread can sit above a cursor its own older entries fall below. A paging caller therefore dedupes by rootExtId and stops when a page adds nothing it has not already shown.
                  * @example 2026-03-11T17:40:00Z
                  */
                 before?: string;

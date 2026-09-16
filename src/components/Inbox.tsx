@@ -121,14 +121,26 @@ export function Inbox() {
     {
       pageParamName: "before",
       initialPageParam: "",
-      getNextPageParam: (last) => {
+      getNextPageParam: (last, pages, cursor) => {
         const chains = last.chains ?? [];
         // A short page is the end of the corpus, not a thing to ask past: the
         // server returns what it has, and asking again with the last row's stamp
         // would be answered with the same short list forever.
         if (chains.length < PAGE) return undefined;
         const oldest = chains[chains.length - 1];
-        return oldest ? oldest.last : undefined;
+        if (!oldest) return undefined;
+        // A chain whose entries straddle the cursor comes back on the next page:
+        // its `last` is the whole chain's newest message, not the newest inside
+        // the window, so a long thread can sit above a cursor its own older
+        // entries fall below. The cursor must therefore be seen to move — a page
+        // ending no earlier than the one it was asked for, or one adding no
+        // thread the list has not already shown, is the same page again, and
+        // asking for that forever is how "Load older" becomes a spinner.
+        if (cursor && oldest.last >= cursor) return undefined;
+        const shown = new Set(
+          pages.slice(0, -1).flatMap((p) => (p.chains ?? []).map((c) => c.rootExtId)),
+        );
+        return chains.some((c) => !shown.has(c.rootExtId)) ? oldest.last : undefined;
       },
     },
   );
