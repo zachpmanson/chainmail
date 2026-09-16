@@ -364,17 +364,25 @@
 
    Sized in `rem` against the line rather than the text: the glyph is the whole
    control, and a box that grew with the font would shrink the target on exactly
-   the screens this pane exists for. */
+   the screens this pane exists for.
+
+   The empty ring is drawn **heavier than the filled disc needs to be** (2px
+   against 1.5px, in `--muted` rather than the hairline `--line`): a full circle
+   carries its own weight, so an outline that only had to be an edge reads as a
+   smudge at this size — and the empty state is the one that has to look like
+   something to press. */
 .ibread-read { align-self:center; flex:none; width:1.05rem; height:1.05rem; padding:0;
-  border:1.5px solid var(--line); border-radius:50%; background:transparent;
+  border:2px solid var(--muted); border-radius:50%; background:transparent;
   cursor:pointer; }
 /* Filled is unread: the accent the row's badge already uses, so the strip and the
    list agree about what the same chain looks like. */
-.ibread-read.unread { border-color:var(--accent); background:var(--accent); }
+.ibread-read.unread { border:1.5px solid var(--accent); background:var(--accent); }
 .ibread-read:hover { border-color:var(--accent); }
 .ibread-read.unread:hover { background:color-mix(in srgb, var(--accent) 75%, var(--mine)); }
-.ibread-read:disabled { border-color:var(--line); background:transparent; cursor:default; }
-.ibread-read:disabled.unread { background:color-mix(in srgb, var(--accent) 45%, var(--mine)); border-color:transparent; }
+.ibread-read:disabled { border-color:var(--muted); background:transparent; cursor:default;
+  opacity:.6; }
+.ibread-read:disabled.unread { background:color-mix(in srgb, var(--accent) 45%, var(--mine));
+  border-color:transparent; opacity:1; }
 /* Flush: the pane's edge is the messages' edge. The gap above the first message
    is the gap between messages, so the heading reads as a heading rather than as
    part of the first email. */
