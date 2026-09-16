@@ -486,7 +486,7 @@ export interface paths {
          *
          *     Membership is only ever added to: `accept` names chains to take from the proposals, and a chain found by a search the spec does not record comes with that search in `queries`, so the page keeps the provenance and can find the chain again.
          *
-         *     The server never reaches the mailbox, on purpose: fetching what arrived is `corpus ingest`'s job and belongs to the CLI and the cron, not a browser. So this refresh is corpus-only. What it cannot see, it cannot propose from fed to it by the mailbox later.
+         *     The server never reaches the mailbox, on purpose: fetching what arrived is `corpus ingest`'s job and belongs to the CLI, not a browser. So this refresh is corpus-only. What it cannot see, it cannot propose from fed to it by the mailbox later.
          */
         post: operations["refreshSpec"];
         delete?: never;
