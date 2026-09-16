@@ -232,24 +232,30 @@
   .av.pic { background-size:cover; background-position:center;
     box-shadow:0 0 0 1.5px var(--ring,var(--muted)), 0 0 0 2.5px var(--bg); }
   .col { min-width:0; }
-  /* The header is a disclosure, not a caption. The sender, the org and the clock
-     are its summary — the things a page is scanned by — and the caret closes the
-     line at its right edge, so it opens from where the eye already is. The
-     receipt behind it (to/cc, the reply it answers, the ids it was found under,
-     and the copy control) is one click away rather than permanently in the
-     bubble, where it was read once and made every bubble taller thereafter. */
+  /* The header is a disclosure, not a caption. The sender, the org, the clock
+     and the reply the message answers are its summary — the things a page is
+     scanned by — and the caret closes the line at its right edge, so it opens
+     from where the eye already is. The receipt behind it (to/cc, the ids it was
+     found under, and the copy control) is one click away rather than permanently
+     in the bubble, where it was read once and made every bubble taller
+     thereafter. */
   details.hdr { margin:0 0 .14rem; padding:0 .1rem; }
   details.hdr > summary { display:flex; flex-wrap:wrap; align-items:baseline;
     gap:.3rem; cursor:pointer; list-style:none; }
   details.hdr > summary::-webkit-details-marker { display:none; }
-  /* The caret takes the accent on hover and when open, so the line reads as a
-     control without recolouring the name sitting beside it. */
-  details.hdr > summary::after { content:""; display:inline-block;
-    width:0; height:0; margin-left:auto;
+  /* The line's right end: the reply it answers, and then the caret. One box so
+     the caret closes the line whether or not there is a reply beside it — two
+     items each claiming the free space would leave the reply stranded
+     mid-line. The caret takes the accent on hover and when open, so the line
+     reads as a control without recolouring the name sitting beside it. */
+  details.hdr > summary > .htail { display:inline-flex; align-items:baseline;
+    gap:.5rem; margin-left:auto; }
+  details.hdr > summary > .htail::after { content:""; display:inline-block;
+    width:0; height:0;
     border:.25em solid transparent; border-left-color:var(--muted);
     transition:transform .12s, border-left-color .12s; }
-  details.hdr > summary:hover::after { border-left-color:var(--accent); }
-  details.hdr[open] > summary::after { transform:rotate(90deg);
+  details.hdr > summary:hover > .htail::after { border-left-color:var(--accent); }
+  details.hdr[open] > summary > .htail::after { transform:rotate(90deg);
     border-left-color:var(--accent); }
   details.hdr > summary:focus-visible { outline:1px solid var(--accent); outline-offset:2px; }
   .nm { font-size:.83rem; font-weight:650; }

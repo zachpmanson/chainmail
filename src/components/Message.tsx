@@ -102,7 +102,8 @@ export interface MessageProps {
   /** what changed since a previous render, where there was one */
   mark?: "new" | "revised";
   /** the reply relationship — a node, because only the pipeline knows how a
-   *  message resolves the parent it replies to */
+   *  message resolves the parent it replies to. Drawn at the right of the
+   *  header line, beside the caret, where the transcript is scanned. */
   reply?: ReactNode;
   /** where the entry was found — the ids under it, in the header's expanded
    *  section beside the to/cc line */
@@ -358,12 +359,12 @@ export function Message(p: MessageProps) {
     <div className={cls} id={p.id} data-ch={p.lane} style={p.style}>
       <div className="col">
         {/* The header is the bubble's disclosure, not a caption: the sender, the
-            org and the clock are what a page is scanned by, and the receipt —
-            who it was addressed to, what it answers, the ids it was found
-            under, and the control that copies it whole — opens beneath rather
-            than sitting inside the bubble, where it is read once and is only
-            height thereafter. A native <details>, like the provenance line and
-            the panels: the export stays readable without scripting, and
+            org, the clock and the reply the message answers are what a page is
+            scanned by, and the receipt — who it was addressed to, the ids it was
+            found under, and the control that copies it whole — opens beneath
+            rather than sitting inside the bubble, where it is read once and is
+            only height thereafter. A native <details>, like the provenance line
+            and the panels: the export stays readable without scripting, and
             find-in-page reaches the ids closed or open. */}
         <details className="hdr">
           <summary>
@@ -375,10 +376,13 @@ export function Message(p: MessageProps) {
             <Stamp id={p.id} stamp={p.stamp} />
             {p.mark === "new" ? <span className="newpill">new</span> : null}
             {p.mark === "revised" ? <span className="revpill">revised</span> : null}
+            {/* The line's right end, and always drawn even when the caller has
+                no reply to put in it: the caret lives inside this box, so an
+                empty tail still closes the line at the right edge. */}
+            <span className="htail">{p.reply}</span>
           </summary>
           <div className="hdet">
             <span className="to">to {p.to ?? "—"}</span>
-            {p.reply}
             {p.source}
             {p.copyJson !== undefined ? <CopyJson data={p.copyJson} /> : null}
           </div>
