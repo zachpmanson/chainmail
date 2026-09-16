@@ -309,13 +309,22 @@
 .ibread > .stream { padding:.5rem 0 0; }
 .ibread > .selnote { margin:.7rem .8rem 0; }
 @media (min-width:60rem) {
-  /* The inbox is one window, not a page that grows: the nav at the top, two
-     columns that end at the bottom edge, and only the columns scroll. So the nav,
-     the folder button and the separator never leave the screen. The height comes
-     from the shell — #root is the viewport and this page is what is left of it
-     after the nav — rather than from a guess at what the chrome above costs,
-     which is what `calc(100vh - 12rem)` was and why it stopped fitting when the
-     search box moved out of the page. */
+  /* The app is one window: the nav, and under it the two panels, which scroll
+     inside themselves. **`height`, not `min-height`** — a minimum lets the shell
+     grow with its content, and that is what left the two panels nine thousand
+     pixels tall on a nine-hundred pixel screen with the page scrolling instead of
+     them. The whole chain is a height: the body is the viewport, `#root` is the
+     body, the page is what the nav leaves, the split is what the page leaves.
+
+     Only where there are two panels. In the single-column layout the list and the
+     thread are stacked, and capping that page would cut the second one off — so
+     there, as on every document page, the page scrolls.
+
+     `body.inbox` is added by the page (see Inbox) rather than guessed at in CSS:
+     "this page is a workspace" is something the page knows about itself, and it is
+     the same way a transcript says `body.chains`. */
+  body.inbox { height:100vh; overflow:hidden; }
+  body.inbox #root { height:100%; min-height:0; }
   .wrap.ibwrap { flex:1 1 auto; min-height:0; padding-bottom:1rem;
     display:flex; flex-direction:column; }
   /* The list is bounded and the pane takes whatever is left: a row is skimmed,
@@ -329,11 +338,11 @@
      so a long list runs past a thread that keeps its heading — a mail client, not
      a page that grows until the reader loses where they were. The list's box
      moves out to the wrapper, which is what scrolls, so its edges stay put. */
-  .ibcol, .ibread { min-height:0; }
+  .ibcol, .ibread { min-height:0; height:100%; }
   .iblistwrap { height:100%; overflow-y:auto;
     border:1px solid var(--line); border-radius:9px; background:var(--card); }
   .iblistwrap .iblist { border:0; border-radius:0; background:none; }
-  .ibread { height:100%; overflow:auto; }
+  .ibread { overflow:auto; }
   .ibback { display:none; }
 }
 @media (max-width:59.99rem) {
