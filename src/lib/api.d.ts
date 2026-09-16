@@ -486,6 +486,8 @@ export interface components {
             body?: string;
             /** @description The body rendered for reading, by the same conversion a page build uses. `body` stays the raw text: it is what the corpus holds, and what anything matching text should read. Absent when there is nothing to render. */
             html?: string;
+            /** @description The recipient line a page build prints under the bubble, e.g. `Bo Halvorsen, cc Cy Okafor`. Absent where the entry stated no recipients — every entry recovered from someone else's quote has no headers of its own. */
+            to?: string;
             /** @description Mail thread id or Slack channel id. Absent when the source stated none. */
             container?: string;
             /** @description Opens the entry at its source. Absent when the source gave none. */

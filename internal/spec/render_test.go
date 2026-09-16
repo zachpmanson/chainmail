@@ -2,15 +2,18 @@ package spec
 
 import "testing"
 
-// The whole reason RenderBodies exists: a view that draws messages without
+// The whole reason RenderTrail exists: a view that draws messages without
 // building a page has to draw what a page draws. If these ever diverge, the
 // inbox pane and the page built from the same thread have quietly become two
 // renderers again — which is the defect this path was added to remove — and the
 // divergence would show up as a difference in a bubble rather than as a failure.
 //
 // Compared against a real build rather than against a literal: what the
-// conversion produces is not the claim, that the two agree is.
-func TestRenderedBodiesAreTheBodiesAPageBuilds(t *testing.T) {
+// conversion produces is not the claim, that the two agree is. That covers the
+// recipient line as well as the body, because both come out of the one load, and
+// a pane whose "to" line is written differently from the page's is the same
+// defect wearing a smaller hat.
+func TestRenderedEntriesAreTheEntriesAPageBuilds(t *testing.T) {
 	s := trail(t)
 	sp := generate(t, s, Options{Containers: []string{"T1"}})
 
@@ -18,19 +21,28 @@ func TestRenderedBodiesAreTheBodiesAPageBuilds(t *testing.T) {
 	for _, m := range sp.Messages {
 		ids = append(ids, m.ExtID)
 	}
-	bodies, err := RenderBodies(s, ids)
+	rendered, err := RenderTrail(s, ids)
 	if err != nil {
-		t.Fatalf("RenderBodies: %v", err)
+		t.Fatalf("RenderTrail: %v", err)
 	}
 
+	// The fixture states recipients — a To and a Cc — so an empty line here would
+	// mean the pane reads "to —" for a message that named them.
+	if len(ids) > 0 && rendered[ids[0]].To == "" {
+		t.Fatal("no entry came back with a recipient line, so the comparison proves nothing")
+	}
 	for _, m := range sp.Messages {
-		got, ok := bodies[m.ExtID]
+		got, ok := rendered[m.ExtID]
 		if !ok {
 			t.Errorf("%s: not rendered at all", m.ExtID)
 			continue
 		}
-		if got != m.Body {
-			t.Errorf("%s: the pane and the page disagree\n pane: %q\n page: %q", m.ExtID, got, m.Body)
+		if got.HTML != m.Body {
+			t.Errorf("%s: the pane and the page disagree\n pane: %q\n page: %q", m.ExtID, got.HTML, m.Body)
+		}
+		if got.To != m.To {
+			t.Errorf("%s: the pane and the page write different recipients\n pane: %q\n page: %q",
+				m.ExtID, got.To, m.To)
 		}
 	}
 }
@@ -41,18 +53,18 @@ func TestRenderedBodiesAreTheBodiesAPageBuilds(t *testing.T) {
 func TestRenderingAnUnknownEntryIsAbsentRatherThanFatal(t *testing.T) {
 	s := trail(t)
 
-	bodies, err := RenderBodies(s, []string{"mail:<a@loomworks>", "mail:<nobody@nowhere>"})
+	rendered, err := RenderTrail(s, []string{"mail:<a@loomworks>", "mail:<nobody@nowhere>"})
 	if err != nil {
-		t.Fatalf("RenderBodies: %v", err)
+		t.Fatalf("RenderTrail: %v", err)
 	}
-	if _, ok := bodies["mail:<nobody@nowhere>"]; ok {
+	if _, ok := rendered["mail:<nobody@nowhere>"]; ok {
 		t.Error("an entry the corpus does not hold came back rendered")
 	}
-	if _, ok := bodies["mail:<a@loomworks>"]; !ok {
+	if _, ok := rendered["mail:<a@loomworks>"]; !ok {
 		t.Error("the entry the corpus does hold was not rendered")
 	}
 
-	empty, err := RenderBodies(s, nil)
+	empty, err := RenderTrail(s, nil)
 	if err != nil || len(empty) != 0 {
 		t.Errorf("nothing asked for = %v, %v; want an empty result and no error", empty, err)
 	}

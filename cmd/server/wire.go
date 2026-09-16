@@ -70,9 +70,13 @@ type corpusEntry struct {
 	Subject         string `json:"subject,omitempty"`
 	Body            string `json:"body,omitempty"`
 	// HTML is the body rendered for reading, by the same conversion a page build
-	// uses (spec.RenderBodies); Body stays the plain text, which is what the
+	// uses (spec.RenderTrail); Body stays the plain text, which is what the
 	// corpus holds and what anything matching text should read.
-	HTML         string        `json:"html,omitempty"`
+	HTML string `json:"html,omitempty"`
+	// To is the recipient line a page build prints under the bubble, e.g.
+	// "Bo Halvorsen, cc Cy Okafor". Absent where the entry stated no recipients,
+	// which is every entry recovered from someone else's quote.
+	To           string        `json:"to,omitempty"`
 	Container    string        `json:"container,omitempty"`
 	Permalink    string        `json:"permalink,omitempty"`
 	Parent       string        `json:"parent,omitempty"`
@@ -409,11 +413,11 @@ func toRefreshReport(r refresh.Report) refreshReport {
 	return out
 }
 
-func toCorpusEntry(s corpus.Shown, html string) corpusEntry {
+func toCorpusEntry(s corpus.Shown, r spec.Rendered) corpusEntry {
 	e := corpusEntry{
 		ExtID: s.ExtID, Source: s.Source, Quoted: s.Quoted, TS: stamp(s.TS),
 		TZ: s.TZ, TZOffsetMinutes: s.TZOffset, Author: s.Author, Subject: s.Subject,
-		Body: s.Body, HTML: html, Container: s.Container, Permalink: s.Permalink,
+		Body: s.Body, HTML: r.HTML, To: r.To, Container: s.Container, Permalink: s.Permalink,
 		Parent: s.Parent, ParentRef: s.ParentRef,
 	}
 	for _, g := range s.Sightings {

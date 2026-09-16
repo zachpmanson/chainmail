@@ -169,12 +169,16 @@ const pageOf = (chains: unknown[]) => json(200, { mode: "lexical", chains });
  *  the pane draws the html, and a test that asserted against the text alone would
  *  pass just as well if it drew the wrong one. `Loom cutover`'s html carries
  *  markup the text does not, which is how a test can tell them apart. */
-const CHAIN_BODIES: Record<string, { author: string; subject: string; body: string; html: string; tz: string; tzOffsetMinutes: number }> = {
+const CHAIN_BODIES: Record<
+  string,
+  { author: string; subject: string; body: string; html: string; to?: string; tz: string; tzOffsetMinutes: number }
+> = {
   "mail:<fence-panel-9@example.fed>": {
     author: "Ada Okoye",
     subject: "Fence panels",
     body: "Unrelated: the fence panels arrived, and the gate needs a new hinge.",
     html: "<p>Unrelated: the fence panels arrived, and the gate needs a new hinge. <b>Regards, Ada</b></p>",
+    to: "Bo Halvorsen, cc Cy Okafor",
     tz: "AEST",
     tzOffsetMinutes: 600,
   },
@@ -183,6 +187,18 @@ const CHAIN_BODIES: Record<string, { author: string; subject: string; body: stri
     subject: "Loom cutover schedule",
     body: "Roof access is fine from the 14th.",
     html: "<p>Roof access is fine from the 14th.</p>",
+    to: "Ada Okoye",
+    tz: "AEST",
+    tzOffsetMinutes: 600,
+  },
+  // A message recovered from inside someone else's quote: it has no headers of
+  // its own, so the corpus sends no recipient line and the pane must say so
+  // rather than leave the gap looking like a rendering failure.
+  "quote:9f2c1ab4e77d": {
+    author: "Dana Reyes",
+    subject: "Fence panels",
+    body: "The gate hinge was ordered.",
+    html: "<p>The gate hinge was ordered.</p>",
     tz: "AEST",
     tzOffsetMinutes: 600,
   },
@@ -444,6 +460,17 @@ describe("the home page with no query", () => {
     // fixture's two differ by a <b> that only the html has.
     expect(pane().querySelector(".bd b")?.textContent).toBe("Regards, Ada");
     expect(pane().querySelector(".bd")?.textContent).not.toContain("<b>");
+    // The recipient line the message itself stated. It is the same footer the
+    // page prints, filled from the chain read rather than left as "to —".
+    expect(pane().querySelector(".msg .foot .to")?.textContent).toBe("to Bo Halvorsen, cc Cy Okafor");
+  });
+
+  it("says a recovered entry named no recipients instead of leaving the gap dark", async () => {
+    handler = buildHandler;
+    await mountApp("/?open=quote%3A9f2c1ab4e77d");
+
+    await waitFor(() => expect(pane().querySelector(".msg .bub")).not.toBeNull());
+    expect(pane().querySelector(".msg .foot .to")?.textContent).toBe("to —");
   });
 
   it("builds a page from the ticked chains, recording no query for it", async () => {
