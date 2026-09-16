@@ -3,7 +3,7 @@
   "info": {
     "title": "chainmail API",
     "version": "1.0.0",
-    "description": "Read-only HTTP over a local chainmail corpus: search for candidate chains, choose which belong on a page, then build the timeline spec the renderer consumes.\n\nTwo stages on purpose. Search selects; POST /v1/spec renders a chosen set. A spec built straight from a query takes whatever the query returned, and then the only way to remove a thread is to regenerate the page.\n\nThis serves personal mail and has no authentication of any kind. It binds to loopback and refuses a non-loopback address unless explicitly overridden, and spec bodies carry unsanitised sender HTML (issue #14) \u2014 so the loopback bind is what makes the whole surface safe, not a default to be relaxed.\n\nOperator commands \u2014 ingest, embed, eval, dedupe, twins, repair, merge, alias, refresh \u2014 are absent in their mailbox-touching forms; that reach belongs to the CLI and the cron, with one opt-in exception: POST /v1/slurp runs the same ingest the cron runs, and answers 403 unless the server was started with -slurp. Two local exceptions, both refusal-based and both carrying the audit trail: POST /v1/refresh re-derives a saved page and, before redrawing, collapses stored twin copies with the same sweep the CLI's slurp runs; GET /v1/ops/plan and POST /v1/ops/merge review people merges, the one write applying a single pair from the re-derived plan, never a whole plan."
+    "description": "Read-only HTTP over a local chainmail corpus: search for candidate chains, choose which belong on a page, then build the timeline spec the renderer consumes.\n\nTwo stages on purpose. Search selects; POST /v1/spec renders a chosen set. A spec built straight from a query takes whatever the query returned, and then the only way to remove a thread is to regenerate the page.\n\nThis serves personal mail and has no authentication of any kind. It binds to loopback and refuses a non-loopback address unless explicitly overridden, and spec bodies carry unsanitised sender HTML (issue #14) — so the loopback bind is what makes the whole surface safe, not a default to be relaxed.\n\nOperator commands — ingest, embed, eval, dedupe, twins, repair, merge, alias, refresh — are absent in their mailbox-touching forms; that reach belongs to the CLI and the cron, with one opt-in exception: POST /v1/slurp runs the same ingest the cron runs, and answers 403 unless the server was started with -slurp. Two local exceptions, both refusal-based and both carrying the audit trail: POST /v1/refresh re-derives a saved page and, before redrawing, collapses stored twin copies with the same sweep the CLI's slurp runs; GET /v1/ops/plan and POST /v1/ops/merge review people merges, the one write applying a single pair from the re-derived plan, never a whole plan."
   },
   "servers": [
     {
@@ -14,8 +14,8 @@
   "paths": {
     "/v1/search": {
       "get": {
-        "summary": "Chains for a query \u2014 or, with no query at all, the corpus in the order it arrived.",
-        "description": "Two questions, one row shape. With q, person or since, this is the selection stage: chains ranked by how much of each is about the query \u2014 lexical by default, because FTS5 wins decisively on the tokens a mail corpus is dense with (invoice numbers, account ids, Message-IDs), and the structural half of a real question is a filter rather than something a similarity score encodes.\n\nWith none of them, it is the inbox: every chain, newest message first, no score involved. A chain is ordered by its last message rather than by the damped sum of its members' positions, because there is nothing to be relevant to \u2014 and the difference is visible: a three-message thread from March outranks a single message from April under a sum, and cannot under a list. Each row's `best` holds the newest entry, so a row has a sender, a date and an opening excerpt to show.\n\nPaging is `before`. The cursor includes its own second, so a caller paging on the last row's `last` cannot lose a chain that ends in the same second as the boundary \u2014 the boundary thread itself may appear on both pages, which is the recoverable direction: a reader can ignore a row twice, not a chain that never appears.\n\nmode=semantic and mode=hybrid still need q: there is nothing to be similar to.",
+        "summary": "Chains for a query — or, with no query at all, the corpus in the order it arrived.",
+        "description": "Two questions, one row shape. With q, person or since, this is the selection stage: chains ranked by how much of each is about the query — lexical by default, because FTS5 wins decisively on the tokens a mail corpus is dense with (invoice numbers, account ids, Message-IDs), and the structural half of a real question is a filter rather than something a similarity score encodes.\n\nWith none of them, it is the inbox: every chain, newest message first, no score involved. A chain is ordered by its last message rather than by the damped sum of its members' positions, because there is nothing to be relevant to — and the difference is visible: a three-message thread from March outranks a single message from April under a sum, and cannot under a list. Each row's `best` holds the newest entry, so a row has a sender, a date and an opening excerpt to show.\n\nPaging is `before`. The cursor includes its own second, so a caller paging on the last row's `last` cannot lose a chain that ends in the same second as the boundary — the boundary thread itself may appear on both pages, which is the recoverable direction: a reader can ignore a row twice, not a chain that never appears.\n\nmode=semantic and mode=hybrid still need q: there is nothing to be similar to.",
         "operationId": "search",
         "parameters": [
           {
@@ -31,7 +31,7 @@
           {
             "name": "person",
             "in": "query",
-            "description": "An address, display name or Slack uid. Matches anyone recorded on the entry, author or recipient \u2014 on a real trail a quarter of the participants appear only in to:/cc:, so \"threads Ada was on\" cannot be an author-only filter.",
+            "description": "An address, display name or Slack uid. Matches anyone recorded on the entry, author or recipient — on a real trail a quarter of the participants appear only in to:/cc:, so \"threads Ada was on\" cannot be an author-only filter.",
             "schema": {
               "type": "string",
               "description": ""
@@ -52,7 +52,7 @@
           {
             "name": "before",
             "in": "query",
-            "description": "The inbox's cursor: only entries at or before this instant. A caller pages by passing the oldest row's `last`, which is why this is a timestamp and not a date \u2014 a day-granular cursor would repeat or drop a whole day's boundary. The instant is inclusive, so a chain ending in the cursor's own second is returned rather than skipped, at the cost of that chain appearing on two pages. A chain whose entries straddle the cursor appears again for the same reason and more often: `last` is the whole chain's newest message, not the newest inside the window, so a long thread can sit above a cursor its own older entries fall below. A paging caller therefore dedupes by rootExtId and stops when a page adds nothing it has not already shown.",
+            "description": "The inbox's cursor: only entries at or before this instant. A caller pages by passing the oldest row's `last`, which is why this is a timestamp and not a date — a day-granular cursor would repeat or drop a whole day's boundary. The instant is inclusive, so a chain ending in the cursor's own second is returned rather than skipped, at the cost of that chain appearing on two pages. A chain whose entries straddle the cursor appears again for the same reason and more often: `last` is the whole chain's newest message, not the newest inside the window, so a long thread can sit above a cursor its own older entries fall below. A paging caller therefore dedupes by rootExtId and stops when a page adds nothing it has not already shown.",
             "schema": {
               "type": "string",
               "description": "",
@@ -184,7 +184,7 @@
     "/v1/media/pull": {
       "post": {
         "summary": "Fetch the files one message's attachments need.",
-        "description": "The deliberate half of the media design, and what the button under a message's chips presses: the bytes behind one message's attachments are fetched into the corpus, so the page can show the picture instead of sending the reader to Gmail for it.\n\nOne message per call, by construction. Each attachment is a mailbox round trip, so a pull is a per-conversation decision \u2014 a thread-sized sweep is the CLI's (\u0060corpus media pull -container\u0060). Nothing here fetches media by itself: it runs because a reader asked.\n\nA part too large, a part the sender's account no longer holds and a part the metadata names but the message does not contain are each recorded with their reason and reported, so a later attempt does not pay for the same answer again. A transport failure is left unrecorded and stays retryable.\n\nOpt-in and off by default: a server started without -media answers 403. A pull spends the mail credential this unit already holds, so switching it on hands the page no access the host had not already given this user \u2014 what changes is when the fetch runs, not what it may touch.",
+        "description": "The deliberate half of the media design, and what the button under a message's chips presses: the bytes behind one message's attachments are fetched into the corpus, so the page can show the picture instead of sending the reader to Gmail for it.\n\nOne message per call, by construction. Each attachment is a mailbox round trip, so a pull is a per-conversation decision — a thread-sized sweep is the CLI's (`corpus media pull -container`). Nothing here fetches media by itself: it runs because a reader asked.\n\nA part too large, a part the sender's account no longer holds and a part the metadata names but the message does not contain are each recorded with their reason and reported, so a later attempt does not pay for the same answer again. A transport failure is left unrecorded and stays retryable.\n\nOpt-in and off by default: a server started without -media answers 403. A pull spends the mail credential this unit already holds, so switching it on hands the page no access the host had not already given this user — what changes is when the fetch runs, not what it may touch.",
         "operationId": "pullMedia",
         "requestBody": {
           "required": true,
@@ -238,7 +238,7 @@
             }
           },
           "502": {
-            "description": "The pull could not run at all \u2014 a corpus it could not read, say. A single file's failure is a 200 carrying its reason.",
+            "description": "The pull could not run at all — a corpus it could not read, say. A single file's failure is a 200 carrying its reason.",
             "content": {
               "application/json": {
                 "schema": {
@@ -253,7 +253,7 @@
     "/v1/spec": {
       "post": {
         "summary": "Build a timeline spec from a chosen set of chains.",
-        "description": "Render stage, and deliberately separate from search: what belongs on a page is a human decision, and removing a thread afterwards means regenerating everything downstream, so scope is settled once, up front.\n\nThe response validates against schema/timeline.schema.json, the contract the renderer already consumes.\n\nExpensive: spec assembly recovers quoted bodies, detects repeated boilerplate and builds attachment thumbnails, which is seconds for a large selection. There is no job queue \u2014 the response is synchronous. Concurrency is capped, so an over-eager caller gets 429 rather than a server with every core in HTML recovery.\n\nEntry bodies are sender HTML, and it is NOT sanitised (issue #14). That is accepted at today's risk because the server binds to loopback only. It is a hard blocker on binding wider, not a footnote.",
+        "description": "Render stage, and deliberately separate from search: what belongs on a page is a human decision, and removing a thread afterwards means regenerating everything downstream, so scope is settled once, up front.\n\nThe response validates against schema/timeline.schema.json, the contract the renderer already consumes.\n\nExpensive: spec assembly recovers quoted bodies, detects repeated boilerplate and builds attachment thumbnails, which is seconds for a large selection. There is no job queue — the response is synchronous. Concurrency is capped, so an over-eager caller gets 429 rather than a server with every core in HTML recovery.\n\nEntry bodies are sender HTML, and it is NOT sanitised (issue #14). That is accepted at today's risk because the server binds to loopback only. It is a hard blocker on binding wider, not a footnote.",
         "operationId": "buildSpec",
         "requestBody": {
           "required": true,
@@ -383,13 +383,13 @@
     "/v1/attachments/{sha}": {
       "get": {
         "summary": "The bytes of a stored attachment, by digest.",
-        "description": "Serves the file itself, so a chip that names a digest can be opened rather than sent back to Gmail for a copy the corpus already holds. Content-Disposition follows the same rule as the attachment\u0027s open field \u2014 inline for a picture, a recording, a video or text, attachment for a PDF, a document or an archive \u2014 and markup (HTML, SVG) is never served inline. The digest is the content, so the response is immutable and cacheable.",
+        "description": "Serves the file itself, so a chip that names a digest can be opened rather than sent back to Gmail for a copy the corpus already holds. Content-Disposition follows the same rule as the attachment's open field — inline for a picture, a recording, a video or text, attachment for a PDF, a document or an archive — and markup (HTML, SVG) is never served inline. The digest is the content, so the response is immutable and cacheable.",
         "operationId": "getAttachment",
         "parameters": [
           {
             "name": "sha",
             "in": "path",
-            "description": "Hex sha256 of the bytes, as the timeline\u0027s blobSha carries it.",
+            "description": "Hex sha256 of the bytes, as the timeline's blobSha carries it.",
             "required": true,
             "schema": {
               "type": "string",
@@ -402,7 +402,7 @@
             "description": "The file.",
             "headers": {
               "Content-Disposition": {
-                "description": "inline or attachment, with the sender\u0027s filename (RFC 6266).",
+                "description": "inline or attachment, with the sender's filename (RFC 6266).",
                 "schema": {
                   "type": "string",
                   "description": ""
@@ -486,7 +486,7 @@
     "/v1/chains/{rootExtId}": {
       "get": {
         "summary": "The chain around an entry, in time order, as data.",
-        "description": "Kept even though selection makes it unnecessary for building a page, because reading a chain is a different act from rendering one: a client browsing a candidate wants its entries as data, cheaply, without paying for spec assembly or committing to a page.\n\nReachability is followed in BOTH directions, so ANY member's ext id returns the whole conversation \u2014 search reports the entry that matched, not the root. The parameter is named rootExtId because that is what search hands you.",
+        "description": "Kept even though selection makes it unnecessary for building a page, because reading a chain is a different act from rendering one: a client browsing a candidate wants its entries as data, cheaply, without paying for spec assembly or committing to a page.\n\nReachability is followed in BOTH directions, so ANY member's ext id returns the whole conversation — search reports the entry that matched, not the root. The parameter is named rootExtId because that is what search hands you.",
         "operationId": "getChain",
         "parameters": [
           {
@@ -723,7 +723,9 @@
     "schemas": {
       "AuthStatusResponse": {
         "type": "object",
-        "required": ["signed_in"],
+        "required": [
+          "signed_in"
+        ],
         "properties": {
           "signed_in": {
             "type": "boolean",
@@ -766,7 +768,7 @@
       },
       "ChainHit": {
         "type": "object",
-        "description": "One candidate chain \u2014 the unit a caller selects for POST /v1/spec.",
+        "description": "One candidate chain — the unit a caller selects for POST /v1/spec.",
         "required": [
           "rootExtId",
           "entries",
@@ -831,7 +833,7 @@
           },
           "best": {
             "type": "array",
-            "description": "The top-scoring entries of this chain, most relevant first \u2014 the evidence for the ranking.",
+            "description": "The top-scoring entries of this chain, most relevant first — the evidence for the ranking.",
             "items": {
               "$ref": "#/components/schemas/EntryHit"
             }
@@ -893,7 +895,7 @@
           },
           "snippet": {
             "type": "string",
-            "description": "Match excerpt with matched terms wrapped in square brackets. When nothing matched \u2014 a structural filter, a browse of the corpus, or an entry no keyword explains \u2014 this is the opening of the body instead, with nothing bracketed: the same substitute a semantic hit gets, and what a row shows where a preview belongs."
+            "description": "Match excerpt with matched terms wrapped in square brackets. When nothing matched — a structural filter, a browse of the corpus, or an entry no keyword explains — this is the opening of the body instead, with nothing bracketed: the same substitute a semantic hit gets, and what a row shows where a preview belongs."
           },
           "score": {
             "type": "number",
@@ -919,7 +921,7 @@
       },
       "CorpusEntry": {
         "type": "object",
-        "description": "One entry resolved for reading rather than for ranking: plain text, with its provenance. Deliberately not a timeline entry \u2014 no HTML recovery, no boilerplate folding, no thumbnails \u2014 so reading a chain costs a query rather than seconds of assembly. Use POST /v1/spec when the goal is to render.",
+        "description": "One entry resolved for reading rather than for ranking: plain text, with its provenance. Deliberately not a timeline entry — no HTML recovery, no boilerplate folding, no thumbnails — so reading a chain costs a query rather than seconds of assembly. Use POST /v1/spec when the goal is to render.",
         "required": [
           "extId",
           "source",
@@ -970,6 +972,10 @@
             "type": "string",
             "description": "The entry's own plain text. Absent when the source carried no text body."
           },
+          "html": {
+            "type": "string",
+            "description": "The body rendered for reading, by the same conversion a page build uses. `body` stays the raw text: it is what the corpus holds, and what anything matching text should read. Absent when there is nothing to render."
+          },
           "container": {
             "type": "string",
             "description": "Mail thread id or Slack channel id. Absent when the source stated none."
@@ -980,7 +986,7 @@
           },
           "parent": {
             "type": "string",
-            "description": "Ext id of the entry this replies to. Absent at a chain root, and also absent when it names a parent that is not in the corpus \u2014 parentRef tells the two apart."
+            "description": "Ext id of the entry this replies to. Absent at a chain root, and also absent when it names a parent that is not in the corpus — parentRef tells the two apart."
           },
           "parentRef": {
             "type": "string",
@@ -1013,7 +1019,7 @@
         "properties": {
           "rootExtId": {
             "type": "string",
-            "description": "The id that was asked for, echoed back. Note this is whatever the caller passed, which need not be the chain's root \u2014 see the path parameter."
+            "description": "The id that was asked for, echoed back. Note this is whatever the caller passed, which need not be the chain's root — see the path parameter."
           },
           "entries": {
             "type": "array",
@@ -1233,7 +1239,7 @@
           },
           "eligible": {
             "type": "integer",
-            "description": "Entries a full backfill would still embed \u2014 how much work is left."
+            "description": "Entries a full backfill would still embed — how much work is left."
           }
         }
       },
@@ -1726,7 +1732,7 @@
       },
       "OpsMergeRecord": {
         "type": "object",
-        "description": "One row of the person_merges trail: a merge that happened, who it folded into whom, and on what evidence. This is the audit record, not an undo handle \u2014 a merge is not reversible.",
+        "description": "One row of the person_merges trail: a merge that happened, who it folded into whom, and on what evidence. This is the audit record, not an undo handle — a merge is not reversible.",
         "required": [
           "keepId",
           "dropId",
@@ -1736,7 +1742,7 @@
         "properties": {
           "keepId": {
             "type": "integer",
-            "description": "The survivor, as currently resolved \u2014 later merges repoint it."
+            "description": "The survivor, as currently resolved — later merges repoint it."
           },
           "keepName": {
             "type": "string",
@@ -1841,7 +1847,7 @@
           },
           "trail": {
             "type": "array",
-            "description": "Merges so far, newest first \u2014 the person_merges audit trail.",
+            "description": "Merges so far, newest first — the person_merges audit trail.",
             "items": {
               "$ref": "#/components/schemas/OpsMergeRecord"
             }
@@ -2240,11 +2246,26 @@
               "type": "object",
               "additionalProperties": false,
               "properties": {
-                "id": { "type": "string", "description": "Spec id of the derived (edited) copy; the diff source." },
-                "base": { "type": "string", "description": "Spec id of the original message the change was made to." },
-                "who": { "type": "string", "description": "The quoter who made the edit." },
-                "time": { "type": "string", "description": "When the quoting message was sent, e.g. '14:00'." },
-                "body": { "type": "string", "description": "The quoter's modified text of the quote, as stored (plain text, not HTML)." }
+                "id": {
+                  "type": "string",
+                  "description": "Spec id of the derived (edited) copy; the diff source."
+                },
+                "base": {
+                  "type": "string",
+                  "description": "Spec id of the original message the change was made to."
+                },
+                "who": {
+                  "type": "string",
+                  "description": "The quoter who made the edit."
+                },
+                "time": {
+                  "type": "string",
+                  "description": "When the quoting message was sent, e.g. '14:00'."
+                },
+                "body": {
+                  "type": "string",
+                  "description": "The quoter's modified text of the quote, as stored (plain text, not HTML)."
+                }
               }
             }
           },
@@ -2286,7 +2307,7 @@
                 },
                 "preview": {
                   "type": "string",
-                  "description": "Thumbnail as a data: URI. Never a URL \u2014 the page renders without a network.",
+                  "description": "Thumbnail as a data: URI. Never a URL — the page renders without a network.",
                   "pattern": "^data:image/"
                 },
                 "blobSha": {
@@ -2327,14 +2348,14 @@
         "properties": {
           "entry": {
             "type": "string",
-            "description": "The message's ext id, as the spec's \u0060extId\u0060 field carries it, e.g. 'mail:<...>'."
+            "description": "The message's ext id, as the spec's `extId` field carries it, e.g. 'mail:<...>'."
           }
         },
         "additionalProperties": false
       },
       "MediaPullResponse": {
         "type": "object",
-        "description": "What a pull did: the files this message still needed, and how each one ended. A file already in the corpus, and one already declined, are both absent \u2014 the first needs nothing, and the second has a recorded reason that asking again would not change.",
+        "description": "What a pull did: the files this message still needed, and how each one ended. A file already in the corpus, and one already declined, are both absent — the first needs nothing, and the second has a recorded reason that asking again would not change.",
         "required": [
           "wanted",
           "pulled",

@@ -1214,7 +1214,24 @@ func (s *server) entry(w http.ResponseWriter, r *http.Request) {
 		failLookup(w, err)
 		return
 	}
-	send(w, http.StatusOK, toCorpusEntry(shown))
+	html, err := s.rendered(shown.ExtID)
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	send(w, http.StatusOK, toCorpusEntry(shown, html))
+}
+
+// rendered is one entry's body HTML, as a page build would put it in a bubble.
+// The failure is returned rather than written because the two handlers that ask
+// for it report it differently: one is answering for a trail, the other for a
+// single entry.
+func (s *server) rendered(extID string) (string, error) {
+	bodies, err := spec.RenderBodies(s.store, []string{extID})
+	if err != nil {
+		return "", fmt.Errorf("rendering %s: %w", extID, err)
+	}
+	return bodies[extID], nil
 }
 
 func (s *server) chain(w http.ResponseWriter, r *http.Request) {
@@ -1227,9 +1244,24 @@ func (s *server) chain(w http.ResponseWriter, r *http.Request) {
 		failLookup(w, err)
 		return
 	}
+	ids := make([]string, 0, len(shown))
+	for _, sh := range shown {
+		ids = append(ids, sh.ExtID)
+	}
+	// One render for the whole trail rather than one per entry: the conversion is
+	// per entry, but the queries behind it are not, and a trail is read as a unit.
+	// A failure here fails the request: the trail's whole purpose is to be read,
+	// and a client that asks for it and gets entries it cannot draw would be
+	// shown a broken thread instead of a retryable error. See RenderBodies for
+	// what this deliberately does not do (no zone inference, no participation).
+	bodies, err := spec.RenderBodies(s.store, ids)
+	if err != nil {
+		fail(w, http.StatusInternalServerError, fmt.Errorf("rendering the trail: %w", err))
+		return
+	}
 	out := chainResponse{RootExtID: id, Entries: make([]corpusEntry, 0, len(shown))}
 	for _, sh := range shown {
-		out.Entries = append(out.Entries, toCorpusEntry(sh))
+		out.Entries = append(out.Entries, toCorpusEntry(sh, bodies[sh.ExtID]))
 	}
 	send(w, http.StatusOK, out)
 }

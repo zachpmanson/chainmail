@@ -408,6 +408,7 @@ func TestChainIsWholeFromAnyMember(t *testing.T) {
 			Entries   []struct {
 				ExtID string `json:"extId"`
 				TS    string `json:"ts"`
+				HTML  string `json:"html"`
 			}
 		}](t, res)
 		if got.RootExtID != from {
@@ -425,6 +426,13 @@ func TestChainIsWholeFromAnyMember(t *testing.T) {
 		for _, e := range got.Entries {
 			if e.ExtID == extOther {
 				t.Error("an unrelated thread is in the chain")
+			}
+			// Every entry arrives drawable. The pane shows these messages without
+			// building a page, and the fixtures' invented bodies all have text, so
+			// an empty one here is the field not being filled rather than a message
+			// that genuinely says nothing.
+			if e.HTML == "" {
+				t.Errorf("from %s: %s arrived with no rendered html", from, e.ExtID)
 			}
 		}
 	}
