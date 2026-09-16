@@ -517,6 +517,35 @@ describe("the specs index /specs", () => {
   });
 });
 
+describe("the reply tree's reserved column", () => {
+  const viewHandler: Handler = (c) =>
+    pathOf(c) === "/v1/specs/loom-cutover"
+      ? json(200, SPEC)
+      : pathOf(c) === "/v1/search"
+        ? json(200, { mode: "lexical", chains: [] })
+        : json(500, { error: `unexpected call to ${pathOf(c)}` });
+
+  it("is reserved only while a transcript is on screen", async () => {
+    handler = viewHandler;
+    const router = await mountApp("/view/loom-cutover");
+    await screen.findByText("Loom cutover");
+    // The transcript marks the body so the panel's measured width can be fed into
+    // --panel; the toolbar and the reserved content column both inset from it.
+    expect(document.body.classList.contains("hasmap")).toBe(true);
+
+    // Leave for the inbox the way a reader does, client-side: the shell is one
+    // page, so nothing reloads the body class away.
+    click(screen.getByRole("link", { name: "chainmail" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/"));
+
+    // No tree on the inbox, so no column reserved for one. The leftover was the
+    // bug: the map's inset outlived the map, and every page visited afterwards
+    // had a couple of hundred pixels of nothing down its right edge.
+    expect(document.body.classList.contains("hasmap")).toBe(false);
+    expect(document.body.style.getPropertyValue("--panel")).toBe("");
+  });
+});
+
 // The render route /view/<name>.
 describe("the render route /view/<name>", () => {
   it("loads the saved page from the API when the URL names one", async () => {

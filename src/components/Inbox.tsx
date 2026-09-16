@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { $api, type ChainHit, type EntryHit } from "../lib/api";
 import { useBuildPage } from "../lib/build";
@@ -196,6 +196,29 @@ export function Inbox() {
 
   const selected = rows.find((c) => c.rootExtId === chosenRoot) ?? rows[0] ?? null;
 
+  // Reading to the end of the list is the request for more of it: a reader who
+  // keeps scrolling keeps getting rows, where a button made them say so after
+  // they had already decided. The end of the list is a marker the observer
+  // watches; it is not rendered once a page has failed, because a marker that
+  // stays in view would fire again on every render and the corpus would be asked
+  // the same question forever. A failure shows the error and a button instead.
+  const end = useRef<HTMLDivElement | null>(null);
+  const paging = inbox.hasNextPage === true && inbox.isFetchNextPageError !== true;
+  useEffect(() => {
+    const marker = end.current;
+    if (!marker || !paging) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) void inbox.fetchNextPage();
+      },
+      // Ahead of the fold: the next page lands while the reader is still going
+      // through rows, rather than after they stop at the end and wait.
+      { rootMargin: "300px" },
+    );
+    io.observe(marker);
+    return () => io.disconnect();
+  }, [paging, inbox.fetchNextPage]);
+
   return (
     <div className="wrap ibwrap">
       <form className="ibsearch" onSubmit={submit}>
@@ -210,7 +233,9 @@ export function Inbox() {
         </button>
       </form>
 
-      {inbox.isError ? <Failure error={inbox.error} /> : null}
+      {/* A failure with nothing to show is the whole page's; one with rows already
+          on screen belongs at the end of the list, where the reader is. */}
+      {inbox.isError && !inbox.data ? <Failure error={inbox.error} /> : null}
       {inbox.isPending ? <p className="selnote">Reading the corpus…</p> : null}
       {!inbox.isPending && !inbox.isError && rows.length === 0 ? (
         <p className="selnote">
@@ -235,15 +260,22 @@ export function Inbox() {
             </ul>
           ) : null}
 
-          {inbox.hasNextPage ? (
-            <button
-              type="button"
-              className="ibmore"
-              onClick={() => inbox.fetchNextPage()}
-              disabled={inbox.isFetchingNextPage}
-            >
-              {inbox.isFetchingNextPage ? "Loading…" : "Load older"}
-            </button>
+          {paging ? (
+            <div className="ibend" ref={end}>
+              {inbox.isFetchingNextPage ? (
+                <p className="selnote" role="status">
+                  Reading further back…
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+          {inbox.isFetchNextPageError ? (
+            <>
+              <Failure error={inbox.error} />
+              <button type="button" className="ibmore" onClick={() => inbox.fetchNextPage()}>
+                Try again
+              </button>
+            </>
           ) : null}
         </div>
 
