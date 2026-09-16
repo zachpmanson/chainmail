@@ -278,8 +278,10 @@
 
 /* The border between the panels, which is also the control that moves it. Eight
    pixels of target for a one-pixel line: a drag handle the reader has to aim at
-   is a drag handle they will miss. Only where there are two panels to divide —
-   in the single-column layout the list steps aside instead of being narrowed. */
+   is a drag handle they will miss. The space around the line is the two-column
+   layout's column gap, half of it on either side — see `.ibsplit` below. Only
+   where there are two panels to divide — in the single-column layout the list
+   steps aside instead of being narrowed. */
 .ibdrag { display:none; touch-action:none; cursor:col-resize; position:relative;
   /* The row's own height, not its content's: the items are aligned to the top, and
      a border between two columns has to run the length of both of them. */
@@ -364,7 +366,14 @@
      a thread is read, so the width goes where the reading is. Bounded by the
      grid until the reader drags the border — `--listw` is their width, and its
      absence is this minmax(), which is the layout's own answer for this screen. */
+  /* The border sits in a column of its own, and the gap is what the reader sees
+     on either side of the line: the same gap as everywhere else is a gutter wide
+     enough to read as a missing third panel, so the line carries *half* of it on
+     each side — `.9rem` split in two. The handle's own column is left alone, so
+     the eight-pixel target and the two panels' widths are unchanged. `row-gap`
+     keeps the base rule's `.9rem`, which is the stacked layout's spacing. */
   .ibsplit { grid-template-columns:var(--listw, minmax(15rem, 24rem)) .55rem minmax(0, 1fr);
+    column-gap:.45rem;
     align-items:stretch; flex:1 1 auto; min-height:0; }
   .ibdrag { display:block; }
   /* Both columns are the height of the window's remainder and scroll themselves,
