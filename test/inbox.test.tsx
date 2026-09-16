@@ -633,3 +633,106 @@ describe("how a row writes its date", () => {
     expect(whenShort(undefined, now)).toBe("");
   });
 });
+
+/**
+ * The folder button above the list. The folders are the mailbox's own labels —
+ * the list is what Gmail filed the mail under, so the tests answer with labels
+ * and counts and assert that those are what is shown; nothing here may invent a
+ * folder or a number.
+ */
+describe("the folder button", () => {
+  const FOLDER_PAGE: Handler = withChains((c) => {
+    const p = pathOf(c);
+    if (p === "/v1/labels") {
+      return json(200, {
+        labels: [
+          { name: "INBOX", messages: 2 },
+          { name: "CATEGORY_PROMOTIONS", messages: 1 },
+          { name: "SENT", messages: 1 },
+        ],
+      });
+    }
+    if (p === "/v1/search") {
+      switch (paramsOf(c).get("label")) {
+        case "INBOX":
+          return pageOf([CHAINS[0]]);
+        case "SENT":
+          return pageOf([CHAINS[1]]);
+        case "RECEIPTS":
+          return pageOf([]);
+        default:
+          return pageOf(CHAINS);
+      }
+    }
+    if (p === "/auth/status") return json(200, { signed_in: true });
+    return json(500, { error: `unexpected call to ${c.method} ${p}` });
+  });
+
+  it("says which folder the list is in, and opens the mailbox's own list", async () => {
+    handler = FOLDER_PAGE;
+    await mountApp("/");
+    await screen.findByText("Loom cutover schedule");
+
+    // Nothing chosen is every folder at once, and it says so rather than naming
+    // one the reader never picked.
+    const button = screen.getByRole("button", { name: /All mail/ });
+    expect(screen.queryByRole("menu")).toBeNull();
+
+    click(button);
+    const menu = await screen.findByRole("menu");
+    // The mailbox's labels with the mailbox's counts, and the button's own
+    // "All mail" above them as the way back out.
+    expect(menu.textContent).toContain("INBOX");
+    expect(menu.textContent).toContain("CATEGORY_PROMOTIONS");
+    const inboxRow = within(menu).getByRole("menuitem", { name: /INBOX/ });
+    expect(inboxRow.textContent).toContain("2");
+    expect(within(menu).getByRole("menuitem", { name: "All mail" })).not.toBeNull();
+  });
+
+  it("filters the list when a folder is picked, and keeps the folder in the address", async () => {
+    handler = FOLDER_PAGE;
+    const router = await mountApp("/");
+    await screen.findByText("Loom cutover schedule");
+
+    click(screen.getByRole("button", { name: /All mail/ }));
+    click(await screen.findByRole("menuitem", { name: /SENT/ }));
+
+    // The filter is the address's, so a reload or a sent link comes back to the
+    // folder rather than to the whole mailbox.
+    await waitFor(() => expect(router.state.location.searchStr).toBe("?label=SENT"));
+    const asked = calls.filter((c) => pathOf(c) === "/v1/search");
+    expect(paramsOf(asked[asked.length - 1]!).get("label")).toBe("SENT");
+    // And the list is the folder's: the outbound thread, not the inbox one.
+    await waitFor(() => expect(screen.getAllByRole("checkbox")).toHaveLength(1));
+    expect(document.querySelector(".ibrow")!.textContent).toContain("Loom cutover schedule");
+  });
+
+  it("opens the folder the address names, without a click", async () => {
+    handler = FOLDER_PAGE;
+    await mountApp("/?label=INBOX");
+    // The row, not the pane's heading: both name the subject, and only one of
+    // them is the list.
+    await waitFor(() => expect(document.querySelectorAll(".ibrow")).toHaveLength(1));
+    expect(screen.getByRole("button", { name: /INBOX/ })).not.toBeNull();
+    const asked = calls.filter((c) => pathOf(c) === "/v1/search");
+    expect(paramsOf(asked[0]!).get("label")).toBe("INBOX");
+  });
+
+  it("says a folder is empty rather than that the corpus is", async () => {
+    handler = FOLDER_PAGE;
+    await mountApp("/?label=RECEIPTS");
+    const note = await screen.findByText(/Nothing in RECEIPTS/);
+    expect(note.textContent).not.toContain("slurp");
+  });
+
+  it("closes on Escape, so the reader is not stuck behind it", async () => {
+    handler = FOLDER_PAGE;
+    await mountApp("/");
+    await screen.findByText("Loom cutover schedule");
+
+    click(screen.getByRole("button", { name: /All mail/ }));
+    await screen.findByRole("menu");
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+  });
+});

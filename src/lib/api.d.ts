@@ -260,6 +260,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/labels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The mailbox's labels, which are its folders.
+         * @description Every label the mailbox put on a message, with how many messages carry it, busiest first. The labels are Gmail's own — the system folders (INBOX, SENT, UNREAD, STARRED, IMPORTANT, CATEGORY_*) and whatever was filed by hand — because a folder list invented here would be a guess about the mailbox rather than a description of it. Messages rather than chains: a chain count for a label is a walk over the reply graph, and a mail client's sidebar counts messages.
+         */
+        get: operations["getLabels"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/people": {
         parameters: {
             query?: never;
@@ -611,6 +631,18 @@ export interface components {
         PeopleResponse: {
             /** @description Most-involved first. */
             people: components["schemas"]["PersonSummary"][];
+        };
+        /** @description The mailbox's labels, which are its folders. */
+        LabelsResponse: {
+            /** @description Busiest first, ties broken by name so two reads of an unchanged corpus agree. */
+            labels: components["schemas"]["LabelSummary"][];
+        };
+        /** @description One folder: a label the mailbox put on a message, and how many messages carry it. */
+        LabelSummary: {
+            /** @description The label as the mailbox spells it, e.g. INBOX, CATEGORY_PROMOTIONS, or a name filed by hand. */
+            name: string;
+            /** @description Messages carrying this label. Messages rather than chains: a chain count is a walk over the reply graph, and a mail client's sidebar counts messages. */
+            messages: number;
         };
         /** @description The connection snapshot the operator's probe wrote. checkedAt is omitted until some probe has run; services is always the full known set, so a missing snapshot reads as unchecked rather than empty. */
         StatusResponse: {
@@ -1137,6 +1169,11 @@ export interface operations {
                  * @example 2026-03-11T17:40:00Z
                  */
                 before?: string;
+                /**
+                 * @description Only chains with a message carrying this mailbox label — a folder, in the reading a mail client uses. Repeatable, and the labels are ORed: a message in two folders is in both, so `label=INBOX&label=STARRED` is the answer to either question. It selects messages rather than chains, so a chain is returned when any of its messages carries the label: a reply that went out under SENT does not take the thread out of the inbox its first message landed in. A folder with nothing in it is an empty list, not an error. The label is matched literally, so the % and _ in a name are characters rather than wildcards.
+                 * @example INBOX
+                 */
+                label?: string;
                 /** @description Retrieval. semantic and hybrid need vectors (`corpus embed`) AND a running local embedding daemon; without the daemon they return 503, never an empty result set. */
                 mode?: "lexical" | "semantic" | "hybrid";
                 /** @description How many chains (or entries) to return. */
@@ -1592,6 +1629,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getLabels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Labels, busiest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LabelsResponse"];
                 };
             };
         };

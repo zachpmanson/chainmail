@@ -97,23 +97,26 @@ func testServer(t *testing.T) *harness {
 		from:      "Ada Okoye <ada@loomworks.example>",
 		to:        "Bo Halvorsen <bo@fjordline.example>",
 		text:      "Can you quote the solar install for the north shed?",
+		labels:    []string{"INBOX", "IMPORTANT"},
 		atts:      []corpus.Attachment{{Name: "shed.csv", Mime: "text/csv", Size: 512, SourceRef: shedPart}},
 	})
 	b := putMail(t, s, mailFixture{
 		ext: extBo2, ts: "2026-03-02T23:40:00+01:00", tz: "+0100",
 		person: bo, container: "T1", subject: "Solar install quote",
 		messageID: "<c0ffee-2@fjordline.example>", inReplyTo: "<c0ffee-1@loomworks.example>",
-		from: "Bo Halvorsen <bo@fjordline.example>",
-		to:   "Ada Okoye <ada@loomworks.example>",
-		text: "Quote attached. The install needs two days of roof access.",
+		from:   "Bo Halvorsen <bo@fjordline.example>",
+		to:     "Ada Okoye <ada@loomworks.example>",
+		labels: []string{"INBOX"},
+		text:   "Quote attached. The install needs two days of roof access.",
 	})
 	c := putMail(t, s, mailFixture{
 		ext: extAda3, ts: "2026-03-03T10:00:00+11:00", tz: "AEDT",
 		person: ada, container: "T1", subject: "Solar install quote: dates",
 		messageID: "<c0ffee-3@loomworks.example>", inReplyTo: "<c0ffee-2@fjordline.example>",
-		from: "Ada Okoye <ada@loomworks.example>",
-		to:   "Bo Halvorsen <bo@fjordline.example>",
-		text: "Roof access is fine from the 14th.",
+		from:   "Ada Okoye <ada@loomworks.example>",
+		to:     "Bo Halvorsen <bo@fjordline.example>",
+		labels: []string{"SENT"},
+		text:   "Roof access is fine from the 14th.",
 	})
 	putMail(t, s, mailFixture{
 		ext: extOther, ts: "2026-04-01T08:00:00+11:00", tz: "AEDT",
@@ -122,6 +125,7 @@ func testServer(t *testing.T) *harness {
 		from:      "Ada Okoye <ada@loomworks.example>",
 		to:        "Bo Halvorsen <bo@fjordline.example>",
 		text:      "Unrelated: the fence panels arrived.",
+		labels:    []string{"INBOX", "CATEGORY_PROMOTIONS"},
 	})
 	for _, id := range []int64{a, b, c} {
 		if err := s.Sight(id, 0, "direct", ""); err != nil {
@@ -190,6 +194,7 @@ type mailFixture struct {
 	from      string
 	to        string
 	text      string
+	labels    []string // the mailbox's own labels, as Gmail states them
 	atts      []corpus.Attachment
 }
 
@@ -214,6 +219,7 @@ func putMail(t *testing.T, s *corpus.Store, m mailFixture) int64 {
 		ParentRef: m.inReplyTo, BodyText: m.text,
 	}, &corpus.Mail{
 		MessageID: m.messageID, InReplyTo: m.inReplyTo, From: m.from, To: m.to,
+		Labels: m.labels,
 	}, m.atts)
 	if err != nil {
 		t.Fatalf("Put %s: %v", m.ext, err)

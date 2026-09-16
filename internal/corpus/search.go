@@ -125,6 +125,17 @@ type Query struct {
 	// HasAttachment: nil to not care, else require/forbid attachments.
 	HasAttachment *bool
 
+	// Labels matches the mailbox labels a message carries — what a reader calls
+	// its folders. A message in several labels is in each of them, which is why
+	// this is a list and an existence test rather than one folder per entry: the
+	// answer Gmail gives for a conversation filed in two places is that it is in
+	// both.
+	//
+	// It selects entries, not chains, so a chain is returned when *any* of its
+	// messages carries the label — the same reading: a reply that went out under
+	// SENT does not remove the thread from the inbox its first message landed in.
+	Labels []string
+
 	// IncludeNoise disables noise exclusion entirely. Noise overrides which
 	// predicates define noise; nil means DefaultNoiseFilter.
 	IncludeNoise bool
@@ -670,6 +681,16 @@ func (q Query) filters() (string, []any) {
 			args = append(args, ra...)
 		}
 		preds = append(preds, p+")")
+	}
+	for _, l := range q.Labels {
+		// mail_detail.labels is the mailbox's own list, stored as one
+		// comma-joined string, so membership is a substring test against a
+		// delimited copy. instr() rather than like: a label is user text and may
+		// contain % or _, which like would read as wildcards. NULL labels (every
+		// Slack row, and any mail entry with no mailbox copy) match nothing,
+		// which is the honest answer — an entry with no labels is in no folder.
+		preds = append(preds, "instr(',' || md.labels || ',', ',' || ? || ',') > 0")
+		args = append(args, l)
 	}
 	if q.HasAttachment != nil {
 		p := "exists (select 1 from attachments a where a.entry_id = e.id)"

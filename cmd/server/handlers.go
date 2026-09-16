@@ -150,6 +150,7 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("/v1/entries/{extId}", get(s.entry))
 	mux.HandleFunc("/v1/chains/{rootExtId}", get(s.chain))
 	mux.HandleFunc("/v1/stats", get(s.stats))
+	mux.HandleFunc("/v1/labels", get(s.labels))
 	mux.HandleFunc("/v1/people", get(s.people))
 	mux.HandleFunc("/auth/status", get(s.authStatus))
 	mux.HandleFunc("/auth/login", get(s.authLogin))
@@ -329,6 +330,17 @@ func (s *server) search(w http.ResponseWriter, r *http.Request) {
 	p := r.URL.Query()
 	text, person, since := p.Get("q"), p.Get("person"), p.Get("since")
 	before := p.Get("before")
+	// Every label named on the URL, not the first: the store takes a list, and a
+	// caller asking for two folders is asking a question it can already answer.
+	// An empty one is dropped rather than passed through — `label=` sent
+	// literally would be a filter on a label nobody has, which is a different
+	// (and silently empty) search from not filtering.
+	labels := make([]string, 0, len(p["label"]))
+	for _, l := range p["label"] {
+		if l != "" {
+			labels = append(labels, l)
+		}
+	}
 	// With no filter at all this is the inbox: the corpus in the order it
 	// arrived, which is a list a reader can act on without typing anything.
 	// Deliberately not a ranking — the store orders a query with no ranking
@@ -347,7 +359,7 @@ func (s *server) search(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
-	q := corpus.Query{Text: text, Limit: limit}
+	q := corpus.Query{Text: text, Limit: limit, Labels: labels}
 	if since != "" {
 		t, err := time.Parse("2006-01-02", since)
 		if err != nil {
@@ -1310,6 +1322,19 @@ func (s *server) status(w http.ResponseWriter, r *http.Request) {
 		snap = status.Parse(blob)
 	}
 	send(w, http.StatusOK, toStatusResponse(snap))
+}
+
+// labels is the folder list the home page's button opens. It is the mailbox's
+// own labels with the counts they carry, kept as one plain read: the labels are
+// what Zach filed his mail under, and nothing here decides what a folder should
+// be on his behalf.
+func (s *server) labels(w http.ResponseWriter, r *http.Request) {
+	ls, err := s.store.Labels()
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	send(w, http.StatusOK, toLabelsResponse(ls))
 }
 
 func (s *server) people(w http.ResponseWriter, r *http.Request) {

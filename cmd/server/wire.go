@@ -136,6 +136,28 @@ type personSummary struct {
 	Received    int64    `json:"received"`
 }
 
+// labelsResponse is the folder list a mailbox-style sidebar opens: every label
+// on a mailbox message, with how many messages carry it. Messages rather than
+// chains — a chain count for a label is a walk over the reply graph, and a mail
+// client's own sidebar counts messages — so a client showing this next to a
+// folder name should say nothing more specific than a number.
+type labelsResponse struct {
+	Labels []labelSummary `json:"labels"`
+}
+
+type labelSummary struct {
+	Name     string `json:"name"`
+	Messages int    `json:"messages"`
+}
+
+func toLabelsResponse(ls []corpus.LabelCount) labelsResponse {
+	out := labelsResponse{Labels: make([]labelSummary, 0, len(ls))}
+	for _, l := range ls {
+		out.Labels = append(out.Labels, labelSummary{Name: l.Name, Messages: l.Messages})
+	}
+	return out
+}
+
 // opsPlanResponse is everything the ops screen shows to review people merges,
 // in one read-only shot: the dedupe plan the CLI's dry run prints (merges and
 // refusals), the pairs MergeCandidates offers a human glance at, the twins
