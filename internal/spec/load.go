@@ -218,13 +218,19 @@ func load(store *corpus.Store, ids []int64) ([]*entryRow, error) {
 
 // loadFolds attaches each entry's boilerplate block.
 //
-// The pass is over the whole corpus and only the selection's share of it is
-// kept, which is the same asymmetry inferZones runs on and for the same reason:
-// what a person appends to their mail is a fact about them, so a six-entry page
-// and a sixty-entry page have to fold the same block. Deriving it here rather
-// than reading a stored column is argued at corpus.Boilerplate.
+// The evidence is every message by the senders on this page, and every message
+// from the domains they were sent from — whole groups, not the selection, because
+// a six-entry page and a sixty-entry page have to fold the same block. The
+// argument for scoping it there rather than over the corpus, and for why the two
+// agree, is at corpus.BoilerplateFor; what it buys is the difference between a
+// rendered chain costing ~30 ms and costing a pass over every mail body in the
+// corpus — 1.8 s of a 1.83 s request, measured before this change.
 func loadFolds(store *corpus.Store, rows []*entryRow) error {
-	folds, err := store.Boilerplate()
+	ids := make([]int64, 0, len(rows))
+	for _, r := range rows {
+		ids = append(ids, r.ID)
+	}
+	folds, err := store.BoilerplateFor(ids)
 	if err != nil {
 		return err
 	}
