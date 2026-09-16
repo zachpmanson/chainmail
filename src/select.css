@@ -337,9 +337,15 @@
   /* Both columns are the height of the window's remainder and scroll themselves,
      so a long list runs past a thread that keeps its heading — a mail client, not
      a page that grows until the reader loses where they were. The list's box
-     moves out to the wrapper, which is what scrolls, so its edges stay put. */
+     moves out to the wrapper, which is what scrolls, so its edges stay put.
+
+     The list's column holds a folder button above the list, so its height is the
+     button *plus* the list. Both claiming the full height pushed the list 22px
+     past the window, which the body's overflow:hidden then cut off — a column,
+     not two things each taking 100%, so the list gets what the button leaves. */
   .ibcol, .ibread { min-height:0; height:100%; }
-  .iblistwrap { height:100%; overflow-y:auto;
+  .ibcol { display:flex; flex-direction:column; }
+  .iblistwrap { flex:1 1 auto; min-height:0; overflow-y:auto;
     border:1px solid var(--line); border-radius:9px; background:var(--card); }
   .iblistwrap .iblist { border:0; border-radius:0; background:none; }
   .ibread { overflow:auto; }
