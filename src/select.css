@@ -324,7 +324,12 @@
      "this page is a workspace" is something the page knows about itself, and it is
      the same way a transcript says `body.chains`. */
   body.inbox { height:100vh; overflow:hidden; }
-  body.inbox #root { height:100%; min-height:0; }
+  /* The shell is a flex column *here only*: the nav keeps its height, the page
+     takes the rest, and the page's own columns split that. Everywhere else #root
+     stays a block, because a flex item with `margin:0 auto` is sized to its
+     content — which is how this rule, applied to every page, narrowed the search,
+     saved pages, services and ops down to a centred column. */
+  body.inbox #root { display:flex; flex-direction:column; height:100%; min-height:0; }
   .wrap.ibwrap { flex:1 1 auto; min-height:0; padding-bottom:1rem;
     display:flex; flex-direction:column; }
   /* The list is bounded and the pane takes whatever is left: a row is skimmed,

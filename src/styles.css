@@ -27,11 +27,12 @@
   html { scroll-behavior:smooth; }
   body { margin:0; background:var(--bg); color:var(--fg);
     font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; }
-  /* The shell is the window: the nav at the top, the page under it. A document
-     page grows past the viewport and scrolls exactly as it did; a workspace
-     claims what is left (see .wrap.ibwrap), so its own columns scroll and the
-     nav stays where it was put. */
-  #root { display:flex; flex-direction:column; min-height:100vh; }
+  /* No shell rule here on purpose. Making #root a flex column for every page
+     silently disabled the centring the document measure relies on: a flex item
+     with `margin:0 auto` is sized to its *content*, because auto margins take
+     precedence over `align-items:stretch` — so /specs, /status, /ops and the
+     search page all shrank to a centred column on a wide screen. The shell is a
+     flex column only where a page has to fill the window: body.inbox, below. */
   /* The document measure. A transcript is read, so it keeps a readable width on
      a wide screen; column mode drops it (see body.chains — a workspace is laid
      out, not read), and the app's own pages opt out below, because a list and a
