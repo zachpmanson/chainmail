@@ -6,9 +6,10 @@ import (
 	"image"
 	"image/png"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/zachpmanson/chainmail/internal/uploads"
 
 	// Registered for their side effect only: image.Decode sniffs the format, and
 	// png is the one this file also encodes with.
@@ -17,11 +18,15 @@ import (
 )
 
 // Previews turn an attachment into a picture the reader can see without leaving
-// the page. Bytes are never in the corpus — it stores metadata only — so a
-// preview exists exactly where the archive that fed the corpus also kept the
-// file on disk. Today that is Slack, whose downloader writes every upload under
-// __uploads/<file id>/<name>; mail attachments have no local bytes and stay
-// chips until the mail CLI can fetch a part.
+// the page. Two places can hold the bytes, and the corpus is asked first: an
+// attachment that has been pulled is in `blobs`, so the page no longer depends on
+// a directory outside the database. The archive directory stays as the second
+// source — slackdump's __uploads/<file id>/<name> — because a corpus that was
+// never asked for media still renders, and because a spec built on a machine
+// with the archive but no blobs is a normal case.
+//
+// A mail attachment with neither stays a chip, which is what it was before any of
+// this existed: the renderer shows what it has and never reaches for the network.
 //
 // The thumbnail is embedded in the page as a data: URI rather than linked. The
 // page is one self-contained file whose whole point is that it reads with no
@@ -62,10 +67,14 @@ const (
 // signal that survives, so it is used on its own.
 var inlinePartName = regexp.MustCompile(`(?i)^image\d{1,4}\.(png|jpe?g|gif)$`)
 
-// previewer resolves an attachment's archived bytes and encodes thumbnails,
-// spending at most previewBudget across the page.
+// previewer resolves an attachment's bytes and encodes thumbnails, spending at
+// most previewBudget across the page.
 type previewer struct {
-	dir   string // archive upload root; empty disables previews entirely
+	dir string // archive upload root; empty leaves the corpus as the only source
+	// blob reads filed bytes by digest. Nil when the caller has no corpus to read
+	// (a spec built from JSON), which is not an error — it just means previews can
+	// only come from dir.
+	blob  func(sha string) ([]byte, bool)
 	spent int
 	// Skipped counts attachments that would have had a preview but lost it to
 	// the budget, so the caller can say so rather than leave a silent hole.
@@ -73,26 +82,21 @@ type previewer struct {
 }
 
 // preview returns a data: URI for the attachment, or "" when it does not get
-// one. Every "no" is a normal outcome: no local bytes, decoration, a format
+// one. Every "no" is a normal outcome: no bytes anywhere, decoration, a format
 // with no decoder, a corrupt file. None of them is worth failing a page over,
 // because the chip is still correct without a picture.
 func (p *previewer) preview(a attRow) (uri string, w, h int) {
-	if p == nil || p.dir == "" || a.SourceRef == "" {
+	if p == nil {
 		return "", 0, 0
 	}
 	if !previewableMime(a.Mime) || inlinePartName.MatchString(a.Name) {
 		return "", 0, 0
 	}
-	path, ok := p.locate(a)
+	data, ok := p.bytesFor(a)
 	if !ok {
 		return "", 0, 0
 	}
-	f, err := os.Open(path)
-	if err != nil {
-		return "", 0, 0
-	}
-	defer f.Close()
-	src, _, err := image.Decode(f)
+	src, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		return "", 0, 0
 	}
@@ -119,34 +123,28 @@ func (p *previewer) preview(a attRow) (uri string, w, h int) {
 		tb.Dx(), tb.Dy()
 }
 
-// locate finds the archived file for an attachment. slackdump keys a directory
-// by file id and puts the upload inside it under its own name, but the name in
-// the corpus and the name on disk can disagree — the archive sanitises it — so
-// the directory is authoritative and a lone file inside it is taken as the one.
-func (p *previewer) locate(a attRow) (string, bool) {
-	dir := filepath.Join(p.dir, a.SourceRef)
-	ents, err := os.ReadDir(dir)
+// bytesFor finds an attachment's bytes, preferring the corpus.
+//
+// The order is the point. Bytes pulled into the corpus are the ones the reader
+// deliberately asked for, and reading them first is what makes a rendered page
+// independent of a directory on whichever host built it. The archive is the
+// fallback for everything not pulled — and if the corpus link is stale (the blob
+// was pruned), falling through to the directory is better than a hole.
+func (p *previewer) bytesFor(a attRow) ([]byte, bool) {
+	if p.blob != nil && a.BlobSHA != "" {
+		if data, ok := p.blob(a.BlobSHA); ok && len(data) > 0 {
+			return data, true
+		}
+	}
+	path, ok := uploads.Locate(p.dir, a.SourceRef, a.Name)
+	if !ok {
+		return nil, false
+	}
+	data, err := os.ReadFile(path)
 	if err != nil {
-		return "", false
+		return nil, false
 	}
-	var files []string
-	for _, e := range ents {
-		if !e.IsDir() {
-			files = append(files, e.Name())
-		}
-	}
-	if len(files) == 0 {
-		return "", false
-	}
-	for _, f := range files {
-		if f == a.Name {
-			return filepath.Join(dir, f), true
-		}
-	}
-	if len(files) == 1 {
-		return filepath.Join(dir, files[0]), true
-	}
-	return "", false
+	return data, true
 }
 
 // previewableMime is the set of image types the standard library decodes. WebP

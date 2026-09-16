@@ -232,5 +232,13 @@ export interface Entry {
     preview?: string;
     previewW?: number;
     previewH?: number;
+    /**
+     * Digest of the attachment's bytes in the corpus, present only once they have been pulled. It is what lets a client ask for the file rather than send the reader back to Gmail for something we already hold.
+     */
+    blobSha?: string;
+    /**
+     * What a click should do with bytes we hold, decided by the server from the stored MIME — the same rule that sets Content-Disposition when the file is served, because the two must not be able to disagree. Absent when there is nothing local to open, which is what gmailId and link are for.
+     */
+    open?: "popup" | "download";
   }[];
 }

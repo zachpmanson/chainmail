@@ -58,7 +58,10 @@ type Mail struct {
 	Labels     []string
 }
 
-// Attachment is metadata only; bytes are never stored.
+// Attachment is the metadata a source states about a file on a message. The
+// bytes, when they have been pulled, live in `blobs` and are reached through the
+// attachment row's blob_sha — see blob.go. Ingest never carries bytes: a mail
+// part costs a Gmail round trip, and `slurp` does not spend those.
 type Attachment struct {
 	Name      string
 	Mime      string
@@ -256,6 +259,16 @@ func (s *Store) put(tx *sql.Tx, e Entry, m *Mail, sd *Slack, atts []Attachment) 
 
 	// Attachments are replaced wholesale: the source is authoritative, and a
 	// message's attachment list does not change independently of its body.
+	//
+	// Bytes pulled earlier must survive that replacement, so the links are read
+	// out first and re-applied by (source_ref) afterwards. A blob is not owned by
+	// the row that points at it: a re-slurp deletes the row, and losing the only
+	// reference to bytes nobody asked for twice would be a silent regression in
+	// exactly the case this was built for — the hourly walk.
+	links, err := mediaLinks(tx, res.ID)
+	if err != nil {
+		return res, err
+	}
 	if _, err := tx.Exec(`delete from attachments where entry_id=?`, res.ID); err != nil {
 		return res, err
 	}
@@ -267,6 +280,9 @@ func (s *Store) put(tx *sql.Tx, e Entry, m *Mail, sd *Slack, atts []Attachment) 
 			nullStr(a.SourceRef)); err != nil {
 			return res, fmt.Errorf("attachment %q: %w", a.Name, err)
 		}
+	}
+	if err := restoreMediaLinks(tx, res.ID, links); err != nil {
+		return res, err
 	}
 
 	if err := s.reindex(tx, res.ID, res.Created, oldSubject, oldBody); err != nil {

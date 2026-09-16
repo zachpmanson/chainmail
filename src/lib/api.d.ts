@@ -37,7 +37,7 @@ export interface paths {
         put?: never;
         /**
          * Reach the work mailbox and ingest it.
-         * @description Runs `corpus slurp` against the corpus — reaching the work mailbox through the scoped docket access the host grants this unit — so a subsequent /v1/refresh can build over mail that arrived since the last ingest. The phases are the ones the chainmail-slurp unit runs (mail, twins, repair, dedupe as a dry run, embed), and the ingest's own transcript is returned.
+         * @description Runs `corpus slurp` against the corpus — reading the work mailbox through the mail credential this unit already holds — so a subsequent /v1/refresh can build over mail that arrived since the last ingest. The phases are the ones the chainmail-slurp unit runs (mail, twins, repair, dedupe as a dry run, embed), and the ingest's own transcript is returned.
          *
          *     Opt-in and off by default: a server started without -slurp answers 403, keeping the surface read-most and never touching the mailbox.
          */
@@ -998,6 +998,13 @@ export interface components {
                 link?: string;
                 /** @description Thumbnail as a data: URI. Never a URL — the page renders without a network. */
                 preview?: string;
+                /** @description Digest of the attachment's bytes in the corpus, present only once they have been pulled. It is what lets a client ask for the file rather than send the reader back to Gmail for something we already hold. */
+                blobSha?: string;
+                /**
+                 * @description What a click should do with bytes we hold, decided by the server from the stored MIME — the same rule that sets Content-Disposition when the file is served, because the two must not be able to disagree. Absent when there is nothing local to open, which is what gmailId and link are for.
+                 * @enum {string}
+                 */
+                open?: "popup" | "download";
                 previewW?: number;
                 previewH?: number;
             }[];

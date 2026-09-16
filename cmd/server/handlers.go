@@ -476,6 +476,9 @@ func (s *server) spec(w http.ResponseWriter, r *http.Request) {
 		Queries:   req.Queries,
 		RunLabel:  time.Now().Format("2 Jan 2006"),
 		UploadDir: s.uploads,
+		// A pulled attachment renders from the corpus, so the web client sees the
+		// same page a spec built on the host would — without the archive directory.
+		Blobs: s.store.BlobBytes,
 	})
 	if err != nil {
 		// Generate refuses a selection it cannot turn into a valid spec — no

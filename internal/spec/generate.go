@@ -43,10 +43,13 @@ type Options struct {
 	Orgs map[string]string
 
 	// UploadDir is the archive's upload root, where the downloader that fed the
-	// corpus kept attachment bytes. Set it to embed image thumbnails; leave it
-	// empty and every attachment stays a chip. Only the Slack archive keeps
-	// bytes today, so only Slack attachments can gain a preview.
+	// corpus kept attachment bytes. It is the second source for a preview: the
+	// corpus's own blobs are asked first (see Blobs), and this catches everything
+	// that was never pulled.
 	UploadDir string
+	// Blobs reads attachment bytes the corpus holds, by digest. Nil leaves the
+	// archive as the only source, which is what a spec built from JSON has.
+	Blobs func(sha string) ([]byte, bool)
 }
 
 // Generate builds a timeline spec from the corpus.
@@ -113,7 +116,7 @@ func Generate(store *corpus.Store, opts Options) (Spec, error) {
 		badZones:    map[string]int{},
 		zoneWhy:     map[string]string{},
 		orgByPerson: map[int64]string{},
-		prev:        &previewer{dir: opts.UploadDir},
+		prev:        &previewer{dir: opts.UploadDir, blob: opts.Blobs},
 	}
 	for _, r := range rows {
 		b.rowByID[r.ID] = r
@@ -293,6 +296,11 @@ func (b *builder) add(r *entryRow) {
 			continue
 		}
 		att.Preview, att.PreviewW, att.PreviewH = b.prev.preview(a)
+		// The digest travels so the renderer can ask for the file itself once
+		// there is a server to ask — a thumbnail is not the whole of what was
+		// pulled. Set whenever the bytes are in the corpus, previewed or not.
+		att.BlobSHA = a.BlobSHA
+		att.Open = attachmentOpen(a.Mime, a.Name, a.BlobSHA != "")
 		e.Attachments = append(e.Attachments, att)
 	}
 

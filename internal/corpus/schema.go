@@ -340,4 +340,45 @@ var migrations = []string{
 	// not re-derived at render. The renderer reads it to draw the quoter's edit
 	// inline inside the message that quoted it instead of a floating duplicate.
 	`alter table entries add column derived integer not null default 0;`,
+
+	// 12: attachment bytes, filed once and pulled on purpose.
+	//
+	// Until now the corpus held attachment METADATA only — a mail attachment was
+	// a chip that sent the reader to Gmail, and only a Slack attachment could
+	// ever show a picture, because slackdump happened to leave its bytes beside
+	// the archive. Storing the bytes is what makes a rendered page genuinely
+	// self-contained and stops a preview depending on a directory outside the
+	// database — which is also what a headless host's cron slurp cannot promise.
+	//
+	// Content-addressed rather than a `data` column on attachments, for two
+	// reasons. The same screenshot forwarded five times is one row, and docket
+	// already hands back the digest, so the key is free. And `Put` replaces an
+	// entry's attachment rows WHOLESALE on every re-slurp: bytes hung off one of
+	// those rows would be silently dropped by the next hourly walk. blob_sha is
+	// re-linked by (entry, source_ref) across that replacement instead, so a blob
+	// outlives the row that pointed at it.
+	//
+	// `media_skip` records a part that was deliberately not pulled or could not
+	// be, for the same reason entry_embeddings.skip exists: without it every pass
+	// re-requests the same 25 MB video, and "we decided not to" is
+	// indistinguishable from "we have not got to it yet". It is a fact worth
+	// being able to count, not an error.
+	//
+	// Nothing here is filled by `slurp`. A mail part costs a Gmail round trip, so
+	// pulling is explicit — per message, per thread, per page — and a corpus
+	// nobody asked has no media in it.
+	`
+	create table blobs (
+	  sha256     text primary key,   -- over the decoded bytes
+	  bytes      blob not null,
+	  mime       text,
+	  size       integer not null,
+	  source     text not null,      -- mail | slack
+	  fetched_at integer not null
+	);
+
+	alter table attachments add column blob_sha text references blobs(sha256);
+	alter table attachments add column media_skip text;
+	create index attachments_blob on attachments(entry_id) where blob_sha is not null;
+	`,
 }

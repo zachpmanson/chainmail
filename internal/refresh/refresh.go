@@ -385,6 +385,7 @@ func Run(store *corpus.Store, mb Mailbox, prev spec.Spec, opts Options) (Report,
 		Me:         opts.Me,
 		RunLabel:   opts.RunLabel,
 		UploadDir:  opts.Uploads,
+		Blobs:      store.BlobBytes,
 		Params: &spec.RunParams{
 			Me:     opts.Me,
 			Limit:  opts.Limit,

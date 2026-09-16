@@ -18,6 +18,8 @@
 //	corpus eval -set judged.json      score two retrieval configurations
 //	corpus spec -q <text> -o f.json   a timeline spec for those chains
 //	corpus refresh <prev> -o f.json   the same page again, with what has arrived since
+//	corpus media pull -entry <id>     attachment bytes, on purpose, for one message
+//	corpus media stats|prune          what is filed, and what nothing points at
 //	corpus unnest <ext-id>            what extraction recovers from one message
 package main
 
@@ -105,6 +107,12 @@ const usage = `usage: corpus <command> [flags]
                            the per-query detail, -floor the cosine distributions
                            a similarity floor has to separate
   show          <ext-id>   one entry in full, or -chain for the whole thread
+  media         <pull|stats|prune>
+                           attachment bytes, on purpose and not by default:
+                           pull fetches what a message or thread needs (see
+                           corpus media pull, and -why for a dry run), stats
+                           says what is filed, prune deletes blobs nothing
+                           points at any more
   spec          -q <text>  write a timeline spec for the renderer
   refresh       <spec.json|page.html>
                            the same page again, from the corpus as it now stands:
@@ -396,6 +404,12 @@ func run(args []string) error {
 		defer s.Close()
 		return zonesReport(os.Stdout, s, *people, *chain)
 
+	case "media":
+		// The deliberate pull. `slurp` never touches attachment bytes — a mail part
+		// is a Gmail round trip — so this is the only way media enters the corpus,
+		// and it is scoped to what somebody is actually reading.
+		return runMedia(path, args[1:])
+
 	case "spec":
 		fs := flag.NewFlagSet("spec", flag.ContinueOnError)
 		q := fs.String("q", "", "text query; the matching chains become the spec")
@@ -455,6 +469,9 @@ func run(args []string) error {
 			},
 
 			UploadDir: *uploads,
+			// The corpus first, the archive second — a page renders attachments
+			// that were pulled without depending on this host's directory layout.
+			Blobs: s.BlobBytes,
 		})
 		if err != nil {
 			return err
