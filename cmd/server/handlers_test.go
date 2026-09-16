@@ -1072,3 +1072,101 @@ func TestLabelsListsTheFoldersWithTheirCounts(t *testing.T) {
 		t.Errorf("labels = %v, want %s", lines, want)
 	}
 }
+
+// A setting is read back the way every other answer is: from a body, into a
+// fresh struct. Decoding into the struct the last read filled would leave an
+// omitted key holding its old value — the server would have cleared the folder
+// and the test would still see it.
+func readSettings(t *testing.T, srv *harness) settingsResponse {
+	t.Helper()
+	res := srv.do(t, "GET", "/v1/settings", nil)
+	if res.status != 200 {
+		t.Fatalf("GET /v1/settings: status = %d: %s", res.status, res.body)
+	}
+	var got settingsResponse
+	if err := json.Unmarshal(res.body, &got); err != nil {
+		t.Fatalf("decoding settings: %v", err)
+	}
+	return got
+}
+
+// The settings are the reader's own choices, and the corpus has to keep "no
+// choice" distinct from "a choice of nothing" — a default folder that was never
+// set is every folder at once, which is not the same as one that was cleared
+// from something else.
+func TestSettingsRoundTripAndPreserveAnUnsetChoice(t *testing.T) {
+	srv := testServer(t)
+
+	res := srv.do(t, "GET", "/v1/settings", nil)
+	if res.status != 200 {
+		t.Fatalf("status = %d, want 200: %s", res.status, res.body)
+	}
+	if got := readSettings(t, srv); got.DefaultFolder != nil {
+		t.Fatalf("defaultFolder = %q for a corpus nobody has configured", *got.DefaultFolder)
+	}
+	// Omitted rather than empty, so a client can tell the two apart.
+	if strings.Contains(string(res.body), "defaultFolder") {
+		t.Errorf("an unset setting is served as a key: %s", res.body)
+	}
+
+	res = srv.do(t, "POST", "/v1/settings", []byte(`{"defaultFolder":"External Conversations"}`))
+	if res.status != 200 {
+		t.Fatalf("setting: status = %d: %s", res.status, res.body)
+	}
+	// The answer is the state, not the request: a caller sees what it stored.
+	if got := readSettings(t, srv); got.DefaultFolder == nil || *got.DefaultFolder != "External Conversations" {
+		t.Fatalf("after setting, the settings say %v; the write answered %s", got.DefaultFolder, res.body)
+	}
+
+	// Clearing is a state of its own, and a blank folder is how it is asked for.
+	if res := srv.do(t, "POST", "/v1/settings", []byte(`{"defaultFolder":"  "}`)); res.status != 200 {
+		t.Fatalf("clearing: status = %d: %s", res.status, res.body)
+	}
+	if got := readSettings(t, srv); got.DefaultFolder != nil {
+		t.Errorf("after clearing, defaultFolder = %q", *got.DefaultFolder)
+	}
+}
+
+// A folder that is not in the label list is stored rather than refused: it may
+// be one the next slurp brings in, and a folder that is not there shows an empty
+// list under its own name instead of the corpus arguing about the mailbox.
+func TestAFolderTheMailboxHasNotShownYetIsStillAChoice(t *testing.T) {
+	srv := testServer(t)
+	if res := srv.do(t, "POST", "/v1/settings",
+		[]byte(`{"defaultFolder":"Later"}`)); res.status != 200 {
+		t.Fatalf("status = %d: %s", res.status, res.body)
+	}
+	if got := readSettings(t, srv); got.DefaultFolder == nil || *got.DefaultFolder != "Later" {
+		t.Errorf("defaultFolder = %v, want the name as it was written", got.DefaultFolder)
+	}
+}
+
+// A field the contract does not declare is a caller reading a different
+// contract; storing the preference they did not ask for is worse than refusing.
+// (encoding/json matches field names case-insensitively, so a differently-cased
+// defaultFolder is the same field rather than an unknown one.)
+func TestAnUnknownSettingFieldIsRefused(t *testing.T) {
+	srv := testServer(t)
+	res := srv.do(t, "POST", "/v1/settings", []byte(`{"folder":"INBOX"}`))
+	if res.status != 400 {
+		t.Fatalf("status = %d, want 400: %s", res.status, res.body)
+	}
+	if !strings.Contains(res.errText(t), "folder") {
+		t.Errorf("the refusal does not name the field: %s", res.body)
+	}
+	if got := readSettings(t, srv); got.DefaultFolder != nil {
+		t.Errorf("a refused write stored %q anyway", *got.DefaultFolder)
+	}
+}
+
+// One path, two verbs, and the error a wrong one gets names both of them.
+func TestSettingsRefusesAVerbItDoesNotTake(t *testing.T) {
+	srv := testServer(t)
+	res := srv.do(t, "DELETE", "/v1/settings", nil)
+	if res.status != 405 {
+		t.Fatalf("status = %d, want 405: %s", res.status, res.body)
+	}
+	if allow := res.header.Get("Allow"); allow != "GET, POST" {
+		t.Errorf("Allow = %q, want both verbs", allow)
+	}
+}

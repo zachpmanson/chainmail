@@ -214,8 +214,8 @@ func TestEveryDocumentedPathIsServed(t *testing.T) {
 	if err := json.Unmarshal(blob, &doc); err != nil {
 		t.Fatal(err)
 	}
-	if len(doc.Paths) != 18 {
-		t.Errorf("the contract declares %d paths; the handler table lists 18", len(doc.Paths))
+	if len(doc.Paths) != 19 {
+		t.Errorf("the contract declares %d paths; the handler table lists 19", len(doc.Paths))
 	}
 	srv := testServer(t)
 	for path, ops := range doc.Paths {

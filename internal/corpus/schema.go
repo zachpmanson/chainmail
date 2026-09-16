@@ -381,4 +381,22 @@ var migrations = []string{
 	alter table attachments add column media_skip text;
 	create index attachments_blob on attachments(entry_id) where blob_sha is not null;
 	`,
+
+	// 13: settings — the few choices that are about the reader rather than about
+	// the mail.
+	//
+	// A key/value table because the alternative is a column per preference, and a
+	// preference is not evidence: nothing here describes a message, so nothing
+	// here may influence what the corpus says. It is stored server-side rather
+	// than in the browser because the reader has more than one browser — the
+	// point of "open in this folder" is that it is true on the phone as well.
+	//
+	// A missing row and an empty value mean the same thing, a setting nobody has
+	// made: there is no third state for "unset" to be confused with.
+	`
+	create table settings (
+	  key   text primary key,
+	  value text not null
+	);
+	`,
 }
