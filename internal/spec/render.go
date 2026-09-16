@@ -28,6 +28,10 @@ type Rendered struct {
 	// pane hangs it on the sender's name so a reader can see who they are actually
 	// reading, and naming the wrong address would be worse than naming none.
 	FromEmail string
+	// Org is the sender's organisation, resolved by the same function a page build
+	// uses, so the pane's colours and the page's cannot disagree about one sender.
+	// Empty where nothing established one, which is drawn as the unknown slot.
+	Org string
 }
 
 // RenderTrail renders the named entries as the entries a page build would draw,
@@ -55,7 +59,13 @@ type Rendered struct {
 // which message placed a cid image, and a chip under the wrong message is a claim
 // about who sent what. Same rows, same order, same function — so the HTML here is
 // the HTML there, which is the whole point.
-func RenderTrail(store *corpus.Store, extIDs []string) (map[string]Rendered, error) {
+//
+// orgs are the stored domain rules (corpus.OrgRules). They are a parameter rather
+// than a lookup here because the caller already has them for whatever else it is
+// doing — a page build and a chain read are answering questions about the same
+// corpus in the same request — and a rule that arrived late would colour half a
+// trail one way and half another.
+func RenderTrail(store *corpus.Store, extIDs []string, orgs map[string]string) (map[string]Rendered, error) {
 	out := make(map[string]Rendered, len(extIDs))
 	if len(extIDs) == 0 {
 		return out, nil
@@ -70,6 +80,7 @@ func RenderTrail(store *corpus.Store, extIDs []string) (map[string]Rendered, err
 
 	ids := make([]int64, 0, len(extIDs))
 	extOf := make(map[int64]string, len(extIDs))
+	idOf := make(map[string]int64, len(extIDs))
 	for q.Next() {
 		var id int64
 		var ext string
@@ -78,6 +89,7 @@ func RenderTrail(store *corpus.Store, extIDs []string) (map[string]Rendered, err
 		}
 		ids = append(ids, id)
 		extOf[id] = ext
+		idOf[ext] = id
 	}
 	if err := q.Err(); err != nil {
 		return nil, err
@@ -89,10 +101,27 @@ func RenderTrail(store *corpus.Store, extIDs []string) (map[string]Rendered, err
 	}
 	// The recipient line comes from the same place a page build's does, which for
 	// an entry with no headers of its own means the participants table. See
-	// recipientsOf.
-	part, _, err := loadParticipation(store.DB(), ids)
+	// recipientsOf. The addresses it loads back are also what a recovered entry's
+	// org is resolved from, so this one call answers both.
+	part, addrs, err := loadParticipation(store.DB(), ids)
 	if err != nil {
 		return nil, err
+	}
+	// The org rules resolve in the order the caller asked for the entries in,
+	// because that is the trail's own order: a person who appears at two
+	// organisations is coloured at whichever the trail reached first, exactly as a
+	// page build colours them at whichever its own order reached first.
+	resolver := newOrgResolver(orgs, addrs)
+	byID := make(map[int64]entryRow, len(rows))
+	for _, r := range rows {
+		byID[r.ID] = r
+	}
+	for _, ext := range extIDs {
+		r, ok := byID[idOf[ext]]
+		if !ok || r.PersonID == 0 {
+			continue
+		}
+		resolver.note(r.PersonID, parseAddr(r.From).Address)
 	}
 	attributeAttachments(rows)
 	for _, r := range rows {
@@ -100,6 +129,7 @@ func RenderTrail(store *corpus.Store, extIDs []string) (map[string]Rendered, err
 			HTML:      bodyHTML(r),
 			To:        recipientsOf(r, part[r.ID]),
 			FromEmail: parseAddr(r.From).Address,
+			Org:       resolver.org(r.PersonID, parseAddr(r.From).Address),
 		}
 	}
 	return out, nil
