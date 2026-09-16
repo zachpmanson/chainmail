@@ -156,6 +156,16 @@ type Attachment struct {
 	// Empty when there is nothing local to open, which is the case the Gmail link
 	// above exists for. See attachmentOpen.
 	Open string `json:"open,omitempty"`
+	// View says which element shows these bytes in the window over the page —
+	// "image", "text", "pdf" — and is empty for a file that can only be taken
+	// rather than looked at. Decided here for the same reason Open is: the page
+	// renders what the server says the file is, so six renderers cannot drift.
+	//
+	// A different question from Open, and the PDF is where they differ: a click on
+	// one hands the file over (`open: "download"`, Content-Disposition
+	// `attachment`) while the page can still show it in a frame. See
+	// attachmentView.
+	View string `json:"view,omitempty"`
 	// Skip is why the corpus does not hold these bytes, when that was decided and
 	// recorded: a file the pull declined as too large, or a part the source no
 	// longer has. Present means asking again is pointless — the corpus keeps the

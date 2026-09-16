@@ -373,10 +373,32 @@
   .popimg { max-width:100%; max-height:calc(100vh - 6rem); width:auto; height:auto;
     object-fit:contain; border:1px solid var(--line); border-radius:6px;
     background:var(--card); }
+  .popimg[hidden] { display:none; }
+  /* A text file, read rather than parsed: monospace, no wrapping, scrolling both
+     ways, because a CSV line and a log line are both wider than any column and a
+     wrapped one is harder to read than a scrolled one. */
+  .poptext { margin:0; padding:.9rem 1rem; width:min(72rem, 92vw);
+    max-height:calc(100vh - 6rem); overflow:auto; text-align:left;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.78rem;
+    line-height:1.5; white-space:pre; tab-size:4;
+    border:1px solid var(--line); border-radius:6px; background:var(--card);
+    color:var(--fg); }
+  .poptext[hidden] { display:none; }
+  /* A framed document: the browser's own viewer, sized like a page. No sandbox
+     attribute — the frame's content is a blob this page built with a type it
+     chose (application/pdf), never the sender's claim about the bytes, and the
+     PDF viewers that would break under a sandbox are the only reason to have a
+     frame here at all. */
+  .popframe { width:min(72rem, 92vw); height:calc(100vh - 6rem); border:1px solid var(--line);
+    border-radius:6px; background:var(--card); }
+  .popframe[hidden] { display:none; }
   .popbar { display:flex; align-items:center; gap:.7rem; }
   .popcap { font-size:.74rem; font-weight:650; color:var(--muted);
     font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  /* What the window has to say about itself: that a long file was cut, that the
+     bytes could not be read. Not a control, so it is not framed like one. */
+  .popnote { font-size:.72rem; color:var(--muted); white-space:nowrap; }
   .popx { margin-left:auto; font:inherit; font-size:.72rem; cursor:pointer;
     border:1px solid var(--line); border-radius:6px; padding:.15rem .55rem;
     background:var(--card); color:var(--fg); }

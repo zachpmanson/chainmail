@@ -317,6 +317,7 @@ func (b *builder) add(r *entryRow) {
 		// pulled. Set whenever the bytes are in the corpus, previewed or not.
 		att.BlobSHA = a.BlobSHA
 		att.Open = attachmentOpen(a.Mime, a.Name, a.BlobSHA != "")
+		att.View = attachmentView(a.Mime, a.Name, a.BlobSHA != "")
 		att.Skip = a.Skip
 		e.Attachments = append(e.Attachments, att)
 	}

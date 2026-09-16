@@ -245,6 +245,10 @@ export interface Entry {
      */
     open?: "popup" | "download";
     /**
+     * How the bytes are shown in the window over the page: an image, a block of text, a framed PDF. Decided by the server from the stored MIME, like open and for the same reason — the renderers must not be able to drift. Empty when the file can only be taken rather than looked at, which is most formats. Not derived from open: a PDF downloads on click and still shows in the window.
+     */
+    view?: "image" | "text" | "pdf";
+    /**
      * Why the corpus does not hold these bytes, recorded when a pull decided it never will: too large, gone from the sender's copy, nothing to fetch by. Present means the file is not coming, so a page can explain the chip and stop offering to fetch it. The value is the corpus's own word; the page owns the phrasing.
      */
     skip?: string;

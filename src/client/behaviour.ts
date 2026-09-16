@@ -335,8 +335,9 @@ function withTransition(doc: Document, apply: () => void) {
 
 /**
  * Click-to-enlarge for attachment thumbnails, and for pictures the sender put
- * in the body: one modal over the page, still called `pop` after the popover it
- * grew out of.
+ * in the body: one window over the page, still called `pop` after the popover it
+ * grew out of. What it shows is the server's `view`: a picture, a block of text,
+ * a framed PDF.
  *
  * Not a `<details>`: a disclosure reveals content in place and leaves the
  * document readable around it, which is right for the panels and the signature
@@ -362,10 +363,19 @@ function attachPopover(doc: Document, on: On): () => void {
 
   let host: HTMLElement | null = null;
   let shot: HTMLImageElement;
+  let text: HTMLElement;
+  let frame: HTMLIFrameElement;
   let cap: HTMLElement;
+  let note: HTMLElement;
   let save: HTMLAnchorElement;
   let closeBtn: HTMLButtonElement;
   let opener: HTMLElement | null = null;
+  // Whatever a slow fetch was going to put in the window belongs to the opening
+  // that asked for it. Closing, or opening something else, retires the number and
+  // the reply is dropped: the reader has moved on, and bytes arriving late must
+  // not paint over what they are looking at now.
+  let opening = 0;
+  let blobURL = "";
 
   /** Built on first use, so a page nobody enlarges anything on carries no extra DOM. */
   const build = () => {
@@ -374,15 +384,28 @@ function attachPopover(doc: Document, on: On): () => void {
     host.className = "pop";
     host.setAttribute("role", "dialog");
     host.setAttribute("aria-modal", "true");
-    host.setAttribute("aria-label", "Enlarged image");
+    // Named by its caption rather than by a fixed string: the window holds a
+    // picture, a file's text or a framed document, and the one thing that is true
+    // of all three is the file's name or the picture's alt text.
+    host.setAttribute("aria-labelledby", "popcap");
     host.hidden = true;
     host.innerHTML =
-      '<div class="popbox"><img class="popimg" alt=""><div class="popbar">' +
-      '<span class="popcap"></span><a class="popget" download hidden>save</a>' +
+      '<div class="popbox"><img class="popimg" alt="" hidden>' +
+      '<pre class="poptext" hidden></pre>' +
+      // A frame holds the browser's own PDF viewer. Its type comes from the blob
+      // this page makes out of the served bytes, never from the sender's claim,
+      // which is the whole reason it is safe to frame.
+      '<iframe class="popframe" title="" hidden></iframe>' +
+      '<div class="popbar">' +
+      '<span class="popcap" id="popcap"></span><span class="popnote"></span>' +
+      '<a class="popget" download hidden>save</a>' +
       '<button type="button" class="popx">Close</button>' +
       "</div></div>";
     shot = host.querySelector<HTMLImageElement>(".popimg")!;
+    text = host.querySelector<HTMLElement>(".poptext")!;
+    frame = host.querySelector<HTMLIFrameElement>(".popframe")!;
     cap = host.querySelector<HTMLElement>(".popcap")!;
+    note = host.querySelector<HTMLElement>(".popnote")!;
     save = host.querySelector<HTMLAnchorElement>(".popget")!;
     closeBtn = host.querySelector<HTMLButtonElement>(".popx")!;
     doc.body.appendChild(host);
@@ -393,6 +416,9 @@ function attachPopover(doc: Document, on: On): () => void {
     on(host, "click", (ev: Event) => { if (ev.target === host) close(); });
     on(host, "keydown", (ev: Event) => {
       const k = ev as KeyboardEvent;
+      // A framed document keeps its own keys — a PDF viewer swallows Escape and
+      // Tab both — so this reaches the picture and text windows and the bar, and
+      // Close and the backdrop are the way out of a PDF.
       if (k.key === "Escape") { k.preventDefault(); close(); return; }
       // Close and save are the only focusable things inside, so the trap is Tab
       // staying put rather than a cycle through a list. Written as a wrap anyway:
@@ -414,6 +440,8 @@ function attachPopover(doc: Document, on: On): () => void {
 
   function close() {
     if (!host || host.hidden) return;
+    opening++;
+    empty();
     host.hidden = true;
     doc.body.classList.remove("popped");
     doc.querySelector(".wrap")?.removeAttribute("inert");
@@ -423,35 +451,64 @@ function attachPopover(doc: Document, on: On): () => void {
     opener = null;
   }
 
+  /** Put the window back to empty: nothing shown, nothing held. */
+  function empty() {
+    if (!host) return;
+    shot.hidden = true;
+    text.hidden = true;
+    text.textContent = "";
+    frame.hidden = true;
+    frame.removeAttribute("src");
+    note.textContent = "";
+    // A blob is held by the document until it is told otherwise, which for a
+    // window the reader has closed is a file kept in memory for nothing.
+    if (blobURL) { URL.revokeObjectURL(blobURL); blobURL = ""; }
+  }
+
   /**
-   * Enlarge one picture over the page.
+   * Enlarge one file over the page.
    *
-   * A chip whose bytes this host holds is shown from those bytes — the original,
-   * at its real size — rather than from the preview the builder embedded, which
-   * is capped at 640 pixels on its long edge and reads as a blur when it is
-   * blown up to fill a screen. The preview is what is shown when those bytes
-   * cannot be fetched: the corpus prunes bytes nothing points at, and a saved
-   * page can outlive them.
+   * A picture is shown from the bytes this host holds — the original, at its real
+   * size — rather than from the preview the builder embedded, which is capped at
+   * 640 pixels on its long edge and reads as a blur when it is blown up to fill a
+   * screen. The preview is what is shown when those bytes cannot be fetched: the
+   * corpus prunes bytes nothing points at, and a saved page can outlive them.
+   *
+   * Text and PDFs need the bytes in hand before they can be shown, so the window
+   * is opened empty and filled when they arrive: text goes into a `pre` (so no
+   * markup from a file ever becomes markup in the page), and a PDF becomes a blob
+   * the browser will frame — the served URL is a download, and a frame handed an
+   * attachment renders nothing.
    */
-  const open = (from: HTMLElement, caption: string, preview: string, full: string) => {
+  const open = (
+    from: HTMLElement, caption: string, preview: string, full: string, view: string,
+  ) => {
     build();
+    const mine = ++opening;
+    empty();
     cap.textContent = caption;
     shot.alt = caption;
-    // The save control, for a chip whose bytes this host holds. The modal is
+    frame.title = caption;
+    // The save control, for a chip whose bytes this host holds. The window is
     // reached by clicking a chip, and that click is intercepted — so without this
-    // there would be no route to the original file at all, only to the picture
-    // the spec embedded. `download` is what makes it a save rather than a view:
-    // the response is inline for a picture, and the attribute overrides that, with
-    // the filename still coming from the Content-Disposition header.
+    // there would be no route to the original file at all, only to what the page
+    // can show of it. `download` is what makes it a save rather than a view: the
+    // response is inline for a picture, and the attribute overrides that, with the
+    // filename still coming from the Content-Disposition header.
     save.hidden = !full;
     if (full) save.href = full;
-    // A 404 — bytes pruned since the page was saved — must not leave the modal
-    // empty-handed when there is a thumbnail to fall back to.
-    shot.onerror = () => {
-      shot.onerror = null;
-      if (preview) shot.src = preview;
-    };
-    shot.src = full || preview;
+    if (view === "image") {
+      // A 404 — bytes pruned since the page was saved — must not leave the window
+      // empty-handed when there is a thumbnail to fall back to.
+      shot.onerror = () => {
+        shot.onerror = null;
+        if (preview) shot.src = preview;
+      };
+      shot.src = full || preview;
+      shot.hidden = false;
+    } else if (full) {
+      void bring(full, view, mine);
+    }
     host!.hidden = false;
     // The overlay covers the viewport, so a pointer cannot reach the transcript
     // anyway; inert is what says the same thing to a screen reader and to the
@@ -462,12 +519,44 @@ function attachPopover(doc: Document, on: On): () => void {
     closeBtn.focus();
   };
 
-  /** Wire one picture up, once it is known to be worth enlarging.
+  /** Fetch the bytes and put them in the window, unless the reader has moved on. */
+  const bring = async (url: string, view: string, mine: number) => {
+    let res: Response;
+    try {
+      res = await fetch(url);
+      if (!res.ok) throw new Error(String(res.status));
+      if (view === "text") {
+        const body = await res.text();
+        if (mine !== opening) return;
+        // A file longer than this is one to save and open elsewhere: a window is
+        // for reading something, and a megabyte of log is not read by scrolling.
+        // The bytes are already here, so the save control is right beside it.
+        const cut = body.length > TEXT_CAP;
+        text.textContent = cut ? body.slice(0, TEXT_CAP) : body;
+        // No units claimed: the cap is in characters and the file's size is on the
+        // chip behind this window, so the honest thing to say here is that there
+        // is more of it and where to get it.
+        if (cut) note.textContent = "truncated — save it for the rest";
+        text.hidden = false;
+        return;
+      }
+      const blob = await res.blob();
+      if (mine !== opening) return;
+      blobURL = URL.createObjectURL(blob);
+      frame.src = blobURL;
+      frame.hidden = false;
+    } catch {
+      // A file that cannot be read says so in the window rather than leaving it
+      // blank: the reader asked for it and is owed an answer. The save control is
+      // still there, since the bytes may well save perfectly well.
+      if (mine === opening) note.textContent = "could not be read here";
+    }
+  };
+
+  /** Wire one chip up, once it is known to be worth opening.
    *
    *  `thumb` is the chip's embedded preview, when it has one: null for a small
-   *  stored picture, whose bytes the corpus holds but never embedded. The chip's
-   *  own `data-get` is then the only src there is, which is why a chip with
-   *  neither is not armed at all.
+   *  stored picture, whose bytes the corpus holds but never embedded.
    */
   const arm = (t: HTMLElement, thumb: HTMLImageElement | null, isChip: boolean) => {
     if (isChip && !thumb && !t.dataset.get) return;
@@ -480,10 +569,13 @@ function attachPopover(doc: Document, on: On): () => void {
     trig.setAttribute("aria-haspopup", "dialog");
 
     // Resolved at open time: the thumbnail is what is on screen to start with,
-    // and the local bytes are what the modal actually shows.
+    // and the bytes this host holds are what the window actually shows. The view
+    // is the renderer's — the server's for a chip, `image` for a body picture,
+    // which is a picture by the fact that it is an img.
+    const view = isChip ? trig.dataset.view || "image" : "image";
     const show = () =>
       open(trig, label, thumb ? thumb.currentSrc || thumb.src : "",
-        isChip ? trig.dataset.get ?? "" : "");
+        isChip ? trig.dataset.get ?? "" : "", view);
     on(trig, "click", (ev) => {
       const m = ev as MouseEvent;
       // A modified click is the reader asking for a new tab or a download, and
@@ -549,7 +641,18 @@ function attachPopover(doc: Document, on: On): () => void {
 const MIN_ENLARGE_EDGE = 100;
 
 /**
- * Whether a body picture is worth a popover, or whether that cannot be told yet.
+ * How much of a text file the window will hold, in characters.
+ *
+ * A window is for reading something, and a transcript, a CSV or a log past this
+ * length is a file to save and open somewhere that scrolls properly. The bytes
+ * are already here, so the save control sits right beside the truncated text; the
+ * note says what was cut. Characters rather than bytes: this is a limit on what
+ * goes into the DOM, and `text` is what comes out of the response.
+ */
+const TEXT_CAP = 256 * 1024;
+
+/**
+ * Whether a body picture is worth the window, or whether that cannot be told yet.
  *
  * Two things disqualify one: being small enough to be furniture, and already
  * being on screen at its full size, where enlarging shows nothing new. Both are
