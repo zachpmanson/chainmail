@@ -5,7 +5,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { makeQueryClient } from "../src/lib/queryClient";
 import { createChainmailRouter } from "../src/router";
-import { whenShort } from "../src/components/Inbox";
+import { whenShort } from "../src/lib/stamp";
 
 /**
  * The inbox: "/" with nothing asked of it. Every name, address and id below is
@@ -632,11 +632,11 @@ describe("how a row writes its date", () => {
     new Date(y, m, d, h, min).toISOString();
 
   it("is a clock for today, and 'Yesterday' for yesterday", () => {
-    const today = whenShort(at(2026, 8, 16, 14, 30), now);
-    expect(today).toMatch(/\d/);
-    // No month, and no year: today's clock is the whole answer.
-    expect(today).not.toContain("Mar");
-    expect(today).not.toContain("2026");
+    // 24-hour, and not the machine's idea of a clock: an en-US browser printed
+    // "2:30 PM" here for a time every other surface prints as 14:30.
+    expect(whenShort(at(2026, 8, 16, 14, 30), now)).toBe("14:30");
+    // Midnight is 00:05, not "12:05 AM", and not 24:05.
+    expect(whenShort(at(2026, 8, 16, 0, 5), now)).toBe("00:05");
     expect(whenShort(at(2026, 8, 15, 14, 30), now)).toBe("Yesterday");
   });
 

@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { $api, type OpsMerge, type OpsMergeRecord } from "../lib/api";
+import { when } from "../lib/stamp";
 
 function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -14,18 +15,6 @@ const RULES: Record<string, string> = {
   "dedupe:webmail-and-work-mailbox": "webmail and work mailbox",
 };
 const ruleLabel = (rule: string): string => RULES[rule] ?? rule;
-
-function when(stamp: string): string {
-  const d = new Date(stamp);
-  if (Number.isNaN(d.getTime())) return stamp;
-  const nowY = new Date().getFullYear();
-  const date =
-    d.getFullYear() === nowY
-      ? d.toLocaleDateString(undefined, { day: "numeric", month: "short" })
-      : d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
-  const t = d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-  return `${date}, ${t}`;
-}
 
 /** One merge the plan would make. The apply surface is drawn server-side; the
  *  client only offers a checkbox where the plan says applicable, so a request

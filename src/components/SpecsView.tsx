@@ -1,27 +1,9 @@
 import { Link } from "@tanstack/react-router";
 import { $api } from "../lib/api";
+import { when } from "../lib/stamp";
 
 function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
-}
-
-/**
- * A saved-at stamp, as the server wrote it (UTC RFC3339), shown in the reader's
- * own local time. Two digits survive from the wire: date and clock. The year is
- * kept when it is not the current one, so a page months old does not read as if
- * it were recent; the seconds are dropped, because within an index they are
- * noise next to the date.
- */
-function when(stamp: string): string {
-  const d = new Date(stamp);
-  if (Number.isNaN(d.getTime())) return stamp;
-  const y = d.getFullYear();
-  const nowY = new Date().getFullYear();
-  const date = y === nowY
-    ? d.toLocaleDateString(undefined, { day: "numeric", month: "short" })
-    : d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
-  const t = d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-  return `${date}, ${t}`;
 }
 
 /**
