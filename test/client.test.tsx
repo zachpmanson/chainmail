@@ -75,6 +75,26 @@ let calls: Call[];
 type Handler = (call: Call) => Promise<Response> | Response;
 let handler: Handler;
 
+/**
+ * The chain the right-hand pane reads, for any id. A candidate is fetched by id
+ * — the same read the inbox's pane makes — and the tests here are about the
+ * search and the build rather than about what a chain holds, so every id is
+ * answered with one invented entry. A handler that did not answer it would fail
+ * the pane into an alert, and a test looking for the page's own failure would
+ * find that one instead.
+ */
+const CHAIN_ENTRIES = [
+  {
+    extId: "mail:<loom-cutover-1@example.fed>",
+    source: "mail",
+    quoted: false,
+    ts: "2026-03-02T09:15:00Z",
+    author: "Ada Byron",
+    subject: "Loom cutover schedule",
+    body: "Cutover goes ahead on the 11th.",
+  },
+];
+
 const json = (status: number, body: unknown, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), {
     status,
@@ -100,6 +120,15 @@ beforeEach(() => {
     // answered here, and not recorded as one of their calls.
     if (new URL(call.url).pathname === "/v1/version") return json(200, {});
     calls.push(call);
+    // The pane's read of one candidate chain: the search page shows its top
+    // result, so every test that gets results reads a chain whether it meant to
+    // or not.
+    if (pathOf(call).startsWith("/v1/chains/")) {
+      return json(200, {
+        rootExtId: decodeURIComponent(pathOf(call).slice("/v1/chains/".length)),
+        entries: CHAIN_ENTRIES,
+      });
+    }
     return handler(call);
   });
 });
@@ -204,7 +233,7 @@ describe("searching for chains", () => {
     handler = () => json(200, { mode: "lexical", chains: CHAINS });
     await mountApp("/?q=cutover");
 
-    await screen.findByText("Loom cutover schedule");
+    await screen.findByText("Loom cutover schedule", { selector: ".selsub" });
     expect(await screen.findByText("3 of 4 matched")).toBeTruthy();
     // The cast of the whole chain, not just the authors of the hits.
     expect(await screen.findByText("4 participants")).toBeTruthy();
@@ -235,7 +264,7 @@ describe("searching for chains", () => {
         chains: new URL(c.url).searchParams.get("mode") === "semantic" ? [CHAINS[1]] : [CHAINS[0]],
       });
     await mountApp("/?q=cutover");
-    await screen.findByText("Loom cutover schedule");
+    await screen.findByText("Loom cutover schedule", { selector: ".selsub" });
 
     // hold the semantic answer open: whatever is on screen mid-flight is the
     // claim the page is making, and it must not be the lexical result set
@@ -250,7 +279,67 @@ describe("searching for chains", () => {
     await act(async () => {
       release(json(200, { mode: "semantic", chains: [CHAINS[1]] }));
     });
-    await screen.findByText("Warehouse lease renewal");
+    await screen.findByText("Warehouse lease renewal", { selector: ".selsub" });
+  });
+});
+
+describe("reading a candidate beside the results", () => {
+  const pane = () => document.querySelector(".ibread") as HTMLElement;
+  const rowOf = (subject: string) =>
+    screen.getByText(subject, { selector: ".selsub" }).closest(".selrow") as HTMLElement;
+
+  it("reads the first candidate on arrival, in the split rather than over it", async () => {
+    handler = () => json(200, { mode: "lexical", chains: CHAINS });
+    await mountApp("/?q=cutover");
+    await screen.findByText("Loom cutover schedule", { selector: ".selsub" });
+
+    // The pane is a column of the split, and the chain it is reading is the top
+    // result — waiting for a click would be a pane with nothing in it.
+    expect(document.querySelector(".ibsplit .ibread")).toBeTruthy();
+    expect(pane().querySelector(".ibread-subj")!.textContent).toBe("Loom cutover schedule");
+    await waitFor(() => expect(pane().textContent).toContain("Cutover goes ahead on the 11th."));
+    // No dialog over the list: the whole point is reading one candidate and
+    // comparing it with the others.
+    expect(document.querySelector(".selpv")).toBeNull();
+    // And the row it is reading says so, the way the inbox's open row does.
+    expect(rowOf("Loom cutover schedule").classList.contains("sel")).toBe(true);
+  });
+
+  it("puts the candidate whose button was pressed in the pane, and in the URL", async () => {
+    handler = () => json(200, { mode: "lexical", chains: CHAINS });
+    const router = await mountApp("/?q=cutover");
+    const other = CHAINS[1]!.rootExtId;
+    await screen.findByText("Warehouse lease renewal", { selector: ".selsub" });
+
+    click(within(rowOf("Warehouse lease renewal")).getByRole("button", { name: "Preview" }));
+
+    await waitFor(() => expect(pane().querySelector(".ibread-subj")!.textContent).toBe("Warehouse lease renewal"));
+    await waitFor(() =>
+      expect(
+        calls.some((c) => decodeURIComponent(pathOf(c)) === `/v1/chains/${other}`),
+      ).toBe(true),
+    );
+    // The address carries it, so a reload or a shared link lands on the same
+    // candidate rather than back at the top of the results.
+    expect(decodeURIComponent(router.state.location.searchStr)).toContain(`open=${other}`);
+    expect(rowOf("Warehouse lease renewal").classList.contains("sel")).toBe(true);
+    expect(rowOf("Loom cutover schedule").classList.contains("sel")).toBe(false);
+  });
+
+  it("reads a candidate named on the URL, and hands the list back when it is closed", async () => {
+    handler = () => json(200, { mode: "lexical", chains: CHAINS });
+    const router = await mountApp(
+      `/?q=cutover&open=${encodeURIComponent(CHAINS[1]!.rootExtId)}`,
+    );
+
+    await waitFor(() => expect(pane().querySelector(".ibread-subj")!.textContent).toBe("Warehouse lease renewal"));
+
+    // The pane's own way back, which is the whole of the list on a narrow
+    // screen: clearing the address is what un-picks it.
+    click(screen.getByRole("button", { name: "← Results" }));
+    await waitFor(() =>
+      expect(decodeURIComponent(router.state.location.searchStr)).not.toContain("open="),
+    );
   });
 });
 
@@ -311,7 +400,7 @@ describe("building a page from the chosen set", () => {
   it("posts exactly the ticked chains and lands on the page", async () => {
     handler = buildHandler;
     const router = await mountApp("/?q=cutover");
-    await screen.findByText("Loom cutover schedule");
+    await screen.findByText("Loom cutover schedule", { selector: ".selsub" });
 
     const boxes = screen.getAllByRole("checkbox");
     click(boxes[0]!);
@@ -351,7 +440,7 @@ describe("building a page from the chosen set", () => {
       return json(500, { error: "unexpected" });
     };
     const router = await mountApp("/?q=cutover");
-    await screen.findByText("Loom cutover schedule");
+    await screen.findByText("Loom cutover schedule", { selector: ".selsub" });
     click(screen.getAllByRole("checkbox")[0]!);
     typeInto("Page title", "Loom cutover");
     click(screen.getByRole("button", { name: /Build page/ }));
@@ -372,7 +461,7 @@ describe("building a page from the chosen set", () => {
       return json(500, { error: "unexpected" });
     };
     await mountApp("/?q=cutover");
-    await screen.findByText("Loom cutover schedule");
+    await screen.findByText("Loom cutover schedule", { selector: ".selsub" });
     click(screen.getAllByRole("checkbox")[0]!);
     click(screen.getByRole("button", { name: /Build page/ }));
 
@@ -392,7 +481,7 @@ describe("building a page from the chosen set", () => {
       return json(500, { error: "unexpected" });
     };
     await mountApp("/?q=cutover");
-    await screen.findByText("Loom cutover schedule");
+    await screen.findByText("Loom cutover schedule", { selector: ".selsub" });
 
     click(screen.getAllByRole("checkbox")[0]!);
     typeInto("Page title", "Loom cutover");
@@ -582,7 +671,7 @@ describe("the render route /view/<name>", () => {
   it("moves the address bar to /view/<name> when a page is built", async () => {
     handler = buildHandler;
     const router = await mountApp("/?q=cutover");
-    await screen.findByText("Loom cutover schedule");
+    await screen.findByText("Loom cutover schedule", { selector: ".selsub" });
     typeInto("Page title", "Loom cutover");
     click(screen.getAllByRole("checkbox")[0]!);
     click(screen.getByRole("button", { name: /Build page from 1 chain$/ }));
@@ -908,7 +997,7 @@ describe("adding another email to a page", () => {
     expect(button.disabled).toBe(false);
     fireEvent.submit(button.closest("form")!);
     await waitFor(() => expect(searchCalls().length).toBeGreaterThan(0));
-    await screen.findByText("Warehouse lease renewal");
+    await screen.findByText("Warehouse lease renewal", { selector: ".selsub" });
 
     // One tick, then the add goes back through the same accept path a proposal
     // uses: re-run the refresh with the roots named. The checkbox is scoped to
@@ -949,7 +1038,7 @@ describe("the search lives in the URL", () => {
     // Both inputs are back, and the search ran itself.
     await waitFor(() => expect((screen.getByLabelText("Query") as HTMLInputElement).value).toBe("cutover"));
     expect((screen.getByLabelText("Mode") as HTMLSelectElement).value).toBe("semantic");
-    await screen.findByText("Warehouse lease renewal");
+    await screen.findByText("Warehouse lease renewal", { selector: ".selsub" });
   });
 
   it("writes the search to the URL, and Back from a built page lands on it", async () => {
@@ -960,7 +1049,7 @@ describe("the search lives in the URL", () => {
     // plain /.q=cutover, not a URL that spells out the default.
     await waitFor(() => expect(router.state.location.searchStr).toBe("?q=cutover"));
 
-    await screen.findByText("Loom cutover schedule");
+    await screen.findByText("Loom cutover schedule", { selector: ".selsub" });
     typeInto("Page title", "Loom cutover");
     click(screen.getAllByRole("checkbox")[0]!);
     click(screen.getByRole("button", { name: /Build page from 1 chain$/ }));
@@ -975,7 +1064,7 @@ describe("the search lives in the URL", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/"));
     expect(router.state.location.searchStr).toBe("?q=cutover");
     await waitFor(() => expect((screen.getByLabelText("Query") as HTMLInputElement).value).toBe("cutover"));
-    await screen.findByText("Loom cutover schedule");
+    await screen.findByText("Loom cutover schedule", { selector: ".selsub" });
   });
 });
 // A page carrying a quoter's edit (#42): the host message repeats a chunk the
