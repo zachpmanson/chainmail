@@ -1,101 +1,15 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { $api, searchQuery, type ChainHit, type SearchMode, type SearchParams } from "../lib/api";
-import { ChainReading, Failure, type PreviewableChain } from "./ChainPreview";
+import { $api, searchQuery, type SearchMode, type SearchParams } from "../lib/api";
+import { ChainPane } from "./ChainPane";
+import { ChainRow, RankMeta } from "./ChainRow";
+import { Failure, type PreviewableChain } from "./ChainPreview";
 import { useBuildPage } from "../lib/build";
 import { SplitPane } from "./SplitPane";
 
 // The default-first order is what the dropdown shows: hybrid is the default
 // search style — lexical and semantic fused — and the order says so.
 const MODES: SearchMode[] = ["hybrid", "semantic", "lexical"];
-
-/** Both ends of the span, or the one date when a chain never got a reply. */
-function span(chain: ChainHit): string {
-  const day = (t?: string) => (t ? t.slice(0, 10) : "");
-  const a = day(chain.first);
-  const b = day(chain.last);
-  if (!a && !b) return "undated";
-  if (!b || a === b) return a || b;
-  return `${a} – ${b}`;
-}
-
-/** The search page's relevance floor, for the highlight. A chain whose best
- * cosine clears it is marked as a strong semantic match — the same number
- * refresh holds semantic-only proposals to (see internal/refresh). */
-const HIGHLIGHT_FLOOR = 0.8;
-
-/** The chain's best cosine similarity to the query, from its best entry hits. */
-function chainSimilarity(chain: ChainHit): number {
-  let best = 0;
-  for (const e of chain.best ?? []) {
-    if (e.semRank > 0 && e.similarity !== undefined && e.similarity > best) best = e.similarity;
-  }
-  return best;
-}
-
-export function ChainRow({
-  chain,
-  checked,
-  current,
-  onToggle,
-  onPreview,
-}: {
-  chain: ChainHit;
-  checked: boolean;
-  /** Whether this is the chain the pane is reading. Absent where the row is
-   *  read in a modal instead — a list with no pane has nothing to mark. */
-  current?: boolean;
-  onToggle: () => void;
-  onPreview: () => void;
-}) {
-  const sim = chainSimilarity(chain);
-  const hot = sim > HIGHLIGHT_FLOOR;
-  return (
-    <li className={`selrow${hot ? " selhot" : ""}${current ? " sel" : ""}`}>
-      <label className="chk">
-        <input type="checkbox" checked={checked} onChange={onToggle} />
-        <span className="seld">
-          <span className="selsub">
-            {chain.subject || "(no subject)"}
-            {hot ? (
-              <span className="selshot" title="strong semantic match">
-                strong
-              </span>
-            ) : null}
-          </span>
-          <span className="selmeta">
-            <span className="selratio" title="matching entries of the whole chain">
-              {chain.matched} of {chain.entries} matched
-            </span>
-            {sim > 0 ? (
-              <span className="selsim" title="best cosine similarity of the chain">
-                sim {sim.toFixed(2)}
-              </span>
-            ) : null}
-            {chain.people > 0 ? (
-              <span className="selppl" title="distinct people in the whole chain, senders and recipients">
-                {chain.people} participant{chain.people === 1 ? "" : "s"}
-              </span>
-            ) : null}
-            <span className="selspan">{span(chain)}</span>
-            {chain.sources?.length ? (
-              <span className="selsrc">{chain.sources.join(", ")}</span>
-            ) : null}
-          </span>
-        </span>
-      </label>
-      {/* Preview reads the chain as data — cheap, no spec assembly — so a
-          candidate can be judged on its entries before it is committed to a
-          page. It reads it in the pane beside the list rather than in a modal
-          over it: judging a candidate is comparing it with the others, which a
-          dialog hides. The button is kept out of the checkbox label, so ticking
-          a row and reading it never fight over one hit area. */}
-      <button type="button" className="selpvbtn" onClick={onPreview}>
-        Preview
-      </button>
-    </li>
-  );
-}
 
 
 /**
@@ -264,41 +178,33 @@ export function SelectView() {
             hasChoice={Boolean(opened)}
             list={
               <div className="iblistwrap">
-                <ul className="sellist">
+                <ul className="iblist">
                   {chains.map((c) => (
                     <ChainRow
                       key={c.rootExtId}
                       chain={c}
                       checked={chosen.includes(c.rootExtId)}
                       current={reading?.rootExtId === c.rootExtId}
+                      meta={<RankMeta chain={c} />}
                       onToggle={() => toggle(c.rootExtId)}
-                      onPreview={() => openChain(c.rootExtId)}
+                      // The row body opens the candidate in the pane, which is
+                      // what it does on the inbox too: a ranked list is still a
+                      // list of chains, and a second "Preview" control beside it
+                      // was two ways to do the one thing.
+                      onOpen={() => openChain(c.rootExtId)}
                     />
                   ))}
                 </ul>
               </div>
             }
             pane={
-              <aside className="ibread" aria-label="The candidate being read">
-                {reading ? (
-                  <>
-                    <div className="ibread-head">
-                      <button type="button" className="ibback" onClick={closeChain}>
-                        ← Results
-                      </button>
-                      <span className="ibread-subj">{reading.subject || "(no subject)"}</span>
-                      <span className="note">
-                        {reading.entries
-                          ? `${reading.entries} entr${reading.entries === 1 ? "y" : "ies"}`
-                          : ""}
-                      </span>
-                    </div>
-                    <ChainReading chain={reading} />
-                  </>
-                ) : (
-                  <p className="selnote">Nothing to read yet.</p>
-                )}
-              </aside>
+              <ChainPane
+                chain={reading}
+                label="The candidate being read"
+                backLabel="← Results"
+                empty="Nothing to read yet."
+                onClose={closeChain}
+              />
             }
           />
 

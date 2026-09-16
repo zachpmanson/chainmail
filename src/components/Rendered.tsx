@@ -4,7 +4,7 @@ import { attach } from "../client/behaviour";
 import { derive } from "../lib/derive";
 import { SpecView } from "./SpecView";
 import { ChainPreview } from "./ChainPreview";
-import { ChainRow } from "./Select";
+import { ChainRow, RankMeta } from "./ChainRow";
 import { $api, searchQuery, type ChainHit, type RefreshCandidate, type RefreshReport } from "../lib/api";
 import type { Timeline as Spec } from "../lib/spec";
 
@@ -259,8 +259,12 @@ function AddEmailsModal({ onClose, onAdd }: {
                 key={c.rootExtId}
                 chain={c}
                 checked={chosen.includes(c.rootExtId)}
+                current={false}
+                meta={<RankMeta chain={c} />}
                 onToggle={() => toggle(c.rootExtId)}
-                onPreview={() => setPreview(c)}
+                // Here the row opens the modal, not a pane: this list is already
+                // a dialog, and a second column inside one has nowhere to go.
+                onOpen={() => setPreview(c)}
               />
             ))}
           </ul>

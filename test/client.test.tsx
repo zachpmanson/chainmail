@@ -82,6 +82,11 @@ let handler: Handler;
  * answered with one invented entry. A handler that did not answer it would fail
  * the pane into an alert, and a test looking for the page's own failure would
  * find that one instead.
+ *
+ * `html` as well as `body`, because the pane draws the transcript's bubbles: the
+ * corpus renders the sender's markup server-side (internal/spec, the same
+ * conversion a build uses) and the pane shows that, so a fixture without it would
+ * pass a "the pane has text in it" assertion while rendering nothing.
  */
 const CHAIN_ENTRIES = [
   {
@@ -92,6 +97,9 @@ const CHAIN_ENTRIES = [
     author: "Ada Byron",
     subject: "Loom cutover schedule",
     body: "Cutover goes ahead on the 11th.",
+    html: "<p>Cutover goes ahead on the 11th.</p>",
+    tz: "AEST",
+    tzOffsetMinutes: 600,
   },
 ];
 
@@ -229,19 +237,67 @@ const statusHandler: Handler = (c) => {
 };
 
 describe("searching for chains", () => {
-  it("lists each candidate with the matched-of-total ratio", async () => {
-    handler = () => json(200, { mode: "lexical", chains: CHAINS });
+  it("lists each candidate with the matched-of-total ratio, in the inbox's own rows", async () => {
+    // One entry attached to the top candidate, so the row has a sender, a clock
+    // and a snippet to draw — and a semantic rank, which is what the ranked
+    // row's similarity is read from.
+    handler = () =>
+      json(200, {
+        mode: "lexical",
+        chains: [
+          {
+            ...CHAINS[0],
+            best: [
+              {
+                extId: "mail:<loom-cutover-4@example.fed>",
+                source: "mail",
+                ts: "2026-03-11T17:40:00Z",
+                personId: 1,
+                person: "Ada Byron",
+                snippet: "Roof access is fine from the 14th.",
+                score: 0.9,
+                proseRank: 0,
+                identRank: 0,
+                semRank: 1,
+                similarity: 0.83,
+              },
+            ],
+          },
+          CHAINS[1],
+        ],
+      });
     await mountApp("/?q=cutover");
 
-    await screen.findByText("Loom cutover schedule", { selector: ".selsub" });
-    expect(await screen.findByText("3 of 4 matched")).toBeTruthy();
-    // The cast of the whole chain, not just the authors of the hits.
-    expect(await screen.findByText("4 participants")).toBeTruthy();
+    await screen.findByText("Loom cutover schedule", { selector: ".ibsubj" });
+    // The row is the inbox's row: who wrote last, when, what the thread is
+    // called, what they said, the people in it and how many messages, drawn by
+    // the same component with the same classes. What the ranking adds is the
+    // meta line, and it is the only thing under the snippet.
+    const row = screen
+      .getByText("Loom cutover schedule", { selector: ".ibsubj" })
+      .closest(".ibrow") as HTMLElement;
+    expect(row.querySelector(".ibwho")!.textContent).toBe("Ada Byron");
+    expect(row.querySelector(".ibwhen")!.textContent).toBeTruthy();
+    expect(row.querySelector(".ibsnippet")!.textContent).toBe("Roof access is fine from the 14th.");
+    // Two counts, each in its own glyph: the people in the chain, and how many
+    // messages it holds.
+    expect(row.querySelector(".ibppl")!.textContent).toContain("4");
+    expect(row.querySelector(".ibppl svg")).toBeTruthy();
+    expect(row.querySelector(".ibcount")!.textContent).toContain("4");
+    expect(row.querySelector(".ibcount svg")).toBeTruthy();
+    // What a ranked row adds, and nothing else: the ratio the person is judging
+    // the candidate by, and the similarity behind it. The span and the sources
+    // are gone — a chain does not grow a date range because it was searched for.
+    const meta = row.querySelector(".ibmeta")!;
+    expect(meta.textContent).toContain("3 of 4 matched");
+    expect(meta.textContent).toContain("sim 0.83");
+    expect(meta.textContent).not.toContain("2026-03-02");
+    expect(meta.textContent).not.toContain("mail");
+    expect(row.querySelector(".selpvbtn")).toBeNull();
     // the same numerator over a different chain size — the ratio is what
     // separates a thread about the query from one that mentioned it
     expect(await screen.findByText("3 of 180 matched")).toBeTruthy();
-    expect(await screen.findByText("12 participants")).toBeTruthy();
-    expect(screen.getByText("2026-03-02 – 2026-03-11")).toBeTruthy();
+    expect(document.querySelectorAll(".ibppl").length).toBe(2);
   });
 
   it("passes the mode and drops the filters left blank", async () => {
@@ -264,7 +320,7 @@ describe("searching for chains", () => {
         chains: new URL(c.url).searchParams.get("mode") === "semantic" ? [CHAINS[1]] : [CHAINS[0]],
       });
     await mountApp("/?q=cutover");
-    await screen.findByText("Loom cutover schedule", { selector: ".selsub" });
+    await screen.findByText("Loom cutover schedule", { selector: ".ibsubj" });
 
     // hold the semantic answer open: whatever is on screen mid-flight is the
     // claim the page is making, and it must not be the lexical result set
@@ -279,25 +335,30 @@ describe("searching for chains", () => {
     await act(async () => {
       release(json(200, { mode: "semantic", chains: [CHAINS[1]] }));
     });
-    await screen.findByText("Warehouse lease renewal", { selector: ".selsub" });
+    await screen.findByText("Warehouse lease renewal", { selector: ".ibsubj" });
   });
 });
 
 describe("reading a candidate beside the results", () => {
   const pane = () => document.querySelector(".ibread") as HTMLElement;
   const rowOf = (subject: string) =>
-    screen.getByText(subject, { selector: ".selsub" }).closest(".selrow") as HTMLElement;
+    screen.getByText(subject, { selector: ".ibsubj" }).closest(".ibrow") as HTMLElement;
 
-  it("reads the first candidate on arrival, in the split rather than over it", async () => {
+  it("reads the same viewer the inbox reads, in the split rather than over it", async () => {
     handler = () => json(200, { mode: "lexical", chains: CHAINS });
     await mountApp("/?q=cutover");
-    await screen.findByText("Loom cutover schedule", { selector: ".selsub" });
+    await screen.findByText("Loom cutover schedule", { selector: ".ibsubj" });
 
     // The pane is a column of the split, and the chain it is reading is the top
     // result — waiting for a click would be a pane with nothing in it.
     expect(document.querySelector(".ibsplit .ibread")).toBeTruthy();
     expect(pane().querySelector(".ibread-subj")!.textContent).toBe("Loom cutover schedule");
     await waitFor(() => expect(pane().textContent).toContain("Cutover goes ahead on the 11th."));
+    // The transcripts' own bubbles, not the pane's old plain cards: the same
+    // `Message` a built page draws for the same entry, over the corpus's
+    // rendered html. A search result and a browsed thread are the same reading.
+    expect(pane().querySelector(".stream .msg .bub")).toBeTruthy();
+    expect(pane().querySelector(".selen")).toBeNull();
     // No dialog over the list: the whole point is reading one candidate and
     // comparing it with the others.
     expect(document.querySelector(".selpv")).toBeNull();
@@ -305,13 +366,19 @@ describe("reading a candidate beside the results", () => {
     expect(rowOf("Loom cutover schedule").classList.contains("sel")).toBe(true);
   });
 
-  it("puts the candidate whose button was pressed in the pane, and in the URL", async () => {
+  it("opens the row that was pressed in the pane, and puts it in the URL", async () => {
     handler = () => json(200, { mode: "lexical", chains: CHAINS });
     const router = await mountApp("/?q=cutover");
     const other = CHAINS[1]!.rootExtId;
-    await screen.findByText("Warehouse lease renewal", { selector: ".selsub" });
+    await screen.findByText("Warehouse lease renewal", { selector: ".ibsubj" });
 
-    click(within(rowOf("Warehouse lease renewal")).getByRole("button", { name: "Preview" }));
+    // The row body, which is what opens a chain on the inbox — the ranked list's
+    // own "Preview" button was a second way to do the one thing.
+    click(
+      within(rowOf("Warehouse lease renewal")).getByRole("button", {
+        name: "Warehouse lease renewal",
+      }),
+    );
 
     await waitFor(() => expect(pane().querySelector(".ibread-subj")!.textContent).toBe("Warehouse lease renewal"));
     await waitFor(() =>
@@ -400,7 +467,7 @@ describe("building a page from the chosen set", () => {
   it("posts exactly the ticked chains and lands on the page", async () => {
     handler = buildHandler;
     const router = await mountApp("/?q=cutover");
-    await screen.findByText("Loom cutover schedule", { selector: ".selsub" });
+    await screen.findByText("Loom cutover schedule", { selector: ".ibsubj" });
 
     const boxes = screen.getAllByRole("checkbox");
     click(boxes[0]!);
@@ -440,7 +507,7 @@ describe("building a page from the chosen set", () => {
       return json(500, { error: "unexpected" });
     };
     const router = await mountApp("/?q=cutover");
-    await screen.findByText("Loom cutover schedule", { selector: ".selsub" });
+    await screen.findByText("Loom cutover schedule", { selector: ".ibsubj" });
     click(screen.getAllByRole("checkbox")[0]!);
     typeInto("Page title", "Loom cutover");
     click(screen.getByRole("button", { name: /Build page/ }));
@@ -461,7 +528,7 @@ describe("building a page from the chosen set", () => {
       return json(500, { error: "unexpected" });
     };
     await mountApp("/?q=cutover");
-    await screen.findByText("Loom cutover schedule", { selector: ".selsub" });
+    await screen.findByText("Loom cutover schedule", { selector: ".ibsubj" });
     click(screen.getAllByRole("checkbox")[0]!);
     click(screen.getByRole("button", { name: /Build page/ }));
 
@@ -481,7 +548,7 @@ describe("building a page from the chosen set", () => {
       return json(500, { error: "unexpected" });
     };
     await mountApp("/?q=cutover");
-    await screen.findByText("Loom cutover schedule", { selector: ".selsub" });
+    await screen.findByText("Loom cutover schedule", { selector: ".ibsubj" });
 
     click(screen.getAllByRole("checkbox")[0]!);
     typeInto("Page title", "Loom cutover");
@@ -671,7 +738,7 @@ describe("the render route /view/<name>", () => {
   it("moves the address bar to /view/<name> when a page is built", async () => {
     handler = buildHandler;
     const router = await mountApp("/?q=cutover");
-    await screen.findByText("Loom cutover schedule", { selector: ".selsub" });
+    await screen.findByText("Loom cutover schedule", { selector: ".ibsubj" });
     typeInto("Page title", "Loom cutover");
     click(screen.getAllByRole("checkbox")[0]!);
     click(screen.getByRole("button", { name: /Build page from 1 chain$/ }));
@@ -997,7 +1064,7 @@ describe("adding another email to a page", () => {
     expect(button.disabled).toBe(false);
     fireEvent.submit(button.closest("form")!);
     await waitFor(() => expect(searchCalls().length).toBeGreaterThan(0));
-    await screen.findByText("Warehouse lease renewal", { selector: ".selsub" });
+    await screen.findByText("Warehouse lease renewal", { selector: ".ibsubj" });
 
     // One tick, then the add goes back through the same accept path a proposal
     // uses: re-run the refresh with the roots named. The checkbox is scoped to
@@ -1038,7 +1105,7 @@ describe("the search lives in the URL", () => {
     // Both inputs are back, and the search ran itself.
     await waitFor(() => expect((screen.getByLabelText("Query") as HTMLInputElement).value).toBe("cutover"));
     expect((screen.getByLabelText("Mode") as HTMLSelectElement).value).toBe("semantic");
-    await screen.findByText("Warehouse lease renewal", { selector: ".selsub" });
+    await screen.findByText("Warehouse lease renewal", { selector: ".ibsubj" });
   });
 
   it("writes the search to the URL, and Back from a built page lands on it", async () => {
@@ -1049,7 +1116,7 @@ describe("the search lives in the URL", () => {
     // plain /.q=cutover, not a URL that spells out the default.
     await waitFor(() => expect(router.state.location.searchStr).toBe("?q=cutover"));
 
-    await screen.findByText("Loom cutover schedule", { selector: ".selsub" });
+    await screen.findByText("Loom cutover schedule", { selector: ".ibsubj" });
     typeInto("Page title", "Loom cutover");
     click(screen.getAllByRole("checkbox")[0]!);
     click(screen.getByRole("button", { name: /Build page from 1 chain$/ }));
@@ -1064,7 +1131,7 @@ describe("the search lives in the URL", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/"));
     expect(router.state.location.searchStr).toBe("?q=cutover");
     await waitFor(() => expect((screen.getByLabelText("Query") as HTMLInputElement).value).toBe("cutover"));
-    await screen.findByText("Loom cutover schedule", { selector: ".selsub" });
+    await screen.findByText("Loom cutover schedule", { selector: ".ibsubj" });
   });
 });
 // A page carrying a quoter's edit (#42): the host message repeats a chunk the
