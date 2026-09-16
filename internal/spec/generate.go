@@ -243,7 +243,7 @@ func (b *builder) add(r *entryRow) {
 		Sender:    firstNonEmpty(r.Person, from.Who()),
 		Org:       b.orgFor(r.PersonID, from.Address),
 		FromEmail: from.Address,
-		To:        recipientLine(to, cc),
+		To:        recipientsOf(r, b.part[r.ID]),
 		Body:      bodyHTML(r),
 		// Empty means unknown, and the renderer shows it as unknown. Nothing
 		// downstream may fill it in: a zone invented at render time is a claim

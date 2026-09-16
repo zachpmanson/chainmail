@@ -69,3 +69,27 @@ func TestRenderingAnUnknownEntryIsAbsentRatherThanFatal(t *testing.T) {
 		t.Errorf("nothing asked for = %v, %v; want an empty result and no error", empty, err)
 	}
 }
+
+// The pane's path, on the same evidence: a recovered entry's recipients come from
+// the participants table, and the line is made by the same function the page uses,
+// so the two views cannot disagree about who a message went to.
+func TestARecoveredEntryKeepsItsRecipientsInThePane(t *testing.T) {
+	s, sp := quotedTo(t)
+	var want string
+	for _, m := range sp.Messages {
+		if m.ExtID == "quote:sha-to" {
+			want = m.To
+		}
+	}
+	if want == "" {
+		t.Fatal("the page has no recipient line for the recovered entry, so there is nothing to match")
+	}
+
+	rendered, err := RenderTrail(s, []string{"quote:sha-to"})
+	if err != nil {
+		t.Fatalf("RenderTrail: %v", err)
+	}
+	if got := rendered["quote:sha-to"].To; got != want {
+		t.Errorf("pane to = %q, page to = %q", got, want)
+	}
+}
