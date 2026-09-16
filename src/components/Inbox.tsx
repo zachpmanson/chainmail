@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { $api, type ChainHit, type EntryHit } from "../lib/api";
+import { ApiError, $api, type ChainHit, type EntryHit } from "../lib/api";
 import { useBuildPage } from "../lib/build";
 import { whenShort } from "../lib/stamp";
 import { ChainMessages } from "./ChainMessages";
@@ -185,7 +185,7 @@ function InboxRow({
   const last = newest(chain);
   const subject = chain.subject || "(no subject)";
   return (
-    <li className={`ibrow${current ? " sel" : ""}`}>
+    <li className={`ibrow${current ? " sel" : ""}${chain.unread > 0 ? " unread" : ""}`}>
       {/* aria-current, not a second class: the row the pane is showing is the
           current row, and a screen reader should hear it as one. */}
       <button
@@ -198,6 +198,20 @@ function InboxRow({
         <span className="ibwho">{last?.person || "unknown sender"}</span>
         <span className="ibwhen">{whenShort(last?.ts ?? chain.last)}</span>
         <span className="ibsubrow">
+          {/* The count of unread messages, before the subject the way a mail
+              client puts its dot: it is the first thing scanned for when
+              picking through a list, and the number rather than a dot because a
+              twelve-message trail with four unread is not the same row as one
+              with twelve. The row's subject is emboldened by CSS off the same
+              state, so the count and the weight never disagree. */}
+          {chain.unread > 0 ? (
+            <span
+              className="ibunread"
+              title={`${chain.unread} unread message${chain.unread === 1 ? "" : "s"} in this chain`}
+            >
+              {chain.unread}
+            </span>
+          ) : null}
           <span className="ibsubj">{subject}</span>
           {chain.entries > 1 ? (
             <span className="ibcount" title={`${chain.entries} messages in this chain`}>
@@ -385,6 +399,32 @@ export function Inbox() {
     .map((a) => a.trim())
     .filter((a) => a !== "");
 
+  // The read-state write: the one thing this page changes in the mailbox itself,
+  // and the reason the unread counts here mean what the reader's phone means.
+  //
+  // The row's own count is the state the button acts on, and the list is what
+  // holds it, so the write invalidates the list rather than patching a row in
+  // place: the server reconciles every message in the chain, and the number it
+  // comes back with is the mailbox's answer about all of them — a client that
+  // set `unread: 0` by hand would be claiming something it had not been told.
+  const [readNote, setReadNote] = useState<string | null>(null);
+  const read = $api.useMutation("post", "/v1/read", {
+    onSuccess: () => {
+      setReadNote(null);
+      void queryClient.invalidateQueries({ queryKey: ["get", "/v1/search"] });
+    },
+    onError: (e: unknown) => {
+      // Said in the pane, not only in the console, and the disabled case in words
+      // a reader can act on: a host started without -mark-read refuses every
+      // press, and a silent button would read as a broken one.
+      setReadNote(
+        e instanceof ApiError && e.status === 403
+          ? "This host cannot change the mailbox: it was started without -mark-read."
+          : `Marking failed: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    },
+  });
+
   // The address may name a chain this page of the list does not hold — an old
   // thread opened, then reloaded, comes back before the list has been paged that
   // far. The pane reads it from the id either way (it fetches the chain by id),
@@ -499,7 +539,45 @@ export function Inbox() {
                     ? `${selected.entries} entr${selected.entries === 1 ? "y" : "ies"}`
                     : ""}
                 </span>
+                {/* The read-state control, and the only explicit one: nothing is
+                    marked by looking at it. The pane opens the newest chain by
+                    itself when the page loads, so a mark-on-open rule would
+                    clear the badge for mail nobody has read — and undoing that
+                    is a second click nobody knows to make. Absent when the row
+                    is not in the list yet, because then the count is unknown and
+                    the button could only guess which way it goes.
+
+                    Rightmost in the strip, past the count, so it is one place to
+                    reach for on every chain. The circle *is* the state — filled
+                    for unread, an outline for read, the same grammar the row
+                    badge uses — and the press is the other one: no label, because
+                    a word here would be a second thing to read on a line whose
+                    subject is the thing being read. */}
+                {selected.unread !== undefined ? (
+                  <button
+                    type="button"
+                    className={`ibread-read${selected.unread > 0 ? " unread" : ""}`}
+                    disabled={read.isPending}
+                    aria-label={selected.unread > 0 ? "Mark read" : "Mark unread"}
+                    aria-pressed={selected.unread > 0}
+                    title={
+                      selected.unread > 0
+                        ? "Unread in the mailbox — mark this chain read"
+                        : "Read in the mailbox — mark this chain unread"
+                    }
+                    onClick={() =>
+                      read.mutate({
+                        body: { chain: selected.rootExtId, unread: selected.unread === 0 },
+                      })
+                    }
+                  />
+                ) : null}
               </div>
+              {readNote ? (
+                <p className="selnote" role="status">
+                  {readNote}
+                </p>
+              ) : null}
               {/* The same component the page built from this thread uses, over a
                   corpus read that carries each body already rendered. */}
               <ChainMessages chain={selected} />

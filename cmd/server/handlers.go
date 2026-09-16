@@ -103,6 +103,17 @@ type server struct {
 	// as -slurp, because it is the second thing here that reaches the mailbox,
 	// once per attachment part. See defaultMediaPull for what the switch crosses.
 	mediaEnabled bool
+
+	// markReadEnabled is the -mark-read grant: whether POST /v1/read may change
+	// the mailbox, rather than only read it. Off unless the host says otherwise,
+	// and the one switch here whose absence is a 403 rather than a missing
+	// feature — the read state lives in Gmail, and half of it is not a state.
+	markReadEnabled bool
+	// openUnreadMailbox opens the mailbox the write goes through, called once per
+	// request and only when the chain has something markable in it, so a chain of
+	// recovered text never needs a grant. Injected so the handler is testable
+	// without a mailbox (see unreadMailbox).
+	openUnreadMailbox func() (unreadMailbox, error)
 	// runMediaPull is one message's pull, injected so the handler can be tested
 	// without a mailbox. The real one (defaultMediaPull) is the same
 	// internal/media walk the `corpus media pull` command runs, called in-process
@@ -145,6 +156,7 @@ func (s *server) routes() http.Handler {
 	// wrong one answers with the same JSON error shape as everything else
 	// instead of ServeMux's plain text.
 	mux.HandleFunc("/v1/refresh", post(s.refresh))
+	mux.HandleFunc("/v1/read", post(s.markRead))
 	mux.HandleFunc("/v1/media/pull", post(s.mediaPull))
 	mux.HandleFunc("/v1/attachments/{sha}", get(s.attachment))
 	mux.HandleFunc("/v1/ops/plan", get(s.opsPlan))
@@ -801,10 +813,15 @@ type slurpResponse struct {
 // the ingest and the server are one package with one default.
 //
 // Which phases run matches the chainmail-slurp unit (mail, twins, repair,
-// dedupe, embed): a human pressed this button, so the dedupe plan is worth
-// showing — it stays a dry run in slurp regardless. CHAINMAIL_CORPUS pins the
-// same database this process has open; being WAL, the ingest writes beside the
-// reader.
+// dedupe, unread, embed): a human pressed this button, so the dedupe plan is
+// worth showing — it stays a dry run in slurp regardless. CHAINMAIL_CORPUS pins
+// the same database this process has open; being WAL, the ingest writes beside
+// the reader.
+//
+// unread rides along so the button also fixes a stale badge: the ingest reads a
+// message's labels once and never again, so a thread read on a phone still reads
+// unread here until something reconciles it — and the person most likely to
+// notice is the one looking at that row.
 func defaultSlurp() func(ctx context.Context, corpusPath string) ([]byte, error) {
 	return func(ctx context.Context, corpusPath string) ([]byte, error) {
 		corpus, err := siblingBin("corpus")
@@ -812,7 +829,7 @@ func defaultSlurp() func(ctx context.Context, corpusPath string) ([]byte, error)
 			return nil, err
 		}
 		args := []string{"slurp", "-q", "in:anywhere",
-			"-only", "mail,twins,repair,dedupe,embed"}
+			"-only", "mail,twins,repair,dedupe,unread,embed"}
 		cmd := exec.CommandContext(ctx, corpus, args...)
 		cmd.Env = append(os.Environ(), "CHAINMAIL_CORPUS="+corpusPath)
 		return cmd.CombinedOutput()
@@ -934,6 +951,157 @@ func (s *server) mediaPull(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	send(w, http.StatusOK, out)
+}
+
+// unreadMailbox is the mailbox write this server makes: mark one message read
+// or unread, and answer with the labels the mailbox reports afterwards.
+//
+// An interface rather than the concrete client, for the reason runMediaPull is a
+// field: the handler's own contract is which message changes and what is stored
+// afterwards, and that is testable without a mailbox, a grant or a network.
+// Returning the labels rather than taking them is the whole point — the local
+// copy is what the mailbox said, not what the caller assumed it would say.
+type unreadMailbox interface {
+	SetUnread(id string, unread bool) ([]string, error)
+}
+
+// markRead is the one write this server makes to the mailbox itself: every
+// message of a chain is marked read or unread in Gmail, and the labels the
+// mailbox returns are stored beside them in the same pass.
+//
+// Opt-in and off by default, like -slurp and -media, and for a stronger reason
+// than either: those spend mailbox round trips, this changes what is in the
+// mailbox. A host that has not granted -mark-read answers 403, naming the
+// switch.
+//
+// Chain-level rather than per message, because a chain is what the list shows
+// and the pane reads: resolving it is the store's walk down the reply graph
+// (ChainEntries), which a browser cannot do with the entries it happens to hold
+// — the row it draws carries three of them and no others.
+//
+// Messages with no mailbox copy are counted and reported, never failed: a
+// message recovered from somebody's quote, or a Slack post, is a real part of
+// the chain and has no Gmail id to change. A chain of nothing else answers
+// marked: 0, which is the truth about it.
+func (s *server) markRead(w http.ResponseWriter, r *http.Request) {
+	if !s.markReadEnabled {
+		fail(w, http.StatusForbidden, fmt.Errorf(
+			"marking mail read is disabled: this server was started without -mark-read, so "+
+				"it will not change anything in the mailbox. A restart with -mark-read enables "+
+				"POST /v1/read."))
+		return
+	}
+	var req markReadRequest
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequestBody))
+	// A misspelled field is a caller reading a different contract, and this call
+	// writes to a real mailbox — refusing is cheaper than guessing.
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		fail(w, http.StatusBadRequest, fmt.Errorf("reading the request body: %w", err))
+		return
+	}
+	chain := strings.TrimSpace(req.Chain)
+	if chain == "" {
+		fail(w, http.StatusBadRequest, errors.New(
+			"a read-state change needs a chain: POST /v1/read takes "+
+				"{\"chain\": \"mail:<...>\", \"unread\": false}, the root extId a chain hit "+
+				"carries as rootExtId"))
+		return
+	}
+
+	entries, err := s.store.ChainEntries(chain)
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	if len(entries) == 0 {
+		fail(w, http.StatusNotFound, fmt.Errorf(
+			"no chain at %q: no entry has that extId, so there is nothing to mark", chain))
+		return
+	}
+
+	markable := 0
+	for _, e := range entries {
+		if e.GmailID != "" {
+			markable++
+		}
+	}
+	// Opened only when there is something to change. A chain of recovered
+	// messages is answered without reaching the mailbox at all, which is also
+	// what keeps this endpoint usable on a host that has no grant but does have
+	// such a chain on screen.
+	var mb unreadMailbox
+	if markable > 0 {
+		if mb, err = s.openUnreadMailbox(); err != nil {
+			fail(w, http.StatusBadGateway, fmt.Errorf("opening the mailbox: %w", err))
+			return
+		}
+	}
+
+	out := markReadResponse{Chain: chain, Unread: req.Unread}
+	for _, e := range entries {
+		if e.GmailID == "" {
+			out.Skipped++
+			continue
+		}
+		labels, err := mb.SetUnread(e.GmailID, req.Unread)
+		if err != nil {
+			// The count already marked is in the error because a chain is more
+			// than one message: the caller has to know whether the chain is half
+			// changed, and the mailbox's own error says nothing about that.
+			fail(w, http.StatusBadGateway, fmt.Errorf(
+				"the mailbox refused %s: %w (%d of %d messages in this chain were changed before this)",
+				e.ExtID, err, out.Marked, markable))
+			return
+		}
+		if err := s.store.SetLabels(e.ID, labels); err != nil {
+			fail(w, http.StatusInternalServerError, fmt.Errorf(
+				"the mailbox changed %s but storing its labels failed: %w", e.ExtID, err))
+			return
+		}
+		out.Marked++
+	}
+
+	// Journaled like a media pull, and for the same reason: this changes the
+	// reader's real mailbox, so "did it run, and what did it say" has to be
+	// answerable from the host after the tab is gone.
+	log.Printf("read: %s unread=%t marked=%d skipped=%d",
+		chain, req.Unread, out.Marked, out.Skipped)
+	send(w, http.StatusOK, out)
+}
+
+// markReadRequest is what a caller may say: which chain, and the state it wants
+// every mailbox message in it to be left in. No message list and no "mark all":
+// the chain IS the scope, and the store resolves it.
+type markReadRequest struct {
+	Chain  string `json:"chain"`
+	Unread bool   `json:"unread"`
+}
+
+// markReadResponse is the contract's MarkReadResponse: what changed, and what
+// could not be changed because it has no mailbox copy. The counts are separate
+// from an error on purpose — a chain with nothing markable in it is a complete
+// answer about a chain that is partly recovered text, not a failure.
+type markReadResponse struct {
+	Chain   string `json:"chain"`
+	Unread  bool   `json:"unread"`
+	Marked  int    `json:"marked"`
+	Skipped int    `json:"skipped"`
+}
+
+// defaultUnreadMailbox is the real write: the docket library's label modify
+// (PrepareLabel + Execute, i.e. Users.Messages.Modify), through the mail grant
+// this unit already holds in its own HOME — the same credential the ingest and
+// the media pull read, so -mark-read asks for no access the host had not already
+// given this user. What changes is that the server now changes the mailbox, not
+// only reads it.
+//
+// The client is opened per call rather than kept: this is a one-click write a
+// reader makes, the label cache it loads is fresh on every pass, and a
+// long-lived token source in a process that may run for weeks is a worse trade
+// than one token read per click.
+func defaultUnreadMailbox() func() (unreadMailbox, error) {
+	return func() (unreadMailbox, error) { return gmailclient.New() }
 }
 
 // mediaPullRequest is what a caller may say: which message, and — when the

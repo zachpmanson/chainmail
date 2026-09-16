@@ -39,6 +39,7 @@ const (
 	phaseTwins  slurpPhase = "twins"
 	phaseRepair slurpPhase = "repair"
 	phaseDedupe slurpPhase = "dedupe"
+	phaseUnread slurpPhase = "unread"
 	phaseEmbed  slurpPhase = "embed"
 	phaseStatus slurpPhase = "status"
 )
@@ -46,8 +47,14 @@ const (
 // slurpOrder is the sequence, written down once. A phase is added here and
 // nowhere else; -only and -skip choose a subset of it and never reorder it,
 // because the order is the correctness argument above and not a preference.
+//
+// unread sits after dedupe and before embed: it rewrites mail_detail rows by
+// entry id, and everything that can merge or delete an entry (twins, repair,
+// dedupe) has finished by then, so nothing discards its work. Embed is last of
+// the working phases because it embeds whatever the others left; a label change
+// is not its business either way.
 var slurpOrder = []slurpPhase{
-	phaseSlack, phaseMail, phaseTwins, phaseRepair, phaseDedupe, phaseEmbed,
+	phaseSlack, phaseMail, phaseTwins, phaseRepair, phaseDedupe, phaseUnread, phaseEmbed,
 }
 
 // phaseGroups name a run of phases that operators think of as one thing, so
@@ -105,6 +112,7 @@ type slurpDeps struct {
 	twins        func(apply bool) error
 	repair       func() error
 	dedupe       func(apply bool) error
+	unread       func() error
 	// embedReady answers before the work starts, and says what is missing when
 	// the answer is no.
 	embedReady func() (bool, string)
@@ -125,6 +133,7 @@ func defaultSlurpDeps(path string, o slurpOpts) slurpDeps {
 		twins:        func(apply bool) error { return runTwins(path, apply, false) },
 		repair:       func() error { return runRepair(path) },
 		dedupe:       func(apply bool) error { return runDedupe(path, apply) },
+		unread:       func() error { return runUnread(path) },
 		embedReady:   func() (bool, string) { return embedDaemon(eo) },
 		embed:        func() error { return runEmbed(path, eo) },
 		status:       func() error { return runStatusTail(path, o) },
@@ -310,6 +319,17 @@ func runSlurp(w io.Writer, o slurpOpts, d slurpDeps) error {
 				continue
 			}
 			report(p, outcomeDone, "reported only; apply it by hand")
+
+		case phaseUnread:
+			// The one phase that changes a mailbox message's *labels* rather than
+			// the corpus, and the only one that needs the mailbox to be reachable
+			// to do anything at all: a host without a grant reports it as every
+			// other mailbox phase does, and the corpus is no worse for the skip.
+			if err := d.unread(); err != nil {
+				report(p, outcomeFailed, err.Error())
+				continue
+			}
+			report(p, outcomeDone, "unread labels reconciled")
 
 		case phaseEmbed:
 			// A skip, not a failure: vectors are a derived index, the backfill is

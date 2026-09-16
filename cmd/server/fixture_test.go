@@ -274,6 +274,7 @@ type mailFixture struct {
 	to        string
 	text      string
 	labels    []string // the mailbox's own labels, as Gmail states them
+	gmail     string   // the Gmail message id, when this entry has a mailbox copy
 	atts      []corpus.Attachment
 }
 
@@ -297,8 +298,8 @@ func putMail(t *testing.T, s *corpus.Store, m mailFixture) int64 {
 		PersonID: m.person, Container: m.container, Subject: m.subject,
 		ParentRef: m.inReplyTo, BodyText: m.text,
 	}, &corpus.Mail{
-		MessageID: m.messageID, InReplyTo: m.inReplyTo, From: m.from, To: m.to,
-		Labels: m.labels,
+		GmailID: m.gmail, MessageID: m.messageID, InReplyTo: m.inReplyTo,
+		From: m.from, To: m.to, Labels: m.labels,
 	}, m.atts)
 	if err != nil {
 		t.Fatalf("Put %s: %v", m.ext, err)

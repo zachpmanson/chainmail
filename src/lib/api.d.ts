@@ -445,6 +445,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark a chain's messages read or unread in the mailbox itself.
+         * @description The one write this surface makes to the mailbox, and the state the list is read against: every message in a chain is marked read or unread in Gmail, and the labels the mailbox answers with are stored beside it. Read state lives in the mailbox — the reader's phone shows the same thing — so this writes through rather than keeping a second, private answer.
+         *
+         *     Chain-level, because a chain is what the list shows and the pane reads: the reply graph is walked here (an entry recovered from quoted text is part of a trail, and is not one of the three entries a row carries), and a caller naming messages one at a time could mark a thread half read.
+         *
+         *     An entry with no mailbox copy — a message recovered from somebody's quote, a Slack post — is counted in `skipped`, never failed: it is a real part of the chain and has no Gmail id to change. A chain of nothing else answers `marked: 0`, which is the truth about it.
+         *
+         *     Opt-in and off by default: a server started without -mark-read answers 403, naming the switch. That is a stronger gate than -slurp or -media, because those spend mailbox round trips and this changes what is in the mailbox. The credential is the mail grant the unit already holds.
+         */
+        post: operations["markRead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/refresh": {
         parameters: {
             query?: never;
@@ -508,6 +534,8 @@ export interface components {
             matched: number;
             /** @description Distinct people involved in the whole chain, authors and recipients — the same "who was involved" answer the spec's participant list gives. 0 only when no entry carries a person row. */
             people: number;
+            /** @description How many of the chain's messages the mailbox still calls unread. 0 for a chain that has been read, one that never was unread, and one with no mailbox copy at all — the same number the sidebar shows beside the UNREAD folder, scoped to a conversation. POST /v1/read is what changes it. */
+            unread: number;
             /**
              * Format: date-time
              * @description Timestamp of the earliest entry, UTC.
@@ -1295,6 +1323,27 @@ export interface components {
             /** @description What the rebuild behind the pull changed, in the same shape POST /v1/refresh reports. Present alongside spec. */
             report?: components["schemas"]["RefreshReport"];
         };
+        /** @description One chain's read state: which conversation, and the state every mailbox message in it should be left in. */
+        MarkReadRequest: {
+            /**
+             * @description The chain root's ext id, as a chain hit carries it in `rootExtId`. The whole chain is the scope: the reply graph is walked server-side, so a caller does not have to hold every entry of a thread it can see three of.
+             * @example mail:<c0ffee-1@example.com>
+             */
+            chain: string;
+            /** @description The state to leave the chain in: true marks it unread, false marks it read. Spelled as the state itself rather than a verb, so a client that reads the value back knows what the chain now is. */
+            unread: boolean;
+        };
+        /** @description What the write did: how many messages were marked, and how many entries of the chain have no mailbox copy to mark. The second number is not an error — a message recovered from somebody's quote is part of a chain and has no Gmail id — which is why a chain of nothing else answers 200 with marked 0. */
+        MarkReadResponse: {
+            /** @description The chain that was changed, as it was named. */
+            chain: string;
+            /** @description The state the chain was left in, echoed back so a client does not have to infer it from the request it sent. */
+            unread: boolean;
+            /** @description Messages marked in the mailbox, and whose returned labels are now stored. */
+            marked: number;
+            /** @description Entries of the chain that have no mailbox copy, so there was nothing to mark. Recovered text and Slack posts, normally. */
+            skipped: number;
+        };
         /** @description One attachment's outcome within a pull. */
         MediaFile: {
             name: string;
@@ -2053,6 +2102,66 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StatusResponse"];
+                };
+            };
+        };
+    };
+    markRead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkReadRequest"];
+            };
+        };
+        responses: {
+            /** @description How much of the chain changed, and how much could not. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarkReadResponse"];
+                };
+            };
+            /** @description No chain named, or a malformed body. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Marking mail read is disabled: the server was started without -mark-read. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No chain rooted at that ext id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The mailbox refused: the error names how many messages were changed before it did. Messages after it are left alone, and a chain with no mailbox copy never opens the mailbox at all. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };

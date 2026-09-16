@@ -251,6 +251,48 @@ func runRepair(path string) error {
 	return nil
 }
 
+// runUnread brings the corpus's copy of the mailbox's UNREAD label back into
+// agreement with the mailbox itself, in both directions.
+//
+// The ingest reads a message once and never looks at it again (refresh.go's
+// known-id skip), which is right for the body and wrong for the labels: UNREAD
+// is written by whoever opens the message, wherever they open it, and a corpus
+// that reads labels only at ingest reports "unread when it arrived" while
+// calling it "unread". This is the cheap half of that repair — the unread set
+// is one paged query, so the cost is bounded by the unread mail itself rather
+// than by the corpus, and nothing else about the message is re-read.
+//
+// It needs a mailbox, so it is the one phase that cannot run on a corpus-only
+// host, and it says so the way the other mailbox phases do: opening the client
+// fails, and the failure is the phase's outcome.
+func runUnread(path string) error {
+	s, err := corpus.Open(path)
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+
+	gc, err := gmailclient.New()
+	if err != nil {
+		return fmt.Errorf("opening gmail library client: %w", err)
+	}
+	ids, err := gc.UnreadMessageIDs()
+	if err != nil {
+		return err
+	}
+
+	r, err := s.ReconcileUnread(ids)
+	if err != nil {
+		return err
+	}
+	// The unread total is in the line on purpose: it is the number a reader
+	// compares against the sidebar, and a corpus that agrees with it is the whole
+	// point of the phase.
+	fmt.Printf("checked %d mailbox %s against %d unread in the mailbox: marked %d, cleared %d\n",
+		r.Checked, plural(r.Checked, "message", "messages"), len(ids), r.Marked, r.Cleared)
+	return nil
+}
+
 // runTwins collapses the messages stored twice.
 func runTwins(path string, apply, declined bool) error {
 	s, err := corpus.Open(path)

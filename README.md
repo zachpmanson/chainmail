@@ -40,7 +40,7 @@ corpus, without ollama you have lexical search.
 ```bash
 export CHAINMAIL_ME=you@example.com        # marks your own messages
 corpus init
-corpus slurp -since 2026-08-01             # slack, then mail, then settle, then embed
+corpus slurp -since 2026-08-01             # slack, then mail, then settle, then unread, then embed
 make doctor                                # what is in it, and what is missing
 ```
 
@@ -57,6 +57,14 @@ npm run dev             # vite, proxying /v1 to the server
 
 Search, tick the chains that belong, build a page from them. Without the server, a spec
 on disk still renders: `corpus spec -q "…" -o spec.json && npm run render -- spec.json -o page.html`.
+
+**Unread state is the mailbox's, not the corpus's.** A row carries how many of its
+messages Gmail still calls unread, and the reading pane's mark read / mark unread button
+changes that in the mailbox itself — so the reader's phone agrees with the page. The
+server needs `-mark-read` to be allowed to write (`enableMarkRead` in the nix module);
+without it the button says so and changes nothing. The corpus's own copy of the label is
+corrected by the `unread` phase of `corpus slurp`, which reads the mailbox's unread set
+and fixes every stored label that disagrees with it.
 
 **Timeline** is one chronological column. **Columns** gives one lane per reply chain.
 The **reply tree** panel lights the ancestry of the entry you're reading.

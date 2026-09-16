@@ -26,9 +26,16 @@ type Client struct {
 	labels *mail.LabelCache
 }
 
-// New opens the auth store and a Gmail service. Chainmail never writes, so the
-// client it returns is read-only by construction: the OAuth scope is what
-// enforces it, not an env var.
+// New opens the auth store and a Gmail service.
+//
+// The client is read-most: everything the ingest, the media pull and the
+// refresh ask of it is a read, and the one write it offers (SetUnread) is a
+// single label change a reader asked for. The scope that permits it is the
+// grant's own — docket's default provider registers https://mail.google.com/,
+// which is write-capable — so the read-only posture this package used to claim
+// was never enforced here. It is enforced where it belongs: the server refuses
+// to reach this path without -mark-read, and this client is constructed only
+// when it is asked for.
 func New() (*Client, error) {
 	ctx := context.Background()
 	cfg, err := auth.LoadConfig()
@@ -80,6 +87,84 @@ func (c Client) Read(id string) (mailingest.Message, error) {
 		return mailingest.Message{}, err
 	}
 	return convertMessage(msg), nil
+}
+
+// UnreadMessageIDs reads the mailbox's complete unread set, paging to
+// exhaustion.
+//
+// Complete is the whole contract, and the reason this returns an error rather
+// than a prefix: the corpus reconciles its own UNREAD labels against this list,
+// and an id missing from it is indistinguishable from a message somebody has
+// read. A truncated read would therefore clear good labels wholesale, so every
+// failure — a page that fails, a cursor that will not advance, more pages than
+// any mailbox has — is returned rather than reported as a smaller answer.
+//
+// in:anywhere, because the ingest reads in:anywhere: Gmail's own default scope
+// for a search excludes Spam and Trash, and a message the corpus holds from
+// either folder would then look read the moment it was reconciled.
+func (c Client) UnreadMessageIDs() ([]string, error) {
+	var ids []string
+	var token string
+	// A mailbox with more unread pages than this has stopped being mail and
+	// started being an incident; the bound is here so a cursor that loops cannot
+	// become an unbounded run against a personal account.
+	const maxPages = 200
+	for page := 0; page < maxPages; page++ {
+		res, err := mail.List(c.ctx, c.svc, c.labels, mail.ListOptions{
+			Query:     "in:anywhere is:unread",
+			Limit:     mail.MaxLimit,
+			PageToken: token,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("listing unread mail: %w", err)
+		}
+		for _, e := range res.Envelopes {
+			if e.ID != "" {
+				ids = append(ids, e.ID)
+			}
+		}
+		if res.NextPageToken == "" {
+			return ids, nil
+		}
+		if res.NextPageToken == token {
+			return nil, fmt.Errorf("gmail returned the same page token twice (%q) after %d messages", token, len(ids))
+		}
+		token = res.NextPageToken
+	}
+	return nil, fmt.Errorf("unread mail did not finish after %d pages: refusing to reconcile against a partial set", maxPages)
+}
+
+// unreadLabel is the mailbox's own name for "nobody has opened this yet".
+//
+// Spelled here rather than imported from the corpus: this package is a
+// transport and the corpus is a store, and a label name is the mailbox's
+// vocabulary, not either of theirs. The two spellings are the same system label
+// Gmail defines, which is why they cannot drift.
+const unreadLabel = "UNREAD"
+
+// SetUnread marks one message read or unread, and returns the labels the
+// mailbox reports afterwards.
+//
+// The returned labels are the point: the caller stores exactly what Gmail said
+// rather than editing its own copy by hand, so the local mirror cannot drift
+// from the mailbox on the one message it just wrote. A label removed by some
+// other client in the same second is carried back with it.
+func (c Client) SetUnread(id string, unread bool) ([]string, error) {
+	var add, remove []string
+	if unread {
+		add = []string{unreadLabel}
+	} else {
+		remove = []string{unreadLabel}
+	}
+	plan, err := mail.PrepareLabel(c.labels, id, add, remove)
+	if err != nil {
+		return nil, fmt.Errorf("preparing the label change on message %q: %w", id, err)
+	}
+	env, err := plan.Execute(c.ctx, c.svc, c.labels)
+	if err != nil {
+		return nil, err
+	}
+	return env.Labels, nil
 }
 
 // pageOf maps one library list page onto chainmail's paging block. HasMore

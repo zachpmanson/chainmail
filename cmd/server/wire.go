@@ -26,17 +26,22 @@ type searchResponse struct {
 }
 
 type chainHit struct {
-	RootExtID string     `json:"rootExtId"`
-	Subject   string     `json:"subject,omitempty"`
-	Container string     `json:"container,omitempty"`
-	Sources   []string   `json:"sources,omitempty"`
-	Entries   int        `json:"entries"`
-	Matched   int        `json:"matched"`
-	People    int        `json:"people"`
-	First     string     `json:"first"`
-	Last      string     `json:"last"`
-	Score     float64    `json:"score"`
-	Best      []entryHit `json:"best,omitempty"`
+	RootExtID string   `json:"rootExtId"`
+	Subject   string   `json:"subject,omitempty"`
+	Container string   `json:"container,omitempty"`
+	Sources   []string `json:"sources,omitempty"`
+	Entries   int      `json:"entries"`
+	Matched   int      `json:"matched"`
+	People    int      `json:"people"`
+	// Unread is how many of the chain's messages the mailbox still calls unread.
+	// Always emitted, never omitempty: 0 is the answer for a chain that has been
+	// read, and a client that cannot see the key cannot tell that from a server
+	// that does not report read state at all.
+	Unread int        `json:"unread"`
+	First  string     `json:"first"`
+	Last   string     `json:"last"`
+	Score  float64    `json:"score"`
+	Best   []entryHit `json:"best,omitempty"`
 }
 
 type entryHit struct {
@@ -430,7 +435,8 @@ func toChainHit(c corpus.ChainHit) chainHit {
 	out := chainHit{
 		RootExtID: c.RootExtID, Subject: c.Subject, Container: c.Container,
 		Sources: c.Sources, Entries: c.Entries, Matched: c.Matched,
-		People: c.People, First: stamp(c.First), Last: stamp(c.Last), Score: c.Score,
+		People: c.People, Unread: c.Unread, First: stamp(c.First),
+		Last: stamp(c.Last), Score: c.Score,
 	}
 	for _, b := range c.Best {
 		out.Best = append(out.Best, toEntryHit(b))
