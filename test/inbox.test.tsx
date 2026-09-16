@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within, act } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { makeQueryClient } from "../src/lib/queryClient";
@@ -35,6 +35,38 @@ const json = (status: number, body: unknown, headers: Record<string, string> = {
 
 const pathOf = (c: Call) => new URL(c.url).pathname;
 const paramsOf = (c: Call) => new URL(c.url).searchParams;
+
+/**
+ * jsdom has no IntersectionObserver, and the inbox asks for the next page when
+ * the end of the list scrolls into view. This stands in for it and can be driven
+ * by hand — `scrollToEnd()` is a reader reaching the bottom — so the tests are
+ * about the wiring (a marker exists, it is watched, being seen asks for what is
+ * older) rather than about a browser's scroll arithmetic.
+ */
+const watchers = new Set<() => void>();
+class ScrollWatcher {
+  root = null;
+  rootMargin = "";
+  thresholds: number[] = [];
+  private seen: () => void;
+  constructor(cb: IntersectionObserverCallback) {
+    this.seen = () =>
+      cb([{ isIntersecting: true } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+    watchers.add(this.seen);
+  }
+  observe() {}
+  unobserve() {}
+  disconnect() {
+    watchers.delete(this.seen);
+  }
+  takeRecords() {
+    return [];
+  }
+}
+/** The marker declared below is not the only one: this fires every live watcher. */
+const scrollToEnd = () => {
+  for (const see of [...watchers]) see();
+};
 
 /** The shape /v1/search answers with, for a chain a row is built from. Loose on
  *  purpose: a fixture only has to survive JSON to the client, and the fields a
@@ -173,6 +205,8 @@ const buildHandler: Handler = withChains((c) => {
 
 beforeEach(() => {
   calls = [];
+  watchers.clear();
+  (globalThis as { IntersectionObserver?: unknown }).IntersectionObserver = ScrollWatcher;
   handler = () => json(500, { error: "no handler installed" });
   vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
     const req =
@@ -386,7 +420,7 @@ describe("paging the inbox", () => {
     await mountApp("/");
     await waitFor(() => expect(screen.getAllByRole("checkbox")).toHaveLength(50));
 
-    click(screen.getByRole("button", { name: "Load older" }));
+    await act(async () => scrollToEnd());
     await screen.findByText("An older thread");
 
     const asked = calls.filter((c) => pathOf(c) === "/v1/search");
@@ -396,8 +430,8 @@ describe("paging the inbox", () => {
     // 50 + 1 new, not 52: the repeated thread is one row, keyed on its root.
     expect(screen.getAllByRole("checkbox")).toHaveLength(51);
     expect(screen.getAllByText("Chain 50")).toHaveLength(1);
-    // A short page is the end of the corpus, so the button retires.
-    expect(screen.queryByRole("button", { name: "Load older" })).toBeNull();
+    // A short page is the end of the corpus, so there is nothing left to watch.
+    expect(document.querySelector(".ibend")).toBeNull();
   });
 
   // A chain whose entries straddle the cursor is returned again on the next page
@@ -412,14 +446,42 @@ describe("paging the inbox", () => {
     await mountApp("/");
     await waitFor(() => expect(screen.getAllByRole("checkbox")).toHaveLength(50));
 
-    click(screen.getByRole("button", { name: "Load older" }));
-    await waitFor(() =>
-      expect(screen.queryByRole("button", { name: "Load older" })).toBeNull(),
-    );
+    await act(async () => scrollToEnd());
+    await waitFor(() => expect(document.querySelector(".ibend")).toBeNull());
     // The second page was fetched, and then the asking stopped: the list is the
     // same fifty threads, not a hundred rows of them.
     expect(calls.filter((c) => pathOf(c) === "/v1/search")).toHaveLength(2);
     expect(screen.getAllByRole("checkbox")).toHaveLength(50);
+  });
+
+  // A page that failed is the one case automatic paging must not keep firing:
+  // the marker stays where it was, so asking again on every render would be a
+  // request loop nobody reads the answer to. The reader gets the error, and the
+  // button comes back for the one case the automatic path cannot handle.
+  it("stops watching the end when a page fails, and offers the retry", async () => {
+    let second = 0;
+    handler = (c) => {
+      // The pane asks for whichever chain is on screen; empty is enough here, and
+      // an answer keeps its own failure out of the alert this test is reading.
+      if (pathOf(c).startsWith("/v1/chains/")) return json(200, { entries: [] });
+      if (pathOf(c) !== "/v1/search") return json(500, { error: "unexpected" });
+      if (!paramsOf(c).get("before")) return pageOf(firstPage);
+      second += 1;
+      return json(503, { error: "the corpus is busy" });
+    };
+    await mountApp("/");
+    await waitFor(() => expect(screen.getAllByRole("checkbox")).toHaveLength(50));
+
+    await act(async () => scrollToEnd());
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/the corpus is busy/);
+    expect(second).toBe(1);
+
+    // Nothing is watching the end any more, so scrolling it into view again asks
+    // nothing, and the retry is the reader's to make.
+    await act(async () => scrollToEnd());
+    expect(screen.queryByRole("button", { name: "Try again" })).not.toBeNull();
+    expect(calls.filter((c) => pathOf(c) === "/v1/search")).toHaveLength(2);
   });
 });
 
