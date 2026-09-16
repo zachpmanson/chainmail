@@ -1,6 +1,9 @@
 package corpus
 
-import "database/sql"
+import (
+	"database/sql"
+	"strings"
+)
 
 // The settings the corpus stores. Named here rather than spelled at each call
 // site so a typo is a compile error rather than a silently empty setting.
@@ -8,6 +11,10 @@ const (
 	// SettingDefaultFolder is the mailbox label the home page opens in. Empty
 	// means every folder at once — the same as never having chosen.
 	SettingDefaultFolder = "default_folder"
+	// SettingMe is the addresses the reader says are theirs, so their own mail
+	// can be marked on a page and in the reading pane. Nothing in the corpus
+	// records which mailbox it was collected from, so this can only be told.
+	SettingMe = "me"
 )
 
 // Setting reads one stored setting. A setting nobody has made is absent, not an
@@ -24,6 +31,61 @@ func (s *Store) Setting(key string) (string, bool, error) {
 		return "", false, err
 	}
 	return v, true, nil
+}
+
+// MeAddresses reads the addresses the reader has named as their own.
+//
+// The parse lives here rather than at each call site because two callers need
+// the same one: the settings API, which serves and writes them, and the trail
+// render, which marks the reader's own messages (spec.RenderTrail). Two parses
+// would be two answers to "who is the reader", and the disagreement would show
+// as one surface tinting a bubble the other leaves plain.
+//
+// A setting nobody has made is an empty list rather than an error, the same way
+// Setting reports absence rather than a zero value: a reader who has never said
+// who they are is a real state, and nothing is marked for them.
+func (s *Store) MeAddresses() ([]string, error) {
+	v, ok, err := s.Setting(SettingMe)
+	if err != nil || !ok {
+		return nil, err
+	}
+	return SplitAddresses(v), nil
+}
+
+// SplitAddresses reads addresses out of the comma-separated form they are typed
+// and stored in. Each is trimmed and blanks are dropped — a trailing comma is
+// something a reader writes, not an address — and duplicates are dropped
+// case-insensitively, because the corpus lowercases every address it stores, so
+// `Ada@x` and `ada@x` are one address and listing both must not read as two.
+//
+// Nothing here resolves an address to a person: that is the corpus's identity
+// graph, and a list of strings is not the place to decide whose they are.
+func SplitAddresses(v string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, a := range strings.Split(v, ",") {
+		a = strings.TrimSpace(a)
+		if a == "" || seen[strings.ToLower(a)] {
+			continue
+		}
+		seen[strings.ToLower(a)] = true
+		out = append(out, a)
+	}
+	return out
+}
+
+// JoinAddresses is SplitAddresses the other way: the addresses a caller holds,
+// in the one form the setting is written in.
+//
+// The elements are joined and then parsed rather than parsed one at a time,
+// because what arrives on the wire is the reader's own text — the whole value of
+// the field they typed into, which is one comma-separated list — and a
+// per-element join would store one address where they named three.
+//
+// Joining nothing is the empty string, which PutSetting deletes: no addresses
+// and no setting are one state rather than two, exactly as for the folder.
+func JoinAddresses(vs []string) string {
+	return strings.Join(SplitAddresses(strings.Join(vs, ",")), ", ")
 }
 
 // PutSetting records a setting, replacing whatever was there. An empty value

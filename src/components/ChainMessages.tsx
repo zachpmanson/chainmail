@@ -137,6 +137,15 @@ export function ChainMessages({ chain }: { chain: { rootExtId: string } }) {
           // The sender's organisation as the corpus resolved it, on the slot this
           // chain's own first-appearance order gives it.
           orgSlot={slot(e.org)}
+          // The reader's own message: the corpus resolved this entry's author
+          // against the addresses the reader stored, so the pane makes no second
+          // guess about whose mail this is. The mark itself is the page's — the
+          // same `Message` with the same `me`, which is the class the stylesheet
+          // already tints (`.msg.me .bub`). That is the decision the issue left
+          // open, and it is settled this way on purpose: a pane-only vocabulary
+          // for one fact — a border, an alignment — would be a second thing to
+          // keep in step with what "sent by you" means on the page.
+          me={e.mine}
           quoted={e.quoted}
           // The recipients the message itself stated, or nothing: a recovered
           // entry has no headers, and the line reads "to —" rather than naming

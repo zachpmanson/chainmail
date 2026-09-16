@@ -1106,3 +1106,188 @@ describe("the border's own idea of where it is", () => {
     expect(listw()).toBe("396px");
   });
 });
+
+/**
+ * The reader's own messages in the pane.
+ *
+ * The mark is the corpus's, not the client's: the chain read carries `mine`,
+ * which the service resolved from the addresses the reader stored as a setting,
+ * and the pane draws the page's own `.msg.me` — the class the stylesheet already
+ * tints — rather than inventing a second way to say "sent by you". The client
+ * resolves nothing, which is why the handler below answers `mine` from the
+ * setting it holds: that is the whole chain of custody this is testing.
+ *
+ * A reader who has never named an address sees no marks, and that is a state to
+ * pin rather than a gap to fill: the pane has no surface of its own for saying
+ * who the reader is, and guessing from the corpus would be inventing a fact
+ * about them.
+ */
+describe("the reader's own messages in the pane", () => {
+  const READER = "mail:<fence-panel-9@example.fed>"; // CHAINS[0], so the pane opens on it
+  const READER_ADDR = "ada@okoye.example";
+
+  /** The settings API as the server behaves: a field the body names is written,
+   *  a field it does not name is left as it stands, and the addresses are tidied
+   *  into the one comma-separated form the field is typed in. A mock that
+   *  cleared everything on every write would let this file pass while the pane
+   *  wiped the folder it never mentioned. */
+  const mineHandler = (initial: { defaultFolder?: string; me?: string[] }): Handler => {
+    let stored = initial;
+    return (c) => {
+      const p = pathOf(c);
+      if (p === "/v1/settings") {
+        if (c.method === "POST") {
+          const body = JSON.parse(c.body ?? "{}") as { defaultFolder?: string; me?: string[] };
+          stored = {
+            defaultFolder:
+              body.defaultFolder !== undefined ? body.defaultFolder : stored.defaultFolder,
+            me:
+              body.me !== undefined
+                ? [...new Set(body.me.flatMap((v) => v.split(",")).map((v) => v.trim()))].filter(
+                    (v) => v !== "",
+                  )
+                : stored.me,
+          };
+        }
+        return json(200, {
+          ...(stored.defaultFolder ? { defaultFolder: stored.defaultFolder } : {}),
+          ...(stored.me?.length ? { me: stored.me } : {}),
+        });
+      }
+      if (p.startsWith("/v1/chains/")) {
+        const named = stored.me ?? [];
+        return json(200, {
+          rootExtId: READER,
+          entries: [
+            {
+              extId: "mail:<fence-panel-8@example.fed>",
+              source: "mail",
+              quoted: false,
+              ts: "2026-04-01T07:00:00Z",
+              author: "Bo Halvorsen",
+              html: "<p>Somebody else's message.</p>",
+            },
+            {
+              extId: READER,
+              source: "mail",
+              quoted: false,
+              ts: "2026-04-01T08:00:00Z",
+              author: "Ada Okoye",
+              html: "<p>The reader's own message.</p>",
+              ...(named.includes(READER_ADDR) ? { mine: true } : {}),
+            },
+          ],
+        });
+      }
+      if (p === "/v1/search") return pageOf(CHAINS);
+      if (p === "/v1/spec" && c.method === "POST") return json(200, SPEC);
+      if (p.startsWith("/v1/specs/")) return json(200, SPEC);
+      if (p === "/auth/status") return json(200, { signed_in: true });
+      return json(500, { error: `unexpected call to ${c.method} ${p}` });
+    };
+  };
+
+  const chainReads = () => calls.filter((c) => pathOf(c).startsWith("/v1/chains/")).length;
+  const settingsWrites = (): Call[] =>
+    calls.filter((c) => c.method === "POST" && pathOf(c) === "/v1/settings");
+  const marked = () => pane().querySelectorAll(".msg.me");
+
+  it("tints the reader's own bubble, and only that one", async () => {
+    handler = mineHandler({ me: [READER_ADDR] });
+    await mountApp("/");
+    await waitFor(() => expect(pane().querySelectorAll(".msg")).toHaveLength(2));
+
+    // One of the two, and it is the reader's: the mark lands by who wrote the
+    // message, not by where it sits in the thread.
+    const mine = marked();
+    expect(mine).toHaveLength(1);
+    expect(mine[0]!.textContent).toContain("The reader's own message.");
+    // The page's own mark — `me`, which is what `.msg.me .bub` tints — rather
+    // than a pane-only class or border.
+    expect(mine[0]!.classList.contains("me")).toBe(true);
+    const theirs = pane().querySelectorAll(".msg")[0]!;
+    expect(theirs.textContent).toContain("Somebody else's message.");
+    expect(theirs.classList.contains("me")).toBe(false);
+  });
+
+  it("marks nothing for a reader who has never named an address", async () => {
+    handler = mineHandler({});
+    await mountApp("/");
+    // The pane has drawn the whole thread, so an empty mark is a claim about
+    // what is on screen rather than about what was fetched.
+    await waitFor(() => expect(pane().querySelectorAll(".msg")).toHaveLength(2));
+    expect(marked()).toHaveLength(0);
+  });
+
+  it("keeps the addresses as a setting, and marks the pane from the stored one", async () => {
+    handler = mineHandler({});
+    await mountApp("/");
+    await screen.findByRole("button", { name: "Fence panels" });
+    click(screen.getByLabelText("Select Fence panels"));
+
+    // Nothing has been named yet, so the field is empty and nothing is marked.
+    const field = (await screen.findByLabelText("Your addresses")) as HTMLInputElement;
+    expect(field.value).toBe("");
+    await waitFor(() => expect(pane().querySelectorAll(".msg")).toHaveLength(2));
+    expect(marked()).toHaveLength(0);
+
+    fireEvent.change(field, { target: { value: ` ${READER_ADDR} ,` } });
+    fireEvent.blur(field);
+
+    await waitFor(() => expect(settingsWrites()).toHaveLength(1));
+    // The whole value the field holds, punctuation and all — the server tidies it
+    // (corpus.JoinAddresses), and a client that parsed it first would be a second
+    // answer to who the reader is. Only `me` is named, which is what leaves the
+    // folder as it stands.
+    expect(JSON.parse(settingsWrites()[0]!.body!)).toEqual({ me: [` ${READER_ADDR} ,`] });
+    // The stored form comes back and the field shows it, so a reader can see what
+    // was kept rather than what they typed.
+    await waitFor(() => expect(field.value).toBe(READER_ADDR));
+    // And the pane is redrawn without a reload: the mark is read from the
+    // setting, so the thread the reader is looking at has to be read again.
+    await waitFor(() => expect(chainReads()).toBe(2));
+    await waitFor(() => expect(marked()).toHaveLength(1));
+    expect(marked()[0]!.textContent).toContain("The reader's own message.");
+  });
+
+  it("opens the field on the addresses already stored", async () => {
+    handler = mineHandler({ me: [READER_ADDR, "ada@work.example"] });
+    await mountApp("/");
+    await screen.findByRole("button", { name: "Fence panels" });
+    click(screen.getByLabelText("Select Fence panels"));
+
+    const field = (await screen.findByLabelText("Your addresses")) as HTMLInputElement;
+    // Read back into the field the reader typed them into, in the form they are
+    // stored in: one comma-separated line.
+    await waitFor(() => expect(field.value).toBe(`${READER_ADDR}, ada@work.example`));
+    // Reading the setting is not writing it: a page load must not post the value
+    // it just read back.
+    expect(settingsWrites()).toHaveLength(0);
+  });
+
+  it("records the addresses when a build starts, and hands the build the list", async () => {
+    handler = mineHandler({});
+    await mountApp("/");
+    await screen.findByRole("button", { name: "Fence panels" });
+    click(screen.getByLabelText("Select Fence panels"));
+
+    const field = (await screen.findByLabelText("Your addresses")) as HTMLInputElement;
+    // Typed, and then the build button pressed without leaving the field: the
+    // reader who has just said who they are should not have to say it twice for
+    // the pane to agree with the page.
+    fireEvent.change(field, {
+      target: { value: `${READER_ADDR}, bo@halvorsen.example` },
+    });
+    click(screen.getByRole("button", { name: /Build page from 1 chain$/ }));
+
+    await waitFor(() => expect(settingsWrites()).toHaveLength(1));
+    expect(JSON.parse(settingsWrites()[0]!.body!)).toEqual({
+      me: [`${READER_ADDR}, bo@halvorsen.example`],
+    });
+    // And the page build itself still gets the addresses as a list: the build
+    // paints the page it writes, the setting is what marks the pane, and the
+    // reader named themselves once for both.
+    const build = calls.find((c) => c.method === "POST" && pathOf(c) === "/v1/spec")!;
+    expect(JSON.parse(build.body!).me).toEqual([READER_ADDR, "bo@halvorsen.example"]);
+  });
+});
