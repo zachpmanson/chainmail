@@ -165,6 +165,31 @@ in {
         credential is the mail grant this unit already holds.
       '';
     };
+
+    enableMailWrite = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Permit POST /v1/mail: archive, trash or move the messages of the chains
+        a reader ticked, storing the labels the mailbox answers with. This is
+        what the selection bar's Archive, Delete and Move controls press, and it
+        is the second switch here that lets the server CHANGE the mailbox.
+
+        A switch of its own rather than a piece of enableMarkRead, because the
+        two are different asks even though both write: a host that lets the read
+        circle write has not thereby asked this server to be able to move mail
+        out of the inbox.
+
+        What each action does is the mailbox's own vocabulary — archive is the
+        removal of INBOX, delete is Gmail's own Trash (recoverable for thirty
+        days), and a move is the target label plus the way out of the inbox — so
+        nothing here invents a folder model of its own, and a name Gmail does
+        not have is refused by Gmail rather than created.
+
+        Nothing moves by itself: every change is a request a person made. The
+        credential is the mail grant this unit already holds.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -200,7 +225,8 @@ in {
           lib.optionalString cfg.enableSlurp (
             " -slurp -slurp-timeout ${cfg.slurpTimeout}") +
           lib.optionalString cfg.enableMedia " -media" +
-          lib.optionalString cfg.enableMarkRead " -mark-read";
+          lib.optionalString cfg.enableMarkRead " -mark-read" +
+          lib.optionalString cfg.enableMailWrite " -mail-write";
         User = cfg.user;
         Group = cfg.user;
         StateDirectory = "chainmail";
@@ -229,9 +255,9 @@ in {
         # become root.
         NoNewPrivileges = !cfg.enableSlurp;
         # The server opens the corpus WAL-mode. It writes the corpus only in the
-        # one way the flags above grant (a label change when -mark-read is on,
-        # beside a rebuild); Restart is what keeps a transient failure from
-        # taking the tunnel down.
+        # one way the flags above grant (a label change when -mark-read or
+        # -mail-write is on, beside a rebuild); Restart is what keeps a transient
+        # failure from taking the tunnel down.
         Restart = "on-failure";
         RestartSec = "5s";
       };
