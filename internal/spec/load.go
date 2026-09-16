@@ -61,6 +61,10 @@ type attRow struct {
 	// MIME part number for mail. It is what locates the bytes on disk where the
 	// archive kept them.
 	SourceRef string
+	// BlobSHA is the digest of the bytes in the corpus, set once the attachment has
+	// been pulled. Empty means nothing was fetched, which is the normal state of a
+	// mail attachment nobody asked for.
+	BlobSHA string
 	// GmailID is the Gmail message the attachment lives in. Only set for an
 	// inline (cid) image re-attributed to the quoted entry that placed it: the
 	// chip then opens the host message that actually shows the image.
@@ -312,7 +316,8 @@ func loadSightings(db *sql.DB, ph string, args []any, byID map[int64]*entryRow) 
 func loadAttachments(db *sql.DB, ph string, args []any, byID map[int64]*entryRow) error {
 	rows, err := db.Query(`
 		select entry_id, name, coalesce(mime, ''), coalesce(size, 0),
-		       coalesce(permalink, ''), coalesce(source_ref, '') from attachments
+		       coalesce(permalink, ''), coalesce(source_ref, ''), coalesce(blob_sha, '')
+		from attachments
 		where entry_id in (`+ph+`) order by rowid`, args...)
 	if err != nil {
 		return fmt.Errorf("loading attachments: %w", err)
@@ -321,7 +326,8 @@ func loadAttachments(db *sql.DB, ph string, args []any, byID map[int64]*entryRow
 	for rows.Next() {
 		var id int64
 		var a attRow
-		if err := rows.Scan(&id, &a.Name, &a.Mime, &a.Size, &a.Permalink, &a.SourceRef); err != nil {
+		if err := rows.Scan(&id, &a.Name, &a.Mime, &a.Size, &a.Permalink, &a.SourceRef,
+			&a.BlobSHA); err != nil {
 			return err
 		}
 		if r, ok := byID[id]; ok {

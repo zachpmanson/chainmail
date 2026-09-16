@@ -133,6 +133,20 @@ type Attachment struct {
 	// Link opens the attachment at its source, for attachments not reached
 	// through Gmail. Without it a Slack attachment is an unopenable label.
 	Link string `json:"link,omitempty"`
+	// BlobSHA is the digest of the attachment's bytes in the corpus, present only
+	// once they have been pulled. It is what lets a client ask for the file
+	// itself rather than send the reader back to Gmail for something the corpus
+	// already holds.
+	BlobSHA string `json:"blobSha,omitempty"`
+	// Open says what a click should do with bytes we hold: "popup" for the types
+	// that read in a window — images, video, audio, text — and "download" for
+	// everything else. Decided here, from the stored MIME, and NOT by the client:
+	// half a dozen renderers each deciding from a short label drift, and the one
+	// that matters is the server that will set Content-Disposition.
+	//
+	// Empty when there is nothing local to open, which is the case the Gmail link
+	// above exists for. See attachmentOpen.
+	Open string `json:"open,omitempty"`
 	// Preview is a thumbnail as a data: URI, present only where the archive kept
 	// the bytes and the picture is content rather than decoration. Never a URL:
 	// the page must render without a network. See preview.go.

@@ -172,7 +172,9 @@
               "link": { "type": "string", "description": "Opens the attachment at its source, for attachments not reached through Gmail." },
               "preview": { "type": "string", "description": "Thumbnail as a data: URI. Never a URL — the page renders without a network.", "pattern": "^data:image/" },
               "previewW": { "type": "integer", "minimum": 1 },
-              "previewH": { "type": "integer", "minimum": 1 }
+              "previewH": { "type": "integer", "minimum": 1 },
+              "blobSha": { "type": "string", "description": "Digest of the attachment's bytes in the corpus, present only once they have been pulled. It is what lets a client ask for the file rather than send the reader back to Gmail for something we already hold." },
+              "open": { "type": "string", "enum": ["popup", "download"], "description": "What a click should do with bytes we hold, decided by the server from the stored MIME — the same rule that sets Content-Disposition when the file is served, because the two must not be able to disagree. Absent when there is nothing local to open, which is what gmailId and link are for." }
             }
           }
         }

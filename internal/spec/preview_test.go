@@ -178,3 +178,82 @@ func TestDownsampleLeavesASmallImageAlone(t *testing.T) {
 		t.Errorf("tall image: width = %d, want %d", b.Dx(), 300*previewMaxEdge/1500)
 	}
 }
+
+// The point of the corpus-first order: a page built on a host with no archive
+// still shows what was pulled, which is what makes a deliberate pull worth doing.
+func TestAPulledAttachmentPreviewsWithNoArchiveAtAll(t *testing.T) {
+	data := encodePNG(t, 1200, 800)
+	p := &previewer{blob: func(sha string) ([]byte, bool) {
+		if sha != "abc123" {
+			return nil, false
+		}
+		return data, true
+	}}
+	uri, w, h := p.preview(attRow{Name: "shot.png", Mime: "image/png", SourceRef: "part-1", BlobSHA: "abc123"})
+	if uri == "" {
+		t.Fatal("a pulled attachment produced no preview, even from the corpus")
+	}
+	// Thumbnailed to the long edge, which is itself the proof it came from the
+	// 1200-wide copy: an archive file under the edge would come back at its own size.
+	if w != previewMaxEdge || h == 0 {
+		t.Errorf("preview is %d×%d, want a %d-wide thumbnail", w, h, previewMaxEdge)
+	}
+
+	// A link whose blob has been pruned falls back to the archive rather than
+	// leaving a hole, and neither source is an error.
+	root := t.TempDir()
+	draw(t, root, "part-1", "shot.png", 300, 200)
+	stale := &previewer{dir: root, blob: func(string) ([]byte, bool) { return nil, false }}
+	if uri, _, _ := stale.preview(
+		attRow{Name: "shot.png", Mime: "image/png", SourceRef: "part-1", BlobSHA: "pruned"}); uri == "" {
+		t.Error("a stale blob link discarded the archive copy")
+	}
+}
+
+func TestTheCorpusIsAskedBeforeTheArchive(t *testing.T) {
+	// Deliberately different shapes, so which source answered is visible in the
+	// result rather than inferred from a call count.
+	root := t.TempDir()
+	draw(t, root, "F001", "shot.png", 300, 200)
+	pulled := encodePNG(t, 1200, 800)
+
+	asked := 0
+	p := &previewer{dir: root, blob: func(sha string) ([]byte, bool) {
+		asked++
+		return pulled, sha == "abc123"
+	}}
+	_, w, h := p.preview(attRow{Name: "shot.png", Mime: "image/png", SourceRef: "F001", BlobSHA: "abc123"})
+	if w != previewMaxEdge {
+		t.Fatalf("preview is %d×%d, want a %d-wide thumbnail of the pulled copy", w, h, previewMaxEdge)
+	}
+	if asked == 0 {
+		t.Error("the corpus was never consulted")
+	}
+
+	// An attachment that was never pulled must not consult the corpus at all:
+	// the digest is the only thing it would have to look up.
+	asked = 0
+	p2 := &previewer{dir: root, blob: p.blob}
+	if _, w, h := p2.preview(attRow{Name: "shot.png", Mime: "image/png", SourceRef: "F001"}); w != 300 {
+		t.Fatalf("archive-only preview is %d×%d, want 300×200", w, h)
+	}
+	if asked != 0 {
+		t.Errorf("looked up an attachment with no digest %d times", asked)
+	}
+}
+
+// encodePNG draws a gradient PNG in memory, for tests that never touch disk.
+func encodePNG(t *testing.T, w, h int) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := range h {
+		for x := range w {
+			img.Set(x, y, color.RGBA{uint8(x * 7), uint8(y * 5), uint8(x ^ y), 0xff})
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
