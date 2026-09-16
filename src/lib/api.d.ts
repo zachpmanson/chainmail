@@ -353,13 +353,13 @@ export interface paths {
         };
         /**
          * The reader's own choices, which are not facts about the mail.
-         * @description Currently one: the mailbox label the home page opens in. Served with the absence of a choice preserved — defaultFolder is omitted when nothing has been chosen, because a client has to be able to tell "no default" from "a default of nothing". Stored server-side rather than in the browser: the reader has more than one browser, and the point of "open in this folder" is that it is true on the phone as well.
+         * @description The reader's own choices, which are not facts about the mail: the folder the home page opens in, and the addresses that are theirs. Each is served with the absence of a choice preserved — defaultFolder and me are omitted when nothing has been chosen, because a client has to be able to tell "no default" from "a default of nothing", and "nobody has said who the reader is" from a list of addresses. Stored server-side rather than in the browser: the reader has more than one browser, and the point of a stored preference is that it is true on the phone as well.
          */
         get: operations["getSettings"];
         put?: never;
         /**
          * Set the reader's own choices.
-         * @description The body is the whole set of preferences, so a field that is missing is cleared rather than preserved: this is the only writer, and "I did not mention it" and "I want it gone" being two states is how a setting becomes impossible to turn off. The folder is not validated against the label list — it may be one the next slurp brings in — so a folder that is not there shows an empty list under its own name rather than being refused. Answers with the settings as they now stand, not with what was asked for.
+         * @description Each field the body names is written, and a field the body leaves out is left as it stands. That is the opposite of the rule while there was one preference — absent meant cleared — and it cannot survive a second one: both settings travel in one body, so a reader saving the folder they are in would clear the addresses that say which mail is theirs. Nothing on the wire changed meaning with it, because every caller already names the field it writes, including the empty string it sends to clear one; what is new is that not mentioning a field now leaves it alone. me is stored in the one form the field is typed in — trimmed, de-duplicated, comma separated — and is served back split, because the same text is both what the reader wrote and what the mark on a message is resolved from. The folder is not validated against the label list — it may be one the next slurp brings in — so a folder that is not there shows an empty list under its own name rather than being refused. Answers with the settings as they now stand, not with what was asked for.
          */
         post: operations["setSettings"];
         delete?: never;
@@ -577,6 +577,8 @@ export interface components {
             source: "mail" | "slack";
             /** @description True when this entry exists only because someone quoted it: it was never in the mailbox as a standalone message. */
             quoted: boolean;
+            /** @description True when the reader wrote this, resolved by the corpus's own identity graph rather than by comparing address strings: naming one of their addresses marks their mail sent from any of them, and marks a message recovered from a quote — which has no From header to match — too. Omitted for a message that is not the reader's, which is also every message for a reader who has never named an address. */
+            mine?: boolean;
             /**
              * Format: date-time
              * @description Entry timestamp, UTC.
@@ -749,11 +751,20 @@ export interface components {
         SettingsResponse: {
             /** @description A mailbox label the home page opens in. Omitted when nothing has been chosen — no default is a state, not a default of nothing. */
             defaultFolder?: string;
+            /**
+             * @description The addresses the reader has named as their own, so their outbound messages can be marked as theirs on a page and in the reading pane. Nothing in the corpus records which mailbox it was collected from, so this can only be told rather than inferred. Omitted when the reader has never named one — which is also what an emptied field leaves behind.
+             * @example [
+             *       "ada@loomworks.example"
+             *     ]
+             */
+            me?: string[];
         };
-        /** @description The same shape written back. A missing field clears the setting. */
+        /** @description The same shape written back, field by field: a field that is present sets it, and a field that is absent is left as it stands. An empty value clears its setting, so "defaultFolder": "" and "me": [] are both requests to unset one. */
         SettingsRequest: {
             /** @description The label to open in, or an empty string for no default. */
             defaultFolder?: string;
+            /** @description The addresses that are the reader's, as the whole value of the field they typed them into — one comma-separated string is as valid as a list of one address per element, and the two are stored as the same list. An empty array (or a list of blanks) clears the setting. */
+            me?: string[];
         };
         /** @description The connection snapshot the operator's probe wrote. checkedAt is omitted until some probe has run; services is always the full known set, so a missing snapshot reads as unchecked rather than empty. */
         StatusResponse: {

@@ -1639,31 +1639,57 @@ func (s *server) version(w http.ResponseWriter, r *http.Request) {
 }
 
 // getSettings reads the choices that are about the reader rather than about the
-// mail. Only one so far — the folder the home page opens in — and it is served
-// with the absence of a choice preserved: a client has to be able to tell "no
-// default" from "a default of nothing", and an omitted key is how that is said.
+// mail: the folder the home page opens in, and the addresses that are theirs.
+// Each is served with the absence of a choice preserved — a client has to be
+// able to tell "no default" from "a default of nothing", and "nobody has said
+// who the reader is" from a list of addresses — and an omitted key is how that
+// is said.
 func (s *server) getSettings(w http.ResponseWriter, r *http.Request) {
+	out := settingsResponse{}
 	folder, ok, err := s.store.Setting(corpus.SettingDefaultFolder)
 	if err != nil {
 		fail(w, http.StatusInternalServerError, err)
 		return
 	}
-	out := settingsResponse{}
 	if ok && folder != "" {
 		out.DefaultFolder = &folder
+	}
+	me, err := s.store.MeAddresses()
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	// Omitted rather than served as an empty array, so that "the reader has
+	// never said" is not answered with a list a client would have to interpret.
+	if len(me) > 0 {
+		out.Me = me
 	}
 	send(w, http.StatusOK, out)
 }
 
-// setSettings records them. The body is the whole set of preferences, so a
-// missing field clears it rather than preserving it: this is the only writer,
-// and "I did not mention it" and "I want it gone" being two states is how a
-// setting becomes impossible to turn off.
+// setSettings records them. Each field the body names is written, and a field
+// the body leaves out is left as it stands.
+//
+// That is the opposite of the rule while there was one preference — absent meant
+// cleared — and the rule could not survive a second one: both settings travel in
+// the same body, so a reader saving the folder they are in would clear the
+// addresses that say which mail is theirs, and every save would have to send the
+// whole state or silently destroy the part it did not mention. Nothing on the
+// wire changed meaning with it: every caller already names the field it writes,
+// including the empty string it sends to clear one, so a cleared folder is still
+// asked for with "defaultFolder": "". What is new is that not mentioning a field
+// is now a way to leave it alone, which is what lets one screen write one
+// preference without speaking for the other.
 //
 // Nothing is validated against the label list. A folder may be one the next
 // slurp brings in, and refusing it would be the corpus arguing with the reader
 // about a mailbox it is behind on; a folder that is not there shows an empty
 // list under its own name, which is exactly true and one click from being fixed.
+//
+// The addresses are stored in one form — trimmed, de-duplicated and comma
+// separated (corpus.JoinAddresses) — because the same text is both what the
+// reader types and what the trail render parses, and two spellings of one list
+// is two answers to who the reader is.
 func (s *server) setSettings(w http.ResponseWriter, r *http.Request) {
 	var in settingsRequest
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequestBody))
@@ -1674,13 +1700,18 @@ func (s *server) setSettings(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, fmt.Errorf("reading the request body: %w", err))
 		return
 	}
-	folder := ""
 	if in.DefaultFolder != nil {
-		folder = strings.TrimSpace(*in.DefaultFolder)
+		folder := strings.TrimSpace(*in.DefaultFolder)
+		if err := s.store.PutSetting(corpus.SettingDefaultFolder, folder); err != nil {
+			fail(w, http.StatusInternalServerError, err)
+			return
+		}
 	}
-	if err := s.store.PutSetting(corpus.SettingDefaultFolder, folder); err != nil {
-		fail(w, http.StatusInternalServerError, err)
-		return
+	if in.Me != nil {
+		if err := s.store.PutSetting(corpus.SettingMe, corpus.JoinAddresses(in.Me)); err != nil {
+			fail(w, http.StatusInternalServerError, err)
+			return
+		}
 	}
 	// The settings as they now stand, so a caller sees what it stored rather than
 	// what it asked for.

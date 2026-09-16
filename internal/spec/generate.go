@@ -39,7 +39,7 @@ type Options struct {
 	// marked. Nothing in the corpus knows which mailbox it was collected from,
 	// so the reader says. One of their addresses is enough: the corpus has
 	// already merged the rest of them into the same person, and the mark is
-	// about the human rather than the string (see builder.isMine).
+	// about the human rather than the string (see me.go).
 	Me []string
 
 	// UploadDir is the archive's upload root, where the downloader that fed the
@@ -91,17 +91,9 @@ func Generate(store *corpus.Store, opts Options) (Spec, error) {
 		return Spec{}, err
 	}
 
-	me := map[string]bool{}
-	for _, a := range opts.Me {
-		me[strings.ToLower(strings.TrimSpace(a))] = true
-	}
-	// The addresses resolve to the humans the corpus has already decided they
-	// are. A reader's mail arrives from addresses they did not name — a `+tag`
-	// of their own mailbox, a work address, an alias — and the corpus merged
-	// every one of those into one person long before this page was built.
-	mePeople, err := corpus.PeopleForAddresses(store, opts.Me)
+	me, err := newMeSet(store, opts.Me)
 	if err != nil {
-		return Spec{}, fmt.Errorf("resolving the reader's addresses: %w", err)
+		return Spec{}, err
 	}
 
 	part, addrs, err := loadParticipation(db, ids)
@@ -123,7 +115,6 @@ func Generate(store *corpus.Store, opts Options) (Spec, error) {
 	b := &builder{
 		opts:      opts,
 		me:        me,
-		mePeople:  mePeople,
 		zones:     inferred,
 		zoneStats: zoneStats,
 		ids:       newIDAllocator(),
@@ -188,9 +179,11 @@ func Generate(store *corpus.Store, opts Options) (Spec, error) {
 // builder accumulates the spec as entries are visited in chronological order,
 // which is also first-appearance order for the cast and for org colour slots.
 type builder struct {
-	opts     Options
-	me       map[string]bool
-	mePeople map[int64]bool // the same addresses, as the humans they belong to
+	opts Options
+	// me is the reader, as the addresses they named and the humans the corpus
+	// resolved them to. One value for both surfaces that ask: this page build and
+	// the trail render the reading pane draws. See me.go.
+	me       meSet
 	ids      *idAllocator
 	idOf     map[int64]string    // corpus id -> spec id, for parent edges
 	rowByID  map[int64]*entryRow // every selected entry, for sighting lookups
@@ -381,39 +374,12 @@ func (b *builder) ref(person int64, name, address string) castRef {
 	return castRef{person: person, address: address, name: name, others: known}
 }
 
-// isMine answers "did the reader write this?".
-//
-// Two ways to say yes. The From address is one of the addresses the reader
-// named, or the corpus has already resolved this entry's author to a human the
-// reader named.
-//
-// The second is not a convenience. A reader's mail arrives from addresses they
-// never list — every `+tag` of their own mailbox, each work address, each alias
-// — and the corpus merged all of them into one person when it ingested them,
-// which is exactly the claim a reader makes when they say those addresses are
-// theirs. Marking on the string alone meant that naming one address marked the
-// mail sent from that one address and left the rest of their own mail unmarked,
-// so the page contradicted the corpus about who the reader is.
-//
-// It is also the only way a recovered entry can ever be marked. An entry
-// reconstructed from a quote has no From header of its own, so its address is
-// empty and no list of addresses can match it — while the corpus knows
-// perfectly well who wrote it, because the quoting client's attribution said
-// so. That is the entry a reader is most likely to spot and least likely to
-// believe was written by someone else.
-//
-// An address the corpus has never seen resolves to nobody, and an entry whose
-// author is unknown has person 0, which is nobody's: both fall back to the
-// address test, so a reader naming a stranger's address marks that stranger's
-// mail as before.
+// isMine answers "did the reader write this?". The resolution itself lives in
+// me.go, because the reading pane asks the same question of the same trail and
+// one answer has to serve both: a page that tints a bubble the pane above it
+// leaves plain is the disagreement between two ideas of whose mail is whose.
 func (b *builder) isMine(r *entryRow, from addr) bool {
-	if b.me[from.Address] {
-		return true
-	}
-	if r.PersonID == 0 {
-		return false
-	}
-	return b.mePeople[r.PersonID]
+	return b.me.wrote(r.PersonID, from.Address)
 }
 
 // source records where an entry was found: the mailbox, or someone's quoted

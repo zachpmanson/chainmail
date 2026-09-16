@@ -10,13 +10,14 @@ import (
 
 // Rendered is one entry as a view that is not a page needs it: the body as HTML a
 // page build would produce, the recipient line it would print under the bubble,
-// the address it came from, and — where it has no address of its own — the person
-// it was recovered from.
+// whether the reader wrote it, the address it came from, and — where it has no
+// address of its own — the person it was recovered from.
 //
-// Several fields rather than one because they come out of the same load. A caller
-// that asked for the HTML and then had to ask again for the recipients would pay
-// twice for the rows, the host documents and the attachment attribution that
-// decide both — and the second answer could disagree with the first.
+// One struct rather than a call per field, because they come out of the same
+// load. A caller that asked for the HTML and then had to ask again for the
+// recipients would pay twice for the rows, the host documents and the attachment
+// attribution that decide both — and the second answer could disagree with the
+// first.
 type Rendered struct {
 	// HTML is the body as rendered for reading, already sanitised.
 	HTML string
@@ -25,6 +26,19 @@ type Rendered struct {
 	// every recovered entry, since it has no headers of its own. Empty renders as
 	// unknown, and nothing may guess at it.
 	To string
+	// Mine is whether the reader wrote this, resolved by the same rule a page
+	// build applies (me.go): the corpus's own idea of which human the addresses
+	// the reader named belong to, so a message sent from another address of
+	// theirs is theirs, and a recovered entry — which has no From header for a
+	// list of addresses to match — is theirs too. False for a message that is not
+	// the reader's.
+	//
+	// The mark itself is the page's, and deliberately: the pane draws the same
+	// Message component and passes this as `me`, which is the class the
+	// stylesheet already tints (`.msg.me .bub`). A second vocabulary for one fact
+	// — a pane-only border, say — would be a second thing to keep in step with
+	// what "sent by you" means.
+	Mine bool
 	// FromEmail is the address the entry was sent from, lowercased, as the page's
 	// own Entry carries it. Empty where the entry has no From header of its own —
 	// a message recovered from someone else's quote — and empty is the answer: the
@@ -150,12 +164,33 @@ func RenderTrail(store *corpus.Store, extIDs []string) (map[string]Rendered, err
 	if err != nil {
 		return nil, err
 	}
+	// The reader's own addresses are read here, from the stored setting, rather
+	// than taken as an argument. The setting is where the reader said who they
+	// are — the pane has no surface of its own for saying it — and reading it here
+	// keeps this call the same shape for every caller, which is the point of the
+	// trail render existing at all. A caller resolving the addresses itself would
+	// need a second copy of the rule, and the two would answer differently the
+	// first time one of them was edited.
+	addresses, err := store.MeAddresses()
+	if err != nil {
+		return nil, fmt.Errorf("reading the reader's addresses: %w", err)
+	}
+	me, err := newMeSet(store, addresses)
+	if err != nil {
+		return nil, err
+	}
 	for _, r := range rows {
+		// The address is parsed once and used for every fact it carries: a page
+		// build reads the same expression for the same ones, and asking for it
+		// repeatedly is how the mark, the hover and the colour would come to name
+		// different addresses.
+		from := parseAddr(r.From)
 		out[extOf[r.ID]] = Rendered{
 			HTML:      bodyHTML(r),
 			To:        recipientsOf(r, part[r.ID]),
-			FromEmail: parseAddr(r.From).Address,
-			Org:       resolver.org(r.PersonID, parseAddr(r.From).Address),
+			Mine:      me.wrote(r.PersonID, from.Address),
+			FromEmail: from.Address,
+			Org:       resolver.org(r.PersonID, from.Address),
 			QuotedBy:  quoters[r.ID],
 		}
 	}

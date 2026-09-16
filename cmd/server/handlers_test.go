@@ -1226,3 +1226,145 @@ func TestSettingsRefusesAVerbItDoesNotTake(t *testing.T) {
 		t.Errorf("Allow = %q, want both verbs", allow)
 	}
 }
+
+// The addresses that are the reader's round-trip the way the folder does: served
+// as the list they were stored as, and omitted entirely when nobody has named
+// one, because "they have never said" is not the same answer as "they said
+// nothing".
+func TestTheReadersAddressesRoundTripThroughTheSettings(t *testing.T) {
+	srv, api := testServer(t), loadAPI(t)
+
+	res := srv.do(t, "GET", "/v1/settings", nil)
+	if res.status != 200 {
+		t.Fatalf("status = %d: %s", res.status, res.body)
+	}
+	api.assert(t, "SettingsResponse", res.body)
+	if strings.Contains(string(res.body), `"me"`) {
+		t.Errorf("a reader who has named no address is served one: %s", res.body)
+	}
+
+	// The whole value of the field, with the spacing and the trailing comma a
+	// reader leaves behind: what is stored is the addresses, not the punctuation.
+	res = srv.do(t, "POST", "/v1/settings", []byte(`{"me":[" Ada@loomworks.example , bo@fjordline.example,"]}`))
+	if res.status != 200 {
+		t.Fatalf("setting the addresses: status = %d: %s", res.status, res.body)
+	}
+	api.assert(t, "SettingsResponse", res.body)
+	if got := readSettings(t, srv); len(got.Me) != 2 ||
+		got.Me[0] != "Ada@loomworks.example" || got.Me[1] != "bo@fjordline.example" {
+		t.Fatalf("after setting, me = %q; the write answered %s", got.Me, res.body)
+	}
+
+	// Clearing is a state of its own, and both ways a caller asks for it mean the
+	// same thing: a list of blanks (what an emptied field posts) and an empty
+	// list. Neither is the same as not naming me at all, which is what leaves it
+	// alone — that is the pairing the next test pins.
+	for _, body := range []string{`{"me":["  "]}`, `{"me":[]}`} {
+		if res := srv.do(t, "POST", "/v1/settings",
+			[]byte(`{"me":["ada@loomworks.example"]}`)); res.status != 200 {
+			t.Fatalf("setting the addresses: status = %d: %s", res.status, res.body)
+		}
+		if res := srv.do(t, "POST", "/v1/settings", []byte(body)); res.status != 200 {
+			t.Fatalf("clearing with %s: status = %d: %s", body, res.status, res.body)
+		}
+		res = srv.do(t, "GET", "/v1/settings", nil)
+		if got := readSettings(t, srv); len(got.Me) != 0 {
+			t.Errorf("after clearing with %s, me = %q", body, got.Me)
+		}
+		if strings.Contains(string(res.body), `"me"`) {
+			t.Errorf("a cleared setting is served as a key: %s", res.body)
+		}
+	}
+}
+
+// A body that names one preference leaves the other exactly as it stands.
+//
+// This is the contract change that came with the second setting, and it is
+// pinned because the old rule — a field the body does not mention is cleared —
+// was only ever safe while there was one preference to lose. Both settings
+// travel in one body, so under the old rule a reader saving the folder they were
+// in destroyed the addresses that say which mail is theirs.
+func TestAPostThatNamesOneSettingLeavesTheOtherAlone(t *testing.T) {
+	srv := testServer(t)
+	if res := srv.do(t, "POST", "/v1/settings",
+		[]byte(`{"defaultFolder":"INBOX","me":["ada@loomworks.example"]}`)); res.status != 200 {
+		t.Fatalf("setting both: status = %d: %s", res.status, res.body)
+	}
+
+	if res := srv.do(t, "POST", "/v1/settings", []byte(`{"defaultFolder":"SENT"}`)); res.status != 200 {
+		t.Fatalf("setting the folder alone: status = %d: %s", res.status, res.body)
+	}
+	got := readSettings(t, srv)
+	if got.DefaultFolder == nil || *got.DefaultFolder != "SENT" {
+		t.Errorf("defaultFolder = %v, want the folder that was named", got.DefaultFolder)
+	}
+	if len(got.Me) != 1 || got.Me[0] != "ada@loomworks.example" {
+		t.Errorf("me = %q — saving a folder cleared the reader's addresses", got.Me)
+	}
+
+	if res := srv.do(t, "POST", "/v1/settings", []byte(`{"me":["bo@fjordline.example"]}`)); res.status != 200 {
+		t.Fatalf("setting the addresses alone: status = %d: %s", res.status, res.body)
+	}
+	got = readSettings(t, srv)
+	if got.DefaultFolder == nil || *got.DefaultFolder != "SENT" {
+		t.Errorf("defaultFolder = %v — saving addresses cleared the folder", got.DefaultFolder)
+	}
+	if len(got.Me) != 1 || got.Me[0] != "bo@fjordline.example" {
+		t.Errorf("me = %q, want the addresses that were named", got.Me)
+	}
+
+	// And a field that IS named is still written, including when it is named as
+	// nothing: leaving one alone must not become a way to make one unstoppable.
+	if res := srv.do(t, "POST", "/v1/settings", []byte(`{"defaultFolder":""}`)); res.status != 200 {
+		t.Fatalf("clearing the folder: status = %d: %s", res.status, res.body)
+	}
+	got = readSettings(t, srv)
+	if got.DefaultFolder != nil {
+		t.Errorf("defaultFolder = %q, want it cleared by the empty value that named it", *got.DefaultFolder)
+	}
+	if len(got.Me) != 1 || got.Me[0] != "bo@fjordline.example" {
+		t.Errorf("me = %q after the folder was cleared", got.Me)
+	}
+}
+
+// The pane's mark arrives on the chain read, which is where it has to come from:
+// the client has no idea whose mail is whose, and a client that resolved the
+// reader's addresses itself would be a second idea of it — the two surfaces
+// disagreeing about something the reader can see is the defect this is for.
+func TestTheChainMarksTheReadersOwnEntries(t *testing.T) {
+	srv, api := testServer(t), loadAPI(t)
+
+	// Nobody has said who the reader is, so nothing is marked and the field is
+	// not even on the wire.
+	before := srv.do(t, "GET", entryPath("/v1/chains/", extAda1), nil)
+	if strings.Contains(string(before.body), `"mine"`) {
+		t.Errorf("a reader who has named no address has a marked message: %s", before.body)
+	}
+
+	// Ada's two messages came from the address named below; Bo's did not.
+	if res := srv.do(t, "POST", "/v1/settings",
+		[]byte(`{"me":["ada@loomworks.example"]}`)); res.status != 200 {
+		t.Fatalf("setting the addresses: status = %d: %s", res.status, res.body)
+	}
+
+	res := srv.do(t, "GET", entryPath("/v1/chains/", extAda1), nil)
+	if res.status != 200 {
+		t.Fatalf("status = %d: %s", res.status, res.body)
+	}
+	api.assert(t, "ChainResponse", res.body)
+	got := decode[struct {
+		Entries []struct {
+			ExtID string `json:"extId"`
+			Mine  bool   `json:"mine"`
+		}
+	}](t, res)
+	if len(got.Entries) != 3 {
+		t.Fatalf("the chain has %d entries, want 3", len(got.Entries))
+	}
+	for _, e := range got.Entries {
+		want := e.ExtID == extAda1 || e.ExtID == extAda3
+		if e.Mine != want {
+			t.Errorf("%s: mine = %v, want %v", e.ExtID, e.Mine, want)
+		}
+	}
+}

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { $api, type ChainHit, type EntryHit } from "../lib/api";
 import { useBuildPage } from "../lib/build";
@@ -230,9 +231,16 @@ function InboxRow({
 
 export function Inbox() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [chosen, setChosen] = useState<string[]>([]);
   const [title, setTitle] = useState("");
-  const [me, setMe] = useState("");
+  // The reader's own addresses, as the field stands: null until they type, which
+  // is not the same as an empty field — it is what lets the stored setting seed
+  // the input (below) without an effect. An effect that re-seeded the field
+  // whenever the settings query answered would be re-seeding it after every save
+  // and every reconnect, overwriting the address the reader is halfway through
+  // typing with the one they last stored.
+  const [typedMe, setTypedMe] = useState<string | null>(null);
   const { build, start } = useBuildPage();
 
   // This page is a workspace: one window, with the list and the thread scrolling
@@ -259,8 +267,42 @@ export function Inbox() {
   const urlLabel = useSearch({ from: "/" }).label;
   const settings = $api.useQuery("get", "/v1/settings", {});
   const save = $api.useMutation("post", "/v1/settings", {
-    onSuccess: () => void settings.refetch(),
+    onSuccess: (_stored, variables) => {
+      void settings.refetch();
+      // The pane's marks are resolved from the stored addresses, so a write that
+      // names them has to redraw the open thread: without this the reader says
+      // who they are and the thread they are looking at keeps showing their own
+      // mail unmarked until they reload. A folder save changes nothing the pane
+      // draws, and re-reading the thread for it would be a request per click on
+      // a control that has nothing to do with the thread.
+      if (variables.body?.me !== undefined) {
+        setTypedMe(null);
+        void queryClient.invalidateQueries({ queryKey: ["get", "/v1/chains/{rootExtId}"] });
+      }
+    },
   });
+
+  // The field shows what the setting holds until the reader types, and their own
+  // text from then on. The stored list is written back in the form it was typed
+  // in — comma separated — because that is the form the field is in: a reader
+  // who wrote "ada@x, bo@y" should not find it rewritten as something else the
+  // next time they open the page.
+  const storedMe = (settings.data?.me ?? []).join(", ");
+  const me = typedMe ?? storedMe;
+
+  // Persist the field. Sent as the whole current value rather than as the parsed
+  // list, so what is stored is what the reader wrote: the server trims it, drops
+  // the blanks and de-duplicates it in one place (corpus.JoinAddresses), and a
+  // client that did that first would be a second answer to who the reader is.
+  //
+  // Nothing is sent when the field was never touched or already matches what is
+  // stored — a write that changes nothing but invalidates the pane's thread is a
+  // refetch per blur. And the body names only `me`: the server writes the fields
+  // it is given, which is what leaves the folder exactly as it stands.
+  const saveMe = () => {
+    if (typedMe === null || typedMe === storedMe) return;
+    save.mutate({ body: { me: [typedMe] } });
+  };
 
   // Where the list opens, and the one place the reader's own default is read.
   //
@@ -610,12 +652,28 @@ export function Inbox() {
           </label>
           <label className="self">
             <span>Your addresses</span>
-            <input value={me} onChange={(e) => setMe(e.target.value)} placeholder="comma separated" />
+            <input
+              value={me}
+              onChange={(e) => setTypedMe(e.target.value)}
+              // On blur, because that is when the reader has finished saying it:
+              // a write per keystroke would be a request per letter, and each one
+              // would redraw the pane.
+              onBlur={saveMe}
+              placeholder="comma separated"
+            />
           </label>
           <button
             type="button"
             disabled={build.isPending}
-            onClick={() => start({ chains: chosen, title, me: addresses })}
+            onClick={() => {
+              // The addresses are recorded as a preference as well as handed to
+              // the build. The build paints the page it writes; the stored
+              // setting is what marks the pane, here and after a reload, so a
+              // reader who has just named themselves should not have to say it
+              // twice.
+              saveMe();
+              start({ chains: chosen, title, me: addresses });
+            }}
           >
             {build.isPending
               ? "Building…"

@@ -60,9 +60,17 @@ type entryHit struct {
 }
 
 type corpusEntry struct {
-	ExtID           string `json:"extId"`
-	Source          string `json:"source"`
-	Quoted          bool   `json:"quoted"`
+	ExtID  string `json:"extId"`
+	Source string `json:"source"`
+	Quoted bool   `json:"quoted"`
+	// Mine is whether the reader wrote this, by the corpus's own resolution of
+	// the addresses they named rather than a comparison of strings (see
+	// spec.Rendered.Mine). Carried on the chain read so the reading pane can mark
+	// the reader's own messages without a second, client-side idea of whose mail
+	// is whose — the page and the pane have to agree about a thing the reader can
+	// see. Absent means false, and false is also what every message is for a
+	// reader who has never named an address.
+	Mine            bool   `json:"mine,omitempty"`
 	TS              string `json:"ts"`
 	TZ              string `json:"tz,omitempty"`
 	TZOffsetMinutes *int   `json:"tzOffsetMinutes,omitempty"`
@@ -183,17 +191,36 @@ type versionResponse struct {
 
 // settingsResponse is the reader's own choices, which are not facts about the
 // mail. Absent means the choice has not been made — a folder the home page opens
-// in by default, or no such folder — so a client cannot mistake "unset" for a
-// default of nothing.
+// in by default, the addresses that are theirs — so a client cannot mistake
+// "unset" for a default of nothing.
 type settingsResponse struct {
 	DefaultFolder *string `json:"defaultFolder,omitempty"`
+	// Me is the addresses the reader has named as their own, in the form they
+	// typed rather than a normalised one: it is read back into the field it came
+	// from, and rewriting a reader's own address for them is a change they did not
+	// ask for. Absent when they have named none, which is also absent when they
+	// have cleared the field.
+	Me []string `json:"me,omitempty"`
 }
 
-// settingsRequest is the same shape written back. A pointer so a missing field
-// clears the setting: there is one writer, and defaulting an absent field to
-// "leave it alone" leaves no way to unset it.
+// settingsRequest is the same shape written back, field by field: a field the
+// body names is written, and a field it leaves out is left as it stands.
+//
+// That is the opposite of what the rule was while there was one preference, and
+// it has to be this way once there are two: a reader saving the folder they are
+// in would otherwise clear the addresses that say which mail is theirs, since
+// both travel in one body. Nothing on the wire changed meaning with it — every
+// caller already names the field it is writing, including the empty string it
+// sends to clear one — but "I did not mention it" and "I want it gone" are now
+// told apart by whether the field is there at all.
+//
+// DefaultFolder says that with a pointer, since a string has no absent value.
+// Me says it with the slice encoding/json leaves nil for a missing key while a
+// present-but-empty list decodes to a non-nil empty one: nil is "not mentioned",
+// and any list at all — including one empty string — is a value to store.
 type settingsRequest struct {
-	DefaultFolder *string `json:"defaultFolder,omitempty"`
+	DefaultFolder *string  `json:"defaultFolder,omitempty"`
+	Me            []string `json:"me,omitempty"`
 }
 
 type labelSummary struct {
@@ -549,7 +576,7 @@ func toCorpusEntry(s corpus.Shown, r spec.Rendered) corpusEntry {
 	e := corpusEntry{
 		ExtID: s.ExtID, Source: s.Source, Quoted: s.Quoted, TS: stamp(s.TS),
 		TZ: s.TZ, TZOffsetMinutes: s.TZOffset, Author: s.Author, Subject: s.Subject,
-		Body: s.Body, HTML: r.HTML, To: r.To, FromEmail: r.FromEmail,
+		Body: s.Body, HTML: r.HTML, To: r.To, Mine: r.Mine, FromEmail: r.FromEmail,
 		Org: r.Org, QuotedBy: r.QuotedBy,
 		Container: s.Container,
 		Permalink: s.Permalink,
