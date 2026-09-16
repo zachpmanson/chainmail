@@ -381,27 +381,28 @@ describe("the home page with no query", () => {
     expect(req.get("before") ?? "").toBe("");
   });
 
-  it("leaves for the search page when a query is typed, and says so in the URL", async () => {
+  it("opens the search page from the nav, and the page's own field is the only box", async () => {
     handler = buildHandler;
     const router = await mountApp("/");
     await screen.findByText("Loom cutover schedule");
 
-    const box = screen.getByRole("textbox", { name: "Search the corpus" });
-    fireEvent.change(box, { target: { value: "cutover" } });
-    fireEvent.submit(box.closest("form")!);
+    click(screen.getByRole("button", { name: "Search the corpus" }));
 
-    await waitFor(() => expect(router.state.location.searchStr).toBe("?q=cutover"));
-    // The search page's own fields, not the list's: the query is what turns one
-    // into the other.
+    // The search page's own fields, not the list's: the button opened the page
+    // rather than asking anything, so what the address records is a query being
+    // composed and nothing has been searched for yet.
     expect(await screen.findByLabelText("Query")).toBeTruthy();
-    // The nav's box is the only search box now, and it holds the query the
-    // address carries — an empty box above a filtered list would be a lie about
-    // what is on screen.
-    await waitFor(() =>
-      expect((screen.getByRole("textbox", { name: "Search the corpus" }) as HTMLInputElement).value).toBe(
-        "cutover",
-      ),
-    );
+    await waitFor(() => expect(router.state.location.searchStr).toBe("?q="));
+    expect(screen.queryByText("No chain matched.")).toBeNull();
+    // One box rather than two: the nav is a button, and the box that searches is
+    // the page's. The nav says it is where you already are.
+    expect(screen.queryByRole("textbox", { name: "Search the corpus" })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Search the corpus" }).getAttribute("aria-current"),
+    ).toBe("page");
+    // And the page has the caret already, so the button is a way in rather than a
+    // click and then another click on the field.
+    expect(document.activeElement).toBe(screen.getByLabelText("Query"));
   });
 
   it("says on the body that this page is a workspace, and takes it off again", async () => {

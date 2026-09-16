@@ -41,6 +41,11 @@ export function SelectView() {
       : null,
   );
   const [chosen, setChosen] = useState<string[]>([]);
+  // Whether this visit arrived with a question already asked, read once so the
+  // answer belongs to the mount rather than to the render: the nav opens the
+  // search page empty and its field is where the caret belongs, while an arrival
+  // that names a query is a visit for reading results.
+  const [arrivedAsking] = useState(asked !== null);
 
   // This page is a workspace too: a list to pick candidates out of and a pane to
   // read them in, each scrolling inside the window rather than the page scrolling
@@ -140,7 +145,18 @@ export function SelectView() {
       <form className="selform" onSubmit={submit}>
         <label className="self">
           <span>Query</span>
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="words, a name, an id" />
+          {/* The caret is in the field when the page is opened with nothing asked
+              of it — the nav's button opens the search to be typed in, and a page
+              that opens a form without putting the caret in it is a form you have
+              to click before you can use it. An arrival that already asked a
+              question keeps the caret where it was: that visit is for reading the
+              results. */}
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="words, a name, an id"
+            autoFocus={!arrivedAsking}
+          />
         </label>
         <label className="self">
           <span>Mode</span>

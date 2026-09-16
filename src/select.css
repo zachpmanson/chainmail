@@ -14,10 +14,10 @@
 .self:first-child { flex:1 1 18rem; }
 .self:first-child input { width:100%; }
 
-.selform button, .selbuild button, .navsearch button { font:inherit; font-size:.78rem; font-weight:650;
+.selform button, .selbuild button { font:inherit; font-size:.78rem; font-weight:650;
   padding:.32rem .7rem; border:1px solid var(--line); border-radius:6px;
   background:var(--mine); color:var(--fg); cursor:pointer; }
-.selform button:disabled, .selbuild button:disabled, .navsearch button:disabled { opacity:.45; cursor:default; }
+.selform button:disabled, .selbuild button:disabled { opacity:.45; cursor:default; }
 
 /* The ranked list is the inbox's list (see .iblist and .ibrow): same rows, same
    classes, because a chain is a chain whether it was browsed to or searched for.
