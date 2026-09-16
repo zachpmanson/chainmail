@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { $api, type ChainHit, type EntryHit } from "../lib/api";
 import { useBuildPage } from "../lib/build";
-import { ChainReading, Failure, type PreviewableChain } from "./ChainPreview";
+import { ChainMessages } from "./ChainMessages";
+import { Failure, type PreviewableChain } from "./ChainPreview";
 
 /**
  * The home page with nothing asked of it: the corpus in the order it arrived,
@@ -316,7 +317,9 @@ export function Inbox() {
                     : ""}
                 </span>
               </div>
-              <ChainReading chain={selected} />
+              {/* The same component the page built from this thread uses, over a
+                  corpus read that carries each body already rendered. */}
+              <ChainMessages chain={selected} />
             </>
           ) : (
             <p className="selnote">Nothing in the corpus to read yet.</p>
