@@ -104,12 +104,14 @@ export interface MessageProps {
   /** the reply relationship — a node, because only the pipeline knows how a
    *  message resolves the parent it replies to */
   reply?: ReactNode;
-  /** the provenance line under the bubble */
+  /** where the entry was found — the ids under it, in the header's expanded
+   *  section beside the to/cc line */
   source?: ReactNode;
   /** a quoter's inline edit to text this message quoted */
   edits?: ReactNode;
   /** what the clip button puts on the clipboard as JSON; absent leaves the
-   *  button off, since a button that copies nothing is a lie */
+   *  button off, since a button that copies nothing is a lie. The button rides
+   *  in the header's expanded section, with the rest of the receipt. */
   copyJson?: unknown;
 }
 
@@ -355,17 +357,32 @@ export function Message(p: MessageProps) {
   return (
     <div className={cls} id={p.id} data-ch={p.lane} style={p.style}>
       <div className="col">
-        <div className="hdr">
-          <Avatar name={p.sender ?? ""} orgSlot={p.orgSlot} pic={p.avatarClass} title={who} />
-          <span className="nm" title={who}>
-            {p.sender}
-          </span>
-          <span className="org">{p.org}</span>
-          <Stamp id={p.id} stamp={p.stamp} />
-          {p.mark === "new" ? <span className="newpill">new</span> : null}
-          {p.mark === "revised" ? <span className="revpill">revised</span> : null}
-          {p.copyJson !== undefined ? <CopyJson data={p.copyJson} /> : null}
-        </div>
+        {/* The header is the bubble's disclosure, not a caption: the sender, the
+            org and the clock are what a page is scanned by, and the receipt —
+            who it was addressed to, what it answers, the ids it was found
+            under, and the control that copies it whole — opens beneath rather
+            than sitting inside the bubble, where it is read once and is only
+            height thereafter. A native <details>, like the provenance line and
+            the panels: the export stays readable without scripting, and
+            find-in-page reaches the ids closed or open. */}
+        <details className="hdr">
+          <summary>
+            <Avatar name={p.sender ?? ""} orgSlot={p.orgSlot} pic={p.avatarClass} title={who} />
+            <span className="nm" title={who}>
+              {p.sender}
+            </span>
+            <span className="org">{p.org}</span>
+            <Stamp id={p.id} stamp={p.stamp} />
+            {p.mark === "new" ? <span className="newpill">new</span> : null}
+            {p.mark === "revised" ? <span className="revpill">revised</span> : null}
+          </summary>
+          <div className="hdet">
+            <span className="to">to {p.to ?? "—"}</span>
+            {p.reply}
+            {p.source}
+            {p.copyJson !== undefined ? <CopyJson data={p.copyJson} /> : null}
+          </div>
+        </details>
         <div className="bub">
           {p.mentions?.length ? (
             <div className="ment">
@@ -385,11 +402,6 @@ export function Message(p: MessageProps) {
             pulling={p.pulling}
             mediaBase={p.mediaBase}
           />
-          <div className="foot">
-            <span className="to">to {p.to ?? "—"}</span>
-            {p.reply}
-            {p.source}
-          </div>
         </div>
       </div>
     </div>

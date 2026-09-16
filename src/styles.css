@@ -232,8 +232,26 @@
   .av.pic { background-size:cover; background-position:center;
     box-shadow:0 0 0 1.5px var(--ring,var(--muted)), 0 0 0 2.5px var(--bg); }
   .col { min-width:0; }
-  .hdr { display:flex; flex-wrap:wrap; align-items:baseline; gap:.3rem;
-    margin:0 0 .14rem; padding:0 .1rem; }
+  /* The header is a disclosure, not a caption. The sender, the org and the clock
+     are its summary — the things a page is scanned by — and the caret closes the
+     line at its right edge, so it opens from where the eye already is. The
+     receipt behind it (to/cc, the reply it answers, the ids it was found under,
+     and the copy control) is one click away rather than permanently in the
+     bubble, where it was read once and made every bubble taller thereafter. */
+  details.hdr { margin:0 0 .14rem; padding:0 .1rem; }
+  details.hdr > summary { display:flex; flex-wrap:wrap; align-items:baseline;
+    gap:.3rem; cursor:pointer; list-style:none; }
+  details.hdr > summary::-webkit-details-marker { display:none; }
+  /* The caret takes the accent on hover and when open, so the line reads as a
+     control without recolouring the name sitting beside it. */
+  details.hdr > summary::after { content:""; display:inline-block;
+    width:0; height:0; margin-left:auto;
+    border:.25em solid transparent; border-left-color:var(--muted);
+    transition:transform .12s, border-left-color .12s; }
+  details.hdr > summary:hover::after { border-left-color:var(--accent); }
+  details.hdr[open] > summary::after { transform:rotate(90deg);
+    border-left-color:var(--accent); }
+  details.hdr > summary:focus-visible { outline:1px solid var(--accent); outline-offset:2px; }
   .nm { font-size:.83rem; font-weight:650; }
   /* Tinted to match the bubble strip, so the colour is self-describing and the
      page needs no legend. Falls back to --muted for an entry with no org. */
@@ -443,10 +461,14 @@
   body.popped { overflow:hidden; }
   .afn { font-size:.74rem; font-weight:650; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
   .ameta { font-size:.64rem; color:var(--muted); }
-  .foot { display:flex; flex-wrap:wrap; align-items:baseline; gap:.2rem .7rem;
-    margin-top:.35rem; padding-top:.25rem; border-top:1px solid var(--line); }
+  /* The header's expanded section: the message's receipt, in the same quiet hand
+     as the bubble's other asides, closed by the copy control at the right edge —
+     where it sat when it was the header's own, so it is still found without
+     being looked for. */
+  .hdet { display:flex; flex-wrap:wrap; align-items:baseline; gap:.2rem .7rem;
+    margin:0 0 .3rem; padding:.22rem .1rem 0; border-top:1px solid var(--line); }
   .to { font-size:.66rem; color:var(--muted); }
-  .src { font-size:.64rem; color:var(--muted); margin-left:auto;
+  .src { font-size:.64rem; color:var(--muted);
     font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
   .src a { color:inherit; text-decoration:none; border-bottom:1px dotted currentColor; }
   .src a:hover { color:var(--accent); }
@@ -460,9 +482,9 @@
   details.src[open] > summary::before { transform:rotate(90deg); }
   details.src > summary:hover { color:var(--accent); }
   details.src > summary:focus-visible { outline:1px solid var(--accent); outline-offset:2px; }
-  /* Open, the ids need the footer's whole width or they wrap a handle per line.
+  /* Open, the ids need the panel's whole width or they wrap a handle per line.
      Right-aligned so the summary does not move under the reader when it opens;
-     closed, the line is one flex item as before and the bubble is no taller. */
+     closed, the line is one flex item as before and the panel is no taller. */
   details.src[open] { flex-basis:100%; text-align:right; }
   .srcids { padding-top:.15rem; line-height:1.5; }
   /* An id and its "msg" are one token to the reader, so the space between them is

@@ -42,7 +42,7 @@ const sheet = { name: "readings.csv", kind: "CSV", size: "18 KB", link: "https:/
 
 /** Just the attachment strip, so a panel above cannot satisfy an assertion. */
 const strip = (html: string) => {
-  const m = /<div class="atts">.*?<\/div>(?=<div class="foot")/s.exec(html);
+  const m = /<div class="atts">.*?<\/div>(?=<\/div><\/div><\/div>)/s.exec(html);
   if (!m) throw new Error("no attachment strip in the rendered page");
   return m[0];
 };
