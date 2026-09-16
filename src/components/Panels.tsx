@@ -281,16 +281,16 @@ export function Legend() {
       <div className="st">
         <span className="sw plain" />
         <div>
-          <b>Solid</b> — a real standalone message in the mailbox. Footer carries its Gmail
-          message&nbsp;id.
+          <b>Solid</b> — a real standalone message in the mailbox. The caret on its header
+          opens the ids it was found under, its Gmail message&nbsp;id among them.
         </div>
       </div>
       <div className="st">
         <span className="sw dash" />
         <div>
           <b>Dashed</b> — reconstructed from quoted text inside a later email; no message of
-          its own. Footer says which email it came out of, and its timestamp is the one in the
-          quoted header.
+          its own. Its header names the email it came out of, and its timestamp is the one in
+          the quoted header.
         </div>
       </div>
       <div className="st">
