@@ -359,6 +359,26 @@ describe("paging the inbox", () => {
     // A short page is the end of the corpus, so the button retires.
     expect(screen.queryByRole("button", { name: "Load older" })).toBeNull();
   });
+
+  // A chain whose entries straddle the cursor is returned again on the next page
+  // (its `last` is the whole chain's newest message, not the newest inside the
+  // window), so a page can arrive having added nothing. Measured against the live
+  // corpus: two hundred rows held 194 distinct threads. Asking forever after that
+  // is how a "Load older" button becomes a spinner.
+  it("stops asking when a page adds nothing the list has not already shown", async () => {
+    handler = (c) => (pathOf(c) === "/v1/search" ? pageOf(firstPage) : json(500, { error: "unexpected" }));
+    await mountApp("/");
+    await waitFor(() => expect(screen.getAllByRole("checkbox")).toHaveLength(50));
+
+    click(screen.getByRole("button", { name: "Load older" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Load older" })).toBeNull(),
+    );
+    // The second page was fetched, and then the asking stopped: the list is the
+    // same fifty threads, not a hundred rows of them.
+    expect(calls.filter((c) => pathOf(c) === "/v1/search")).toHaveLength(2);
+    expect(screen.getAllByRole("checkbox")).toHaveLength(50);
+  });
 });
 
 describe("how a row writes its date", () => {
