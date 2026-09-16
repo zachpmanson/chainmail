@@ -351,6 +351,74 @@ describe("the home page with no query", () => {
     expect(screen.getByRole("button", { name: "Fence panels" }).getAttribute("aria-current")).toBeNull();
   });
 
+  it("writes the open thread into the address, so a reload lands on it", async () => {
+    handler = buildHandler;
+    const router = await mountApp("/");
+    await screen.findByText("Loom cutover schedule");
+
+    click(screen.getByRole("button", { name: "Loom cutover schedule" }));
+    await waitFor(() =>
+      expect(router.state.location.search).toMatchObject({
+        open: "mail:<loom-cutover-1@example.fed>",
+      }),
+    );
+  });
+
+  it("opens the thread the address names, without a click", async () => {
+    handler = buildHandler;
+    await mountApp(`/?open=${encodeURIComponent("mail:<loom-cutover-1@example.fed>")}`);
+
+    // The pane is the address's, not the newest row's: what was open when the
+    // page was left is what is open on the way back in.
+    await waitFor(() =>
+      expect(within(pane()).getByText(/Roof access is fine from the 14th/)).toBeTruthy(),
+    );
+    expect(within(pane()).queryByText(/and the gate needs a new hinge/)).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Loom cutover schedule" }).getAttribute("aria-current"),
+    ).toBe("true");
+  });
+
+  it("opens a thread the loaded page does not hold, and claims nothing about it", async () => {
+    // Only the loom thread is in this page of the list, which is the position a
+    // reader is in when an old thread is opened, then reloaded: the row is not
+    // there to be found. The pane reads the chain from its id — the only thing
+    // the address carries — so the head claims no subject or count it cannot
+    // know, and what the thread says is read from the chain itself.
+    handler = (c) =>
+      pathOf(c).startsWith("/v1/chains/")
+        ? chainHandler(c)
+        : pathOf(c) === "/v1/search"
+          ? pageOf([CHAINS[1]!])
+          : buildHandler(c);
+    await mountApp(`/?open=${encodeURIComponent("mail:<fence-panel-9@example.fed>")}`);
+
+    await waitFor(() =>
+      expect(within(pane()).getByText(/and the gate needs a new hinge/)).toBeTruthy(),
+    );
+    const head = document.querySelector(".ibread-head")!.textContent ?? "";
+    expect(head).toContain("(no subject)");
+    expect(head).not.toMatch(/entr(y|ies)/);
+    // The one row is the loom thread, and it is not the one open.
+    expect(
+      screen.getByRole("button", { name: "Loom cutover schedule" }).getAttribute("aria-current"),
+    ).toBeNull();
+  });
+
+  it("clears the address when the list is asked for again", async () => {
+    handler = buildHandler;
+    const router = await mountApp(`/?open=${encodeURIComponent("mail:<loom-cutover-1@example.fed>")}`);
+    await screen.findByText("Loom cutover schedule");
+
+    click(within(pane()).getByRole("button", { name: /List/ }));
+    await waitFor(() => expect(router.state.location.search).not.toMatchObject({ open: expect.anything() }));
+
+    // Back to the default reading: the newest thread, with nobody having picked.
+    await waitFor(() =>
+      expect(within(pane()).getByText(/and the gate needs a new hinge/)).toBeTruthy(),
+    );
+  });
+
   it("builds a page from the ticked chains, recording no query for it", async () => {
     handler = buildHandler;
     const router = await mountApp("/");

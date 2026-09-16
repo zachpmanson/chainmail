@@ -56,7 +56,10 @@ function EntryCard({ e }: { e: CorpusEntry }) {
 export interface PreviewableChain {
   rootExtId: string;
   subject?: string;
-  entries: number;
+  /** How many messages the chain holds. Absent when the caller knows only the
+   *  id — the inbox read from an address bar, say — in which case no count is
+   *  claimed rather than a zero. */
+  entries?: number;
 }
 
 /** A candidate chain read as data. This is deliberately NOT the rendered
@@ -106,7 +109,7 @@ export function ChainPreview({ chain, onClose }: { chain: PreviewableChain; onCl
       <div className="selpv-panel" onClick={(e) => e.stopPropagation()}>
         <div className="selpv-head">
           <b>preview</b>
-          <span className="note">{chain.subject || "(no subject)"} · {chain.entries} entr{chain.entries === 1 ? "y" : "ies"}</span>
+          <span className="note">{chain.subject || "(no subject)"}{chain.entries ? ` · ${chain.entries} entr${chain.entries === 1 ? "y" : "ies"}` : ""}</span>
           <button type="button" className="selpv-close" onClick={onClose}>
             Close
           </button>
