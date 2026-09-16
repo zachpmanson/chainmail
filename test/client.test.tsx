@@ -233,7 +233,12 @@ const statusHandler: Handler = (c) => {
   const p = pathOf(c);
   if (p === "/v1/status") return json(200, STATUS);
   if (p === "/v1/stats") return json(200, STATS);
-  if (p === "/v1/settings") return json(200, { slurpEvery: "10m" });
+  if (p === "/v1/settings") return json(200, { slurpEvery: "10m", defaultFolder: "INBOX" });
+  // The folder control on this screen reads the same label list the home page's
+  // own folder button does.
+  if (p === "/v1/labels") {
+    return json(200, { labels: [{ name: "INBOX", messages: 210 }, { name: "Work", messages: 41 }] });
+  }
   return json(500, { error: `unexpected call to ${c.method} ${p}` });
 };
 
@@ -655,6 +660,78 @@ describe("the sweep cadence on /status", () => {
       expect(writes.map((c) => JSON.parse(c.body!))).toEqual([{ slurpEvery: "30m" }]);
     });
     await waitFor(() => expect(control.value).toBe("30m"));
+  });
+});
+
+describe("the default folder on /status", () => {
+  it("shows the folder the home page opens in, from the labels the corpus has", async () => {
+    handler = statusHandler;
+    await mountApp("/status");
+
+    const control = (await screen.findByLabelText(
+      "Which folder the home page opens in",
+    )) as HTMLSelectElement;
+    await waitFor(() => expect(control.value).toBe("INBOX"));
+    // The labels the corpus has, and the choice of none at the top — the same
+    // words the home page's own folder button uses for it.
+    expect([...control.options].map((o) => o.textContent)).toEqual(["All mail", "INBOX", "Work"]);
+
+    const line = control.closest(".stnote")!.textContent ?? "";
+    expect(line).toContain("The home page opens in");
+  });
+
+  it("writes the folder that was chosen, and writes none when All mail is", async () => {
+    let stored = "INBOX";
+    handler = (c) => {
+      const p = pathOf(c);
+      if (p === "/v1/settings") {
+        if (c.method === "POST") {
+          stored = (JSON.parse(c.body ?? "{}") as { defaultFolder?: string }).defaultFolder ?? "";
+        }
+        return json(200, { slurpEvery: "10m", defaultFolder: stored });
+      }
+      return statusHandler(c);
+    };
+    await mountApp("/status");
+
+    const control = (await screen.findByLabelText(
+      "Which folder the home page opens in",
+    )) as HTMLSelectElement;
+    await waitFor(() => expect(control.value).toBe("INBOX"));
+    fireEvent.change(control, { target: { value: "Work" } });
+
+    // Only the folder travels: the cadence beside it is left as it stands rather
+    // than sent again from this screen (see setSettings).
+    await waitFor(() => {
+      const writes = calls.filter((c) => pathOf(c) === "/v1/settings" && c.method === "POST");
+      expect(writes.map((c) => JSON.parse(c.body!))).toEqual([{ defaultFolder: "Work" }]);
+    });
+    await waitFor(() => expect(control.value).toBe("Work"));
+
+    // All mail is the empty value, not a folder named All mail: no default is a
+    // state of the setting, and the server stores it as one.
+    fireEvent.change(control, { target: { value: "" } });
+    await waitFor(() => expect(control.value).toBe(""));
+    expect(calls.filter((c) => c.method === "POST").at(-1)!.body).toBe('{"defaultFolder":""}');
+  });
+
+  it("shows a folder the corpus has no label for rather than snapping to All mail", async () => {
+    // The server does not validate the folder against the label list — it may be
+    // one the next sweep brings in — so the control has to be able to render the
+    // value it was handed, or it would silently show a setting that is not in
+    // force and write that back on the next change.
+    handler = (c) => {
+      const p = pathOf(c);
+      if (p === "/v1/settings") return json(200, { slurpEvery: "10m", defaultFolder: "Later" });
+      return statusHandler(c);
+    };
+    await mountApp("/status");
+
+    const control = (await screen.findByLabelText(
+      "Which folder the home page opens in",
+    )) as HTMLSelectElement;
+    await waitFor(() => expect(control.value).toBe("Later"));
+    expect([...control.options].map((o) => o.textContent)).toEqual(["All mail", "INBOX", "Work", "Later"]);
   });
 });
 
