@@ -34,16 +34,17 @@ const page = (messages: Entry[]) =>
     <Timeline spec={normalise({ title: "Loom cutover", messages } as Spec)} />,
   );
 
-/** Just the bubble footer, so a panel above cannot satisfy an assertion by accident. */
-const footer = (messages: Entry[]) => {
-  const m = /<div class="foot">(.*?)<\/div><\/div><\/div><\/div>/s.exec(page(messages));
-  if (!m) throw new Error("no bubble footer in the rendered page");
+/** Just the header's receipt, so a panel above cannot satisfy an assertion by
+ *  accident — cut off before the bubble, so a body cannot either. */
+const receipt = (messages: Entry[]) => {
+  const m = /<div class="hdet">(.*?)<\/div><\/details><div class="bub">/s.exec(page(messages));
+  if (!m) throw new Error("no header receipt in the rendered page");
   return m[1]!;
 };
 
-/** Every bubble footer, so a multi-message page can assert on a specific one. */
-const foots = (messages: Entry[]) =>
-  [...page(messages).matchAll(/<div class="foot">(.*?)<\/div><\/div><\/div><\/div>/gs)].map((m) => m[1]!);
+/** Every header receipt, so a multi-message page can assert on a specific one. */
+const receipts = (messages: Entry[]) =>
+  [...page(messages).matchAll(/<div class="hdet">(.*?)<\/div><\/details><div class="bub">/gs)].map((m) => m[1]!);
 
 describe("reading a provenance line", () => {
   it("recognises a list of generated ids", () => {
@@ -80,37 +81,37 @@ describe("counting messages", () => {
 
 describe("the source line under a bubble", () => {
   it("collapses many hosts to a count and keeps every id in the document", () => {
-    const foot = footer([
+    const rec = receipt([
       entry({ quoted: true, source: `unspooled from ${H.map((h) => `msg ${h}`).join(", ")}` }),
     ]);
-    expect(foot).toContain("unspooled from 7 msgs");
+    expect(rec).toContain("unspooled from 7 msgs");
     // collapsed, not dropped: every id is in the document, behind a closed
     // <details>. Dropping them would pass a count assertion just as well.
     // a native <details>/<summary>, which is what makes it operable from the
     // keyboard and with scripting off; a div and a click handler would be neither
-    expect(foot).toContain('<details class="src srcx"><summary>');
-    expect(foot).not.toContain("open=");
+    expect(rec).toContain('<details class="src srcx"><summary>');
+    expect(rec).not.toContain("open=");
     for (const h of H) {
       // the ids stay in the document, but none of these hosts is a row on this
       // page, so no unspooled id is an outbound Gmail link any more
-      expect(foot).toContain(`msg ${h}`);
-      expect(foot).not.toContain(`href="https://mail.google.com/mail/u/0/#all/${h}"`);
+      expect(rec).toContain(`msg ${h}`);
+      expect(rec).not.toContain(`href="https://mail.google.com/mail/u/0/#all/${h}"`);
     }
   });
 
   it("shows one host inline, and never says '1 msgs'", () => {
-    const foot = footer([entry({ quoted: true, source: `unspooled from msg ${H[0]}` })]);
-    expect(foot).not.toMatch(/\b1 msgs?\b/);
-    expect(foot).not.toContain("<details");
+    const rec = receipt([entry({ quoted: true, source: `unspooled from msg ${H[0]}` })]);
+    expect(rec).not.toMatch(/\b1 msgs?\b/);
+    expect(rec).not.toContain("<details");
     // no on-page message with this gmailId: the id is named, not shipped to Gmail
-    expect(foot).toContain(`unspooled from <span class="sid">msg ${H[0]}</span>`);
-    expect(foot).not.toContain("mail.google.com");
+    expect(rec).toContain(`unspooled from <span class="sid">msg ${H[0]}</span>`);
+    expect(rec).not.toContain("mail.google.com");
   });
 
   it("anchors an unspooled id to the same-page message it came from", () => {
     const real = entry({ sender: "Ada Byron", source: `msg ${H[0]}`, gmailId: H[0] });
     const spool = entry({ sender: "Bo Halvorsen", quoted: true, source: `unspooled from msg ${H[0]}` });
-    const all = foots([real, spool]);
+    const all = receipts([real, spool]);
     const spoolFooter = all.find((f) => f.includes("unspooled from"))!;
     // the unspooled id links to the on-page anchor of the message it was lifted
     // out of, not out to Gmail
@@ -118,26 +119,26 @@ describe("the source line under a bubble", () => {
       `unspooled from <span class="sid"><a href="#m-20260302-0915-ab" title="The message this was unspooled from, on this page">msg ${H[0]}</a></span>`,
     );
     expect(spoolFooter).not.toContain("mail.google.com");
-    // the named message's own footer still opens its mailbox copy
+    // the named message's own receipt still opens its mailbox copy
     const realFooter = all.find((f) => f.includes(`msg ${H[0]}`) && !f.includes("unspooled"))!;
     expect(realFooter).toContain(`href="https://mail.google.com/mail/u/0/#all/${H[0]}"`);
   });
 
   it("collapses from two, since two handles outrun the summary that replaces them", () => {
-    const foot = footer([entry({ quoted: true, source: `unspooled from msg ${H[0]}, msg ${H[1]}` })]);
-    expect(foot).toContain("unspooled from 2 msgs");
-    expect(foot).toContain('<details class="src srcx">');
+    const rec = receipt([entry({ quoted: true, source: `unspooled from msg ${H[0]}, msg ${H[1]}` })]);
+    expect(rec).toContain("unspooled from 2 msgs");
+    expect(rec).toContain('<details class="src srcx">');
   });
 
   it("links the mailbox's own id on a direct message", () => {
-    const foot = footer([entry({ source: `msg ${H[0]}`, gmailId: H[0] })]);
-    expect(foot).toContain(`href="https://mail.google.com/mail/u/0/#all/${H[0]}"`);
-    expect(foot).not.toContain("<details");
+    const rec = receipt([entry({ source: `msg ${H[0]}`, gmailId: H[0] })]);
+    expect(rec).toContain(`href="https://mail.google.com/mail/u/0/#all/${H[0]}"`);
+    expect(rec).not.toContain("<details");
   });
 
   it("leaves an entry with no source alone", () => {
-    const foot = footer([entry({})]);
-    expect(foot).not.toContain('class="src');
-    expect(foot).not.toContain("unspooled");
+    const rec = receipt([entry({})]);
+    expect(rec).not.toContain('class="src');
+    expect(rec).not.toContain("unspooled");
   });
 });

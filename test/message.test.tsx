@@ -75,9 +75,35 @@ describe("a bubble drawn from its props alone", () => {
     expect(container.querySelector(".msg")!.className).toContain("isnew");
     expect(container.querySelector(".hdr .newpill")!.textContent).toBe("new");
     expect(container.querySelector(".hdr .copyjson")).not.toBeNull();
-    expect(container.querySelector(".foot .par")).not.toBeNull();
-    expect(container.querySelector(".foot .src")).not.toBeNull();
+    expect(container.querySelector(".hdet .par")).not.toBeNull();
+    expect(container.querySelector(".hdet .src")).not.toBeNull();
     expect(container.querySelector(".bub .edits")).not.toBeNull();
+  });
+
+  it("opens the receipt from the header, with the copy control behind it", () => {
+    // The header is the disclosure and the receipt is what it opens: nothing
+    // that only the pipeline supplies — the to line, the reply, the ids, the
+    // clip — is left standing in the summary, where it would be read once and
+    // be height on every message thereafter.
+    const { container } = draw({
+      to: "Bo Halvorsen, cc Cy Okafor",
+      copyJson: { id: "m1" },
+      reply: <a className="par">in reply to Bo</a>,
+      source: <span className="src">unspooled</span>,
+    });
+    const hdr = container.querySelector("details.hdr")!;
+    expect(hdr.querySelector("summary")).not.toBeNull();
+    expect(hdr.querySelector("summary")!.querySelector(".copyjson, .par, .src, .to")).toBeNull();
+    const det = hdr.querySelector(".hdet")!;
+    expect(det.querySelector(".to")!.textContent).toBe("to Bo Halvorsen, cc Cy Okafor");
+    expect(det.querySelector(".par")).not.toBeNull();
+    expect(det.querySelector(".src")).not.toBeNull();
+    expect(det.querySelector(".copyjson")).not.toBeNull();
+    // the summary is the sender and the clock, and it is the first thing in it
+    expect(hdr.firstElementChild!.tagName).toBe("SUMMARY");
+    expect(hdr.querySelector("summary .nm")!.textContent).toBe("Ada Okoye");
+    expect(hdr.querySelector("summary .tm")).not.toBeNull();
+    expect(container.querySelector(".foot")).toBeNull();
   });
 
   it("copies the payload it was handed, as JSON", () => {

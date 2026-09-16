@@ -499,16 +499,16 @@ describe("the home page with no query", () => {
     await screen.findByText("Loom cutover schedule");
 
     // The page's classes, not the pane's own: one component draws a message in
-    // both places, so the bubble, the header and the footer are the same boxes.
+    // both places, so the bubble, the header and its receipt are the same boxes.
     await waitFor(() => expect(pane().querySelector(".msg .bub")).not.toBeNull());
     expect(pane().querySelector(".msg .hdr .nm")?.textContent).toBe("Ada Okoye");
     // And the body is the service's rendered html, not the plain text: the
     // fixture's two differ by a <b> that only the html has.
     expect(pane().querySelector(".bd b")?.textContent).toBe("Regards, Ada");
     expect(pane().querySelector(".bd")?.textContent).not.toContain("<b>");
-    // The recipient line the message itself stated. It is the same footer the
+    // The recipient line the message itself stated. It is the same receipt the
     // page prints, filled from the chain read rather than left as "to —".
-    expect(pane().querySelector(".msg .foot .to")?.textContent).toBe("to Bo Halvorsen, cc Cy Okafor");
+    expect(pane().querySelector(".msg .hdet .to")?.textContent).toBe("to Bo Halvorsen, cc Cy Okafor");
   });
 
   it("names the sender's address on hover, and only where the entry has one", async () => {
@@ -545,7 +545,7 @@ describe("the home page with no query", () => {
     await mountApp("/?open=quote%3A9f2c1ab4e77d");
 
     await waitFor(() => expect(pane().querySelector(".msg .bub")).not.toBeNull());
-    expect(pane().querySelector(".msg .foot .to")?.textContent).toBe("to —");
+    expect(pane().querySelector(".msg .hdet .to")?.textContent).toBe("to —");
   });
 
   it("builds a page from the ticked chains, recording no query for it", async () => {
