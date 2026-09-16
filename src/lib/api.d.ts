@@ -52,6 +52,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/mail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archive, trash or move a chain's messages in the mailbox itself.
+         * @description The second write this surface makes to the mailbox, beside /v1/read: the labels of every message in the named chains are changed, and the labels the mailbox answers with are stored beside them. What each action means is the mailbox's own vocabulary — archive is the removal of INBOX, trash is the Trash label, and a move is the target label plus the way out of the inbox — so nothing here invents a folder model of its own.
+         *
+         *     Plural, because the bar acts on what a reader ticked: every chain is resolved before anything is written, and a set naming one unknown chain changes nothing at all rather than half of it.
+         *
+         *     An entry with no mailbox copy — a message recovered from somebody's quote, a Slack post — is counted in `skipped`, never failed, exactly as in /v1/read.
+         *
+         *     Opt-in and off by default, with its own switch rather than -mark-read: a host that lets the read circle write has not thereby asked this server to be able to delete mail. A server started without -mail-write answers 403, naming the switch. The credential is the mail grant the unit already holds.
+         */
+        post: operations["mailAction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/media/pull": {
         parameters: {
             query?: never;
@@ -1330,6 +1356,51 @@ export interface components {
             /** @description What the rebuild behind the pull changed, in the same shape POST /v1/refresh reports. Present alongside spec. */
             report?: components["schemas"]["RefreshReport"];
         };
+        /** @description What to do to which chains: one action, the chains it applies to, and where a move goes. */
+        MailActionRequest: {
+            /**
+             * @description The root ext ids of the chains to change, as chain hits carry them in `rootExtId`. All of them, or none: an unknown id in the set leaves the mailbox as it was.
+             * @example [
+             *       "mail:<c0ffee-1@example.com>"
+             *     ]
+             */
+            chains: string[];
+            /**
+             * @description What to do to every mailbox message in the chains: archive removes INBOX, trash puts the messages in the Trash and out of the inbox, and move adds the labels below and leaves the inbox. One action per call, because the counts in the answer are about one change.
+             * @enum {string}
+             */
+            action: "archive" | "trash" | "move";
+            /**
+             * @description Where a move goes: label names, as /v1/labels serves them. Required for `move` and refused with it when empty; ignored by the other actions. A name the mailbox does not have is refused by the mailbox, not created.
+             * @example [
+             *       "Work"
+             *     ]
+             */
+            labels?: string[];
+        };
+        /** @description What the write did: how many messages changed, how many entries have no mailbox copy, and the same counts per chain — because the reader ticked a set, and a total cannot tell them which thread stayed put. */
+        MailActionResponse: {
+            /**
+             * @description The action that ran, echoed back so a client does not have to infer it from the request it sent.
+             * @enum {string}
+             */
+            action: "archive" | "trash" | "move";
+            /** @description Where a move went. Absent for the actions that name no label. */
+            labels?: string[];
+            /** @description Mailbox messages whose labels were changed and stored, across every chain. */
+            changed: number;
+            /** @description Entries with no mailbox copy, so there was nothing to change. Recovered text and Slack posts, normally. */
+            skipped: number;
+            /** @description One row per chain named, in the order it was named. */
+            chains: {
+                /** @description The chain, as it was named. */
+                rootExtId: string;
+                /** @description Its mailbox messages that changed. */
+                changed: number;
+                /** @description Its entries with no mailbox copy. */
+                skipped: number;
+            }[];
+        };
         /** @description One chain's read state: which conversation, and the state every mailbox message in it should be left in. */
         MarkReadRequest: {
             /**
@@ -1485,6 +1556,66 @@ export interface operations {
                 };
             };
             /** @description The ingest failed, at the mailbox or over the corpus. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    mailAction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MailActionRequest"];
+            };
+        };
+        responses: {
+            /** @description What changed, in total and per chain, and how much of each chain the mailbox does not hold. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailActionResponse"];
+                };
+            };
+            /** @description No chains named, an unknown action, or a move with no labels. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Changing mail is disabled: the server was started without -mail-write. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No chain rooted at one of the ext ids named. Nothing was changed. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The mailbox refused: the error names how many messages were changed before it did, and how many chains were finished. */
             502: {
                 headers: {
                     [name: string]: unknown;

@@ -174,6 +174,17 @@ const typeInto = (label: string, value: string) =>
 
 const click = (el: Element) => fireEvent.click(el);
 
+/** Braid the ticked chains into a page. The bar's button opens a dialog, and the
+ *  title is typed in there — a title is a decision about the page being made, so
+ *  it lives beside the button that commits to it rather than on the bar's line
+ *  with Archive and Delete, which are about the mailbox. */
+async function braid(title?: string) {
+  click(screen.getByRole("button", { name: "Braid Threads" }));
+  await screen.findByLabelText("Page title");
+  if (title !== undefined) typeInto("Page title", title);
+  click(screen.getByRole("button", { name: "Braid" }));
+}
+
 /** jsdom does not submit a form when its submit button is clicked, so the submit
  *  event is dispatched directly. The button itself is still asserted on. */
 function submitSearch() {
@@ -539,12 +550,15 @@ describe("building a page from the chosen set", () => {
     // Nothing ticked is nothing to build from, so there is no bar — the same
     // rule as the inbox, where the search page used to show a row of controls
     // that could not do anything yet.
-    expect(screen.queryByLabelText("Page title")).toBeNull();
-    expect(screen.queryByRole("button", { name: /Build page/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Braid Threads" })).toBeNull();
 
     click(screen.getAllByRole("checkbox")[0]!);
+    expect(await screen.findByRole("button", { name: "Braid Threads" })).toBeTruthy();
+    // The title is not on the bar: it is in the dialog the button opens, so the
+    // bar's own line holds only the verbs and the folder those verbs take.
+    expect(screen.queryByLabelText("Page title")).toBeNull();
+    click(screen.getByRole("button", { name: "Braid Threads" }));
     expect(await screen.findByLabelText("Page title")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Build page from 1 chain$/ })).toBeTruthy();
     // And it is the one bar, so no field asking who the reader is: the addresses
     // are a setting, written on the services page.
     expect(screen.queryByLabelText("Your addresses")).toBeNull();
@@ -559,9 +573,7 @@ describe("building a page from the chosen set", () => {
     click(boxes[0]!);
     click(boxes[1]!);
     click(boxes[1]!); // unticked again: it must not reach the request
-    typeInto("Page title", "Loom cutover");
-
-    click(screen.getByRole("button", { name: /Build page from 1 chain$/ }));
+    await braid("Loom cutover");
     await waitFor(() => expect(calls.some((c) => pathOf(c) === "/v1/spec")).toBe(true));
 
     const post = calls.find((c) => pathOf(c) === "/v1/spec")!;
@@ -595,8 +607,7 @@ describe("building a page from the chosen set", () => {
     const router = await mountApp("/?q=cutover");
     await screen.findByText("Loom cutover schedule", { selector: ".ibsubj" });
     click(screen.getAllByRole("checkbox")[0]!);
-    typeInto("Page title", "Loom cutover");
-    click(screen.getByRole("button", { name: /Build page/ }));
+    await braid("Loom cutover");
 
     // "not yet", with a time attached, is the one decline worth re-asking
     await waitFor(() => expect(router.state.location.pathname).toBe("/view/loom-cutover"));
@@ -616,7 +627,7 @@ describe("building a page from the chosen set", () => {
     await mountApp("/?q=cutover");
     await screen.findByText("Loom cutover schedule", { selector: ".ibsubj" });
     click(screen.getAllByRole("checkbox")[0]!);
-    click(screen.getByRole("button", { name: /Build page/ }));
+    await braid();
 
     expect((await screen.findByRole("alert")).textContent).toContain("Timed out (504)");
     await new Promise((r) => setTimeout(r, 120));
@@ -637,13 +648,11 @@ describe("building a page from the chosen set", () => {
     await screen.findByText("Loom cutover schedule", { selector: ".ibsubj" });
 
     click(screen.getAllByRole("checkbox")[0]!);
-    typeInto("Page title", "Loom cutover");
-    const button = screen.getByRole("button", { name: /Build page/ });
-    click(button);
+    await braid("Loom cutover");
 
     const status = await screen.findByRole("status");
     expect(status.textContent).toContain("boilerplate");
-    expect((await screen.findByRole("button", { name: "Building…" })).hasAttribute("disabled")).toBe(true);
+    expect((await screen.findByRole("button", { name: "Braiding…" })).hasAttribute("disabled")).toBe(true);
 
     await act(async () => {
       release(json(200, SPEC));
@@ -1012,8 +1021,7 @@ describe("the render route /view/<name>", () => {
     // The bar appears with the first tick — nothing ticked is nothing to build
     // from — so the title is typed after it.
     click(screen.getAllByRole("checkbox")[0]!);
-    typeInto("Page title", "Loom cutover");
-    click(screen.getByRole("button", { name: /Build page from 1 chain$/ }));
+    await braid("Loom cutover");
 
     await waitFor(() => expect(router.state.location.pathname).toBe("/view/loom-cutover"));
     await screen.findByText("Loom cutover");
@@ -1391,8 +1399,7 @@ describe("the search lives in the URL", () => {
     await screen.findByText("Loom cutover schedule", { selector: ".ibsubj" });
     // The bar appears with the first tick, so the title waits for it.
     click(screen.getAllByRole("checkbox")[0]!);
-    typeInto("Page title", "Loom cutover");
-    click(screen.getByRole("button", { name: /Build page from 1 chain$/ }));
+    await braid("Loom cutover");
     await waitFor(() => expect(router.state.location.pathname).toBe("/view/loom-cutover"));
     await screen.findByText("Loom cutover");
 
@@ -1713,5 +1720,145 @@ describe("the ops route /ops", () => {
     // The pair that did apply is gone from the list all the same.
     await waitFor(() => expect(screen.queryByLabelText(/Select folding #8/)).toBeNull());
     expect(screen.getByLabelText(/Select folding #22/)).toBeTruthy();
+  });
+});
+
+describe("what the bar does to the mail", () => {
+  /** The chains this suite ticks are the search page's rows: they are the ones
+   *  reachable without a second fixture, and the bar is the same bar on both
+   *  pages. */
+  const mailHandler = (answer: Response): Handler => (c) => {
+    const p = pathOf(c);
+    if (p === "/v1/mail") return answer;
+    if (p === "/v1/labels") {
+      return json(200, {
+        labels: [
+          { name: "INBOX", messages: 210 },
+          { name: "Work", messages: 41 },
+          { name: "Archive", messages: 5 },
+        ],
+      });
+    }
+    return buildHandler(c);
+  };
+
+  const ticksTwo = async () => {
+    await screen.findByText("Loom cutover schedule", { selector: ".ibsubj" });
+    const boxes = screen.getAllByRole("checkbox");
+    click(boxes[0]!);
+    click(boxes[1]!);
+  };
+
+  it("archives every ticked chain in one call, and says what the mailbox answered", async () => {
+    handler = mailHandler(
+      json(200, {
+        action: "archive",
+        changed: 12,
+        skipped: 1,
+        chains: [
+          { rootExtId: "mail:<loom-cutover-1@example.fed>", changed: 4, skipped: 1 },
+          { rootExtId: "mail:<lease-renewal-1@example.fed>", changed: 8, skipped: 0 },
+        ],
+      }),
+    );
+    await mountApp("/?q=cutover");
+    await ticksTwo();
+
+    click(screen.getByRole("button", { name: "Archive" }));
+    await waitFor(() => expect(calls.some((c) => pathOf(c) === "/v1/mail")).toBe(true));
+
+    const post = calls.find((c) => pathOf(c) === "/v1/mail")!;
+    expect(post.method).toBe("POST");
+    // One call for the set, in the order it was ticked: four requests would be
+    // four chances for the mailbox to be left half changed.
+    expect(JSON.parse(post.body!)).toEqual({
+      chains: ["mail:<loom-cutover-1@example.fed>", "mail:<lease-renewal-1@example.fed>"],
+      action: "archive",
+    });
+    // The sentence is the mailbox's numbers, not the caller's — and the skipped
+    // entry is named rather than swallowed: the reader can see four messages and
+    // be told about three.
+    expect((await screen.findByRole("status")).textContent).toContain(
+      "Archived 12 messages — out of the inbox, still in All Mail. 1 entry has no mailbox copy and was left alone.",
+    );
+    // The ticks are cleared, and the bar with them: the chains are not in this
+    // list any more.
+    expect(screen.queryByRole("button", { name: "Archive" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Braid Threads" })).toBeNull();
+  });
+
+  it("deletes to the trash, and says how long it can be got back", async () => {
+    handler = mailHandler(json(200, { action: "trash", changed: 3, skipped: 0, chains: [] }));
+    await mountApp("/?q=cutover");
+    await ticksTwo();
+
+    click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(calls.some((c) => pathOf(c) === "/v1/mail")).toBe(true));
+
+    expect(JSON.parse(calls.find((c) => pathOf(c) === "/v1/mail")!.body!)).toEqual({
+      chains: ["mail:<loom-cutover-1@example.fed>", "mail:<lease-renewal-1@example.fed>"],
+      action: "trash",
+    });
+    // "deleted" is a claim about the reader's mailbox, so the sentence says where
+    // it went and how long it can be undone — the trash is Gmail's, not a folder
+    // this page invented.
+    expect((await screen.findByRole("status")).textContent).toBe(
+      "Deleted 3 messages — in the trash, recoverable for 30 days.",
+    );
+  });
+
+  it("moves to the folder the dropdown names, and cannot move to none", async () => {
+    handler = mailHandler(
+      json(200, { action: "move", labels: ["Work"], changed: 3, skipped: 0, chains: [] }),
+    );
+    await mountApp("/?q=cutover");
+    await ticksTwo();
+
+    // Nothing is named yet, so there is nothing to move to: the button is the
+    // state of the dropdown, and a move with no destination is not a move.
+    const move = screen.getByRole("button", { name: "Move" }) as HTMLButtonElement;
+    expect(move.disabled).toBe(true);
+
+    const folders = screen.getByLabelText("Move to");
+    // The inbox is not offered: a move to the place the mail is leaving is not a
+    // move. Everything else the mailbox has is, including folders this page has
+    // never seen mail in.
+    expect(
+      Array.from(folders.querySelectorAll("option")).map((o) => o.textContent),
+    ).toEqual(["choose a folder…", "Archive", "Work"]);
+
+    fireEvent.change(folders, { target: { value: "Work" } });
+    click(screen.getByRole("button", { name: "Move" }));
+    await waitFor(() => expect(calls.some((c) => pathOf(c) === "/v1/mail")).toBe(true));
+
+    expect(JSON.parse(calls.find((c) => pathOf(c) === "/v1/mail")!.body!)).toEqual({
+      chains: ["mail:<loom-cutover-1@example.fed>", "mail:<lease-renewal-1@example.fed>"],
+      action: "move",
+      labels: ["Work"],
+    });
+    expect((await screen.findByRole("status")).textContent).toBe("Moved 3 messages to Work.");
+  });
+
+  it("leaves the ticks alone when the mailbox refuses", async () => {
+    handler = mailHandler(
+      json(403, {
+        error:
+          "changing mail is disabled: this server was started without -mail-write, so it will not archive, trash or move anything.",
+      }),
+    );
+    await mountApp("/?q=cutover");
+    await ticksTwo();
+
+    click(screen.getByRole("button", { name: "Archive" }));
+    // The refusal names the switch, because the person reading it is the one who
+    // can restart the service with it.
+    expect((await screen.findByRole("alert")).textContent).toContain("-mail-write");
+    // Nothing moved, so nothing is cleared: the ticks are still the reader's
+    // selection and the buttons still stand.
+    expect((screen.getByRole("button", { name: "Archive" }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+    expect((screen.getAllByRole("checkbox")[0] as HTMLInputElement).checked).toBe(true);
+    expect(screen.queryByRole("status")).toBeNull();
   });
 });
