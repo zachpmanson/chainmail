@@ -528,7 +528,8 @@ export function Inbox() {
       {/* A failure with nothing to show is the whole page's; one with rows already
           on screen belongs at the end of the list, where the reader is. */}
       {inbox.isError && !inbox.data ? <Failure error={inbox.error} /> : null}
-      {inbox.isPending ? <p className="selnote">Reading the corpus…</p> : null}
+      {/* No "reading the corpus" line here: the read is the site's, not this
+          page's, and it is said in the nav. */}
       {!inbox.isPending && !inbox.isError && rows.length === 0 ? (
         <p className="selnote">
           {label ? (
