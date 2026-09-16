@@ -36,14 +36,27 @@ func sweepable(t *testing.T, every string) (*harness, *int) {
 	return srv, &runs
 }
 
+// swept makes the last ingest ago-old. The cadence is measured from the last
+// time the mailbox was reached, so a test that wants a tick to run has to give
+// the loop something to measure from — a corpus that has never been swept is not
+// due until a cadence after the server came up.
+func swept(t *testing.T, srv *harness, ago time.Duration) {
+	t.Helper()
+	if err := srv.store.PutSetting(corpus.SettingSlurpAt,
+		time.Now().Add(-ago).UTC().Format(time.RFC3339)); err != nil {
+		t.Fatalf("storing the last sweep: %v", err)
+	}
+}
+
 // The pulse: a cadence has elapsed since the last ingest, so the tick runs one —
 // and having run it, does not run another the next time the loop looks.
 func TestASweepRunsWhenItsCadenceHasElapsed(t *testing.T) {
 	srv, runs := sweepable(t, "")
+	swept(t, srv, 11*time.Minute)
 
 	srv.sweepIfDue(context.Background())
 	if *runs != 1 {
-		t.Fatalf("%d sweeps, want one: nothing has been ingested and the cadence is due", *runs)
+		t.Fatalf("%d sweeps, want one: the last ingest was a whole cadence ago", *runs)
 	}
 	if got := srv.lastSlurp(); got.IsZero() {
 		t.Error("the sweep left no stamp, so the next tick would sweep again immediately")
@@ -87,6 +100,7 @@ func TestTheCadenceDecidesWhenTheNextSweepIsDue(t *testing.T) {
 // seconds. The run is reported, not swallowed — the loop logs it.
 func TestASweepThatFailedStillHoldsTheNextOneOff(t *testing.T) {
 	srv, runs := sweepable(t, "")
+	swept(t, srv, 11*time.Minute)
 	srv.runSweep = func(context.Context, string) ([]byte, error) {
 		*runs++
 		return nil, context.DeadlineExceeded
@@ -107,6 +121,7 @@ func TestASweepThatFailedStillHoldsTheNextOneOff(t *testing.T) {
 // nothing claims a next sweep.
 func TestACadenceOfOffNeverSweeps(t *testing.T) {
 	srv, runs := sweepable(t, slurpEveryOff)
+	swept(t, srv, 11*time.Minute) // due by the clock, and still not swept
 
 	srv.sweepIfDue(context.Background())
 	if *runs != 0 {
@@ -149,6 +164,7 @@ func TestASecondIngestWhileOneIsRunningIsRefused(t *testing.T) {
 // seconds after the first finished.
 func TestAManualIngestCountsAsTheSweepTheCadenceMeasuresFrom(t *testing.T) {
 	srv, runs := sweepable(t, "")
+	swept(t, srv, 11*time.Minute)
 	srv.runSlurp = func(context.Context, string) ([]byte, error) {
 		*runs++
 		return []byte("slurp\nmail: 0 new\n"), nil
@@ -188,7 +204,7 @@ func TestSlurpEveryIsServedWrittenAndCleared(t *testing.T) {
 		// Two spellings of one cadence, stored and served as one: the page's
 		// control can only render the vocabulary the server hands back.
 		{sent: "600s", want: "10m"},
-		{sent: "2h30m", want: "2h30m"},		{sent: " never ", want: slurpEveryOff},
+		{sent: "2h30m", want: "2h30m"}, {sent: " never ", want: slurpEveryOff},
 	} {
 		res := srv.do(t, "POST", "/v1/settings", []byte(`{"slurpEvery":`+strconv.Quote(c.sent)+`}`))
 		if res.status != 200 {
@@ -297,13 +313,23 @@ func TestTheNextSweepIsTheLastOnePlusTheCadence(t *testing.T) {
 
 // A corpus that has never been swept has nothing to count from, and the one base
 // that makes a fresh host predictable is its own start: due one cadence after it
-// came up, rather than the moment it boots.
+// came up, rather than the moment it boots. The loop and the served answer are
+// held to the same rule, so this is asserted on both.
 func TestAFreshCorpusIsDueOneCadenceAfterTheServerStarted(t *testing.T) {
-	srv, _ := sweepable(t, "")
+	srv, runs := sweepable(t, "")
+	// The fixture's start is a fixed clock a day behind, which is a server that has
+	// been up for ages rather than one that has just come up; the case under test
+	// is the latter, so the base is moved to now.
+	srv.startedAt = time.Now()
 	want := srv.startedAt.Add(DefaultSlurpEvery).UTC().Format(time.RFC3339)
 
 	if got := srv.nextSlurpAt(); got != want {
 		t.Errorf("nextSlurpAt = %q on a corpus that has never been swept, want %q", got, want)
+	}
+
+	srv.sweepIfDue(context.Background())
+	if *runs != 0 {
+		t.Errorf("%d sweeps on a corpus that has never been swept, want none before the cadence", *runs)
 	}
 }
 

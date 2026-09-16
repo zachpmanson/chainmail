@@ -90,10 +90,15 @@
 /* The sweep cadence, sitting inside the sentence that states it: the same field
    furniture as the home page's controls, at the size of the note it lives in, so
    the line reads as one sentence with one thing in it that can be changed. */
-.stsweep { font:inherit; font-size:.76rem; padding:.15rem .3rem; margin:0 .1rem;
+/* A setting's control: a select sized to the sentence it sits in rather than to
+   the field, because the line around it is what names what is being set. Two
+   settings, one class: they are the same kind of thing on the same screen, and
+   one drifting away from the other's padding is how a settings list starts
+   looking like two screens. */
+.stpick { font:inherit; font-size:.76rem; padding:.15rem .3rem; margin:0 .1rem;
   border:1px solid var(--line); border-radius:6px;
   background:var(--card); color:var(--fg); cursor:pointer; }
-.stsweep:disabled { opacity:.6; cursor:default; }
+.stpick:disabled { opacity:.6; cursor:default; }
 .stlist { list-style:none; margin:.5rem 0 0; padding:0; border:1px solid var(--line);
   border-radius:9px; background:var(--card); overflow:hidden; }
 .strow + .strow { border-top:1px solid var(--line); }
