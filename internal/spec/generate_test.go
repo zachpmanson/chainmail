@@ -871,3 +871,65 @@ func TestDerivedQuoteSurfacesAsAnEditOnItsHost(t *testing.T) {
 		t.Errorf("edit base = %q, want the original %q", e.Base, baseID)
 	}
 }
+
+// quotedTo is a store with one entry recovered from quoted text, whose quoters
+// preserved both a To and a Cc, and the page built from the same store. It is the
+// fixture both views of the line are tested against, because the claim is about
+// the evidence rather than about either renderer.
+func quotedTo(t *testing.T) (*corpus.Store, Spec) {
+	t.Helper()
+	s := trail(t)
+	ed := person(t, s, "Ed Nakamura", "ed@loomworks.example")
+	dee := person(t, s, "Dee Farrow", "dee@fjordline.example")
+	cy := person(t, s, "Cy Okafor", "cy@loomworks.example")
+
+	ts, _ := time.Parse(time.RFC3339, "2026-03-01T08:00:00+11:00")
+	id, _, err := s.PutQuoted(corpus.Entry{
+		Source: corpus.SourceMail, ExtID: "quote:sha-to", TS: ts, TZ: "AEDT",
+		PersonID: ed, Container: "T1", Subject: "Loom cutover", BodyText: "invented body",
+	})
+	if err != nil {
+		t.Fatalf("PutQuoted: %v", err)
+	}
+	if err := s.Sight(id, 0, "quoted", ""); err != nil {
+		t.Fatalf("Sight: %v", err)
+	}
+	for _, p := range []struct {
+		person int64
+		role   string
+	}{
+		{ed, corpus.RoleFrom}, {dee, corpus.RoleTo}, {cy, corpus.RoleCc},
+	} {
+		if err := corpus.Participate(s, id, p.person, p.role); err != nil {
+			t.Fatalf("Participate %s: %v", p.role, err)
+		}
+	}
+	return s, generate(t, s, Options{Containers: []string{"T1"}})
+}
+
+// A recovered entry has no headers of its own, so its To/Cc columns are empty and
+// the page used to print "to —" for most of a thread — 26 of 31 entries on the
+// chain that prompted this. Its recipients are not unknown, though: the ingest
+// reads the header block the quoting client wrote and records them as
+// participants, unioned across forwards. The line may be filled from that, and
+// nothing may invent one.
+func TestAQuotedEntryStatesTheRecipientsItsQuotersWrote(t *testing.T) {
+	_, sp := quotedTo(t)
+	var quoted *Entry
+	for i := range sp.Messages {
+		if sp.Messages[i].ExtID == "quote:sha-to" {
+			quoted = &sp.Messages[i]
+		}
+	}
+	if quoted == nil {
+		t.Fatal("the quoted entry is not on the page at all")
+	}
+	if quoted.To != "Dee Farrow, cc Cy Okafor" {
+		t.Errorf("to = %q, want the recipients the quoters wrote", quoted.To)
+	}
+	// And the page did not have to guess: the sender is not in their own
+	// recipient list.
+	if strings.Contains(quoted.To, "Ed Nakamura") {
+		t.Errorf("to = %q, which puts the sender in their own To line", quoted.To)
+	}
+}

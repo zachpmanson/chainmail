@@ -6,6 +6,8 @@ import (
 	"net/mail"
 	"strings"
 	"unicode"
+
+	"github.com/zachpmanson/chainmail/internal/corpus"
 )
 
 // addr is one parsed address from a From/To/Cc header.
@@ -128,6 +130,36 @@ func recipientLine(to, cc []addr) string {
 		line += "cc " + strings.Join(ccs, ", ")
 	}
 	return line
+}
+
+// recipientsOf is the "to …" line for one entry: what the message itself said,
+// or — where it has no headers of its own — what the corpus recovered of them.
+//
+// A recovered entry was found as text inside someone else's message: mail_detail
+// has no row for it, so its To and Cc columns are empty and a line read from them
+// alone would say "to —" for most of a thread. Its recipients are in the
+// participants table, put there by the ingest reading the header block the
+// quoting client wrote and unioning them across forwards (AddHeader argues why
+// union rather than replacement: each forward shows a different subset). That is
+// the message's own statement as it survived, not a guess about it, which is why
+// this may fill the line and nothing may invent one.
+//
+// A recovered entry whose quoters wrote only an attribution has no recipients
+// rows either, and still reads "to —". That is the honest answer: nobody said.
+func recipientsOf(r *entryRow, part []partRow) string {
+	if line := recipientLine(parseAddrList(r.To), parseAddrList(r.Cc)); line != "" {
+		return line
+	}
+	var to, cc []addr
+	for _, p := range part {
+		switch p.Role {
+		case corpus.RoleTo:
+			to = append(to, addr{Name: p.Name})
+		case corpus.RoleCc:
+			cc = append(cc, addr{Name: p.Name})
+		}
+	}
+	return recipientLine(to, cc)
 }
 
 // freemail domains say nothing about who someone works for, so they yield no

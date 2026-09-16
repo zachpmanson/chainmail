@@ -81,11 +81,18 @@ func RenderTrail(store *corpus.Store, extIDs []string) (map[string]Rendered, err
 	if err != nil {
 		return nil, err
 	}
+	// The recipient line comes from the same place a page build's does, which for
+	// an entry with no headers of its own means the participants table. See
+	// recipientsOf.
+	part, _, err := loadParticipation(store.DB(), ids)
+	if err != nil {
+		return nil, err
+	}
 	attributeAttachments(rows)
 	for _, r := range rows {
 		out[extOf[r.ID]] = Rendered{
 			HTML: bodyHTML(r),
-			To:   recipientLine(parseAddrList(r.To), parseAddrList(r.Cc)),
+			To:   recipientsOf(r, part[r.ID]),
 		}
 	}
 	return out, nil
