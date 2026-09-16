@@ -114,7 +114,8 @@ func run(args []string) error {
 		statusPath:   status.FileName(*path),
 		slurpEnabled: *slurp,
 		slurpTimeout: *slurpTimeout,
-		runSlurp:     defaultSlurp(),
+		runSlurp:     defaultSlurp(manualPhases),
+		runSweep:     defaultSlurp(sweepPhases),
 		mediaEnabled: *mediaPull,
 		runMediaPull: defaultMediaPull(store, *uploads),
 
@@ -154,6 +155,14 @@ func run(args []string) error {
 	// done without a request waiting on it — and the request that would have paid
 	// is a person opening a thread. See warmFolds.
 	srv.warmFolds()
+
+	// The sweep schedule runs for as long as the process does: the cadence is a
+	// setting this server reads (see schedule.go), so the thing that owns the
+	// timer is the thing that can be told to change it. Cancelled on the way out,
+	// before the store is closed under it.
+	sweeps, stopSweeps := context.WithCancel(context.Background())
+	defer stopSweeps()
+	go srv.sweepLoop(sweeps)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)

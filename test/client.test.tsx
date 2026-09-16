@@ -225,6 +225,7 @@ const statusHandler: Handler = (c) => {
   const p = pathOf(c);
   if (p === "/v1/status") return json(200, STATUS);
   if (p === "/v1/stats") return json(200, STATS);
+  if (p === "/v1/settings") return json(200, { slurpEvery: "10m" });
   return json(500, { error: `unexpected call to ${c.method} ${p}` });
 };
 
@@ -532,16 +533,61 @@ describe("the status route /status", () => {
     // The detail under a not-ok row says what the fix is.
     expect(await screen.findByText("start it with `ollama serve`")).toBeTruthy();
 
-    // The note shows when the state was last measured AND when the next scheduled
-    // slurp fires; both carry a clock now, not just a day. Exact text varies by
-    // the machine's timezone, so assert the sentence holds both timestamps.
-    const note = (await screen.findByText(/Next slurp/)).textContent ?? "";
-    expect(note).toContain("Last checked");
+    // The note shows when the state was last measured; the schedule is the
+    // sweep section's own line now, since the cadence beside it is what decides
+    // it. Exact text varies by the machine's timezone, so assert the sentence
+    // holds a clock rather than a fixed string.
+    const note = (await screen.findByText(/Last checked/)).textContent ?? "";
     expect(note).toMatch(/\d{1,2}:\d{2}/);
 
     // Corpus coverage from /v1/stats.
     expect(await screen.findByText("4281")).toBeTruthy();
     expect(await screen.findByText("mail entries")).toBeTruthy();
+  });
+});
+
+// The sweep cadence is the one control on the status screen, and the only thing
+// there that writes: the server owns the schedule (cmd/server/schedule.go), so
+// what the page has to prove is that the value in force is the one shown and
+// that choosing another stores it.
+describe("the sweep cadence on /status", () => {
+  it("shows the cadence in force with the next sweep it implies", async () => {
+    handler = statusHandler;
+    await mountApp("/status");
+
+    const control = (await screen.findByLabelText("How often to sweep the mailbox")) as HTMLSelectElement;
+    await waitFor(() => expect(control.value).toBe("10m"));
+    // The option label, not the word: the page says "10 minutes" and stores "10m".
+    expect(control.selectedOptions[0]!.textContent).toBe("10 minutes");
+
+    const line = control.closest(".stnote")!.textContent ?? "";
+    expect(line).toContain("next");
+  });
+
+  it("writes the cadence that was chosen, and takes the new schedule back", async () => {
+    let stored = "10m";
+    handler = (c) => {
+      const p = pathOf(c);
+      if (p === "/v1/settings") {
+        if (c.method === "POST") stored = (JSON.parse(c.body ?? "{}") as { slurpEvery?: string }).slurpEvery ?? "";
+        return json(200, { slurpEvery: stored });
+      }
+      return statusHandler(c);
+    };
+    await mountApp("/status");
+
+    const control = (await screen.findByLabelText("How often to sweep the mailbox")) as HTMLSelectElement;
+    await waitFor(() => expect(control.value).toBe("10m"));
+    fireEvent.change(control, { target: { value: "30m" } });
+
+    // Only the field being changed travels: the addresses and the folder are
+    // left as they stand rather than sent again from a screen that never saw
+    // them (see setSettings).
+    await waitFor(() => {
+      const writes = calls.filter((c) => pathOf(c) === "/v1/settings" && c.method === "POST");
+      expect(writes.map((c) => JSON.parse(c.body!))).toEqual([{ slurpEvery: "30m" }]);
+    });
+    await waitFor(() => expect(control.value).toBe("30m"));
   });
 });
 

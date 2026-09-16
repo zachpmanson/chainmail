@@ -6,6 +6,36 @@ function errText(e: unknown): string {
 }
 
 /**
+ * The cadences the sweep control offers, as the words the server stores and
+ * serves them in (cmd/server/schedule.go). One vocabulary, listed once: a
+ * control whose options the server canonicalises differently would be handing
+ * back a value it then could not show.
+ *
+ * "Never" is a cadence rather than the absence of one: the mailbox is then read
+ * only when someone asks for it, which is a choice a reader can want and the one
+ * the refresh button already offers.
+ */
+const CADENCES: [string, string][] = [
+  ["5m", "5 minutes"],
+  ["10m", "10 minutes"],
+  ["15m", "15 minutes"],
+  ["30m", "30 minutes"],
+  ["1h", "every hour"],
+  ["6h", "every 6 hours"],
+  ["off", "never"],
+];
+
+/**
+ * The options, with the value in force appended when it is not one of them. The
+ * server takes any whole-minute cadence between a minute and a day, so one set
+ * through the API has to leave the control able to show it rather than silently
+ * snapping to the first option and writing that back.
+ */
+function cadenceOptions(every: string): [string, string][] {
+  return CADENCES.some(([word]) => word === every) ? CADENCES : [...CADENCES, [every, every]];
+}
+
+/**
  * A badge's wording and colour, per the state the probe reported. A state is
  * a truth the screen is asserting, so it earns a colour; "unchecked" is the
  * calm first-boot grey rather than an error, because nothing has been asked
@@ -57,13 +87,28 @@ function CorpusStats({ s }: { s: Stats }) {
 /**
  * The /status route: which of the backends chainmail reads through are logged
  * in, as the operator's `corpus status` last measured them, plus the corpus
- * coverage /v1/stats already reports. Both halves are read-only — this is how
- * the status screen stays on the safe side of the render/model boundary: the
- * server never contacts docket or slackdump; it serves what the CLI wrote.
+ * coverage /v1/stats already reports and the cadence the server sweeps on. Only
+ * the cadence writes; the rest is how the status screen stays on the safe side
+ * of the render/model boundary: the server never contacts docket or slackdump,
+ * it serves what the CLI wrote.
  */
 export function StatusView() {
   const status = $api.useQuery("get", "/v1/status", {});
   const stats = $api.useQuery("get", "/v1/stats", {});
+  const settings = $api.useQuery("get", "/v1/settings", {});
+  // The one setting on this screen, written the way the home page writes its
+  // own: only the field being changed is named, and the rest are left as they
+  // stand.
+  const save = $api.useMutation("post", "/v1/settings", {
+    onSuccess: () => {
+      void settings.refetch();
+      // The next sweep is computed from the cadence, so a change to one is a
+      // change to the other: without this the line under the control would keep
+      // naming the old schedule until the page was reloaded.
+      void status.refetch();
+    },
+  });
+  const every = settings.data?.slurpEvery ?? "";
 
   return (
     <div className="wrap statuswrap">
@@ -72,7 +117,6 @@ export function StatusView() {
         Run <code>corpus status</code> to re-measure.
         {status.data?.checkedAt ? <> Last checked {when(status.data.checkedAt)}.</>
           : " Nothing measured yet."}
-        {status.data?.nextSlurpAt ? <> Next slurp {when(status.data.nextSlurpAt)}.</> : null}
       </p>
       {status.isError ? (
         <p className="selfail" role="alert">
@@ -86,6 +130,42 @@ export function StatusView() {
           <li className="strow stempty">Checking services…</li>
         )}
       </ul>
+
+      {/* How often the corpus reaches for the mailbox by itself. It belongs next
+          to the backends it reads through, and it is the only control on this
+          screen: everything else here reports. */}
+      <h2 className="sthead">Sweep</h2>
+      <p className="stnote">
+        The mailbox is swept{" "}
+        <select
+          className="stsweep"
+          aria-label="How often to sweep the mailbox"
+          value={every}
+          disabled={save.isPending || every === ""}
+          onChange={(e) => save.mutate({ body: { slurpEvery: e.target.value } })}
+        >
+          {every === "" ? <option value="">…</option> : null}
+          {cadenceOptions(every).map(([word, label]) => (
+            <option key={word} value={word}>
+              {label}
+            </option>
+          ))}
+        </select>
+        {status.data?.nextSlurpAt ? (
+          <> — next {when(status.data.nextSlurpAt)}.</>
+        ) : every === "off" ? (
+          <> — never, unless asked.</>
+        ) : every === "" ? null : (
+          // A cadence with nothing scheduled is a host whose -slurp grant is off,
+          // which is a state the page cannot fix and should not hide.
+          <> — nothing scheduled.</>
+        )}
+      </p>
+      {save.isError ? (
+        <p className="selfail" role="alert">
+          {errText(save.error)}
+        </p>
+      ) : null}
 
       <h2 className="sthead">Corpus</h2>
       {stats.isError ? (

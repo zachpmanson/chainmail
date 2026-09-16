@@ -206,6 +206,12 @@ type settingsResponse struct {
 	// ask for. Absent when they have named none, which is also absent when they
 	// have cleared the field.
 	Me []string `json:"me,omitempty"`
+	// SlurpEvery is how often this server sweeps the mailbox by itself, as a
+	// duration word (`10m`) or `off`. Always served, unlike the two above: the
+	// cadence is in force whether or not anyone chose it — an unset control would
+	// hide the schedule the server is keeping — and the reader's page is the only
+	// place the number is visible at all.
+	SlurpEvery string `json:"slurpEvery"`
 }
 
 // settingsRequest is the same shape written back, field by field: a field the
@@ -226,6 +232,10 @@ type settingsResponse struct {
 type settingsRequest struct {
 	DefaultFolder *string  `json:"defaultFolder,omitempty"`
 	Me            []string `json:"me,omitempty"`
+	// SlurpEvery sets the sweep cadence, or clears it back to the default with an
+	// empty string — hence the pointer, like DefaultFolder's: a preference that
+	// can be unset needs a way to say "this field is here, and it is empty".
+	SlurpEvery *string `json:"slurpEvery,omitempty"`
 }
 
 type labelSummary struct {
@@ -602,8 +612,9 @@ func toCorpusEntry(s corpus.Shown, r spec.Rendered) corpusEntry {
 // the operator's probe wrote. CheckedAt is the probe's UTC stamp, omitted when
 // no probe has ever run; the services list is always present, each backend
 // answered "unchecked" rather than absent, so the screen degrades instead of
-// 404ing. NextSlurpAt is the next scheduled pulse, computed live (never
-// stored), so it stays right however long ago the last probe or slurp ran.
+// 404ing. NextSlurpAt is the next sweep, computed live from the cadence in force
+// and the last ingest this server made (never stored), so it stays right however
+// long ago the last probe ran — and it is absent when nothing will sweep at all.
 type statusResponse struct {
 	CheckedAt   string          `json:"checkedAt,omitempty"`
 	NextSlurpAt string          `json:"nextSlurpAt,omitempty"`
@@ -617,9 +628,9 @@ type serviceStatus struct {
 	Detail string `json:"detail,omitempty"`
 }
 
-func toStatusResponse(s status.Snapshot) statusResponse {
+func toStatusResponse(s status.Snapshot, nextSlurpAt string) statusResponse {
 	out := statusResponse{
-		NextSlurpAt: nextSlurpAt(),
+		NextSlurpAt: nextSlurpAt,
 		Services:    make([]serviceStatus, 0, len(s.Services)),
 	}
 	if s.CheckedAt != "" {
@@ -631,15 +642,4 @@ func toStatusResponse(s status.Snapshot) statusResponse {
 		})
 	}
 	return out
-}
-
-// nextSlurpAt is when the scheduled slurp pulse next fires, as a UTC RFC3339
-// stamp. The deployed timer runs OnCalendar="*:0" (naboo's chainmail-slurp
-// timer: on the hour, every hour), so the next one is the next top of the hour
-// in local time. Computed rather than stored so it never goes stale between
-// runs; if the timer's cadence ever changes, this must follow it.
-func nextSlurpAt() string {
-	now := time.Now()
-	next := time.Date(now.Year(), now.Month(), now.Day(), now.Hour(), 0, 0, 0, now.Location()).Add(time.Hour)
-	return next.UTC().Format(time.RFC3339)
 }

@@ -775,7 +775,7 @@ export interface components {
             /** @description Messages carrying this label. Messages rather than chains: a chain count is a walk over the reply graph, and a mail client's sidebar counts messages. */
             messages: number;
         };
-        /** @description The reader's own choices. Absent means the choice has not been made. */
+        /** @description The reader's own choices. Absent means the choice has not been made — except for slurpEvery, which is always present because a host sweeps at some cadence whether or not anyone chose one. */
         SettingsResponse: {
             /** @description A mailbox label the home page opens in. Omitted when nothing has been chosen — no default is a state, not a default of nothing. */
             defaultFolder?: string;
@@ -786,6 +786,11 @@ export interface components {
              *     ]
              */
             me?: string[];
+            /**
+             * @description How often this server sweeps the mailbox by itself, as a duration word ("10m", "1h", "2h30m") or "off" for never. Always served: the cadence is in force whether or not anyone has chosen it, and it is the only place the schedule is visible. Canonicalised on the way in, so a value a control offers is a value it will be handed back.
+             * @example 10m
+             */
+            slurpEvery: string;
         };
         /** @description The same shape written back, field by field: a field that is present sets it, and a field that is absent is left as it stands. An empty value clears its setting, so "defaultFolder": "" and "me": [] are both requests to unset one. */
         SettingsRequest: {
@@ -793,6 +798,8 @@ export interface components {
             defaultFolder?: string;
             /** @description The addresses that are the reader's, as the whole value of the field they typed them into — one comma-separated string is as valid as a list of one address per element, and the two are stored as the same list. An empty array (or a list of blanks) clears the setting. */
             me?: string[];
+            /** @description How often to sweep the mailbox: a duration word between 1m and 24h in whole minutes or hours, or "off" for never. Anything else is refused with the reason — a cadence drives a walk of the whole mailbox, so it is not stored and quietly defaulted. An empty string clears the choice, leaving the default cadence in force. */
+            slurpEvery?: string;
         };
         /** @description The connection snapshot the operator's probe wrote. checkedAt is omitted until some probe has run; services is always the full known set, so a missing snapshot reads as unchecked rather than empty. */
         StatusResponse: {
@@ -803,7 +810,7 @@ export interface components {
             checkedAt?: string;
             /**
              * Format: date-time
-             * @description UTC RFC3339 stamp of the next scheduled slurp pulse. Computed live from the hourly timer cadence (OnCalendar="*:0"), so it is present even before any probe has run.
+             * @description UTC RFC3339 stamp of the next sweep: the last ingest this server made plus the cadence in force, computed per request rather than stored. Absent when nothing will sweep at all — no -slurp grant on this host, or a cadence of "off".
              */
             nextSlurpAt?: string;
             /** @description Every backend, in the screen's order. */
