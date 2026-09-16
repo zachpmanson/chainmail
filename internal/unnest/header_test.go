@@ -152,3 +152,64 @@ func TestFoldedRecipientListDoesNotTruncateTheBlock(t *testing.T) {
 		t.Errorf("body = %q", blocks[0].Text)
 	}
 }
+
+// The same wrap on the block's LAST header, where no key follows to give the
+// fold away. Gmail re-rendered this block inside a forward (zpm/chainmail#146):
+// a long Cc: cut inside "Sam Bennett <", and the tail became the recovered
+// entry's opening — an address fragment as the first paragraph, and an opening
+// the twin pass could not match against the real mailbox copy.
+func TestFoldedFinalRecipientLineStaysInTheBlock(t *testing.T) {
+	body := "---------- Forwarded message ---------\r\n" +
+		"From: Zoe Robson <zoe@meridian.example>\r\n" +
+		"Date: Wed, 16 Sep 2026 at 8:14 PM\r\n" +
+		"Subject: RE: Ruralco sites\r\n" +
+		"To: Lane Whittaker <lane@termina.example>\r\n" +
+		"Cc: dona@termina.example <dona@termina.example>, Sam Bennett <\r\n" +
+		"sam@meridian.example>, Zach Manson <zach@termina.example>\r\n" +
+		"\r\n" +
+		"Hiya Lane\r\n"
+	blocks := Peel(body)
+	if len(blocks) != 1 {
+		t.Fatalf("got %d blocks, want 1", len(blocks))
+	}
+	// The recipients past the wrap must survive: losing them loses participants.
+	if got := blocks[0].Sentinel; !strings.Contains(got, "sam@meridian.example") ||
+		!strings.Contains(got, "zach@termina.example") {
+		t.Errorf("sentinel = %q, lost the recipients past the fold", got)
+	}
+	if strings.Contains(blocks[0].Text, "@meridian.example") {
+		t.Errorf("header tail leaked into the body: %q", blocks[0].Text)
+	}
+	if !strings.HasPrefix(blocks[0].Text, "Hiya Lane") {
+		t.Errorf("body = %q", blocks[0].Text)
+	}
+}
+
+// The narrow half of the rule, in the two shapes that nearly match it: a value
+// that ended, and a value cut short by a line that is prose rather than an
+// address. Neither line belongs in the block.
+func TestProseAfterARecipientListIsNotAFold(t *testing.T) {
+	for _, tc := range []struct{ name, body, prose string }{
+		{"value ended",
+			"From: Alice <a@ex.fed>\nTo: Bob <b@ex.fed>\nBob@ex.fed wrote the survey.\n",
+			"Bob@ex.fed wrote the survey."},
+		// The line quotes an address under a value cut at a comma, so it comes
+		// closest to the shape the rule accepts — and is still prose.
+		{"cut value, prose after",
+			"From: Alice <a@ex.fed>\nTo: Bob <b@ex.fed>,\nPing bob@ex.fed if anything is missing\n",
+			"Ping bob@ex.fed if anything is missing"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			blocks := Peel(tc.body)
+			if len(blocks) != 1 {
+				t.Fatalf("got %d blocks, want 1", len(blocks))
+			}
+			if strings.Contains(blocks[0].Sentinel, tc.prose) {
+				t.Errorf("prose was folded into the header block: %q", blocks[0].Sentinel)
+			}
+			if !strings.Contains(blocks[0].Text, tc.prose) {
+				t.Errorf("body = %q, want it to hold %q", blocks[0].Text, tc.prose)
+			}
+		})
+	}
+}

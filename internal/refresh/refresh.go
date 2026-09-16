@@ -239,6 +239,14 @@ type Report struct {
 	// same one the slurp pipeline runs; it refuses rather than guesses, and a
 	// corpus with no twins leaves this at 0.
 	TwinsCollapsed int
+	// QuotedRefixed is how many quoted entries the refresh re-derived out of the
+	// hosts they were recovered from before collapsing twins. Reprocessing is what
+	// a parser fix needs and cannot do itself: extraction is insert-or-leave-alone
+	// (see corpus.PutQuoted), so an entry stored by the old parser keeps its text
+	// until a pass re-peels its host — and that text is what the twin sweep reads
+	// when it decides whether two entries are one message. A corpus whose parser
+	// has not changed since its last ingest leaves this at 0.
+	QuotedRefixed int
 	// ChainsAdded are chains now on the page: accepted candidates, or a
 	// container the corpus has newly attached to the reply graph.
 	ChainsAdded []Growth
@@ -284,6 +292,7 @@ func (r Report) Changed() int {
 func (r Report) NothingNew() bool {
 	return r.Created() == 0 && r.Changed() == 0 &&
 		r.EntriesAfter == r.EntriesBefore && r.TwinsCollapsed == 0 &&
+		r.QuotedRefixed == 0 &&
 		len(r.ChainsAdded) == 0 && len(r.ChainsGrown) == 0 &&
 		len(r.ChainsProposed) == 0 && len(r.QueriesRecorded) == 0
 }
@@ -310,6 +319,17 @@ func Run(store *corpus.Store, mb Mailbox, prev spec.Spec, opts Options) (Report,
 	// the mailbox copy it was recovered from, ingested on different days, are
 	// one message stored twice, and a page re-derived over them would count it
 	// twice. The sweep is idempotent; a corpus with none leaves the count 0.
+	//
+	// The re-derivation comes first because a sweep can only judge the text it is
+	// given: an entry stored before a parser fix carries the old parser's body,
+	// and for the header-fold case that meant a duplicate the sweep was built to
+	// collapse declined every time. See corpus.RepairQuotedBodies.
+	qr, err := corpus.RepairQuotedBodies(store)
+	if err != nil {
+		return rep, spec.Spec{}, fmt.Errorf("re-deriving the quoted entries: %w", err)
+	}
+	rep.QuotedRefixed = qr.Fixed
+
 	plan, err := corpus.CollapseTwins(store, true)
 	if err != nil {
 		return rep, spec.Spec{}, fmt.Errorf("collapsing stored twins: %w", err)

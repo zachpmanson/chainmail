@@ -36,15 +36,13 @@ func ExtractQuoted(store *corpus.Store, hostID int64, host corpus.Entry, body st
 	// directly with a quote (Forward pressed, nothing typed) has its first block
 	// carrying a sentinel, and skipping by index would discard the entire
 	// forwarded message.
-	var rs []unnest.Recovered
-	for _, b := range unnest.Peel(body) {
-		if b.Sentinel == "" {
-			continue
-		}
-		rs = append(rs, unnest.Parse(b))
-	}
-	r.Blocks = len(rs)
-	rs = unnest.Dedup(rs)
+	//
+	// RecoverQuotes is shared with the repair that re-derives these rows from the
+	// same host text (corpus.RepairQuotedBodies), so the two cannot disagree
+	// about what the parser recovers.
+	quotes := corpus.RecoverQuotes(body)
+	r.Blocks = quotes.Blocks
+	rs := quotes.Distinct
 	r.Distinct = len(rs)
 
 	ids := make([]int64, len(rs))

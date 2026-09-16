@@ -163,13 +163,37 @@ func runReindex(path string) error {
 	return nil
 }
 
-// runRepair reduces the identities one mailbox split into.
+// runRepair reduces the identities one mailbox split into, and re-derives the
+// entries recovered from quoted text.
 func runRepair(path string) error {
 	s, err := corpus.Open(path)
 	if err != nil {
 		return err
 	}
 	defer s.Close()
+
+	// The parser's other half, and here for the same reason the identity passes
+	// are: a fix changes what extraction says and cannot change what extraction
+	// has already written, because PutQuoted is insert-or-leave-alone. One peel
+	// per host holding a recovered entry, so an unchanged corpus pays for a walk
+	// and rewrites nothing — and for the header-fold case it is the difference
+	// between a duplicate the twin sweep can collapse and one it declines every
+	// time (zpm/chainmail#146).
+	qr, err := corpus.RepairQuotedBodies(s)
+	if err != nil {
+		return err
+	}
+	if qr.Fixed > 0 {
+		fmt.Printf("re-derived %d %s from their hosts\n",
+			qr.Fixed, plural(qr.Fixed, "quoted message", "quoted messages"))
+	} else {
+		fmt.Println("re-derived quoted bodies: nothing to rewrite")
+	}
+	if n := len(qr.Missing); n > 0 {
+		fmt.Printf("  %d recovered %s no host body accounts for — left alone\n",
+			n, plural(n, "message", "messages"))
+	}
+
 	r, err := corpus.RepairMailtoIdentities(s)
 	if err != nil {
 		return err

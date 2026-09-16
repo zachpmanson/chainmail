@@ -144,28 +144,41 @@ func FindAttribution(lines []Line, i int) (Boundary, bool) {
 // and would be accepted by anything looser.
 func FindHeaderBlock(lines []Line, i int) (Boundary, bool) {
 	n := 0
+	// lastField and lastValue are the last key line recognised, which is what
+	// tells a fold at the END of the block from the start of the body: only a
+	// recipient list can be cut mid-value, and only its own value says whether
+	// it was. See continuesRecipients.
+	lastField, lastValue := "", ""
+	folds := 0
 	j := i
 	for ; j < len(lines); j++ {
 		t := unbold(strings.TrimSpace(lines[j].Text))
 		if t == "" {
 			break
 		}
-		if !reHeaderKey.MatchString(t) {
-			// A long recipient list wraps, and the quoted rendering usually loses
-			// the leading whitespace RFC 5322 folding would have left. Treat the
-			// line as a continuation only when a header key resumes right after it:
-			// that is what separates a folded Cc: from the start of the body.
-			//
-			// Stopping here instead cost real data — the remaining keys were
-			// orphaned outside the block, so Subject: landed in the body text and
-			// every recipient past the wrap was lost. 10 of 28 recovered entries
-			// on one real trail.
-			if n > 0 && continuesHeader(lines, j) {
-				continue
-			}
-			break
+		if reHeaderKey.MatchString(t) {
+			n++
+			lastField, lastValue, folds = headerField(t), headerValue(t), 0
+			continue
 		}
-		n++
+		// A long recipient list wraps, and the quoted rendering usually loses the
+		// leading whitespace RFC 5322 folding would have left. Treat the line as
+		// a continuation in either of the two shapes a fold takes:
+		//
+		//   - a header key resumes a few lines later (continuesHeader). Stopping
+		//     here instead cost real data — the remaining keys were orphaned
+		//     outside the block, so Subject: landed in the body text and every
+		//     recipient past the wrap was lost. 10 of 28 recovered entries on one
+		//     real trail.
+		//   - the wrap is the block's LAST header, so nothing resumes after it
+		//     (continuesRecipients).
+		if n > 0 && (continuesHeader(lines, j) ||
+			(folds < maxFoldLines && continuesRecipients(lastField, lastValue, t))) {
+			folds++
+			lastValue = t
+			continue
+		}
+		break
 	}
 	if n < 2 {
 		return Boundary{}, false
@@ -202,4 +215,84 @@ func continuesHeader(lines []Line, j int) bool {
 		}
 	}
 	return false
+}
+
+// continuesRecipients reports whether line is the tail of a recipient list that
+// the quoting client's wrap cut mid-address, where no header key follows to give
+// the fold away.
+//
+// continuesHeader covers a fold with more keys after it. This covers the fold
+// that is the block's LAST header, which is where the wraps that motivated it
+// land: Gmail re-renders a long Cc: with none of the leading whitespace RFC 5322
+// folding would have left, and cuts inside the address —
+//
+//	Cc: dona@termina.io <dona@termina.io>, Sam Bennett <
+//	Sam.Bennett@meridianenergy.co.nz>, Zach Manson <zach@termina.io>
+//
+// — so the tail was taken as the body's first line. A recovered entry then
+// opened with an address fragment: it reads as a stray paragraph, and it defeats
+// the twin pass, whose opening test sees the two copies as two different
+// messages and leaves the duplicate standing (zpm/chainmail#146).
+//
+// Deliberately narrow: the key before it must be a recipient list, its value
+// must end mid-token, and the line must still read as the rest of one. Body prose
+// under a To:/Cc: is otherwise swallowed into the header block — and parsed as a
+// recipient, which fabricates a participant.
+func continuesRecipients(field, value, line string) bool {
+	switch field {
+	case "to", "cc": // a Bcc: parses to cc, the same way ParseHeaderBlock maps it
+	default:
+		return false
+	}
+	if !endsMidList(value) {
+		return false
+	}
+	if !strings.Contains(line, "@") && !strings.Contains(line, "<") {
+		return false
+	}
+	// Bracketed names and addresses say so themselves. A list of bare addresses
+	// gives itself away only by the separator its wrap left at the end; prose
+	// that happens to quote one does not.
+	if strings.ContainsAny(line, "<>") {
+		return true
+	}
+	switch line[len(line)-1] {
+	case ',', ';', '"':
+		return true
+	}
+	return false
+}
+
+// endsMidList reports whether a recipient value was cut inside an address rather
+// than ended: on an opening angle bracket, or on a list or quoted-name
+// separator. Nothing else can leave a recipient list unfinished.
+func endsMidList(v string) bool {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return false
+	}
+	switch v[len(v)-1] {
+	case '<', ',', ';', '"':
+		return true
+	}
+	return false
+}
+
+// headerField and headerValue split a recognised key line into the HeaderBlock
+// field it fills and the value it states. The field is empty for a key
+// reHeaderKey matched but the alias table does not name.
+func headerField(line string) string {
+	m := reKeyValue.FindStringSubmatch(line)
+	if m == nil {
+		return ""
+	}
+	return headerKeyAlias[strings.ToLower(m[1])]
+}
+
+func headerValue(line string) string {
+	m := reKeyValue.FindStringSubmatch(line)
+	if m == nil {
+		return ""
+	}
+	return strings.TrimSpace(m[2])
 }
