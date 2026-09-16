@@ -684,3 +684,61 @@ func TestParseAddressKeepsABracketThatIntroducesNoAddress(t *testing.T) {
 		t.Fatalf("got %+v (%v), want the name untouched", got, ok)
 	}
 }
+
+// An address resolves to the human the corpus merged it into, which is what
+// lets "my mail" be a claim about a person rather than about one string.
+func TestAddressesResolveToThePeopleTheyWereMergedInto(t *testing.T) {
+	s := open(t)
+
+	ada, err := Resolve(s, KindEmail, "ada@loomworks.example", "Ada Byron")
+	if err != nil {
+		t.Fatalf("resolve ada: %v", err)
+	}
+	// A `+tag` of the same mailbox is a different string and the same person:
+	// the tag says which signup it was, not who it is.
+	tagged, err := Resolve(s, KindEmail, "ada+salsa@loomworks.example", "")
+	if err != nil {
+		t.Fatalf("resolve the tagged address: %v", err)
+	}
+	if tagged != ada {
+		t.Errorf("a subaddress of the mailbox resolved to person %d, want %d", tagged, ada)
+	}
+	bo, err := Resolve(s, KindEmail, "bo@fjordline.example", "Bo Halvorsen")
+	if err != nil {
+		t.Fatalf("resolve bo: %v", err)
+	}
+
+	// Case and padding are not identity, and each is one query's worth of text.
+	got, err := PeopleForAddresses(s,
+		[]string{" ADA@Loomworks.example ", "bo@fjordline.example"})
+	if err != nil {
+		t.Fatalf("PeopleForAddresses: %v", err)
+	}
+	if !got[ada] || !got[bo] || len(got) != 2 {
+		t.Errorf("resolved %v, want exactly %d and %d", got, ada, bo)
+	}
+
+	// An address the corpus has never seen is absent, not an error: the caller
+	// is naming their own addresses, and one of them not being here yet is a
+	// fact about the corpus.
+	got, err = PeopleForAddresses(s, []string{"nobody@nowhere.example"})
+	if err != nil {
+		t.Fatalf("PeopleForAddresses, unseen address: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("an address the corpus has never seen resolved to %v", got)
+	}
+
+	// And a reader who named nothing resolves to nobody rather than to every
+	// person the empty string might match. `q in ()` is not valid SQL, so this
+	// is also the branch that keeps the query from being built at all.
+	for _, nothing := range [][]string{nil, {}, {""}, {"   "}} {
+		got, err = PeopleForAddresses(s, nothing)
+		if err != nil {
+			t.Fatalf("PeopleForAddresses(%q): %v", nothing, err)
+		}
+		if len(got) != 0 {
+			t.Errorf("PeopleForAddresses(%q) resolved to %v, want nobody", nothing, got)
+		}
+	}
+}

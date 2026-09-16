@@ -661,6 +661,53 @@ func MergeByEmail(s *Store, keepEmail, dropEmail string) (int64, error) {
 	return keep, nil
 }
 
+// PeopleForAddresses resolves addresses to the people the corpus has decided
+// they belong to.
+//
+// This is the identity graph answering a question about a human rather than
+// about a string. A reader who names one of their addresses names the person
+// every address of theirs was merged into — `zachpmanson@gmail.com` and
+// `zachpmanson+salsa@gmail.com` are one mailbox and so one person here — and
+// that is what lets a statement about a reader's own mail be true of all of it
+// rather than of the one address they happened to type.
+//
+// An address the corpus has never seen — a new work address, a typo — is absent
+// from the result rather than an error. The caller is naming their own
+// addresses; one of them not being in the corpus yet is a fact about the corpus,
+// not a mistake by the reader.
+func PeopleForAddresses(s *Store, addrs []string) (map[int64]bool, error) {
+	out := map[int64]bool{}
+	seen := map[string]bool{}
+	vals := make([]string, 0, len(addrs))
+	for _, a := range addrs {
+		v, err := NormaliseIdentity(KindEmail, a)
+		if err != nil || seen[v] {
+			continue
+		}
+		seen[v] = true
+		vals = append(vals, v)
+	}
+	if len(vals) == 0 {
+		return out, nil
+	}
+	ph, args := placeholders(vals)
+	rows, err := s.db.Query(
+		`select person_id from identities where kind=? and value in (`+ph+`)`,
+		append([]any{KindEmail}, args...)...)
+	if err != nil {
+		return nil, fmt.Errorf("resolving addresses to people: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out[id] = true
+	}
+	return out, rows.Err()
+}
+
 // PersonByIdentity looks up an existing identity without creating one.
 func PersonByIdentity(s *Store, kind, value string) (int64, error) {
 	v, err := NormaliseIdentity(kind, value)
