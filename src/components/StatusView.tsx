@@ -277,7 +277,7 @@ export function StatusView() {
           onBlur={saveMe}
           placeholder="comma separated"
         />{" "}
-        — comma separated, and nothing else about you is stored.
+        — comma separated.
       </p>
       {save.isError ? (
         <p className="selfail" role="alert">
