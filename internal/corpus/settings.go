@@ -15,6 +15,17 @@ const (
 	// can be marked on a page and in the reading pane. Nothing in the corpus
 	// records which mailbox it was collected from, so this can only be told.
 	SettingMe = "me"
+	// SettingSlurpEvery is how often the server sweeps the mailbox by itself.
+	// A duration word (`10m`, `1h`) or `off`; absent means the default cadence,
+	// which is the server's to choose (see DefaultSlurpEvery). It is stored
+	// rather than configured because it is a decision about this corpus's
+	// freshness, made from the services page — see cmd/server/schedule.go.
+	SettingSlurpEvery = "slurp_every"
+	// SettingSlurpAt is when the server last reached for the mailbox, which is
+	// what the cadence counts from. A stamp rather than a flag, so a restart
+	// does not swallow the wait and re-ingest a mailbox that was ingested
+	// minutes ago.
+	SettingSlurpAt = "slurp_at"
 )
 
 // Setting reads one stored setting. A setting nobody has made is absent, not an

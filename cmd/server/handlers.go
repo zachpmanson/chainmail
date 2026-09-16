@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/zachpmanson/chainmail/internal/corpus"
@@ -96,6 +97,14 @@ type server struct {
 	// tested without a mailbox. The real one delegates to the sibling `corpus`
 	// binary (see defaultSlurp), so every phase and its ordering stays there.
 	runSlurp func(ctx context.Context, corpusPath string) ([]byte, error)
+	// runSweep is the same operation on the schedule's terms: the same pipeline
+	// without dedupe, because a plan nobody is watching is work nobody reads.
+	// Nil when this host has nothing to sweep with, which leaves the loop idle.
+	runSweep func(ctx context.Context, corpusPath string) ([]byte, error)
+	// sweeping is the one-ingest-at-a-time latch, shared by POST /v1/slurp and
+	// the scheduler: they write the same tables from the same mailbox, and an
+	// overlapping pair would be two walks of one query. See slurpOnce.
+	sweeping atomic.Bool
 
 	// mediaEnabled enables POST /v1/media/pull: fetch the bytes behind one
 	// message's attachments, so the page can show a file instead of sending the
@@ -773,18 +782,19 @@ func (s *server) slurp(w http.ResponseWriter, r *http.Request) {
 				"cannot reach the work mailbox. A restart with -slurp enables POST /v1/slurp."))
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), s.slurpTimeout)
-	defer cancel()
-	out, err := s.runSlurp(ctx, s.corpusPath)
+	out, err := s.slurpOnce(r.Context(), s.runSlurp)
+	if errors.Is(err, errSweepRunning) {
+		// Asked for while the schedule (or another press) was already walking the
+		// mailbox: the answer is that the work is being done, not that it failed.
+		fail(w, http.StatusConflict, fmt.Errorf(
+			"a sweep is already running: the mailbox is being ingested right now, "+
+				"and this page will be built over what that run brings in"))
+		return
+	}
 	if err != nil {
 		fail(w, http.StatusBadGateway, fmt.Errorf("slurp failed: %w", err))
 		return
 	}
-	// The ingest just changed the corpus the fold cache is evidence about — and the
-	// cache is keyed on bodies, so what arrived has to be reduced. Doing it here
-	// means the button that filled the mailbox does not hand the next reader the
-	// cost of reading it. See warmFolds.
-	s.warmFolds()
 	send(w, http.StatusOK, slurpResponse{Report: string(out)})
 }
 
@@ -812,24 +822,29 @@ type slurpResponse struct {
 // the server did not already have, and `-backend` needs no spelling out because
 // the ingest and the server are one package with one default.
 //
-// Which phases run matches the chainmail-slurp unit (mail, twins, repair,
-// dedupe, unread, embed): a human pressed this button, so the dedupe plan is
-// worth showing — it stays a dry run in slurp regardless. CHAINMAIL_CORPUS pins
-// the same database this process has open; being WAL, the ingest writes beside
-// the reader.
+// Which phases run is the caller's choice, in one list, because the two callers
+// differ by exactly one phase: `manualPhases` is what a person pressing the
+// button gets — the dedupe plan is part of what they asked to see, and it stays
+// a dry run either way (see cmd/corpus/slurp.go) — and `sweepPhases` is the same
+// pipeline without it, since a plan printed into the journal of a sweep nobody
+// is watching is work nobody reads. Both include unread, which is the phase that
+// makes a scheduled sweep worth having: it fixes the badges a phone has moved on
+// from, and the person most likely to notice is the one looking at that row.
 //
-// unread rides along so the button also fixes a stale badge: the ingest reads a
-// message's labels once and never again, so a thread read on a phone still reads
-// unread here until something reconciles it — and the person most likely to
-// notice is the one looking at that row.
-func defaultSlurp() func(ctx context.Context, corpusPath string) ([]byte, error) {
+// CHAINMAIL_CORPUS pins the same database this process has open; being WAL, the
+// ingest writes beside the reader.
+const (
+	manualPhases = "mail,twins,repair,dedupe,unread,embed"
+	sweepPhases  = "mail,twins,repair,unread,embed"
+)
+
+func defaultSlurp(phases string) func(ctx context.Context, corpusPath string) ([]byte, error) {
 	return func(ctx context.Context, corpusPath string) ([]byte, error) {
 		corpus, err := siblingBin("corpus")
 		if err != nil {
 			return nil, err
 		}
-		args := []string{"slurp", "-q", "in:anywhere",
-			"-only", "mail,twins,repair,dedupe,unread,embed"}
+		args := []string{"slurp", "-q", "in:anywhere", "-only", phases}
 		cmd := exec.CommandContext(ctx, corpus, args...)
 		cmd.Env = append(os.Environ(), "CHAINMAIL_CORPUS="+corpusPath)
 		return cmd.CombinedOutput()
@@ -1774,7 +1789,7 @@ func (s *server) status(w http.ResponseWriter, r *http.Request) {
 	} else {
 		snap = status.Parse(blob)
 	}
-	send(w, http.StatusOK, toStatusResponse(snap))
+	send(w, http.StatusOK, toStatusResponse(snap, s.nextSlurpAt()))
 }
 
 // labels is the folder list the home page's button opens. It is the mailbox's
@@ -1814,6 +1829,10 @@ func (s *server) version(w http.ResponseWriter, r *http.Request) {
 // is said.
 func (s *server) getSettings(w http.ResponseWriter, r *http.Request) {
 	out := settingsResponse{}
+	// Unlike the reader's other choices this one is always served: the cadence is
+	// in force whether or not anyone has chosen it (DefaultSlurpEvery), and a page
+	// showing an unset control would be hiding the schedule the server is keeping.
+	out.SlurpEvery = s.slurpEveryWord()
 	folder, ok, err := s.store.Setting(corpus.SettingDefaultFolder)
 	if err != nil {
 		fail(w, http.StatusInternalServerError, err)
@@ -1871,6 +1890,29 @@ func (s *server) setSettings(w http.ResponseWriter, r *http.Request) {
 	if in.DefaultFolder != nil {
 		folder := strings.TrimSpace(*in.DefaultFolder)
 		if err := s.store.PutSetting(corpus.SettingDefaultFolder, folder); err != nil {
+			fail(w, http.StatusInternalServerError, err)
+			return
+		}
+	}
+	if in.SlurpEvery != nil {
+		// An empty word clears the setting rather than being refused, the same
+		// way an emptied folder does: it means "stop choosing, sweep at the
+		// default", which is a state a reader can want and the one the corpus
+		// starts in. Anything else is validated rather than stored as sent: the
+		// cadence drives a walk of the whole mailbox, so a value the server
+		// cannot honour has to be refused where the caller can see why, not
+		// stored and silently defaulted. The canonical word is what is written,
+		// so the page's control finds the value among the ones it offers.
+		word := ""
+		if strings.TrimSpace(*in.SlurpEvery) != "" {
+			_, canonical, err := parseSlurpEvery(*in.SlurpEvery)
+			if err != nil {
+				fail(w, http.StatusBadRequest, err)
+				return
+			}
+			word = canonical
+		}
+		if err := s.store.PutSetting(corpus.SettingSlurpEvery, word); err != nil {
 			fail(w, http.StatusInternalServerError, err)
 			return
 		}

@@ -100,7 +100,7 @@ func TestSlurpRunsTheSiblingCLIWithThePipelinePhases(t *testing.T) {
 	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	out, err := defaultSlurp()(context.Background(), "/tmp/chainmail-test.db")
+	out, err := defaultSlurp(manualPhases)(context.Background(), "/tmp/chainmail-test.db")
 	if err != nil {
 		t.Fatalf("running the sibling: %v (output %q)", err, out)
 	}
@@ -117,7 +117,7 @@ func TestSlurpRunsTheSiblingCLIWithThePipelinePhases(t *testing.T) {
 		t.Fatalf("argv = %q, want it to run the slurp subcommand", args)
 	}
 	joined := strings.Join(args, " ")
-	for _, want := range []string{"-q in:anywhere", "-only mail,twins,repair,dedupe,unread,embed"} {
+	for _, want := range []string{"-q in:anywhere", "-only " + manualPhases} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("argv = %q, want it to carry %q", args, want)
 		}
