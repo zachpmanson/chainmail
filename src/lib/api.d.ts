@@ -260,6 +260,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/ops/orgs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every mail domain the corpus holds mail from, and what it is drawn as.
+         * @description A bubble is coloured by its sender's organisation, and an organisation is read from the sender's mail domain: the label left of the public suffix, skipping freemail. That guess is right until a company mails from two domains, or a domain's guess reads badly, and this is the list where the reader overrides it. Domains are counted from the mail itself — entries whose own From header names the domain — so mail recovered from a quote is absent here and counted under its sender instead. org is what the mail is drawn as (the stored rule, else the domain's own name), stored tells an undecided domain from one the reader has ruled on, and guess is what an undecided one would be called.
+         */
+        get: operations["getOpsOrgs"];
+        put?: never;
+        /**
+         * Say what one domain is.
+         * @description Three answers arrive in one shape. A named org groups this domain with every other domain of that name — grouping is nothing more than a shared name, there is no separate group entity to keep in step. An empty org is a decision that the domain is not an organisation, which is not the same claim as no rule at all. An absent org drops the rule and puts the domain back to being read from its own name. Nothing is validated against the list: a domain the corpus has no mail from yet is a rule about mail that has not arrived, which is a thing an operator may know before the corpus does. Answers with the rules as they now stand, not with what was asked for.
+         */
+        post: operations["setOpsOrg"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ops/orgs/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * What one proposed rule would redraw, counted over the corpus.
+         * @description The consequence shown before the write, as the rest of Ops does it, and computed by the resolver that will apply the rule rather than by a second estimate of it. A rule about a domain is not a rule about that domain's mail alone: mail with no organisation of its own — a message recovered from a quote, or a personal address by someone who also mails from work — takes the name its sender's own mail established, and follows the rule. Nothing is stored. ambiguous is the entries left out of both counts, because their sender's own mail names two organisations and which one colours them depends on the order a trail is read in; they are reported rather than silently dropped, since the count otherwise reads as a claim about all of them.
+         */
+        post: operations["previewOpsOrg"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/labels": {
         parameters: {
             query?: never;
@@ -554,6 +598,8 @@ export interface components {
             to?: string;
             /** @description The address the entry was sent from, lowercased, as a page build's own entry carries it. Absent where the entry has no From header of its own, which is every entry recovered from someone else's quote. */
             fromEmail?: string;
+            /** @description The sender's organisation, resolved by the same resolver a page build uses — the reader's stored rule about the domain their mail came from, else the domain's own name, else whatever their other addresses establish. Absent where nothing established one, which is drawn as the unknown colour rather than as a group of its own. */
+            org?: string;
             /** @description Mail thread id or Slack channel id. Absent when the source stated none. */
             container?: string;
             /** @description Opens the entry at its source. Absent when the source gave none. */
@@ -918,6 +964,49 @@ export interface components {
             evidence?: string;
             /** @description Whether POST /v1/ops/merge will accept the pair. Everything the plan makes is listed; only the same-name/same-thread tiers are applicable. */
             applicable: boolean;
+        };
+        /** @description One reader's answer about one domain, in the three states a grouping can be in. A named org groups the domain with every other domain of that name; an empty org says the domain is not an organisation, which is a decision rather than an absence; an absent org drops the rule and puts the domain back to being read from its own name. The pointer exists for exactly that last distinction. */
+        OrgRuleRequest: {
+            /**
+             * @description The mail domain the rule is about, lowercased and trimmed. One the corpus has no mail from yet is allowed: a rule about mail that has not arrived is something an operator may know before the corpus does.
+             * @example termina.io
+             */
+            domain: string;
+            /** @description The organisation to draw this domain's mail as, or an empty string for "not an organisation". Omit the field entirely to drop the rule. */
+            org?: string;
+        };
+        /** @description One domain as the Ops screen shows it: how much mail is drawn from it and what that mail is drawn as. */
+        OrgRuleResponse: {
+            /**
+             * @description The mail domain, as the corpus received it.
+             * @example termina.io
+             */
+            domain: string;
+            /** @description Entries whose own From header names this domain. Mail recovered from a quote has no domain of its own, so it is counted under its sender and absent here — a change to this domain's grouping still moves it, which is what the preview counts. */
+            messages: number;
+            /** @description The distinct senders behind those entries. */
+            people: number;
+            /** @description The organisation this domain's mail is drawn as: the stored rule, else the name the domain itself gives. Omitted when there is no label at all — both "the reader said it is not an organisation" and "nothing can be read out of this domain" — which is what stored is for. */
+            org?: string;
+            /** @description Whether the reader has ruled on this domain, so that an empty org can be told from a guess. */
+            stored: boolean;
+            /** @description What the domain would be called with no rule at all. Omitted when the guess is nothing (freemail, a hostname, an address nothing can be read out of). */
+            guess?: string;
+        };
+        /** @description Every domain mail has been sent from, with the mail behind it and what that mail is drawn as. Busiest first, then alphabetically, so the list is the same on every read. */
+        OrgsResponse: {
+            domains: components["schemas"]["OrgRuleResponse"][];
+        };
+        /** @description What one proposed rule would redraw, counted over the corpus by the same resolver that will apply it. */
+        OrgShiftResponse: {
+            /** @description The domain the question was about, echoed so a screen showing several does not have to guess which answered. */
+            domain: string;
+            /** @description Entries that would be drawn under a different organisation than they are now. */
+            messages: number;
+            /** @description The distinct senders those entries belong to. */
+            people: number;
+            /** @description Entries left out of both counts: their sender's own mail names two organisations and they have no address of their own, so which one colours them depends on the order a trail is read in. */
+            ambiguous: number;
         };
         /** @description One row of the person_merges trail: a merge that happened, who it folded into whom, and on what evidence. This is the audit record, not an undo handle — a merge is not reversible. */
         OpsMergeRecord: {
@@ -1698,6 +1787,92 @@ export interface operations {
             };
             /** @description The pair is not in the current plan (already merged, or the corpus changed), its rule is outside the apply surface, or the merge could not be applied. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getOpsOrgs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The domains, busiest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgsResponse"];
+                };
+            };
+        };
+    };
+    setOpsOrg: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrgRuleRequest"];
+            };
+        };
+        responses: {
+            /** @description The rules as they now stand. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgsResponse"];
+                };
+            };
+            /** @description Malformed body, or no domain named. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    previewOpsOrg: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrgRuleRequest"];
+            };
+        };
+        responses: {
+            /** @description What would change if that rule were stored. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgShiftResponse"];
+                };
+            };
+            /** @description Malformed body, or no domain named. */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };

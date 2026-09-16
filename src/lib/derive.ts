@@ -55,6 +55,34 @@ export interface View {
   hashed: boolean;
 }
 
+/** The colour-slot order for a list of organisations as they appear: first
+ *  sighting wins, later repeats keep the place the first one took.
+ *
+ *  Shared by the page build and the reading pane, because the pane is handed the
+ *  chain's entries and has to put a sender's organisation on the same colour the
+ *  page puts it on. The pane cannot read the page's list (it has no panel, and no
+ *  recipients who sent nothing), so the function is shared rather than the answer:
+ *  each caller derives its own order in its own container's order, and neither
+ *  re-implements the rule. */
+export function orgOrder(values: (string | undefined)[]): string[] {
+  const out: string[] = [];
+  for (const v of values) if (v && !out.includes(v)) out.push(v);
+  return out;
+}
+
+/** The slot class an org takes from an order, e.g. "o2". The panel and the
+ *  transcript both go through this, so a person's row and their bubbles cannot be
+ *  coloured differently. An org absent from the list indexes to -1 and would name
+ *  the slot "o0", a class with no colour behind it, so it is folded into the
+ *  unknown slot rather than rendering as nothing at all. "o5" is that unknown
+ *  slot, and a fifth org takes it too. */
+export function slotsFor(orgs: string[]): (org?: string) => string {
+  return (org?: string) => {
+    const i = org ? orgs.indexOf(org) : -1;
+    return i < 0 ? "o5" : `o${Math.min(i + 1, 5)}`;
+  };
+}
+
 /** Everything the components need, computed once. */
 export function derive(input: Timeline): View {
   const used = new Set<string>();
@@ -112,16 +140,9 @@ export function derive(input: Timeline): View {
   // The panel's orgs are here at all because a recipient who sent nothing can be
   // at an org no message came from. Leaving them out would put a whole org on the
   // unknown grey — indistinguishable from a person whose org nothing established.
-  const orgs: string[] = [];
-  for (const e of ordered) if (e.org && !orgs.includes(e.org)) orgs.push(e.org);
+  const orgs: string[] = orgOrder(ordered.map((e) => e.org));
   for (const p of input.participants ?? []) if (p.org && !orgs.includes(p.org)) orgs.push(p.org);
-  // An org absent from the list indexes to -1 and would name the slot "o0", a
-  // class with no colour behind it, so it is folded into the unknown slot rather
-  // than rendering as nothing at all.
-  const slot = (org?: string) => {
-    const i = org ? orgs.indexOf(org) : -1;
-    return i < 0 ? "o5" : `o${Math.min(i + 1, 5)}`;
-  };
+  const slot = slotsFor(orgs);
 
   const avatarNames = Object.keys(input.avatars ?? {}).sort();
   const avatarClass = new Map(avatarNames.map((n, i) => [n, `p${i}`]));

@@ -1,4 +1,5 @@
 import { $api, type CorpusEntry } from "../lib/api";
+import { orgOrder, slotsFor } from "../lib/derive";
 import { Failure } from "./ChainPreview";
 import { Message, type StampData } from "./Message";
 
@@ -14,11 +15,14 @@ import { Message, type StampData } from "./Message";
  * same conversion a build uses, so a bubble here is a bubble there.
  *
  * What is drawn but not yet filled in, because the chain read does not carry it:
- * the org (and so the org colour — every bubble here is on the unknown slot) and
- * attachments. Those live in the spec's per-entry pipeline today. The gaps show
- * as gaps rather than as guesses: an unknown org is the stylesheet's unknown
- * colour, which is what the page shows for a sender whose org nothing
- * established.
+ * attachments. That lives in the spec's per-entry pipeline today, and the gap
+ * shows as a gap rather than as a guess.
+ *
+ * The organisation behind the colour does come with the chain, resolved by the
+ * same resolver a page build uses, so a bubble here is coloured like the bubble
+ * the page draws for the same sender. The slots are then assigned here, in the
+ * order the chain's own entries present them — see orgOrder — because a pane has
+ * only the entries it was handed and no panel to take organisations from.
  */
 
 /** The transcript's clock, written the way the spec writes it ("Mon 2 Jan 2006",
@@ -91,6 +95,11 @@ export function ChainMessages({ chain }: { chain: { rootExtId: string } }) {
   const entries = fetched.data?.entries ?? [];
   if (entries.length === 0) return <p className="selnote">No entries to show.</p>;
 
+  // One colour rule, two callers: the same function the page build uses, over the
+  // entries this pane was handed. A sender whose org nothing established takes the
+  // stylesheet's unknown slot, which is what the page draws for them too.
+  const slot = slotsFor(orgOrder(entries.map((e) => e.org)));
+
   return (
     <div className="stream">
       {entries.map((e, i) => (
@@ -105,10 +114,9 @@ export function ChainMessages({ chain }: { chain: { rootExtId: string } }) {
           // rather than borrowing one from the people table — the same rule the
           // page follows, so the two cannot name two addresses for one message.
           senderTitle={senderTitle(e)}
-          // No org on a chain read yet, so no colour can be claimed: `o5` is the
-          // stylesheet's unknown slot, the same one the page uses for a sender
-          // whose org nothing established.
-          orgSlot="o5"
+          // The sender's organisation as the corpus resolved it, on the slot this
+          // chain's own first-appearance order gives it.
+          orgSlot={slot(e.org)}
           quoted={e.quoted}
           // The recipients the message itself stated, or nothing: a recovered
           // entry has no headers, and the line reads "to —" rather than naming

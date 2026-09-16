@@ -399,4 +399,26 @@ var migrations = []string{
 	  value text not null
 	);
 	`,
+
+	// 14: org_domains — which mail domains are one organisation.
+	//
+	// A message's colour is its sender's organisation, and an organisation is
+	// guessed from the sender's mail domain: the label left of the public suffix,
+	// skipping freemail. That guess is right until a company mails from two
+	// domains, or a domain's guess reads badly, and this table is where the reader
+	// overrides it. Two rows naming the same org *are* one organisation — grouping
+	// domains is nothing more than giving them one name — and a row with an empty
+	// org says the domain is not an organisation at all, which is a different
+	// claim from having no row.
+	//
+	// Deliberately not `domain_aliases`. That table merges identities and decides
+	// who people are; this one decides only what colour their mail is drawn in.
+	// Named differently, stored separately, because the two are worth confusing
+	// exactly once.
+	`
+	create table org_domains (
+	  domain text primary key,
+	  org    text not null default ''
+	);
+	`,
 }
