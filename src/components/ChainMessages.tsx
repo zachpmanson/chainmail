@@ -76,10 +76,29 @@ const anchor = (i: number) => `entry-${i}`;
 /** What hovering the sender says: their name and the address the mail came from,
  *  e.g. "Lane Whittaker <lane@whittaker.example>". The same string a page build
  *  makes for the same entry (see derive.ts's whoTitle), because a reader reading
- *  one thread in two places should be told the same thing about it. */
+ *  one thread in two places should be told the same thing about it.
+ *
+ *  A message recovered from inside someone else's quote has no From header of its
+ *  own, so there is no address to hang on the name — and the corpus will not lend
+ *  one, because an address reached by matching the sender's name is not evidence
+ *  about who sent this. The absence is named instead, with the address that is
+ *  real here and labelled as what it is: the quoter's. Silence would read as the
+ *  pane failing to fill in what it fills in on every other bubble in the thread.
+ *
+ *  The page answers a different question in its own source line, and should keep
+ *  doing so: "unspooled from msg g-a" is about where the text came from, and is
+ *  printed under every bubble whether or not anyone can be named. A hover is
+ *  about the person, so it says which person's address this is rather than where
+ *  the entry was found. */
 function senderTitle(e: CorpusEntry): string {
   const name = e.author ?? "";
-  if (!e.fromEmail) return name;
+  if (!e.fromEmail) {
+    if (!e.fromQuotedBy) return name;
+    // Nothing to hang the parenthesis on when the entry has no name either, so
+    // it stands alone rather than starting with a space and a bracket.
+    const unknown = `address unknown; quoted by ${e.fromQuotedBy}`;
+    return name ? `${name} (${unknown})` : unknown;
+  }
   if (!name) return e.fromEmail;
   return `${name} <${e.fromEmail}>`;
 }
@@ -110,9 +129,10 @@ export function ChainMessages({ chain }: { chain: { rootExtId: string } }) {
           sender={e.author}
           // Hovering the name (or the avatar) names the person fully: the address
           // the entry came from, as a page build's own title does. A recovered
-          // entry has no address of its own, and then the name stands alone
-          // rather than borrowing one from the people table — the same rule the
-          // page follows, so the two cannot name two addresses for one message.
+          // entry has no address of its own, and then the title names that
+          // absence and the person it was quoted by rather than borrowing an
+          // address from the people table — the same rule the page follows, so
+          // the two cannot name two addresses for one message.
           senderTitle={senderTitle(e)}
           // The sender's organisation as the corpus resolved it, on the slot this
           // chain's own first-appearance order gives it.

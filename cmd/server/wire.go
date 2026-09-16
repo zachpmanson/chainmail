@@ -86,7 +86,13 @@ type corpusEntry struct {
 	// uses, so a bubble in the pane and a bubble on the page cannot disagree about
 	// one sender. Absent where nothing established one, which is drawn as the
 	// unknown colour rather than as a group of its own.
-	Org          string        `json:"org,omitempty"`
+	Org string `json:"org,omitempty"`
+	// QuotedBy is the person whose message this entry was recovered from, written
+	// as a client writes a person on hover ("Ada Okoye <ada@loomworks.example>"),
+	// with several joined by ", ". It is what the pane says where FromEmail is
+	// absent: a recovered entry has no address of its own, and the quoter is where
+	// it came from rather than a guess at who sent it.
+	QuotedBy     string        `json:"fromQuotedBy,omitempty"`
 	Container    string        `json:"container,omitempty"`
 	Permalink    string        `json:"permalink,omitempty"`
 	Parent       string        `json:"parent,omitempty"`
@@ -543,7 +549,8 @@ func toCorpusEntry(s corpus.Shown, r spec.Rendered) corpusEntry {
 	e := corpusEntry{
 		ExtID: s.ExtID, Source: s.Source, Quoted: s.Quoted, TS: stamp(s.TS),
 		TZ: s.TZ, TZOffsetMinutes: s.TZOffset, Author: s.Author, Subject: s.Subject,
-		Body: s.Body, HTML: r.HTML, To: r.To, FromEmail: r.FromEmail, Org: r.Org,
+		Body: s.Body, HTML: r.HTML, To: r.To, FromEmail: r.FromEmail,
+		Org: r.Org, QuotedBy: r.QuotedBy,
 		Container: s.Container,
 		Permalink: s.Permalink,
 		Parent:    s.Parent, ParentRef: s.ParentRef,

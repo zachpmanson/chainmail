@@ -178,6 +178,7 @@ const CHAIN_BODIES: Record<
     html: string;
     to?: string;
     fromEmail?: string;
+    fromQuotedBy?: string;
     tz: string;
     tzOffsetMinutes: number;
   }
@@ -203,13 +204,16 @@ const CHAIN_BODIES: Record<
     tzOffsetMinutes: 600,
   },
   // A message recovered from inside someone else's quote: it has no headers of
-  // its own, so the corpus sends no recipient line and the pane must say so
-  // rather than leave the gap looking like a rendering failure.
+  // its own, so the corpus sends no recipient line and no address, and the pane
+  // must say so rather than leave the gap looking like a rendering failure. What
+  // it sends instead is the person who quoted it, which is where the entry came
+  // from — the one address here that is evidence rather than a guess.
   "quote:9f2c1ab4e77d": {
     author: "Dana Reyes",
     subject: "Fence panels",
     body: "The gate hinge was ordered.",
     html: "<p>The gate hinge was ordered.</p>",
+    fromQuotedBy: "Ada Okoye <ada@okoye.example>",
     tz: "AEST",
     tzOffsetMinutes: 600,
   },
@@ -530,14 +534,20 @@ describe("the home page with no query", () => {
     );
   });
 
-  it("offers no address for a recovered entry, which has none", async () => {
+  it("names who quoted a recovered message, which has no address of its own", async () => {
     handler = buildHandler;
     await mountApp("/?open=quote%3A9f2c1ab4e77d");
 
     await waitFor(() => expect(pane().querySelector(".msg .hdr .nm")?.textContent).toBe("Dana Reyes"));
-    // The name, and nothing more: an address borrowed from the people table
-    // would be a claim about who sent it, and the entry does not say.
-    expect(pane().querySelector(".msg .hdr .nm")?.getAttribute("title")).toBe("Dana Reyes");
+    // The absence, and where the address that is offered came from: the quoter's
+    // address is not the sender's, and a hover that showed it bare would
+    // attribute it to Dana. The direct bubble is unchanged (the test above),
+    // because there the entry does have an address of its own to name.
+    const title = "Dana Reyes (address unknown; quoted by Ada Okoye <ada@okoye.example>)";
+    expect(pane().querySelector(".msg .hdr .nm")?.getAttribute("title")).toBe(title);
+    // The avatar says the same thing: it is one person, and two ways of naming
+    // them would be two answers to one question.
+    expect(pane().querySelector(".msg .hdr .av")?.getAttribute("title")).toBe(title);
   });
 
   it("says a recovered entry named no recipients instead of leaving the gap dark", async () => {

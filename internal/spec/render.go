@@ -1,16 +1,19 @@
 package spec
 
 import (
+	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/zachpmanson/chainmail/internal/corpus"
 )
 
 // Rendered is one entry as a view that is not a page needs it: the body as HTML a
 // page build would produce, the recipient line it would print under the bubble,
-// and the address it came from.
+// the address it came from, and — where it has no address of its own — the person
+// it was recovered from.
 //
-// Three fields rather than one because they come out of the same load. A caller
+// Several fields rather than one because they come out of the same load. A caller
 // that asked for the HTML and then had to ask again for the recipients would pay
 // twice for the rows, the host documents and the attachment attribution that
 // decide both — and the second answer could disagree with the first.
@@ -26,12 +29,27 @@ type Rendered struct {
 	// own Entry carries it. Empty where the entry has no From header of its own —
 	// a message recovered from someone else's quote — and empty is the answer: the
 	// pane hangs it on the sender's name so a reader can see who they are actually
-	// reading, and naming the wrong address would be worse than naming none.
+	// reading, and naming the wrong address would be worse than naming none. What
+	// the pane says in its place is QuotedBy.
 	FromEmail string
 	// Org is the sender's organisation, resolved by the same function a page build
 	// uses, so the pane's colours and the page's cannot disagree about one sender.
 	// Empty where nothing established one, which is drawn as the unknown slot.
 	Org string
+	// QuotedBy names the person whose message this entry was recovered from,
+	// written the way the pane writes a person on hover ("Ada Okoye
+	// <ada@loomworks.example>"), with several of them joined by ", ".
+	//
+	// It answers the question FromEmail raises and cannot answer. An empty address
+	// on every other bubble in a thread is a fact the reader can see, and it reads
+	// like a failure rather than like a message recovered from someone's quote; the
+	// quoter is where that entry actually came from, and it is evidence the corpus
+	// holds rather than a guess. What it is not is the sender's address: the corpus
+	// resolves people by address, so an entry whose author was matched by name
+	// alone would otherwise be handed a stranger's address, which is the one claim
+	// this hover exists to avoid. Empty for an entry that has an address of its
+	// own, which has nothing to explain away.
+	QuotedBy string
 }
 
 // RenderTrail renders the named entries as the entries a page build would draw,
@@ -128,13 +146,118 @@ func RenderTrail(store *corpus.Store, extIDs []string) (map[string]Rendered, err
 		resolver.note(r.PersonID, parseAddr(r.From).Address)
 	}
 	attributeAttachments(rows)
+	quoters, err := loadQuoters(db, rows)
+	if err != nil {
+		return nil, err
+	}
 	for _, r := range rows {
 		out[extOf[r.ID]] = Rendered{
 			HTML:      bodyHTML(r),
 			To:        recipientsOf(r, part[r.ID]),
 			FromEmail: parseAddr(r.From).Address,
 			Org:       resolver.org(r.PersonID, parseAddr(r.From).Address),
+			QuotedBy:  quoters[r.ID],
 		}
 	}
 	return out, nil
+}
+
+// loadQuoters names the messages each recovered entry was found inside, keyed by
+// the entry's own id.
+//
+// A host is usually outside the trail being rendered: the pane draws one entry,
+// or one reply chain, and the message that quoted this one sits beside or above
+// it rather than in it — so this is its own query over the host ids rather than a
+// join against the rows already loaded. loadHostHTML asks the same question about
+// the same ids for the same reason, and the two are not folded together because
+// each wants a handful of columns the other has no use for: a host with no markup
+// to give is still a host that can be named, and vice versa.
+//
+// Only entries with no address of their own are asked about. A direct entry has
+// its own From header, so a quoter named beside it would be a second answer to a
+// question already answered.
+func loadQuoters(db *sql.DB, rows []*entryRow) (map[int64]string, error) {
+	var recovered []*entryRow
+	want := map[int64]bool{}
+	for _, r := range rows {
+		if parseAddr(r.From).Address != "" {
+			continue
+		}
+		recovered = append(recovered, r)
+		for _, id := range r.SeenIn {
+			want[id] = true
+		}
+	}
+	if len(want) == 0 {
+		return nil, nil
+	}
+	ph, args := placeholders(keys(want))
+	q, err := db.Query(`select e.id, coalesce(p.display_name, ''), coalesce(d.from_addr, '')
+		from entries e
+		left join people p      on p.id = e.person_id
+		left join mail_detail d on d.entry_id = e.id
+		where e.id in (`+ph+`)`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("loading quoters: %w", err)
+	}
+	defer q.Close()
+	who := map[int64]string{}
+	for q.Next() {
+		var id int64
+		var name, from string
+		if err := q.Scan(&id, &name, &from); err != nil {
+			return nil, err
+		}
+		who[id] = quoterTitle(name, parseAddr(from).Address)
+	}
+	if err := q.Err(); err != nil {
+		return nil, err
+	}
+
+	out := make(map[int64]string, len(recovered))
+	for _, r := range recovered {
+		seen := map[int64]bool{}
+		var names []string
+		for _, id := range r.SeenIn {
+			// A sighting is keyed by (entry, host, kind), so a host that both quoted
+			// and forwarded this entry arrives twice. It is one person, and a hover
+			// that named them twice would read as two of them — the same reason
+			// builder.source drops the repeat from the page's provenance line.
+			if seen[id] {
+				continue
+			}
+			seen[id] = true
+			// A host the corpus holds no person or From header for names nobody, so
+			// it contributes nothing rather than an empty slot in the list.
+			if who[id] != "" {
+				names = append(names, who[id])
+			}
+		}
+		if len(names) > 0 {
+			out[r.ID] = strings.Join(names, ", ")
+		}
+	}
+	return out, nil
+}
+
+// quoterTitle names a quoter the way the pane names a person on hover: the
+// corpus person's display name, and the address their mail came from, e.g.
+// "Ada Okoye <ada@loomworks.example>".
+//
+// Either half may be missing and the other then stands alone. That is the same
+// fallback ChainMessages.tsx's senderTitle makes, and deliberately so: the pane
+// names a quoter and a sender through one expression, and a reader told two
+// different things about the same person by two hovers would have no way to tell
+// which one to believe. Neither half is filled in from the other source — the
+// name comes from the corpus person, the address from the host's own From header
+// — because a name guessed into an address is exactly the wrong address this
+// hover is written to avoid.
+func quoterTitle(name, address string) string {
+	switch {
+	case name == "":
+		return address
+	case address == "":
+		return name
+	}
+	return name + " <" + address + ">"
 }
