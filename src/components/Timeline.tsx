@@ -1,102 +1,13 @@
-import { Fragment, useState } from "react";
-import type { Entry } from "../lib/spec";
-import { derive, initials, type Row, type RowEdit, type View } from "../lib/derive";
+import { Fragment } from "react";
+import { derive, type Row, type RowEdit, type View } from "../lib/derive";
 import type { Timeline as Spec } from "../lib/spec";
 import { COLLAPSE_FROM, msgCount, provenance, type SourceId } from "../lib/sources";
-import { attHref, hasPreview, isSkipped, localHref, skipNote } from "../lib/attachments";
 import { DiffPanel, Legend, ParticipantsPanel, SourcesPanel, type ChainFilter } from "./Panels";
 import { Minimap } from "./Minimap";
+import { Message } from "./Message";
 import { trimBody } from "../lib/trimBody";
 
 const html = (s: string) => ({ __html: s });
-
-function Avatar({ row, v }: { row: Row; v: View }) {
-  const name = row.entry.sender ?? "";
-  const pic = row.avatarClass;
-  return (
-    <div className={`av ${row.orgSlot}${pic ? ` pic ${pic}` : ""}`} title={v.whoTitle(name)}>
-      {pic ? null : <span className="ini">{initials(name)}</span>}
-    </div>
-  );
-}
-
-/**
- * A zone is shown three ways, because the reader's next move differs in each.
- * Stated is a fact and reads as one. Inferred is a claim and is dotted, dimmed
- * and suffixed so it cannot be mistaken for the source's own words. Unknown is
- * neither, and is said out loud rather than left as whitespace — an unlabelled
- * clock beside a labelled one silently invites the reader to compare them, and
- * on this page most clocks are unlabelled.
- */
-/**
- * A clip button that drops the message's own data onto the clipboard as JSON —
- * the spec entry as the renderer saw it, plus the row id and any resolved
- * quote-edits (the "edited by … original from …" attribution), so a message
- * that renders wrong can be pasted somewhere and inspected whole. Quiet, and
- * not a navigational control: inline handlers only, no listener of its own.
- */
-function CopyJson({ row }: { row: Row }) {
-  const [done, setDone] = useState(false);
-  return (
-    <button
-      type="button"
-      className="copyjson"
-      title="Copy this message's JSON"
-      aria-label="Copy this message's JSON"
-      onClick={() => {
-        const payload = JSON.stringify(
-          {
-            id: row.id,
-            chain: row.chain ?? null,
-            entry: row.entry,
-            edits: row.edits?.length ? row.edits : undefined,
-          },
-          null,
-          2,
-        );
-        navigator.clipboard?.writeText(payload).then(
-          () => setDone(true),
-          () => {},
-        );
-        window.setTimeout(() => setDone(false), 1200);
-      }}
-    >
-      {done ? "copied" : (
-        <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
-          <rect x="5.5" y="5.5" width="8" height="8" rx="1.2" fill="none"
-            stroke="currentColor" strokeWidth="1.4" />
-          <path d="M3 10.5 V3.5 a.5.5 0 0 1 .5-.5 H10" fill="none"
-            stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-        </svg>
-      )}
-    </button>
-  );
-}
-
-function Stamp({ row }: { row: Row }) {
-  const { date, time, tz, zone } = row.stamp;
-  return (
-    <a className="tm pl" href={`#${row.id}`} title="Link to this message">
-      {date}
-      {time ? ` · ${time}` : ""}
-      {zone === "stated" ? <span className="tz">{tz}</span> : null}
-      {zone === "inferred" ? (
-        <span
-          className="tz tzi"
-          title="Inferred — this source stated no zone. The offset was worked out from the client that quoted this message; see the source notes."
-        >{` ${tz}?`}</span>
-      ) : null}
-      {zone === "unknown" ? (
-        <span
-          className="tz tzu"
-          title="Zone unknown — this source stated none and nothing available places it. The clock is a wall clock as quoted, so it cannot be compared with the times above and below it."
-        >
-          {" zone unknown"}
-        </span>
-      ) : null}
-    </a>
-  );
-}
 
 function ReplyLink({ row, v }: { row: Row; v: View }) {
   const parent = row.entry.parent
@@ -141,111 +52,6 @@ function Edits({ edits, v }: { edits?: RowEdit[]; v: View }) {
           <div className="ebd" dangerouslySetInnerHTML={html(ed.html)} />
         </div>
       ))}
-    </div>
-  );
-}
-
-function Attachments({ e, onPull, pulling, mediaBase }: {
-  e: Entry;
-  /** fetch this message's files, where a host will do it at all */
-  onPull?: (extId: string) => void;
-  /** the message whose files are being fetched, so its button can say so */
-  pulling?: string | null;
-  /** where the corpus serves stored bytes; empty in the static export, which has no server */
-  mediaBase?: string;
-}) {
-  if (!e.attachments?.length) return null;
-  // The button is offered only where there is something to fetch and somebody
-  // able to fetch it: a host started without -media never passes onPull, a page
-  // rendered to a file never does, and a message whose files are all already in
-  // the corpus is done with the question. A file the corpus has DECLINED is done
-  // with it too — the reason is recorded, not the answer — so it cannot keep the
-  // button alive on a message that has nothing left to ask for.
-  const pending = e.attachments.some((a) => !a.blobSha && !isSkipped(a));
-  return (
-    <div className="atts">
-      <span className="clip">attached</span>
-      {e.attachments.map((a, i) => {
-        const local = localHref(a, mediaBase ?? "");
-        const href = attHref(a, mediaBase);
-       const thumb = hasPreview(a) ? (
-          <img
-            className="athumb"
-            src={a.preview}
-            width={a.previewW}
-            height={a.previewH}
-            /* Decorative here: the filename beside it already names the file, so
-               announcing it twice only makes the chip longer to listen to. */
-            alt=""
-          />
-        ) : null;
-        const label = (
-          <>
-            {thumb}
-            <span className="afn">{a.name}</span>
-            <span className="ameta">
-              {a.kind ?? "file"} · {a.size ?? ""}
-            </span>
-          </>
-        );
-        // The chip stays the same link it always was, and the popover is layered
-        // onto it by script. That is deliberate: no new control appears, the
-        // trigger is already in the tab order, and with scripting unavailable
-        // the click still opens the attachment rather than doing nothing.
-        //
-        // Once the bytes are local, where the click goes changes but the shape
-        // does not: the chip is still one link, and the server decides whether it
-        // downloads or opens by the same `open` rule. A file the reader is TAKING
-        // opens in no tab at all — the browser saves it and the page stays put,
-        // which is what a download should do. One they are LOOKING at opens
-        // beside the page, so the transcript is still there behind it.
-        const beside = !local || a.open !== "download";
-        // A file the corpus has refused says so where the reader is already
-        // looking, rather than in a console they will not open. It is a tooltip
-        // and not more chip text: the chip is a list of files, and a sentence in
-        // the middle of it would push the next file off the line.
-        const note = skipNote(a);
-        return href ? (
-          <a
-            key={i}
-            className={thumb ? "att haspop" : "att"}
-            href={href}
-            {...(note ? { title: note } : {})}
-            {...(beside ? { target: "_blank", rel: "noopener" } : {})}
-            {...(thumb
-              ? { "data-pop": a.name, "aria-haspopup": "dialog" as const }
-              : {})}
-            /* The popover's save control reads this, not the href: a Slack chip's
-               href is a permalink and a body picture has no href at all, so the
-               presence of the local URL is what says "these bytes are here". */
-            {...(local ? { "data-get": local } : {})}
-          >
-            {label}
-          </a>
-        ) : (
-          // A thumbnail still earns its place on a chip with nowhere to go — it
-          // is the only thing here that says what the file actually is. It gets
-          // no popover, though: the only way to offer one would be a control
-          // that does nothing at all without scripting.
-          <span key={i} className="att nolink" {...(note ? { title: note } : {})}>
-            {label}
-          </span>
-        );
-      })}
-      {onPull && pending && e.extId ? (
-        // A button, not a chip: a chip goes to where the file already is, and
-        // this one goes and gets it. Plain text, because the row is already a
-        // run of framed chips and a second frame would read as another file.
-        <button
-          type="button"
-          className="attget"
-          disabled={pulling != null}
-          title="Fetch this message's attached files into the corpus, so they can be shown here"
-          onClick={() => onPull(e.extId!)}
-        >
-          {pulling === e.extId ? "fetching…" : "fetch files"}
-        </button>
-      ) : null}
     </div>
   );
 }
@@ -308,9 +114,9 @@ function SourceIds({ ids, unspooled, anchorByGmail }: {
  * is keyboard-operable and reachable by find-in-page without any of ours. A
  * folding mechanism elsewhere on the page can be the same element.
  */
-function Source({ e, anchorByGmail }: { e: Entry; anchorByGmail: Map<string, string> }) {
-  if (!e.source) return null;
-  const p = provenance(e.source);
+function Source({ source, anchorByGmail }: { source?: string; anchorByGmail: Map<string, string> }) {
+  if (!source) return null;
+  const p = provenance(source);
   if (p.kind === "prose") return <span className="src">{p.text}</span>;
   // "unspooled from …" lines carry an empty prefix only when not unspooled;
   // prose never reaches here, so prefix !== "" means the ids were unspooled
@@ -335,6 +141,24 @@ function Source({ e, anchorByGmail }: { e: Entry; anchorByGmail: Map<string, str
   );
 }
 
+/**
+ * One row of the transcript: a spec `Row` and `View` resolved into a `Message`.
+ *
+ * This is the adapter, and this file is the only place that knows both halves.
+ * Everything a bubble cannot be drawn without goes over as data — the sender,
+ * the org slot, the attachments, the clock, the grid position. Everything that
+ * takes the spec to work out goes over as a node: the reply link (which resolves
+ * the parent through the reply graph), the provenance line (which resolves ids to
+ * anchors on this page), a quoter's inline edit (which resolves a diff against
+ * the message it was made to), and the payload the copy button puts on the
+ * clipboard.
+ *
+ * A system note is not a message and is drawn here rather than through `Message`.
+ * It has no sender, no bubble, no org colour and no attachments, so pushing it
+ * through the bubble component would mean a component reaching every bubble part
+ * with nothing to put in it — and a `.sys` that rendering-inspected an empty
+ * sender to decide whether it was a note at all.
+ */
 function EntryBlock({ row, v, mark, anchorByGmail, onPull, pulling, mediaBase }: {
   row: Row;
   v: View;
@@ -346,9 +170,9 @@ function EntryBlock({ row, v, mark, anchorByGmail, onPull, pulling, mediaBase }:
 }) {
   const e = row.entry;
   const grid = { gridColumn: row.lane + 1, gridRow: row.row };
-  const start = row.isChainStart ? " chstart" : "";
 
   if (e.kind === "note") {
+    const start = row.isChainStart ? " chstart" : "";
     return (
       <div
         className={`sys${start}${mark === "new" ? " isnew" : ""}`}
@@ -368,48 +192,42 @@ function EntryBlock({ row, v, mark, anchorByGmail, onPull, pulling, mediaBase }:
     );
   }
 
-  // The org slot rides on the row so a bubble can carry its sender's colour.
-  // Scanning a page happens in the body column, not the avatar column, so the
-  // avatar alone leaves the org unreadable exactly where the eye already is.
-  const cls = ["msg", row.orgSlot, e.me && "me", e.quoted && "q",
-    row.isChainStart && "chstart", mark === "new" && "isnew"]
-    .filter(Boolean)
-    .join(" ");
   return (
-    <div className={cls} id={row.id} data-ch={row.lane} style={grid}>
-      <div className="col">
-        <div className="hdr">
-          <Avatar row={row} v={v} />
-          <span className="nm" title={v.whoTitle(e.sender ?? "")}>
-            {e.sender}
-          </span>
-          <span className="org">{e.org}</span>
-          <Stamp row={row} />
-          {mark === "new" ? <span className="newpill">new</span> : null}
-          {mark === "revised" ? <span className="revpill">revised</span> : null}
-          <CopyJson row={row} />
-        </div>
-        <div className="bub">
-          {e.mentions?.length ? (
-            <div className="ment">
-              {e.mentions.map((m) => (
-                <span className="at" key={m}>
-                  @{m}
-                </span>
-              ))}
-            </div>
-          ) : null}
-          <div className="bd" dangerouslySetInnerHTML={html(trimBody(e.body))} />
-          <Edits edits={row.edits} v={v} />
-          <Attachments e={e} onPull={onPull} pulling={pulling} mediaBase={mediaBase} />
-          <div className="foot">
-            <span className="to">to {e.to ?? "—"}</span>
-            <ReplyLink row={row} v={v} />
-            <Source e={e} anchorByGmail={anchorByGmail} />
-          </div>
-        </div>
-      </div>
-    </div>
+    <Message
+      id={row.id}
+      body={e.body}
+      sender={e.sender}
+      senderTitle={v.whoTitle(e.sender ?? "")}
+      org={e.org}
+      orgSlot={row.orgSlot}
+      avatarClass={row.avatarClass}
+      me={e.me}
+      quoted={e.quoted}
+      mentions={e.mentions}
+      attachments={e.attachments}
+      extId={e.extId}
+      onPull={onPull}
+      pulling={pulling}
+      mediaBase={mediaBase}
+      to={e.to}
+      stamp={row.stamp}
+      style={grid}
+      lane={row.lane}
+      chainStart={row.isChainStart}
+      mark={mark}
+      reply={<ReplyLink row={row} v={v} />}
+      edits={<Edits edits={row.edits} v={v} />}
+      source={<Source source={e.source} anchorByGmail={anchorByGmail} />}
+      /* The spec entry as the renderer saw it, plus the row id and any resolved
+         quote-edits (the "edited by … original from …" attribution), so a message
+         that renders wrong can be pasted somewhere and inspected whole. */
+      copyJson={{
+        id: row.id,
+        chain: row.chain ?? null,
+        entry: row.entry,
+        edits: row.edits?.length ? row.edits : undefined,
+      }}
+    />
   );
 }
 
