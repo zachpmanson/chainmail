@@ -750,8 +750,22 @@ describe("fetching one message's files from a saved page", () => {
     return json(500, { error: `unexpected call to ${c.method} ${p}` });
   };
 
-  it("asks for that message's files, then re-derives the page over them", async () => {
+  it("asks for that message's files, and the server hands back the rebuilt page", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    // The page after the pull: the file has bytes, so there is nothing left to
+    // fetch. This is what the server now sends back beside the counts, having
+    // re-derived and rewritten the saved page itself.
+    const pulled = {
+      ...PULL_SPEC,
+      messages: [
+        {
+          ...PULL_SPEC.messages[0],
+          attachments: [
+            { ...PULL_SPEC.messages[0]!.attachments[0], blobSha: "sha-of-the-bytes", open: "download" },
+          ],
+        },
+      ],
+    };
     handler = handlerWith(() =>
       json(200, {
         wanted: 2,
@@ -763,6 +777,8 @@ describe("fetching one message's files from a saved page", () => {
           { name: "shed.csv", source: "mail", sha: "sha-of-the-bytes", bytes: 512 },
           { name: "roof.mp4", source: "mail", reason: "too_large" },
         ],
+        spec: pulled,
+        report,
       }),
     );
     await mountApp("/view/loom-cutover");
@@ -770,17 +786,24 @@ describe("fetching one message's files from a saved page", () => {
 
     click(screen.getByRole("button", { name: /fetch files/ }));
 
-    // The pull writes into the corpus and the page is a picture of the corpus,
-    // so the file appears by rebuilding the page — in that order, and without a
-    // slurp, because nothing here asked the mailbox for mail.
-    await waitFor(() =>
-      expect(calls.filter((c) => c.method === "POST").map(pathOf)).toEqual([
-        "/v1/media/pull",
-        "/v1/refresh",
-      ]),
-    );
+    // One call, and no second one to be abandoned: the rebuild that makes the
+    // bytes visible happens on the server, behind the fetch, so a reader who
+    // reloads mid-pull still lands on a page that shows the file. The message
+    // and the page both go in the request — the message is the fetch, the name
+    // is what the server rewrites.
+    await waitFor(() => expect(calls.filter((c) => c.method === "POST").length).toBe(1));
     const pull = calls.find((c) => pathOf(c) === "/v1/media/pull")!;
-    expect(JSON.parse(pull.body!)).toEqual({ entry: "mail:<loom-cutover-1@example.fed>" });
+    expect(JSON.parse(pull.body!)).toEqual({
+      entry: "mail:<loom-cutover-1@example.fed>",
+      name: "loom-cutover",
+    });
+    expect(calls.some((c) => pathOf(c) === "/v1/refresh")).toBe(false);
+
+    // The returned page is what gets rendered: the chip now carries bytes, so
+    // the button is gone — the files arrived, and they said so.
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: /fetch files/ })).toBeNull(),
+    );
 
     // A file that did not arrive is the reason the console is worth reading: the
     // page cannot show what is not there, and a count alone would not say why.
@@ -789,8 +812,34 @@ describe("fetching one message's files from a saved page", () => {
     );
   });
 
-  it("says so on a host that will not fetch, and leaves the page alone", async () => {
-    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+  it("re-derives the page itself when the server sent none back", async () => {
+    // A pull with no page in its answer: a host given no name, or a rebuild that
+    // could not run. The bytes are stored either way, so the browser falls back
+    // to asking for the page — the behaviour that used to be the only one.
+    handler = handlerWith(() =>
+      json(200, {
+        wanted: 1,
+        pulled: 1,
+        skipped: 0,
+        failed: 0,
+        bytes: 512,
+        files: [{ name: "shed.csv", source: "mail", sha: "sha-of-the-bytes", bytes: 512 }],
+      }),
+    );
+    await mountApp("/view/loom-cutover");
+    await screen.findByText("Loom cutover");
+
+    click(screen.getByRole("button", { name: /fetch files/ }));
+
+    await waitFor(() =>
+      expect(calls.filter((c) => c.method === "POST").map(pathOf)).toEqual([
+        "/v1/media/pull",
+        "/v1/refresh",
+      ]),
+    );
+  });
+
+  it("says so in the page on a host that will not fetch, and leaves the page alone", async () => {
     handler = handlerWith(() =>
       json(403, {
         error: "media pulls are disabled: this server was started without -media, so it will not fetch attachment bytes.",
@@ -801,9 +850,16 @@ describe("fetching one message's files from a saved page", () => {
 
     click(screen.getByRole("button", { name: /fetch files/ }));
 
-    await waitFor(() =>
-      expect(err).toHaveBeenCalledWith(expect.stringMatching(/no media fetch on this host/)),
-    );
+    // A press that spends mailbox round trips and then fails must not look like
+    // nothing happening: console-only was the wrong place for it, so the page
+    // says it — and the files are genuinely still missing, so the button stays.
+    const note = await waitFor(() => {
+      const n = document.querySelector(".pullnote");
+      if (!n) throw new Error("no note yet");
+      return n;
+    });
+    expect(note.textContent).toMatch(/cannot fetch files/);
+    expect(screen.queryByRole("button", { name: /fetch files/ })).not.toBeNull();
     // Nothing changed in the corpus, so nothing needs redrawing.
     expect(calls.some((c) => pathOf(c) === "/v1/refresh")).toBe(false);
   });

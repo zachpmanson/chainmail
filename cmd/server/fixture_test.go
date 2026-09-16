@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -63,13 +64,21 @@ func (r *response) errText(t *testing.T) string {
 
 func (h *harness) do(t *testing.T, method, path string, body []byte) *response {
 	t.Helper()
+	return h.doWithContext(t, context.Background(), method, path, body)
+}
+
+// doWithContext is do with the request's context in the caller's hands, so a
+// test can take the reader away mid-request — which is what a browser does to
+// its own fetch when the page is reloaded or the tab is closed.
+func (h *harness) doWithContext(t *testing.T, ctx context.Context, method, path string, body []byte) *response {
+	t.Helper()
 	var rdr *bytes.Reader
 	if body == nil {
 		rdr = bytes.NewReader(nil)
 	} else {
 		rdr = bytes.NewReader(body)
 	}
-	req := httptest.NewRequest(method, path, rdr)
+	req := httptest.NewRequest(method, path, rdr).WithContext(ctx)
 	rec := httptest.NewRecorder()
 	h.handler.ServeHTTP(rec, req)
 	res := rec.Result()

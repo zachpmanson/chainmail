@@ -82,6 +82,11 @@ export function ViewPage() {
   // The message whose files are being fetched: its button says so, and every
   // other one is held until this pull and the rebuild behind it have finished.
   const [pulling, setPulling] = useState<string | null>(null);
+  // Why the last pull failed, when it did. Console-only went with the refresh
+  // verdict and was wrong for this one: a pull is slow (mailbox round trips,
+  // then a page rebuild), it costs quota, and "nothing happened" is
+  // indistinguishable from "it failed" without it.
+  const [pullNote, setPullNote] = useState<string | null>(null);
 
   // A different page means a different run: drop the refreshed copy and any
   // report from the previous one.
@@ -131,18 +136,35 @@ export function ViewPage() {
     },
   });
 
-  // Fetch one message's attachment bytes, then re-derive: the pull writes into
-  // the corpus and the page is a picture of the corpus, so the pictures appear
-  // by rebuilding the page rather than by patching a chip. That is the same
-  // re-derive the refresh button does, without the slurp — nothing here asks the
-  // mailbox for mail, only for the files of a message already on the page.
+  // Fetch one message's attachment bytes: the pull writes into the corpus and
+  // the page is a picture of the corpus, so the pictures appear by rebuilding
+  // the page rather than by patching a chip.
   //
-  // `pulling` is cleared only when the rebuild has settled, so the button cannot
-  // be pressed twice in a row and start a second pull against a spec that is
-  // already being replaced.
+  // The rebuild is the server's, and the page's name is what it needs: it
+  // re-derives the saved page and rewrites it while the fetch is still in
+  // flight for us, so the bytes land on the page even if this browser has
+  // already navigated away — which is what a reload during a fetch used to
+  // cost, since a browser cancels its own request when the reader leaves and
+  // the refresh that made the files visible was the client's to run. The
+  // refreshed page comes back on this response, so one call is the whole
+  // operation and there is no second round trip to be abandoned.
+  //
+  // `pulling` covers both halves — the fetch and the rebuild behind it — so the
+  // button cannot be pressed twice in a row against a page already being
+  // replaced.
   const pull = $api.useMutation("post", "/v1/media/pull", {
     onSuccess: (data) => {
       console.log(`fetch: ${pullSummary(data)}`);
+      setPullNote(null);
+      if (data.spec) {
+        setLocal(normalise(data.spec));
+        setReport(data.report ?? null);
+        setPulling(null);
+        return;
+      }
+      // No page came back: the server was given no name, or its rebuild could
+      // not run. The bytes are stored either way, so the page is re-derived
+      // here instead — the old behaviour, and still the right fallback.
       const s = specRef.current;
       if (!s) {
         setPulling(null);
@@ -155,10 +177,12 @@ export function ViewPage() {
     },
     onError: (e) => {
       setPulling(null);
-      console.error(
+      // Said on the page, not only in the console: a press that spends mailbox
+      // round trips and then fails must not look like nothing happening.
+      setPullNote(
         e instanceof ApiError && e.status === 403
-          ? "no media fetch on this host (the server was started without -media), so there is nothing to ask for"
-          : `fetch failed: ${e instanceof Error ? e.message : String(e)}`,
+          ? "This host cannot fetch files (it was started without -media)."
+          : `Fetching the files failed: ${e instanceof Error ? e.message : String(e)}. Nothing was stored — press again to retry.`,
       );
     },
   });
@@ -181,7 +205,13 @@ export function ViewPage() {
   if (!spec) return <p style={{ padding: "2rem", opacity: 0.6 }}>Loading page…</p>;
 
   return (
-    <Rendered
+    <>
+      {pullNote && (
+        <p className="pullnote" role="status">
+          {pullNote}
+        </p>
+      )}
+      <Rendered
       spec={spec}
       onRefresh={() => {
         specRef.current = spec;
@@ -208,7 +238,8 @@ export function ViewPage() {
       onPull={(extId) => {
         specRef.current = spec;
         setPulling(extId);
-        pull.mutate({ body: { entry: extId } });
+        setPullNote(null);
+        pull.mutate({ body: { entry: extId, name } });
       }}
       pulling={pulling}
       // The endpoint stored bytes come from. Named here and nowhere else,
@@ -218,5 +249,6 @@ export function ViewPage() {
       report={report}
       refreshing={slurp.isPending || refresh.isPending}
     />
+    </>
   );
 }
