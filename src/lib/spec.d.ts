@@ -129,6 +129,10 @@ export interface Entry {
    */
   id?: string;
   /**
+   * The corpus's own handle for this entry, e.g. 'mail:<...>'. What an endpoint that acts on a message takes (GET /v1/entries/{extId}, POST /v1/media/pull). Absent on an entry the page invented; 'id' is a page anchor and will not do instead.
+   */
+  extId?: string;
+  /**
    * As displayed, e.g. 'Thu 16 Jul 2026'. Not normalised.
    */
   date: string;

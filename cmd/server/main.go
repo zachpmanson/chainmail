@@ -60,6 +60,13 @@ func run(args []string) error {
 			"on hands the page no access the host had not already given this user.")
 	slurpTimeout := fs.Duration("slurp-timeout", 15*time.Minute,
 		"upper bound on one /v1/slurp ingest")
+	mediaPull := fs.Bool("media", false,
+		"permit POST /v1/media/pull: fetch one message's attachment bytes into the "+
+			"corpus, so a page can show a file instead of sending the reader to Gmail "+
+			"for it. Off by default, like -slurp: this is the second surface that "+
+			"reaches the mailbox, once per attachment part, and a host that does not "+
+			"grant it answers 403. The credential is the mail grant this unit already "+
+			"reads, so the switch changes when a fetch runs, not what it may touch.")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -92,6 +99,8 @@ func run(args []string) error {
 		slurpEnabled: *slurp,
 		slurpTimeout: *slurpTimeout,
 		runSlurp:     defaultSlurp(),
+		mediaEnabled: *mediaPull,
+		runMediaPull: defaultMediaPull(store, *uploads),
 		specSlots:    make(chan struct{}, specConcurrency),
 		slotWait:     specSlotWait,
 		loginPort:    port,

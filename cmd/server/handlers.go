@@ -22,7 +22,9 @@ import (
 
 	"github.com/zachpmanson/chainmail/internal/corpus"
 	mailembed "github.com/zachpmanson/chainmail/internal/embed"
+	"github.com/zachpmanson/chainmail/internal/gmailclient"
 	"github.com/zachpmanson/chainmail/internal/mailingest"
+	"github.com/zachpmanson/chainmail/internal/media"
 	"github.com/zachpmanson/chainmail/internal/refresh"
 	"github.com/zachpmanson/chainmail/internal/spec"
 	"github.com/zachpmanson/chainmail/internal/status"
@@ -51,6 +53,10 @@ const (
 	maxRequestBody  = 1 << 20
 	maxLimit        = 200
 	defaultLimit    = 20
+	// mediaTimeout bounds one message's media pull. The work is a mailbox round
+	// trip per attachment plus a decode, so it is seconds — bounded anyway,
+	// because a request that ends must not leave a fetch half-done.
+	mediaTimeout = 2 * time.Minute
 )
 
 // Retrieval modes, spelled as GET /v1/search takes them.
@@ -91,6 +97,18 @@ type server struct {
 	// binary (see defaultSlurp), so every phase and its ordering stays there.
 	runSlurp func(ctx context.Context, corpusPath string) ([]byte, error)
 
+	// mediaEnabled enables POST /v1/media/pull: fetch the bytes behind one
+	// message's attachments, so the page can show a file instead of sending the
+	// reader to Gmail for it. Opt-in (`-media`) and off by default — same posture
+	// as -slurp, because it is the second thing here that reaches the mailbox,
+	// once per attachment part. See defaultMediaPull for what the switch crosses.
+	mediaEnabled bool
+	// runMediaPull is one message's pull, injected so the handler can be tested
+	// without a mailbox. The real one (defaultMediaPull) is the same
+	// internal/media walk the `corpus media pull` command runs, called in-process
+	// — a pull needs no phase ordering, so it needs no subprocess.
+	runMediaPull func(ctx context.Context, entry string) (media.Result, error)
+
 	specSlots chan struct{}
 	// slotWait is how long a caller waits for a slot before being told to retry.
 	slotWait  time.Duration
@@ -119,6 +137,7 @@ func (s *server) routes() http.Handler {
 	// wrong one answers with the same JSON error shape as everything else
 	// instead of ServeMux's plain text.
 	mux.HandleFunc("/v1/refresh", post(s.refresh))
+	mux.HandleFunc("/v1/media/pull", post(s.mediaPull))
 	mux.HandleFunc("/v1/ops/plan", get(s.opsPlan))
 	mux.HandleFunc("/v1/ops/merge", post(s.opsMerge))
 	mux.HandleFunc("/v1/search", get(s.search))
@@ -724,6 +743,140 @@ func siblingBin(name string) (string, error) {
 		return p, nil
 	}
 	return "", fmt.Errorf("cannot find the %q binary to run slurp; it is not beside this server and not on PATH", name)
+}
+
+// mediaPull fetches the bytes behind one message's attachments: the button
+// under a message's chips, and the only way this surface can show a file rather
+// than link back to Gmail for it.
+//
+// Opt-in and off by default, like -slurp and for the same reason. Without
+// -media the surface keeps its read-most posture and answers 403, naming the
+// switch: granting it hands a page the ability to spend mailbox round trips,
+// which is a per-host decision (see defaultMediaPull for what it crosses).
+//
+// One message per call, deliberately. Each attachment costs a mailbox round
+// trip, so the browser is the narrow end of the scope the CLI takes — a whole
+// thread is a conversation-sized decision a person makes with `corpus media
+// pull -container`, not something a page offers on one click.
+func (s *server) mediaPull(w http.ResponseWriter, r *http.Request) {
+	if !s.mediaEnabled {
+		fail(w, http.StatusForbidden, fmt.Errorf(
+			"media pulls are disabled: this server was started without -media, so it "+
+				"will not fetch attachment bytes. A restart with -media enables POST /v1/media/pull."))
+		return
+	}
+	var req mediaPullRequest
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequestBody))
+	// A misspelled field is a caller reading a different contract, and this call
+	// spends mailbox round trips — refusing is cheaper than guessing.
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		fail(w, http.StatusBadRequest, fmt.Errorf("reading the request body: %w", err))
+		return
+	}
+	entry := strings.TrimSpace(req.Entry)
+	if entry == "" {
+		fail(w, http.StatusBadRequest, errors.New(
+			"a pull needs an entry: POST /v1/media/pull takes {\"entry\": \"mail:<...>\"}, "+
+				"the extId the spec carries on the message whose files are wanted"))
+		return
+	}
+	// The entry must exist. That keeps a typo from answering "pulled nothing" as
+	// though the mailbox had said so, and it is the 404 the rest of the surface
+	// already answers with.
+	if _, err := s.store.Show(entry); err != nil {
+		failLookup(w, err)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), mediaTimeout)
+	defer cancel()
+	res, err := s.runMediaPull(ctx, entry)
+	if err != nil {
+		fail(w, http.StatusBadGateway, fmt.Errorf("media pull failed: %w", err))
+		return
+	}
+	send(w, http.StatusOK, toMediaResponse(res))
+}
+
+// mediaPullRequest is the whole of what a caller may say: which message. The
+// scope, the size cap and the image-only filter are the CLI's, and a page has
+// no business loosening them.
+type mediaPullRequest struct {
+	Entry string `json:"entry"`
+}
+
+// mediaResponse is the outcome of POST /v1/media/pull (the contract's
+// MediaPullResponse): the counts, plus one row per file, because "fetched
+// nothing" and "fetched the wrong thing" are different answers and a count
+// cannot tell them apart. A file already stored, and one already declined, are
+// absent — neither has anything left to decide.
+type mediaResponse struct {
+	Wanted  int         `json:"wanted"`
+	Pulled  int         `json:"pulled"`
+	Skipped int         `json:"skipped"`
+	Failed  int         `json:"failed"`
+	Bytes   int64       `json:"bytes"`
+	Files   []mediaFile `json:"files"`
+}
+
+// mediaFile is one attachment's outcome. Reason is the recorded word for a
+// skip; Error is what a retryable failure said, and the two are separate fields
+// because only one of them means "do not ask again".
+type mediaFile struct {
+	Name   string `json:"name"`
+	Source string `json:"source,omitempty"`
+	SHA    string `json:"sha,omitempty"`
+	Bytes  int64  `json:"bytes,omitempty"`
+	Reason string `json:"reason,omitempty"`
+	Error  string `json:"error,omitempty"`
+}
+
+// toMediaResponse is the whole mapping from the pull's result to the wire. The
+// pull's own error type is deliberately not carried through: a client cannot do
+// anything with a Go error chain, and the words are what a page can show.
+func toMediaResponse(res media.Result) mediaResponse {
+	out := mediaResponse{
+		Wanted:  res.Wanted,
+		Pulled:  res.Pulled,
+		Skipped: res.Skipped,
+		Failed:  res.Failed,
+		Bytes:   res.Bytes,
+		Files:   make([]mediaFile, 0, len(res.Items)),
+	}
+	for _, it := range res.Items {
+		f := mediaFile{Name: it.Name, Source: it.Source, SHA: it.SHA, Bytes: it.Bytes, Reason: it.Reason}
+		if it.Err != nil {
+			f.Error = it.Err.Error()
+		}
+		out.Files = append(out.Files, f)
+	}
+	return out
+}
+
+// defaultMediaPull returns the real pull: the same internal/media walk the
+// `corpus media pull` command runs, called in-process rather than as a
+// subprocess, because a pull is one library call and not a sequence of phases.
+//
+// The store is the handle this process already has open — blobs, and the reasons
+// for the files that could not be fetched, are written there (WAL) beside the
+// reader. Uploads is the archive root, where a Slack attachment's bytes live; a
+// mail part comes down the transport instead.
+//
+// The transport is deferred so that opening it fails only when a mail part is
+// actually fetched: a pull of a Slack-only message must not need a mailbox. The
+// credential is the one this unit already holds in its own HOME (the same grant
+// the ingest reads), so -media asks for no access the host had not already given
+// this user — what changes is when the fetch runs, not what it may touch.
+func defaultMediaPull(store *corpus.Store, uploads string) func(ctx context.Context, entry string) (media.Result, error) {
+	return func(ctx context.Context, entry string) (media.Result, error) {
+		return media.Pull(ctx, media.Options{
+			Store:   store,
+			Uploads: uploads,
+			Fetcher: media.Deferred(func() (media.Fetcher, error) {
+				return gmailclient.New()
+			}),
+		}, corpus.MediaScope{Entry: entry})
+	}
 }
 
 // refresh brings a page that has already been built up to date: the caller

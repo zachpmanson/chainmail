@@ -134,6 +134,9 @@ export type Stats = components["schemas"]["Stats"];
 
 export type RefreshReport = components["schemas"]["RefreshReport"];
 
+/** What one message's media pull did: the counts, and one row per file. */
+export type MediaPull = components["schemas"]["MediaPullResponse"];
+
 export type RefreshCandidate = components["schemas"]["RefreshCandidate"];
 
 export type OpsPlanResponse = components["schemas"]["OpsPlanResponse"];

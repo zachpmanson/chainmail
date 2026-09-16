@@ -124,6 +124,7 @@
       "properties": {
         "kind": { "enum": ["message", "note"], "description": "'note' is a meeting or event that never existed as an email. Omitted means message." },
         "id": { "type": "string", "description": "Stable anchor. Omit to derive from date+time+sender; content-derived ids survive inserting entries mid-trail." },
+        "extId": { "type": "string", "description": "The corpus's own handle for this entry, e.g. 'mail:<...>'. What an endpoint that acts on a message takes (GET /v1/entries/{extId}, POST /v1/media/pull). Absent on an entry the page invented; 'id' is a page anchor and will not do instead." },
         "date": { "type": "string", "description": "As displayed, e.g. 'Thu 16 Jul 2026'. Not normalised." },
         "time": { "type": "string", "description": "As displayed, e.g. '11:35'. Absent for undated notes." },
         "tz": { "type": "string", "description": "The zone this entry's clock is in, e.g. 'NZST', '+0530'. Drives absolute-time ordering. Omit rather than guess: absent means the zone is unknown and the renderer shows it as unknown." },

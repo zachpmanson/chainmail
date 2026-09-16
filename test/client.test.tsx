@@ -683,6 +683,103 @@ describe("pressing refresh on a saved page", () => {
   });
 });
 
+describe("fetching one message's files from a saved page", () => {
+  // A page with one file the corpus does not hold. The button under its chips is
+  // the only way the page can fetch it, and this is the wiring: the click names
+  // the message, and the page is re-derived so the bytes can be shown.
+  const PULL_SPEC = {
+    title: "Loom cutover",
+    messages: [
+      {
+        date: "Mon 2 Mar 2026",
+        time: "09:15",
+        sender: "Ada Byron",
+        extId: "mail:<loom-cutover-1@example.fed>",
+        body: "<p>quote attached</p>",
+        attachments: [
+          { name: "shed.csv", kind: "CSV", size: "512 B", gmailId: "19d263bb5a6b00db" },
+        ],
+      },
+    ],
+  };
+
+  const report = {
+    entriesBefore: 1,
+    entriesAfter: 1,
+    nothingNew: true,
+    chainsAdded: [],
+    chainsGrown: [],
+    chainsProposed: [],
+    unranked: [],
+  };
+
+  const handlerWith = (pull: () => Response): Handler => (c) => {
+    const p = pathOf(c);
+    if (p === "/v1/specs/loom-cutover") return json(200, PULL_SPEC);
+    if (p === "/v1/media/pull" && c.method === "POST") return pull();
+    if (p === "/v1/refresh" && c.method === "POST") return json(200, { spec: PULL_SPEC, report });
+    return json(500, { error: `unexpected call to ${c.method} ${p}` });
+  };
+
+  it("asks for that message's files, then re-derives the page over them", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    handler = handlerWith(() =>
+      json(200, {
+        wanted: 2,
+        pulled: 1,
+        skipped: 1,
+        failed: 0,
+        bytes: 512,
+        files: [
+          { name: "shed.csv", source: "mail", sha: "sha-of-the-bytes", bytes: 512 },
+          { name: "roof.mp4", source: "mail", reason: "too_large" },
+        ],
+      }),
+    );
+    await mountApp("/view/loom-cutover");
+    await screen.findByText("Loom cutover");
+
+    click(screen.getByRole("button", { name: /fetch files/ }));
+
+    // The pull writes into the corpus and the page is a picture of the corpus,
+    // so the file appears by rebuilding the page — in that order, and without a
+    // slurp, because nothing here asked the mailbox for mail.
+    await waitFor(() =>
+      expect(calls.filter((c) => c.method === "POST").map(pathOf)).toEqual([
+        "/v1/media/pull",
+        "/v1/refresh",
+      ]),
+    );
+    const pull = calls.find((c) => pathOf(c) === "/v1/media/pull")!;
+    expect(JSON.parse(pull.body!)).toEqual({ entry: "mail:<loom-cutover-1@example.fed>" });
+
+    // A file that did not arrive is the reason the console is worth reading: the
+    // page cannot show what is not there, and a count alone would not say why.
+    await waitFor(() =>
+      expect(log.mock.calls.map((c) => c[0]).join("\n")).toMatch(/roof\.mp4: too_large/),
+    );
+  });
+
+  it("says so on a host that will not fetch, and leaves the page alone", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    handler = handlerWith(() =>
+      json(403, {
+        error: "media pulls are disabled: this server was started without -media, so it will not fetch attachment bytes.",
+      }),
+    );
+    await mountApp("/view/loom-cutover");
+    await screen.findByText("Loom cutover");
+
+    click(screen.getByRole("button", { name: /fetch files/ }));
+
+    await waitFor(() =>
+      expect(err).toHaveBeenCalledWith(expect.stringMatching(/no media fetch on this host/)),
+    );
+    // Nothing changed in the corpus, so nothing needs redrawing.
+    expect(calls.some((c) => pathOf(c) === "/v1/refresh")).toBe(false);
+  });
+});
+
 describe("adding another email to a page", () => {
   it("searches the corpus from the toolbar and adds the chosen chain by accept", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
