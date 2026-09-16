@@ -418,16 +418,24 @@ describe("the home page with no query", () => {
     await waitFor(() => expect(document.body.classList.contains("inbox")).toBe(false));
   });
 
-  it("reads the newest chain in the pane before a row is clicked", async () => {
+  it("starts with the pane empty, and fills it from the row that is clicked", async () => {
     handler = buildHandler;
     await mountApp("/");
-    // The row, not the text: the pane is already showing the same subject, and a
-    // duplicate on screen is the point of the layout.
     await screen.findByRole("button", { name: "Fence panels" });
 
     // A pane beside the list, not a modal over it: nothing was opened, and the
     // list is still there to be read.
     expect(screen.queryByRole("dialog")).toBeNull();
+    // Nothing is open until something is chosen. No row is current, the pane
+    // holds no thread, and it says so rather than filling itself in with the top
+    // of the list — that would be a thread the reader has to dismiss.
+    expect(
+      screen.getByRole("button", { name: "Fence panels" }).getAttribute("aria-current"),
+    ).toBeNull();
+    expect(within(pane()).getByText(/Nothing open/)).toBeTruthy();
+    expect(pane().querySelector(".msg")).toBeNull();
+
+    click(screen.getByRole("button", { name: "Fence panels" }));
     await waitFor(() =>
       expect(within(pane()).getByText(/and the gate needs a new hinge/)).toBeTruthy(),
     );
@@ -435,6 +443,34 @@ describe("the home page with no query", () => {
     expect(
       screen.getByRole("button", { name: "Fence panels" }).getAttribute("aria-current"),
     ).toBe("true");
+  });
+
+  it("empties the pane when the open row is clicked a second time", async () => {
+    handler = buildHandler;
+    const router = await mountApp("/");
+    await screen.findByText("Loom cutover schedule");
+
+    click(screen.getByRole("button", { name: "Loom cutover schedule" }));
+    await waitFor(() =>
+      expect(within(pane()).getByText(/Roof access is fine from the 14th/)).toBeTruthy(),
+    );
+
+    click(screen.getByRole("button", { name: "Loom cutover schedule" }));
+    await waitFor(() => expect(pane().querySelector(".msg")).toBeNull());
+    // The address lets go of it as well: closing is a state a reload lands on,
+    // the same way opening is.
+    expect(router.state.location.search.open).toBeUndefined();
+    expect(
+      screen.getByRole("button", { name: "Loom cutover schedule" }).getAttribute("aria-current"),
+    ).toBeNull();
+    expect(within(pane()).getByText(/Nothing open/)).toBeTruthy();
+
+    // And clicking a different row still opens that one — the second click closed
+    // the row it was on, it did not turn the pane off.
+    click(screen.getByRole("button", { name: "Fence panels" }));
+    await waitFor(() =>
+      expect(within(pane()).getByText(/and the gate needs a new hinge/)).toBeTruthy(),
+    );
   });
 
   it("swaps the pane when another row is clicked", async () => {
@@ -549,16 +585,17 @@ describe("the home page with no query", () => {
     click(within(pane()).getByRole("button", { name: /List/ }));
     await waitFor(() => expect(router.state.location.search).not.toMatchObject({ open: expect.anything() }));
 
-    // Back to the default reading: the newest thread, with nobody having picked.
-    await waitFor(() =>
-      expect(within(pane()).getByText(/and the gate needs a new hinge/)).toBeTruthy(),
-    );
+    // Back to nothing open: the list is a list, and the pane is not showing a
+    // thread nobody chose.
+    await waitFor(() => expect(pane().querySelector(".msg")).toBeNull());
+    expect(within(pane()).getByText(/Nothing open/)).toBeTruthy();
   });
 
   it("draws the thread with the transcript's own message component", async () => {
     handler = buildHandler;
     await mountApp("/");
-    await screen.findByText("Loom cutover schedule");
+    await screen.findByText("Fence panels");
+    click(screen.getByRole("button", { name: "Fence panels" }));
 
     // The page's classes, not the pane's own: one component draws a message in
     // both places, so the bubble, the header and its receipt are the same boxes.
@@ -575,8 +612,8 @@ describe("the home page with no query", () => {
 
   it("names the sender's address on hover, and only where the entry has one", async () => {
     handler = buildHandler;
-    await mountApp("/");
-    await screen.findByText("Loom cutover schedule");
+    await mountApp("/?open=mail%3A%3Cfence-panel-9%40example.fed%3E");
+    await screen.findByText("Fence panels", { selector: ".ibsubj" });
 
     // The name and the avatar both say who this is: "Ada Okoye" alone is a name
     // the reader cannot check against anything.
@@ -1181,8 +1218,11 @@ describe("the border's own idea of where it is", () => {
  * about them.
  */
 describe("the reader's own messages in the pane", () => {
-  const READER = "mail:<fence-panel-9@example.fed>"; // CHAINS[0], so the pane opens on it
+  const READER = "mail:<fence-panel-9@example.fed>"; // CHAINS[0]; opened by its row
   const READER_ADDR = "ada@okoye.example";
+  /** The address that reads the reader's own chain: the pane starts empty now, so
+   *  a test about what the pane draws has to say which chain is open. */
+  const OPEN_READER = `/?open=${encodeURIComponent(READER)}`;
 
   /** The settings API as the server behaves: a field the body names is written,
    *  a field it does not name is left as it stands, and the addresses are tidied
@@ -1252,7 +1292,7 @@ describe("the reader's own messages in the pane", () => {
 
   it("tints the reader's own bubble, and only that one", async () => {
     handler = mineHandler({ me: [READER_ADDR] });
-    await mountApp("/");
+    await mountApp(OPEN_READER);
     await waitFor(() => expect(pane().querySelectorAll(".msg")).toHaveLength(2));
 
     // One of the two, and it is the reader's: the mark lands by who wrote the
@@ -1270,7 +1310,7 @@ describe("the reader's own messages in the pane", () => {
 
   it("marks nothing for a reader who has never named an address", async () => {
     handler = mineHandler({});
-    await mountApp("/");
+    await mountApp(OPEN_READER);
     // The pane has drawn the whole thread, so an empty mark is a claim about
     // what is on screen rather than about what was fetched.
     await waitFor(() => expect(pane().querySelectorAll(".msg")).toHaveLength(2));
@@ -1279,7 +1319,7 @@ describe("the reader's own messages in the pane", () => {
 
   it("keeps the addresses as a setting, and marks the pane from the stored one", async () => {
     handler = mineHandler({});
-    await mountApp("/");
+    await mountApp(OPEN_READER);
     await screen.findByRole("button", { name: "Fence panels" });
     click(screen.getByLabelText("Select Fence panels"));
 
