@@ -19,41 +19,11 @@
   background:var(--mine); color:var(--fg); cursor:pointer; }
 .selform button:disabled, .selbuild button:disabled, .navsearch button:disabled { opacity:.45; cursor:default; }
 
-.sellist { list-style:none; margin:.8rem 0 0; padding:0; border:1px solid var(--line);
-  border-radius:9px; background:var(--card); overflow:hidden; }
-.selrow { display:flex; align-items:center; gap:.4rem; }
-.selrow + .selrow { border-top:1px solid var(--line); }
-/* The candidate the pane is reading. The same left rule the inbox's open row
-   carries, so "this is the one on the right" reads the same on both pages. No
-   background: a row can already be a strong match (`selhot`), and the mark has
-   to be the one thing that never varies. */
-.selrow.sel { box-shadow:inset 2px 0 0 var(--accent); }
-.selrow > .chk { display:flex; gap:.5rem; padding:.5rem .7rem; cursor:pointer;
-  flex:1 1 auto; min-width:0; }
-.selrow:hover { background:var(--quote); }
-/* The row's preview button: pinned to the right edge, out of the checkbox's
-   hit area. Kept quiet until hovered so the metadata stays the row's voice. */
-.selpvbtn { font:inherit; font-size:.72rem; font-weight:650; margin-right:.5rem;
-  padding:.3rem .6rem; border:1px solid var(--line); border-radius:6px;
-  background:var(--card); color:var(--muted); cursor:pointer; white-space:nowrap; }
-.selpvbtn:hover { color:var(--accent); border-color:var(--accent); }
-/* A strong semantic match: the row carries the highlight and the badge stays
-   readable under it. The colour is the search page's way of saying "this is
-   above the relevance floor" — same 0.8 refresh holds proposals to. */
-.selhot { background:color-mix(in srgb, var(--strong) 14%, var(--bg)); }
-.selhot > .chk:hover { background:color-mix(in srgb, var(--strong) 20%, var(--quote)); }
-.selshot { display:inline-block; margin-left:.35rem; font-size:.62rem; font-weight:700;
-  text-transform:uppercase; letter-spacing:.06em; color:var(--strong);
-  border:1px solid var(--strong); border-radius:999px; padding:0 .35rem .05rem; }
-.selsim { color:var(--strong); font-weight:600; }
-.seld { display:flex; flex-direction:column; gap:.12rem; min-width:0; }
-.selsub { font-size:.88rem; font-weight:650; overflow-wrap:anywhere; }
-.selmeta { display:flex; flex-wrap:wrap; gap:.75rem; font-size:.7rem; color:var(--muted); }
-/* The ratio carries the judgement the person is being asked to make, so it is
-   the one piece of metadata not greyed down to the others' weight. */
-.selratio { color:var(--fg); font-weight:650; }
-.selppl { font-weight:600; }
-.selsrc { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+/* The ranked list is the inbox's list (see .iblist and .ibrow): same rows, same
+   classes, because a chain is a chain whether it was browsed to or searched for.
+   What a ranked row adds is its meta line, and nothing here describes a row of
+   its own — this file's own history had one, and it is what made the same
+   conversation look like two products. */
 
 .selbuild { border-top:1px solid var(--line); padding-top:.7rem; margin-top:.9rem; }
 .selnote { font-size:.78rem; color:var(--muted); margin:.5rem 0 0; flex:1 1 100%; }
@@ -64,7 +34,13 @@
   letter-spacing:.08em; color:crimson; }
 
 /* Chain preview modal. Same dimmed-backdrop family as the proposal evaluator:
-   the page stays visible while a candidate chain is read as data. */
+   the page stays visible while a candidate chain is read as data. Its button is
+   the one that opens it — the refresh dialog's proposal cards, which have no pane
+   beside them to open a chain into. */
+.selpvbtn { font:inherit; font-size:.72rem; font-weight:650; margin-right:.5rem;
+  padding:.3rem .6rem; border:1px solid var(--line); border-radius:6px;
+  background:var(--card); color:var(--muted); cursor:pointer; white-space:nowrap; }
+.selpvbtn:hover { color:var(--accent); border-color:var(--accent); }
 .selpv { position:fixed; inset:0; z-index:55; background:rgba(0,0,0,.45);
   display:flex; align-items:center; justify-content:center; }
 .selpv-panel { background:var(--card); border:1px solid var(--line); border-radius:8px;
@@ -256,8 +232,28 @@
   background:var(--accent); color:var(--card); font-variant-numeric:tabular-nums; }
 .ibrow.unread .ibsubj { font-weight:650; }
 .ibrow.unread .ibwho { font-weight:750; }
-.ibcount { margin-left:auto; flex:none; font-size:.68rem; font-weight:700;
+.ibcount { font-weight:700; }
+/* The tail of the subject line: how many people the chain holds, and how many
+   messages. Both are counts a reader picks by, so both are numbers wearing their
+   glyph — a person and an envelope — rather than words, because a row is scanned
+   down rather than read across. The group takes the free space, so the pair stays
+   together at the right edge whether or not the message count is drawn, and the
+   people count is on every row on every page: it is a fact about the chain, not
+   about the search that found it. */
+.ibtail { margin-left:auto; flex:none; display:flex; align-items:center; gap:.5rem; }
+.ibppl, .ibcount { display:inline-flex; align-items:center; gap:.2rem; font-size:.68rem;
   color:var(--muted); font-variant-numeric:tabular-nums; }
+.ibppl svg, .ibcount svg { flex:none; opacity:.75; }
+/* What only a ranked row knows: the similarity and the match, under the snippet
+   rather than in place of the row. Nothing else is added here — a chain's date
+   span and its sources are facts the same chain would show on the inbox, and a
+   list that changes vocabulary when you search it is what this replaced. */
+.ibmeta { grid-area:4/1 / 4/3; display:flex; flex-wrap:wrap; gap:.6rem;
+  font-size:.7rem; color:var(--muted); }
+/* The ratio carries the judgement the reader is being asked to make, so it is the
+   one piece of the meta line not greyed down to the others' weight. */
+.ibrank { color:var(--fg); font-weight:650; }
+.ibsim { color:var(--strong); font-weight:600; }
 /* One line, elided: a preview is a hint about what the message says, and a
    paragraph of it would push the next row off the screen. */
 .ibsnippet { grid-area:3/1 / 3/3; font-size:.78rem; color:var(--muted);
