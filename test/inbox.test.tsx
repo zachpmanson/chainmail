@@ -873,43 +873,56 @@ describe("the default folder", () => {
  * class, which is what the splitter itself reads: the split's width is what the
  * pane is left with, and the column's is where the arrow keys start.
  */
-describe("resizing the panels", () => {
-  const WIDE = 1200;
-  const MIN = 15 * 16; // the list's floor
-  const MOST = WIDE - 26 * 16; // and what leaves the pane its own minimum
-  let restore: (() => void) | null;
+// The rects the splitter reads, supplied by hand: jsdom lays nothing out. The
+// stub answers by class, which is what the component itself asks — the split's
+// width is what the pane is left with, and the column's is where the border is.
+const WIDE = 1200;
+const MIN = 15 * 16; // the list's floor
+const MOST = WIDE - 26 * 16; // and what leaves the pane its own minimum
+let restoreRects: (() => void) | null;
 
-  const stubLayout = (column = 300) => {
-    const real = Element.prototype.getBoundingClientRect;
-    const box = (w: number) =>
-      ({
-        x: 0,
-        y: 0,
-        left: 0,
-        top: 0,
-        right: w,
-        bottom: 100,
-        width: w,
-        height: 100,
-        toJSON: () => ({}),
-      }) as DOMRect;
-    Element.prototype.getBoundingClientRect = function (this: Element) {
-      if (this.classList?.contains("ibsplit")) return box(WIDE);
-      if (this.classList?.contains("ibcol")) return box(column);
-      return real.call(this);
-    };
-    restore = () => {
-      Element.prototype.getBoundingClientRect = real;
-      restore = null;
-    };
+const stubLayout = (column = 300) => {
+  let list = column;
+  const real = Element.prototype.getBoundingClientRect;
+  const box = (w: number) =>
+    ({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: w,
+      bottom: 100,
+      width: w,
+      height: 100,
+      toJSON: () => ({}),
+    }) as DOMRect;
+  Element.prototype.getBoundingClientRect = function (this: Element) {
+    if (this.classList?.contains("ibsplit")) return box(WIDE);
+    if (this.classList?.contains("ibcol")) return box(list);
+    return real.call(this);
   };
+  restoreRects = () => {
+    Element.prototype.getBoundingClientRect = real;
+    restoreRects = null;
+  };
+  // The grid can hand the column a different width at any moment — a reset does
+  // exactly that — so a test can too.
+  return {
+    setColumn: (px: number) => {
+      list = px;
+    },
+  };
+};
 
+const border = () => screen.getByRole("separator", { name: "Resize the list" });
+
+/** The width the list is being drawn at, or "" when the grid still decides. */
+const listw = () =>
+  (document.querySelector(".ibsplit") as HTMLElement).style.getPropertyValue("--listw");
+
+describe("resizing the panels", () => {
   beforeEach(() => localStorage.clear());
-  afterEach(() => restore?.());
-
-  const border = () => screen.getByRole("separator", { name: "Resize the list" });
-  const listw = () =>
-    (document.querySelector(".ibsplit") as HTMLElement).style.getPropertyValue("--listw");
+  afterEach(() => restoreRects?.());
 
   it("moves the border, and the list with it", async () => {
     stubLayout();
@@ -996,5 +1009,24 @@ describe("resizing the panels", () => {
     // And a key the separator does not take moves nothing.
     fireEvent.keyDown(border(), { key: "PageDown" });
     expect(listw()).toBe(`${MIN}px`);
+  });
+});
+
+describe("the border's own idea of where it is", () => {
+  // A width another test stored would be read as this reader's choice, which is
+  // the whole point of storing it.
+  beforeEach(() => localStorage.clear());
+  afterEach(() => restoreRects?.());
+
+  it("follows the layout when the layout changes", async () => {
+    const layout = stubLayout(300);
+    handler = buildHandler;
+    await mountApp("/");
+    await screen.findByText("Loom cutover schedule");
+    await waitFor(() => expect(border().getAttribute("aria-valuenow")).toBe("300"));
+
+    layout.setColumn(380);
+    fireEvent.keyDown(border(), { key: "ArrowRight" });
+    expect(listw()).toBe("396px");
   });
 });

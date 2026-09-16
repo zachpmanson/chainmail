@@ -299,10 +299,14 @@ export function Inbox() {
   // `listw` is what the reader chose, and null means they never did — which is
   // the layout's own width for the screen, a different thing from a width anyone
   // picked, and the reason the splitter can be reset rather than only moved.
-  // `measured` is what the column actually is: the arrow keys and the
-  // separator's own value have to start wherever the layout put it, and the CSS
-  // maximum is not knowable from here. Both are re-read on a resize, because a
-  // width that was fine in the old window can be too much for the new one.
+  //
+  // What the layout is *now* is read where it is needed rather than kept: a
+  // measurement taken at mount is wrong the moment a reset hands the width back
+  // to the grid, and the arrow keys then start from a width the list no longer
+  // has. jsdom cannot see that — it lays nothing out — and a real browser caught
+  // it, one key press away: ArrowRight from the default moved the border to 256
+  // instead of 400. `remeasure` is only what makes React ask again when the
+  // window changes size.
   const split = useRef<HTMLDivElement>(null);
   const column = useRef<HTMLDivElement>(null);
   const [listw, setListw] = useState<number | null>(readListWidth);
@@ -310,18 +314,16 @@ export function Inbox() {
   // drag was subscribed when the drag started and closes over the width from that
   // render, which is the one thing it cannot be trusted with.
   const latest = useRef<number | null>(listw);
-  const [measured, setMeasured] = useState(0);
   const [dragging, setDragging] = useState(false);
+  const [, remeasure] = useState(0);
   useEffect(() => {
-    const measure = () => {
-      const el = column.current;
-      if (el) setMeasured(el.getBoundingClientRect().width);
-    };
-    measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
+    const again = () => remeasure((n) => n + 1);
+    window.addEventListener("resize", again);
+    return () => window.removeEventListener("resize", again);
   }, []);
   const room = () => split.current?.getBoundingClientRect().width ?? 0;
+  /** The list column as it is drawn: the width the reader chose, or the grid's. */
+  const drawn = () => column.current?.getBoundingClientRect().width ?? 0;
   // A width the reader chose is held to what this window can afford: it was
   // dragged on some other screen, and the one they are in now may be narrower.
   const width = listw === null ? null : clampListWidth(listw, room());
@@ -373,7 +375,8 @@ export function Inbox() {
   }, [dragging]);
 
   const onKeyDown = (ev: React.KeyboardEvent) => {
-    const here = listw ?? measured;
+    // From where the border is, not from where it was when the page loaded.
+    const here = listw ?? drawn();
     const { lo, hi } = bounds();
     if (ev.key === "ArrowLeft") apply(Math.max(lo, here - LIST_STEP));
     else if (ev.key === "ArrowRight") apply(Math.min(hi, here + LIST_STEP));
@@ -573,7 +576,7 @@ export function Inbox() {
           role="separator"
           aria-orientation="vertical"
           aria-label="Resize the list"
-          aria-valuenow={width ?? Math.round(measured)}
+          aria-valuenow={Math.round(width ?? drawn())}
           aria-valuemin={LIST_MIN}
           aria-valuemax={Math.round(bounds().hi)}
           title="Drag to resize the list — double-click to reset"
