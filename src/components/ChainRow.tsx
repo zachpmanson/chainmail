@@ -36,12 +36,25 @@ export function chainSimilarity(chain: ChainHit): number {
   return best;
 }
 
+/** The span between the ends of a chain — the first message and the last — or
+ *  the one date when it never got a reply. Days rather than timestamps: a chain
+ *  is judged over weeks, and the clock is on the newest message in the row's own
+ *  head. Undated is said rather than left blank, because an empty range reads as
+ *  a range that failed to load. */
+export function spanOf(chain: ChainHit): string {
+  const day = (t?: string) => (t ? t.slice(0, 10) : "");
+  const a = day(chain.first);
+  const b = day(chain.last);
+  if (!a && !b) return "undated";
+  if (!b || a === b) return a || b;
+  return `${a} – ${b}`;
+}
+
 /**
  * What a ranked row says that a browsed one cannot: how much of the chain the
- * query found, and how close it scored. Two chips and nothing else — a candidate
- * with a date span and a source list was carrying facts the same chain would not
- * show on the inbox, and a list that changes vocabulary when you search it is the
- * thing this replaced.
+ * query found, how close it scored, and how long the thread ran — the last at the
+ * far end of the line, under everything else, because it is the one fact here
+ * that is about the thread rather than about the search.
  */
 export function RankMeta({ chain }: { chain: ChainHit }) {
   const sim = chainSimilarity(chain);
@@ -55,6 +68,9 @@ export function RankMeta({ chain }: { chain: ChainHit }) {
           sim {sim.toFixed(2)}
         </span>
       ) : null}
+      <span className="ibspan" title="the thread's first and last message">
+        {spanOf(chain)}
+      </span>
     </>
   );
 }

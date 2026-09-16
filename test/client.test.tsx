@@ -292,8 +292,12 @@ describe("searching for chains", () => {
     const meta = row.querySelector(".ibmeta")!;
     expect(meta.textContent).toContain("3 of 4 matched");
     expect(meta.textContent).toContain("sim 0.83");
-    expect(meta.textContent).not.toContain("2026-03-02");
-    expect(meta.textContent).not.toContain("mail");
+    // The thread's own span, at the far end of the line and so at the bottom
+    // right of the row: the one fact here that is about the conversation rather
+    // than about the search that found it.
+    const span = meta.querySelector(".ibspan")!;
+    expect(span.textContent).toBe("2026-03-02 – 2026-03-11");
+    expect(meta.lastElementChild).toBe(span);
     expect(row.querySelector(".selpvbtn")).toBeNull();
     // the same numerator over a different chain size — the ratio is what
     // separates a thread about the query from one that mentioned it
