@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { $api, type ChainHit, type EntryHit } from "../lib/api";
 import { useBuildPage } from "../lib/build";
+import { whenShort } from "../lib/stamp";
 import {
   LIST_MIN,
   LIST_STEP,
@@ -33,30 +34,6 @@ import { Failure, type PreviewableChain } from "./ChainPreview";
 /** Rows per page. Wide enough that the first screen is a real list, narrow
  * enough that a page is read rather than scrolled past. */
 const PAGE = 50;
-
-/**
- * A row's date, written the way a mail client writes one: the clock for today,
- * "Yesterday", then the day and month — the year only when it is not this one, so
- * a row from March does not read as this March. Local time throughout: the
- * stamps on the wire are UTC, and a person reads their own clock.
- */
-export function whenShort(stamp?: string, now = new Date()): string {
-  if (!stamp) return "";
-  const d = new Date(stamp);
-  if (Number.isNaN(d.getTime())) return stamp;
-  const clock = d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-  const same = (a: Date, b: Date) =>
-    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-  if (same(d, now)) return clock;
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
-  if (same(d, yesterday)) return "Yesterday";
-  return d.toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    ...(d.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
-  });
-}
 
 /**
  * The newest entry of a chain, which is what a row is a summary of: who wrote

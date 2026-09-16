@@ -1,4 +1,5 @@
 import { $api, type ServiceStatus, type Stats } from "../lib/api";
+import { when } from "../lib/stamp";
 
 function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -26,19 +27,6 @@ function OneRow({ svc }: { svc: ServiceStatus }) {
       {svc.detail ? <span className="stdetail">{svc.detail}</span> : null}
     </li>
   );
-}
-
-/** A UTC RFC3339 stamp shown in the reader's own local time: date and clock,
- *  year dropped when it is the current one, so a recent check reads fresh. */
-function when(stamp: string): string {
-  const d = new Date(stamp);
-  if (Number.isNaN(d.getTime())) return stamp;
-  const nowY = new Date().getFullYear();
-  const date = d.getFullYear() === nowY
-    ? d.toLocaleDateString(undefined, { day: "numeric", month: "short" })
-    : d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
-  const t = d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-  return `${date}, ${t}`;
 }
 
 function CorpusStats({ s }: { s: Stats }) {
