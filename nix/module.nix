@@ -33,6 +33,12 @@ self: { config, lib, pkgs, ... }:
 
 let
   cfg = config.services.chainmail;
+  # The revision this build came from, for the page's deploy stamp. `self` is this
+  # flake, and the machine config pins it by rev, so this is the commit that is
+  # running — the same value the deployment lock holds. A dirty or tarball source
+  # has no rev, and then the flag is dropped and the header shows no stamp rather
+  # than a wrong commit.
+  rev = self.shortRev or self.dirtyShortRev or "";
 in {
   options.services.chainmail = {
     enable = lib.mkEnableOption "chainmail server";
@@ -153,6 +159,7 @@ in {
         ExecStart = "${cfg.package}/bin/chainmail-server " +
           "-addr 127.0.0.1:${toString cfg.port} " +
           "-corpus ${cfg.corpus}" +
+          lib.optionalString (rev != "") " -rev ${rev}" +
           lib.optionalString (cfg.uploads != "") " -uploads ${cfg.uploads}" +
           lib.optionalString cfg.enableSlurp (
             " -slurp -slurp-timeout ${cfg.slurpTimeout}") +

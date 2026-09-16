@@ -280,6 +280,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/version": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What is running, and since when.
+         * @description The deploy stamp: the revision this process was built from and when it started. Served rather than baked into the bundle, because the bundle is byte-identical across deploys of one revision — a stamp built into it could not tell "the new code is live" from "this tab is still the old build", which is the only question it answers. A changed startedAt with an unchanged rev is a restart, not a deploy. rev is omitted when nobody told the process which revision it is (a `go run` under the devshell), because a stamp naming the wrong commit is worse than no stamp.
+         */
+        get: operations["getVersion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/settings": {
         parameters: {
             query?: never;
@@ -662,6 +682,13 @@ export interface components {
         LabelsResponse: {
             /** @description Busiest first, ties broken by name so two reads of an unchanged corpus agree. */
             labels: components["schemas"]["LabelSummary"][];
+        };
+        /** @description The deploy stamp: what is running and since when, for the header. */
+        VersionResponse: {
+            /** @description The revision this process was built from. Absent when nobody told the process which revision it is — the header then shows no stamp, rather than a commit this code cannot know. */
+            rev?: string;
+            /** @description When this process came up, RFC 3339 in UTC. For a deploy that is when it went live; a changed value with an unchanged rev is a restart. */
+            startedAt: string;
         };
         /** @description One folder: a label the mailbox put on a message, and how many messages carry it. */
         LabelSummary: {
@@ -1129,6 +1156,11 @@ export interface components {
                  * @enum {string}
                  */
                 open?: "popup" | "download";
+                /**
+                 * @description How the bytes are shown in the window over the page: an image, a block of text, a framed PDF. Decided by the server from the stored MIME, like open and for the same reason — the renderers must not be able to drift. Empty when the file can only be taken rather than looked at, which is most formats. Not derived from open: a PDF downloads on click and still shows in the window.
+                 * @enum {string}
+                 */
+                view?: "image" | "text" | "pdf";
                 /** @description Why the corpus does not hold these bytes, recorded when a pull decided it never will: too large, gone from the sender's copy, nothing to fetch by. Present means the file is not coming, so a page can explain the chip and stop offering to fetch it. The value is the corpus's own word; the page owns the phrasing. */
                 skip?: string;
                 previewW?: number;
@@ -1691,6 +1723,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LabelsResponse"];
+                };
+            };
+        };
+    };
+    getVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The deploy stamp. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VersionResponse"];
                 };
             };
         };

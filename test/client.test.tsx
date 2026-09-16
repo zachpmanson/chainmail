@@ -94,6 +94,11 @@ beforeEach(() => {
       input instanceof Request ? input : new Request(new URL(String(input), location.href), init);
     const call: Call = { url: req.url, method: req.method };
     if (req.method !== "GET") call.body = await req.text();
+    // The nav's deploy stamp asks /v1/version on every route. No test in this
+    // file is about it (see deploy.test.tsx), and a stamp rendered into the nav
+    // of every other test would answer a question they did not ask — so it is
+    // answered here, and not recorded as one of their calls.
+    if (new URL(call.url).pathname === "/v1/version") return json(200, {});
     calls.push(call);
     return handler(call);
   });
