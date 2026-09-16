@@ -58,8 +58,17 @@
     background:var(--card); color:var(--fg); }
   /* The app's own pages are workspaces, not documents: an inbox is a list and a
      reading pane, and both want the width the window has. Anything not named
-     here — a 404, a dropped spec — keeps the measure above. */
-  .wrap.selwrap, .wrap.ibwrap, .wrap.statuswrap, .wrap.opswrap { max-width:none; }
+     here — a 404, a dropped spec — keeps the measure above.
+
+     `width:100%` and no auto margins, because `max-width:none` alone was not
+     enough. The inbox's shell is a flex column (it has to be, to cap the app at
+     the window), and a flex item with `margin:0 auto` is sized to its *content* —
+     so the width of this page depended on how long the longest subject line
+     happened to be. Measured at 3440px with a folder of eight short rows: the
+     page started 257px in and ended 257px short, and no amount of `max-width:
+     none` could say otherwise. The same rule broke four document pages (#125). */
+  .wrap.selwrap, .wrap.ibwrap, .wrap.statuswrap, .wrap.opswrap {
+    max-width:none; width:100%; margin-left:0; margin-right:0; }
   header.sitehead .sep { margin:0 .45rem; color:var(--line); }
   /* The site's name, and the link home: it is the one nav item that is not a
      page, so it is weighted like a title and sits in the same bar. */
