@@ -610,7 +610,7 @@ func (s *server) savedSpec(w http.ResponseWriter, r *http.Request) {
 			"name %q: use letters, digits, '.' '_' '-' (no slashes, no '..')", name))
 		return
 	}
-	blob, err := os.ReadFile(filepath.Join(s.specs, name+".json"))
+	blob, err := s.readSpec(name)
 	if err != nil {
 		if os.IsNotExist(err) {
 			fail(w, http.StatusNotFound, fmt.Errorf(
@@ -621,6 +621,13 @@ func (s *server) savedSpec(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	send(w, http.StatusOK, json.RawMessage(blob))
+}
+
+// readSpec is the bytes of a saved page: the read half of saveSpec, shared by
+// GET /v1/specs/{name} and by a pull that has to bring the page it was asked
+// for up to date.
+func (s *server) readSpec(name string) ([]byte, error) {
+	return os.ReadFile(filepath.Join(s.specs, name+".json"))
 }
 
 // savedSpecs is the index half of the specs dir: every page POST /v1/spec
@@ -827,6 +834,13 @@ func (s *server) mediaPull(w http.ResponseWriter, r *http.Request) {
 				"the extId the spec carries on the message whose files are wanted"))
 		return
 	}
+	// The page name is a path segment on the way back out, so it is checked
+	// before any bytes are spent rather than when the rebuild tries to write.
+	if req.Name != "" && !validSpecName(req.Name) {
+		fail(w, http.StatusBadRequest, fmt.Errorf(
+			"name %q: use letters, digits, '.' '_' '-' (no slashes, no '..')", req.Name))
+		return
+	}
 	// The entry must exist. That keeps a typo from answering "pulled nothing" as
 	// though the mailbox had said so, and it is the 404 the rest of the surface
 	// already answers with.
@@ -834,21 +848,64 @@ func (s *server) mediaPull(w http.ResponseWriter, r *http.Request) {
 		failLookup(w, err)
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), mediaTimeout)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), mediaTimeout)
 	defer cancel()
+	started := time.Now()
 	res, err := s.runMediaPull(ctx, entry)
 	if err != nil {
 		fail(w, http.StatusBadGateway, fmt.Errorf("media pull failed: %w", err))
 		return
 	}
-	send(w, http.StatusOK, toMediaResponse(res))
+	// The journal keeps the trace the browser cannot be relied on for. A pull
+	// spends mailbox round trips, and whoever asked for it may already have
+	// navigated away — so "did it run, and what did it say" has to be
+	// answerable from the host, the same way a spec build is.
+	log.Printf("media: %s wanted=%d pulled=%d skipped=%d failed=%d in %s",
+		entry, res.Wanted, res.Pulled, res.Skipped, res.Failed,
+		time.Since(started).Round(time.Millisecond))
+	for _, it := range res.Items {
+		switch {
+		case it.Reason != "":
+			log.Printf("media: %s: %s declined: %s", entry, it.Name, it.Reason)
+		case it.Err != nil:
+			log.Printf("media: %s: %s failed: %v", entry, it.Name, it.Err)
+		}
+	}
+	out := toMediaResponse(res)
+	// A page that asked for files is handed its page back up to date, here
+	// rather than in the browser: the bytes are only visible on a re-derived
+	// page, and the one who pressed the button may have reloaded, navigated or
+	// closed the tab by now. The spec is read from disk — the saved page is
+	// this call's subject, so the server needs nothing from the client but its
+	// name, and a caller that vanishes still leaves the page correct.
+	if req.Name != "" {
+		if blob, err := s.readSpec(req.Name); err != nil {
+			log.Printf("media: %s: page %q: %v", entry, req.Name, err)
+		} else {
+			page := refreshRequest{Name: req.Name}
+			if err := json.Unmarshal(blob, &page.Spec); err != nil {
+				log.Printf("media: %s: page %q: reading the saved spec: %v", entry, req.Name, err)
+			} else if next, rep, err := s.rebuildPage(page); err != nil {
+				// The pull succeeded and the bytes are in the corpus; a page that
+				// would not re-derive is this call's bad news, not a failed
+				// fetch, and the client still has its own refresh to fall back on.
+				log.Printf("media: %s: page %q: %v", entry, req.Name, err)
+			} else {
+				report := toRefreshReport(rep)
+				out.Spec, out.Report = &next, &report
+			}
+		}
+	}
+	send(w, http.StatusOK, out)
 }
 
-// mediaPullRequest is the whole of what a caller may say: which message. The
-// scope, the size cap and the image-only filter are the CLI's, and a page has
-// no business loosening them.
+// mediaPullRequest is what a caller may say: which message, and — when the
+// reader is looking at a saved page — which page to bring up to date once the
+// bytes land. The scope, the size cap and the image-only filter are the CLI's,
+// and a page has no business loosening them.
 type mediaPullRequest struct {
 	Entry string `json:"entry"`
+	Name  string `json:"name,omitempty"`
 }
 
 // mediaResponse is the outcome of POST /v1/media/pull (the contract's
@@ -863,6 +920,12 @@ type mediaResponse struct {
 	Failed  int         `json:"failed"`
 	Bytes   int64       `json:"bytes"`
 	Files   []mediaFile `json:"files"`
+	// The page this pull brought up to date, when the caller named one. Absent
+	// for a call that named no page, and absent when the rebuild could not run
+	// — the bytes are stored either way, and a client that wants the page can
+	// still ask POST /v1/refresh for it.
+	Spec   *spec.Spec     `json:"spec,omitempty"`
+	Report *refreshReport `json:"report,omitempty"`
 }
 
 // mediaFile is one attachment's outcome. Reason is the recorded word for a
@@ -975,6 +1038,40 @@ func (s *server) refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	next, rep, err := s.rebuildPage(req)
+	if err != nil {
+		// The failure is either the previous spec not being reproducible —
+		// nothing recorded to re-run, or a recorded selection that cannot be
+		// re-run, which is the caller's spec being wrong — or this host failing
+		// to write the page it was asked for.
+		if errors.Is(err, errSavingPage) {
+			fail(w, http.StatusInternalServerError, err)
+			return
+		}
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	send(w, http.StatusOK, refreshResponse{Spec: next, Report: toRefreshReport(rep)})
+}
+
+// errSavingPage separates the two ways a rebuild can fail: a spec the server
+// cannot reproduce (the caller's page is wrong, a 400) and a page it cannot
+// write (the server's disk is wrong, a 500). Both callers — POST /v1/refresh
+// and the rebuild a pull runs behind the reader's back — have to tell them
+// apart, so the distinction travels in the error rather than in a status the
+// helper has no business choosing.
+var errSavingPage = errors.New("saving the page")
+
+// rebuildPage re-derives a page from the corpus and, when the request names
+// one, rewrites the saved copy so a reload of /view/<name> lands on this run.
+//
+// This is the half POST /v1/refresh and POST /v1/media/pull share. A pull used
+// to hand the rebuild back to the client — fetch the files, then ask for the
+// page again — which meant a reader who reloaded while the bytes were coming
+// down lost both: the files landed in the corpus and the page they were
+// expected to appear on was never rewritten. Here the page is brought up to date
+// by the side that already knows the files landed.
+func (s *server) rebuildPage(req refreshRequest) (spec.Spec, refresh.Report, error) {
 	rep, next, err := refresh.Run(s.store, noMailbox{}, req.Spec, refresh.Options{
 		Title:      req.Title,
 		Person:     req.Person,
@@ -993,23 +1090,18 @@ func (s *server) refresh(w http.ResponseWriter, r *http.Request) {
 		Embed: s.embedder(),
 	})
 	if err != nil {
-		// The failure is the previous spec not being reproducible — nothing
-		// recorded to re-run, or a recorded selection that cannot be re-run.
-		// That is the caller's spec being wrong, not the server failing.
-		fail(w, http.StatusBadRequest, err)
-		return
+		return spec.Spec{}, refresh.Report{}, err
 	}
 	if req.Name != "" {
 		// The saved page must not drift from what the client just received: the
 		// refresh rewrites the file exactly as POST /v1/spec would, so a reload
 		// of /view/<name> lands on this run, not the stale one.
 		if err := s.saveSpec(req.Name, next); err != nil {
-			fail(w, http.StatusInternalServerError,
-				fmt.Errorf("saving the refreshed page as %q: %w", req.Name, err))
-			return
+			return spec.Spec{}, refresh.Report{},
+				fmt.Errorf("%w as %q: %w", errSavingPage, req.Name, err)
 		}
 	}
-	send(w, http.StatusOK, refreshResponse{Spec: next, Report: toRefreshReport(rep)})
+	return next, rep, nil
 }
 
 // opsPlan is the review surface for people merges, all read-only: the dedupe

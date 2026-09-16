@@ -1133,12 +1133,14 @@ export interface components {
                 previewH?: number;
             }[];
         };
-        /** @description One message to fetch the files for. */
+        /** @description One message to fetch the files for, and the page to bring up to date once they land. */
         MediaPullRequest: {
             /** @description The message's ext id, as the spec's `extId` field carries it, e.g. 'mail:<...>'. */
             entry: string;
+            /** @description The saved page the reader is looking at, when there is one. The server re-derives it after the pull and rewrites it, so a reader who reloads — or who has already navigated away while the bytes were coming down — lands on a page that shows the files. Absent for a caller with no page to update; the bytes are stored either way. */
+            name?: string;
         };
-        /** @description What a pull did: the files this message still needed, and how each one ended. A file already in the corpus, and one already declined, are both absent — the first needs nothing, and the second has a recorded reason that asking again would not change. */
+        /** @description What a pull did: the files this message still needed, and how each one ended. A file already in the corpus, and one already declined, are both absent — the first needs nothing, and the second has a recorded reason that asking again would not change. When the caller named a page, the re-derived page and its refresh report ride along, so one call both fetches the bytes and leaves the page that asked for them up to date. */
         MediaPullResponse: {
             /** @description Attachments still needing bytes: everything the call considered. A file already stored and one already declined are both excluded, because neither has anything left to decide. */
             wanted: number;
@@ -1152,6 +1154,10 @@ export interface components {
             bytes: number;
             /** @description One row per file considered, in the order they were walked. */
             files: components["schemas"]["MediaFile"][];
+            /** @description The page after the pull, re-derived from the corpus by the server and written to the saved page. Present only when the caller named one and the rebuild ran; a client that receives it should render it rather than asking POST /v1/refresh for the same page again. */
+            spec?: components["schemas"]["TimelineSpec"];
+            /** @description What the rebuild behind the pull changed, in the same shape POST /v1/refresh reports. Present alongside spec. */
+            report?: components["schemas"]["RefreshReport"];
         };
         /** @description One attachment's outcome within a pull. */
         MediaFile: {

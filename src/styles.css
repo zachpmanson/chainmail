@@ -685,3 +685,12 @@
     background:var(--bg); color:var(--fg); cursor:pointer; }
   .addform button:hover:not(:disabled) { color:var(--accent); border-color:var(--accent); }
   .addform button:disabled { opacity:.45; cursor:default; }
+  /* --- a pull that failed --- */
+  /* Above the page rather than beside the chips: a pull is one message's business
+     but its failure is the page's — the reader pressed a button that spends
+     mailbox round trips and has to be told, in the page, that it did not work.
+     Console-only is where the refresh verdict lives and where this used to be
+     lost: "nothing happened" and "it failed" look identical without it. */
+  .pullnote { margin:0 0 .8rem; padding:.55rem .85rem; font-size:.85rem;
+    color:var(--fg); background:var(--card); border:1px solid var(--accent);
+    border-left-width:3px; border-radius:6px; }
