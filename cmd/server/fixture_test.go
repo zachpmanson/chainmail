@@ -25,6 +25,12 @@ const (
 	extAda3  = "mail:<c0ffee-3@loomworks.example>"
 	extOther = "mail:<c0ffee-9@loomworks.example>"
 	extNone  = "mail:<no-such-entry@loomworks.example>"
+
+	// The recovered entry and the message that quoted it are their own fixture
+	// (see quotedServer): a recovered entry is the one shape the corpus below
+	// deliberately does not hold.
+	extQuoted     = "quote:9f2c1ab4e77d"
+	extQuotedHost = "mail:<c0ffee-5@loomworks.example>"
 )
 
 // shedBytes is the fixture attachment's content, filed as a blob so that the
@@ -151,7 +157,65 @@ func testServer(t *testing.T) *harness {
 	if n, err := s.LinkBlob(extAda1, shedPart, shedSHA); err != nil || n != 1 {
 		t.Fatalf("LinkBlob: %d rows, %v", n, err)
 	}
+	return harnessOver(t, s)
+}
 
+// quotedServer is the server over a corpus holding the one shape the fixture
+// above has none of: a message recovered from quoted text, and the message it was
+// found inside.
+//
+// It is a corpus of its own rather than two more entries in testServer's, because
+// an extra entry changes what the shared fixture's counts mean for every test
+// that is not about this one — a chain's length, the ops screen's people — and
+// those assertions are the ones a fixture exists to keep honest.
+//
+// The recovered entry is a chain of its own, and that is the point of the shape:
+// the host that quoted it is outside any trail it can be rendered in, so a name
+// for that host can only come from a load the render goes and makes.
+func quotedServer(t *testing.T) *harness {
+	t.Helper()
+	s, err := corpus.Open(":memory:")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+
+	ada := putPerson(t, s, "Ada Okoye", "ada@loomworks.example")
+	dana := putPerson(t, s, "Dana Reyes", "dana@fjordline.example")
+	host := putMail(t, s, mailFixture{
+		ext: extQuotedHost, ts: "2026-03-04T09:00:00+11:00", tz: "AEDT", offset: mins(660),
+		person: ada, container: "T1", subject: "Fence panels",
+		messageID: "<c0ffee-5@loomworks.example>",
+		from:      "Ada Okoye <ada@loomworks.example>",
+		to:        "Dana Reyes <dana@fjordline.example>",
+		text:      "Quoting the original below.",
+	})
+	ts, err := time.Parse(time.RFC3339, "2026-03-01T08:00:00+11:00")
+	if err != nil {
+		t.Fatalf("bad ts: %v", err)
+	}
+	id, _, err := s.PutQuoted(corpus.Entry{
+		Source: corpus.SourceMail, ExtID: extQuoted, TS: ts, TZ: "AEDT",
+		PersonID: dana, Container: "T1", Subject: "Fence panels",
+		BodyText: "The gate hinge was ordered.",
+	})
+	if err != nil {
+		t.Fatalf("PutQuoted: %v", err)
+	}
+	if err := s.Sight(id, host, "quoted", ""); err != nil {
+		t.Fatalf("Sight: %v", err)
+	}
+	return harnessOver(t, s)
+}
+
+// harnessOver is the server the fixtures run on, over a corpus they built.
+//
+// Its switches are the same on every corpus on purpose: a test that added a
+// recovered entry should be exercising this wire, not a differently configured
+// server — and the two fixtures that need different ones set them on the harness
+// the way the slurp tests do.
+func harnessOver(t *testing.T, s *corpus.Store) *harness {
+	t.Helper()
 	// Seeded so the documented-path walk can GET /v1/specs/{name} without a
 	// prior save; the round-trip test writes its own.
 	specsDir := t.TempDir()

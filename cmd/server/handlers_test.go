@@ -372,6 +372,56 @@ func TestEntryCarriesItsProvenanceAndTheZoneItStated(t *testing.T) {
 	}
 }
 
+// An entry recovered from someone else's quote has no address of its own to send,
+// and the person who quoted it is not in the trail either: the pane renders one
+// entry, so the host sits outside it and a name for that host can only come from
+// a row the render loads for itself. Without this the pane's hover on every
+// recovered bubble is a bare name, which is the gap this closes.
+//
+// Both routes are asked, because they are the same conversion over two trails: the
+// pane reads the chain, and the entry route answers for one entry, which is the
+// trail a host is most certainly outside of.
+func TestARecoveredEntrySaysWhoQuotedIt(t *testing.T) {
+	srv, api := quotedServer(t), loadAPI(t)
+	const want = "Ada Okoye <ada@loomworks.example>"
+
+	type drawn struct {
+		ExtID        string `json:"extId"`
+		FromEmail    string `json:"fromEmail"`
+		FromQuotedBy string `json:"fromQuotedBy"`
+	}
+
+	res := srv.do(t, "GET", entryPath("/v1/entries/", extQuoted), nil)
+	if res.status != 200 {
+		t.Fatalf("entry: status = %d: %s", res.status, res.body)
+	}
+	// Asserted against the contract as well as read: a field the server sends and
+	// the document never declares is one no generated client will have.
+	api.assert(t, "CorpusEntry", res.body)
+	if got := decode[drawn](t, res); got.ExtID != extQuoted || got.FromEmail != "" || got.FromQuotedBy != want {
+		t.Errorf("entry = %+v, want the recovered entry with fromQuotedBy %q and no address of its own", got, want)
+	}
+
+	res = srv.do(t, "GET", entryPath("/v1/chains/", extQuoted), nil)
+	if res.status != 200 {
+		t.Fatalf("chain: status = %d: %s", res.status, res.body)
+	}
+	api.assert(t, "ChainResponse", res.body)
+	chained := decode[struct {
+		RootExtID string  `json:"rootExtId"`
+		Entries   []drawn `json:"entries"`
+	}](t, res)
+	// One entry: the host is outside this trail, so the name below cannot have been
+	// read off anything the render was handed.
+	if len(chained.Entries) != 1 {
+		t.Fatalf("the chain holds %d entries; the host must be outside it for this test "+
+			"to mean what it says", len(chained.Entries))
+	}
+	if got := chained.Entries[0]; got.FromQuotedBy != want {
+		t.Errorf("chain entry = %+v, want fromQuotedBy %q", got, want)
+	}
+}
+
 // The two must not look alike: "no such id" is a mistake to fix, "nothing
 // matched" is an answer.
 func TestAnUnknownIDIs404WhileAnEmptyResultIs200(t *testing.T) {

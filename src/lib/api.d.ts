@@ -600,6 +600,8 @@ export interface components {
             fromEmail?: string;
             /** @description The sender's organisation, resolved by the same resolver a page build uses — the reader's stored rule about the domain their mail came from, else the domain's own name, else whatever their other addresses establish. Absent where nothing established one, which is drawn as the unknown colour rather than as a group of its own. */
             org?: string;
+            /** @description The person whose message this entry was recovered from, written as a client writes a person on hover ("Ada Okoye <ada@loomworks.example>"), with several joined by ", ". Present only where `fromEmail` is absent: a recovered entry has no address of its own, and the quoter is where it came from rather than a guess at who sent it. */
+            fromQuotedBy?: string;
             /** @description Mail thread id or Slack channel id. Absent when the source stated none. */
             container?: string;
             /** @description Opens the entry at its source. Absent when the source gave none. */
