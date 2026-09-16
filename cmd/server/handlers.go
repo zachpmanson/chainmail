@@ -186,6 +186,13 @@ func (s *server) webRoot() http.HandlerFunc {
 	// The app shell. FileServer would serve it for "/" via its implicit index,
 	// but the same bytes must also answer for a bare /index.html and every
 	// client route; open index.html directly so they all get the same headers.
+	//
+	// The shell must not be cached without revalidation, and it must not be cached
+	// *at all* by a client that cannot revalidate: it names the hashed bundle, so a
+	// stale shell is an entire stale app — the reader reloads, sees the build from
+	// before the fix, and has no way to tell. Nothing here can carry a validator
+	// (an embedded file has no modtime), which is exactly why the header has to be
+	// explicit rather than left to a heuristic.
 	shell := func(w http.ResponseWriter, r *http.Request) {
 		f, err := sub.Open("index.html")
 		if err != nil {
@@ -194,8 +201,16 @@ func (s *server) webRoot() http.HandlerFunc {
 		}
 		defer f.Close()
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache")
 		io.Copy(w, f)
 	}
+	// A hashed asset is immutable: the name is the content hash, so those bytes
+	// under that name can never change, and re-fetching them per navigation is
+	// paying for a promise the filename already made.
+	assets := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		fileServer.ServeHTTP(w, r)
+	})
 	return func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/v1/") {
 			json404(w, r)
@@ -207,7 +222,7 @@ func (s *server) webRoot() http.HandlerFunc {
 			return
 		}
 		if _, err := fs.Stat(sub, p); err == nil {
-			fileServer.ServeHTTP(w, r)
+			assets.ServeHTTP(w, r)
 			return
 		}
 		// Not a file: a client route, present or mistyped. Either way the shell

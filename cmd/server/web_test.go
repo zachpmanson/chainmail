@@ -25,6 +25,12 @@ func TestWebClientIsServedFromTheSamePort(t *testing.T) {
 	if ct := res.header.Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
 		t.Errorf("GET / Content-Type = %q, want text/html", ct)
 	}
+	// The shell names the hashed bundle, so a cached copy is a whole stale app.
+	// It can carry no validator (an embedded file has no modtime), so the header
+	// has to say "revalidate" rather than leave it to a browser's guess.
+	if cc := res.header.Get("Cache-Control"); cc != "no-cache" {
+		t.Errorf("GET / Cache-Control = %q, want no-cache — a cached shell pins the reader to an old build", cc)
+	}
 	if !strings.Contains(string(res.body), "<div id=\"root\"></div>") {
 		t.Error("GET / does not contain the app mount point — this does not look like the client")
 	}
@@ -73,6 +79,10 @@ func TestWebClientIsServedFromTheSamePort(t *testing.T) {
 	}
 	if ct := res.header.Get("Content-Type"); !strings.Contains(ct, "javascript") {
 		t.Errorf("asset Content-Type = %q, want javascript", ct)
+	}
+	// A hashed asset is immutable by construction; the filename is the hash.
+	if cc := res.header.Get("Cache-Control"); !strings.Contains(cc, "immutable") {
+		t.Errorf("asset Cache-Control = %q, want an immutable cache — the name is the content hash", cc)
 	}
 
 	// An undocumented API path keeps the API error shape: an operator command
