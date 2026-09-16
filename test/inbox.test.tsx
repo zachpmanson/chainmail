@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { makeQueryClient } from "../src/lib/queryClient";
@@ -128,36 +128,48 @@ const SPEC = {
  *  message first, each carrying the entries a row reads. */
 const pageOf = (chains: unknown[]) => json(200, { mode: "lexical", chains });
 
-/** The chain preview reads /v1/chains/<root>, which echoes the root and lists
- *  the whole chain in time order. */
-const chainResponse = (root: string) =>
-  json(200, {
-    rootExtId: root,
-    entries: [
-      {
-        extId: "mail:<fence-panel-9@example.fed>",
-        source: "mail",
-        quoted: false,
-        ts: "2026-04-01T08:00:00Z",
-        author: "Ada Okoye",
-        subject: "Fence panels",
-        body: "Unrelated: the fence panels arrived.",
-      },
-    ],
-  });
+/** The reading pane asks /v1/chains/<root> for whichever chain is selected, and
+ *  every chain in the fixtures has a body of its own, so "the pane swapped" is a
+ *  claim about what is on screen rather than about a call being made. */
+const CHAIN_BODIES: Record<string, { author: string; subject: string; body: string }> = {
+  "mail:<fence-panel-9@example.fed>": {
+    author: "Ada Okoye",
+    subject: "Fence panels",
+    body: "Unrelated: the fence panels arrived, and the gate needs a new hinge.",
+  },
+  "mail:<loom-cutover-1@example.fed>": {
+    author: "Bo Halvorsen",
+    subject: "Loom cutover schedule",
+    body: "Roof access is fine from the 14th.",
+  },
+};
 
-const buildHandler: Handler = (c) => {
+const chainHandler: Handler = (c) => {
+  const root = decodeURIComponent(pathOf(c).slice("/v1/chains/".length));
+  const b = CHAIN_BODIES[root];
+  return b
+    ? json(200, {
+        rootExtId: root,
+        entries: [{ extId: root, source: "mail", quoted: false, ts: "2026-04-01T08:00:00Z", ...b }],
+      })
+    : json(404, { error: `no chain ${root}` });
+};
+
+/** A handler that answers the pane for any chain, and lets the test's own
+ *  handler see everything else. */
+const withChains = (inner: Handler): Handler => (c) =>
+  pathOf(c).startsWith("/v1/chains/") ? chainHandler(c) : inner(c);
+
+const buildHandler: Handler = withChains((c) => {
   const p = pathOf(c);
   if (p === "/v1/spec" && c.method === "POST") return json(200, SPEC);
   if (p.startsWith("/v1/specs/")) return json(200, SPEC);
-  if (p === "/v1/chains/mail%3A%3Cfence-panel-9%40example.fed%3E")
-    return chainResponse("mail:<fence-panel-9@example.fed>");
   if (p === "/v1/search") return pageOf(CHAINS);
   // The shell's sign-in banner probes auth on every route; answer it signed in
   // so a test exercises the app, not the banner.
   if (p === "/auth/status") return json(200, { signed_in: true });
   return json(500, { error: `unexpected call to ${c.method} ${p}` });
-};
+});
 
 beforeEach(() => {
   calls = [];
@@ -192,6 +204,10 @@ async function mountApp(...initialEntries: string[]) {
 }
 
 const click = (el: Element) => fireEvent.click(el);
+
+/** The reading pane, so an assertion about the thread shown cannot be satisfied
+ *  by the same text in a row. */
+const pane = () => document.querySelector(".ibread") as HTMLElement;
 
 describe("the home page with no query", () => {
   it("lists every chain, newest message first", async () => {
@@ -263,24 +279,48 @@ describe("the home page with no query", () => {
     expect(screen.queryByLabelText("Search the corpus")).toBeNull();
   });
 
-  it("opens a chain from its row, and closes it again", async () => {
+  it("reads the newest chain in the pane before a row is clicked", async () => {
     handler = buildHandler;
     await mountApp("/");
-    await screen.findByText("Fence panels");
+    // The row, not the text: the pane is already showing the same subject, and a
+    // duplicate on screen is the point of the layout.
+    await screen.findByRole("button", { name: "Fence panels" });
 
-    click(screen.getByRole("button", { name: "Fence panels" }));
-    const dialog = await screen.findByRole("dialog");
-    expect(dialog.getAttribute("aria-label")).toBe("Chain preview");
-    expect(await screen.findByText("Unrelated: the fence panels arrived.")).toBeTruthy();
+    // A pane beside the list, not a modal over it: nothing was opened, and the
+    // list is still there to be read.
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await waitFor(() =>
+      expect(within(pane()).getByText(/and the gate needs a new hinge/)).toBeTruthy(),
+    );
+    // The top row is what the pane is showing, and it says so.
+    expect(
+      screen.getByRole("button", { name: "Fence panels" }).getAttribute("aria-current"),
+    ).toBe("true");
+  });
 
-    fireEvent.keyDown(document, { key: "Escape" });
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  it("swaps the pane when another row is clicked", async () => {
+    handler = buildHandler;
+    await mountApp("/");
+    await screen.findByText("Loom cutover schedule");
+
+    click(screen.getByRole("button", { name: "Loom cutover schedule" }));
+    await waitFor(() =>
+      expect(within(pane()).getByText(/Roof access is fine from the 14th/)).toBeTruthy(),
+    );
+    // The previous thread is gone from the pane, and one row is current at a
+    // time — the row is the pane's, and the pane is the row's.
+    expect(within(pane()).queryByText(/and the gate needs a new hinge/)).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Loom cutover schedule" }).getAttribute("aria-current"),
+    ).toBe("true");
+    expect(screen.getByRole("button", { name: "Fence panels" }).getAttribute("aria-current")).toBeNull();
   });
 
   it("builds a page from the ticked chains, recording no query for it", async () => {
     handler = buildHandler;
     const router = await mountApp("/");
-    await screen.findByText("Fence panels");
+    await screen.findByRole("button", { name: "Fence panels" });
 
     click(screen.getByLabelText("Select Fence panels"));
     click(screen.getByRole("button", { name: /Build page from 1 chain$/ }));
@@ -339,10 +379,10 @@ describe("paging the inbox", () => {
   ];
 
   it("asks for what is older with the cursor, and shows a repeated thread once", async () => {
-    handler = (c) => {
+    handler = withChains((c) => {
       if (pathOf(c) !== "/v1/search") return json(500, { error: "unexpected" });
       return paramsOf(c).get("before") ? pageOf(secondPage) : pageOf(firstPage);
-    };
+    });
     await mountApp("/");
     await waitFor(() => expect(screen.getAllByRole("checkbox")).toHaveLength(50));
 
@@ -366,7 +406,9 @@ describe("paging the inbox", () => {
   // corpus: two hundred rows held 194 distinct threads. Asking forever after that
   // is how a "Load older" button becomes a spinner.
   it("stops asking when a page adds nothing the list has not already shown", async () => {
-    handler = (c) => (pathOf(c) === "/v1/search" ? pageOf(firstPage) : json(500, { error: "unexpected" }));
+    handler = withChains((c) =>
+      pathOf(c) === "/v1/search" ? pageOf(firstPage) : json(500, { error: "unexpected" }),
+    );
     await mountApp("/");
     await waitFor(() => expect(screen.getAllByRole("checkbox")).toHaveLength(50));
 

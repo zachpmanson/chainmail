@@ -174,9 +174,18 @@ function RootLayout() {
       {/* The site nav is the header: the same cross-links that used to sit in
           the footer, at the top of every page instead — above the sign-in
           banner and the page's own header, so it is the first thing read and
-          the one place site-level navigation lives. */}
+          the one place site-level navigation lives.
+
+          The name lives here rather than in a title block on each page: "which
+          site is this" is a fact about the site, not about the page, and a
+          <h1> repeating it above every panel was the one thing on screen that
+          said nothing the nav did not. It is also the way home, so there is no
+          separate Home link beside it. A built page keeps its own title — that
+          one is the page's, not the site's. */}
       <header className="sitehead">
-        <Link to="/">Home</Link>
+        <Link to="/" className="brand">
+          chainmail
+        </Link>
         <span className="sep">·</span>
         <Link to="/specs">Browse</Link>
         <span className="sep">·</span>
