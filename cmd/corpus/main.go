@@ -12,7 +12,7 @@
 //	corpus candidates                 pairs that may be one human, for review
 //	corpus dedupe [-apply]            merge the duplicates three rules can prove
 //	corpus twins [-apply]             collapse the messages stored twice
-//	corpus repair                     rejoin the people one mailbox split into
+//	corpus repair                     re-derive quoted bodies, rejoin the people one address split into
 //	corpus search -q <text>           which chains are about this
 //	corpus embed                      fill in the vectors semantic search needs
 //	corpus eval -set judged.json      score two retrieval configurations
@@ -168,10 +168,12 @@ const usage = `usage: corpus <command> [flags]
   alias         [-from -to]  list or add a domain alias, folding the people that
                            domain split in two and naming every pair it will not
                            fold; -dry-run decides all that and writes nothing
-  repair                   reduce addresses stored with a mailto: link or an
-                           RFC 5233 +tag, split the address out of a display name
-                           that swallowed it, clean display names cut off at a
-                           bracket, and fold the people that split apart
+  repair                   re-derive the messages recovered from quoted text out
+                           of the hosts they came from, and reduce addresses
+                           stored with a mailto: link or an RFC 5233 +tag, split
+                           the address out of a display name that swallowed it,
+                           clean display names cut off at a bracket, and fold the
+                           people that split apart
   unread                   read the mailbox's unread set and correct every
                            stored UNREAD label that disagrees with it. The ingest
                            reads a message's labels once, at ingest, so a corpus
