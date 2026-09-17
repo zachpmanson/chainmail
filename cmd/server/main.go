@@ -95,7 +95,10 @@ func run(args []string) error {
 			"mailbox — and when that leaves nobody (a note to yourself) the sender comes "+
 			"back on, because a reply needs somewhere to go — "+
 			"in both plain text and HTML so a client that renders markup does "+
-			"not read the quote as part of the answer. What the reader decides about the "+
+			"not read the quote as part of the answer — the HTML part quoting the "+
+			"answered message's own markup where it had any, through the reading "+
+			"pane's allowlist, and its text where it did not. What the reader decides "+
+			"about the "+
 			"reply is whether the rest of that audience is on it — which can only "+
 			"narrow the reply — and whether the HTML part goes with the text, for a "+
 			"correspondent or a list that wants the words alone. The credential is the "+

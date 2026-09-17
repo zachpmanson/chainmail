@@ -1427,8 +1427,11 @@ func (s *server) sendReply(w http.ResponseWriter, r *http.Request) {
 	// the plan previews and what the mailbox is handed are then the same bytes, and
 	// a second client cannot compose a quote this package would have written
 	// differently (see spec.ComposeReply). Both forms come out of the same call, so
-	// the text part and the HTML part of one reply are two renderings of one
-	// message rather than two messages that happen to agree.
+	// the text part and the HTML part of one reply are two renderings of one message
+	// rather than two messages that happen to agree: the reader's words, the heading
+	// and the reader's own half of the message are written once, and only the quote is
+	// read twice — from each form the answered message was sent in, which is the point
+	// of quoting it that way.
 	body := spec.ComposeReply(req.Body, target)
 
 	// Absent means everyone, which is what this endpoint has always answered: a

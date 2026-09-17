@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/zachpmanson/chainmail/internal/corpus"
 	"github.com/zachpmanson/chainmail/internal/gmailclient"
 	"github.com/zachpmanson/chainmail/internal/mailingest"
 )
@@ -497,4 +498,93 @@ func chainExtIDs(t *testing.T, h *harness, ext string) []string {
 		out = append(out, id)
 	}
 	return out
+}
+
+// htmlSendServer is the send surface over a message that arrived with markup of its
+// own: one entry, one mailbox copy, and a mailbox that answers with its own recipient
+// and subject. rThe fixture's html is the one the reading route is tested against
+// (htmlPart) — a booking confirmation full of layout, and full of the things the
+// allowlist refuses — because the quote of it is the same pass over the same bytes.
+func htmlSendServer(t *testing.T) (*harness, *fakeMailbox) {
+	t.Helper()
+	s, err := corpus.Open(":memory:")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+
+	ada := putPerson(t, s, "Ada Okoye", "ada@loomworks.example")
+	putMail(t, s, mailFixture{
+		ext: extHTML, ts: "2026-03-01T09:00:00+11:00", tz: "AEDT", offset: mins(660),
+		person: ada, container: "T2", subject: "Booking confirmed",
+		messageID: "<c0ffee-6@loomworks.example>",
+		from:      "Ada Okoye <ada@loomworks.example>",
+		to:        "Bo Halvorsen <bo@fjordline.example>",
+		labels:    []string{"INBOX"}, gmail: "g-6",
+		text: "Booking confirmed: Tuesday 3 March, 10:00.",
+		html: htmlPart,
+	})
+	if _, err := s.ResolveParents(); err != nil {
+		t.Fatalf("ResolveParents: %v", err)
+	}
+
+	h := harnessOver(t, s)
+	h.sendMailEnabled = true
+	fake := &fakeMailbox{
+		base:    map[string][]string{"g-6": {"INBOX"}},
+		to:      map[string]string{"g-6": "Bo Halvorsen <bo@fjordline.example>"},
+		subject: map[string]string{"g-6": "Re: Booking confirmed"},
+	}
+	h.openMailbox = func() (mailbox, error) { return fake, nil }
+	return h, fake
+}
+
+// The quote's own source, end to end: the message being answered arrived with markup,
+// so the HTML part of the answer carries that markup rather than the transcript the
+// text part beside it is. Until this, answering an HTML mail sent its text under a
+// blockquote — a table as the cells' lines, a link as its label — which reads as a
+// transcript of a mail rather than as the mail.
+func TestASentReplyQuotesTheAnsweredMessagesMarkup(t *testing.T) {
+	h, fake := htmlSendServer(t)
+
+	res := h.do(t, "POST", "/v1/send",
+		[]byte(`{"entry":"`+extHTML+`","body":"Both dates work."}`))
+	if res.status != 200 {
+		t.Fatalf("status %d: %s", res.status, res.body)
+	}
+	got := decode[sendResponse](t, res)
+	if len(fake.replies) != 1 {
+		t.Fatalf("the mailbox saw %+v, want one call", fake.replies)
+	}
+	html := fake.replies[0].body.HTML
+
+	// The message's own markup, marked up as its sender marked it up.
+	for _, want := range []string{
+		"<h1>Booking confirmed</h1>",
+		"<b>Tuesday 3 March, 10:00</b>",
+		`<a href="https://example.example/booking/1">Details</a>`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("the reply's HTML is missing the answered message's own %q:\n%s", want, html)
+		}
+	}
+	// And none of what the same fixture's sender put in there to be refused: the quote
+	// passes the allowlist every body in the reading pane passes, so a reply can relay
+	// to its recipients nothing the page would refuse to render.
+	for _, bad := range []string{"<script", "onclick", "javascript:", "<style", "assets.example.example", "<title>"} {
+		if strings.Contains(html, bad) {
+			t.Errorf("the reply's HTML carries %q, which the allowlist refuses:\n%s", bad, html)
+		}
+	}
+	// The text part is the message's own text, one level in, because a text part has
+	// nowhere to put markup: the two forms are each the message's own reading of one
+	// message, and neither is a conversion of the other.
+	if !strings.Contains(fake.replies[0].body.Text, "\n> Booking confirmed: Tuesday 3 March, 10:00.") {
+		t.Errorf("the reply's text lost the answered message:\n%s", fake.replies[0].body.Text)
+	}
+	// What the reader was shown is what the mailbox was handed: the plan is the
+	// message rather than a draft of one.
+	if got.Body != fake.replies[0].body.Text {
+		t.Errorf("the plan previews %q, the mailbox was handed %q", got.Body, fake.replies[0].body.Text)
+	}
 }

@@ -30,10 +30,17 @@ type ReplyTarget struct {
 	// Author is the person the corpus resolved this entry to; From is the header
 	// as it arrived, and is what an attribution names when there is no person, or
 	// when the address is the more honest half of the pair.
-	Author   string
-	From     string
-	Subject  string
-	Body     string
+	Author  string
+	From    string
+	Subject string
+	Body    string
+	// HTML is the sender's own text/html part for this message, exactly as their
+	// client wrote it, and empty when the message had none. A reply quotes it in
+	// place of the text when it is there (see spec.ComposeReply): the message being
+	// answered had a markup form and the answer carries it, which is what makes the
+	// quote under a reply to an HTML message look like the message rather than like
+	// a transcript of it.
+	HTML     string
 	TS       time.Time
 	TZ       string
 	TZOffset *int
@@ -50,15 +57,15 @@ func (s *Store) ReplyTarget(extID string) (ReplyTarget, error) {
 	var t ReplyTarget
 	var ts int64
 	var off sql.NullInt64
-	var author, from, subject, body, tz, gmail sql.NullString
+	var author, from, subject, body, bodyHTML, tz, gmail sql.NullString
 	err := s.db.QueryRow(`
 		select e.ext_id, e.ts, e.tz, e.tz_offset,
-		       p.display_name, md.from_addr, e.subject, e.body_text, md.gmail_id
+		       p.display_name, md.from_addr, e.subject, e.body_text, e.body_html, md.gmail_id
 		from entries e
 		left join people p on p.id = e.person_id
 		left join mail_detail md on md.entry_id = e.id
 		where e.ext_id = ?`, extID).
-		Scan(&t.ExtID, &ts, &tz, &off, &author, &from, &subject, &body, &gmail)
+		Scan(&t.ExtID, &ts, &tz, &off, &author, &from, &subject, &body, &bodyHTML, &gmail)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ReplyTarget{}, fmt.Errorf("%q: %w", extID, ErrNotFound)
 	}
@@ -72,6 +79,7 @@ func (s *Store) ReplyTarget(extID string) (ReplyTarget, error) {
 	}
 	t.TZ, t.Author, t.From = tz.String, author.String, from.String
 	t.Subject, t.Body, t.GmailID = subject.String, body.String, gmail.String
+	t.HTML = bodyHTML.String
 	return t, nil
 }
 
