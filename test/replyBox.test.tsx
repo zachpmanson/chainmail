@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { makeQueryClient } from "../src/lib/queryClient";
+import { clearToasts } from "../src/lib/toasts";
 import { createChainmailRouter } from "../src/router";
 
 /**
@@ -137,6 +138,10 @@ const sent = (i: number) => JSON.parse(sends()[i]!.body!) as Record<string, unkn
 
 beforeEach(() => {
   calls = [];
+  // The notifications are one store shared by every writer in the app, so a test
+  // starts with none standing — a send's own account is asserted below, and it
+  // must be that send's rather than a neighbour's.
+  clearToasts();
   (globalThis as { IntersectionObserver?: unknown }).IntersectionObserver = class {
     observe() {}
     unobserve() {}
@@ -161,6 +166,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   history.replaceState(null, "", "/");
+  clearToasts();
 });
 
 async function mountApp() {
@@ -279,12 +285,33 @@ describe("answering a message from the pane", () => {
     // mailbox's own copy of the message.
     await waitFor(() => expect(chains().length).toBeGreaterThan(before));
     // And the box is empty again, with the account of what happened in the words
-    // the surface uses for it.
+    // the surface uses for it — in the shell's corner, where the app keeps work
+    // that is over (see Toasts), not in a row of the trail being read.
     await waitFor(() =>
-      expect(box()!.querySelector(".pullnote")!.textContent).toContain("Answered Bo Halvorsen"),
+      expect(document.querySelector(".toast")!.textContent).toContain("Answered Bo Halvorsen"),
     );
+    expect(box()!.querySelector(".pullnote")).toBeNull();
     expect(box()!.querySelector(".replytext")).toBeNull();
     expect(field().value).toBe("");
+  });
+
+  it("says it once, and says the last one", async () => {
+    await write("The 14th works.");
+    await waitFor(() => expect(box()!.querySelector(".replytext")).toBeTruthy());
+    press("send this reply");
+    await waitFor(() => expect(document.querySelectorAll(".toast")).toHaveLength(1));
+
+    // A second reply is a second send, and the corner holds the account of the
+    // last thing this box did rather than one sentence per reply — a reply cannot
+    // be recalled, so two accounts of two of them is a reader counting.
+    fireEvent.change(field(), { target: { value: "And the fitters?" } });
+    press("preview");
+    await waitFor(() => expect(box()!.querySelector(".replytext")).toBeTruthy());
+    press("send this reply");
+
+    await waitFor(() => expect(sends()).toHaveLength(4));
+    expect(document.querySelectorAll(".toast")).toHaveLength(1);
+    expect(document.querySelector(".toast")!.textContent).toContain("Answered Bo Halvorsen");
   });
 
   it("tells the reader when this host cannot answer mail at all", async () => {
