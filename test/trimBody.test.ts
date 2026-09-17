@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { trimBody } from "../src/lib/trimBody";
+import { hasBody, trimBody } from "../src/lib/trimBody";
 
 /**
  * trimBody strips whitespace-only nodes from the exposed edges of a body,
@@ -124,3 +124,55 @@ describe("trimBody", () => {
       '<div><div><details class="sig"><summary>signature</summary><div>Lane</div></details></div></div>',
     );
   });
+
+/**
+ * hasBody answers the one question a bubble asks before drawing a body: is there
+ * anything here at all? It is the trim's own judgement of content (visible text,
+ * an image, a preformatted block, a folded signature) asked of the whole body,
+ * so a body the trim would find nothing to keep in is exactly a body that says
+ * "No body" instead of drawing empty.
+ */
+describe("hasBody", () => {
+  it("says nothing of a body with no text in it", () => {
+    for (const body of [
+      "",
+      "   ",
+      "\n\t",
+      "<p></p>",
+      "<p> </p>",
+      "<br>",
+      "<div>&nbsp;</div>",
+      "<div>&#160;</div>",
+      "<p><span> </span></p>",
+      "<!-- a comment is not a sentence -->",
+      "<p><!--[if mso]><table><tr><td>hidden from every browser</td></tr></table><![endif]--></p>",
+      "<style>p{color:red}</style>",
+    ]) {
+      expect(hasBody(body), JSON.stringify(body)).toBe(false);
+    }
+  });
+
+  it("finds a body in anything that says something", () => {
+    for (const body of [
+      "hi",
+      "<p>Roof access is fine.</p>",
+      "<p>&nbsp;ok&nbsp;</p>",
+      '<p><img src="/v1/attachments/abc" alt=""></p>',
+      "<pre>  </pre>",
+      "<pre>code</pre>",
+      '<details class="sig"><summary>signature</summary><div><p>Regards</p></div></details>',
+      // A fold the client wrapped in its own div is still a fold: the trim keeps
+      // it, so this cannot call the body empty and draw the notice over it.
+      '<div><div><details class="sig"><summary>signature</summary><div>Lane</div></details></div></div>',
+    ]) {
+      expect(hasBody(body), JSON.stringify(body)).toBe(true);
+    }
+  });
+
+  it("still finds a body when a comment stands beside one", () => {
+    // The stripping above is what a browser draws nothing for, not a licence to
+    // stop reading: a message with a conditional comment above its words is a
+    // message with words, and the notice must not be drawn over them.
+    expect(hasBody("<p><!--[if mso]><td>x</td><![endif]-->Hi</p>")).toBe(true);
+  });
+});

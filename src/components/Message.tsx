@@ -11,7 +11,7 @@ import {
 } from "../lib/attachments";
 import type { ZoneState } from "../lib/chronological";
 import { isStyled, mountOriginal, toggleStyled, watchStyled } from "../lib/original";
-import { trimBody } from "../lib/trimBody";
+import { hasBody, trimBody } from "../lib/trimBody";
 
 /**
  * Message — one message of a transcript, drawn from data alone.
@@ -595,6 +595,18 @@ function Body({ body, state }: { body: string; state: Original }) {
        into its shadow root, where a rule of this page's cannot reach it and its
        own rules cannot leave. */
     return <div className="bd bdo" ref={host} />;
+  }
+  /* A message that carried no words at all — a mail that was only its file, a
+     calendar reply that was only its invitation — says so in the page's own
+     voice rather than drawing an empty bubble. The gap a blank body leaves reads
+     as something failing to render, and "there was nothing here" is a fact about
+     the message: it is what the sender sent. */
+  if (!hasBody(body)) {
+    return (
+      <div className="bd">
+        <p className="nobody">No body</p>
+      </div>
+    );
   }
   return <div className="bd" dangerouslySetInnerHTML={html(trimBody(body))} />;
 }

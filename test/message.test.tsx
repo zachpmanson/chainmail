@@ -186,3 +186,47 @@ describe("how a bubble says what it knows about its clock", () => {
     expect(container.querySelector(".tz")!.getAttribute("title")).toMatch(/Zone unknown/);
   });
 });
+
+/**
+ * A body with nothing in it. Most mail has words; the ones that do not are the
+ * ones worth pinning down, because a bubble drawn without a body is a gap the
+ * reader has to interpret — and the answer ("the sender sent nothing") is not the
+ * one a gap suggests ("this failed to render").
+ */
+describe("a message that carried no body", () => {
+  it("says so, in the page's own voice", () => {
+    const { container } = draw({ body: "" });
+    const bd = container.querySelector(".bd")!;
+    expect(bd.querySelector(".nobody")!.textContent).toBe("No body");
+    // Nothing of the sender's is drawn: the placeholder is the body.
+    expect(bd.children).toHaveLength(1);
+  });
+
+  it("treats markup that says nothing as nothing", () => {
+    // What an empty text part looks like once the ingest has serialized it: an
+    // empty paragraph, a line break, a run of spaces. None of them is a sentence.
+    for (const body of ["<p></p>", "<p> </p>", "<br>", "<div>&nbsp;</div>", "<p>\n\t</p>", "   ", "<!-- nothing -->"]) {
+      const { container } = draw({ body });
+      expect(container.querySelector(".nobody"), JSON.stringify(body)).not.toBeNull();
+    }
+  });
+
+  it("leaves a body alone when it has anything to show", () => {
+    // A picture, a preformatted block or a folded signature all say something a
+    // sentence does not, and none of them is a hole to fill with our words. A
+    // <pre> counts even when its own text is blank, because its whitespace is the
+    // author's — the same judgement the trim makes about it.
+    const bodies = [
+      "<p>Roof access is fine from the 14th.</p>",
+      '<p><img src="/v1/attachments/abc" alt=""></p>',
+      "<pre>  </pre>",
+      '<details class="sig"><summary>…</summary><div class="sigbd"><p>Ada</p></div></details>',
+    ];
+    for (const body of bodies) {
+      const { container } = draw({ body });
+      expect(container.querySelector(".nobody"), JSON.stringify(body)).toBeNull();
+      // And the sender's own markup is what is drawn, untouched by this.
+      expect(container.querySelector(".bd")!.innerHTML, JSON.stringify(body)).not.toBe("");
+    }
+  });
+});
