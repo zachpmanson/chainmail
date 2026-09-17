@@ -32,7 +32,9 @@ var (
 // They travel together rather than as two arguments because they are one message:
 // a caller that could pass a text body and an unrelated HTML one would be able to
 // send two messages in one envelope, and the parts of a multipart/alternative are
-// only meaningful as two renderings of the same thing.
+// only meaningful as two renderings of the same thing. **An empty HTML is how a
+// caller sends the words alone** — the reader who asked for plain text gets the
+// text part by itself rather than a message with an empty second half in it.
 type ReplyBody struct {
 	Text string
 	HTML string

@@ -1103,14 +1103,17 @@
    takes it — and the primary press is the rightmost of them, which is the one
    place a right-handed reader's cursor already is. */
 .replyacts { justify-content:flex-end; }
-/* The reply-all tick holds the other end of that row: it is the one decision the
-   box has to make about the message rather than about the words in it, so it
-   sits where a form's choices sit — under the field, at the left, in the reader's
-   reading order — while what sends the reply stays where the sending is. */
-.replyall { display:flex; align-items:center; gap:.4rem; margin-right:auto;
+/* The box's choices hold the other end of that row: what the reader decides about
+   the reply rather than about the words in it — who else is on it, and whether the
+   HTML part goes with the text — sits where a form's choices sit, under the field
+   at the left, in the reader's reading order, while what sends the reply stays
+   where the sending is. They are one row and one style because they are one kind
+   of thing: both ticks are on, and either can only take something off the reply. */
+.replyopts { display:flex; align-items:center; gap:1rem; margin-right:auto; }
+.replytick { display:flex; align-items:center; gap:.4rem;
   font-size:.74rem; color:var(--muted); cursor:pointer; }
-.replyall input { margin:0; accent-color:var(--accent); cursor:pointer; }
-.replyall:has(input:disabled) { opacity:.55; cursor:default; }
+.replytick input { margin:0; accent-color:var(--accent); cursor:pointer; }
+.replytick:has(input:disabled) { opacity:.55; cursor:default; }
 
 /* --- what a write leaves to say --- */
 /* The bottom-right corner, over every page. These are accounts of work that is

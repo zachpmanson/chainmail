@@ -51,6 +51,14 @@ import { refusal, staleAfterMail, SAID_MS } from "./MailVerbs";
  * nothing here that can add anyone to it — the reply-all tick can only take people
  * off it (see gmailclient.Reply).
  *
+ * **The two ticks are both subtractions, and both are on.** The reply is one message
+ * in two renderings — the words as text, and the same words as HTML with the quote
+ * inside a blockquote a client folds — and the second tick takes the second
+ * rendering off it for a correspondent who wants the text. That is a choice about
+ * the form and not about the message: the words, the quote and the audience are the
+ * same either way, so a reader who sends plain text has sent exactly what the
+ * preview showed them, minus markup they never wrote.
+ *
  * A refusal says what it was: a host started without -send-mail cannot answer mail
  * at all, and the second step says so in words rather than being a button that
  * does nothing. Neither failure claims the other's outcome — a mailbox that would
@@ -98,6 +106,14 @@ export function ReplyBox({
   // people off the reply when one of them asked you something, not to ask the
   // reader to opt into the conversation they are already in.
   const [all, setAll] = useState(true);
+  // Whether the reply carries the HTML part beside the plain text. On by default,
+  // for the same reason and with the same shape as the tick above: it is what this
+  // box has always sent, so the tick takes the second rendering off a reply rather
+  // than asking the reader to add it. The words are the same either way — the HTML
+  // is the same message marked up — so what the reader is choosing is not what the
+  // reply says but whether the correspondent's client gets a quote it can fold and
+  // paragraphs that are paragraphs.
+  const [html, setHtml] = useState(true);
   // The plan the preview came back with, while the reader is looking at it.
   const [plan, setPlan] = useState<SendResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -133,7 +149,7 @@ export function ReplyBox({
     setBusy(true);
     try {
       const res = await send.mutateAsync({
-        body: { entry: answer.extId, body: own, all, confirm: false },
+        body: { entry: answer.extId, body: own, all, html, confirm: false },
       });
       setPlan(res);
     } catch (e) {
@@ -162,7 +178,7 @@ export function ReplyBox({
     setBusy(true);
     try {
       await send.mutateAsync({
-        body: { entry: answer.extId, body: own, all, confirm: true },
+        body: { entry: answer.extId, body: own, all, html, confirm: true },
       });
       setPlan(null);
       setOwn("");
@@ -204,7 +220,7 @@ export function ReplyBox({
                 , cc <strong>{plan.cc}</strong>
               </>
             ) : null}
-            , as <strong>{plan.subject}</strong>. Your words come first and the message you
+            , as <strong>{plan.subject}</strong>, in <strong>{html ? "text and HTML" : "plain text alone"}</strong>. Your words come first and the message you
             are answering is quoted under them.
           </p>
           {/* The body as it will be sent, whitespace and all: a quote is line by
@@ -241,21 +257,45 @@ export function ReplyBox({
             onChange={(e) => setOwn(e.target.value)}
           />
           <div className="opmact replyacts">
-            <label
-              className="replyall"
-              title={
-                "Answer everyone the message was addressed to, not only whoever wrote it. " +
-                "Who that is comes from the message itself — nothing here can add anyone to it."
-              }
-            >
-              <input
-                type="checkbox"
-                checked={all}
-                disabled={busy}
-                onChange={(e) => setAll(e.target.checked)}
-              />
-              reply all
-            </label>
+            {/* The two decisions the box has to make, at the left end of the row
+                where a form's choices sit, and the press that acts on them at the
+                right where the sending is. Both are ticks and both are on: each
+                one takes something off the reply — the audience beyond the sender,
+                and the second rendering of the words — and neither can add
+                anything the answered message did not already carry. */}
+            <div className="replyopts">
+              <label
+                className="replytick"
+                title={
+                  "Answer everyone the message was addressed to, not only whoever wrote it. " +
+                  "Who that is comes from the message itself — nothing here can add anyone to it."
+                }
+              >
+                <input
+                  type="checkbox"
+                  checked={all}
+                  disabled={busy}
+                  onChange={(e) => setAll(e.target.checked)}
+                />
+                reply all
+              </label>
+              <label
+                className="replytick"
+                title={
+                  "Send the HTML part of the reply — the same words marked up, with the " +
+                  "quoted message in a blockquote a client can fold — beside the plain " +
+                  "text. Unchecked sends the plain text alone, which says the same thing."
+                }
+              >
+                <input
+                  type="checkbox"
+                  checked={html}
+                  disabled={busy}
+                  onChange={(e) => setHtml(e.target.checked)}
+                />
+                send html
+              </label>
+            </div>
             <button
               type="button"
               className="opbtn"

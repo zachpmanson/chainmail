@@ -3383,7 +3383,7 @@
       },
       "SendRequest": {
         "type": "object",
-        "description": "A reply: which message is being answered, what the reader has to say, whether the conversation's other participants are on it, and whether this call is the preview or the send. There is no recipient field — the recipients are the ones the answered message's own headers carried, and the addresses belonging to this mailbox are left off them.",
+        "description": "A reply: which message is being answered, what the reader has to say, whether the conversation's other participants are on it, whether the HTML part goes with the text, and whether this call is the preview or the send. There is no recipient field — the recipients are the ones the answered message's own headers carried, and the addresses belonging to this mailbox are left off them.",
         "required": [
           "entry",
           "body"
@@ -3402,6 +3402,11 @@
           "all": {
             "type": "boolean",
             "description": "Whether the reply answers the message's whole audience — its sender in `to`, the rest of it in `cc` — or its sender alone. Absent means everyone, which is what this endpoint has always answered, so an older client keeps the behaviour it had. It is not a recipient list and cannot become one: the addresses are the answered message's own either way, so no value of this field reaches an address the message did not carry. Answering a dozen people when one asked you something is a different act from answering the person who asked, which is why it is the caller's to say.",
+            "example": true
+          },
+          "html": {
+            "type": "boolean",
+            "description": "Whether the reply carries the HTML part beside the plain text: the same words marked up, with the message being answered in a `blockquote` a client folds. Absent means it does, which is what this endpoint has always sent, so an older client sends the message it had. The text part is unchanged either way — the HTML is a second rendering of it, never the source — so turning this off does not change what the reply says, only what it looks like.",
             "example": true
           },
           "confirm": {

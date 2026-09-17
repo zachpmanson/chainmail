@@ -282,6 +282,42 @@ func TestTheReplyGoesOutInBothForms(t *testing.T) {
 	}
 }
 
+// The reader can send the words alone. The second rendering is dropped rather than
+// the message being different: the text part is the one the preview showed, byte for
+// byte, and the HTML never was the source of it. Absent means it goes, so a client
+// that has not been rebuilt sends the message it always sent.
+func TestTheReplyGoesOutAsTextAloneWhenAsked(t *testing.T) {
+	h, fake := sendServer(t)
+
+	res := h.do(t, "POST", "/v1/send",
+		[]byte(`{"entry":"`+extAda3+`","body":"The 14th works.","html":false}`))
+	if res.status != 200 {
+		t.Fatalf("status %d: %s", res.status, res.body)
+	}
+	if len(fake.replies) != 1 {
+		t.Fatalf("the mailbox saw %+v, want one call", fake.replies)
+	}
+	body := fake.replies[0].body
+
+	if body.HTML != "" {
+		t.Errorf("the mailbox was handed an HTML part anyway:\n%s", body.HTML)
+	}
+	// The text part is what it would have been either way — including the quote
+	// and its heading, which are the server's and not the form's.
+	for _, want := range []string{
+		"The 14th works.",
+		"Ada Okoye <ada@loomworks.example> wrote:",
+		"> Roof access is fine from the 14th.",
+	} {
+		if !strings.Contains(body.Text, want) {
+			t.Errorf("the text part is missing %q:\n%s", want, body.Text)
+		}
+	}
+	if got := decode[sendResponse](t, res); got.Body != body.Text {
+		t.Errorf("the plan's body is not the text part that was sent")
+	}
+}
+
 func TestARepliesCcIsAbsentWhenThereIsNobodyElse(t *testing.T) {
 	h, fake := sendServer(t)
 	// The mailbox answers a reply to a message the reader was the only recipient
