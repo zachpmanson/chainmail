@@ -627,15 +627,15 @@ describe("the pane's second reading of a message", () => {
     await waitFor(() => expect(pane().querySelector(".bdo")).toBeTruthy());
     const host = pane().querySelector(".bdo") as HTMLElement;
     expect(host.shadowRoot!.innerHTML).toBe(SENT);
-    // Asked for once per message: the flip back is the same control, pressed —
-    // which is drawn out on the header line, where the reader who has swapped the
-    // body can reach it without opening the receipt to do it.
+    // Asked for once per message: the flip back is the same control, in the same
+    // place it was pressed — the receipt does not hand it to another part of the
+    // bubble when the switch comes on.
     expect(chains().length).toBeGreaterThan(0);
     const asks = () => calls.filter((c) => pathOf(c).endsWith("/original"));
     expect(asks()).toHaveLength(1);
-    const wayBack = pane().querySelector("details.hdr > summary .origbtn") as HTMLElement;
+    const wayBack = pane().querySelector(".hdetend .origbtn") as HTMLElement;
     expect(wayBack.getAttribute("aria-pressed")).toBe("true");
-    expect(pane().querySelector(".hdetend .origbtn")).toBeNull();
+    expect(pane().querySelector("details.hdr > summary .origbtn")).toBeNull();
     fireEvent.click(wayBack);
     expect(asks()).toHaveLength(1);
     await waitFor(() => expect(pane().querySelector(".bdo")).toBeNull());
