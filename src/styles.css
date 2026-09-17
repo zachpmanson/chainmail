@@ -465,11 +465,15 @@
   .msg.o3 .org { --orgc:var(--o3); } .msg.o4 .org { --orgc:var(--o4); }
   .msg.o5 .org { --orgc:var(--o5); }
   .tm { font-size:.71rem; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
-  .copyjson { margin-left:auto; display:inline-flex; align-items:center; gap:.3rem;
+  /* The receipt's two controls are one shape, so they read as one line of them:
+     the clip that copies the message whole, and the swap to the sender's own
+     rendering (see .origbtn further down for why that one is here). */
+  .copyjson, .origbtn { display:inline-flex; align-items:center; gap:.3rem;
     font:inherit; font-size:.66rem; font-weight:650; color:var(--muted);
     background:transparent; border:1px solid transparent; border-radius:5px;
     padding:.12rem .3rem; cursor:pointer; }
-  .copyjson:hover { color:var(--accent); border-color:var(--line); background:var(--card); }
+  .copyjson:hover, .origbtn:hover { color:var(--accent); border-color:var(--line);
+    background:var(--card); }
   .tz { font-size:.9em; opacity:.75; }
   /* an inferred zone must not read as a stated one */
   .tz.tzi { opacity:.55; border-bottom:1px dotted currentColor; cursor:help; }
@@ -504,23 +508,23 @@
   .msg.me .bub { background:var(--mine); border-color:var(--o3); }
   .ment { margin:0 0 .3rem; display:flex; flex-wrap:wrap; gap:.25rem; }
   /* The reader's second reading of one message: the sender's own html, swapped in
-     for this pipeline's stripped one. In flow at the body's top edge rather than
-     floating over it — a mail's own top-right corner is where its header usually
-     is, and a control that covers the content it exists to show is worse than one
-     the reader has to look for.
+     for this pipeline's stripped one. The control lives in the receipt, beside the
+     copy button — the receipt is where a reader inspects a message (the ids it was
+     found under, the address it was sent to, the JSON behind it), and this asks
+     for the same message a second way, so it belongs with those rather than on the
+     bubble. Bubbles are what a thread is scanned by, and most mail renders
+     correctly: a control that asks to be noticed on every one of them trades one
+     kind of noise for another.
 
-     Quiet at rest, and quiet is a decision: most mail renders correctly, so a
-     control that asks to be noticed on every bubble trades one kind of noise for
-     another. Its weight is the signature fold's (see .bd details.sig), not the
-     toolbar's. Pressed is the exception — the reader who has swapped the body is
-     the one who needs the way back, so the state is drawn at full weight even
-     when the pointer is somewhere else. */
-  .origrow { display:flex; justify-content:flex-end; align-items:center; gap:.4rem;
-    margin:0 0 .3rem; }
-  .origrow .tbtn { font-size:.6rem; padding:.08rem .35rem; opacity:.5; }
-  .origrow .tbtn:hover, .origrow .tbtn:focus-visible,
-  .origrow .tbtn[aria-pressed="true"] { opacity:1; }
-  .origwhy { font-size:.68rem; color:var(--muted); font-style:italic; }
+     So it is drawn in the receipt's own dialect rather than the toolbar's — a
+     small quiet label, like the copy button beside it, and the shared shape above
+     so the pair reads as one line of controls. Pressed is the exception the colour
+     carries: the reader who has swapped the body is the one who needs the way
+     back, and they may well have closed the receipt by then. */
+  .hdetend { margin-left:auto; display:inline-flex; align-items:center; gap:.35rem; }
+  .origbtn[aria-pressed="true"] { color:var(--accent); background:var(--mine);
+    border-color:var(--accent); }
+  .origwhy { font-size:.66rem; color:var(--muted); font-style:italic; }
   /* The shadow host: layout only, and deliberately no colour. A rule in THIS
      stylesheet beats a :host rule written inside the shadow root, so a colour
      here would be a canvas the sender's own stylesheet could not correct — the

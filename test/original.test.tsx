@@ -24,6 +24,12 @@ afterEach(() => {
  * Every test names its own ext id, because lib/original holds what it fetched for
  * the session — the same caching a reader gets, and the same reason two tests
  * sharing an id would be observing each other.
+ *
+ * Note for whoever writes the next one: the control lives inside the bubble's
+ * receipt, so in a browser it is one click away. jsdom does not hide a closed
+ * <details>, so a role query finds it here whether the receipt is open or not —
+ * these tests are about the swap, not about it being on screen. The one test that
+ * does assert where it is drawn is the placement test at the end.
  */
 
 const bubble = (over: Partial<MessageProps> = {}): MessageProps => ({
@@ -123,7 +129,32 @@ describe("a message whose own html the corpus holds", () => {
     // A built page, a static export, a message that arrived as plain text: the
     // prop is the flag, so its absence is the answer for all three.
     const { container } = draw();
-    expect(container.querySelector(".origrow")).toBeNull();
+    expect(container.querySelector(".origbtn")).toBeNull();
+    expect(container.querySelector(".hdetend")).toBeNull();
+  });
+
+  it("puts the control in the receipt, beside the copy button", () => {
+    // The reader who needs this is the one who has noticed the rendering is wrong,
+    // which means going to look at the message — and this is where looking at a
+    // message lives. So: in the details body rather than the summary (where it
+    // would be a control on every bubble in the thread), in the bubble's header
+    // rather than its body (where it would sit on top of the content it exists to
+    // show), and next to the clip rather than alone at the other end of the line.
+    const { container } = draw({
+      original: { extId: "mail:<orig-place@loomworks.example>", load: async () => sent },
+      copyJson: { id: "m1" },
+    });
+    const hdr = container.querySelector("details.hdr")!;
+    expect(hdr.querySelector("summary .origbtn, summary .copyjson")).toBeNull();
+    const det = hdr.querySelector(".hdet")!;
+    expect(det.querySelector(".bub .origbtn")).toBeNull();
+    const end = det.querySelector(".hdetend")!;
+    expect(end.querySelector(".origbtn")!.textContent).toBe("original");
+    expect(end.querySelector(".copyjson")).not.toBeNull();
+    // The clip is the last thing on the line and the swap sits immediately before
+    // it: both in the one group that is pushed to the right edge, so the pair
+    // stays together however the receipt's fields above them wrap.
+    expect(end.lastElementChild!.className).toBe("copyjson");
   });
 });
 

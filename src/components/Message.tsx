@@ -366,9 +366,9 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
 }
 
 /**
- * The bubble's body, and the reader's second reading of it.
+ * The reader's second reading of one message.
  *
- * By default the body is the transcript's: the sender's markup as this pipeline
+ * By default a body is the transcript's: the sender's markup as this pipeline
  * renders it, stripped of the stylesheet and the class names that made it what it
  * was, so that a page of other people's design reads as one page. That stripping
  * is what makes some mail illegible — a calendar invite is tables and classes and
@@ -382,13 +382,14 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
  * for the control — and the whole reason to reach for it is that one of the two is
  * wrong for this message.
  *
- * The control is drawn only where a caller passed somewhere to fetch from, so a
- * built page and a static export never show one. Where it is drawn, it is quiet:
- * in flow at the body's own top edge, at the weight of the signature fold rather
- * than the toolbar's (see .origrow in the stylesheet), because a message that says
- * nothing about being in the wrong rendering should say nothing at all.
+ * The state lives here, at the bubble, rather than in either end of the swap: the
+ * control belongs in the receipt (where the reader goes to inspect a message) and
+ * the body it replaces belongs in the bubble, and one of them cannot own the other
+ * without the other reaching for it. The control is drawn only where a caller
+ * passed somewhere to fetch from, so a built page and a static export never show
+ * one — see MessageProps.original.
  */
-function Body({ body, original }: { body: string; original?: MessageProps["original"] }) {
+function useOriginal(original?: MessageProps["original"]) {
   const [state, setState] = useState<Original>({ at: "read" });
   // What arrived, held apart from what is on screen: the reader who flips back and
   // forth is comparing two renderings of one body, and re-asking for bytes this
@@ -397,14 +398,6 @@ function Body({ body, original }: { body: string; original?: MessageProps["origi
   // message, or one remounted, pays nothing either) — this is what keeps the flip
   // itself free.
   const arrived = useRef<string | null>(null);
-  const host = useRef<HTMLDivElement | null>(null);
-  // Mounted by effect rather than in the ref callback: the element exists on the
-  // render that swaps to it, and the shadow root is created on the element as
-  // part of that commit. React owns the host as an empty div; the mail is written
-  // into it by this one call, and never read back.
-  useEffect(() => {
-    if (state.at === "sent" && host.current) mountOriginal(host.current, state.html);
-  }, [state]);
 
   const ask = () => {
     if (!original) return;
@@ -433,47 +426,71 @@ function Body({ body, original }: { body: string; original?: MessageProps["origi
     );
   };
 
+  return { state, ask };
+}
+
+/**
+ * The control, in the bubble's receipt beside the copy button.
+ *
+ * The receipt is where a reader goes to inspect a message rather than read it: the
+ * ids it was found under, the address it was sent to, the JSON behind it. This asks
+ * for the same message a second way, so it belongs with those rather than on the
+ * bubble — as chrome over the body it would be a control on every message that had
+ * one (most of them), while the reader who needs it is the one who has already
+ * noticed the rendering is wrong.
+ *
+ * `none` is the one answer that leaves nothing to press: the corpus was asked and
+ * said there is nothing of the sender's to show. The server's own sentence is the
+ * answer, so it rides the note's title rather than being replaced with a word.
+ */
+function OriginalControl({ state, ask }: { state: Original; ask: () => void }) {
+  if (state.at === "none") {
+    return (
+      <span className="origwhy" title={state.why}>
+        nothing to show
+      </span>
+    );
+  }
   return (
-    <>
-      {original ? (
-        <div className="origrow">
-          {state.at === "none" ? (
-            /* The one case with nothing left to press: the corpus was asked and
-               answered that there is nothing to show. The server's own sentence
-               is the answer, so it is shown rather than replaced with a
-               word — this is a reader looking at a message, not an operator
-               reading a log. */
-            <span className="origwhy" title={state.why}>
-              nothing to show
-            </span>
-          ) : (
-            <button
-              type="button"
-              className="tbtn"
-              aria-pressed={state.at === "sent"}
-              disabled={state.at === "asking"}
-              title={
-                state.at === "sent"
-                  ? "Back to the rendered body: the same message with the sender's own styling removed"
-                  : "Show this message as it was written: the sender's own markup and its own stylesheet, in a shadow root, which is where the stylesheet cannot reach this page"
-              }
-              onClick={ask}
-            >
-              {state.at === "asking" ? "loading…" : "original"}
-            </button>
-          )}
-        </div>
-      ) : null}
-      {state.at === "sent" ? (
-        /* The shadow host. Empty as far as React is concerned — the mail is
-           written into its shadow root, where a rule of this page's cannot
-           reach it and its own rules cannot leave. */
-        <div className="bd bdo" ref={host} />
-      ) : (
-        <div className="bd" dangerouslySetInnerHTML={html(trimBody(body))} />
-      )}
-    </>
+    <button
+      type="button"
+      className="origbtn"
+      aria-pressed={state.at === "sent"}
+      disabled={state.at === "asking"}
+      title={
+        state.at === "sent"
+          ? "Back to the rendered body: the same message with the sender's own styling removed"
+          : "Show this message as it was written: the sender's own markup and its own stylesheet, in a shadow root, which is where the stylesheet cannot reach this page"
+      }
+      onClick={ask}
+    >
+      {state.at === "asking" ? "loading…" : "original"}
+    </button>
   );
+}
+
+/**
+ * The bubble's body, in whichever of the two renderings the reader last asked
+ * for. The mount is the only imperative thing in this file: a shadow root is DOM
+ * rather than React, and the element it is created on is created by the render.
+ */
+function Body({ body, state }: { body: string; state: Original }) {
+  const host = useRef<HTMLDivElement | null>(null);
+  // Mounted by effect rather than in the ref callback: the element exists on the
+  // render that swaps to it, and the shadow root is created on the element as
+  // part of that commit. React owns the host as an empty div; the mail is written
+  // into it by this one call, and never read back.
+  useEffect(() => {
+    if (state.at === "sent" && host.current) mountOriginal(host.current, state.html);
+  }, [state]);
+
+  if (state.at === "sent") {
+    /* The shadow host. Empty as far as React is concerned — the mail is written
+       into its shadow root, where a rule of this page's cannot reach it and its
+       own rules cannot leave. */
+    return <div className="bd bdo" ref={host} />;
+  }
+  return <div className="bd" dangerouslySetInnerHTML={html(trimBody(body))} />;
 }
 
 /** What the reader has asked for, and what came back.
@@ -501,6 +518,11 @@ export function Message(p: MessageProps) {
     p.chainStart && "chstart", p.mark === "new" && "isnew", p.landed && "landed"]
     .filter(Boolean)
     .join(" ");
+  // The receipt's controls are the last thing on the line, and the two of them
+  // sit together: the tail of the receipt is where a reader inspects the message
+  // rather than reads it, and a second way to read it belongs beside the way to
+  // copy it, not on the bubble.
+  const original = useOriginal(p.original);
   // The name's hover title, and the avatar's: both name the person the same way,
   // and a caller that supplies no title gets the name it already gave us.
   const who = p.senderTitle ?? p.sender ?? "";
@@ -553,7 +575,14 @@ export function Message(p: MessageProps) {
             ) : null}
             <span className="to">to {p.to ?? "—"}</span>
             {p.source}
-            {p.copyJson !== undefined ? <CopyJson data={p.copyJson} /> : null}
+            {p.original !== undefined || p.copyJson !== undefined ? (
+              <span className="hdetend">
+                {p.original !== undefined ? (
+                  <OriginalControl state={original.state} ask={original.ask} />
+                ) : null}
+                {p.copyJson !== undefined ? <CopyJson data={p.copyJson} /> : null}
+              </span>
+            ) : null}
           </div>
         </details>
         <div className="bub">
@@ -567,9 +596,9 @@ export function Message(p: MessageProps) {
             </div>
           ) : null}
           {/* The body, and the second reading of it: this is where the sender's own
-              html is mounted in place of the rendered one, and where the control
-              that swaps them lives. */}
-          <Body body={p.body} original={p.original} />
+              html is mounted in place of the rendered one. Which one to draw is
+              the receipt's control's state, held at the bubble above. */}
+          <Body body={p.body} state={original.state} />
           {p.edits}
           <Attachments
             attachments={p.attachments}

@@ -617,7 +617,7 @@ describe("the pane's second reading of a message", () => {
     await mountApp();
     await openRow();
     const button = await waitFor(() => {
-      const b = pane().querySelector(".origrow .tbtn") as HTMLElement;
+      const b = pane().querySelector(".hdetend .origbtn") as HTMLElement;
       expect(b).toBeTruthy();
       return b;
     });
@@ -631,7 +631,7 @@ describe("the pane's second reading of a message", () => {
     expect(chains().length).toBeGreaterThan(0);
     const asks = () => calls.filter((c) => pathOf(c).endsWith("/original"));
     expect(asks()).toHaveLength(1);
-    fireEvent.click(pane().querySelector(".origrow .tbtn") as HTMLElement);
+    fireEvent.click(pane().querySelector(".hdetend .origbtn") as HTMLElement);
     expect(asks()).toHaveLength(1);
   });
 
@@ -640,6 +640,6 @@ describe("the pane's second reading of a message", () => {
     await mountApp();
     await openRow();
     await waitFor(() => expect(pane().querySelector(".bd")).toBeTruthy());
-    expect(pane().querySelector(".origrow")).toBeNull();
+    expect(pane().querySelector(".origbtn")).toBeNull();
   });
 });
