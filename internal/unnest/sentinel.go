@@ -226,8 +226,8 @@ func continuesHeader(lines []Line, j int) bool {
 // land: Gmail re-renders a long Cc: with none of the leading whitespace RFC 5322
 // folding would have left, and cuts inside the address —
 //
-//	Cc: dona@termina.io <dona@termina.io>, Sam Bennett <
-//	Sam.Bennett@meridianenergy.co.nz>, Zach Manson <zach@termina.io>
+//	Cc: nella@loomworks.example <nella@loomworks.example>, Bo Vantel <
+//	Bo.Vantel@loomworks.example>, Zach Manson <zach@loomworks.example>
 //
 // — so the tail was taken as the body's first line. A recovered entry then
 // opened with an address fragment: it reads as a stray paragraph, and it defeats

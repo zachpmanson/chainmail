@@ -289,7 +289,7 @@ func NormaliseIdentity(kind, value string) (string, error) {
 // plusBaseAddress reduces an address carrying an RFC 5233 subaddress to the
 // mailbox it is delivered to, and returns the tag separately. Everything from
 // the first `+` to the `@` is a detail the recipient chose — which signup, which
-// vendor — so `zachpmanson+salsa@gmail.com` and `zachpmanson@gmail.com` are one
+// vendor — so `nellaforge+salsa@gmail.com` and `nellaforge@gmail.com` are one
 // mailbox and therefore one person.
 //
 // ok is false where there is no tag to take off, and where taking it off would
@@ -693,8 +693,8 @@ func MergeByEmail(s *Store, keepEmail, dropEmail string) (int64, error) {
 //
 // This is the identity graph answering a question about a human rather than
 // about a string. A reader who names one of their addresses names the person
-// every address of theirs was merged into — `zachpmanson@gmail.com` and
-// `zachpmanson+salsa@gmail.com` are one mailbox and so one person here — and
+// every address of theirs was merged into — `nellaforge@gmail.com` and
+// `nellaforge+salsa@gmail.com` are one mailbox and so one person here — and
 // that is what lets a statement about a reader's own mail be true of all of it
 // rather than of the one address they happened to type.
 //

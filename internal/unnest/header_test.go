@@ -125,7 +125,7 @@ func TestHeaderBlockRecoversRecipientsAcrossCorpus(t *testing.T) {
 // orphaned every key after it: Subject: landed in the body text and the
 // recipients past the wrap vanished. 10 of 28 recovered entries on a real trail.
 func TestFoldedRecipientListDoesNotTruncateTheBlock(t *testing.T) {
-	body := "*From:* Bo Vantel <bo@fjord.co.nz>\r\n" +
+	body := "*From:* Bo Vantel <bo@loomworks.co.nz>\r\n" +
 		"*Sent:* Tuesday, 25 November 2025 1:29 pm\r\n" +
 		"*To:* Ro Laren <ro@ex.fed>; Ana Quill <\r\n" +
 		"ana.quill@ex.fed>\r\n" +
@@ -155,7 +155,7 @@ func TestFoldedRecipientListDoesNotTruncateTheBlock(t *testing.T) {
 
 // The same wrap on the block's LAST header, where no key follows to give the
 // fold away. Gmail re-rendered this block inside a forward (zpm/chainmail#146):
-// a long Cc: cut inside "Sam Bennett <", and the tail became the recovered
+// a long Cc: cut inside "Bo Vantel <", and the tail became the recovered
 // entry's opening — an address fragment as the first paragraph, and an opening
 // the twin pass could not match against the real mailbox copy.
 func TestFoldedFinalRecipientLineStaysInTheBlock(t *testing.T) {
@@ -164,7 +164,7 @@ func TestFoldedFinalRecipientLineStaysInTheBlock(t *testing.T) {
 		"Date: Wed, 16 Sep 2026 at 8:14 PM\r\n" +
 		"Subject: RE: Ruralco sites\r\n" +
 		"To: Lane Whittaker <lane@termina.example>\r\n" +
-		"Cc: dona@termina.example <dona@termina.example>, Sam Bennett <\r\n" +
+		"Cc: nella@loomworks.example <nella@loomworks.example>, Bo Vantel <\r\n" +
 		"sam@meridian.example>, Zach Manson <zach@termina.example>\r\n" +
 		"\r\n" +
 		"Hiya Lane\r\n"

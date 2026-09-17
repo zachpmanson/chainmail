@@ -413,8 +413,8 @@ func TestCandidatesLeavesOutRoleMailboxesAtTwoDomains(t *testing.T) {
 // employer. The alias must point at the domain still in use.
 func TestCandidatesNameTheCommandThatWouldSettleThem(t *testing.T) {
 	s := open(t)
-	person(t, s, "bryn@quarry.fed", "Bryn Lowther")
-	person(t, s, "bryn@millrace.fed", "Bryn Lowther")
+	person(t, s, "nella@quarry.fed", "Nella Forge")
+	person(t, s, "nella@millrace.fed", "Nella Forge")
 	person(t, s, "cass@millrace.fed", "Cass Enright")
 	person(t, s, "dai@millrace.fed", "Dai Rhys")
 
@@ -428,7 +428,7 @@ func TestCandidatesNameTheCommandThatWouldSettleThem(t *testing.T) {
 	if !strings.Contains(cs[0].Suggest, "-from quarry.fed -to millrace.fed") {
 		t.Fatalf("suggestion = %q, want the alias toward the live domain", cs[0].Suggest)
 	}
-	if !strings.Contains(cs[0].Suggest, "corpus merge -keep bryn@millrace.fed") {
+	if !strings.Contains(cs[0].Suggest, "corpus merge -keep nella@millrace.fed") {
 		t.Fatalf("suggestion = %q, want the merge that keeps the live account", cs[0].Suggest)
 	}
 }
