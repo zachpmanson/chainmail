@@ -1097,6 +1097,12 @@
   line-height:1.45; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
   color:var(--fg); background:var(--bg); border:1px solid var(--line);
   border-radius:6px; }
+/* The box's own buttons sit at the right end rather than the left. The box is
+   the last thing in the reading pane and its action is the last thing in the
+   box, so the eye that has finished reading the plan lands on the press that
+   takes it — and the primary press is the rightmost of them, which is the one
+   place a right-handed reader's cursor already is. */
+.replyacts { justify-content:flex-end; }
 
 /* --- what a write leaves to say --- */
 /* The bottom-right corner, over every page. These are accounts of work that is

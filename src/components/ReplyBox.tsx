@@ -201,15 +201,7 @@ export function ReplyBox({
               line, and a reply that reflowed on its way out would not be this
               text. */}
           <pre className="replytext">{plan.body}</pre>
-          <div className="opmact">
-            <button
-              type="button"
-              className="opbtn opbtn-after"
-              disabled={busy}
-              onClick={() => void ship()}
-            >
-              {busy ? "sending…" : "send this reply"}
-            </button>
+          <div className="opmact replyacts">
             <button
               type="button"
               className="opbtn"
@@ -217,6 +209,14 @@ export function ReplyBox({
               onClick={() => setPlan(null)}
             >
               keep editing
+            </button>
+            <button
+              type="button"
+              className="opbtn opbtn-after"
+              disabled={busy}
+              onClick={() => void ship()}
+            >
+              {busy ? "sending…" : "send this reply"}
             </button>
           </div>
         </div>
@@ -230,7 +230,7 @@ export function ReplyBox({
             disabled={busy}
             onChange={(e) => setOwn(e.target.value)}
           />
-          <div className="opmact">
+          <div className="opmact replyacts">
             <button
               type="button"
               className="opbtn"

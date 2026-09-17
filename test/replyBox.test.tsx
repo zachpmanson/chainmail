@@ -248,6 +248,35 @@ describe("answering a message from the pane", () => {
     expect(box()).toBeNull();
   });
 
+  it("holds its buttons at the right end, with the press that sends last", async () => {
+    handler = server(
+      () => json(200, chainBody(threaded)),
+      () => json(200, replyPlan(false)),
+    );
+    await mountApp();
+    await openThread();
+    await waitFor(() => expect(box()!.querySelector(".replyacts")).toBeTruthy());
+
+    // Which end the row sits at is the stylesheet's answer (`.replyacts`), and
+    // jsdom applies no stylesheets — so what is pinned here is what the
+    // stylesheet right-aligns, and in what order: the last button in a
+    // right-aligned row is the one nearest the reader's cursor, and the press
+    // that sends is the one the plan exists to be checked before.
+    const type = box()!.querySelector(".replyacts")!;
+    expect(within(type as HTMLElement).getAllByRole("button").map((b) => b.textContent)).toEqual([
+      "preview",
+    ]);
+
+    fireEvent.change(field(), { target: { value: "The 14th works." } });
+    press("preview");
+    await waitFor(() => expect(box()!.querySelector(".replyplan")).toBeTruthy());
+    const plan = box()!.querySelector(".replyacts")!;
+    expect(within(plan as HTMLElement).getAllByRole("button").map((b) => b.textContent)).toEqual([
+      "keep editing",
+      "send this reply",
+    ]);
+  });
+
   it("sends nothing on the first press, and shows what the second would send", async () => {
     await write("The 14th works.");
 
