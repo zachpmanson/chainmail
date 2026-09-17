@@ -1,4 +1,5 @@
 import { readTable, type Table } from "../lib/tables";
+import { withTransition } from "../lib/viewTransition";
 
 /**
  * All page interactivity, as a framework-agnostic module that attaches to
@@ -340,31 +341,6 @@ export function attach(doc: Document = document): () => void {
   }
 
   return () => { for (const c of cleanups) c(); };
-}
-
-/**
- * Name only the entries on screen before transitioning: dozens of transition
- * groups is needless work, and the ones off screen cannot be perceived. Names are
- * cleared afterwards so they never affect a later transition.
- */
-function withTransition(doc: Document, apply: () => void) {
-  type WithVT = Document & { startViewTransition?: (cb: () => void) => { finished: Promise<void> } };
-  const d = doc as WithVT;
-  const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-  if (!d.startViewTransition || reduce) { apply(); return; }
-
-  const named: HTMLElement[] = [];
-  const vh = window.innerHeight;
-  for (const el of doc.querySelectorAll<HTMLElement>(".msg[id], .sys[id]")) {
-    if (named.length >= 24) break;
-    const r = el.getBoundingClientRect();
-    if (r.bottom > -vh * 0.25 && r.top < vh * 1.25) {
-      el.style.viewTransitionName = el.id;
-      named.push(el);
-    }
-  }
-  const clear = () => { for (const el of named) el.style.viewTransitionName = ""; };
-  d.startViewTransition(apply).finished.then(clear, clear);
 }
 
 /**

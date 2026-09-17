@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { $api } from "../lib/api";
 import { dropFromLists, markInLists, putBackLists } from "../lib/lists";
 import { dismissToast, pushToast } from "../lib/toasts";
 import { readThreaded, rememberThreaded } from "../lib/threading";
+import { withTransition } from "../lib/viewTransition";
 import { ThreadMessages } from "./ThreadMessages";
 import { AttachmentCount, MailCount, PeopleCount } from "./ThreadRow";
 import {
@@ -188,12 +190,23 @@ export function ThreadPane({
               aria-pressed={threaded}
               aria-label={nestLabel(threaded)}
               title={nestLabel(threaded)}
-              onClick={() =>
-                setThreaded((on) => {
-                  rememberThreaded(!on);
-                  return !on;
-                })
-              }
+              onClick={() => {
+                // The switch is the one thing here that rearranges what the reader
+                // is looking at, so it is the one thing that animates: the bubbles
+                // are named by their anchors and morph to their new places as the
+                // render lands (see lib/viewTransition). The state change has to be
+                // in the DOM before the browser takes its second snapshot, which is
+                // what `flushSync` is for — without it the transition would animate
+                // between two copies of the same view.
+                withTransition(document, () =>
+                  flushSync(() =>
+                    setThreaded((on) => {
+                      rememberThreaded(!on);
+                      return !on;
+                    }),
+                  ),
+                );
+              }}
             >
               <NestGlyph />
             </button>

@@ -85,7 +85,13 @@ describe("a thread drawn as a tree", () => {
     // limit — and no DOM test can see it, because jsdom computes no cascade.
     const css = readFileSync("src/select.css", "utf8");
     expect(css).toContain("margin-left:calc(var(--nest,0) * var(--step))");
-    expect(css).toContain("background-size:calc(var(--nest,0) * var(--step)) 100%");
+    // One hairline per level it is under, laid across a box as wide as the depth
+    // and stopped at the bubble's own edge — and in the margin, on the ::before,
+    // because a background on the bubble paints inside the box the indent has
+    // already pushed right (which is where the guides used to end up: behind the
+    // header they were meant to stand beside).
+    expect(css).toContain("left:calc(-1 * var(--nest,0) * var(--step))");
+    expect(css).toContain("width:calc(var(--nest,0) * var(--step))");
     expect(css).not.toMatch(/min\(var\(--nest/);
   });
 

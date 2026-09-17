@@ -605,11 +605,17 @@
 
    - the indent, one step per reply;
    - a hairline per level it is under, so a message three replies down still shows
-     the two it hangs off. `background-size` is the whole of the second one: the
-     repeating gradient lays a rule every step and the size is the depth's own
-     width, so an opener is given no background at all and a nested bubble is
-     given one rule per ancestor. Nothing here counts levels by hand, and a flat
-     thread is the plain list of bubbles it has always been.
+     the two it hangs off.
+
+   The guides are drawn in the MARGIN the indent opened, not inside the bubble.
+   One rule paints a rule every step across a box as wide as the depth and stops
+   at the bubble's own left edge, so a message two deep gets two rules: one at the
+   opener's left edge and one at its parent's. That box is a ::before offset left
+   by the same width the margin took — a background on the bubble itself paints
+   inside the bubble's border box, which the margin has already pushed right, and
+   every rule then lands behind the card it was meant to stand beside. Nothing
+   counts levels by hand either way, and a flat thread draws nothing: a depth of
+   zero is a zero-width box.
 
    The indent goes in as far as the thread does. There is no cap: a reply twenty
    deep is drawn twenty steps in, with twenty hairlines beside it, because a
@@ -622,12 +628,22 @@
 .ibread .stream .msg {
   --nest:0;
   --step:1.1rem;
-  margin-left:calc(var(--nest,0) * var(--step));
+  position:relative;
+  margin-left:calc(var(--nest,0) * var(--step)); }
+.ibread .stream .msg::before {
+  content:"";
+  position:absolute;
+  top:0; bottom:-.5rem;
+  /* The half-rem is the bubble's own bottom margin (see .msg in styles.css), so
+     the guides of one bubble meet the next one's: the levels read as rails down
+     the thread rather than as dashes beside each card. */
+  left:calc(-1 * var(--nest,0) * var(--step));
+  width:calc(var(--nest,0) * var(--step));
   background-image:repeating-linear-gradient(to right,
     color-mix(in srgb, var(--line) 80%, transparent) 0 1px,
     transparent 1px var(--step));
-  background-size:calc(var(--nest,0) * var(--step)) 100%;
-  background-repeat:no-repeat; }
+  background-repeat:no-repeat;
+  pointer-events:none; }
 /* The participants panel, at the top of the pane's scroll, with room under it: the
    bubbles below are the thread and this is a heading over them, and flush against
    the first message it read as part of that message's card. Its own top margin is
