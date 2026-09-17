@@ -1551,3 +1551,139 @@ describe("the reader's own messages in the pane", () => {
     expect(settingsWrites()).toHaveLength(0);
   });
 });
+
+describe("fetching one message's files from the pane", () => {
+  // The pane draws the corpus, so a file whose bytes are not in it is a chip
+  // that has to leave for the mailbox — and, where the thread is the corpus's
+  // rather than a saved page's, the button under that chip is the reader's way
+  // of asking for the bytes instead. Every id, name and address here is invented.
+  const ROOT = "mail:<loom-cutover-1@example.fed>";
+  const OPEN_ROOT = `/?open=${encodeURIComponent(ROOT)}`;
+  /** The file the mailbox holds and the corpus does not: the corpus knows the
+   *  message rather than the file, so the only destination it can name is the
+   *  message's permalink (see toCorpusAttachment). */
+  const UNFETCHED = {
+    name: "shed.csv",
+    kind: "CSV",
+    size: "512 B",
+    link: "https://mail.google.com/mail/u/0/#all/19d263bb5a6b00db",
+  };
+  /** The same file once a pull has stored it. */
+  const STORED = { ...UNFETCHED, blobSha: "sha-of-the-bytes", open: "download" as const };
+
+  const ENTRY = {
+    extId: ROOT,
+    source: "mail",
+    quoted: false,
+    ts: "2026-03-02T09:15:00Z",
+    author: "Ada Okoye",
+    subject: "Loom cutover schedule",
+    body: "quote attached",
+    html: "<p>quote attached</p>",
+    tz: "AEST",
+    tzOffsetMinutes: 600,
+  };
+
+  /** A pane whose thread carries one file, either before or after a pull, and a
+   *  pull endpoint that answers the counts. Everything else is the app's own. */
+  const paneHandler = (opts: {
+    stored: () => boolean;
+    pull: () => Response;
+  }): Handler => (c) => {
+    const p = pathOf(c);
+    if (p.startsWith("/v1/chains/")) {
+      return json(200, {
+        rootExtId: ROOT,
+        entries: [{ ...ENTRY, attachments: [opts.stored() ? STORED : UNFETCHED] }],
+      });
+    }
+    if (p === "/v1/media/pull" && c.method === "POST") return opts.pull();
+    return buildHandler(c);
+  };
+
+  const pulledAnswer = () =>
+    json(200, {
+      wanted: 1,
+      pulled: 1,
+      skipped: 0,
+      failed: 0,
+      bytes: 512,
+      files: [{ name: "shed.csv", source: "mail", sha: "sha-of-the-bytes", bytes: 512 }],
+    });
+
+  const fetchButton = () => within(pane()).queryByRole("button", { name: /fetch files/ });
+  const pulls = () => calls.filter((c) => c.method === "POST" && pathOf(c) === "/v1/media/pull");
+  const chainReads = () => calls.filter((c) => pathOf(c).startsWith("/v1/chains/"));
+
+  it("fetches that message's files, and re-reads the thread they landed in", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    let stored = false;
+    // The server stores the bytes before it answers — so the flag flips inside the
+    // handler, and the thread the pane re-reads is one that has them.
+    handler = paneHandler({
+      stored: () => stored,
+      pull: () => {
+        stored = true;
+        return pulledAnswer();
+      },
+    });
+
+    await mountApp(OPEN_ROOT);
+    // The chip is a link to the mailbox: the corpus holds no bytes for it.
+    const chip = await within(pane()).findByRole("link", { name: /shed\.csv/ });
+    expect(chip.getAttribute("href")).toBe(UNFETCHED.link);
+
+    fireEvent.click(fetchButton()!);
+
+    // One call, and it names the message alone: a pane opened from an address bar
+    // has no saved page to be handed back, and asking for one would make a saved
+    // page the price of looking at a file (see ThreadMessages).
+    await waitFor(() => expect(pulls()).toHaveLength(1));
+    expect(JSON.parse(pulls()[0]!.body!)).toEqual({ entry: ROOT });
+
+    // The bytes landed on the server, and the pane is a picture of the corpus:
+    // the thread is read again rather than patched, and the chip now points at
+    // the copy the app serves.
+    await waitFor(() =>
+      expect(
+        within(pane()).getByRole("link", { name: /shed\.csv/ }).getAttribute("href"),
+      ).toBe("/v1/attachments/sha-of-the-bytes"),
+    );
+    expect(chainReads().length).toBeGreaterThan(1);
+
+    // The files arrived, so the button says so by being gone rather than by
+    // saying it twice.
+    await waitFor(() => expect(fetchButton()).toBeNull());
+
+    // What the pull did is on the console, where the counts and the reasons are:
+    // a chip that became a local file says the rest.
+    expect(log.mock.calls.map((c) => c[0]).join("\n")).toMatch(/1\/1 files fetched/);
+  });
+
+  it("offers nothing to fetch once every file is in the corpus", async () => {
+    handler = paneHandler({ stored: () => true, pull: pulledAnswer });
+    await mountApp(OPEN_ROOT);
+
+    await within(pane()).findByRole("link", { name: /shed\.csv/ });
+    expect(fetchButton()).toBeNull();
+  });
+
+  it("says on the pane why a pull failed, rather than looking like nothing happened", async () => {
+    // A host started without -media answers 403: a reach, and one that a reader
+    // asking a page for bytes has to be told about.
+    handler = paneHandler({
+      stored: () => false,
+      pull: () => json(403, { error: "this host cannot fetch media" }),
+    });
+    await mountApp(OPEN_ROOT);
+    await within(pane()).findByRole("link", { name: /shed\.csv/ });
+
+    fireEvent.click(fetchButton()!);
+
+    const note = await within(pane()).findByRole("status");
+    expect(note.textContent).toMatch(/started without -media/);
+    // The button is pressable again: the failure stored nothing, so the files are
+    // still there to ask for.
+    expect(fetchButton()).not.toBeNull();
+  });
+});
