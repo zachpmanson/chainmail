@@ -1017,7 +1017,7 @@ func (s *server) mediaPull(w http.ResponseWriter, r *http.Request) {
 type mailbox interface {
 	SetUnread(id string, unread bool) ([]string, error)
 	SetLabels(id string, add, remove []string) ([]string, error)
-	Reply(id, body string, send bool) (gmailclient.ReplyPlan, error)
+	Reply(id, body string, all, send bool) (gmailclient.ReplyPlan, error)
 	Read(id string) (mailingest.Message, error)
 }
 
@@ -1362,6 +1362,12 @@ type mailActionChain struct {
 // it is the set the answered message already carried, which is what keeps
 // "nowhere but back down a thread that is already in the corpus" true.
 //
+// Whether the rest of that audience is on the reply is the one thing the caller
+// decides (`all`), because it is a choice about the conversation rather than about
+// deliverability: answering a dozen people when one asked you something is a
+// different act from answering the person who asked. Either way the addresses are
+// the answered message's own, so the property above holds for both settings.
+//
 // Two steps, and the first one sends nothing: without `confirm` the reply is
 // PREPARED and answered with the plan — the recipients the mailbox will use, the
 // subject, and the whole body including the quote of the message being answered.
@@ -1423,12 +1429,17 @@ func (s *server) sendReply(w http.ResponseWriter, r *http.Request) {
 	// differently (see spec.ReplyBody).
 	body := spec.ReplyBody(req.Body, target)
 
+	// Absent means everyone, which is what this endpoint has always answered: a
+	// client that has not been rebuilt must not silently start answering one person
+	// instead of the message's whole audience.
+	all := req.All == nil || *req.All
+
 	mb, err := s.openMailbox()
 	if err != nil {
 		fail(w, http.StatusBadGateway, fmt.Errorf("opening the mailbox: %w", err))
 		return
 	}
-	plan, err := mb.Reply(target.GmailID, body, req.Confirm)
+	plan, err := mb.Reply(target.GmailID, body, all, req.Confirm)
 	if err != nil {
 		// Which half failed is the whole of what a reader can act on, and the two
 		// cases demand the opposite thing: a prepare that failed sent nothing, so
@@ -1510,6 +1521,15 @@ type sendRequest struct {
 	// without it, which is why a client that forgets the field previews rather than
 	// sends.
 	Confirm bool `json:"confirm,omitempty"`
+	// All answers everyone the message was addressed to — its sender in To, the rest
+	// of its audience in Cc — rather than the sender alone. Absent means everyone,
+	// so the older shape of this request keeps the answer it always had.
+	//
+	// It is not a recipient list and cannot become one: which addresses are on the
+	// reply is still the answered message's own headers, and this only says whether
+	// the ones beyond its sender are on it. There is no value of this field that
+	// reaches an address the message did not carry.
+	All *bool `json:"all,omitempty"`
 }
 
 // sendResponse is the contract's SendResponse: the reply as the mailbox has it,

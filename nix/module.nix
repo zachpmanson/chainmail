@@ -61,6 +61,9 @@
 # carried — its sender, and the original To and Cc, minus every address the
 # mailbox doing the replying owns (which the mailbox itself decides, since mail
 # is usually addressed to a send-as alias rather than to the account's own name).
+# The one thing the reader decides about that audience is whether the rest of it
+# is on the reply: a reply-all tick under the field, on by default, which can
+# narrow the reply to whoever wrote and cannot widen it to anyone else.
 # A server reachable only over a tunnel is still a server with no
 # authentication, and this is the one flag here that would otherwise be an
 # outbound channel to anywhere — answering a message's own audience, and nobody
@@ -235,7 +238,8 @@ in {
         (the account's profile and its send-as aliases, which only the mailbox
         can answer: mail is usually addressed to an alias rather than to the
         account's own name). There is nothing on the surface that can name a
-        different one. That is what keeps a loopback-only server with no
+        different one, and the reader's own reply-all tick can only take people
+        off that set. That is what keeps a loopback-only server with no
         authentication from becoming an outbound channel to anywhere — it can
         answer the reader's correspondence and nothing else. The mail grant this
         unit already holds is the credential, and it is a send grant already.

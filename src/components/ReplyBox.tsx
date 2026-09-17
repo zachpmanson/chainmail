@@ -48,7 +48,8 @@ import { refusal, staleAfterMail, SAID_MS } from "./MailVerbs";
  * it. What the box does not offer is offered nowhere: no attachments, no drafts, no
  * send-later. The cc itself is not a field either: who else is on the reply is the
  * answered message's own audience, minus the reader's addresses, and there is
- * nothing here that can add anyone to it.
+ * nothing here that can add anyone to it — the reply-all tick can only take people
+ * off it (see gmailclient.Reply).
  *
  * A refusal says what it was: a host started without -send-mail cannot answer mail
  * at all, and the second step says so in words rather than being a button that
@@ -91,6 +92,12 @@ export function ReplyBox({
   // the message being answered — that is added on the way out, so the reader is
   // never editing around text they did not write.
   const [own, setOwn] = useState("");
+  // Whether the answer is to everyone the message was addressed to or to its
+  // sender alone. On by default, because that is what a reply in a conversation
+  // usually is and what this box has always sent — the tick is there to take
+  // people off the reply when one of them asked you something, not to ask the
+  // reader to opt into the conversation they are already in.
+  const [all, setAll] = useState(true);
   // The plan the preview came back with, while the reader is looking at it.
   const [plan, setPlan] = useState<SendResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -126,7 +133,7 @@ export function ReplyBox({
     setBusy(true);
     try {
       const res = await send.mutateAsync({
-        body: { entry: answer.extId, body: own, confirm: false },
+        body: { entry: answer.extId, body: own, all, confirm: false },
       });
       setPlan(res);
     } catch (e) {
@@ -155,7 +162,7 @@ export function ReplyBox({
     setBusy(true);
     try {
       await send.mutateAsync({
-        body: { entry: answer.extId, body: own, confirm: true },
+        body: { entry: answer.extId, body: own, all, confirm: true },
       });
       setPlan(null);
       setOwn("");
@@ -176,8 +183,11 @@ export function ReplyBox({
     <div className="replybox">
       <p className="replyto">
         Replying to {words.who || "the sender"}
-        {words.when ? `, ${words.when}` : ""} and everyone else the message was
-        addressed to — the newest message here the mailbox holds.
+        {words.when ? `, ${words.when}` : ""}
+        {all
+          ? " and everyone else the message was addressed to"
+          : " and nobody else on it"}{" "}
+        — the newest message here the mailbox holds.
       </p>
       {error ? (
         <p className="selfail" role="alert">
@@ -231,6 +241,21 @@ export function ReplyBox({
             onChange={(e) => setOwn(e.target.value)}
           />
           <div className="opmact replyacts">
+            <label
+              className="replyall"
+              title={
+                "Answer everyone the message was addressed to, not only whoever wrote it. " +
+                "Who that is comes from the message itself — nothing here can add anyone to it."
+              }
+            >
+              <input
+                type="checkbox"
+                checked={all}
+                disabled={busy}
+                onChange={(e) => setAll(e.target.checked)}
+              />
+              reply all
+            </label>
             <button
               type="button"
               className="opbtn"

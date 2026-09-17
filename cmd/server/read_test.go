@@ -50,6 +50,7 @@ type fakeMailbox struct {
 
 type fakeReply struct {
 	id, body string
+	all      bool
 	send     bool
 }
 
@@ -69,12 +70,19 @@ func (f *fakeMailbox) SetUnread(id string, unread bool) ([]string, error) {
 // headers give, and — when asked to send — the id of the message that went out.
 // The body is the caller's, because composing the quote is the server's and this
 // package quotes nothing (see spec.ReplyBody).
-func (f *fakeMailbox) Reply(id, body string, send bool) (gmailclient.ReplyPlan, error) {
-	f.replies = append(f.replies, fakeReply{id: id, body: body, send: send})
+//
+// The audience follows what it was asked for: the rest of the message's addresses
+// are only on the reply when all is set, which is what makes a request that forgot
+// the flag — or quietly dropped it — visible here rather than in the answer's cc.
+func (f *fakeMailbox) Reply(id, body string, all, send bool) (gmailclient.ReplyPlan, error) {
+	f.replies = append(f.replies, fakeReply{id: id, body: body, all: all, send: send})
 	if err := f.fail[id]; err != nil {
 		return gmailclient.ReplyPlan{}, err
 	}
-	plan := gmailclient.ReplyPlan{To: f.to[id], Cc: f.cc[id], Subject: f.subject[id], Body: body}
+	plan := gmailclient.ReplyPlan{To: f.to[id], Subject: f.subject[id], Body: body}
+	if all {
+		plan.Cc = f.cc[id]
+	}
 	if send {
 		plan.GmailID = f.sentID
 	}
