@@ -398,10 +398,10 @@ func TestAddressNamesPerson(t *testing.T) {
 		{"nella.forge", "Nella Forge", true},
 		{"nellaforge88", "Nella Forge", true},
 		{"nforge", "Nella Forge", true}, // initial and surname
-		{"nforg", "Nella Forge", true},   // initial and the start of the surname
-		{"nia", "Nella Forge", false},     // somebody else's mailbox
+		{"nforg", "Nella Forge", true},  // initial and the start of the surname
+		{"nia", "Nella Forge", false},   // somebody else's mailbox
 		{"reception", "Nella Forge", false},
-		{"bl", "Nella Forge", false},                // two letters name nobody
+		{"bl", "Nella Forge", false},                 // two letters name nobody
 		{"support", "Nia Prentice (Support)", false}, // the annotation is not a name
 		{"arvida", "Klara Belk | Arvida", false},
 	} {
