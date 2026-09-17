@@ -639,6 +639,9 @@ describe("the pane's second reading of a message", () => {
     fireEvent.click(wayBack);
     expect(asks()).toHaveLength(1);
     await waitFor(() => expect(pane().querySelector(".bdo")).toBeNull());
+    // And the host went with it: a shadow root cannot be detached from its
+    // element, so an element React kept would go on drawing the mail.
+    expect([...pane().querySelectorAll(".bd")].some((el) => el.shadowRoot)).toBe(false);
   });
 
   it("offers nothing on a message the read says has no part of its own", async () => {

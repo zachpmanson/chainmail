@@ -579,6 +579,14 @@ function OriginalControl({ on, state, ask }: { on: boolean; state: Original; ask
  * The bubble's body, in whichever of the two renderings the reader last asked
  * for. The mount is the only imperative thing in this file: a shadow root is DOM
  * rather than React, and the element it is created on is created by the render.
+ *
+ * The two renderings are keyed apart so that React replaces the element rather
+ * than reusing it. React reconciles by element type where the key is the same, so
+ * an unkeyed swap hands the same `<div>` back with a different class on it — and
+ * **a shadow root cannot be detached from the element it was created on**, so the
+ * sender's html goes on being drawn inside it however empty the light DOM is. The
+ * body stayed on screen when the switch was turned off, until a reload built the
+ * bubble again. A key is the whole fix: one rendering, one element.
  */
 function Body({ body, state }: { body: string; state: Original }) {
   const host = useRef<HTMLDivElement | null>(null);
@@ -594,7 +602,7 @@ function Body({ body, state }: { body: string; state: Original }) {
     /* The shadow host. Empty as far as React is concerned — the mail is written
        into its shadow root, where a rule of this page's cannot reach it and its
        own rules cannot leave. */
-    return <div className="bd bdo" ref={host} />;
+    return <div key="sent" className="bd bdo" ref={host} />;
   }
   /* A message that carried no words at all — a mail that was only its file, a
      calendar reply that was only its invitation — says so in the page's own
@@ -603,12 +611,12 @@ function Body({ body, state }: { body: string; state: Original }) {
      the message: it is what the sender sent. */
   if (!hasBody(body)) {
     return (
-      <div className="bd">
+      <div key="read" className="bd">
         <p className="nobody">No body</p>
       </div>
     );
   }
-  return <div className="bd" dangerouslySetInnerHTML={html(trimBody(body))} />;
+  return <div key="read" className="bd" dangerouslySetInnerHTML={html(trimBody(body))} />;
 }
 
 /** What became of this message's fetch, while its sender's switch is on.
