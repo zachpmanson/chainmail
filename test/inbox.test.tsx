@@ -1552,24 +1552,27 @@ describe("the reader's own messages in the pane", () => {
   });
 });
 
-describe("fetching one message's files from the pane", () => {
-  // The pane draws the corpus, so a file whose bytes are not in it is a chip
-  // that has to leave for the mailbox — and, where the thread is the corpus's
-  // rather than a saved page's, the button under that chip is the reader's way
-  // of asking for the bytes instead. Every id, name and address here is invented.
+describe("downloading a file the pane does not hold yet", () => {
+  // The pane draws the corpus, so a file whose bytes are not in it is a chip that
+  // has to leave for the mailbox — and, where the thread comes from the corpus
+  // rather than from a saved page, pressing that chip is the download: it asks the
+  // host for the message's files, and the file opens over the pane once they are
+  // here. Every id, name and address in this block is invented.
   const ROOT = "mail:<loom-cutover-1@example.fed>";
   const OPEN_ROOT = `/?open=${encodeURIComponent(ROOT)}`;
+  const SHA = "sha-of-the-bytes";
+  const SHEET = "shed,readings\nNova,41.2";
   /** The file the mailbox holds and the corpus does not: the corpus knows the
-   *  message rather than the file, so the only destination it can name is the
-   *  message's permalink (see toCorpusAttachment). */
+   *  message rather than the file, so the only destination it can name today is
+   *  the message's permalink (see toCorpusAttachment). */
   const UNFETCHED = {
     name: "shed.csv",
     kind: "CSV",
     size: "512 B",
     link: "https://mail.google.com/mail/u/0/#all/19d263bb5a6b00db",
   };
-  /** The same file once a pull has stored it. */
-  const STORED = { ...UNFETCHED, blobSha: "sha-of-the-bytes", open: "download" as const };
+  /** The same file once a pull has stored it, with the host's own way to show it. */
+  const STORED = { ...UNFETCHED, blobSha: SHA, open: "popup" as const, view: "text" as const };
 
   const ENTRY = {
     extId: ROOT,
@@ -1586,10 +1589,7 @@ describe("fetching one message's files from the pane", () => {
 
   /** A pane whose thread carries one file, either before or after a pull, and a
    *  pull endpoint that answers the counts. Everything else is the app's own. */
-  const paneHandler = (opts: {
-    stored: () => boolean;
-    pull: () => Response;
-  }): Handler => (c) => {
+  const paneHandler = (opts: { stored: () => boolean; pull: () => Response }): Handler => (c) => {
     const p = pathOf(c);
     if (p.startsWith("/v1/chains/")) {
       return json(200, {
@@ -1598,6 +1598,9 @@ describe("fetching one message's files from the pane", () => {
       });
     }
     if (p === "/v1/media/pull" && c.method === "POST") return opts.pull();
+    // The bytes, once they are stored: the window reads them from this host.
+    if (p.startsWith("/v1/attachments/"))
+      return new Response(SHEET, { status: 200, headers: { "content-type": "text/csv" } });
     return buildHandler(c);
   };
 
@@ -1608,14 +1611,15 @@ describe("fetching one message's files from the pane", () => {
       skipped: 0,
       failed: 0,
       bytes: 512,
-      files: [{ name: "shed.csv", source: "mail", sha: "sha-of-the-bytes", bytes: 512 }],
+      files: [{ name: "shed.csv", source: "mail", sha: SHA, bytes: 512 }],
     });
 
-  const fetchButton = () => within(pane()).queryByRole("button", { name: /fetch files/ });
+  const chip = () => within(pane()).getByRole("link", { name: /shed\.csv/ });
   const pulls = () => calls.filter((c) => c.method === "POST" && pathOf(c) === "/v1/media/pull");
   const chainReads = () => calls.filter((c) => pathOf(c).startsWith("/v1/chains/"));
+  const windowOver = () => document.querySelector(".pop") as HTMLElement | null;
 
-  it("fetches that message's files, and re-reads the thread they landed in", async () => {
+  it("fetches that message's files, and opens the file in the window", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     let stored = false;
     // The server stores the bytes before it answers — so the flag flips inside the
@@ -1629,11 +1633,12 @@ describe("fetching one message's files from the pane", () => {
     });
 
     await mountApp(OPEN_ROOT);
-    // The chip is a link to the mailbox: the corpus holds no bytes for it.
-    const chip = await within(pane()).findByRole("link", { name: /shed\.csv/ });
-    expect(chip.getAttribute("href")).toBe(UNFETCHED.link);
+    await within(pane()).findByRole("link", { name: /shed\.csv/ });
+    // Before the press the chip is a link to the mailbox: the corpus holds no
+    // bytes for it, and the click is the reader's own to make.
+    expect(chip().getAttribute("href")).toBe(UNFETCHED.link);
 
-    fireEvent.click(fetchButton()!);
+    fireEvent.click(chip());
 
     // One call, and it names the message alone: a pane opened from an address bar
     // has no saved page to be handed back, and asking for one would make a saved
@@ -1641,31 +1646,36 @@ describe("fetching one message's files from the pane", () => {
     await waitFor(() => expect(pulls()).toHaveLength(1));
     expect(JSON.parse(pulls()[0]!.body!)).toEqual({ entry: ROOT });
 
-    // The bytes landed on the server, and the pane is a picture of the corpus:
-    // the thread is read again rather than patched, and the chip now points at
-    // the copy the app serves.
-    await waitFor(() =>
-      expect(
-        within(pane()).getByRole("link", { name: /shed\.csv/ }).getAttribute("href"),
-      ).toBe("/v1/attachments/sha-of-the-bytes"),
-    );
-    expect(chainReads().length).toBeGreaterThan(1);
+    // Then it opens, over the pane: the press was replayed once the re-read had
+    // put bytes behind the chip (behaviour.ts), and the file's own text is in the
+    // window.
+    const win = await waitFor(() => {
+      const w = windowOver();
+      if (!w || w.hidden) throw new Error("no window yet");
+      return w;
+    });
+    expect(win.querySelector(".popcap")!.textContent).toBe("shed.csv");
+    await waitFor(() => expect(win.querySelector(".poptext")!.textContent).toBe(SHEET));
 
-    // The files arrived, so the button says so by being gone rather than by
-    // saying it twice.
-    await waitFor(() => expect(fetchButton()).toBeNull());
+    // The pane is a picture of the corpus, so the bytes appearing is the thread
+    // being read again rather than a chip being patched.
+    expect(chainReads().length).toBeGreaterThan(1);
+    expect(chip().getAttribute("href")).toBe(`/v1/attachments/${SHA}`);
 
     // What the pull did is on the console, where the counts and the reasons are:
-    // a chip that became a local file says the rest.
+    // the file that opened says the rest.
     expect(log.mock.calls.map((c) => c[0]).join("\n")).toMatch(/1\/1 files fetched/);
   });
 
-  it("offers nothing to fetch once every file is in the corpus", async () => {
+  it("does not make a download of a file the corpus already holds", async () => {
     handler = paneHandler({ stored: () => true, pull: pulledAnswer });
     await mountApp(OPEN_ROOT);
 
-    await within(pane()).findByRole("link", { name: /shed\.csv/ });
-    expect(fetchButton()).toBeNull();
+    await waitFor(() =>
+      expect(chip().getAttribute("href")).toBe(`/v1/attachments/${SHA}`),
+    );
+    fireEvent.click(chip());
+    expect(pulls()).toHaveLength(0);
   });
 
   it("says on the pane why a pull failed, rather than looking like nothing happened", async () => {
@@ -1678,12 +1688,13 @@ describe("fetching one message's files from the pane", () => {
     await mountApp(OPEN_ROOT);
     await within(pane()).findByRole("link", { name: /shed\.csv/ });
 
-    fireEvent.click(fetchButton()!);
+    fireEvent.click(chip());
 
     const note = await within(pane()).findByRole("status");
     expect(note.textContent).toMatch(/started without -media/);
-    // The button is pressable again: the failure stored nothing, so the files are
-    // still there to ask for.
-    expect(fetchButton()).not.toBeNull();
+    // The file is still missing, so the chip is still the download it was, and
+    // pressing it again asks again.
+    fireEvent.click(chip());
+    await waitFor(() => expect(pulls()).toHaveLength(2));
   });
 });

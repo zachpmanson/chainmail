@@ -1,16 +1,18 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Timeline } from "../src/components/Timeline";
+import { MEDIA_BASE } from "../src/lib/attachments";
 import { normalise } from "../src/lib/normalise";
 import type { Entry, Timeline as Spec } from "../src/lib/spec";
 
 afterEach(cleanup);
 
 /**
- * The button that fetches one message's files. What is worth asserting is when
- * it exists at all — it is a control that spends mailbox round trips, so every
- * page that cannot or need not fetch must not show one.
+ * The download a chip becomes when its bytes are not here yet. What is worth
+ * asserting is when that is offered at all — it spends mailbox round trips, so
+ * every page that cannot or need not fetch must leave the chip the plain link to
+ * the mailbox it has always been.
  */
 
 const entry = (over: Partial<Entry>): Entry => ({
@@ -34,70 +36,75 @@ const page = (messages: Entry[], onPull?: (extId: string) => void, pulling?: str
       spec={normalise({ title: "Loom cutover", messages } as Spec)}
       onPull={onPull}
       pulling={pulling}
+      mediaBase={MEDIA_BASE}
     />,
   );
 
-const fetchButton = () => screen.queryByRole("button", { name: /fetch/i });
+// Scoped to the message's own strip: the sources panel lists these files too, and
+// it is not the chip the reader presses.
+const chip = () => within(document.querySelector(".atts")!).getByRole("link", { name: /shed\.csv/ });
+const press = () => fireEvent.click(chip());
 
-describe("the fetch-files button", () => {
-  it("offers to fetch a message's files, and asks for that message", () => {
+describe("a chip whose file the corpus does not hold", () => {
+  it("asks for that message's files when it is pressed", () => {
     const onPull = vi.fn();
     page([entry({ attachments: [unFetched] })], onPull);
-    const btn = fetchButton();
-    expect(btn).not.toBeNull();
-    fireEvent.click(btn!);
+
+    // It is still the same link to where the file is today — the press is
+    // intercepted, the href is not replaced — so a modified press, or a reader
+    // with no script, still lands in the mailbox rather than nowhere.
+    expect(chip().getAttribute("href")).toContain("mail.google.com");
+
+    press();
     expect(onPull).toHaveBeenCalledWith("mail:<c0ffee-1@loomworks.example>");
     expect(onPull).toHaveBeenCalledTimes(1);
+    // The press is remembered on the element, because the render that follows the
+    // pull is the one that has to replay it (see behaviour.ts).
+    expect(chip().hasAttribute("data-download")).toBe(true);
   });
 
-  it("is absent on a page nobody can fetch from", () => {
-    // The static export, and any host started without -media: the renderer is
-    // handed no way to fetch, so the control would be a promise it cannot keep.
-    page([entry({ attachments: [unFetched] })]);
-    expect(fetchButton()).toBeNull();
-  });
-
-  it("is absent once every file is in the corpus", () => {
-    page([entry({ attachments: [fetched] })], () => {});
-    expect(fetchButton()).toBeNull();
-  });
-
-  it("is offered while any one file is still missing", () => {
-    // A message with one stored file and one not: the whole point is the one
-    // that is not, so the button belongs here.
-    page([entry({ attachments: [fetched, unFetched] })], () => {});
-    expect(fetchButton()).not.toBeNull();
-  });
-
-  it("says it is fetching, and holds every other message", () => {
-    const extId = "mail:<c0ffee-1@loomworks.example>";
+  it("says it is downloading, and takes no second press while it does", () => {
+    const onPull = vi.fn();
     page(
-      [
-        entry({ attachments: [unFetched] }),
-        entry({ extId: "mail:<c0ffee-2@fjordline.example>", attachments: [unFetched] }),
-      ],
-      () => {},
-      extId,
+      [entry({ attachments: [unFetched] })],
+      onPull,
+      "mail:<c0ffee-1@loomworks.example>",
     );
-    const btns = screen.getAllByRole("button", { name: /fetch/i });
-    expect(btns).toHaveLength(2);
-    expect(btns[0]!.textContent).toBe("fetching…");
-    expect((btns[0] as HTMLButtonElement).disabled).toBe(true);
-    // A second pull against a spec that is already being replaced is not
-    // something a reader should be able to start.
-    expect((btns[1] as HTMLButtonElement).disabled).toBe(true);
-    expect(btns[1]!.textContent).toBe("fetch files");
+
+    // The word is on the chip, in the same ↻ the nav's refresh wears.
+    expect(chip().textContent).toContain("downloading…");
+    expect(chip().querySelector(".spinner")).not.toBeNull();
+    expect(chip().getAttribute("aria-busy")).toBe("true");
+    // A press while the files are already coming is absorbed: the endpoint spends
+    // a mailbox round trip per call, and the reader's press has been taken.
+    press();
+    expect(onPull).not.toHaveBeenCalled();
   });
 
-  it("is absent on an entry with no corpus id to name", () => {
-    // An entry the page invented (a note) has nothing the server could look up,
-    // so the control has nothing to say.
+  it("leaves a chip alone once its bytes are here", () => {
+    const onPull = vi.fn();
+    page([entry({ attachments: [fetched] })], onPull);
+
+    // The corpus's own copy is where the chip points, so the press is the server's
+    // to answer (open or download, by its own rule) rather than a fetch.
+    expect(chip().getAttribute("href")).toBe(`${MEDIA_BASE}/sha-of-the-bytes`);
+    press();
+    expect(onPull).not.toHaveBeenCalled();
+    expect(chip().hasAttribute("data-download")).toBe(false);
+  });
+
+  it("is a plain link on a host that cannot fetch", () => {
+    // A page rendered to a file, and any host started without -media: there is
+    // nobody to ask, so the chip must not promise anything.
+    page([entry({ attachments: [unFetched] })]);
+    press();
+    expect(chip().hasAttribute("data-download")).toBe(false);
+  });
+
+  it("is a plain link on an entry with no corpus id to name", () => {
+    // An entry the page invented (a note) has nothing the server could look up.
     page([entry({ extId: undefined, attachments: [unFetched] })], () => {});
-    expect(fetchButton()).toBeNull();
-  });
-
-  it("is absent on a message with no attachments", () => {
-    page([entry({})], () => {});
-    expect(fetchButton()).toBeNull();
+    press();
+    expect(chip().hasAttribute("data-download")).toBe(false);
   });
 });

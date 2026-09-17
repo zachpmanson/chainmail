@@ -225,8 +225,8 @@ function Stamp({ id, stamp }: { id: string; stamp: StampData }) {
   );
 }
 
-/** The attachment strip: a link to where a file already is, or a fetch button
- *  where it is not here yet.
+/** The attachment strip: a link to where a file already is, and — where it is not
+ *  here yet and somebody can go and get it — the download itself.
  *
  *  It reads an attachment list rather than an entry, because nothing below needs
  *  anything else the entry carries — the one handle it does need, `extId`, is
@@ -234,29 +234,34 @@ function Stamp({ id, stamp }: { id: string; stamp: StampData }) {
  */
 function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
   attachments?: Attachment[];
-  /** the handle the fetch button asks for */
+  /** the handle a download asks for: the message whose files it wants */
   extId?: string;
   /** fetch this message's files, where a host will do it at all */
   onPull?: (extId: string) => void;
-  /** the message whose files are being fetched, so its button can say so */
+  /** the message whose files are being fetched, so its chips can say so */
   pulling?: string | null;
   /** where the corpus serves stored bytes; empty in the static export, which has no server */
   mediaBase?: string;
 }) {
   if (!attachments.length) return null;
-  // The button is offered only where there is something to fetch and somebody
-  // able to fetch it: a host started without -media never passes onPull, a page
-  // rendered to a file never does, and a message whose files are all already in
-  // the corpus is done with the question. A file the corpus has DECLINED is done
-  // with it too — the reason is recorded, not the answer — so it cannot keep the
-  // button alive on a message that has nothing left to ask for.
-  const pending = attachments.some((a) => !a.blobSha && !isSkipped(a));
+  // Whether THIS message's files are being fetched. A message is the unit the
+  // endpoint works in — one mailbox round trip, and every file it carried — so
+  // one press puts every chip on the line into the same state.
+  const fetching = pulling != null && pulling === extId;
   return (
     <div className="atts">
       <span className="clip">attached</span>
       {attachments.map((a, i) => {
         const local = localHref(a, mediaBase ?? "");
         const href = attHref(a, mediaBase);
+        // Whether this chip can go and get the file. It is offered only where
+        // there is something to fetch and somebody able to fetch it: a host
+        // started without -media never passes onPull, a page rendered to a file
+        // never does, and a message whose bytes are already here has nothing to
+        // ask for. A file the corpus has DECLINED cannot be asked for again —
+        // the reason is recorded, not the answer — so it stays the plain link to
+        // its source that every chip used to be.
+        const fetchable = !local && !isSkipped(a) && onPull !== undefined && extId !== undefined;
        const thumb = hasPreview(a) ? (
           <img
             className="athumb"
@@ -273,7 +278,21 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
             {thumb}
             <span className="afn">{a.name}</span>
             <span className="ameta">
-              {a.kind ?? "file"} · {a.size ?? ""}
+              {fetching && fetchable ? (
+                <>
+                  {/* The same ↻ and the same 0.8s turn the nav's refresh wears
+                      (see .navrefresh .spinner): one glyph for "this is being
+                      worked on", in both the places this app asks a server for
+                      something that takes a moment. Decorative — the word beside
+                      it says the same thing to a reader who cannot see it turn. */}
+                  <span className="spinner" aria-hidden="true" />
+                  downloading…
+                </>
+              ) : (
+                <>
+                  {a.kind ?? "file"} · {a.size ?? ""}
+                </>
+              )}
             </span>
           </>
         );
@@ -316,12 +335,24 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
         // and not more chip text: the chip is a list of files, and a sentence in
         // the middle of it would push the next file off the line.
         const note = skipNote(a);
+        // What a chip says when the pointer is on it. The skip reason first, since
+        // a chip that cannot be fetched is the one whose state is not visible from
+        // the outside; then what a press will do, because the href under the chip
+        // names the mailbox and the press is not going there.
+        const tip =
+          note ??
+          (fetchable
+            ? fetching
+              ? "Downloading this file from the mailbox…"
+              : "Download this file from the mailbox"
+            : undefined);
         return href ? (
           <a
             key={i}
-            className={opens ? "att haspop" : "att"}
+            className={["att", opens && "haspop", fetching && fetchable && "busy"]
+              .filter(Boolean).join(" ")}
             href={href}
-            {...(note ? { title: note } : {})}
+            {...(tip ? { title: tip } : {})}
             {...(beside ? { target: "_blank", rel: "noopener" } : {})}
             {...(opens
               ? {
@@ -334,6 +365,36 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
                href is a permalink and a body picture has no href at all, so the
                presence of the local URL is what says "these bytes are here". */
             {...(local ? { "data-get": local } : {})}
+            /* The download itself, on a chip whose file is not here yet: the press
+               asks the host for this message's files, and the request is marked on
+               the element so the click can be replayed the moment there are bytes
+               behind the chip (see behaviour.ts). That is what makes the press a
+               download rather than a promise — press, wait, and the file opens.
+
+               A modified press is left alone: it is the reader asking for a new tab
+               or a download of the link *under* the chip, which is where the file
+               is today, and the link is the right answer to that.
+
+               The marker is set on the element rather than rendered from state,
+               because the render that follows the pull is the one that has to find
+               it — state would have to survive a props change that replaces every
+               attachment, and a DOM attribute does that by being there. */
+            {...(fetchable
+              ? {
+                  onClick: (ev: React.MouseEvent<HTMLAnchorElement>) => {
+                    if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey || ev.button !== 0)
+                      return;
+                    ev.preventDefault();
+                    // Already asked for, and the answer is on its way: a second
+                    // press would spend a second mailbox round trip on files that
+                    // are already coming.
+                    if (fetching) return;
+                    ev.currentTarget.setAttribute("data-download", "");
+                    onPull!(extId!);
+                  },
+                }
+              : {})}
+            {...(fetching && fetchable ? { "aria-busy": true } : {})}
           >
             {label}
           </a>
@@ -347,20 +408,6 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
           </span>
         );
       })}
-      {onPull && pending && extId ? (
-        // A button, not a chip: a chip goes to where the file already is, and
-        // this one goes and gets it. Plain text, because the row is already a
-        // run of framed chips and a second frame would read as another file.
-        <button
-          type="button"
-          className="attget"
-          disabled={pulling != null}
-          title="Fetch this message's attached files into the corpus, so they can be shown here"
-          onClick={() => onPull(extId)}
-        >
-          {pulling === extId ? "fetching…" : "fetch files"}
-        </button>
-      ) : null}
     </div>
   );
 }

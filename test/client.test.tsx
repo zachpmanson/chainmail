@@ -1293,10 +1293,10 @@ describe("pressing refresh on a saved page", () => {
   });
 });
 
-describe("fetching one message's files from a saved page", () => {
-  // A page with one file the corpus does not hold. The button under its chips is
-  // the only way the page can fetch it, and this is the wiring: the click names
-  // the message, and the page is re-derived so the bytes can be shown.
+describe("downloading a file the page does not hold yet", () => {
+  // A page with one file the corpus does not hold. The chip is the download:
+  // pressing it fetches that message's files, and the file opens in the window
+  // over the page the moment the bytes are behind it. This is the wiring.
   const PULL_SPEC = {
     title: "Loom cutover",
     messages: [
@@ -1313,6 +1313,9 @@ describe("fetching one message's files from a saved page", () => {
     ],
   };
 
+  /** What the file turns out to hold, once it is here. */
+  const SHEET = "shed,readings\nNova,41.2";
+
   const report = {
     entriesBefore: 1,
     entriesAfter: 1,
@@ -1328,21 +1331,33 @@ describe("fetching one message's files from a saved page", () => {
     if (p === "/v1/specs/loom-cutover") return json(200, PULL_SPEC);
     if (p === "/v1/media/pull" && c.method === "POST") return pull();
     if (p === "/v1/refresh" && c.method === "POST") return json(200, { spec: PULL_SPEC, report });
+    // The bytes, once they are stored: the window reads them from this host.
+    if (p.startsWith("/v1/attachments/"))
+      return new Response(SHEET, { status: 200, headers: { "content-type": "text/csv" } });
     return json(500, { error: `unexpected call to ${c.method} ${p}` });
   };
 
-  it("asks for that message's files, and the server hands back the rebuilt page", async () => {
+  /** The chip in the bubble's own strip, which is the download. The sources panel
+   *  lists the same file by name, and it is not the control being pressed. */
+  const chip = () => document.querySelector(".atts a") as HTMLElement;
+
+  it("asks for that message's files, and opens the file when they arrive", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
-    // The page after the pull: the file has bytes, so there is nothing left to
-    // fetch. This is what the server now sends back beside the counts, having
-    // re-derived and rewritten the saved page itself.
+    // The page after the pull: the file has bytes and a way to be shown. This is
+    // what the server sends back beside the counts, having re-derived and
+    // rewritten the saved page itself.
     const pulled = {
       ...PULL_SPEC,
       messages: [
         {
           ...PULL_SPEC.messages[0],
           attachments: [
-            { ...PULL_SPEC.messages[0]!.attachments[0], blobSha: "sha-of-the-bytes", open: "download" },
+            {
+              ...PULL_SPEC.messages[0]!.attachments[0],
+              blobSha: "sha-of-the-bytes",
+              open: "popup",
+              view: "text",
+            },
           ],
         },
       ],
@@ -1365,7 +1380,10 @@ describe("fetching one message's files from a saved page", () => {
     await mountApp("/view/loom-cutover");
     await screen.findByText("Loom cutover");
 
-    click(screen.getByRole("button", { name: /fetch files/ }));
+    // Before the press the chip is what it always was: a link to where the file
+    // is today.
+    expect(chip().getAttribute("href")).toContain("mail.google.com");
+    click(chip());
 
     // One call, and no second one to be abandoned: the rebuild that makes the
     // bytes visible happens on the server, behind the fetch, so a reader who
@@ -1380,11 +1398,17 @@ describe("fetching one message's files from a saved page", () => {
     });
     expect(calls.some((c) => pathOf(c) === "/v1/refresh")).toBe(false);
 
-    // The returned page is what gets rendered: the chip now carries bytes, so
-    // the button is gone — the files arrived, and they said so.
-    await waitFor(() =>
-      expect(screen.queryByRole("button", { name: /fetch files/ })).toBeNull(),
-    );
+    // Then it opens: the press was replayed once the renderer had bytes behind
+    // the chip (behaviour.ts), and the window over the page is showing the file.
+    const win = await waitFor(() => {
+      const w = document.querySelector(".pop") as HTMLElement | null;
+      if (!w || w.hidden) throw new Error("no window yet");
+      return w;
+    });
+    expect(win.querySelector(".popcap")!.textContent).toBe("shed.csv");
+    await waitFor(() => expect(win.querySelector(".poptext")!.textContent).toBe(SHEET));
+    // The chip now points at this host, which is what made the window possible.
+    expect(chip().getAttribute("href")).toBe("/v1/attachments/sha-of-the-bytes");
 
     // A file that did not arrive is the reason the console is worth reading: the
     // page cannot show what is not there, and a count alone would not say why.
@@ -1410,7 +1434,7 @@ describe("fetching one message's files from a saved page", () => {
     await mountApp("/view/loom-cutover");
     await screen.findByText("Loom cutover");
 
-    click(screen.getByRole("button", { name: /fetch files/ }));
+    click(chip());
 
     await waitFor(() =>
       expect(calls.filter((c) => c.method === "POST").map(pathOf)).toEqual([
@@ -1429,18 +1453,22 @@ describe("fetching one message's files from a saved page", () => {
     await mountApp("/view/loom-cutover");
     await screen.findByText("Loom cutover");
 
-    click(screen.getByRole("button", { name: /fetch files/ }));
+    click(chip());
 
     // A press that spends mailbox round trips and then fails must not look like
     // nothing happening: console-only was the wrong place for it, so the page
-    // says it — and the files are genuinely still missing, so the button stays.
+    // says it — and the file is genuinely still missing, so the chip is still the
+    // download it was, and pressing it again asks again.
     const note = await waitFor(() => {
       const n = document.querySelector(".pullnote");
       if (!n) throw new Error("no note yet");
       return n;
     });
     expect(note.textContent).toMatch(/cannot fetch files/);
-    expect(screen.queryByRole("button", { name: /fetch files/ })).not.toBeNull();
+    click(chip());
+    await waitFor(() =>
+      expect(calls.filter((c) => pathOf(c) === "/v1/media/pull")).toHaveLength(2),
+    );
     // Nothing changed in the corpus, so nothing needs redrawing.
     expect(calls.some((c) => pathOf(c) === "/v1/refresh")).toBe(false);
   });

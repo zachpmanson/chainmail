@@ -608,18 +608,18 @@
     background:var(--quote); color:var(--fg); }
   .att:hover { border-color:var(--accent); }
   .att.nolink { opacity:.6; }
-  /* The fetch control: the one thing in this row that goes and gets the file
-     rather than linking to where it already is. So it is not a chip — the row is
-     already a run of framed names, and a second frame would read as another
-     file. Text only, muted, and it underlines on hover the way a link does, so
-     the row keeps saying the same thing at a glance. */
-  .attget { font:inherit; font-size:.64rem; text-transform:uppercase;
-    letter-spacing:.08em; font-weight:700; color:var(--muted); background:none;
-    border:0; padding:0 .1rem; cursor:pointer; text-decoration:underline dotted;
-    text-underline-offset:.18em; }
-  .attget::before { content:"\2193  "; }
-  .attget:hover:enabled { color:var(--accent); }
-  .attget:disabled { opacity:.55; cursor:default; }
+  /* A chip whose file the reader has asked for and the mailbox has not answered
+     yet. The press IS the download (see Attachments), so the chip is the only
+     place the wait can be said — and the meta line is where it is said, in the
+     same ↻ and the same turn the nav's refresh wears while it works. Colouring
+     the border too, because a word can be missed on a row of framed names and a
+     chip that is out asking for something should not read as idle. */
+  .att.busy { border-color:var(--accent); cursor:progress; }
+  .att.busy .ameta { color:var(--fg); }
+  .att.busy .spinner { display:inline-block; margin-right:.28em;
+    vertical-align:.02em; animation:spin .8s linear infinite; }
+  .att.busy .spinner::before { content:"\21BB"; }
+  @media (prefers-reduced-motion: reduce) { .att.busy .spinner { animation:none; } }
   /* A chip with a thumbnail centres on the picture instead of the text baseline,
      which is what the other chips align to. Left as its own rule rather than
      changing .att, so a chip without a picture keeps sitting on the baseline of

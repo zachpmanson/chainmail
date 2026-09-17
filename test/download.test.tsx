@@ -405,6 +405,8 @@ describe("getting the original out of the popover", () => {
 describe("a file the corpus has refused", () => {
   /** A message whose one file was declined: the reason is recorded, not the answer. */
   const skipped = { name: "walkthrough.mp4", kind: "MP4", size: "48 MB", gmailId: "18f0", skip: "too_large" } as const;
+  /** The ordinary "not pulled yet" state: no bytes and no reason. */
+  const waiting = { name: "quote.pdf", kind: "PDF", size: "88 KB", gmailId: "18f0" } as const;
   const extId = "mail:<roof@loomworks.example>";
   const offer = (messages: Entry[]) => page([{ ...messages[0]!, extId }], MEDIA_BASE, () => {});
 
@@ -415,24 +417,31 @@ describe("a file the corpus has refused", () => {
     expect(s).toContain("mail.google.com");
   });
 
-  it("stops offering to fetch a message that has nothing left to ask for", () => {
-    // The wart this closes: a declined file used to keep the button alive, and
-    // pressing it answered "wanted 0" every time.
+  it("does not make a download of a file the corpus has refused", () => {
+    // A declined file is a recorded answer, so it cannot be asked for again: the
+    // chip says the reason instead of promising a fetch. The wart this closes:
+    // pressing used to answer "wanted 0" every time.
     const html = offer([entry({ attachments: [skipped] })]);
-    expect(html).not.toContain("attget");
+    expect(html).not.toContain("Download this file");
   });
 
-  it("still offers while another file on the message is waiting", () => {
-    const html = offer([
-      entry({ attachments: [skipped, { name: "quote.pdf", kind: "PDF", size: "88 KB", gmailId: "18f0" }] }),
-    ]);
-    expect(html).toContain("attget");
+  it("still offers the file on the message that is waiting", () => {
+    const html = offer([entry({ attachments: [skipped, waiting] })]);
+    expect(html).toContain('title="Download this file from the mailbox"');
+    expect(html).toContain('title="not stored: larger than the fetch cap"');
   });
 
-  it("keeps the offer for a file nobody has decided about", () => {
-    // Absent reason, absent bytes: the ordinary "not pulled yet" state, which is
-    // exactly what the button is for.
-    const html = offer([entry({ attachments: [{ name: "quote.pdf", kind: "PDF", size: "88 KB", gmailId: "18f0" }] })]);
-    expect(html).toContain("attget");
+  it("offers a file nobody has decided about", () => {
+    // Absent reason, absent bytes: the state a download is for.
+    const html = offer([entry({ attachments: [waiting] })]);
+    expect(html).toContain('title="Download this file from the mailbox"');
+  });
+
+  it("offers nothing on a page with no host to fetch from", () => {
+    // A static export, and any host started without -media: the chip stays the
+    // link to the mailbox it has always been, with nothing promised.
+    const html = strip(page([entry({ attachments: [waiting] })], MEDIA_BASE));
+    expect(html).not.toContain("Download this file");
+    expect(html).toContain("mail.google.com");
   });
 });

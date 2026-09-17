@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError, $api, type CorpusEntry } from "../lib/api";
 import { MEDIA_BASE, pullSummary } from "../lib/attachments";
+import { attach } from "../client/behaviour";
 import { orgOrder, slotsFor } from "../lib/derive";
 import { newest } from "../lib/newest";
 import { gmailIdOf, sourceLine } from "../lib/sources";
@@ -186,6 +187,19 @@ export function ThreadMessages({ thread }: { thread: { rootExtId: string } }) {
   // back to the start away from where they were reading.
   const [landed, setLanded] = useState<string | null>(null);
   const landedFor = useRef<string | null>(null);
+  // The transcript's behaviour over the pane's bubbles, the same module a built
+  // page attaches (see Rendered): a chip the corpus holds bytes for opens in the
+  // window over the pane rather than in a new tab, and a download asked for before
+  // the bytes were here is replayed once they are. Above the early returns, since
+  // a hook cannot be conditional on the thread having loaded.
+  //
+  // Re-attached when the entries are, because `attach` wires the elements it
+  // finds, and the chips that arrive with bytes behind them (after a pull, after
+  // saving "who I am") are elements the previous pass never saw.
+  useEffect(() => {
+    const detach = attach(document);
+    return detach;
+  }, [entries]);
   const target = newest(entries);
   useEffect(() => {
     if (!target || landedFor.current === thread.rootExtId) return;
