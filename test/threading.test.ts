@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import { nest } from "../src/lib/threading";
 
 /**
@@ -59,6 +60,33 @@ describe("a thread drawn as a tree", () => {
   it("counts depth along the chain, not by how many messages precede it", () => {
     const deep = { a: undefined, b: "a", c: "b", d: "c" };
     expect(drawn(keys, deep)).toEqual(["a:0", "b:1", "c:2", "d:3"]);
+  });
+
+  it("counts as deep as a thread goes, with nothing rounded off", () => {
+    // No limit on the tree: a chain of thirty answers is thirty levels, and the
+    // depth a bubble is handed is exactly that. There is no cap to test against in
+    // the walk — the stylesheet is where one could be introduced, and is where the
+    // guard for it lives (see below).
+    const parents: Record<string, string | undefined> = { m0: undefined };
+    const chain = ["m0"];
+    for (let i = 1; i < 30; i++) {
+      chain.push(`m${i}`);
+      parents[`m${i}`] = `m${i - 1}`;
+    }
+    const out = nest(chain, (k) => k, (k) => parents[k]);
+    expect(out.map((n) => n.depth)).toEqual(chain.map((_, i) => i));
+  });
+
+  it("is indented by the stylesheet all the way in, with no depth capped", () => {
+    // The rule the reader actually sees, read as text: an indent is one step per
+    // level and *every* level, which is a fact about the stylesheet rather than
+    // about the walk above. A `min()` creeping back in here would leave a reply
+    // twenty deep sharing a column with one six deep — a rendering fault, not a
+    // limit — and no DOM test can see it, because jsdom computes no cascade.
+    const css = readFileSync("src/select.css", "utf8");
+    expect(css).toContain("margin-left:calc(var(--nest,0) * var(--step))");
+    expect(css).toContain("background-size:calc(var(--nest,0) * var(--step)) 100%");
+    expect(css).not.toMatch(/min\(var\(--nest/);
   });
 
   it("opens a tree at a reply whose parent the corpus does not hold", () => {
