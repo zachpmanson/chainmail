@@ -227,7 +227,7 @@ describe("a message whose own html the corpus holds", () => {
       [...container.querySelectorAll(".origbtn")] as HTMLElement[];
     expect(bubbles().map((b) => b.className)).toEqual(["bd", "bd"]);
 
-    fireEvent.click(switches()[0]);
+    fireEvent.click(switches()[0]!);
     await waitFor(() => expect(container.querySelectorAll(".bdo").length).toBe(2));
     // Both bubbles swapped, and each asked for its own part rather than sharing one.
     expect(load.mock.calls.map((c) => c[0])).toEqual([
@@ -236,7 +236,7 @@ describe("a message whose own html the corpus holds", () => {
     ]);
 
     // Pressing the control on either of them turns the pair back together.
-    fireEvent.click(switches()[0]);
+    fireEvent.click(switches()[0]!);
     await waitFor(() => expect(container.querySelectorAll(".bdo").length).toBe(0));
     expect(bubbles().map((b) => b.className)).toEqual(["bd", "bd"]);
   });
