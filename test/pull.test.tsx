@@ -80,6 +80,10 @@ describe("a chip whose file the corpus does not hold", () => {
     const spin = chip().querySelector(".spinner")!;
     expect(spin.getAttribute("aria-label")).toBe("Downloading…");
     expect(spin.getAttribute("aria-hidden")).toBeNull();
+    // Named, not a live region: the pane already has one of those for what
+    // happens to the thread (see .pullnote), and a mark that appears and goes on
+    // every chip is not a second one.
+    expect(spin.getAttribute("role")).toBe("img");
     expect(chip().getAttribute("aria-busy")).toBe("true");
     // A press while the files are already coming is absorbed: the endpoint spends
     // a mailbox round trip per call, and the reader's press has been taken.

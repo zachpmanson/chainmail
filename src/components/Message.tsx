@@ -292,9 +292,12 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
                    used to sit beside it changed the chip's width mid-download and
                    reflowed the line of files, and the file's own name still says
                    which one is being fetched. Named rather than hidden for a
-                   reader who cannot see it turn, and announced because it is the
-                   state of the chip they just pressed. */
-                <span className="spinner" role="status" aria-label="Downloading…" />
+                   reader who cannot see it turn, and named as a picture rather
+                   than as a status: the waiting is on the chip, which already
+                   says it with `aria-busy`, and the pane has one live region for
+                   the things that happen to it (see .pullnote) — a mark that
+                   comes and goes on every chip must not be a second one. */
+                <span className="spinner" role="img" aria-label="Downloading…" />
               ) : (
                 <>
                   {a.kind ?? "file"} · {a.size ?? ""}
