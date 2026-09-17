@@ -1,8 +1,9 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { $api } from "../lib/api";
 import { dropFromLists, markInLists, putBackLists } from "../lib/lists";
 import { dismissToast, pushToast } from "../lib/toasts";
+import { readThreaded, rememberThreaded } from "../lib/threading";
 import { ThreadMessages } from "./ThreadMessages";
 import { AttachmentCount, MailCount, PeopleCount } from "./ThreadRow";
 import {
@@ -55,6 +56,15 @@ export function ThreadPane({
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
+
+  // The pane's own view switch: replies drawn under the message they answer, or
+  // the transcript's flat order (see lib/threading). Read once, at mount, and
+  // written when it is pressed — this button is the only thing that sets it, so
+  // there is nothing to watch for. It sits above the threads rather than in one,
+  // because a reader's answer about how they read a thread is not a fact about
+  // the thread they happen to have open — and the pane is not remounted between
+  // threads, only its contents change, so the switch survives opening another.
+  const [threaded, setThreaded] = useState(readThreaded);
 
   // What the last write here has to say is drawn in the shell's corner, not in
   // this pane (see Toasts): an account of work that is over must not take a row
@@ -160,6 +170,33 @@ export function ThreadPane({
                 <AttachmentCount attachments={thread.attachments} />
               ) : null}
             </span>
+            {/* How the thread is drawn, which is the reader's to say and belongs
+                with the other things that act on the thread being read. The
+                switch is the same button the verbs beside it are — same box,
+                same glyph size, same hover (see .ibicon) — and it wears its
+                state in `aria-pressed` and in the accent colour of a pressed
+                control rather than in a second glyph: one mark for the switch,
+                and which way it is set is visible without the tooltip.
+
+                Between the counts and the verbs, so that the subject keeps its
+                numbers beside it and the controls that act on the mailbox stay
+                together at the end of the line, where the read circle is the
+                outermost of them on every thread (see .ibread-read). */}
+            <button
+              type="button"
+              className="ibicon ibnest"
+              aria-pressed={threaded}
+              aria-label={nestLabel(threaded)}
+              title={nestLabel(threaded)}
+              onClick={() =>
+                setThreaded((on) => {
+                  rememberThreaded(!on);
+                  return !on;
+                })
+              }
+            >
+              <NestGlyph />
+            </button>
             {/* The two mailbox verbs, beside the read circle and on the thread
                 that is open rather than on a ticked set. Glyphs, and the same two
                 the bar draws (see MailVerbs): the strip's line is the subject, and
@@ -255,12 +292,47 @@ export function ThreadPane({
               own scroll box, so the head above is a line of the pane rather than
               the first thing in the thread (see .ibreadwrap). */}
           <div className="ibreadwrap">
-            <ThreadMessages thread={thread} />
+            <ThreadMessages thread={thread} threaded={threaded} />
           </div>
         </>
       ) : (
         <p className="selnote">{empty}</p>
       )}
     </aside>
+  );
+}
+
+/** What the switch says it is, and what pressing it does — the same shape the
+ *  page's own reply-tree button names itself in (see behaviour.ts's treeLabel):
+ *  the state, then the press. The words are the reader's two options rather than
+ *  the feature's name, because "threading" is what this build calls it and what
+ *  a reader sees is the difference between two shapes of transcript. */
+function nestLabel(on: boolean): string {
+  return on
+    ? "Replies are nested under what they answer — click to show them in the order they were sent"
+    : "Messages are in the order they were sent — click to nest each reply under what it answers";
+}
+
+/** The switch's mark: a message, two answers to it, and an answer to one of
+ *  those — the three levels the indent draws, in the four lines a 14px glyph has
+ *  room for. Drawn with the same stroke and the same box as the two verbs beside
+ *  it rather than as a filled shape, so the strip stays one kind of thing. */
+function NestGlyph() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M2 4h12" />
+      <path d="M6 8h8" />
+      <path d="M10 12h4" />
+    </svg>
   );
 }

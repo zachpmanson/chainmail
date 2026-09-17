@@ -558,6 +558,13 @@
 .ibread-head .ibicon:hover:not(:disabled) { color:var(--accent); border-color:var(--line);
   background:var(--card); }
 .ibread-head .ibicon:disabled { opacity:.45; cursor:default; }
+/* The threading switch, on: the glyph in the accent and the box it is in drawn, so
+   which way the switch is set is visible from the button rather than only from the
+   transcript below it — and a reader scanning the strip after a reload can see it
+   without pressing it. The accent and not a second glyph, because the state of a
+   switch is the colour of a control that is on everywhere else in this app (see
+   .origbtn and .tbtn, the two other switches that carry theirs this way). */
+.ibread-head .ibnest[aria-pressed="true"] { color:var(--accent); border-color:var(--line); }
 .ibback { font:inherit; font-size:.78rem; font-weight:650; padding:.2rem .5rem;
   border:1px solid var(--line); border-radius:6px; background:var(--card);
   color:var(--fg); cursor:pointer; }
@@ -592,6 +599,30 @@
    and the bottom of a long scroll is the one place a reader wants a page's worth
    of quiet rather than the next thing. */
 .ibread .stream { padding:.5rem 0 10rem; }
+/* Replies nested under what they answer, when the head's switch is on (see
+   lib/threading). Each bubble is handed how deep it is and the stylesheet turns
+   that into two things, both off the same number:
+
+   - the indent, one step per reply;
+   - a hairline per level it is under, so a message three replies down still shows
+     the two it hangs off. `background-size` is the whole of the second one: the
+     repeating gradient lays a rule every step and the size is the depth's own
+     width, so an opener is given no background at all and a nested bubble is
+     given one rule per ancestor. Nothing here counts levels by hand, and a flat
+     thread is the plain list of bubbles it has always been.
+
+   Six steps of indent is the most it goes in. Past that the bubbles are a
+   column of wrapped words in a pane that is not wide, and a thread that deep
+   reads as a list by then anyway. */
+.ibread .stream .msg {
+  --nest:0;
+  --step:1.1rem;
+  margin-left:calc(min(var(--nest,0), 6) * var(--step));
+  background-image:repeating-linear-gradient(to right,
+    color-mix(in srgb, var(--line) 80%, transparent) 0 1px,
+    transparent 1px var(--step));
+  background-size:calc(min(var(--nest,0), 6) * var(--step)) 100%;
+  background-repeat:no-repeat; }
 /* The participants panel, at the top of the pane's scroll, with room under it: the
    bubbles below are the thread and this is a heading over them, and flush against
    the first message it read as part of that message's card. Its own top margin is

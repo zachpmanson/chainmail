@@ -1755,3 +1755,124 @@ describe("downloading a file the pane does not hold yet", () => {
     await waitFor(() => expect(pulls()).toHaveLength(2));
   });
 });
+
+describe("drawing a thread as a reply tree", () => {
+  // A thread that forks, which is the shape the switch exists for: Ada opens, Bo
+  // and Cy both answer her, and Ada answers Bo. Flat, the transcript reads t1,
+  // t2, t3, t4 — the answer to Bo is the last bubble on the page, under a message
+  // it has nothing to do with. Every name and id here is invented.
+  const ROOT = "mail:<fork-1@example.fed>";
+  const OPEN_ROOT = `/?open=${encodeURIComponent(ROOT)}`;
+  const T2 = "mail:<fork-2@example.fed>";
+  const T3 = "mail:<fork-3@example.fed>";
+  const T4 = "mail:<fork-4@example.fed>";
+
+  const message = (extId: string, author: string, body: string, ts: string, parent?: string) => ({
+    extId,
+    source: "mail",
+    quoted: false,
+    ts,
+    author,
+    body,
+    html: `<p>${body}</p>`,
+    tz: "AEST",
+    tzOffsetMinutes: 600,
+    ...(parent ? { parent } : {}),
+  });
+
+  const FORK = [
+    message(ROOT, "Ada Okoye", "The shed door is stuck.", "2026-03-02T09:15:00Z"),
+    message(T2, "Bo Halvorsen", "I can come Sunday.", "2026-03-03T08:00:00Z", ROOT),
+    message(T3, "Cy Okafor", "Take the back gate.", "2026-03-04T11:30:00Z", ROOT),
+    message(T4, "Ada Okoye", "Sunday works, thank you.", "2026-03-05T07:20:00Z", T2),
+  ];
+
+  const forkHandler: Handler = (c) =>
+    pathOf(c).startsWith("/v1/chains/") ? json(200, { rootExtId: ROOT, entries: FORK }) : buildHandler(c);
+
+  /** The bubbles in the order they are drawn, as the anchors they carry: the id
+   *  of a bubble is the entry's place in the thread as the corpus sent it, so the
+   *  order and the naming are asserted in one list — nesting may move a bubble,
+   *  and nothing else may change about what it is called. */
+  const drawn = () =>
+    [...pane().querySelectorAll(".stream .msg")].map((m) => m.getAttribute("id") ?? "");
+  /** How deep each drawn bubble is, from the one number the stylesheet indents by. */
+  const depths = () =>
+    [...pane().querySelectorAll(".stream .msg")].map((m) =>
+      (m as HTMLElement).style.getPropertyValue("--nest"),
+    );
+  const switchBtn = () => within(pane()).getByRole("button", { name: /nested under what they answer|order they were sent/ });
+
+  const openThread = async () => {
+    await mountApp(OPEN_ROOT);
+    await waitFor(() => expect(pane().querySelectorAll(".stream .msg")).toHaveLength(4));
+  };
+
+  // The switch is remembered in the browser, so a test that turned it on would
+  // otherwise hand the next test a nested thread it never asked for.
+  beforeEach(() => localStorage.clear());
+  afterEach(() => localStorage.clear());
+
+  it("draws the transcript's own order, flat, until it is asked for", async () => {
+    handler = forkHandler;
+    await openThread();
+
+    expect(drawn()).toEqual(["entry-0", "entry-1", "entry-2", "entry-3"]);
+    expect(depths()).toEqual(["0", "0", "0", "0"]);
+    const btn = switchBtn();
+    expect(btn.getAttribute("aria-pressed")).toBe("false");
+    // The switch is a glyph in the head's strip, like the verbs beside it, and its
+    // name says what a press would do.
+    expect(btn.className).toContain("ibicon");
+    expect(btn.getAttribute("title")).toMatch(/^Messages are in the order they were sent/);
+  });
+
+  it("puts each reply under the message it answers when it is pressed", async () => {
+    handler = forkHandler;
+    await openThread();
+
+    click(switchBtn());
+
+    // Ada's opener, Bo's answer to it, Ada's answer to Bo, and then Cy's answer to
+    // the opener — back at Bo's level rather than after the message that answered
+    // him. The bubbles themselves are the same four, called what they were called.
+    await waitFor(() => expect(drawn()).toEqual(["entry-0", "entry-1", "entry-3", "entry-2"]));
+    expect(depths()).toEqual(["0", "1", "2", "1"]);
+    expect(pane().querySelectorAll(".stream .msg")).toHaveLength(4);
+    // Which way it is set is on the button, and remembered for the next visit.
+    expect(switchBtn().getAttribute("aria-pressed")).toBe("true");
+    expect(localStorage.getItem("cm-nest")).toBe("1");
+  });
+
+  it("reads the switch back at mount, and puts the transcript back when it is pressed again", async () => {
+    localStorage.setItem("cm-nest", "1");
+    handler = forkHandler;
+    await openThread();
+
+    await waitFor(() => expect(drawn()).toEqual(["entry-0", "entry-1", "entry-3", "entry-2"]));
+    expect(switchBtn().getAttribute("aria-pressed")).toBe("true");
+
+    click(switchBtn());
+    await waitFor(() => expect(drawn()).toEqual(["entry-0", "entry-1", "entry-2", "entry-3"]));
+    expect(depths()).toEqual(["0", "0", "0", "0"]);
+    expect(switchBtn().getAttribute("aria-pressed")).toBe("false");
+    expect(localStorage.getItem("cm-nest")).toBe("0");
+  });
+
+  it("leaves the reply link pointing at the message that was answered", async () => {
+    handler = forkHandler;
+    await openThread();
+
+    // Flat, Ada's answer to Bo names the second bubble on the page.
+    expect(pane().querySelector("#entry-3 .par")?.getAttribute("href")).toBe("#entry-1");
+
+    click(switchBtn());
+
+    // Nested, the link is the same link: the anchor is the message's place in the
+    // thread rather than its place on the page, so indenting a reply cannot make
+    // its own arrow miss. What changes is only how far the reader scrolls.
+    await waitFor(() => expect(depths()[2]).toBe("2"));
+    expect(pane().querySelector("#entry-3 .par")?.getAttribute("href")).toBe("#entry-1");
+    expect(pane().querySelector("#entry-2 .par")?.getAttribute("href")).toBe("#entry-0");
+  });
+});
