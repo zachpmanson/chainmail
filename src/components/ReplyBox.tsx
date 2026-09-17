@@ -43,8 +43,12 @@ import { refusal, staleAfterMail, SAID_MS } from "./MailVerbs";
  * What the preview shows is deliberately the *whole* object rather than a summary:
  * a quote of a long message is the bulk of what will be sent, and a reader who is
  * going to send a signature, a footer or half of the previous message along with
- * their sentence should be able to see that before it leaves. What the box does not
- * offer is offered nowhere: no attachments, no cc, no drafts, no send-later.
+ * their sentence should be able to see that before it leaves — which is also why
+ * the plan names the cc: the reader is not choosing the audience, they are checking
+ * it. What the box does not offer is offered nowhere: no attachments, no drafts, no
+ * send-later. The cc itself is not a field either: who else is on the reply is the
+ * answered message's own audience, minus the reader's addresses, and there is
+ * nothing here that can add anyone to it.
  *
  * A refusal says what it was: a host started without -send-mail cannot answer mail
  * at all, and the second step says so in words rather than being a button that
