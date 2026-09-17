@@ -1655,7 +1655,11 @@ describe("downloading a file the pane does not hold yet", () => {
       return w;
     });
     expect(win.querySelector(".popcap")!.textContent).toBe("shed.csv");
-    await waitFor(() => expect(win.querySelector(".poptext")!.textContent).toBe(SHEET));
+    await waitFor(() =>
+      expect(
+        [...win.querySelectorAll(".poptable tbody td")].map((td) => td.textContent),
+      ).toEqual(["Nova", "41.2"]),
+    );
 
     // The pane is a picture of the corpus, so the bytes appearing is the thread
     // being read again rather than a chip being patched.

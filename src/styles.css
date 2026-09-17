@@ -663,6 +663,28 @@
     border:1px solid var(--line); border-radius:6px; background:var(--card);
     color:var(--fg); }
   .poptext[hidden] { display:none; }
+  /* A delimited file, read as cells rather than as lines of commas: the same
+     scroll-anywhere box the text window uses, with the values in a table. The
+     header stays put while the rows scroll, because a column of figures is read
+     against its heading, and that heading is the first thing to leave the screen.
+     Monospace, so a column of amounts lines up on its digits. */
+  .popgrid { width:min(72rem, 92vw); max-height:calc(100vh - 6rem); overflow:auto;
+    border:1px solid var(--line); border-radius:6px; background:var(--card);
+    text-align:left; }
+  .popgrid[hidden] { display:none; }
+  .poptable { border-collapse:collapse; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    font-size:.74rem; }
+  .poptable th, .poptable td { padding:.28rem .6rem; text-align:left; vertical-align:top;
+    border-right:1px solid var(--line); border-bottom:1px solid var(--line);
+    /* A cell can hold a paragraph — an address, a note column — and a row that
+       runs off the screen is worse than one that is two lines taller. The width
+       is a cap, not a target: a narrow column stays narrow. */
+    white-space:pre-wrap; max-width:26rem; overflow-wrap:anywhere; }
+  .poptable th { position:sticky; top:0; z-index:1; background:var(--card);
+    font-weight:650; color:var(--muted); }
+  .poptable td.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .poptable tr:last-child th, .poptable tr:last-child td { border-bottom:0; }
+  .poptable th:last-child, .poptable td:last-child { border-right:0; }
   /* A framed document: the browser's own viewer, sized like a page. No sandbox
      attribute — the frame's content is a blob this page built with a type it
      chose (application/pdf), never the sender's claim about the bytes, and the
