@@ -1034,3 +1034,59 @@ func TestTheReaderIsMarkedByTheHumanRatherThanTheAddress(t *testing.T) {
 		}
 	}
 }
+
+// A build that names no addresses marks the reader from the corpus's own stored
+// setting, which is the answer the reading pane already marks by.
+//
+// This is the bug a reader reports as "my own messages are not coloured on this
+// page": the page and the pane are two surfaces asking one question, and the page
+// was asking a caller for its own copy of the answer. A caller that has no copy —
+// a CLI build with no `--me`, a refresh, a browser whose settings read came back
+// without the list — drew every one of the reader's messages plain, next to a
+// pane that tinted them.
+func TestABuildWithNoAddressesNamedMarksFromTheStoredSetting(t *testing.T) {
+	s := open(t)
+	reader := person(t, s, "Ada Byron", "ada@loomworks.example")
+	bo := person(t, s, "Bo Halvorsen", "bo@fjordline.example")
+	put(t, s, msg{
+		ext: "mail:<mine@loomworks>", ts: "2026-03-02T09:00:00+11:00", tz: "AEDT",
+		person: reader, container: "T1", subject: "Loom cutover",
+		messageID: "<mine@loomworks>", from: "Ada Byron <ada@loomworks.example>",
+		to: "Bo Halvorsen <bo@fjordline.example>", gmail: "g-1",
+	})
+	put(t, s, msg{
+		ext: "mail:<theirs@fjordline>", ts: "2026-03-02T10:00:00+11:00", tz: "AEDT",
+		person: bo, container: "T1", subject: "Loom cutover",
+		messageID: "<theirs@fjordline>", inReplyTo: "<mine@loomworks>",
+		from: "Bo Halvorsen <bo@fjordline.example>",
+		to:   "Ada Byron <ada@loomworks.example>", gmail: "g-2",
+	})
+
+	// Nothing is marked for a reader who has never said who they are: the
+	// setting's absence is a real state, and it is not an error.
+	for _, m := range generate(t, s, Options{Containers: []string{"T1"}}).Messages {
+		if m.Me {
+			t.Errorf("%s is marked as the reader's, who has named nobody", m.ExtID)
+		}
+	}
+
+	if err := s.SetMePerson(reader); err != nil {
+		t.Fatalf("SetMePerson: %v", err)
+	}
+	for _, m := range generate(t, s, Options{Containers: []string{"T1"}}).Messages {
+		want := m.ExtID == "mail:<mine@loomworks>"
+		if m.Me != want {
+			t.Errorf("%s: Me = %v, want %v (the setting names Ada)", m.ExtID, m.Me, want)
+		}
+	}
+
+	// Naming addresses still overrides the setting, for the caller that means it
+	// and for the one test above that names a stranger.
+	for _, m := range generate(t, s,
+		Options{Containers: []string{"T1"}, Me: []string{"bo@fjordline.example"}}).Messages {
+		want := m.ExtID == "mail:<theirs@fjordline>"
+		if m.Me != want {
+			t.Errorf("%s: Me = %v, want %v (Bo was named, not the setting)", m.ExtID, m.Me, want)
+		}
+	}
+}
