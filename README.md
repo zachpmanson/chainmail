@@ -100,11 +100,20 @@ there is no value of it that puts an address on the reply that the message did n
 **A reply goes out in both forms, and the reader can send the text alone.** The message is
 one `multipart/alternative`: the plain text it has always been, and the same words as HTML
 beside it — the reader's paragraphs, and the message being answered inside a `blockquote` so
-a client that renders markup does not read the quote as part of the answer. The two parts are
-composed in one call (`spec.ComposeReply`) from the same words and the same quote, so they
-cannot come to say different things; nothing is converted from the other, and nothing in
-either is markup that a person did not type. The preview shows the text part, which is the
-one that says what the message says.
+a client that renders markup does not read the quote as part of the answer. What sits inside
+that blockquote is the answered message's own markup when it had any — its lists, its links,
+its tables, and the quote it was itself carrying — and paragraphs of its text when it did not,
+so an answer to an HTML mail carries the mail rather than a transcript of it. A message that
+came as text is quoted as text in both parts, its own `>` markers and all: a text part has
+nowhere to put markup, and the two readings of one message are the message's own.
+
+A reply's markup is therefore not all the server's: the quote is the answered message's own,
+put through the same allowlist every body in the reading pane passes, so an answer can relay
+to its recipients nothing the page would refuse to render. The reader's own words, the
+heading, and every word of a message that came as text are escaped as they always were. Both
+parts come from one call (`spec.ComposeReply`), from the same words and the same message, each
+quoting it in the form that message was sent in; nothing is converted from the other. The
+preview shows the text part, which is the one that says what the message says.
 
 An **`html`** field turns the second part off for one reply (absent means it goes, so an
 older client sends the message it always sent). A reader who knows their correspondent or a

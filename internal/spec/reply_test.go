@@ -178,10 +178,13 @@ func plain(html string) string {
 		"<blockquote class=\"gmail_quote\">", "").Replace(html)
 }
 
-// Nothing in a reply is markup except the markup this package adds. A reader who
-// types a tag meant it as characters, and so did the sender of the message being
-// answered — a reply that let either become markup would be a rendering of
-// somebody's words that they did not write, in mail they cannot edit.
+// The reader's own words are escaped, always, and so is every word of a message
+// that came as text. A tag somebody typed meant it as characters, and a reply that
+// turned it into markup would send a rendering of their words that they did not
+// write. The one markup in a reply that is not written by this package is the
+// answered message's own, and that reaches the recipient only as what the pane's
+// allowlist lets through (see TestAQuoteNeverRelaysWhatThePageWouldRefuse). This is
+// the text case: a message with no html part is quoted as the text it is.
 func TestTheHTMLOnlyEverAddsMarkupOfItsOwn(t *testing.T) {
 	got := ComposeReply("less <than> & more", corpus.ReplyTarget{
 		Author: "Bo <script>alert(1)</script> Halvorsen", From: "bo@fjordline.example",
@@ -197,7 +200,8 @@ func TestTheHTMLOnlyEverAddsMarkupOfItsOwn(t *testing.T) {
 	if !strings.Contains(got.HTML, "<p>&lt;b&gt;bold&lt;/b&gt; and &amp; ampersands<br>second line</p>") {
 		t.Errorf("the quoted message was not escaped, or its line break was lost:\n%s", got.HTML)
 	}
-	// The only tags in the message are the ones written here.
+	// The only tags in the message are the ones written here — for a message with no
+	// markup of its own, which is what a quote of one is made of.
 	for _, tag := range []string{"<p>", "</p>", "<br>", "<blockquote", "</blockquote>"} {
 		if !strings.Contains(got.HTML, tag) {
 			t.Errorf("the message is missing its own %s:\n%s", tag, got.HTML)
@@ -207,6 +211,99 @@ func TestTheHTMLOnlyEverAddsMarkupOfItsOwn(t *testing.T) {
 		`<blockquote class="gmail_quote">`, "", "</blockquote>", "").Replace(got.HTML)
 	if strings.Contains(inner, "<") || strings.Contains(inner, ">") {
 		t.Errorf("markup survived from somebody's text:\n%s", got.HTML)
+	}
+}
+
+// A reply to a message that had markup quotes that markup. The answer to an HTML
+// mail used to carry it as escaped text — a table as its cells' lines, a link as its
+// label, the sender's own quoted message as a run of "&gt;" — so a reply to a mail
+// read as a transcript of one. The markup is in the corpus, so the quote is built
+// from it.
+func TestAReplyToAnHTMLMessageQuotesItsMarkup(t *testing.T) {
+	got := ComposeReply("Both dates work.\n", corpus.ReplyTarget{
+		Author: "Bo Halvorsen", From: "bo@fjordline.example",
+		Body: "Roof access on the 14th.\n\n> Earlier: the tiles arrive Tuesday.\n",
+		HTML: `<div dir="ltr"><p>Roof access on the <b>14th</b>.</p>` +
+			`<ul><li>scaffold</li><li>tiles</li></ul>` +
+			`<p><a href="https://loomworks.example/quote">the quote</a></p>` +
+			`<blockquote class="gmail_quote"><p>Earlier: the tiles arrive Tuesday.</p></blockquote></div>`,
+		TS: at(t),
+	})
+
+	// The message's own markup is inside the blockquote, marked up as its sender
+	// marked it up — the words, the list, the link, and the quote that message itself
+	// carried, which is the nesting a client shows under an answer to it.
+	for _, want := range []string{
+		`<b>14th</b>`,
+		"<ul><li>scaffold</li><li>tiles</li></ul>",
+		`<a href="https://loomworks.example/quote">the quote</a>`,
+		`<p>On Mon 2 Mar 2026 23:00 UTC, Bo Halvorsen &lt;bo@fjordline.example&gt; wrote:</p>` +
+			"\n<blockquote class=\"gmail_quote\">\n" +
+			`<div><p>Roof access on the <b>14th</b>.`,
+		// The message's own quote of the message before it, with the class the
+		// allowlist does not carry: the nesting is the sender's, the attributes are the
+		// pane's decision (see sanitise.go, which a reply's quote passes like any body).
+		`<blockquote><p>Earlier: the tiles arrive Tuesday.</p></blockquote>`,
+	} {
+		if !strings.Contains(got.HTML, want) {
+			t.Errorf("the answered message's markup is not in the quote: no %s\n%s", want, got.HTML)
+		}
+	}
+	// And not its text beside the markup: the quote is one reading of the message,
+	// the one the message itself was sent in. A quote carrying both would repeat it.
+	if strings.Contains(got.HTML, "&gt; Earlier") {
+		t.Errorf("the quote carries the text rendition as well as the markup:\n%s", got.HTML)
+	}
+	// The text part is still the message's own text, one level in and markers
+	// intact, because a text part has nowhere to put markup: the message's own
+	// quotation is that text's content, and it goes one level deeper.
+	if !strings.Contains(got.Text, "\n> Roof access on the 14th.\n>\n> > Earlier: the tiles arrive Tuesday.") {
+		t.Errorf("the text part lost the message's own lines:\n%s", got.Text)
+	}
+}
+
+// What a sender's markup may carry is the allowlist's decision, not the reply's.
+// The markup in a quote passes the same sanitiser the page's own bodies pass, so an
+// answer cannot relay to its recipients anything the page would refuse to render —
+// and the sender's words survive it anyway, because an unlisted element is flattened
+// to its own text rather than dropped.
+func TestAQuoteNeverRelaysWhatThePageWouldRefuse(t *testing.T) {
+	got := ComposeReply("Noted.\n", corpus.ReplyTarget{
+		Author: "Bo Halvorsen", From: "bo@fjordline.example",
+		Body: "the words of the message\n",
+		HTML: `<style>:host{background:#fff;color-scheme:light}</style>` +
+			`<script>alert(1)</script>` +
+			`<p>the words of the message</p>` +
+			`<img src="x.png" onerror="alert(1)">` +
+			`<p><a href="javascript:alert(1)">a link</a></p>` +
+			`<form action="https://loomworks.example"><input type="text"><button>Send</button></form>`,
+		TS: at(t),
+	})
+
+	for _, bad := range []string{"<script", "<style", ":host", "onerror", "javascript:", "<form", "<input", "<button"} {
+		if strings.Contains(got.HTML, bad) {
+			t.Errorf("the quote carries %s:\n%s", bad, got.HTML)
+		}
+	}
+	for _, want := range []string{"the words of the message", "a link"} {
+		if !strings.Contains(got.HTML, want) {
+			t.Errorf("the sanitised quote lost %q, which the sender wrote:\n%s", want, got.HTML)
+		}
+	}
+}
+
+// A part with nothing in it to quote is not a quote, and the text beside it is still
+// the message: a client that wraps its html in a style block and writes the body as
+// text (Gmail's mobile app does exactly this) is answered with what it said.
+func TestAMessageWithNoWordsInItsMarkupIsQuotedAsText(t *testing.T) {
+	got := ComposeReply("Understood.\n", corpus.ReplyTarget{
+		Author: "Bo Halvorsen", Body: "the tiles arrive Tuesday\n",
+		HTML: `<style>:host{background:#fff;color:#000;color-scheme:light}</style>`,
+		TS:   at(t),
+	})
+	if !strings.Contains(got.HTML,
+		"<blockquote class=\"gmail_quote\">\n<p>the tiles arrive Tuesday</p>\n</blockquote>") {
+		t.Errorf("a part with no words in it was quoted as markup:\n%s", got.HTML)
 	}
 }
 
