@@ -4,6 +4,7 @@ import { MEDIA_BASE } from "../lib/attachments";
 import { orgOrder, slotsFor } from "../lib/derive";
 import { newest } from "../lib/newest";
 import { gmailIdOf, sourceLine } from "../lib/sources";
+import { fetchOriginal } from "../lib/original";
 import { Failure } from "./ThreadPreview";
 import { Message, type StampData } from "./Message";
 import { ParticipantsPanel, castOfEntries } from "./Participants";
@@ -242,6 +243,13 @@ export function ThreadMessages({ thread }: { thread: { rootExtId: string } }) {
           // pasted somewhere and read whole — the same affordance, and the same
           // button, the page offers.
           copyJson={e}
+          // The sender's own html, where the corpus holds a part for this message:
+          // `original` is the read's own answer to that (body_html is not empty),
+          // so the control is drawn for the messages that can answer it and for no
+          // others. The fetch is the app's one route to a message's own markup, and
+          // it is this pane's to pass because the pane is a reader with a server
+          // behind it — a built page has none and gets no control.
+          original={e.original ? { extId: e.extId, load: fetchOriginal } : undefined}
           // The files this message carried, as the corpus read them. mediaBase is
           // the app's own route to stored bytes — the pane is a reader with a
           // server behind it, unlike a shared export, so a pulled file opens

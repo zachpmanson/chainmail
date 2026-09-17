@@ -31,6 +31,13 @@ const (
 	// deliberately does not hold.
 	extQuoted     = "quote:9f2c1ab4e77d"
 	extQuotedHost = "mail:<c0ffee-5@loomworks.example>"
+
+	// The entry carrying html of its own and its plain-text neighbour are their
+	// own fixture too (see htmlServer). An html body changes what the transcript
+	// renders, so putting one in the shared corpus above would be a change to
+	// every assertion about what a message says.
+	extHTML  = "mail:<c0ffee-6@loomworks.example>"
+	extPlain = "mail:<c0ffee-7@loomworks.example>"
 )
 
 // shedBytes is the fixture attachment's content, filed as a blob so that the
@@ -208,6 +215,77 @@ func quotedServer(t *testing.T) *harness {
 	return harnessOver(t, s)
 }
 
+// htmlPart is the invented html an entry arrives with, shaped like the thing this
+// route exists for: a booking confirmation, which is all presentation and layout
+// and none of it a paragraph the transcript can keep.
+//
+// Every refusal the route makes is in here too — a script, an inline handler and a
+// javascript: URL — because the point of a fixture is to be the input the route is
+// not allowed to pass, and an input that only contains what we keep cannot fail.
+const htmlPart = `<!doctype html>
+<html><head><meta charset="utf-8"><title>Booking confirmed</title>
+<link rel="stylesheet" href="https://assets.example.example/booking.css">
+<style>
+  body { background: #eef2f7; font-family: Georgia, serif; }
+  .card { border: 1px solid #ccd6e0; padding: 12px; }
+  @media (max-width: 600px) { .card { padding: 4px; } }
+</style></head>
+<body bgcolor="#eef2f7">
+<div class="card" id="booking" onclick="steal()">
+  <h1>Booking confirmed</h1>
+  <p>When: <b>Tuesday 3 March, 10:00</b></p>
+  <script>steal()</script>
+  <a href="javascript:steal()">Reschedule</a>
+  <a href="https://example.example/booking/1">Details</a>
+</div>
+</body></html>`
+
+// htmlServer is the fixture for a reader's second look at a message: one entry that
+// arrived with html of its own, and one plain-text neighbour so that "this entry
+// has no original" is asked of an entry that is certainly there.
+//
+// Quoted is what the original must survive — a class, a page-level rule and a media
+// query, which is the whole difference between this and the transcript's rendering —
+// so the two fixtures are one sender writing twice, and the plain one is the same
+// message the transcript would have drawn from the html alone.
+func htmlServer(t *testing.T) *harness {
+	t.Helper()
+	s, err := corpus.Open(":memory:")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+
+	ada := putPerson(t, s, "Ada Okoye", "ada@loomworks.example")
+	putMail(t, s, mailFixture{
+		ext: extHTML, ts: "2026-03-01T09:00:00+11:00", tz: "AEDT", offset: mins(660),
+		person: ada, container: "T2", subject: "Booking confirmed",
+		messageID: "<c0ffee-6@loomworks.example>",
+		from:      "Ada Okoye <ada@loomworks.example>",
+		to:        "Bo Halvorsen <bo@fjordline.example>",
+		text:      "Booking confirmed: Tuesday 3 March, 10:00.",
+		html:      htmlPart,
+	})
+	putMail(t, s, mailFixture{
+		ext: extPlain, ts: "2026-03-01T09:05:00+11:00", tz: "AEDT", offset: mins(660),
+		person: ada, container: "T2", subject: "Booking confirmed",
+		messageID: "<c0ffee-7@loomworks.example>",
+		// A reply, so the two fixtures are one trail: the pane draws the toggle
+		// from a chain read, and a fixture of two unrelated chains could not tell
+		// a per-entry flag from a per-read one.
+		inReplyTo: "<c0ffee-6@loomworks.example>",
+		from:      "Ada Okoye <ada@loomworks.example>",
+		to:        "Bo Halvorsen <bo@fjordline.example>",
+		text:      "Booking confirmed: Tuesday 3 March, 10:00.",
+	})
+	// The reply edge is resolved after both rows exist, not at insert: a parent is
+	// named by Message-ID and the message it names may not have been ingested yet.
+	if _, err := s.ResolveParents(); err != nil {
+		t.Fatalf("ResolveParents: %v", err)
+	}
+	return harnessOver(t, s)
+}
+
 // harnessOver is the server the fixtures run on, over a corpus they built.
 //
 // Its switches are the same on every corpus on purpose: a test that added a
@@ -273,6 +351,7 @@ type mailFixture struct {
 	from      string
 	to        string
 	text      string
+	html      string   // the entry's own text/html part, when it arrived with one
 	labels    []string // the mailbox's own labels, as Gmail states them
 	gmail     string   // the Gmail message id, when this entry has a mailbox copy
 	atts      []corpus.Attachment
@@ -308,7 +387,7 @@ func putMail(t *testing.T, s *corpus.Store, m mailFixture) int64 {
 	res, err := s.Put(corpus.Entry{
 		Source: corpus.SourceMail, ExtID: m.ext, TS: ts, TZ: m.tz, TZOffset: m.offset,
 		PersonID: m.person, Container: m.container, Subject: m.subject,
-		ParentRef: m.inReplyTo, BodyText: m.text,
+		ParentRef: m.inReplyTo, BodyText: m.text, BodyHTML: m.html,
 	}, &corpus.Mail{
 		GmailID: m.gmail, MessageID: m.messageID, InReplyTo: m.inReplyTo,
 		From: m.from, To: m.to, Labels: m.labels,

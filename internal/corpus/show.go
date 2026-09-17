@@ -23,14 +23,22 @@ type Shown struct {
 	// TZOffset is minutes east of UTC as the source stated it, nil when it stated
 	// none. Carried alongside TZ because a label does not determine an offset, so
 	// a caller placing this entry's wall clock has nothing else to place it with.
-	TZOffset  *int
-	Author    string
-	Subject   string
-	Body      string
-	Container string
-	Permalink string
-	Parent    string // parent's ext_id, empty at a chain root
-	ParentRef string // what it names as its parent, resolved or not
+	TZOffset *int
+	Author   string
+	Subject  string
+	Body     string
+	// HasOriginal is whether this entry has a text/html part of its own filed in
+	// the corpus — the sender's own markup, before any of the renderer's rules get
+	// to it. It is a boolean and not the part because the two reads want opposite
+	// things from it: every entry in a chain read has to say whether the reader may
+	// ask to see the original, and answering that by carrying the markup would put
+	// a chain's worth of it on every read. A reader who asks gets the one part they
+	// asked for, from OriginalHTML.
+	HasOriginal bool
+	Container   string
+	Permalink   string
+	Parent      string // parent's ext_id, empty at a chain root
+	ParentRef   string // what it names as its parent, resolved or not
 
 	// Sightings is every place this entry was found. A message quoted in five
 	// forwards has five, which is the evidence that it mattered.
@@ -94,13 +102,14 @@ func (s *Store) Show(extID string) (Shown, error) {
 	err := s.db.QueryRow(`
 		select e.id, e.ext_id, e.source, e.quoted, e.ts, e.tz, e.tz_offset,
 		       p.display_name, e.subject, e.body_text, e.container, e.permalink,
-		       par.ext_id, e.parent_ref
+		       par.ext_id, e.parent_ref, e.body_html is not null and e.body_html != ''
 		from entries e
 		left join people p   on p.id = e.person_id
 		left join entries par on par.id = e.parent_id
 		where e.ext_id = ?`, extID).
 		Scan(&e.ID, &e.ExtID, &e.Source, &e.Quoted, &ts, &tz, &off,
-			&author, &subject, &body, &container, &permalink, &parent, &parentRef)
+			&author, &subject, &body, &container, &permalink, &parent, &parentRef,
+			&e.HasOriginal)
 	if errors.Is(err, sql.ErrNoRows) {
 		return e, fmt.Errorf("%q: %w", extID, ErrNotFound)
 	}
@@ -161,6 +170,31 @@ func (s *Store) Show(extID string) (Shown, error) {
 
 	e.Participants, err = Participants(s, e.ID)
 	return e, err
+}
+
+// OriginalHTML returns the entry's own text/html part exactly as the sender's
+// client wrote it: the markup a reader sees when they ask for the original rather
+// than for this renderer's reading of it.
+//
+// It is kept apart from Show deliberately, because it is not part of reading an
+// entry — it is the point of *not* reading it this way, and it is big (tens of
+// kilobytes for a mail client's output). The caller is the server route that hands
+// it to a shadow root, and everything that makes it presentable is spec's:
+// OriginalBody decides what may go in, this only fetches bytes.
+//
+// An entry with no html part returns "" and no error: the corpus has the message,
+// it simply has nothing the sender wrote to show for it. A reader asking for an
+// original that does not exist is the caller's 404 to make, not an internal error.
+func (s *Store) OriginalHTML(extID string) (string, error) {
+	var part sql.NullString
+	err := s.db.QueryRow(`select body_html from entries where ext_id = ?`, extID).Scan(&part)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", fmt.Errorf("%q: %w", extID, ErrNotFound)
+	}
+	if err != nil {
+		return "", err
+	}
+	return part.String, nil
 }
 
 // Chain returns every entry reachable from the one named, in time order.

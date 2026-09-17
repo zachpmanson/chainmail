@@ -373,6 +373,153 @@ func TestEntryCarriesItsProvenanceAndTheZoneItStated(t *testing.T) {
 	}
 }
 
+// The original route exists because the transcript's rendering is a reading, and
+// some mail cannot survive being read that way: a booking confirmation is layout,
+// and stripping its stylesheet leaves the reader with the fields in a column. So
+// this route keeps the sender's own presentation — stylesheet, class, id, media
+// query — and contains it instead, by serving it to a caller that mounts it in a
+// shadow root. What it does NOT keep is the executable surface, which is the one
+// thing a shadow root cannot contain: no sandbox attribute, no per-message CSP.
+//
+// Both halves are asserted, because either alone is a route that passes while
+// being useless (nothing kept) or dangerous (something kept that runs).
+func TestAnEntrysOwnHTMLKeepsItsStylesAndLosesItsScripts(t *testing.T) {
+	srv, api := htmlServer(t), loadAPI(t)
+
+	// The read says whether there is anything to ask for, and the pane draws the
+	// control from it — so it is this field, not a 404, that decides whether a
+	// reader ever sees the toggle.
+	res := srv.do(t, "GET", entryPath("/v1/entries/", extHTML), nil)
+	if res.status != 200 {
+		t.Fatalf("entry: status = %d: %s", res.status, res.body)
+	}
+	api.assert(t, "CorpusEntry", res.body)
+	got := decode[struct {
+		ExtID    string `json:"extId"`
+		Original bool   `json:"original"`
+	}](t, res)
+	if got.ExtID != extHTML || !got.Original {
+		t.Errorf("entry = %+v, want %s with original true", got, extHTML)
+	}
+	// The plain-text neighbour is not offered one, and is not offered it by an
+	// absent-able field that came back false-looking either: a client reads this
+	// field or it does not, and the message with no html part omits it.
+	res = srv.do(t, "GET", entryPath("/v1/entries/", extPlain), nil)
+	if res.status != 200 {
+		t.Fatalf("plain entry: status = %d: %s", res.status, res.body)
+	}
+	if decoded := decode[map[string]any](t, res); decoded["original"] != nil {
+		t.Errorf("the plain entry carries original = %v, want the field absent", decoded["original"])
+	}
+
+	// The part itself, fetched the way a toggle fetches it.
+	res = srv.do(t, "GET", entryPath("/v1/entries/", extHTML)+"/original", nil)
+	if res.status != 200 {
+		t.Fatalf("original: status = %d: %s", res.status, res.body)
+	}
+	if ct := res.header.Get("Content-Type"); ct != "text/html; charset=utf-8" {
+		t.Errorf("Content-Type = %q, want html", ct)
+	}
+	// Not a response a client may store beyond its own freshness: the corpus is
+	// rewritten by every slurp, so a held copy is a held copy of older mail.
+	if cc := res.header.Get("Cache-Control"); cc != "no-cache" {
+		t.Errorf("Cache-Control = %q, want no-cache", cc)
+	}
+	body := string(res.body)
+	for _, want := range []string{
+		// The sender's presentation, which is the whole reason for the route.
+		"background: #eef2f7",
+		".card {",
+		"id=\"booking\"",
+		"@media (max-width: 600px)",
+		"Booking confirmed",
+		// The link, forced into a tab of its own: this is mounted inside a page
+		// that is signed in to the reader's mailbox, and a sender's link must not
+		// navigate the app away.
+		`target="_blank"`,
+		// A page-level rule is rewritten, because a shadow tree has no html or
+		// body element and a rule written for either would match nothing. The
+		// canvas colour is the case that matters: without this the mail that says
+		// nothing about its background draws as the page's.
+		":host",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the original does not carry %q:\n%s", want, body)
+		}
+	}
+	for _, bad := range []string{
+		"<script", "onclick", "javascript:", "alert(", "steal(",
+	} {
+		if strings.Contains(body, bad) {
+			t.Errorf("the original still carries %q — a shadow root has no sandbox to stop it:\n%s", bad, body)
+		}
+	}
+	// The stylesheet <link> is kept: a shadow root scopes it to this bubble, which
+	// is the same containment that lets the class selectors stay.
+	if !strings.Contains(body, "booking.css") {
+		t.Errorf("the original dropped the sender's own stylesheet link:\n%s", body)
+	}
+}
+
+// Two different nothings, and a caller that has to tell them apart: the entry may
+// not exist, or it may exist with no html of its own (which is most mail, and is
+// also what an entry whose html reduces to nothing showable is). Both are 404s in
+// the server's one error shape; the messages are what an operator reads, and the
+// `original` flag is what a client acts on instead of probing this route.
+func TestTheOriginalRouteNamesWhichNothingItFound(t *testing.T) {
+	srv := htmlServer(t)
+
+	res := srv.do(t, "GET", entryPath("/v1/entries/", extNone)+"/original", nil)
+	if res.status != 404 {
+		t.Fatalf("unknown entry: status = %d, want 404: %s", res.status, res.body)
+	}
+	if msg := res.errText(t); !strings.Contains(msg, "no entry with that id") {
+		t.Errorf("unknown entry: message %q does not say the entry is missing", msg)
+	}
+
+	res = srv.do(t, "GET", entryPath("/v1/entries/", extPlain)+"/original", nil)
+	if res.status != 404 {
+		t.Fatalf("plain entry: status = %d, want 404: %s", res.status, res.body)
+	}
+	if msg := res.errText(t); !strings.Contains(msg, "no text/html part") {
+		t.Errorf("plain entry: message %q does not say there is no part to show", msg)
+	}
+
+	// The route is a read: writing to it is a 405 with the same error shape, from
+	// the same wrapper every other route uses.
+	res = srv.do(t, "POST", entryPath("/v1/entries/", extHTML)+"/original", nil)
+	if res.status != 405 {
+		t.Errorf("POST = %d, want 405: %s", res.status, res.body)
+	}
+	res.errText(t)
+}
+
+// A chain read is where the pane gets its messages from, so the flag has to be on
+// the chain's entries as well as the single-entry read: a client that only asked
+// the entry route would have to fetch each one again to decide what to draw.
+func TestAChainEntrySaysItHasAnOriginal(t *testing.T) {
+	srv, api := htmlServer(t), loadAPI(t)
+	res := srv.do(t, "GET", entryPath("/v1/chains/", extHTML), nil)
+	if res.status != 200 {
+		t.Fatalf("status = %d: %s", res.status, res.body)
+	}
+	api.assert(t, "ChainResponse", res.body)
+	got := decode[struct {
+		Entries []struct {
+			ExtID    string `json:"extId"`
+			Original bool   `json:"original"`
+		} `json:"entries"`
+	}](t, res)
+	if len(got.Entries) != 2 {
+		t.Fatalf("the trail has %d entries, want the two fixture messages", len(got.Entries))
+	}
+	for _, e := range got.Entries {
+		if want := e.ExtID == extHTML; e.Original != want {
+			t.Errorf("%s: original = %v, want %v", e.ExtID, e.Original, want)
+		}
+	}
+}
+
 // An entry recovered from someone else's quote has no address of its own to send,
 // and the person who quoted it is not in the trail either: the pane renders one
 // entry, so the host sits outside it and a name for that host can only come from

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { initials } from "../lib/anchors";
 import {
@@ -10,6 +10,7 @@ import {
   type Attachment,
 } from "../lib/attachments";
 import type { ZoneState } from "../lib/chronological";
+import { mountOriginal } from "../lib/original";
 import { trimBody } from "../lib/trimBody";
 
 /**
@@ -128,6 +129,13 @@ export interface MessageProps {
    *  button off, since a button that copies nothing is a lie. The button rides
    *  in the header's expanded section, with the rest of the receipt. */
   copyJson?: unknown;
+  /** The sender's own html for this message, and how to fetch it: passed exactly
+   *  where a caller knows the corpus holds a part for the entry (the `original`
+   *  flag on a chain or entry read) and has a server to fetch it from. So what is
+   *  absent here is absent everywhere — on a page rendered to a file, in a static
+   *  export, on a message that arrived as plain text — and no control is drawn,
+   *  because a control that cannot answer is worse than no control. */
+  original?: { extId: string; load: (extId: string) => Promise<string> };
 }
 
 /** The sender's face: their avatar image where the page has one, their initials
@@ -357,6 +365,133 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
   );
 }
 
+/**
+ * The bubble's body, and the reader's second reading of it.
+ *
+ * By default the body is the transcript's: the sender's markup as this pipeline
+ * renders it, stripped of the stylesheet and the class names that made it what it
+ * was, so that a page of other people's design reads as one page. That stripping
+ * is what makes some mail illegible — a calendar invite is tables and classes and
+ * nothing else, and a newsletter's white text loses the background it was white
+ * against along with the rule that set it. Where the corpus holds the sender's own
+ * part, the reader can ask for it instead, and it is mounted in a shadow root of
+ * its own so nothing in it can reach the app and nothing in the app can reach it.
+ *
+ * It is swapped and not added. Two renditions stacked would be twice the height of
+ * a thread to hold a comparison the reader has already made by the time they reach
+ * for the control — and the whole reason to reach for it is that one of the two is
+ * wrong for this message.
+ *
+ * The control is drawn only where a caller passed somewhere to fetch from, so a
+ * built page and a static export never show one. Where it is drawn, it is quiet:
+ * in flow at the body's own top edge, at the weight of the signature fold rather
+ * than the toolbar's (see .origrow in the stylesheet), because a message that says
+ * nothing about being in the wrong rendering should say nothing at all.
+ */
+function Body({ body, original }: { body: string; original?: MessageProps["original"] }) {
+  const [state, setState] = useState<Original>({ at: "read" });
+  // What arrived, held apart from what is on screen: the reader who flips back and
+  // forth is comparing two renderings of one body, and re-asking for bytes this
+  // bubble already has would make the comparison a round trip each way. lib/original
+  // holds the same answer for the whole session (a second bubble for the same
+  // message, or one remounted, pays nothing either) — this is what keeps the flip
+  // itself free.
+  const arrived = useRef<string | null>(null);
+  const host = useRef<HTMLDivElement | null>(null);
+  // Mounted by effect rather than in the ref callback: the element exists on the
+  // render that swaps to it, and the shadow root is created on the element as
+  // part of that commit. React owns the host as an empty div; the mail is written
+  // into it by this one call, and never read back.
+  useEffect(() => {
+    if (state.at === "sent" && host.current) mountOriginal(host.current, state.html);
+  }, [state]);
+
+  const ask = () => {
+    if (!original) return;
+    if (state.at === "sent") {
+      // Back to the transcript: the bytes stay in `arrived`, so coming back to
+      // them costs nothing.
+      setState({ at: "read" });
+      return;
+    }
+    if (state.at !== "read") return;
+    if (arrived.current !== null) {
+      setState({ at: "sent", html: arrived.current });
+      return;
+    }
+    setState({ at: "asking" });
+    original.load(original.extId).then(
+      (html) => {
+        arrived.current = html;
+        setState({ at: "sent", html });
+      },
+      (err: unknown) =>
+        setState({
+          at: "none",
+          why: err instanceof Error && err.message ? err.message : "the original is not available",
+        }),
+    );
+  };
+
+  return (
+    <>
+      {original ? (
+        <div className="origrow">
+          {state.at === "none" ? (
+            /* The one case with nothing left to press: the corpus was asked and
+               answered that there is nothing to show. The server's own sentence
+               is the answer, so it is shown rather than replaced with a
+               word — this is a reader looking at a message, not an operator
+               reading a log. */
+            <span className="origwhy" title={state.why}>
+              nothing to show
+            </span>
+          ) : (
+            <button
+              type="button"
+              className="tbtn"
+              aria-pressed={state.at === "sent"}
+              disabled={state.at === "asking"}
+              title={
+                state.at === "sent"
+                  ? "Back to the rendered body: the same message with the sender's own styling removed"
+                  : "Show this message as it was written: the sender's own markup and its own stylesheet, in a shadow root, which is where the stylesheet cannot reach this page"
+              }
+              onClick={ask}
+            >
+              {state.at === "asking" ? "loading…" : "original"}
+            </button>
+          )}
+        </div>
+      ) : null}
+      {state.at === "sent" ? (
+        /* The shadow host. Empty as far as React is concerned — the mail is
+           written into its shadow root, where a rule of this page's cannot
+           reach it and its own rules cannot leave. */
+        <div className="bd bdo" ref={host} />
+      ) : (
+        <div className="bd" dangerouslySetInnerHTML={html(trimBody(body))} />
+      )}
+    </>
+  );
+}
+
+/** What the reader has asked for, and what came back.
+ *
+ * `read` is the transcript's own rendering and the state a bubble opens in;
+ * `asking` is a fetch in flight, during which the transcript's rendering is
+ * still what is on screen, because taking the body away before the replacement
+ * arrives would be a blank bubble on a slow corpus. `sent` is the sender's own
+ * html, mounted. `none` is the corpus's answer that there is nothing of theirs
+ * to show — an answer rather than a failure, and the only state with no way back
+ * to `read` except reloading the thread, because there is nothing to go back to:
+ * what was on screen is still on screen. */
+type Original =
+  | { at: "read" }
+  | { at: "asking" }
+  | { at: "sent"; html: string }
+  | { at: "none"; why: string };
+
 /** One message bubble. */
 export function Message(p: MessageProps) {
   // The org slot rides on the bubble so a bubble can carry its sender's colour,
@@ -431,7 +566,10 @@ export function Message(p: MessageProps) {
               ))}
             </div>
           ) : null}
-          <div className="bd" dangerouslySetInnerHTML={html(trimBody(p.body))} />
+          {/* The body, and the second reading of it: this is where the sender's own
+              html is mounted in place of the rendered one, and where the control
+              that swaps them lives. */}
+          <Body body={p.body} original={p.original} />
           {p.edits}
           <Attachments
             attachments={p.attachments}

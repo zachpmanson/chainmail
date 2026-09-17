@@ -503,6 +503,32 @@
     border-color:color-mix(in srgb, var(--muted) 55%, transparent); }
   .msg.me .bub { background:var(--mine); border-color:var(--o3); }
   .ment { margin:0 0 .3rem; display:flex; flex-wrap:wrap; gap:.25rem; }
+  /* The reader's second reading of one message: the sender's own html, swapped in
+     for this pipeline's stripped one. In flow at the body's top edge rather than
+     floating over it — a mail's own top-right corner is where its header usually
+     is, and a control that covers the content it exists to show is worse than one
+     the reader has to look for.
+
+     Quiet at rest, and quiet is a decision: most mail renders correctly, so a
+     control that asks to be noticed on every bubble trades one kind of noise for
+     another. Its weight is the signature fold's (see .bd details.sig), not the
+     toolbar's. Pressed is the exception — the reader who has swapped the body is
+     the one who needs the way back, so the state is drawn at full weight even
+     when the pointer is somewhere else. */
+  .origrow { display:flex; justify-content:flex-end; align-items:center; gap:.4rem;
+    margin:0 0 .3rem; }
+  .origrow .tbtn { font-size:.6rem; padding:.08rem .35rem; opacity:.5; }
+  .origrow .tbtn:hover, .origrow .tbtn:focus-visible,
+  .origrow .tbtn[aria-pressed="true"] { opacity:1; }
+  .origwhy { font-size:.68rem; color:var(--muted); font-style:italic; }
+  /* The shadow host: layout only, and deliberately no colour. A rule in THIS
+     stylesheet beats a :host rule written inside the shadow root, so a colour
+     here would be a canvas the sender's own stylesheet could not correct — the
+     app's canvas is written inside the root instead, first (see spec.original).
+     `contain` is what contains the two things a mail can do to a page it is
+     mounted in: it becomes the containing block for a `position:fixed`
+     descendant, and it clips a fixed-width layout's overflow at the bubble. */
+  .bdo { contain:layout paint; }
   .at { font-size:.74rem; font-weight:650; color:var(--o3); background:var(--mine);
     border-radius:5px; padding:.02rem .35rem; }
   .bub p { margin:.2rem 0; }
