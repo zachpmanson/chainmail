@@ -271,13 +271,16 @@ export function StatusView() {
           belong next to the backends they decide the reading of, and they are
           the only controls on this screen — everything else here reports.
 
-          Listed as name and control rather than written into a sentence. A
-          sentence about a control has to be read in full to find the control,
-          and re-read every time one of the three changes — and the three were
-          three sentences of the same shape, which is a table pretending to be
-          prose. What each one knows about itself (the schedule it implies, the
-          addresses the reader's mail comes from) stays, in the same muted note
-          it was written in, beside the control rather than behind a dash. */}
+          Three columns: the name of the setting, the control that sets it, and
+          what the setting knows about itself — the schedule the cadence implies,
+          the addresses the reader's mail comes from. The third was inside the
+          second's cell, trailing each control at whatever width the control
+          happened to end at, which read as three unrelated asides down a ragged
+          edge; given a column of its own, the commentary is read down as one and
+          compared, which is why it was written beside the control at all. A
+          setting with nothing to add leaves the cell empty rather than closing
+          the column up — the names and the controls stay in their own columns
+          whatever any one row says. */}
       <h2 className="sthead">Settings</h2>
       <dl className="stdl stset">
         <dt>Sweep the mailbox</dt>
@@ -296,16 +299,20 @@ export function StatusView() {
               </option>
             ))}
           </select>
-          {status.data?.nextSlurpAt ? (
-            <span className="sttail">next {when(status.data.nextSlurpAt)}</span>
-          ) : every === "off" ? (
-            <span className="sttail">never, unless asked</span>
-          ) : every === "" ? null : (
-            // A cadence with nothing scheduled is a host whose -slurp grant is off,
-            // which is a state the page cannot fix and should not hide.
-            <span className="sttail">nothing scheduled</span>
-          )}
         </dd>
+        {status.data?.nextSlurpAt ? (
+          <dd className="sttail">next {when(status.data.nextSlurpAt)}</dd>
+        ) : every === "off" ? (
+          <dd className="sttail">never, unless asked</dd>
+        ) : every === "" ? (
+          // Nothing read yet, so nothing to say about the cadence: the cell is
+          // empty, as the folder's is.
+          <dd className="sttail" />
+        ) : (
+          // A cadence with nothing scheduled is a host whose -slurp grant is
+          // off, which is a state the page cannot fix and should not hide.
+          <dd className="sttail">nothing scheduled</dd>
+        )}
         {/* The setting the home page writes when a reader says "open this folder by
             default". It is here as well because this is the page that lists what
             the server does; a reader who wants the corpus to open somewhere should
@@ -327,6 +334,12 @@ export function StatusView() {
             ))}
           </select>
         </dd>
+        {/* The folder control has nothing about itself to add, and its cell is
+            still there: a row that left the cell out would be the one row whose
+            third column starts a column to the left, because a grid places an
+            unplaced item in the next free cell — the next row's name would land
+            where this row's commentary did. */}
+        <dd className="sttail" />
         {/* Who the reader is. A setting rather than a field on the page being built:
             the same person decides which messages are marked as the reader's
             wherever mail is read — the pane, a built page, every thread — and most
@@ -365,17 +378,17 @@ export function StatusView() {
                   </option>
                 ))}
           </select>
-          {!meKnown ? (
-            // The control is blank until both answers are in, and this is what says
-            // why: the people are what name the person it would show, and the
-            // settings are what say whether anyone is named at all.
-            <span className="sttail">reading…</span>
-          ) : me.value === "" ? (
-            <span className="sttail">nobody, so nothing is marked as yours.</span>
-          ) : (
-            <span className="sttail">{meLine(me)}.</span>
-          )}
         </dd>
+        {!meKnown ? (
+          // The control is blank until both answers are in, and this is what says
+          // why: the people are what name the person it would show, and the
+          // settings are what say whether anyone is named at all.
+          <dd className="sttail">reading…</dd>
+        ) : me.value === "" ? (
+          <dd className="sttail">nobody, so nothing is marked as yours.</dd>
+        ) : (
+          <dd className="sttail">{meLine(me)}.</dd>
+        )}
       </dl>
       {people.isError ? (
         <p className="selfail" role="alert">

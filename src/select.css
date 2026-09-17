@@ -142,13 +142,30 @@
    three facts are a name and a value, and this is the shape that says so. The
    columns come from `.stdl` (the same grid, so the page has one list of names and
    values rather than two), narrowed here to fit the longest of the three names. */
-.stset { grid-template-columns:11rem 1fr; align-items:baseline; gap:.5rem 0;
-  margin:.55rem 0 0; }
-.stset dd { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
-/* What a setting knows about itself — the schedule the cadence implies, the
-   addresses the reader's mail comes from. Muted and beside the control: it is the
-   one part of the row that is not something to press. */
-.sttail { font-size:.72rem; color:var(--muted); }
+/* The settings, three columns: the name of the setting, the control that sets
+   it, and what the setting knows about itself — the schedule the cadence
+   implies, the addresses the reader's mail comes from. The third was a tail on
+   the control, starting wherever that control happened to end, so the three
+   notes read as three unrelated asides down a ragged edge; in a column of their
+   own they are read down as one, which is the reason they are there at all.
+
+   The control column is sized to the widest of the three controls, so the three
+   dropdowns share a left edge and the commentary shares another. A setting with
+   nothing to say leaves its cell empty rather than closing the column up. */
+.stset { grid-template-columns:11rem max-content minmax(0,1fr); gap:.5rem 1.5rem;
+  align-items:baseline; margin:.55rem 0 0; }
+/* Each cell is named to its column rather than left to the grid's own order: a
+   row whose commentary is empty (the folder's) would otherwise hand its cell to
+   the next setting's name. */
+.stset dt { grid-column:1; padding-right:0; }
+.stset dd { grid-column:2; }
+/* What a setting knows about itself — the schedule it implies, the addresses the
+   reader's mail comes from. Muted and in its own column: it is the one part of
+   the row that is not something to press. Named with the parent, because the
+   `.stdl dd` rule above sets the *control's* size and would set the note's too:
+   a note is read at the size of the notes above it, not at the size of the thing
+   it comments on. */
+.stset dd.sttail { grid-column:3; font-size:.72rem; color:var(--muted); }
 
 /* The palette table, at the foot of the status screen: a debugging aid rather
    than a setting, so it is the one thing there with nothing to press in it. Two

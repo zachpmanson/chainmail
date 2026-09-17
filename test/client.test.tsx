@@ -780,7 +780,7 @@ describe("the sweep cadence on /status", () => {
     // The option label, not the word: the page says "10 minutes" and stores "10m".
     expect(control.selectedOptions[0]!.textContent).toBe("10 minutes");
 
-    const line = control.closest("dd")!.textContent ?? "";
+    const line = control.closest("dd")!.nextElementSibling!.textContent ?? "";
     expect(line).toContain("next");
   });
 
@@ -808,6 +808,52 @@ describe("the sweep cadence on /status", () => {
       expect(writes.map((c) => JSON.parse(c.body!))).toEqual([{ slurpEvery: "30m" }]);
     });
     await waitFor(() => expect(control.value).toBe("30m"));
+  });
+});
+
+// The settings are three columns — the name, the control, and what the setting
+// knows about itself — and every row has all three, including the rows with
+// nothing to say. That last part is the one a reader never sees working and a
+// misplaced cell would break: an empty column is also the column that keeps the
+// names in one place.
+describe("the settings rows on /status", () => {
+  const cellAfter = (el: Element) => el.nextElementSibling as HTMLElement | null;
+
+  it("puts each setting's note in a column of its own, beside the control's cell", async () => {
+    handler = statusHandler;
+    await mountApp("/status");
+
+    const sweep = (await screen.findByLabelText("How often to sweep the mailbox")) as HTMLSelectElement;
+    // The cadence in force, which is also what puts a note in the third column:
+    // before the settings have answered there is nothing to say about the sweep.
+    await waitFor(() => expect(sweep.value).toBe("10m"));
+    const control = sweep.closest("dd")!;
+    // Not inside the control's cell: the note is the row's third column, which
+    // is what stops three notes from starting wherever three controls end.
+    expect(control.querySelector(".sttail")).toBeNull();
+    expect(cellAfter(control)!.className).toBe("sttail");
+    expect(cellAfter(control)!.textContent).toContain("next");
+
+    // The person's row carries its addresses there too.
+    const me = (await screen.findByLabelText("Which person you are")).closest("dd")!;
+    expect(me.querySelector(".sttail")).toBeNull();
+    const meNote = cellAfter(me)!;
+    expect(meNote.className).toBe("sttail");
+    expect(meNote.textContent).toContain("nothing is marked as yours");
+  });
+
+  it("keeps the cell on a setting that has nothing to add", async () => {
+    handler = statusHandler;
+    await mountApp("/status");
+
+    const folder = (await screen.findByLabelText(
+      "Which folder the home page opens in",
+    )).closest("dd")!;
+    const note = cellAfter(folder)!;
+    expect(note.className).toBe("sttail");
+    // Empty, and still a cell: the row without one would leave the third column
+    // of the rows below it unaligned.
+    expect(note.textContent).toBe("");
   });
 });
 
@@ -950,7 +996,10 @@ describe("who you are on /status", () => {
     // name is not offered: no mail came from them, so nothing could be marked.
     await waitFor(() => expect(options(control)).toEqual(["Nobody", "Ada Byron", "Bo Halvorsen"]));
     expect(control.value).toBe("");
-    expect(control.closest("dd")!.textContent).toContain("nothing is marked as yours");
+    // The note is the row's third column, not a tail inside the control's cell.
+    expect(control.closest("dd")!.nextElementSibling!.textContent).toContain(
+      "nothing is marked as yours",
+    );
     expect(settingsWrites()).toHaveLength(0);
 
     fireEvent.change(control, { target: { value: "1" } });
@@ -961,10 +1010,11 @@ describe("who you are on /status", () => {
     // named in the body, which is what leaves the cadence and the folder as they
     // stand.
     expect(stored(settingsWrites()[0]!)).toEqual({ mePersonId: 1 });
-    // And the sentence names both halves of the answer: the person the control
-    // shows, and the aliases the corpus resolved them to.
+    // And the note names both halves of the answer: the person the control
+    // shows, and the aliases the corpus resolved them to. It is the row's third
+    // column, so the control's own cell only ever holds the control.
     await waitFor(() => expect(control.selectedOptions[0]!.textContent).toBe("Ada Byron"));
-    expect(control.closest("dd")!.textContent).toContain(
+    expect(control.closest("dd")!.nextElementSibling!.textContent).toContain(
       "Ada Byron: ada@okoye.example, ada@work.example",
     );
   });
@@ -999,7 +1049,9 @@ describe("who you are on /status", () => {
     await waitFor(() => expect(settingsWrites()).toHaveLength(1));
     expect(stored(settingsWrites()[0]!)).toEqual({ mePersonId: 0 });
     await waitFor(() => expect(control.value).toBe(""));
-    expect(control.closest("dd")!.textContent).toContain("nothing is marked as yours");
+    expect(control.closest("dd")!.nextElementSibling!.textContent).toContain(
+      "nothing is marked as yours",
+    );
   });
 });
 
