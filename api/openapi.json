@@ -260,6 +260,75 @@
         }
       }
     },
+    "/v1/send": {
+      "post": {
+        "summary": "Answer one message the corpus holds, and file the answer into the corpus.",
+        "description": "The third write this surface makes to the mailbox, and the only one that creates something. One message is answered, threaded onto the message it replies to by the reply headers the mailbox builds, and the answer is filed into the corpus in the same request so the thread the reader is looking at shows it rather than waiting for the next ingest. If that filing fails the reply has still been sent: the failure is logged and the call still answers 200, because the mailbox is the source of truth and the corpus catches up.\n\nReply-only, and there is deliberately no recipient in the request. The message answered is named by its corpus ext id, and who the reply goes to and what it is called come from that message's own headers. A surface that can only answer mail the corpus already holds has no arbitrary recipient — no address to type, no way for a page behind a loopback bind with no authentication to become an outbound channel — which is what makes this a reading tool that can reply rather than a mail-sending endpoint.\n\nTwo steps, and the first sends nothing: without `confirm` the reply is prepared and the answer is the plan — the recipient the mailbox will use, the subject, and the whole body including the quote of the message being answered, which this server composes. That is a preview of the message rather than of a draft. With `confirm` the same prepare runs and is executed, and the answer carries the id of the message that went out.\n\nAn entry with no mailbox copy answers 400, unlike /v1/read and /v1/mail where such an entry is skipped and counted: those act on the part of a set that can be acted on, and a send cannot be half-performed — there is no mailbox message to thread against.\n\nA failure is one of two things and says which, because they demand the opposite next move: nothing was sent, so pressing send again is safe; or the mailbox did not answer the send, so whether it went out is unknown and only Gmail can say. A message that has gone out cannot be recalled, which is why this has its own switch: a server started without -send-mail answers 403, naming it.",
+        "operationId": "sendReply",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The reply as the mailbox has it: the recipient and subject from the headers of the message being answered, and the body with the quote under the reader's own words — plus whether this call sent it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No entry or no body named, or an entry with no mailbox copy to answer. Nothing was sent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Answering mail is disabled: the server was started without -send-mail.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No entry at that ext id. Nothing was sent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The mailbox refused. The error says whether this is known to have sent nothing (safe to retry) or is unknown because the send did not answer (check Gmail first).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/media/pull": {
       "post": {
         "summary": "Fetch the files one message's attachments need.",
@@ -3308,6 +3377,71 @@
               },
               "additionalProperties": false
             }
+          }
+        },
+        "additionalProperties": false
+      },
+      "SendRequest": {
+        "type": "object",
+        "description": "A reply: which message is being answered, what the reader has to say, and whether this call is the preview or the send. There is no recipient field — the address is the one the message being answered arrived from.",
+        "required": [
+          "entry",
+          "body"
+        ],
+        "properties": {
+          "entry": {
+            "type": "string",
+            "description": "The corpus ext id of the message being answered, as a thread read carries it in `entries[].extId`. One entry rather than a chain: a reply is to a message, and which thread it belongs to is the mailbox's answer by way of the reply headers. An entry with no mailbox copy — a message recovered from somebody's quote, a Slack post — is refused, because there is nothing to thread against.",
+            "example": "mail:<c0ffee-2@example.com>"
+          },
+          "body": {
+            "type": "string",
+            "description": "The reader's own words, with no quote in them: the message being answered, quoted and attributed, is added by this server — so the quote a reply carries is written once, by the same code, whichever client asked for it. An empty body is refused, because the reply would then be the quote alone.",
+            "example": "The 14th works. I'll confirm the roof access with the fitters."
+          },
+          "confirm": {
+            "type": "boolean",
+            "description": "False (or absent) prepares the reply and sends nothing, answering with the plan; true sends it. A client that forgets the field therefore previews rather than sends."
+          }
+        },
+        "additionalProperties": false
+      },
+      "SendResponse": {
+        "type": "object",
+        "description": "The reply as the mailbox has it, and whether this call sent it. The same three fields are answered by a preview and by a send, so what went out can be checked against the plan a reader was shown rather than trusted.",
+        "required": [
+          "entry",
+          "to",
+          "subject",
+          "body",
+          "sent"
+        ],
+        "properties": {
+          "entry": {
+            "type": "string",
+            "description": "The message this reply answers, echoed back so a client does not have to infer it from the request it sent."
+          },
+          "to": {
+            "type": "string",
+            "description": "The recipient the mailbox will use, which is the address the message being answered arrived from — as that message's own header states it, names included, not a name the corpus resolved. Nothing here lets a caller choose it.",
+            "example": "Ada Okoye <ada@loomworks.example>"
+          },
+          "subject": {
+            "type": "string",
+            "description": "The subject the mailbox will use: the answered message's own, with one `Re:` in front when it did not already carry one.",
+            "example": "Re: Solar install quote: dates"
+          },
+          "body": {
+            "type": "string",
+            "description": "The whole message text: the reader's words, then the message being answered, quoted one level in under an attribution line that names it the way its own bubble does."
+          },
+          "sent": {
+            "type": "boolean",
+            "description": "Whether this call sent it. False means this was the preview and nothing was written to the mailbox."
+          },
+          "gmailId": {
+            "type": "string",
+            "description": "The id of the message that went out, which is what the corpus filings and any later read name it by. Absent from a preview: nothing has an id until it exists."
           }
         },
         "additionalProperties": false

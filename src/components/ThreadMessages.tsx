@@ -14,6 +14,7 @@ import { Edits } from "./Edits";
 import { Message, type StampData } from "./Message";
 import { ParticipantsPanel, castOfEntries } from "./Participants";
 import { ReplyLink, type ReplyTarget } from "./ReplyLink";
+import { ReplyBox } from "./ReplyBox";
 import { Source } from "./Source";
 
 /**
@@ -140,6 +141,23 @@ function senderTitle(e: CorpusEntry): string {
   return `${name} <${e.fromEmail}>`;
 }
 
+
+/** The sender's name and the clock of a message, in the words its own bubble
+ *  prints — "Lane Whittaker" and "Mon 2 Mar 2026 09:15".
+ *
+ *  One function, two callers with the same obligation: the line that says what a
+ *  message answers (ReplyLink) and the reply box that says which message is being
+ *  answered. Both are claims about a message the reader is looking at, and the
+ *  bubble between them states the same clock from the same source — so a reader
+ *  must not be told two different times for one message by two lines of the same
+ *  pane. */
+function wordsOf(e: CorpusEntry): { who: string; when: string } {
+  const at = stampOf(e);
+  return {
+    who: e.author ?? "",
+    when: [at.date, at.time].filter(Boolean).join(" "),
+  };
+}
 
 export function ThreadMessages({
   thread,
@@ -329,12 +347,8 @@ export function ThreadMessages({
     // same walk — but a link with no anchor in it would be a worse answer than
     // saying the thread starts here.
     if (i === undefined) return null;
-    const at = stampOf(parent);
-    return {
-      anchor: anchor(i),
-      who: parent.author,
-      when: [at.date, at.time].filter(Boolean).join(" "),
-    };
+    const { who, when } = wordsOf(parent);
+    return { anchor: anchor(i), who, when };
   };
 
   // A quoter's edit, resolved for this message's bubble by the same function the
@@ -370,6 +384,26 @@ export function ThreadMessages({
     }
     return resolved;
   };
+
+  // The message a reply would answer: the newest entry of this thread that the
+  // mailbox holds, which is the last thing said in it that can be answered.
+  //
+  // Newest rather than last drawn, because nesting reorders bubbles without
+  // reordering the conversation — a reply under an older message is still the
+  // newest message. Answerable rather than simply newest, because the newest thing
+  // here may be a line recovered from inside somebody else's quote: that has no
+  // message in the mailbox to thread an answer onto, and a box that offered to
+  // answer it would be offering a press the server must refuse.
+  //
+  // "The mailbox holds it" is read off the entry's own permalink (see gmailIdOf),
+  // which is what every other mailbox-backed thing in this pane is conditional on
+  // — the receipt line's link, the fetch button — and the server is the authority
+  // either way: an entry it cannot answer is refused by name, and the box says so.
+  //
+  // Asked of the DRAWN entries, like every other link on this page: a hoisted
+  // copy occupies no row (see the hoist above), so a box that offered to answer
+  // one would be naming a message with no bubble to read it against.
+  const answer = newest(shown.filter((e) => gmailIdOf(e) !== undefined));
 
   // The order the bubbles are drawn in, and how far in each one is: the
   // transcript's own order, or the reply tree when the pane's switch is on (see
@@ -516,6 +550,19 @@ export function ThreadMessages({
           onLandedEnd={e.extId === landed ? () => setLanded(null) : undefined}
         />
       ))}
+      {/* The reply box, under everything said so far: the newest thing on this
+          screen is the message it answers, and an answer belongs at the bottom of
+          the conversation it continues. It is inside the pane's scroll box with
+          the bubbles rather than pinned below it — the reader's own words are
+          typed here and read back here, and a control that floats over a long
+          thread would hide the message being quoted while it is being read.
+
+          Drawn only when the thread holds something the mailbox can answer: a
+          trail of recovered quotes and Slack posts has no message to thread a
+          reply onto, and a composer there could only offer a press that fails. */}
+      {answer ? (
+        <ReplyBox thread={thread} answer={answer} words={wordsOf(answer)} />
+      ) : null}
     </div>
   );
 }

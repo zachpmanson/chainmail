@@ -139,6 +139,14 @@ export type MediaPull = components["schemas"]["MediaPullResponse"];
 
 export type RefreshCandidate = components["schemas"]["RefreshCandidate"];
 
+/** What a reply came back with, whether it was the preview or the send: the
+ *  recipient and subject the mailbox's own headers give, the whole body with the
+ *  quote of the message being answered in it, and whether this call sent it.
+ *  The same three fields in both cases, which is what lets a reader check what
+ *  went out against the plan they were shown rather than trusting that the two
+ *  were the same. */
+export type SendResponse = components["schemas"]["SendResponse"];
+
 export type OpsPlanResponse = components["schemas"]["OpsPlanResponse"];
 
 export type OpsMerge = components["schemas"]["OpsMerge"];

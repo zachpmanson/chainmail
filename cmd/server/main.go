@@ -82,6 +82,17 @@ func run(args []string) error {
 			"mail. A host that does not grant it answers 403. The credential is the mail "+
 			"grant this unit already reads; what changes is that the server may now move "+
 			"things in the mailbox.")
+	sendMail := fs.Bool("send-mail", false,
+		"permit POST /v1/send: answer one message the corpus holds, and file the "+
+			"answer into the corpus. Off by default and its own switch — the third "+
+			"writer, and the first that creates mail rather than changing a field of "+
+			"mail that is already there. That is why it is gated apart from the other "+
+			"two: a label can be put back by the same button and an archived thread is "+
+			"still in All Mail, while a message that has gone out cannot be recalled. A "+
+			"host that does not grant it answers 403. Reply-only: there is no recipient "+
+			"in the request, and every reply goes to the address the message being "+
+			"answered arrived from. The credential is the mail grant this unit already "+
+			"reads.")
 	// The deploy stamp's revision, passed in by the unit that starts this binary.
 	// Empty is honest for a build nobody labelled: the header then shows nothing
 	// rather than a commit this code cannot know.
@@ -127,14 +138,15 @@ func run(args []string) error {
 		mediaEnabled: *mediaPull,
 		runMediaPull: defaultMediaPull(store, *uploads),
 
-		markReadEnabled:   *markRead,
-		mailWriteEnabled:  *mailWrite,
-		openUnreadMailbox: defaultUnreadMailbox(),
-		specSlots:         make(chan struct{}, specConcurrency),
-		slotWait:          specSlotWait,
-		rev:               *rev,
-		startedAt:         startedAt,
-		loginPort:         port,
+		markReadEnabled:  *markRead,
+		mailWriteEnabled: *mailWrite,
+		sendMailEnabled:  *sendMail,
+		openMailbox:      defaultMailbox(),
+		specSlots:        make(chan struct{}, specConcurrency),
+		slotWait:         specSlotWait,
+		rev:              *rev,
+		startedAt:        startedAt,
+		loginPort:        port,
 		embedder: func() *mailembed.Ollama {
 			return &mailembed.Ollama{BaseURL: *url, Name: *model, Dimension: *dim,
 				Client: &http.Client{Timeout: *timeout}}
