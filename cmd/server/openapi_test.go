@@ -320,3 +320,28 @@ func TestTheSharedAttachmentSchemaIsThePublishedOne(t *testing.T) {
 		t.Errorf("CorpusEntry.attachments points at %q, want the shared schema", ref)
 	}
 }
+
+// A quoter's edit is a component of its own because the ids it names are in the
+// caller's id space — a page names its own anchors, a trail read names ext ids —
+// and the description that says so is where the difference is written down. The
+// entry points at it by $ref rather than inlining the shape, so the generated
+// client gets one named type for both routes; an edit grown inline here would be
+// a second shape the pane could not name.
+func TestTheTrailEditSchemaIsThePublishedOne(t *testing.T) {
+	d := loadAPI(t)
+	corpus, ok := d.schemas["CorpusEntry"].(map[string]any)
+	if !ok {
+		t.Fatal("the contract has no CorpusEntry")
+	}
+	edits, ok := corpus["properties"].(map[string]any)["edits"].(map[string]any)
+	if !ok {
+		t.Fatal("CorpusEntry has no edits — the pane has nothing to draw an edited quote from")
+	}
+	ref, _ := edits["items"].(map[string]any)["$ref"].(string)
+	if ref != "#/components/schemas/TrailEdit" {
+		t.Errorf("CorpusEntry.edits points at %q, want #/components/schemas/TrailEdit", ref)
+	}
+	if _, ok := d.schemas["TrailEdit"]; !ok {
+		t.Error("the referenced TrailEdit component is not published")
+	}
+}

@@ -2,21 +2,9 @@ import type { Entry, Timeline } from "./spec";
 import { entryId, initials } from "./anchors";
 import { order, zones, type ZoneState, type Zones } from "./chronological";
 import { layout, type Layout } from "./lanes";
-import { editHtml } from "./editDiff";
+import { resolveEdits, type EditEntry, type RowEdit } from "./edits";
 
-/** A quoter's edit resolved for the bubble: diff markup plus attribution. */
-export interface RowEdit {
-  /** spec id of the original message the change was made to (anchor target) */
-  base: string;
-  who: string;
-  time: string;
-  /** the quoter's modified text as diff-marked HTML (`.edel` strike / `.eins` insert) */
-  html: string;
-  /** the original message's sender, for “original from <y>” (may be empty) */
-  origWho: string;
-  /** the original message's date + time, for “at <timestamp>” (may be empty) */
-  origStamp: string;
-}
+export type { RowEdit } from "./edits";
 
 export interface Row {
   entry: Entry;
@@ -104,6 +92,9 @@ export function derive(input: Timeline): View {
   // corpus realised it was a derivative. Re-parenting those replies up to the
   // copy's own parent (the base) keeps the subtree attached and the reply graph
   // intact, instead of leaving the host orphaned on a dangling id.
+  //
+  // What an edit is and how it is diffed is lib/edits' question, shared with the
+  // reading pane; this file only decides which rows the page lays out.
   const hoisted = new Set<string>();
   for (const e of input.messages) {
     for (const ed of e.edits ?? []) if (ed.id && byId.has(ed.id)) hoisted.add(ed.id);
@@ -171,27 +162,23 @@ export function derive(input: Timeline): View {
     const id = idOf(entry);
     const chain = lay.chainOf.get(id)!;
     const lbl = z.label(entry);
-    const edits = (entry.edits ?? [])
-      .map((ed) => {
-        const baseEntry = ed.base ? byId.get(ed.base) : undefined;
-        // The derived copy (`ed.id`) is the message the quoter actually pasted,
-        // and it is where a pasted quote's formatting survives (a red answer in
-        // a forwarded thread, say). Format from it when present; the bare
-        // original only carries the text that has still to gain the edit.
-        const copyEntry = ed.id ? byId.get(ed.id) : undefined;
-        return {
-          base: ed.base ?? "",
-          who: ed.who ?? entry.sender ?? "",
-          time: ed.time ?? entry.time ?? "",
-          html: editHtml(
-            copyEntry?.body ?? "",
-            baseEntry?.body ?? "",
-            ed.body ?? "",
-          ),
-          origWho: baseEntry?.sender ?? "",
-          origStamp: [baseEntry?.date, baseEntry?.time].filter(Boolean).join(" "),
-        };
-      });
+    // The copy's own markup is where a pasted quote's formatting survives (a red
+    // answer in a forwarded thread, say); the original only carries the text that
+    // has still to gain the edit. Who and when are the host's, not the copy's —
+    // whoever edited the quote is whoever sent the message quoting it.
+    const editEntry = (id: string | undefined): EditEntry | undefined => {
+      const e = id ? byId.get(id) : undefined;
+      if (!e) return undefined;
+      return {
+        html: e.body,
+        who: e.sender ?? "",
+        stamp: [e.date, e.time].filter(Boolean).join(" "),
+      };
+    };
+    const edits = resolveEdits(entry.edits, editEntry, {
+      who: entry.sender ?? "",
+      time: entry.time ?? "",
+    });
     return {
       entry, id, chain,
       row: lay.row.get(id)!,
@@ -199,7 +186,7 @@ export function derive(input: Timeline): View {
       isChainStart: lay.row.get(id) === firstRow.get(chain),
       orgSlot: slot(entry.org),
       avatarClass: entry.sender ? avatarClass.get(entry.sender) : undefined,
-      edits: edits.length ? edits : undefined,
+      edits,
       stamp: { date: entry.date, time: entry.time, tz: lbl.tz, zone: lbl.state },
     };
   });

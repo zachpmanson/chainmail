@@ -132,6 +132,13 @@ type corpusEntry struct {
 	// Absent when it carries none, which is most mail: an empty list on every
 	// entry would be a paragraph of nothing in every response.
 	Attachments []spec.Attachment `json:"attachments,omitempty"`
+	// Edits are a quoter's in-place changes to a message this one quoted (issue
+	// #42), where this entry is the message that quoted it. The same relation a
+	// page build draws inline inside the quoting bubble, from the same function
+	// (spec's derivedEdits); `id` and `base` are the ext ids of this read, which
+	// is what the pane's own anchors are made of. Absent on a message nobody
+	// edited, which is almost all of them.
+	Edits []spec.Edit `json:"edits,omitempty"`
 }
 
 type sighting struct {
@@ -647,6 +654,7 @@ func toCorpusEntry(s corpus.Shown, r spec.Rendered) corpusEntry {
 		Container: s.Container,
 		Permalink: s.Permalink,
 		Parent:    s.Parent, ParentRef: s.ParentRef,
+		Edits: r.Edits,
 	}
 	for _, g := range s.Sightings {
 		e.Sightings = append(e.Sightings, sighting{Kind: g.Kind, SeenIn: g.SeenIn, Detail: g.Detail})

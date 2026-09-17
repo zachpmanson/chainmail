@@ -194,10 +194,13 @@ type Attachment struct {
 // quoter's MODIFIED copy of the text so the diff can be shown against the
 // original.
 //
-// The wire form is intentionally lean: `id` and `base` are spec ids (the
-// renderer resolves them), and `body` is the raw stored text of the edit, not
-// HTML — the diff primitive reads plain text, and re-rendering here would
-// duplicate what body.go already does for message bodies.
+// The wire form is intentionally lean: `id` and `base` are whatever the caller's
+// own bubbles carry — spec ids on a page, ext ids in a trail read — because
+// every renderer resolves an anchor against the entries it holds, and a page and
+// a pane hold different names for the same message (the same choice ReplyLink
+// makes for a reply target). `body` is the raw stored text of the edit, not HTML
+// — the diff primitive reads plain text, and re-rendering here would duplicate
+// what body.go already does for message bodies.
 type Edit struct {
 	ID   string `json:"id,omitempty"`
 	Base string `json:"base,omitempty"`

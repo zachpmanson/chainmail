@@ -234,3 +234,114 @@ func TestADirectEntryNamesNoQuoter(t *testing.T) {
 		t.Errorf("quotedBy = %q for an entry that has an address of its own", got.QuotedBy)
 	}
 }
+
+// A quoter's in-place change to a quoted message reaches a trail read the same
+// way it reaches a page build (issue #42): the relation is the corpus's, the
+// function that resolves it is shared, and the reading pane draws the edit
+// inline. Compared against the page rather than against a literal, for the
+// reason the first test in this file is: what the trail produces is not the
+// claim, that the two agree is — and a pane whose bubble carried no edit while
+// the page's bubbled one is the divergence this read exists to prevent.
+//
+// The ids differ by design and are translated here: a page resolves a spec id
+// against its own rows, and a trail read resolves an ext id against the entries
+// it was handed. Who and when are empty in the trail because the pane's bubble
+// states its own sender and clock; the page fills them because a spec entry has
+// nowhere else to keep them.
+func TestATrailReadCarriesTheEditsAPageBuildDraws(t *testing.T) {
+	s := open(t)
+	charles := person(t, s, "Charles Nelaturi", "charles@ruralco.example")
+	jason := person(t, s, "Jason Yarrow", "jason@termina.example")
+
+	base := put(t, s, msg{
+		ext: "mail:<c@ruralco>", ts: "2026-08-21T09:00:00+10:00", tz: "+1000",
+		person: charles, container: "r", subject: "CSV layout",
+		messageID: "<c@ruralco>", from: "Charles Nelaturi <charles@ruralco.example>",
+		to: "Jason Yarrow <jason@termina.example>", gmail: "g-c",
+		text: "CSV layout: A: Member Number · B: ATS Number · C: Property Name · " +
+			"D: Statement Date · E: Amount Due",
+	})
+	host := put(t, s, msg{
+		ext: "mail:<j@termina>", ts: "2026-08-21T14:00:00+10:00", tz: "+1000",
+		person: jason, container: "r", subject: "Re: CSV layout",
+		messageID: "<j@termina>", inReplyTo: "<c@ruralco>",
+		from: "Jason Yarrow <jason@termina.example>",
+		to:   "Charles Nelaturi <charles@ruralco.example>", gmail: "g-j",
+		text: "Actually one change — we track Invoice Amount, not Amount Due.",
+	})
+	ds, err := time.Parse(time.RFC3339, "2026-08-21T09:00:00+10:00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	derived, _, err := s.PutQuoted(corpus.Entry{
+		Source: corpus.SourceMail, ExtID: "quote:csv-edit", Kind: "message",
+		TS: ds, TZ: "+1000", PersonID: charles, Container: "r", Subject: "CSV layout",
+		BodyText: "CSV layout: A: Member Number · B: ATS Number · C: Property Name · " +
+			"D: Statement Date · E: Invoice Amount",
+		Derived: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Sight(derived, host, "quoted", "inline edit"); err != nil {
+		t.Fatalf("Sight derived: %v", err)
+	}
+	if err := s.SetParent(derived, base); err != nil {
+		t.Fatalf("SetParent: %v", err)
+	}
+	for _, id := range []int64{base, host} {
+		if err := s.Sight(id, 0, "direct", ""); err != nil {
+			t.Fatalf("Sight: %v", err)
+		}
+	}
+
+	sp := generate(t, s, Options{Containers: []string{"r"}})
+	extOf := map[string]string{} // spec id -> ext id, so the two reads can be compared
+	ids := make([]string, 0, len(sp.Messages))
+	for _, m := range sp.Messages {
+		extOf[m.ID] = m.ExtID
+		ids = append(ids, m.ExtID)
+	}
+	rendered, err := RenderTrail(s, ids)
+	if err != nil {
+		t.Fatalf("RenderTrail: %v", err)
+	}
+
+	hosts := 0
+	for _, m := range sp.Messages {
+		if len(m.Edits) == 0 {
+			continue
+		}
+		hosts++
+		got, ok := rendered[m.ExtID]
+		if !ok {
+			t.Fatalf("%s: the host was not rendered", m.ExtID)
+		}
+		if len(got.Edits) != len(m.Edits) {
+			t.Fatalf("%s: the pane carries %d edits, the page %d (the two renderers disagree)",
+				m.ExtID, len(got.Edits), len(m.Edits))
+		}
+		for i, want := range m.Edits {
+			e := got.Edits[i]
+			if wantExt := extOf[want.ID]; e.ID != wantExt {
+				t.Errorf("%s: edit id = %q, want the edited copy %q", m.ExtID, e.ID, wantExt)
+			}
+			if wantExt := extOf[want.Base]; e.Base != wantExt {
+				t.Errorf("%s: edit base = %q, want the original %q", m.ExtID, e.Base, wantExt)
+			}
+			if e.Body != want.Body {
+				t.Errorf("%s: the pane and the page carry different edited text\n pane: %q\n page: %q",
+					m.ExtID, e.Body, want.Body)
+			}
+			// Deliberately not stated in a trail read: the bubble it is drawn inside
+			// names the sender and prints the clock, and both come from that bubble.
+			if e.Who != "" || e.Time != "" {
+				t.Errorf("%s: trail edit states who/time (%q/%q); the bubble is the one answer",
+					m.ExtID, e.Who, e.Time)
+			}
+		}
+	}
+	if hosts != 1 {
+		t.Fatalf("the fixture surfaced edits on %d messages, want exactly the one host", hosts)
+	}
+}
