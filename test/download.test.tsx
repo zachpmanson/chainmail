@@ -57,6 +57,11 @@ const storedShot = {
 };
 const storedPdf = { name: "quote.pdf", kind: "PDF", size: "88 KB", gmailId: "18f0", blobSha: "b".repeat(64), open: "download" as const, view: "pdf" as const };
 const storedText = { name: "readings.csv", kind: "CSV", size: "18 KB", gmailId: "18f0", blobSha: "c".repeat(64), open: "popup" as const, view: "text" as const };
+/** The same wire shape, a file that is prose: `view: "text"` is one call for every
+ *  textish type, and the bytes are what decide whether it is a table. */
+const storedLog = { name: "slurp.log", kind: "text", size: "22 KB", gmailId: "18f0", blobSha: "9".repeat(64), open: "popup" as const, view: "text" as const };
+/** A tab-separated export, which the wire cannot tell from the CSV above. */
+const storedTsv = { name: "ledger.tsv", kind: "TSV", size: "4 KB", gmailId: "18f0", blobSha: "8".repeat(64), open: "popup" as const, view: "text" as const };
 /** A zip: bytes of ours, a download on click, and nothing that can be shown. */
 const storedZip = { name: "archive.zip", kind: "ZIP", size: "2.1 MB", gmailId: "18f0", blobSha: "e".repeat(64), open: "download" as const };
 /** A small picture: the bytes are here, but the builder embedded no preview. */
@@ -137,13 +142,15 @@ Object.assign(URL, { createObjectURL: () => "blob:opened", revokeObjectURL: revo
 
 /**
  * A response, without the network. Only the parts the window uses: whether it
- * worked, the text, and the bytes it turns into a blob.
+ * worked, the text, the served type (which decides nothing on its own — see
+ * `readTable` — but is read beside the name), and the bytes it turns into a blob.
  */
-const reply = (body: string, status = 200) => ({
+const reply = (body: string, status = 200, type = "") => ({
   ok: status < 400,
   status,
   text: async () => body,
   blob: async () => new Blob([body]),
+  headers: new Headers(type ? { "content-type": type } : {}),
 }) as unknown as Response;
 
 const fetched = vi.fn<(url: string) => Promise<Response>>();
@@ -166,6 +173,8 @@ const mount = (messages: Entry[], fetcher?: (url: string) => Promise<Response>) 
     frame: () => document.querySelector<HTMLIFrameElement>(".popframe"),
     cap: () => document.querySelector<HTMLElement>(".popcap"),
     note: () => document.querySelector<HTMLElement>(".popnote"),
+    grid: () => document.querySelector<HTMLElement>(".popgrid"),
+    table: () => document.querySelector<HTMLTableElement>(".poptable"),
     save: () => document.querySelector<HTMLAnchorElement>(".popget"),
   };
 };
@@ -250,17 +259,18 @@ describe("opening a file over the page", () => {
 
 describe("a text file in the window", () => {
   it("reads the bytes in rather than framing them", () => {
-    const m = mount([entry({ attachments: [storedText] })], () => Promise.resolve(reply("shed,readings\nNova,41.2\n")));
+    const m = mount([entry({ attachments: [storedLog] })], () => Promise.resolve(reply("slurp: 412 messages\n")));
     m.chips[0]!.click();
     return vi.waitFor(() => {
-      expect(m.fetched).toHaveBeenCalledWith(`${MEDIA_BASE}/${storedText.blobSha}`);
+      expect(m.fetched).toHaveBeenCalledWith(`${MEDIA_BASE}/${storedLog.blobSha}`);
       expect(m.text()!.hidden).toBe(false);
-      expect(m.text()!.textContent).toBe("shed,readings\nNova,41.2\n");
+      expect(m.text()!.textContent).toBe("slurp: 412 messages\n");
       // Nothing else is on: one element at a time, and the picture is not it.
       expect(m.shot()!.hidden).toBe(true);
       expect(m.frame()!.hidden).toBe(true);
+      expect(m.grid()!.hidden).toBe(true);
       expect(m.note()!.textContent).toBe("");
-      expect(m.save()!.getAttribute("href")).toBe(`${MEDIA_BASE}/${storedText.blobSha}`);
+      expect(m.save()!.getAttribute("href")).toBe(`${MEDIA_BASE}/${storedLog.blobSha}`);
       m.detach();
     });
   });
@@ -270,7 +280,7 @@ describe("a text file in the window", () => {
     // markup. Framing a text file would have been the other way to show it, and
     // this is why it is not done.
     const evil = "<img src=x onerror=alert(1)>\n";
-    const m = mount([entry({ attachments: [storedText] })], () => Promise.resolve(reply(evil)));
+    const m = mount([entry({ attachments: [storedLog] })], () => Promise.resolve(reply(evil)));
     m.chips[0]!.click();
     return vi.waitFor(() => {
       expect(m.text()!.textContent).toBe(evil);
@@ -282,7 +292,7 @@ describe("a text file in the window", () => {
 
   it("stops at the cap and says so, with the file a click away", () => {
     const long = "x".repeat(300 * 1024);
-    const m = mount([entry({ attachments: [storedText] })], () => Promise.resolve(reply(long)));
+    const m = mount([entry({ attachments: [storedLog] })], () => Promise.resolve(reply(long)));
     m.chips[0]!.click();
     return vi.waitFor(() => {
       expect(m.text()!.textContent!.length).toBe(256 * 1024);
@@ -293,13 +303,148 @@ describe("a text file in the window", () => {
   });
 
   it("says so when the bytes cannot be read", () => {
-    const m = mount([entry({ attachments: [storedText] })], () => Promise.resolve(reply("", 404)));
+    const m = mount([entry({ attachments: [storedLog] })], () => Promise.resolve(reply("", 404)));
     m.chips[0]!.click();
     return vi.waitFor(() => {
       expect(m.note()!.textContent).toBe("could not be read here");
       // Still a file, and still this host's: the save control does not depend on
       // the window being able to show it.
       expect(m.save()!.hidden).toBe(false);
+      m.detach();
+    });
+  });
+
+  it("leaves a file that merely has commas in it as text", () => {
+    // `view: "text"` is one call for every textish type, so the decision is made
+    // from the bytes: prose with commas in it is not a spreadsheet, and showing
+    // it as a one-column table would be a worse reading of the same file.
+    const prose = "Dear Ada,\n\nThanks, and regards,\nBen\n";
+    const m = mount([entry({ attachments: [storedText] })], () => Promise.resolve(reply(prose)));
+    m.chips[0]!.click();
+    return vi.waitFor(() => {
+      expect(m.table()).toBeNull();
+      expect(m.text()!.hidden).toBe(false);
+      expect(m.text()!.textContent).toBe(prose);
+      m.detach();
+    });
+  });
+});
+
+describe("a delimited file in the window", () => {
+  const SHEET = "shed,readings,note\nNova,41.2,ok\nOrion,38.9,\nLyra,44.5,checked\n";
+
+  it("draws a CSV as the table it is", () => {
+    const m = mount([entry({ attachments: [storedText] })], () =>
+      Promise.resolve(reply(SHEET, 200, "text/csv")));
+    m.chips[0]!.click();
+    return vi.waitFor(() => {
+      const t = m.table()!;
+      expect(t).not.toBeNull();
+      // The first row is the header, because that is what a CSV's first row is.
+      expect([...t.querySelectorAll("thead th")].map((th) => th.textContent)).toEqual([
+        "shed",
+        "readings",
+        "note",
+      ]);
+      expect(t.querySelectorAll("tbody tr").length).toBe(3);
+      expect(t.querySelector("tbody tr td")!.textContent).toBe("Nova");
+      // One element at a time: the text window is not also showing the same file.
+      expect(m.grid()!.hidden).toBe(false);
+      expect(m.text()!.hidden).toBe(true);
+      expect(m.note()!.textContent).toBe("");
+      // The route to the original is unchanged — a table is a reading of the file.
+      expect(m.save()!.getAttribute("href")).toBe(`${MEDIA_BASE}/${storedText.blobSha}`);
+      m.detach();
+    });
+  });
+
+  it("reads a TSV by its name, and a tabbed file served as one", () => {
+    for (const [att, body] of [
+      [storedTsv, "account\tamount\n604241462\t1,204.00\n"],
+      [storedLog, "account\tamount\n604241462\t1,204.00\n"],
+    ] as const) {
+      const type = att === storedLog ? "text/tab-separated-values" : "";
+      const m = mount([entry({ attachments: [att] })], () => Promise.resolve(reply(body, 200, type)));
+      m.chips[0]!.click();
+      vi.waitFor(() => expect(m.table()).not.toBeNull());
+      m.detach();
+    }
+  });
+
+  it("reads a semicolon export, quotes and all", () => {
+    // A European spreadsheet's separator, and a quoted field with the delimiter
+    // inside it: splitting on a comma would not find either.
+    const body = 'name;amount\n"Okoye, Ada";"1,204.00"\nByron;88.50\n';
+    const m = mount([entry({ attachments: [storedText] })], () => Promise.resolve(reply(body)));
+    m.chips[0]!.click();
+    return vi.waitFor(() => {
+      const rows = [...m.table()!.querySelectorAll("tbody tr")];
+      expect(rows.length).toBe(2);
+      expect(rows[0]!.querySelectorAll("td")[0]!.textContent).toBe("Okoye, Ada");
+      expect(rows[0]!.querySelectorAll("td")[1]!.textContent).toBe("1,204.00");
+      m.detach();
+    });
+  });
+
+  it("puts no markup in a cell, whatever the file contains", () => {
+    const evil = 'a,b\n"<img src=x onerror=alert(1)>",2\n';
+    const m = mount([entry({ attachments: [storedText] })], () => Promise.resolve(reply(evil)));
+    m.chips[0]!.click();
+    return vi.waitFor(() => {
+      expect(m.table()!.querySelector("tbody td")!.textContent).toBe("<img src=x onerror=alert(1)>");
+      expect(m.grid()!.querySelector("img")).toBeNull();
+      m.detach();
+    });
+  });
+
+  it("right-aligns a column of amounts", () => {
+    // A column of figures is scanned by its digits, so the digits line up under
+    // each other; a column with words in it stays left. Mostly numeric is enough:
+    // one "n/a" must not turn a column of amounts back into text.
+    const body = "shed,readings,note\nNova,41.2,ok\nOrion,n/a,\nLyra,44.5,checked\n";
+    const m = mount([entry({ attachments: [storedText] })], () => Promise.resolve(reply(body)));
+    m.chips[0]!.click();
+    return vi.waitFor(() => {
+      const first = m.table()!.querySelector("tbody tr")!;
+      const cells = [...first.querySelectorAll("td")];
+      expect(cells.map((c) => c.className)).toEqual(["", "num", ""]);
+      m.detach();
+    });
+  });
+
+  it("says what it is not showing, and keeps the file a click away", () => {
+    // 600 rows and 62 columns: the window draws a table, not a wall. The counts
+    // are the honest thing a text window cannot say, and `save` is the rest.
+    const header = Array.from({ length: 62 }, (_, i) => `c${i + 1}`).join(",");
+    const rows = Array.from({ length: 600 }, () => header);
+    const body = [header, ...rows].join("\n");
+    const m = mount([entry({ attachments: [storedText] })], () => Promise.resolve(reply(body)));
+    m.chips[0]!.click();
+    return vi.waitFor(() => {
+      expect(m.table()!.querySelectorAll("tbody tr").length).toBe(500);
+      expect(m.table()!.querySelectorAll("thead th").length).toBe(40);
+      expect(m.note()!.textContent).toBe("first 500 of 600 rows · first 40 of 62 columns");
+      expect(m.save()!.hidden).toBe(false);
+      m.detach();
+    });
+  });
+
+  it("says so when the bytes were cut before the file ended", () => {
+    const long = "a,b\n" + Array.from({ length: 100000 }, () => "x,y").join("\n");
+    const m = mount([entry({ attachments: [storedText] })], () => Promise.resolve(reply(long)));
+    m.chips[0]!.click();
+    return vi.waitFor(() => {
+      expect(m.note()!.textContent).toMatch(/truncated — save it for the rest$/);
+      m.detach();
+    });
+  });
+
+  it("says so when the bytes cannot be read", () => {
+    const m = mount([entry({ attachments: [storedText] })], () => Promise.resolve(reply("", 404)));
+    m.chips[0]!.click();
+    return vi.waitFor(() => {
+      expect(m.note()!.textContent).toBe("could not be read here");
+      expect(m.table()).toBeNull();
       m.detach();
     });
   });

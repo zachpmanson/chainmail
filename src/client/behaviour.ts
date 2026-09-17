@@ -1,3 +1,5 @@
+import { readTable, type Table } from "../lib/tables";
+
 /**
  * All page interactivity, as a framework-agnostic module that attaches to
  * already-rendered DOM by selector.
@@ -396,6 +398,7 @@ function attachPopover(doc: Document, on: On): () => void {
   let host: HTMLElement | null = null;
   let shot: HTMLImageElement;
   let text: HTMLElement;
+  let grid: HTMLElement;
   let frame: HTMLIFrameElement;
   let cap: HTMLElement;
   let note: HTMLElement;
@@ -424,6 +427,10 @@ function attachPopover(doc: Document, on: On): () => void {
     host.innerHTML =
       '<div class="popbox"><img class="popimg" alt="" hidden>' +
       '<pre class="poptext" hidden></pre>' +
+      // A delimited file, read as cells instead of as lines of commas. Its own
+      // element under the `pre` rather than a different `pre`: the text window
+      // keeps `white-space:pre`, which a table must not inherit.
+      '<div class="popgrid" hidden></div>' +
       // A frame holds the browser's own PDF viewer. Its type comes from the blob
       // this page makes out of the served bytes, never from the sender's claim,
       // which is the whole reason it is safe to frame.
@@ -435,6 +442,7 @@ function attachPopover(doc: Document, on: On): () => void {
       "</div></div>";
     shot = host.querySelector<HTMLImageElement>(".popimg")!;
     text = host.querySelector<HTMLElement>(".poptext")!;
+    grid = host.querySelector<HTMLElement>(".popgrid")!;
     frame = host.querySelector<HTMLIFrameElement>(".popframe")!;
     cap = host.querySelector<HTMLElement>(".popcap")!;
     note = host.querySelector<HTMLElement>(".popnote")!;
@@ -489,6 +497,8 @@ function attachPopover(doc: Document, on: On): () => void {
     shot.hidden = true;
     text.hidden = true;
     text.textContent = "";
+    grid.hidden = true;
+    grid.textContent = "";
     frame.hidden = true;
     frame.removeAttribute("src");
     note.textContent = "";
@@ -539,7 +549,7 @@ function attachPopover(doc: Document, on: On): () => void {
       shot.src = full || preview;
       shot.hidden = false;
     } else if (full) {
-      void bring(full, view, mine);
+      void bring(full, view, mine, caption);
     }
     host!.hidden = false;
     // The overlay covers the viewport, so a pointer cannot reach the transcript
@@ -552,7 +562,7 @@ function attachPopover(doc: Document, on: On): () => void {
   };
 
   /** Fetch the bytes and put them in the window, unless the reader has moved on. */
-  const bring = async (url: string, view: string, mine: number) => {
+  const bring = async (url: string, view: string, mine: number, caption: string) => {
     let res: Response;
     try {
       res = await fetch(url);
@@ -564,7 +574,20 @@ function attachPopover(doc: Document, on: On): () => void {
         // for reading something, and a megabyte of log is not read by scrolling.
         // The bytes are already here, so the save control is right beside it.
         const cut = body.length > TEXT_CAP;
-        text.textContent = cut ? body.slice(0, TEXT_CAP) : body;
+        const shown = cut ? body.slice(0, TEXT_CAP) : body;
+        // A delimited file is drawn as the table it is — read off the bytes and
+        // the served type, not off a field on the wire, so a page saved before
+        // this existed gets its table too. Everything else stays text, and a file
+        // that merely has commas in it (prose, a malformed export) is refused by
+        // `readTable` and read as itself.
+        const table = readTable(shown, caption, res.headers.get("content-type") ?? "");
+        if (table) {
+          drawTable(table);
+          note.textContent = tableNote(table, cut);
+          grid.hidden = false;
+          return;
+        }
+        text.textContent = shown;
         // No units claimed: the cap is in characters and the file's size is on the
         // chip behind this window, so the honest thing to say here is that there
         // is more of it and where to get it.
@@ -583,6 +606,52 @@ function attachPopover(doc: Document, on: On): () => void {
       // still there, since the bytes may well save perfectly well.
       if (mine === opening) note.textContent = "could not be read here";
     }
+  };
+
+  /** Draw a delimited file as a table.
+   *
+   *  Built node by node and filled with `textContent`, exactly as the text window
+   *  is: the cells are a sender's bytes, and a spreadsheet is not a reason to let
+   *  any of it become markup. A rounded row is padded rather than broken, so a
+   *  ragged export still lines up under its header. */
+  const drawTable = (t: Table) => {
+    const cell = (tag: "th" | "td", value: string, num: boolean) => {
+      const el = doc.createElement(tag);
+      el.textContent = value;
+      if (num && tag === "td") el.className = "num";
+      return el;
+    };
+    const table = doc.createElement("table");
+    table.className = "poptable";
+    const head = doc.createElement("thead");
+    const hr = doc.createElement("tr");
+    for (const [i, value] of t.header.entries()) hr.appendChild(cell("th", value, t.numeric[i] === true));
+    head.appendChild(hr);
+    table.appendChild(head);
+    const body = doc.createElement("tbody");
+    for (const row of t.rows) {
+      const tr = doc.createElement("tr");
+      for (const [i, value] of row.entries()) tr.appendChild(cell("td", value, t.numeric[i] === true));
+      body.appendChild(tr);
+    }
+    table.appendChild(body);
+    grid.textContent = "";
+    grid.appendChild(table);
+  };
+
+  /** What the table window is not showing, when it is not showing all of it.
+   *
+   *  The same shape as the text window's note and for the same reason — a reader
+   *  must know that a file continues — with the counts a table can give and a
+   *  paragraph cannot: the rows and columns left out, then the fact that the
+   *  bytes themselves were cut before the file ended. `save` is the way to the
+   *  rest, and it is in the bar either way. */
+  const tableNote = (t: Table, cut: boolean) => {
+    const bits: string[] = [];
+    if (t.rowCount > t.rows.length) bits.push(`first ${t.rows.length} of ${t.rowCount} rows`);
+    if (t.colCount > t.header.length) bits.push(`first ${t.header.length} of ${t.colCount} columns`);
+    if (cut) bits.push("truncated — save it for the rest");
+    return bits.join(" · ");
   };
 
   /** Wire one chip up, once it is known to be worth opening.

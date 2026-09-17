@@ -8,6 +8,7 @@ import { avatarURL } from "../src/lib/derive";
 import type { Entry } from "../src/lib/spec";
 import { gmailIdOf, provenance, sourceLine } from "../src/lib/sources";
 import type { CorpusEntry } from "../src/lib/api";
+import { MAX_COLS, MAX_ROWS, couldBeTable, parseDelimited, readTable } from "../src/lib/tables";
 
 const load = (f: string) => normalise(JSON.parse(readFileSync(`fixtures/${f}.json`, "utf8")));
 const withIds = (es: Entry[]) => {
@@ -305,5 +306,97 @@ describe("the provenance line a chain pane builds", () => {
     // knows where.
     const e = entry({ extId: "quote:deadbeef", quoted: true, sightings: [{ kind: "quoted" }] });
     expect(sourceLine(e, (id) => id)).toBe("unspooled from quoted text");
+  });
+});
+
+describe("reading a delimited file as a table", () => {
+  it("splits on a delimiter, and not on one inside quotes", () => {
+    // The whole reason this is not a `split(",")`: a quoted field is allowed to
+    // contain the delimiter, and the quote that would have broken it.
+    const rows = parseDelimited('name,amount\n"Okoye, Ada","1,204.00"\n"O""Brien",2\n', ",");
+    expect(rows).toEqual([
+      ["name", "amount"],
+      ["Okoye, Ada", "1,204.00"],
+      ['O"Brien', "2"],
+    ]);
+  });
+
+  it("keeps a newline that is inside a field, and drops the one that ends it", () => {
+    // A cell holding an address is the common case, and a parser that splits on
+    // "\n" first mangles the row it lands in.
+    const rows = parseDelimited('a,b\n"line one\nline two",2\n', ",");
+    expect(rows).toEqual([
+      ["a", "b"],
+      ["line one\nline two", "2"],
+    ]);
+  });
+
+  it("reads CRLF, a trailing delimiter and a missing final newline", () => {
+    expect(parseDelimited("a,b\r\n1,2\r\n", ",")).toEqual([["a", "b"], ["1", "2"]]);
+    expect(parseDelimited("a,b,\n", ",")).toEqual([["a", "b", ""]]);
+    expect(parseDelimited("a,b", ",")).toEqual([["a", "b"]]);
+  });
+
+  it("leaves a stray quote as the character it is", () => {
+    // Only a quote at the start of a field opens one. 6" and O"Brien are a
+    // measurement and a name, and either would otherwise swallow the file.
+    expect(parseDelimited('a,b\n6" pipe,O"Brien\n', ",")).toEqual([
+      ["a", "b"],
+      ['6" pipe', 'O"Brien'],
+    ]);
+  });
+
+  it("asks the name and the type whether a file could be one at all", () => {
+    expect(couldBeTable("readings.csv", "")).toBe(true);
+    expect(couldBeTable("ledger.TSV", "")).toBe(true);
+    expect(couldBeTable("export.tab", "")).toBe(true);
+    expect(couldBeTable("data", "text/csv")).toBe(true);
+    expect(couldBeTable("data", "text/tab-separated-values; charset=utf-8")).toBe(true);
+    // Prose with commas in it is prose: only an announced table is parsed as one.
+    expect(couldBeTable("slurp.log", "text/plain")).toBe(false);
+    expect(couldBeTable("notes.txt", "")).toBe(false);
+  });
+
+  it("reads a comma file into a header and rows", () => {
+    const t = readTable("shed,readings\nNova,41.2\nOrion,38.9\n", "readings.csv", "text/csv")!;
+    expect(t.header).toEqual(["shed", "readings"]);
+    expect(t.rows).toEqual([["Nova", "41.2"], ["Orion", "38.9"]]);
+    expect(t.rowCount).toBe(2);
+    expect(t.colCount).toBe(2);
+    expect(t.numeric).toEqual([false, true]);
+  });
+
+  it("finds the delimiter the file actually uses", () => {
+    // A European spreadsheet writes a semicolon, and a mainframe writes a pipe;
+    // neither is called a .csv for the delimiter's sake.
+    expect(readTable("a;b\n1;2\n", "export.csv", "")!.header).toEqual(["a", "b"]);
+    expect(readTable("a|b\n1|2\n", "export.csv", "")!.header).toEqual(["a", "b"]);
+    expect(readTable("a\tb\n1\t2\n", "ledger.tsv", "")!.header).toEqual(["a", "b"]);
+    // And a file that only says so in its served type.
+    expect(readTable("a\tb\n1\t2\n", "ledger", "text/tab-separated-values")!.colCount).toBe(2);
+  });
+
+  it("refuses a file that is not a table", () => {
+    // One column is a list, and a list is text — which is what the window falls
+    // back to. This is the guard that keeps prose out of a spreadsheet.
+    expect(readTable("Dear Ada,\n\nThanks, and regards,\nBen\n", "letter.csv", "text/plain")).toBeNull();
+    expect(readTable("", "readings.csv", "")).toBeNull();
+    expect(readTable("a,b", "readings.csv", "")).toBeNull(); // a header with nothing under it
+    expect(readTable("a,b\n1,2\n", "slurp.log", "")).toBeNull();
+  });
+
+  it("pads a ragged row rather than dropping it", () => {
+    const t = readTable("a,b,c\n1,2\n3,4,5\n", "readings.csv", "")!;
+    expect(t.rows).toEqual([["1", "2", ""], ["3", "4", "5"]]);
+  });
+
+  it("caps what it shows and counts what it saw", () => {
+    const header = Array.from({ length: 50 }, (_, i) => `c${i}`).join(",");
+    const body = [header, ...Array.from({ length: 700 }, () => header)].join("\n");
+    const t = readTable(body, "wide.csv", "")!;
+    expect(t.header.length).toBe(MAX_COLS);
+    expect(t.rows.length).toBe(MAX_ROWS);
+    expect(t.rowCount).toBe(700);
+    expect(t.colCount).toBe(50);
   });
 });

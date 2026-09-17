@@ -1406,7 +1406,11 @@ describe("downloading a file the page does not hold yet", () => {
       return w;
     });
     expect(win.querySelector(".popcap")!.textContent).toBe("shed.csv");
-    await waitFor(() => expect(win.querySelector(".poptext")!.textContent).toBe(SHEET));
+    await waitFor(() =>
+      expect(
+        [...win.querySelectorAll(".poptable tbody td")].map((td) => td.textContent),
+      ).toEqual(["Nova", "41.2"]),
+    );
     // The chip now points at this host, which is what made the window possible.
     expect(chip().getAttribute("href")).toBe("/v1/attachments/sha-of-the-bytes");
 
