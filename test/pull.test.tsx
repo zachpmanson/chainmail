@@ -63,7 +63,7 @@ describe("a chip whose file the corpus does not hold", () => {
     expect(chip().hasAttribute("data-download")).toBe(true);
   });
 
-  it("says it is downloading, and takes no second press while it does", () => {
+  it("turns the chip's own ↻ and says nothing else, and takes no second press while it does", () => {
     const onPull = vi.fn();
     page(
       [entry({ attachments: [unFetched] })],
@@ -71,9 +71,15 @@ describe("a chip whose file the corpus does not hold", () => {
       "mail:<c0ffee-1@loomworks.example>",
     );
 
-    // The word is on the chip, in the same ↻ the nav's refresh wears.
-    expect(chip().textContent).toContain("downloading…");
-    expect(chip().querySelector(".spinner")).not.toBeNull();
+    // The chip's own words are gone and the file's name is left alone: what used
+    // to be a line that grew a word and shrank again is now the turn the nav's
+    // refresh wears while it works, so the row of files does not reflow under the
+    // pointer mid-download. It is still said in words for a reader who cannot see
+    // it turn, because a mark that spins is the whole of the state.
+    expect(chip().textContent).not.toContain("downloading");
+    const spin = chip().querySelector(".spinner")!;
+    expect(spin.getAttribute("aria-label")).toBe("Downloading…");
+    expect(spin.getAttribute("aria-hidden")).toBeNull();
     expect(chip().getAttribute("aria-busy")).toBe("true");
     // A press while the files are already coming is absorbed: the endpoint spends
     // a mailbox round trip per call, and the reader's press has been taken.

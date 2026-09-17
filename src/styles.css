@@ -617,13 +617,16 @@
   .att.nolink { opacity:.6; }
   /* A chip whose file the reader has asked for and the mailbox has not answered
      yet. The press IS the download (see Attachments), so the chip is the only
-     place the wait can be said — and the meta line is where it is said, in the
-     same ↻ and the same turn the nav's refresh wears while it works. Colouring
-     the border too, because a word can be missed on a row of framed names and a
-     chip that is out asking for something should not read as idle. */
+     place the wait can be said — and it is said in the same ↻ and the same turn
+     the nav's refresh wears while it works, and in nothing else: the chip keeps
+     its width while the file arrives, where a word here reflowed the line of
+     files under the pointer. Colouring the border too, because a single glyph
+     can be missed on a row of framed names — and under reduced motion, where the
+     turn is stilled, the border and the colour are all that is left — and a chip
+     that is out asking for something should not read as idle. */
   .att.busy { border-color:var(--accent); cursor:progress; }
   .att.busy .ameta { color:var(--fg); }
-  .att.busy .spinner { display:inline-block; margin-right:.28em;
+  .att.busy .spinner { display:inline-block;
     vertical-align:.02em; animation:spin .8s linear infinite; }
   .att.busy .spinner::before { content:"\21BB"; }
   @media (prefers-reduced-motion: reduce) { .att.busy .spinner { animation:none; } }
