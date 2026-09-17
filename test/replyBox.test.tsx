@@ -283,7 +283,7 @@ describe("answering a message from the pane", () => {
     // One call, and it is a preview: the reply was prepared and answered with, and
     // no mailbox was written to.
     await waitFor(() => expect(sends()).toHaveLength(1));
-    expect(sent(0)).toEqual({ entry: ROOT, body: "The 14th works.", confirm: false });
+    expect(sent(0)).toEqual({ entry: ROOT, body: "The 14th works.", all: true, confirm: false });
 
     // What the reader is shown is the whole message as it will go, and the first
     // thing it says is that nothing has left yet — a preview that did not say so
@@ -311,6 +311,38 @@ describe("answering a message from the pane", () => {
     expect(screen.queryByLabelText("Your reply")).toBeNull();
   });
 
+  it("answers the sender alone when the reply-all tick is cleared", async () => {
+    handler = server(() => json(200, chainBody(threaded)));
+    await mountApp();
+    await openThread();
+    await waitFor(() => expect(box()).toBeTruthy());
+
+    // The tick is on by default, and the line above the box says so: who the reply
+    // is going to is stated before the reader presses anything, so the one thing
+    // about the audience they get to decide is also the one thing they are told.
+    const tick = within(box()!).getByRole("checkbox", { name: /reply all/ }) as HTMLInputElement;
+    expect(tick.checked).toBe(true);
+    expect(box()!.querySelector(".replyto")!.textContent).toContain("everyone else");
+    // It is the left end of the row whose buttons are at the right: the choice
+    // under the field, the press past it.
+    expect(box()!.querySelector(".replyacts .replyall")).toBeTruthy();
+
+    fireEvent.click(tick);
+    expect(tick.checked).toBe(false);
+    const said = box()!.querySelector(".replyto")!.textContent!;
+    expect(said).toContain("nobody else");
+    expect(said).not.toContain("everyone else");
+
+    fireEvent.change(field(), { target: { value: "The 14th works." } });
+    press("preview");
+
+    // And the setting is what the server is asked for rather than only what the
+    // box says: answering one person when twelve are on the message is the thing
+    // this control exists to make possible.
+    await waitFor(() => expect(sends()).toHaveLength(1));
+    expect(sent(0)).toEqual({ entry: ROOT, body: "The 14th works.", all: false, confirm: false });
+  });
+
   it("names no cc when the reply has nobody else on it", async () => {
     // A message the reader was the only recipient of answers with no cc at all
     // (see the contract's SendResponse), and the plan must not invent an empty
@@ -331,7 +363,7 @@ describe("answering a message from the pane", () => {
     fireEvent.click(within(box()!).getByRole("button", { name: "send this reply" }));
 
     await waitFor(() => expect(sends()).toHaveLength(2));
-    expect(sent(1)).toEqual({ entry: ROOT, body: "The 14th works.", confirm: true });
+    expect(sent(1)).toEqual({ entry: ROOT, body: "The 14th works.", all: true, confirm: true });
     // The reply is filed into the corpus by the server, so the trail the reader is
     // looking at is re-read rather than guessed at: the answer appears in it as the
     // mailbox's own copy of the message.

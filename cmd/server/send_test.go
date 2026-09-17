@@ -105,9 +105,14 @@ func TestThePreviewSendsNothingAndAnswersTheMailboxsOwnPlan(t *testing.T) {
 	}
 	// The rest of the audience is the mailbox's answer too — this is a reply to
 	// everyone the message was addressed to, and who that is comes from the
-	// message's own headers rather than from anything the caller sent.
+	// message's own headers rather than from anything the caller sent. It is the
+	// default for the same reason it is the mailbox's answer: a request that says
+	// nothing about the audience gets the whole of it.
 	if got.Cc != "Cy Okafor <cy@loomworks.example>" {
 		t.Errorf("cc = %q, want the mailbox's other recipients", got.Cc)
+	}
+	if len(fake.replies) != 1 || !fake.replies[0].all {
+		t.Errorf("the mailbox saw %+v, want a reply to everyone", fake.replies)
 	}
 	if got.Subject != "Re: Solar install quote: dates" {
 		t.Errorf("subject = %q, want the mailbox's", got.Subject)
@@ -169,6 +174,62 @@ func TestSendingAnswersTheMessageAndFilesTheAnswerIntoTheCorpus(t *testing.T) {
 	}
 	if parent := chainTrail(t, h, extAda1)["mail:<sent-4@loomworks.example>"]; parent != extAda3 {
 		t.Errorf("the reply's parent = %q, want the message it answers (%s)", parent, extAda3)
+	}
+}
+
+// The one thing the caller decides about a reply's audience is whether the rest of
+// it is on the reply, and the two settings are told apart by the mailbox: what it is
+// asked for is what it answers, so the plan and the send are the same message either
+// way. The flag narrows to the person who wrote — there is no setting that reaches an
+// address the answered message did not carry.
+func TestTheReplyAllTickCanOnlyNarrowTheReplyToItsSender(t *testing.T) {
+	h, fake := sendServer(t)
+
+	res := h.do(t, "POST", "/v1/send",
+		[]byte(`{"entry":"`+extAda3+`","body":"The 14th works.","all":false}`))
+	if res.status != 200 {
+		t.Fatalf("status %d: %s", res.status, res.body)
+	}
+	loadAPI(t).assert(t, "SendResponse", res.body)
+
+	got := decode[sendResponse](t, res)
+	if got.To != "Bo Halvorsen <bo@fjordline.example>" {
+		t.Errorf("to = %q, want the sender even so — only its audience is dropped", got.To)
+	}
+	if got.Cc != "" {
+		t.Errorf("cc = %q, want nobody else", got.Cc)
+	}
+	if strings.Contains(string(res.body), `"cc"`) {
+		t.Errorf("a sender-only reply carries a cc: %s", res.body)
+	}
+	if len(fake.replies) != 1 || fake.replies[0].all {
+		t.Errorf("the mailbox saw %+v, want a reply to the sender alone", fake.replies)
+	}
+	// And it is still the same message otherwise: the reader's words with the
+	// answered message quoted under them, threaded against the message answered.
+	if fake.replies[0].id != "g-3" {
+		t.Errorf("the reply was threaded against %q, want the answered message's own id",
+			fake.replies[0].id)
+	}
+	for _, want := range []string{"The 14th works.", "> Roof access is fine from the 14th."} {
+		if !strings.Contains(got.Body, want) {
+			t.Errorf("the plan's body is missing %q:\n%s", want, got.Body)
+		}
+	}
+
+	// And the send carries the same setting as the preview: a two-step that
+	// previewed one audience and sent another would be the one thing the preview
+	// exists to rule out.
+	res = h.do(t, "POST", "/v1/send",
+		[]byte(`{"entry":"`+extAda3+`","body":"The 14th works.","all":false,"confirm":true}`))
+	if res.status != 200 {
+		t.Fatalf("status %d: %s", res.status, res.body)
+	}
+	if sent := decode[sendResponse](t, res); !sent.Sent || sent.Cc != "" {
+		t.Errorf("the send answered %+v, want it sent with nobody else on it", sent)
+	}
+	if len(fake.replies) != 2 || !fake.replies[1].send || fake.replies[1].all {
+		t.Errorf("the mailbox saw %+v, want a send to the sender alone", fake.replies)
 	}
 }
 

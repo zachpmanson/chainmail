@@ -93,6 +93,8 @@ export interface paths {
          *
          *     Reply-all, and there is deliberately no recipient in the request. The message answered is named by its corpus ext id, and who the reply goes to and what it is called come from that message's own headers: its sender (Reply-To when it has one, else From) in `to`, and the rest of its audience — the original To and Cc, each address once — in `cc`, minus every address the mailbox doing the replying owns. That last part is the mailbox's answer, not the caller's: mail is usually addressed to a send-as alias rather than to the account's own name, so it is the alias set that decides, and a reply to everyone is never a reply that cc's its own reader. A surface that can only answer mail the corpus already holds has no arbitrary recipient — no address to type, no address that the answered message did not already carry, no way for a page behind a loopback bind with no authentication to become an outbound channel — which is what makes this a reading tool that can reply rather than a mail-sending endpoint.
          *
+         *     Whether the rest of the audience is on the reply is the one thing the caller decides: `all` narrows the reply to the person who wrote and cannot widen it past the message's own headers, so both settings share the one property that matters here — the recipients are not the caller's to name.
+         *
          *     Two steps, and the first sends nothing: without `confirm` the reply is prepared and the answer is the plan — the recipients the mailbox will use, the subject, and the whole body including the quote of the message being answered, which this server composes. That is a preview of the message rather than of a draft. With `confirm` the same prepare runs and is executed, and the answer carries the id of the message that went out.
          *
          *     An entry with no mailbox copy answers 400, unlike /v1/read and /v1/mail where such an entry is skipped and counted: those act on the part of a set that can be acted on, and a send cannot be half-performed — there is no mailbox message to thread against.
@@ -1528,7 +1530,7 @@ export interface components {
                 skipped: number;
             }[];
         };
-        /** @description A reply: which message is being answered, what the reader has to say, and whether this call is the preview or the send. There is no recipient field — the recipients are the ones the answered message's own headers carried, and the addresses belonging to this mailbox are left off them. */
+        /** @description A reply: which message is being answered, what the reader has to say, whether the conversation's other participants are on it, and whether this call is the preview or the send. There is no recipient field — the recipients are the ones the answered message's own headers carried, and the addresses belonging to this mailbox are left off them. */
         SendRequest: {
             /**
              * @description The corpus ext id of the message being answered, as a thread read carries it in `entries[].extId`. One entry rather than a chain: a reply is to a message, and which thread it belongs to is the mailbox's answer by way of the reply headers. An entry with no mailbox copy — a message recovered from somebody's quote, a Slack post — is refused, because there is nothing to thread against.
@@ -1540,6 +1542,11 @@ export interface components {
              * @example The 14th works. I'll confirm the roof access with the fitters.
              */
             body: string;
+            /**
+             * @description Whether the reply answers the message's whole audience — its sender in `to`, the rest of it in `cc` — or its sender alone. Absent means everyone, which is what this endpoint has always answered, so an older client keeps the behaviour it had. It is not a recipient list and cannot become one: the addresses are the answered message's own either way, so no value of this field reaches an address the message did not carry. Answering a dozen people when one asked you something is a different act from answering the person who asked, which is why it is the caller's to say.
+             * @example true
+             */
+            all?: boolean;
             /** @description False (or absent) prepares the reply and sends nothing, answering with the plan; true sends it. A client that forgets the field therefore previews rather than sends. */
             confirm?: boolean;
         };
