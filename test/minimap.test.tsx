@@ -63,7 +63,7 @@ describe("treeSvgString", () => {
     for (const label of ["chains", "lanes", "deep", "forks", "dead ends"]) {
       expect(svg).toContain(label);
     }
-    for (const label of ["message", "note", "starts chain", "reconstructed"]) {
+    for (const label of ["message", "note", "starts thread", "reconstructed"]) {
       expect(svg).toContain(label);
     }
     // the count in the title row is the number of entries

@@ -15,7 +15,7 @@ export interface Chain {
 export interface Layout {
   /** row index per entry id, 1-based with room for a header row */
   row: Map<string, number>;
-  /** chain root per entry id */
+  /** thread root per entry id */
   chainOf: Map<string, string>;
   chains: Chain[];
   laneCount: number;
@@ -39,8 +39,8 @@ export function isMeta(e: Entry): boolean {
 /**
  * Lay entries out as lanes. Vertical position is chronological (one entry per
  * row); the horizontal axis carries no meaning beyond keeping concurrently-live
- * chains apart. A chain takes the lowest lane whose previous occupant finished
- * before it started, so a dead chain's lane is reused rather than standing empty.
+ * chains apart. A thread takes the lowest lane whose previous occupant finished
+ * before it started, so a dead thread's lane is reused rather than standing empty.
  */
 export function layout(entries: Entry[], idOf: (e: Entry) => string): Layout {
   const row = new Map<string, number>();
@@ -76,7 +76,7 @@ export function layout(entries: Entry[], idOf: (e: Entry) => string): Layout {
       subject: head.subject,
       opener: head.kind === "note" ? (head.label ?? "") : (head.sender ?? ""),
       date: head.date,
-      // a chain carries no correspondence only if every entry in it is meta
+      // a thread carries no correspondence only if every entry in it is meta
       meta: ids.every((i) => isMeta(byId.get(i)!)),
     };
   });
@@ -105,7 +105,7 @@ export interface GraphNode {
 
 /**
  * Per-entry lanes for the reply graph, which is a different question from the
- * column view's per-chain lanes: here a fork must get a lane of its own, so the
+ * column view's per-thread lanes: here a fork must get a lane of its own, so the
  * branch is visible. An entry inherits its parent's lane if it is that parent's
  * first child; a later child takes the lowest free lane. A lane is released once
  * its occupant has no descendants left to place.

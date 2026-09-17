@@ -93,7 +93,7 @@ describe("the deploy stamp", () => {
       </QueryClientProvider>,
     );
     // The nav's own links are there; nothing claims to be a revision.
-    await screen.findByRole("link", { name: "Browse" });
+    await screen.findByRole("link", { name: "Braids" });
     expect(document.querySelector(".deploy")).toBeNull();
   });
 });

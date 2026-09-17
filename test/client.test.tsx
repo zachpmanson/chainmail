@@ -44,6 +44,7 @@ const CHAINS = [
     entries: 180,
     matched: 3,
     people: 12,
+    attachments: 7,
     first: "2025-11-04T08:00:00Z",
     last: "2026-02-19T11:02:00Z",
     score: 0.22,
@@ -76,9 +77,9 @@ type Handler = (call: Call) => Promise<Response> | Response;
 let handler: Handler;
 
 /**
- * The chain the right-hand pane reads, for any id. A candidate is fetched by id
+ * The thread the right-hand pane reads, for any id. A candidate is fetched by id
  * — the same read the inbox's pane makes — and the tests here are about the
- * search and the build rather than about what a chain holds, so every id is
+ * search and the build rather than about what a thread holds, so every id is
  * answered with one invented entry. A handler that did not answer it would fail
  * the pane into an alert, and a test looking for the page's own failure would
  * find that one instead.
@@ -128,8 +129,8 @@ beforeEach(() => {
     // answered here, and not recorded as one of their calls.
     if (new URL(call.url).pathname === "/v1/version") return json(200, {});
     calls.push(call);
-    // The pane's read of one candidate chain: the search page shows its top
-    // result, so every test that gets results reads a chain whether it meant to
+    // The pane's read of one candidate thread: the search page shows its top
+    // result, so every test that gets results reads a thread whether it meant to
     // or not.
     if (pathOf(call).startsWith("/v1/chains/")) {
       return json(200, {
@@ -193,19 +194,32 @@ function submitSearch() {
   fireEvent.submit(button.closest("form")!);
 }
 
+/**
+ * The nav's search, opened the way a person opens it: the caret goes in the box.
+ * The box is the search on every page — the page below has no form of its own —
+ * so opening it is what puts the mode, the person and the date on screen, and it
+ * asks nothing by itself: the address is untouched until something is committed.
+ */
+function openSearch(): HTMLInputElement {
+  const box = screen.getByRole("textbox", { name: "Search the corpus" }) as HTMLInputElement;
+  fireEvent.focus(box);
+  return box;
+}
+
 const searchCalls = () => calls.filter((c) => pathOf(c) === "/v1/search");
 
 /**
- * Search from the inbox: the nav's button opens the search page, and the query is
- * typed where that page keeps it. That is the journey a person takes, and the one
+ * Search from the inbox: the nav's box is the search, so the query is typed where
+ * it lives and committed there. That is the journey a person takes, and the one
  * that writes the query into the URL the search page reads.
  */
 async function searchFromInbox(text: string) {
-  click(screen.getByRole("button", { name: "Search the corpus" }));
-  const box = await screen.findByLabelText("Query");
+  const box = openSearch();
   fireEvent.change(box, { target: { value: text } });
   fireEvent.submit(box.closest("form")!);
-  await waitFor(() => expect((screen.getByLabelText("Query") as HTMLInputElement).value).toBe(text));
+  await waitFor(() =>
+    expect((openSearch() as HTMLInputElement).value).toBe(text),
+  );
 }
 
 /** The common building mocks: search answers with the two chains, a build with
@@ -215,6 +229,9 @@ const buildHandler: Handler = (c) => {
   if (p === "/v1/spec" && c.method === "POST") return json(200, SPEC);
   if (p === "/v1/specs/loom-cutover") return json(200, SPEC);
   if (p === "/v1/search") return json(200, { mode: "lexical", chains: CHAINS });
+  // The nav's Person control reads the same people /status does, and only while
+  // the panel is open — a test that never opens it never asks.
+  if (p === "/v1/people") return json(200, PEOPLE);
   // The shell's sign-in banner probes auth on every route; answer it signed in
   // so tests exercise the app, not the banner.
   if (p === "/auth/status") return json(200, { signed_in: true });
@@ -241,6 +258,33 @@ const STATS = {
   embeddings: [{ model: "nomic-embed-text", dim: 768, vectors: 4100, skipped: 120, stale: 0, eligible: 61 }],
 };
 
+/**
+ * The people the corpus holds, for the controls that pick one: the reader's own on
+ * /status, and the Person filter in the nav's search. Ada carries two addresses
+ * because the folding of several aliases into one person is the whole reason both
+ * of them pick a person, and the third has none at all — a name recovered from
+ * somebody else's quote is not a mailbox anything can be marked as coming from.
+ */
+const PEOPLE = {
+  people: [
+    {
+      personId: 1,
+      displayName: "Ada Byron",
+      identities: ["email:ada@okoye.example", "email:ada@work.example"],
+      sent: 340,
+      received: 121,
+    },
+    {
+      personId: 2,
+      displayName: "Bo Halvorsen",
+      identities: ["email:bo@halvorsen.example"],
+      sent: 90,
+      received: 30,
+    },
+    { personId: 3, displayName: "Ben", identities: ["display_name:Ben"], sent: 0, received: 4 },
+  ],
+};
+
 const statusHandler: Handler = (c) => {
   const p = pathOf(c);
   if (p === "/v1/status") return json(200, STATUS);
@@ -251,6 +295,9 @@ const statusHandler: Handler = (c) => {
   if (p === "/v1/labels") {
     return json(200, { labels: [{ name: "INBOX", messages: 210 }, { name: "Work", messages: 41 }] });
   }
+  // The people the corpus holds, for the control that says which of them the
+  // reader is — and, on any page, for the nav's search (see PEOPLE).
+  if (p === "/v1/people") return json(200, PEOPLE);
   return json(500, { error: `unexpected call to ${c.method} ${p}` });
 };
 
@@ -297,7 +344,7 @@ describe("searching for chains", () => {
     expect(row.querySelector(".ibwho")!.textContent).toBe("Ada Byron");
     expect(row.querySelector(".ibwhen")!.textContent).toBeTruthy();
     expect(row.querySelector(".ibsnippet")!.textContent).toBe("Roof access is fine from the 14th.");
-    // Two counts, each in its own glyph: the people in the chain, and how many
+    // Two counts, each in its own glyph: the people in the thread, and how many
     // messages it holds.
     expect(row.querySelector(".ibppl")!.textContent).toContain("4");
     expect(row.querySelector(".ibppl svg")).toBeTruthy();
@@ -305,7 +352,7 @@ describe("searching for chains", () => {
     expect(row.querySelector(".ibcount svg")).toBeTruthy();
     // What a ranked row adds, and nothing else: the ratio the person is judging
     // the candidate by, and the similarity behind it. The span and the sources
-    // are gone — a chain does not grow a date range because it was searched for.
+    // are gone — a thread does not grow a date range because it was searched for.
     const meta = row.querySelector(".ibmeta")!;
     expect(meta.textContent).toContain("3 of 4 matched");
     expect(meta.textContent).toContain("sim 0.83");
@@ -316,7 +363,7 @@ describe("searching for chains", () => {
     expect(span.textContent).toBe("2026-03-02 – 2026-03-11");
     expect(meta.lastElementChild).toBe(span);
     expect(row.querySelector(".selpvbtn")).toBeNull();
-    // the same numerator over a different chain size — the ratio is what
+    // the same numerator over a different thread size — the ratio is what
     // separates a thread about the query from one that mentioned it
     expect(await screen.findByText("3 of 180 matched")).toBeTruthy();
     expect(document.querySelectorAll(".ibppl").length).toBe(2);
@@ -348,8 +395,8 @@ describe("searching for chains", () => {
     // claim the page is making, and it must not be the lexical result set
     let release: (r: Response) => void = () => {};
     handler = () => new Promise<Response>((res) => (release = res));
+    openSearch();
     typeInto("Mode", "semantic");
-    submitSearch();
 
     await waitFor(() => expect(screen.queryByText("Loom cutover schedule")).toBeNull());
     expect(screen.getByText("Searching…")).toBeTruthy();
@@ -397,22 +444,23 @@ describe("reading a candidate beside the results", () => {
     expect(rowOf("Loom cutover schedule").classList.contains("sel")).toBe(true);
   });
 
-  it("keeps the query and the filters when the nav is pressed from the search page", async () => {
+  it("reads the address's search back into the nav's box, and leaves it alone", async () => {
     handler = () => json(200, { mode: "lexical", chains: CHAINS });
     const router = await mountApp("/?q=cutover&mode=semantic&person=ada");
     await screen.findByText("Loom cutover schedule", { selector: ".ibsubj" });
 
-    // The nav carries the search it can see rather than replacing it: a button
-    // that cleared the query would throw away the search the person is in the
-    // middle of, and one that dropped the filters would answer a different
-    // question than the one on screen.
-    click(screen.getByRole("button", { name: "Search the corpus" }));
-    await waitFor(() =>
-      expect(router.state.location.searchStr).toContain("mode=semantic"),
-    );
+    // The box carries the search it can see rather than replacing it: a box that
+    // cleared the query would throw away the search the person is in the middle
+    // of, and one that dropped the filters would answer a different question than
+    // the one on screen.
+    const box = openSearch();
+    expect(box.value).toBe("cutover");
+    expect((screen.getByLabelText("Mode") as HTMLSelectElement).value).toBe("semantic");
+    expect((screen.getByLabelText("Person") as HTMLInputElement).value).toBe("ada");
+    // And opening it asked nothing: the address is still the search it was.
     expect(router.state.location.searchStr).toContain("q=cutover");
+    expect(router.state.location.searchStr).toContain("mode=semantic");
     expect(router.state.location.searchStr).toContain("person=ada");
-    expect((screen.getByLabelText("Query") as HTMLInputElement).value).toBe("cutover");
   });
 
   it("opens the row that was pressed in the pane, and puts it in the URL", async () => {
@@ -421,7 +469,7 @@ describe("reading a candidate beside the results", () => {
     const other = CHAINS[1]!.rootExtId;
     await screen.findByText("Warehouse lease renewal", { selector: ".ibsubj" });
 
-    // The row body, which is what opens a chain on the inbox — the ranked list's
+    // The row body, which is what opens a thread on the inbox — the ranked list's
     // own "Preview" button was a second way to do the one thing.
     click(
       within(rowOf("Warehouse lease renewal")).getByRole("button", {
@@ -442,7 +490,7 @@ describe("reading a candidate beside the results", () => {
     expect(rowOf("Loom cutover schedule").classList.contains("sel")).toBe(false);
   });
 
-  it("wears the chain's counts in the pane's head, as the row wears them", async () => {
+  it("wears the thread's counts in the pane's head, as the row wears them", async () => {
     handler = () => json(200, { mode: "lexical", chains: CHAINS });
     await mountApp("/?q=cutover");
     await screen.findByText("Warehouse lease renewal", { selector: ".ibsubj" });
@@ -455,20 +503,23 @@ describe("reading a candidate beside the results", () => {
       expect(pane().querySelector(".ibread-subj")!.textContent).toBe("Warehouse lease renewal"),
     );
 
-    // The mail count and the participant count, as the glyphs the list uses —
-    // not "180 entries" in words. Two vocabularies for one chain is what this
-    // replaces; the numbers are asserted on both the head and the row so they
-    // are the same numbers.
+    // The mail count, the participant count and the paperclip, as the glyphs the
+    // list uses — not "180 entries" in words. Two vocabularies for one thread is
+    // what this replaces; the numbers are asserted on both the head and the row
+    // so they are the same numbers.
     const counts = pane().querySelector(".ibread-counts")!;
     expect(counts.querySelector(".ibcount")!.textContent!.trim()).toBe("180");
     expect(counts.querySelector(".ibppl")!.textContent!.trim()).toBe("12");
+    expect(counts.querySelector(".ibatt")!.textContent!.trim()).toBe("7");
     expect(counts.querySelector(".ibcount svg")).toBeTruthy();
     expect(counts.querySelector(".ibppl svg")).toBeTruthy();
+    expect(counts.querySelector(".ibatt svg")).toBeTruthy();
     expect(counts.textContent).not.toContain("entr");
 
     const row = rowOf("Warehouse lease renewal");
     expect(row.querySelector(".ibcount")!.textContent!.trim()).toBe("180");
     expect(row.querySelector(".ibppl")!.textContent!.trim()).toBe("12");
+    expect(row.querySelector(".ibatt")!.textContent!.trim()).toBe("7");
   });
 
   it("reads a candidate named on the URL, and hands the list back when it is closed", async () => {
@@ -721,7 +772,7 @@ describe("the sweep cadence on /status", () => {
     // The option label, not the word: the page says "10 minutes" and stores "10m".
     expect(control.selectedOptions[0]!.textContent).toBe("10 minutes");
 
-    const line = control.closest(".stnote")!.textContent ?? "";
+    const line = control.closest("dd")!.textContent ?? "";
     expect(line).toContain("next");
   });
 
@@ -765,8 +816,12 @@ describe("the default folder on /status", () => {
     // words the home page's own folder button uses for it.
     expect([...control.options].map((o) => o.textContent)).toEqual(["All mail", "INBOX", "Work"]);
 
-    const line = control.closest(".stnote")!.textContent ?? "";
-    expect(line).toContain("The home page opens in");
+    // The row names what the control sets, and the control is that setting: the
+    // page lists them as name and value rather than stating each one in a
+    // sentence, so the label is the name rather than a clause around the field.
+    const row = control.closest("dd")!;
+    expect(row.previousElementSibling!.textContent).toBe("Home folder");
+    expect(row.querySelector(".sttail")).toBeNull();
   });
 
   it("writes the folder that was chosen, and writes none when All mail is", async () => {
@@ -825,69 +880,118 @@ describe("the default folder on /status", () => {
 });
 
 /**
- * The reader's own addresses: which mail is theirs. They live here rather than
- * beside the build button on the inbox and the search page, because they are not
- * a fact about a page being built — they decide which messages are marked as the
- * reader's wherever mail is read, including the threads nobody is building a page
- * from. This screen is where the settings are, so it is where this one is set.
+ * Who the reader is: which mail is theirs. The setting lives here rather than
+ * beside the build button on the inbox and the search page, because it is not a
+ * fact about a page being built — it decides which messages are marked as the
+ * reader's wherever mail is read, including the threads nobody is building a
+ * page from. This screen is where the settings are, so it is where this one is
+ * set.
+ *
+ * A person is picked, not a list of addresses: zach@termina.io and
+ * zach@threadlet.com.au behind one account are one person in the corpus's
+ * identity graph, and retyping that folding by hand is what this control stopped
+ * asking for. What is stored is that person's id — not their addresses, which the
+ * server resolves from the identity graph on every read and serves beside it —
+ * so the tests assert the id travels and the addresses come back.
  */
-describe("the addresses on /status", () => {
+describe("who you are on /status", () => {
   const settingsWrites = () => calls.filter((c) => pathOf(c) === "/v1/settings" && c.method === "POST");
-  const addressHandler = (initial: string[]): Handler => {
-    let stored = initial;
+  // The addresses each person is known by, as the server would resolve them. The
+  // client neither sends these nor derives them: it shows what it was served.
+  const ADDRESSES: Record<number, string[]> = {
+    1: ["ada@okoye.example", "ada@work.example"],
+    2: ["bo@halvorsen.example"],
+  };
+  /**
+   * The settings endpoint as the server implements it: a person id is stored, and
+   * that person's addresses are served beside it. A write of 0 is nobody, which
+   * clears the setting and the addresses with it — a state of its own rather than
+   * an address list that happens to be empty.
+   */
+  const settingsHandler = (person?: number, addresses: string[] = []): Handler => {
+    let mePersonId = person;
+    let me = addresses;
     return (c) => {
       const p = pathOf(c);
       if (p === "/v1/settings") {
         if (c.method === "POST") {
-          const body = JSON.parse(c.body ?? "{}") as { me?: string[] };
-          // The server's own rule: the value is trimmed, blanked and de-duplicated
-          // into the one comma-separated form it is served back in. That is what
-          // the field has to be seen to take back.
-          stored = (body.me?.[0] ?? "")
-            .split(",")
-            .map((a) => a.trim())
-            .filter((a) => a !== "");
+          const body = JSON.parse(c.body ?? "{}") as { mePersonId?: number };
+          mePersonId = body.mePersonId === 0 ? undefined : body.mePersonId;
+          me = mePersonId === undefined ? [] : ADDRESSES[mePersonId] ?? [];
         }
-        return json(200, { slurpEvery: "10m", defaultFolder: "INBOX", ...(stored.length ? { me: stored } : {}) });
+        return json(200, {
+          slurpEvery: "10m",
+          defaultFolder: "INBOX",
+          ...(mePersonId === undefined ? {} : { mePersonId }),
+          ...(me.length ? { me } : {}),
+        });
       }
       return statusHandler(c);
     };
   };
+  const options = (control: HTMLSelectElement) => [...control.options].map((o) => o.textContent);
+  const stored = (c: { body?: string | null }) => JSON.parse(c.body ?? "{}");
 
-  it("writes the addresses as they were typed, and shows back what was stored", async () => {
-    handler = addressHandler([]);
+  it("offers the corpus's people, and writes the person that was picked", async () => {
+    handler = settingsHandler();
     await mountApp("/status");
 
-    const field = (await screen.findByLabelText("Your addresses")) as HTMLInputElement;
-    await waitFor(() => expect(field.value).toBe(""));
+    const control = (await screen.findByLabelText("Which person you are")) as HTMLSelectElement;
+    // The people the corpus has an address for, most involved first, and the
+    // choice of none ahead of them. The person known only by a recovered display
+    // name is not offered: no mail came from them, so nothing could be marked.
+    await waitFor(() => expect(options(control)).toEqual(["Nobody", "Ada Byron", "Bo Halvorsen"]));
+    expect(control.value).toBe("");
+    expect(control.closest("dd")!.textContent).toContain("nothing is marked as yours");
     expect(settingsWrites()).toHaveLength(0);
 
-    fireEvent.change(field, { target: { value: " ada@okoye.example , bo@halvorsen.example " } });
-    fireEvent.blur(field);
-
+    fireEvent.change(control, { target: { value: "1" } });
     await waitFor(() => expect(settingsWrites()).toHaveLength(1));
-    // Written as the reader wrote it rather than as a parsed list: the server is
-    // where it is tidied, so what is stored is what was said. Only `me` is named,
-    // which is what leaves the cadence and the folder exactly as they stand.
-    expect(JSON.parse(settingsWrites()[0]!.body!)).toEqual({
-      me: [" ada@okoye.example , bo@halvorsen.example "],
-    });
-    // The stored form comes back into the field, so a reader can see what was
-    // kept rather than what they typed.
-    await waitFor(() => expect(field.value).toBe("ada@okoye.example, bo@halvorsen.example"));
+    // The person's id travels, and nothing else: which addresses are one human is
+    // the corpus's reading, and a page that sent a list would be storing a second
+    // one that goes stale the moment an alias is learned. Only `mePersonId` is
+    // named in the body, which is what leaves the cadence and the folder as they
+    // stand.
+    expect(stored(settingsWrites()[0]!)).toEqual({ mePersonId: 1 });
+    // And the sentence names both halves of the answer: the person the control
+    // shows, and the aliases the corpus resolved them to.
+    await waitFor(() => expect(control.selectedOptions[0]!.textContent).toBe("Ada Byron"));
+    expect(control.closest("dd")!.textContent).toContain(
+      "Ada Byron: ada@okoye.example, ada@work.example",
+    );
   });
 
-  it("opens on the addresses already stored, and reads them without writing them", async () => {
-    handler = addressHandler(["ada@okoye.example", "ada@work.example"]);
+  it("opens on the person that is stored, and reads it without writing", async () => {
+    handler = settingsHandler(1);
     await mountApp("/status");
 
-    const field = (await screen.findByLabelText("Your addresses")) as HTMLInputElement;
-    // The form the setting is stored in: one comma-separated line, which is the
-    // form the reader typed them in.
-    await waitFor(() => expect(field.value).toBe("ada@okoye.example, ada@work.example"));
+    const control = (await screen.findByLabelText("Which person you are")) as HTMLSelectElement;
+    await waitFor(() => expect(control.selectedOptions[0]!.textContent).toBe("Ada Byron"));
     // Reading the setting is not writing it: a page load must not post back the
-    // value it just read.
+    // value it just read, not even to widen it to the person's other aliases.
     expect(settingsWrites()).toHaveLength(0);
+  });
+
+  it("opens on the address list a corpus was configured with, and replaces it", async () => {
+    // The setting a corpus had before this control named a person: there is no
+    // person id to open on, so the addresses are shown as the value in force — the
+    // way the folder and cadence controls keep a value they cannot name — rather
+    // than as nobody, which would be a setting that is not what is stored.
+    handler = settingsHandler(undefined, ["old@elsewhere.example"]);
+    await mountApp("/status");
+
+    const control = (await screen.findByLabelText("Which person you are")) as HTMLSelectElement;
+    await waitFor(() => expect(control.selectedOptions[0]!.textContent).toBe("old@elsewhere.example"));
+    expect(options(control)).toEqual(["Nobody", "Ada Byron", "Bo Halvorsen", "old@elsewhere.example"]);
+    expect(control.closest("dd")!.textContent).toContain("old@elsewhere.example");
+
+    // Nobody is a choice, asked for as the zero that is not a person id, and it
+    // clears the list rather than leaving it to be read again afterwards.
+    fireEvent.change(control, { target: { value: "" } });
+    await waitFor(() => expect(settingsWrites()).toHaveLength(1));
+    expect(stored(settingsWrites()[0]!)).toEqual({ mePersonId: 0 });
+    await waitFor(() => expect(control.value).toBe(""));
+    expect(control.closest("dd")!.textContent).toContain("nothing is marked as yours");
   });
 });
 
@@ -923,7 +1027,7 @@ describe("the site navigation", () => {
     if (!site) throw new Error("the shell rendered no site header");
     // Document order is the claim: the site nav is the first thing on the page.
     expect(document.querySelectorAll("header")[0]).toBe(site);
-    for (const name of ["chainmail", "Browse", "Services", "Ops"]) {
+    for (const name of ["chainmail", "Braids", "Settings", "Ops"]) {
       expect(within(site as HTMLElement).getByRole("link", { name })).toBeTruthy();
     }
     expect(document.querySelector("footer")).toBeNull();
@@ -938,6 +1042,42 @@ describe("the site navigation", () => {
     if (!brand) throw new Error("no site name in the nav");
     expect(brand.textContent).toBe("chainmail");
     expect(new URL(brand.href).pathname).toBe("/");
+  });
+
+  it("re-reads the corpus on the refresh button, and says so while it is asking", async () => {
+    handler = buildHandler;
+    await mountApp("/");
+    await screen.findByText("Loom cutover schedule");
+    const before = searchCalls().length;
+
+    // Hold the next answer open, so the state a reader sees while the corpus is
+    // being re-read is the state this asserts on.
+    let release: (r: Response) => void = () => {};
+    handler = (c) =>
+      pathOf(c) === "/v1/search"
+        ? new Promise<Response>((res) => (release = res))
+        : buildHandler(c);
+
+    const button = screen.getByRole("button", { name: "Refresh" });
+    // The stamp's neighbour, in the nav's own right-hand group — the row where
+    // "is my merge live" is written, which is the page whose answer a refresh can
+    // change.
+    expect(button.closest(".navright")).toBeTruthy();
+    expect(button.closest("header.sitehead")).toBeTruthy();
+    click(button);
+
+    await waitFor(() => expect(button.getAttribute("aria-busy")).toBe("true"));
+    expect(button).toHaveProperty("disabled", true);
+    // The indicator is dripfeed-web's spinner: a span whose ::before is the ↻ the
+    // stylesheet turns (see .navrefresh .spinner).
+    expect(button.querySelector(".spinner")).toBeTruthy();
+    expect(searchCalls().length).toBeGreaterThan(before);
+
+    await act(async () => {
+      release(json(200, { mode: "lexical", chains: CHAINS }));
+    });
+    await waitFor(() => expect(button.getAttribute("aria-busy")).toBe("false"));
+    expect(button).toHaveProperty("disabled", false);
   });
 });
 
@@ -1041,7 +1181,7 @@ describe("the render route /view/<name>", () => {
     });
     await waitFor(() => expect(screen.queryByText("Loom cutover")).toBeNull());
     expect(router.state.location.pathname).toBe("/");
-    expect(screen.getByRole("button", { name: "Search the corpus" })).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "Search the corpus" })).toBeTruthy();
   });
 
   it("renders the client's own 404 view for a URL that is not a route", async () => {
@@ -1307,7 +1447,7 @@ describe("fetching one message's files from a saved page", () => {
 });
 
 describe("adding another email to a page", () => {
-  it("searches the corpus from the toolbar and adds the chosen chain by accept", async () => {
+  it("searches the corpus from the toolbar and adds the chosen thread by accept", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     handler = (c) => {
       const p = pathOf(c);
@@ -1359,8 +1499,8 @@ describe("adding another email to a page", () => {
     );
     expect(body.name).toBe("loom-cutover");
     expect(body.accept).toEqual(["mail:<lease-renewal-1@example.fed>"]);
-    // The search that found the chain goes with it, so the page records where
-    // the chain came from rather than gaining an unexplained one.
+    // The search that found the thread goes with it, so the page records where
+    // the thread came from rather than gaining an unexplained one.
     expect(body.queries).toEqual([{ q: "lease", note: "add-email search, mode=hybrid" }]);
     // The modal closed once the add was sent.
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Add another email" })).toBeNull());
@@ -1382,8 +1522,17 @@ describe("the search lives in the URL", () => {
       });
     await mountApp("/?q=cutover&mode=semantic");
 
-    // Both inputs are back, and the search ran itself.
-    await waitFor(() => expect((screen.getByLabelText("Query") as HTMLInputElement).value).toBe("cutover"));
+    // Both the box and the mode come back from the address, and the search ran
+    // itself: the fields the person set are the ones on screen, and the results
+    // are the answer to them. The box is also filled the way a current nav item
+    // is — there is a question on the address, and the nav can say so here.
+    await waitFor(() =>
+      expect((screen.getByRole("textbox", { name: "Search the corpus" }) as HTMLInputElement).value).toBe("cutover"),
+    );
+    expect(
+      screen.getByRole("textbox", { name: "Search the corpus" }).getAttribute("aria-current"),
+    ).toBe("page");
+    openSearch();
     expect((screen.getByLabelText("Mode") as HTMLSelectElement).value).toBe("semantic");
     await screen.findByText("Warehouse lease renewal", { selector: ".ibsubj" });
   });
@@ -1404,14 +1553,124 @@ describe("the search lives in the URL", () => {
     await screen.findByText("Loom cutover");
 
     // Back: the address bar returns to the search that built this page, and
-    // the search page comes back with its query and results, not a blank form.
+    // the search page comes back with its query and results, not a blank page.
     await act(async () => {
       router.history.back();
     });
     await waitFor(() => expect(router.state.location.pathname).toBe("/"));
     expect(router.state.location.searchStr).toBe("?q=cutover");
-    await waitFor(() => expect((screen.getByLabelText("Query") as HTMLInputElement).value).toBe("cutover"));
+    await waitFor(() =>
+      expect((screen.getByRole("textbox", { name: "Search the corpus" }) as HTMLInputElement).value).toBe("cutover"),
+    );
     await screen.findByText("Loom cutover schedule", { selector: ".ibsubj" });
+  });
+
+  it("answers an empty search with the default view, not an empty search page", async () => {
+    handler = buildHandler;
+    const router = await mountApp("/?q=");
+
+    // A box somebody emptied: nothing is being asked, so what belongs under it is
+    // the inbox — the default view — rather than a search page carrying a
+    // question nobody asked. The address is left as it is: the box wrote it, and
+    // re-writing it would be a navigation for nothing.
+    await waitFor(() => expect(document.querySelector(".ibwrap")).toBeTruthy());
+    expect(document.querySelector(".selwrap")).toBeNull();
+    expect(router.state.location.searchStr).toBe("?q=");
+    // And the box says nothing about where the reader is, there being nothing in
+    // it to be asking.
+    expect(
+      screen.getByRole("textbox", { name: "Search the corpus" }).getAttribute("aria-current"),
+    ).toBeNull();
+  });
+
+  it("gives the search up when the box is emptied, and the inbox is what is left", async () => {
+    handler = buildHandler;
+    const router = await mountApp("/?q=cutover");
+    await screen.findByText("Loom cutover schedule", { selector: ".ibsubj" });
+    // Asking a new question does not clear the answer to the old one on the way:
+    // the arm the reader is on keeps its question until they commit another.
+    expect(document.querySelector(".selwrap")).toBeTruthy();
+
+    const box = openSearch();
+    fireEvent.change(box, { target: { value: "" } });
+    // Submitted directly because the button is disabled with nothing to ask — the
+    // same reason submitSearch() asserts on the button before submitting: an
+    // empty box asks nothing, so committing it is a giving-up rather than a
+    // search.
+    fireEvent.submit(box.closest("form")!);
+
+    await waitFor(() => expect(router.state.location.searchStr).toBe(""));
+    await waitFor(() => expect(document.querySelector(".ibwrap")).toBeTruthy());
+    expect(document.querySelector(".selwrap")).toBeNull();
+    expect((box as HTMLInputElement).value).toBe("");
+  });
+
+  it("searches from the panel's button, not only from its Enter key", async () => {
+    handler = buildHandler;
+    const router = await mountApp("/");
+    await screen.findByText("Loom cutover schedule");
+
+    const box = openSearch();
+    fireEvent.change(box, { target: { value: "cutover" } });
+    // The panel is a form, so its button and its Enter key are one code path; the
+    // button is what makes Enter work at all, and it is the way in for anyone who
+    // does not know the field submits.
+    submitSearch();
+
+    await waitFor(() => expect(router.state.location.searchStr).toBe("?q=cutover"));
+    await screen.findByText("Loom cutover schedule", { selector: ".ibsubj" });
+    expect(document.querySelector(".ibwrap")).toBeNull();
+  });
+
+  it("narrows the search to a person rather than to a string", async () => {
+    handler = buildHandler;
+    const router = await mountApp("/");
+    await screen.findByText("Loom cutover schedule");
+
+    const box = openSearch();
+    fireEvent.change(box, { target: { value: "cutover" } });
+    const person = (await screen.findByLabelText("Person")) as HTMLInputElement;
+
+    // The corpus's people are under the field as it is typed in, looked up by
+    // name or by address: the addresses are the corpus's to fold, so the reader
+    // finds Ada by the half of her name they remember rather than having to
+    // recall which of her two addresses to type.
+    fireEvent.focus(person);
+    fireEvent.change(person, { target: { value: "byron" } });
+    const ada = await screen.findByRole("option", { name: /Ada Byron/ });
+    expect(screen.queryByRole("option", { name: /Bo Halvorsen/ })).toBeNull();
+    // The alias the pick will write is on the row itself, so which of her two
+    // addresses this search is narrowed to is read before it is asked.
+    expect(ada.textContent).toContain("ada@okoye.example");
+
+    // Picking one commits at once, with the query that was typed beside it: who is
+    // being asked about is a decision about a question already being asked.
+    fireEvent.click(ada);
+    await waitFor(() =>
+      expect(router.state.location.searchStr).toContain("person=ada%40okoye.example"),
+    );
+    await waitFor(() => {
+      const asked = new URL(searchCalls().at(-1)!.url).searchParams;
+      expect(asked.get("q")).toBe("cutover");
+      expect(asked.get("person")).toBe("ada@okoye.example");
+    });
+  });
+
+  it("keeps a person the people list cannot name, rather than snapping it away", async () => {
+    handler = buildHandler;
+    // An address typed into the address bar, or a search settled before the people
+    // answered: the field shows it as the value it is, and the suggestions under
+    // it are a suggestion rather than a correction. A field that quietly reset it
+    // would be answering a different question than the one on screen.
+    const router = await mountApp("/?q=cutover&person=someoneelse%40example.fed");
+    await screen.findByText("Loom cutover schedule", { selector: ".ibsubj" });
+
+    openSearch();
+    const person = (await screen.findByLabelText("Person")) as HTMLInputElement;
+    await waitFor(() => expect(person.value).toBe("someoneelse@example.fed"));
+    // And opening the panel asked nothing: the field is showing the question in
+    // force rather than one it has decided to replace.
+    expect(router.state.location.searchStr).toContain("person=someoneelse%40example.fed");
   });
 });
 // A page carrying a quoter's edit (#42): the host message repeats a chunk the
@@ -1593,7 +1852,7 @@ describe("the ops route /ops", () => {
       }
       return json(500, { error: `unexpected call to ${c.method} ${p}` });
     };
-    await mountApp("/ops");
+    await mountApp("/ops?tab=merges");
 
     // The applicable pairs: the evidence is on screen, and so is a checkbox.
     expect(
@@ -1654,7 +1913,7 @@ describe("the ops route /ops", () => {
       }
       return json(500, { error: `unexpected call to ${c.method} ${p}` });
     };
-    await mountApp("/ops");
+    await mountApp("/ops?tab=merges");
     await screen.findByLabelText(/Select folding #8/);
 
     // Select-all ticks every applicable pair, and only those.
@@ -1704,7 +1963,7 @@ describe("the ops route /ops", () => {
       }
       return json(500, { error: `unexpected call to ${c.method} ${p}` });
     };
-    await mountApp("/ops");
+    await mountApp("/ops?tab=merges");
     await screen.findByLabelText(/Select folding #8/);
     click(screen.getByLabelText("select all 2 applicable"));
     click(screen.getByRole("button", { name: "merge 2 selected" }));
@@ -1749,7 +2008,7 @@ describe("what the bar does to the mail", () => {
     click(boxes[1]!);
   };
 
-  it("archives every ticked chain in one call, and says what the mailbox answered", async () => {
+  it("archives every ticked thread in one call, and says what the mailbox answered", async () => {
     handler = mailHandler(
       json(200, {
         action: "archive",
@@ -1764,7 +2023,16 @@ describe("what the bar does to the mail", () => {
     await mountApp("/?q=cutover");
     await ticksTwo();
 
-    click(screen.getByRole("button", { name: "Archive" }));
+    // The two mailbox verbs are icons: the word is on the button as its name and
+    // its tooltip, and the row draws a glyph. The bar also holds the braid, the
+    // folder dropdown, the count and the way out, and spelling Archive and Delete
+    // along that row is what wrapped it.
+    const archive = screen.getByRole("button", { name: "Archive" });
+    expect(archive.getAttribute("title")).toBe("Archive");
+    expect(archive.textContent).toBe("");
+    expect(screen.getByRole("button", { name: "Delete" }).textContent).toBe("");
+
+    click(archive);
     await waitFor(() => expect(calls.some((c) => pathOf(c) === "/v1/mail")).toBe(true));
 
     const post = calls.find((c) => pathOf(c) === "/v1/mail")!;
@@ -1802,33 +2070,77 @@ describe("what the bar does to the mail", () => {
     // "deleted" is a claim about the reader's mailbox, so the sentence says where
     // it went and how long it can be undone — the trash is Gmail's, not a folder
     // this page invented.
-    expect((await screen.findByRole("status")).textContent).toBe(
-      "Deleted 3 messages — in the trash, recoverable for 30 days.",
-    );
+    // Said in the shell's corner rather than in the header's row (see Toasts):
+    // the bar has to be free to leave with the ticks it was drawn for.
+    const said = await screen.findByText(/Deleted 3 messages/);
+    expect(said.closest(".toasts")).not.toBeNull();
+    expect(said.textContent).toBe("Deleted 3 messages — in the trash, recoverable for 30 days.");
   });
 
-  it("moves to the folder the dropdown names, and cannot move to none", async () => {
+  it("takes the account of what happened away once it has been read", async () => {
+    // A sentence about work that is over cannot stand in the corner for the rest
+    // of the session: it says what one action did, which is over the moment it
+    // has been read.
+    handler = mailHandler(json(200, { action: "trash", changed: 3, skipped: 0, chains: [] }));
+    // Watched from before the action, so the timer the note arms is the one this
+    // test drives. Five seconds of a reader's life in one call, on the callback
+    // the component itself handed the timer.
+    const armed = vi.spyOn(globalThis, "setTimeout");
+    await mountApp("/?q=cutover");
+    await ticksTwo();
+
+    click(screen.getByRole("button", { name: "Delete" }));
+    const note = await screen.findByText(/Deleted 3 messages/);
+    expect(note.className).toBe("toasttext");
+
+    const armedTimer = armed.mock.calls.find(([, ms]) => ms === 5000);
+    armed.mockRestore();
+    if (!armedTimer) throw new Error("the note armed no five-second timer");
+    act(() => (armedTimer[0] as () => void)());
+    // Gone, and the bar with it: a note about mail that has already moved is not
+    // a reason to keep the header's row, and it is not a reason to keep the note
+    // either. Both leave, because neither is what the page is for.
+    expect(screen.queryByText(/Deleted 3 messages/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Archive" })).toBeNull();
+  });
+
+  it("takes its own account away without touching a refusal", async () => {
+    // A refusal is something to act on rather than a moment that has passed, so
+    // the note's timer is not what ends it: nothing here is on a clock, and the
+    // reader still has the reason in front of them after the wait.
+    handler = mailHandler(json(502, { error: "gmail: rate limited, try again in a minute" }));
+    const armed = vi.spyOn(globalThis, "setTimeout");
+    await mountApp("/?q=cutover");
+    await ticksTwo();
+
+    click(screen.getByRole("button", { name: "Delete" }));
+    expect(await screen.findByText(/rate limited/)).toBeTruthy();
+    const watchers = armed.mock.calls.filter(([, ms]) => ms === 5000);
+    armed.mockRestore();
+    expect(watchers).toHaveLength(0);
+    // And it is still there: the failure is not on the note's timer and not on
+    // one of its own either.
+    expect(screen.getByText(/rate limited/)).toBeTruthy();
+  });
+
+  it("moves to the folder the dropdown names, in the one action the choice is", async () => {
     handler = mailHandler(
       json(200, { action: "move", labels: ["Work"], changed: 3, skipped: 0, chains: [] }),
     );
     await mountApp("/?q=cutover");
     await ticksTwo();
 
-    // Nothing is named yet, so there is nothing to move to: the button is the
-    // state of the dropdown, and a move with no destination is not a move.
-    const move = screen.getByRole("button", { name: "Move" }) as HTMLButtonElement;
-    expect(move.disabled).toBe(true);
-
-    const folders = screen.getByLabelText("Move to");
+    const folders = screen.getByLabelText("Move to a folder") as HTMLSelectElement;
     // The inbox is not offered: a move to the place the mail is leaving is not a
     // move. Everything else the mailbox has is, including folders this page has
     // never seen mail in.
-    expect(
-      Array.from(folders.querySelectorAll("option")).map((o) => o.textContent),
-    ).toEqual(["choose a folder…", "Archive", "Work"]);
+    expect([...folders.options].map((o) => o.textContent)).toEqual(["Move…", "Archive", "Work"]);
+    // Choosing the folder IS the move: no button to press afterwards, and no
+    // title above the control saying which verb it is — the placeholder does.
+    expect(screen.queryByRole("button", { name: "Move" })).toBeNull();
+    expect(folders.value).toBe("");
 
     fireEvent.change(folders, { target: { value: "Work" } });
-    click(screen.getByRole("button", { name: "Move" }));
     await waitFor(() => expect(calls.some((c) => pathOf(c) === "/v1/mail")).toBe(true));
 
     expect(JSON.parse(calls.find((c) => pathOf(c) === "/v1/mail")!.body!)).toEqual({
@@ -1836,7 +2148,34 @@ describe("what the bar does to the mail", () => {
       action: "move",
       labels: ["Work"],
     });
-    expect((await screen.findByRole("status")).textContent).toBe("Moved 3 messages to Work.");
+    expect((await screen.findByText("Moved 3 messages to Work.")).closest(".toasts")).not.toBeNull();
+  });
+
+  it("stands in the nav's row while a selection does, and deselects every tick from there", async () => {
+    handler = mailHandler(json(200, { action: "archive", changed: 0, skipped: 0, chains: [] }));
+    await mountApp("/?q=cutover");
+    await ticksTwo();
+
+    // The bar is the header's now, in the row the nav is on — not a card at the
+    // foot of the list it acts on. Hiding the nav is the stylesheet's `:has`
+    // rule, which jsdom does not apply; what the client owns, and what this
+    // asserts, is where the bar is drawn.
+    const site = document.querySelector("header.sitehead");
+    const bar = site?.querySelector(".ibbuild");
+    if (!bar) throw new Error("the bar is not in the site header");
+    expect(document.querySelector(".wrap .ibbuild")).toBeNull();
+
+    // How much is ticked, and the way out of it, at the bar's own end.
+    expect(within(bar as HTMLElement).getByText("2 selected")).toBeTruthy();
+    expect((screen.getAllByRole("checkbox")[0] as HTMLInputElement).checked).toBe(true);
+
+    click(within(bar as HTMLElement).getByRole("button", { name: "Deselect all" }));
+    await waitFor(() => expect(document.querySelector(".ibbuild")).toBeNull());
+    expect((screen.getAllByRole("checkbox")[0] as HTMLInputElement).checked).toBe(false);
+    // Nothing was done to the mail, so there is nothing to report: deselecting
+    // dismisses the bar rather than leaving a sentence about an action that was
+    // never taken.
+    expect(screen.queryByRole("status")).toBeNull();
   });
 
   it("leaves the ticks alone when the mailbox refuses", async () => {
@@ -1851,14 +2190,16 @@ describe("what the bar does to the mail", () => {
 
     click(screen.getByRole("button", { name: "Archive" }));
     // The refusal names the switch, because the person reading it is the one who
-    // can restart the service with it.
-    expect((await screen.findByRole("alert")).textContent).toContain("-mail-write");
+    // can restart the service with it. It is drawn where every other account is,
+    // in the shell's corner, and it is the marked kind: a refusal is something to
+    // act on rather than a moment that has passed.
+    const refused = await screen.findByText(/-mail-write/);
+    expect(refused.closest(".toast.bad")).not.toBeNull();
     // Nothing moved, so nothing is cleared: the ticks are still the reader's
     // selection and the buttons still stand.
     expect((screen.getByRole("button", { name: "Archive" }) as HTMLButtonElement).disabled).toBe(
       false,
     );
     expect((screen.getAllByRole("checkbox")[0] as HTMLInputElement).checked).toBe(true);
-    expect(screen.queryByRole("status")).toBeNull();
   });
 });

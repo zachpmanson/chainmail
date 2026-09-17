@@ -24,6 +24,10 @@ export default defineConfig({
     // lets the client expand a leading ~ in ?spec=
     __HOME__: JSON.stringify(homedir()),
   },
+  // Every test file runs against the same module graph, and the notification
+  // store is module state: the reset in here is what keeps one test's sentence
+  // out of the next one's corner.
+  test: { setupFiles: ["./test/setup.ts"] },
   server: {
     open: "/?spec=/synthetic.json",
     // The API is a separate localhost process, so /v1 is proxied rather than

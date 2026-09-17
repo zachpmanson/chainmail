@@ -6,6 +6,8 @@ import { order, zones, tzMinutes } from "../src/lib/chronological";
 import { layout, isMeta } from "../src/lib/lanes";
 import { avatarURL } from "../src/lib/derive";
 import type { Entry } from "../src/lib/spec";
+import { gmailIdOf, provenance, sourceLine } from "../src/lib/sources";
+import type { CorpusEntry } from "../src/lib/api";
 
 const load = (f: string) => normalise(JSON.parse(readFileSync(`fixtures/${f}.json`, "utf8")));
 const withIds = (es: Entry[]) => {
@@ -244,5 +246,64 @@ describe("avatarURL — the avatar value's boundary before it is emitted into ur
     expect(avatarURL("https://e.example/ x.png")).toBeNull();
     expect(avatarURL("https://e.example/x.png\n}")).toBeNull();
     expect(avatarURL("https://e.example/<script>")).toBeNull();
+  });
+});
+
+describe("the provenance line a chain pane builds", () => {
+  const entry = (e: Partial<CorpusEntry>): CorpusEntry =>
+    ({ extId: "mail:<x@y>", source: "mail", quoted: false, ts: "2026-03-02T09:00:00Z", ...e }) as CorpusEntry;
+
+  it("names a message the mailbox holds by its mailbox id", () => {
+    const e = entry({
+      extId: "mail:<c0ffee@loomworks.example>",
+      permalink: "https://mail.google.com/mail/u/0/#all/19fee08b9d28e28b",
+      sightings: [{ kind: "direct" }],
+    });
+    // The same words the generator writes, because provenance() is what reads it
+    // back: a line in any other shape would render as prose.
+    expect(sourceLine(e, (id) => id)).toBe("msg 19fee08b9d28e28b");
+    expect(provenance(sourceLine(e, (id) => id))).toEqual({
+      kind: "ids",
+      prefix: "",
+      ids: [{ text: "msg 19fee08b9d28e28b", gmailId: "19fee08b9d28e28b" }],
+    });
+  });
+
+  it("falls back to the corpus ext id where no mailbox id is known", () => {
+    // A mailbox this build cannot name, or a source that is not a mailbox at
+    // all: the id it is held under is still the id a reader can quote, so it is
+    // shown rather than dropped.
+    const e = entry({ extId: "slack:<C0123>:1712345678.000100", sightings: [{ kind: "direct" }] });
+    expect(sourceLine(e, (id) => id)).toBe("slack:<C0123>:1712345678.000100");
+    expect(gmailIdOf(e)).toBeUndefined();
+    // And a permalink that is not Gmail's is not read as though it were.
+    expect(
+      gmailIdOf(entry({ permalink: "https://example.slack.com/archives/C0123/p1712345678000100" })),
+    ).toBeUndefined();
+  });
+
+  it("names the hosts a recovered message was unspooled from, once each", () => {
+    const seen = entry({
+      extId: "quote:a829678324a518162a2d85db51897b7e",
+      quoted: true,
+      sightings: [
+        { kind: "quoted", seenIn: "mail:<host-1@loomworks.example>" },
+        // A host that both quoted and forwarded arrives twice: one message to
+        // open, so the line may not count it twice.
+        { kind: "quoted", seenIn: "mail:<host-1@loomworks.example>", detail: "depth 2" },
+        { kind: "quoted", seenIn: "mail:<host-2@loomworks.example>" },
+      ],
+    });
+    const named = sourceLine(seen, (id) => "msg " + (id === "mail:<host-1@loomworks.example>" ? "a1b2" : "c3d4"));
+    expect(named).toBe("unspooled from msg a1b2, msg c3d4");
+    expect(provenance(named).kind).toBe("ids");
+  });
+
+  it("says a recovery has no host at all rather than naming nobody", () => {
+    // A quote whose sighting names no host — the generator's own last resort,
+    // for the same reason: the text came from somewhere and the corpus no longer
+    // knows where.
+    const e = entry({ extId: "quote:deadbeef", quoted: true, sightings: [{ kind: "quoted" }] });
+    expect(sourceLine(e, (id) => id)).toBe("unspooled from quoted text");
   });
 });

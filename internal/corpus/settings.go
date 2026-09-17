@@ -2,6 +2,9 @@ package corpus
 
 import (
 	"database/sql"
+	"errors"
+	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -11,9 +14,19 @@ const (
 	// SettingDefaultFolder is the mailbox label the home page opens in. Empty
 	// means every folder at once — the same as never having chosen.
 	SettingDefaultFolder = "default_folder"
-	// SettingMe is the addresses the reader says are theirs, so their own mail
+	// SettingMePerson is the person the reader says they are, so their own mail
 	// can be marked on a page and in the reading pane. Nothing in the corpus
-	// records which mailbox it was collected from, so this can only be told.
+	// records which mailbox it was collected from, so this can only be told —
+	// and what is told is a person rather than a list of their addresses,
+	// because which addresses are one human is the identity graph's answer
+	// rather than the reader's to retype (see MePerson).
+	SettingMePerson = "me_person"
+	// SettingMe is the comma-separated address list the reader used to write,
+	// before the setting named a person. Nothing writes it any more —
+	// SetMePerson clears it — and it is read for one reason: a corpus that was
+	// configured with it keeps marking its reader's own mail until they pick
+	// themselves out of the people list, rather than silently unmarking it the
+	// day this changed.
 	SettingMe = "me"
 	// SettingSlurpEvery is how often the server sweeps the mailbox by itself.
 	// A duration word (`10m`, `1h`) or `off`; absent means the default cadence,
@@ -44,18 +57,76 @@ func (s *Store) Setting(key string) (string, bool, error) {
 	return v, true, nil
 }
 
-// MeAddresses reads the addresses the reader has named as their own.
+// MePerson reads the person the reader has named as themselves: the id of a row
+// in `people`, which is the same person the corpus resolved their mail to rather
+// than a second idea of them kept in a string.
 //
-// The parse lives here rather than at each call site because two callers need
-// the same one: the settings API, which serves and writes them, and the trail
-// render, which marks the reader's own messages (spec.RenderTrail). Two parses
-// would be two answers to "who is the reader", and the disagreement would show
-// as one surface tinting a bubble the other leaves plain.
+// A person rather than a list of addresses because the list was the reader doing
+// the identity graph's work by hand, and doing it wrong in the two ways a person
+// does not: an address they forgot to list stayed somebody else's, and every
+// address the corpus later learned of the same human arrived after the list was
+// written. This way the answer is looked up when the question is asked, so a
+// page built today marks the aliases the corpus knows today.
+//
+// A reader the corpus holds nobody for reads as unnamed, which is every state the
+// caller has no reason to tell apart: no setting at all, a value that will not
+// parse as an id, an id whose person is gone (a merge takes the row away, and
+// repoints this setting on the way out — see Merge; an id left dangling by a
+// hand-edited database reads as nobody rather than taking down every trail render
+// with an error about a preference), and a person no address can have sent from,
+// who marks exactly what nobody marks. The last is the rule SetMePerson refuses
+// a write by, applied to reads as well: a reader the API would not store is not
+// one it serves either, so the control is never handed an id it cannot show.
+func (s *Store) MePerson() (int64, bool, error) {
+	v, ok, err := s.Setting(SettingMePerson)
+	if err != nil || !ok {
+		return 0, false, err
+	}
+	id, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+	if err != nil || id <= 0 {
+		return 0, false, nil
+	}
+	_, emails, err := personMailbox(s, id)
+	if err != nil {
+		if errors.Is(err, ErrNoPerson) {
+			return 0, false, nil
+		}
+		return 0, false, err
+	}
+	if len(emails) == 0 {
+		return 0, false, nil
+	}
+	return id, true, nil
+}
+
+// MeAddresses reads the addresses that are the reader's own, so a message from
+// one of them — or from the person they belong to — can be marked.
+//
+// This is the accessor the marking reads, and it resolves the stored person here
+// rather than at each call site because two callers need the same one: the
+// settings API, which serves and writes the setting, and the trail render, which
+// marks the reader's own messages (spec.RenderTrail). Two resolutions would be
+// two answers to "who is the reader", and the disagreement would show as one
+// surface tinting a bubble the other leaves plain.
 //
 // A setting nobody has made is an empty list rather than an error, the same way
 // Setting reports absence rather than a zero value: a reader who has never said
 // who they are is a real state, and nothing is marked for them.
 func (s *Store) MeAddresses() ([]string, error) {
+	id, ok, err := s.MePerson()
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		emails, err := emailsOf(s, id)
+		if err != nil {
+			return nil, fmt.Errorf("reading the addresses of person %d: %w", id, err)
+		}
+		return emails, nil
+	}
+	// The address list of a corpus configured before the setting named a person.
+	// Read, never written: the reader who picks themselves replaces it (see
+	// SetMePerson), and until then their own mail keeps being marked.
 	v, ok, err := s.Setting(SettingMe)
 	if err != nil || !ok {
 		return nil, err
@@ -63,11 +134,56 @@ func (s *Store) MeAddresses() ([]string, error) {
 	return SplitAddresses(v), nil
 }
 
-// SplitAddresses reads addresses out of the comma-separated form they are typed
-// and stored in. Each is trimmed and blanks are dropped — a trailing comma is
-// something a reader writes, not an address — and duplicates are dropped
-// case-insensitively, because the corpus lowercases every address it stores, so
-// `Ada@x` and `ada@x` are one address and listing both must not read as two.
+// SetMePerson records the reader as a person, or as nobody with id 0. The person
+// must be one the corpus holds and one it has a mailbox for: the setting exists
+// to mark the reader's own mail, and a person no address can have sent from
+// would mark nothing while reading back as a choice that had been made. Both
+// refusals are ErrNoPerson wrapped around the reason, so a caller decides what a
+// 400 is without re-deriving either rule.
+//
+// The address list the setting used to be is cleared with it, in the same
+// transaction: the two are one answer to "whose mail is the reader's", and a
+// stale list left behind would be read again the moment the person was cleared,
+// resurrecting who the reader said they were a change ago.
+func (s *Store) SetMePerson(id int64) error {
+	value := ""
+	if id != 0 {
+		name, emails, err := personMailbox(s, id)
+		if err != nil {
+			return err
+		}
+		if len(emails) == 0 {
+			return fmt.Errorf("%w: %s is not known by any address, so nothing could be marked as theirs",
+				ErrNoPerson, name)
+		}
+		value = strconv.FormatInt(id, 10)
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`delete from settings where key = ?`, SettingMe); err != nil {
+		return err
+	}
+	if value == "" {
+		if _, err := tx.Exec(`delete from settings where key = ?`, SettingMePerson); err != nil {
+			return err
+		}
+	} else if _, err := tx.Exec(`
+		insert into settings (key, value) values (?, ?)
+		on conflict(key) do update set value = excluded.value`, SettingMePerson, value); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// SplitAddresses reads addresses out of the one comma-separated form the reader
+// used to write them in (SettingMe). Each is trimmed and blanks are dropped — a
+// trailing comma is something a reader writes, not an address — and duplicates
+// are dropped case-insensitively, because the corpus lowercases every address it
+// stores, so `Ada@x` and `ada@x` are one address and listing both must not read
+// as two.
 //
 // Nothing here resolves an address to a person: that is the corpus's identity
 // graph, and a list of strings is not the place to decide whose they are.
@@ -83,20 +199,6 @@ func SplitAddresses(v string) []string {
 		out = append(out, a)
 	}
 	return out
-}
-
-// JoinAddresses is SplitAddresses the other way: the addresses a caller holds,
-// in the one form the setting is written in.
-//
-// The elements are joined and then parsed rather than parsed one at a time,
-// because what arrives on the wire is the reader's own text — the whole value of
-// the field they typed into, which is one comma-separated list — and a
-// per-element join would store one address where they named three.
-//
-// Joining nothing is the empty string, which PutSetting deletes: no addresses
-// and no setting are one state rather than two, exactly as for the folder.
-func JoinAddresses(vs []string) string {
-	return strings.Join(SplitAddresses(strings.Join(vs, ",")), ", ")
 }
 
 // PutSetting records a setting, replacing whatever was there. An empty value

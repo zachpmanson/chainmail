@@ -56,12 +56,13 @@ const frontierLookback = 48 * time.Hour
 
 // Result summarises one ingest run.
 type Result struct {
-	Seen      int
-	Created   int
-	Changed   int
-	Drafts    int   // skipped: Gmail labels them DRAFT, so they were never sent
-	Resolved  int64 // parent edges linked after this batch
-	Truncated int   // bodies docket still had to cut — should always be zero
+	Seen       int
+	Created    int
+	Changed    int
+	Drafts     int   // skipped: Gmail labels them DRAFT, so they were never sent
+	Resolved   int64 // parent edges linked after this batch
+	Reasserted int64 // parent edges redrawn from headers a later writer had overruled
+	Truncated  int   // bodies docket still had to cut — should always be zero
 	// Stop is why the walk ended. Read it, not Seen: a run that saw exactly its
 	// limit looks identical to a run that saw everything.
 	Stop Stop
@@ -210,6 +211,17 @@ walk:
 		return r, err
 	}
 	r.Resolved = n
+	// And then the edges the headers disagree with: the walk above writes an edge
+	// for every message it reads, but a body's nesting was linking them while it
+	// ran, and the guard on both sides only fills a NULL parent — so the first
+	// writer won. Reasserting here is what makes a header authoritative over a
+	// reading, both for this batch and for everything ingested before the quoted
+	// pass learned to leave a header's slot alone.
+	m, err := store.ReassertParents()
+	if err != nil {
+		return r, err
+	}
+	r.Reasserted = m
 	return r, nil
 }
 
@@ -251,6 +263,13 @@ func IngestIDs(store *corpus.Store, c Mailbox, ids []string) (Result, error) {
 		return r, err
 	}
 	r.Resolved = n
+	// Same reassert as the walk's: an id list is a batch of mail like any other,
+	// and a header here is as authoritative as one there.
+	m, err := store.ReassertParents()
+	if err != nil {
+		return r, err
+	}
+	r.Reasserted = m
 	return r, nil
 }
 
@@ -297,7 +316,7 @@ func Put(store *corpus.Store, msg Message) (corpus.PutResult, error) {
 		TZOffset:  off,
 		PersonID:  person,
 		Container: msg.ThreadID,
-		ParentRef: msg.InReplyTo,
+		ParentRef: parentRefOf(msg),
 		Subject:   cleanSubject(msg.Subject),
 		BodyText:  msg.Body,
 		BodyHTML:  msg.BodyHTML,
@@ -357,6 +376,23 @@ func Put(store *corpus.Store, msg Message) (corpus.PutResult, error) {
 		return res, fmt.Errorf("extracting quoted history of %s: %w", ext, err)
 	}
 	return res, nil
+}
+
+func parentRefOf(msg Message) string {
+	// In-Reply-To is the direct parent and is the whole answer whenever it is
+	// there. Where it is not, the last id in References is the message this one
+	// was written to — a client that omits In-Reply-To still states its ancestry —
+	// and naming it here costs nothing: resolution matches the string against a
+	// Message-ID like any other.
+	if s := strings.TrimSpace(msg.InReplyTo); s != "" {
+		return s
+	}
+	for i := len(msg.References) - 1; i >= 0; i-- {
+		if s := strings.TrimSpace(msg.References[i]); s != "" {
+			return s
+		}
+	}
+	return ""
 }
 
 // resolveSender finds or creates the person behind a From header. Display names

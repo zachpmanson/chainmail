@@ -59,7 +59,7 @@ export interface View {
  *  sighting wins, later repeats keep the place the first one took.
  *
  *  Shared by the page build and the reading pane, because the pane is handed the
- *  chain's entries and has to put a sender's organisation on the same colour the
+ *  thread's entries and has to put a sender's organisation on the same colour the
  *  page puts it on. The pane cannot read the page's list (it has no panel, and no
  *  recipients who sent nothing), so the function is shared rather than the answer:
  *  each caller derives its own order in its own container's order, and neither
@@ -98,7 +98,7 @@ export function derive(input: Timeline): View {
   //
   // A copy is hoisted however many replies it has, because each of those replies is
   // anchored to the message the edit is diffed against, not to this ghost of it. A
-  // real chain (the Termina x Ruralco CSV thread) has the host — the message that
+  // real thread (the Termina x Ruralco CSV thread) has the host — the message that
   // re-quotes and therefore carries the edit — as a DIRECT descendant of the
   // edited copy, because the thread was replied-to from the copied row before the
   // corpus realised it was a derivative. Re-parenting those replies up to the
@@ -108,7 +108,7 @@ export function derive(input: Timeline): View {
   for (const e of input.messages) {
     for (const ed of e.edits ?? []) if (ed.id && byId.has(ed.id)) hoisted.add(ed.id);
   }
-  // A hoisted copy is replaced in every remaining parent chain by its own parent
+  // A hoisted copy is replaced in every remaining parent thread by its own parent
   // (the base it derives from), so descendants attach to what the copy itself
   // attached to, rather than dangling on an id that no longer occupies a row.
   // Mutated in place: idOf keys by object identity, so a clone would be a

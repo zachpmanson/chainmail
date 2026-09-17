@@ -1,16 +1,18 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { $api, type ChainHit } from "../lib/api";
+import { useEscapeToClear } from "../lib/selection";
 import { ActionBar } from "./ActionBar";
-import { ChainPane } from "./ChainPane";
-import { ChainRow } from "./ChainRow";
-import { Failure, type PreviewableChain } from "./ChainPreview";
+import { useLastDescription } from "../lib/lists";
+import { ThreadPane } from "./ThreadPane";
+import { ThreadRow } from "./ThreadRow";
+import { Failure, type PreviewableThread } from "./ThreadPreview";
 import { SplitPane } from "./SplitPane";
 
 /**
  * The home page with nothing asked of it: the corpus in the order it arrived,
  * newest first. A list rather than a ranking — the service answers an empty
- * query by each chain's last message (corpus.Query.ranked), and every row here
+ * query by each thread's last message (corpus.Query.ranked), and every row here
  * is one conversation, which is the unit a mail client shows and the unit a page
  * is built from.
  *
@@ -18,7 +20,7 @@ import { SplitPane } from "./SplitPane";
  * where chains are ranked and the ones that belong are ticked. The two are one
  * URL apart, which is why the search box here only navigates.
  *
- * Two panels, as a mail client reads: the list on the left, the chosen chain on
+ * Two panels, as a mail client reads: the list on the left, the chosen thread on
  * the right. The reading pane is the same reading the search page shows in a
  * modal — here there is room to put it beside the list, and putting it beside
  * the list is the point of an inbox.
@@ -153,6 +155,10 @@ function Folders({
 export function Inbox() {
   const navigate = useNavigate();
   const [chosen, setChosen] = useState<string[]>([]);
+  // Dropping the ticks is one action, wherever it is asked for from: the bar's
+  // Deselect all, the write that was just made, and Escape (see the hook).
+  const clearChosen = useCallback(() => setChosen([]), []);
+  useEscapeToClear(chosen.length > 0, clearChosen);
 
   // This page is a workspace: one window, with the list and the thread scrolling
   // inside it rather than the page scrolling under them. That is a fact about the
@@ -164,14 +170,14 @@ export function Inbox() {
     return () => document.body.classList.remove("inbox");
   }, []);
 
-  // Which chain the reading pane is showing. It is the URL's, not this
+  // Which thread the reading pane is showing. It is the URL's, not this
   // component's: a reader who reloads, or sends themselves the address, means to
   // land on the thread they were reading rather than at the top of the list —
   // and the browser's own Back then steps from a thread to the list it was
   // opened from, which no amount of local state can offer.
   //
   // Absent means nothing was picked, and then nothing is open: the pane waits to
-  // be given a chain rather than filling itself in with the top of the list. What
+  // be given a thread rather than filling itself in with the top of the list. What
   // the address says still matters most on a narrow screen, where being picked is
   // what switches panels.
   const opened = useSearch({ from: "/" }).open;
@@ -227,8 +233,8 @@ export function Inbox() {
         if (chains.length < PAGE) return undefined;
         const oldest = chains[chains.length - 1];
         if (!oldest) return undefined;
-        // A chain whose entries straddle the cursor comes back on the next page:
-        // its `last` is the whole chain's newest message, not the newest inside
+        // A thread whose entries straddle the cursor comes back on the next page:
+        // its `last` is the whole thread's newest message, not the newest inside
         // the window, so a long thread can sit above a cursor its own older
         // entries fall below. The cursor must therefore be seen to move — a page
         // ending no earlier than the one it was asked for, or one adding no
@@ -261,20 +267,52 @@ export function Inbox() {
 
   // Who the reader is, for the pane's own marks, is not this page's business:
   // the addresses are a setting (see the services page) and the pane is drawn
-  // from the thread the chain read returns.
+  // from the thread the thread read returns.
 
-  // The address may name a chain this page of the list does not hold — an old
+  // The address may name a thread this page of the list does not hold — an old
   // thread opened, then reloaded, comes back before the list has been paged that
-  // far. The pane reads it from the id either way (it fetches the chain by id),
+  // far. The pane reads it from the id either way (it fetches the thread by id),
   // so the head says what is known rather than inventing a subject or a count.
   //
   // With the address naming nothing, **nothing is open**: the pane starts empty
   // and stays empty until a row is clicked. The top of the list is not a choice
   // anyone made, and a pane that filled itself in would be a thread the reader
   // has to dismiss — the same reason nothing is marked read by being looked at.
-  const onlyID: PreviewableChain = { rootExtId: opened ?? "" };
-  const selected: PreviewableChain | null =
-    rows.find((c) => c.rootExtId === opened) ?? (opened ? onlyID : null);
+  const onlyID: PreviewableThread = { rootExtId: opened ?? "" };
+  // Described by the list when the list has it, and by the last list that did when
+  // a write has just taken it out of this view (see useLastDescription) — moving a
+  // thread out of the inbox must not take its subject off the pane's head.
+  const described = useLastDescription(opened ?? null, rows.find((c) => c.rootExtId === opened) ?? null);
+  const selected: PreviewableThread | null = opened ? described ?? onlyID : null;
+
+  // A deep link is answered twice: the pane reads the thread, and the list scrolls
+  // to the row it is reading. The address is what one reader hands another —
+  // "look at this thread" — and the row is the half of that the pane cannot say.
+  //
+  // Once per thread, not once per render: pages arrive under this effect, and a
+  // reader who has scrolled away from the row is not asking to be pulled back to
+  // it. Reopening the same thread later is a new deep link, which is why the note
+  // of what was scrolled to is cleared when nothing is open.
+  const scrolledTo = useRef<string | null>(null);
+  const hasOpenRow = rows.some((c) => c.rootExtId === opened);
+  useEffect(() => {
+    if (!opened) {
+      scrolledTo.current = null;
+      return;
+    }
+    // The row is not on this page of the list, which an old thread opened and
+    // reloaded often is not: nothing to scroll to, and the pane reads the thread
+    // from the address regardless (see above).
+    if (scrolledTo.current === opened || !hasOpenRow) return;
+    const row = [...document.querySelectorAll<HTMLElement>(".iblist .ibrow")].find(
+      (r) => r.dataset.root === opened,
+    );
+    if (!row) return;
+    scrolledTo.current = opened;
+    // Nearest rather than centred: the list is scrolled to a row, not rebuilt
+    // around one, and a row already on screen is left exactly where it is.
+    row.scrollIntoView?.({ block: "nearest" });
+  }, [opened, hasOpenRow]);
 
   // Reading to the end of the list is the request for more of it: a reader who
   // keeps scrolling keeps getting rows, where a button made them say so after
@@ -332,13 +370,13 @@ export function Inbox() {
               {rows.length > 0 ? (
                 <ul className="iblist">
                   {rows.map((c) => (
-                    <ChainRow
+                    <ThreadRow
                       key={c.rootExtId}
-                      chain={c}
+                      thread={c}
                       checked={chosen.includes(c.rootExtId)}
                       current={selected?.rootExtId === c.rootExtId}
                       onToggle={() => toggle(c.rootExtId)}
-                      onOpen={() => (opened === c.rootExtId ? closeChain() : openChain(c.rootExtId))}
+                      onOpen={() => openChain(c.rootExtId)}
                     />
                   ))}
                 </ul>
@@ -365,11 +403,11 @@ export function Inbox() {
           </>
         }
         pane={
-          <ChainPane
-            chain={selected}
-            label="The selected chain"
+          <ThreadPane
+            thread={selected}
+            label="The selected thread"
             backLabel="← List"
-            empty="Nothing open — pick a chain from the list."
+            empty="Nothing open — pick a thread from the list."
             onClose={closeChain}
           />
         }
@@ -381,7 +419,7 @@ export function Inbox() {
           object. The same bar the search page shows, because what it acts on is
           the chains that were ticked rather than anything about the list they
           were ticked in. */}
-      <ActionBar chosen={chosen} onDone={() => setChosen([])} />
+      <ActionBar chosen={chosen} onDone={clearChosen} />
     </div>
   );
 }

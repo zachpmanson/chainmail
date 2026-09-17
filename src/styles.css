@@ -8,6 +8,15 @@
     --accent:#8a5a2b; --mine:#ece1d2; --quote:#faf8f5; --dash:#eae5dc;
     --o1:#2f6f5f; --o2:#4a5b9c; --o3:#8a5a2b; --o4:#8c4a6b; --o5:#77716a;
     --strong:#2e7d4f;
+    /* The serif a subject is set in, where a subject is drawn: the select panel's
+       rows and a rendered page's proposals. A subject is a title rather than a
+       field of one, and there the page's sans makes it read as another label in a
+       table.
+
+       Nowhere in the mail itself: the list rows, the pane's head and the receipt
+       inside a bubble are all deliberately left in the page's own sans. It sits
+       outside the theme blocks below because the same faces are wanted in both. */
+    --serif:Charter,"Bitstream Charter","Sitka Text",Cambria,serif;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
@@ -43,30 +52,177 @@
   /* The shell fills the window. A cap here put the nav in the middle of a wide
      screen with a third of it empty to either side, on every page. */
   /* A row, so the corpus search can sit at its end: `margin-left:auto` is what
-     puts it on the right, and it drops to its own line on a screen too narrow to
-     hold the links and the box together. */
-  header.sitehead { max-width:none; margin:0; padding:1rem 1.25rem .85rem;
+     puts it on the right.
+
+     The row has one height, `--navh`, whatever is in it — the links with the
+     search box shut, the panel wide open with its four controls out, or the
+     selection bar in the nav's place. It is a constant rather than three heights
+     that happen to agree, because the difference between them is a layout jump: a
+     header that grows by four pixels when the panel opens makes the whole page
+     below it move mid-animation, and one that shrinks when the bar arrives moves
+     it again a moment later.
+
+     So the two things that used to decide the height are both sized to fit it
+     instead: the search panel and the selection bar take `height:var(--navh)`,
+     and the rows of controls inside them — the four pickers, the bar's verbs —
+     scroll sideways rather than wrapping, because a second line is exactly the
+     height change this is here to prevent. The nav's own items do the same, so
+     that a narrow screen scrolls the strip rather than wrapping it into two
+     rows: that wrap was the other half of the jump, since opening the search
+     hides the links and the wrapper went with them. */
+  header.sitehead { --navh:2.15rem; max-width:none; margin:0;
+    padding:1rem 1.25rem .85rem;
     border-bottom:1px solid var(--line); color:var(--muted); font-size:.86rem;
     display:flex; align-items:center; flex-wrap:wrap; }
-  /* The app's one way into the search, and the same button on every page: it
-     opens the page that owns the query. A single control rather than an input and
-     a button beside it, because a nav box and the search page's own box are two
-     places to type one query — and the nav's copy was never the one the results
-     answered. */
-  /* The nav's right end: the deploy stamp, then the search button, held together by
+  /* The nav's items, as one element, because one element is what the selection
+     bar replaces: the reader ticked some chains, so the row the links were on is
+     the bar's until the selection clears. One line, scrolled when the links and
+     the box together do not fit (see --navh above), and exactly `--navh` tall
+     however long the line is — this is the row the bar is measured against, and
+     both are the same number rather than two numbers that happen to agree. */
+  .sitenav { display:flex; align-items:center; flex-wrap:nowrap; flex:1 1 auto;
+    min-width:0; overflow-x:auto; overflow-y:hidden; height:var(--navh); }
+  /* The bar's place in the header, and the sentence an action leaves behind. It
+     is empty while nothing is ticked, and a line of its own when it is not: the
+     bar takes the whole row because the nav it replaces has gone, and the report
+     of a finished action stands under the nav, which is back by then. */
+  .buildslot:not(:empty) { flex:1 1 100%; }
+  /* The bar replaces the nav rather than sitting above it. `:has` rather than a
+     class on the header because the bar arrives through a portal and the header
+     is not the component that decides whether it is there — which is exactly
+     the fact `:has` can test for, and the reason the bar cannot test it itself. */
+  header.sitehead:has(.ibbuild) .sitenav { display:none; }
+  /* The app's one way into the search, and the same box on every page. It used
+     to be a button onto a page that owned the query — and the page's own box was
+     the one the results answered, so the nav's copy could only ever disagree with
+     it. The four controls that ask the question live in here now, and the page
+     below is the answer. */
+  /* The nav's right end: the deploy stamp, then the search box, held together by
      one `margin-left:auto` so the stamp stays immediately left of it rather
-     than drifting into the middle of a wide screen. */
+     than drifting into the middle of a wide screen. `flex-end` is what keeps the
+     box against the right edge while it grows: for the length of the transition
+     the row is wider than the box is, and the box has to grow leftward from
+     where it was rather than jump to the row's left end and grow right.
+
+     Nothing here is nudged vertically: the group is centred in a row that is
+     already `--navh`, so the stamp sits on the same line as the links and the
+     box, and the row is the bar's height exactly. A `padding-top` of a couple of
+     pixels used to live here, which is what made the nav's row a hair taller
+     than the bar that replaces it. */
   .navright { margin-left:auto; display:flex; align-items:center; gap:.85rem;
-    flex-wrap:wrap; padding-top:.15rem; }
-  .navsearch { display:inline-flex; align-items:center; gap:.35rem; font:inherit;
-    font-size:.82rem; font-weight:600; padding:.34rem .65rem; cursor:pointer;
-    border:1px solid var(--line); border-radius:6px; background:var(--card);
-    color:var(--fg); }
-  .navsearch:hover { border-color:var(--accent); color:var(--accent); }
-  /* On the search page the button is the current item, so it is marked the way a
-     current nav item is: filled, and not offering to take you where you are. */
-  .navsearch[aria-current="page"] { background:var(--mine); border-color:var(--accent);
-    color:var(--accent); }
+    flex-wrap:nowrap; justify-content:flex-end; }
+  /* Shut: a field showing what the address asks, and the whole of the search. The
+     height is the row's, so the box is the same size open as shut and the page
+     below never moves for it. */
+  .navsearch { display:flex; align-items:center; gap:.4rem; flex:0 0 auto;
+    width:12rem; height:var(--navh); padding:.26rem .5rem;
+    border:1px solid var(--line);
+    border-radius:6px; background:var(--card); overflow:hidden; }
+  /* The width is grown rather than switched: the box becoming the row is one
+     thing turning into the other, and the movement is what says so. The house
+     rule for a reader who has asked for less motion: no animation, same layout. */
+  @media (prefers-reduced-motion: no-preference) { .navsearch { transition:width .18s ease; } }
+  .navsearch:hover, .navsearch:focus-within { border-color:var(--accent); }
+  .navsearch .navq { flex:1 1 auto; min-width:6rem; font:inherit; font-size:.84rem;
+    padding:.12rem 0; border:0; background:none; color:var(--fg); }
+  /* The box's own border is the focus indicator (`:focus-within` above), so the
+     field inside it does not draw a second one around itself: two rings for one
+     focus says the field and the box are two things to the reader, and they are
+     one control. */
+  .navsearch .navq:focus { outline:none; }
+  .navsearch .navq::placeholder { color:var(--muted); }
+  /* No mark for the question on screen: `aria-current` is set on the field (see
+     NavSearch.tsx), and nothing draws it. A live query was coloured the accent,
+     and then given `--mine` behind it — the colour this app uses for the reader's
+     own mail, which turned the box brown when a search was run and said "you are
+     here" in a colour that already means something else. The box's background is
+     the box's. */
+  /* Open: the box is the row. The links beside it are taken out of the row
+     rather than covered by it, so the box can be exactly as wide as the row is
+     (`width:100%` of a line holding nothing else) and the row keeps the nav's
+     own height. `.sitenav` is the ancestor that can see the state: the panel
+     sits in `.navright`, whose siblings the links are, and no selector reaches
+     them from the panel itself. */
+  header.sitehead:has(.navsearch.open) .sitenav > :not(.navright),
+  header.sitehead:has(.navsearch.open) .navright > :not(.navsearch) { display:none; }
+  /* Open, the panel is the row, and it gets there by growing — three of them, in
+     a chain: the nav takes the row, the group takes the nav, the box takes the
+     group.
+
+     The nav's `flex-basis:100%` is the load-bearing one, because it is the only
+     one of the three that resolves against something definite — the header's own
+     width. Everything inside the row was sizing itself to its own contents (a
+     percentage against a width that is itself being decided by its contents is
+     no width at all), which is why the panel opened a third of the way across
+     the row and stopped: a third of a wide screen is what its four controls and
+     its field come to when nothing tells them otherwise. */
+  header.sitehead:has(.navsearch.open) .sitenav { flex:1 1 100%; }
+  header.sitehead:has(.navsearch.open) .navright { flex:1 1 auto; }
+  header.sitehead:has(.navsearch.open) .navsearch { flex:1 1 auto; width:100%; }
+  /* The options, which exist only while the panel is open: shut, the box is the
+     whole interface, and a row of pickers beside a field being read is in the way
+     of it. `overflow:hidden` on the panel above is the reveal — they arrive
+     clipped by the box's growing edge rather than in front of it.
+
+     One line, and it does not wrap: the panel's height is the row's height, so a
+     second line here would be a taller panel and a header that moves. When the
+     four controls and the field cannot share the row, the pickers scroll
+     sideways — `min-width:0` is what lets the row be narrower than they are,
+     which is the whole reason a flex row needs a scroller rather than a wrap.
+
+     Only the *field* grows, and the four controls keep the width they need
+     (`flex:0 1 auto`: free to shrink, never to swell). Both were growing before,
+     so the field and the controls each took half of the row's slack — the field
+     stopped half way across and the cluster of controls floated in the middle of
+     a panel with its own width of empty space at the end of it. What the row is
+     for reads left to right: the field takes the room, and the controls that ask
+     the question with it wait at the end, where the box itself used to be. */
+  .navopts { display:flex; align-items:center; gap:.55rem; flex:0 1 auto;
+    flex-wrap:nowrap; min-width:0; overflow-x:auto; overflow-y:hidden; }
+  .navopt { display:flex; align-items:center; gap:.3rem; flex:none; }
+  .navopt > span { font-size:.6rem; text-transform:uppercase; letter-spacing:.08em;
+    color:var(--muted); font-weight:700; }
+  .navopt select, .navopt input { font:inherit; font-size:.78rem; padding:.16rem .35rem;
+    border:1px solid var(--line); border-radius:5px; background:var(--bg); color:var(--fg); }
+  .navopt input { width:7.5rem; }
+  /* The date field is drawn by the browser, which also draws a picker button
+     inside it, so it needs a little more room than a field of the same ten
+     characters: 7.5rem clipped the last digit wherever the button is shown. */
+  .navopt .navsince { width:8.6rem; }
+  /* The Person control shows an address, which is longer than a word, and it sits
+     on the same line as the mode and the date: capped, so one long value cannot
+     decide how much of that line the other two get. 20ch is a full address and no
+     more — the list under it is where the whole of it is read (see .navpeople). */
+  .navopt .navperson { max-width:20ch; }
+  /* The Person field's suggestions, drawn under it.
+
+     Outside the nav's own tree: the row clips (`overflow-x:auto` on `.sitenav`
+     and `.navopts`, `overflow:hidden` on `.navsearch`), which is what the panel's
+     reveal is made of, and a list inside one of those is a list with its bottom
+     cut off. So it is a fixed box, placed from the field's own rectangle and
+     re-placed as the page scrolls under it (see NavPerson) — `position:fixed`
+     cannot be absolutely positioned by an ancestor, because there is no ancestor
+     left by the time it is drawn.
+
+     Above the header's own stacking (`z-index:60`, the same layer the spec view
+     opens on): the list belongs to a control being used, and nothing in the row
+     it hangs from should be over it. */
+  .navpeople { position:fixed; z-index:60; margin:0; padding:.2rem; list-style:none;
+    max-height:15rem; overflow-y:auto; overflow-x:hidden; background:var(--card);
+    border:1px solid var(--line); border-radius:7px;
+    box-shadow:0 8px 24px rgba(0,0,0,.22); }
+  .navpeople li { display:flex; flex-direction:column; gap:.05rem;
+    padding:.28rem .45rem; border-radius:5px; cursor:pointer; }
+  /* The row under the pointer and the row under the keyboard are one row with
+     one look: the pointer and the arrow keys are two ways to say the same thing,
+     and two marks for it read as two selections. */
+  .navpeople li.on { background:var(--mine); }
+  .navpeople .who { font-size:.78rem; overflow-wrap:anywhere; }
+  .navpeople .adr { font-size:.66rem; color:var(--muted); overflow-wrap:anywhere; }
+  .navsearch button { font:inherit; font-size:.76rem; font-weight:650;
+    padding:.22rem .6rem; border:1px solid var(--line); border-radius:6px;
+    background:var(--mine); color:var(--fg); cursor:pointer; }
+  .navsearch button:disabled { opacity:.45; cursor:default; }
   /* The corpus being read. A status rather than a destination, so it is quieter
      than the links beside it and carries no separator: the space is what says it
      is not a link. Reads at the size of the deploy stamp, which is the nav's
@@ -85,6 +241,25 @@
   .deploy code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
     font-size:.72rem; }
   .deploy:hover { color:var(--accent); }
+  /* The refresh button: the stamp's neighbour, and the one control in the nav
+     that asks the corpus again for what is on screen. Quiet like the stamp it
+     sits beside — it is small print on every page, read when something is being
+     checked — and it lifts to the accent on hover, which is the nav's way of
+     saying a thing is pressable. */
+  .navrefresh { display:inline-flex; align-items:center; justify-content:center;
+    padding:.16rem .24rem; border:1px solid transparent; border-radius:6px;
+    background:none; color:var(--muted); font:inherit; cursor:pointer; }
+  .navrefresh:hover { color:var(--accent); border-color:var(--line); }
+  .navrefresh:disabled { cursor:default; }
+  /* dripfeed-web's spinner, glyph and all (src/index.css there): the same ↻, the
+     same 0.8s linear turn, so the act reads the same in both apps. It spins only
+     while the button is working — as a button's own icon, a still ↻ is what the
+     control *is*, and a turning one is what it is doing. */
+  .navrefresh .spinner { display:inline-block; font-size:.95rem; line-height:1;
+    vertical-align:middle; }
+  .navrefresh .spinner::before { content:"\21BB"; }
+  .navrefresh.busy .spinner { animation:spin .8s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
   .navsearch svg { flex:none; opacity:.8; }
   /* The app's own pages are workspaces, not documents: an inbox is a list and a
      reading pane, and both want the width the window has. Anything not named
@@ -212,7 +387,7 @@
     min-width:0; cursor:pointer; }
   .proptoggle input { accent-color:var(--o1); margin-top:.18rem; }
   .propsubj { font-weight:600; max-width:100%; overflow-wrap:break-word;
-    white-space:normal; }
+    white-space:normal; font-family:var(--serif); }
   .propsubj em { font-style:normal; color:var(--muted); }
   .propmeta { font-size:.7rem; color:var(--muted); margin-top:.15rem; }
   .proprowid { font-size:.66rem; color:var(--accent); max-width:100%;
@@ -264,16 +439,22 @@
      the caret closes the line whether or not there is a reply beside it — two
      items each claiming the free space would leave the reply stranded
      mid-line. The caret takes the accent on hover and when open, so the line
-     reads as a control without recolouring the name sitting beside it. */
+     reads as a control without recolouring the name sitting beside it.
+     The caret is drawn as a LEFT triangle, because that is where it stands: at the
+     end of the line, shut, it should point back along the line at the message it
+     belongs to rather than away from it — a caret at the far right pointing right
+     points at the edge of the box. Open, it turns a quarter clockwise to point down
+     at the receipt that has just appeared under it, which is the rotation the shape
+     itself asks for (a left triangle turned left by 90° is a down one). */
   details.hdr > summary > .htail { display:inline-flex; align-items:baseline;
     gap:.5rem; margin-left:auto; }
   details.hdr > summary > .htail::after { content:""; display:inline-block;
     width:0; height:0;
-    border:.25em solid transparent; border-left-color:var(--muted);
-    transition:transform .12s, border-left-color .12s; }
-  details.hdr > summary:hover > .htail::after { border-left-color:var(--accent); }
-  details.hdr[open] > summary > .htail::after { transform:rotate(90deg);
-    border-left-color:var(--accent); }
+    border:.25em solid transparent; border-right-color:var(--muted);
+    transition:transform .12s, border-right-color .12s; }
+  details.hdr > summary:hover > .htail::after { border-right-color:var(--accent); }
+  details.hdr[open] > summary > .htail::after { transform:rotate(-90deg);
+    border-right-color:var(--accent); }
   details.hdr > summary:focus-visible { outline:1px solid var(--accent); outline-offset:2px; }
   .nm { font-size:.83rem; font-weight:650; }
   /* Tinted to match the bubble strip, so the colour is self-describing and the
@@ -487,10 +668,34 @@
   /* The header's expanded section: the message's receipt, in the same quiet hand
      as the bubble's other asides, closed by the copy control at the right edge —
      where it sat when it was the header's own, so it is still found without
-     being looked for. */
-  .hdet { display:flex; flex-wrap:wrap; align-items:baseline; gap:.2rem .7rem;
-    margin:0 0 .3rem; padding:.22rem .1rem 0; border-top:1px solid var(--line); }
+     being looked for.
+
+     No rule across the top of it. The line it opened under is the header it belongs
+     to — the sender, the clock, the reply — so a border here divided the disclosure
+     from the very line the reader had just pressed, and made the receipt look like
+     the start of a new block rather than the rest of that one. The indent and the
+     quiet hand already say it is a detail; the caret and the darker text say which
+     line it came from.
+
+     Centre, not baseline. The receipt's own line holds the copy control, whose
+     box is taller than the text beside it; under baseline alignment that control
+     pushed the whole receipt down to meet its baseline, which opened up most of
+     the air between it and the subject above. Centring the items keeps the text
+     beside the control rather than hung beneath it, and stops one control from
+     setting the space above an entire row. */
+  .hdet { display:flex; flex-wrap:wrap; align-items:center; gap:.2rem .7rem;
+    margin:0 0 .3rem; padding:.22rem .1rem 0; }
   .to { font-size:.66rem; color:var(--muted); }
+  /* The message's own subject, on a line of its own above the receipt's fields.
+     A subject is a sentence rather than a field of one, so it takes the whole
+     row instead of running into the recipient list; and it is read as a title —
+     quieter than the header line, louder than the receipt — which is what
+     `--fg` at this size against the asides' `--muted` looks like.
+
+     Its leading is tighter than the page's: a title is one line read against the
+     receipt under it, and the body's leading put as much air around the subject
+     as there was between it and the line it belongs to. */
+  .hdet .subj { flex:1 1 100%; font-size:.72rem; color:var(--fg); line-height:1.25; }
   .src { font-size:.64rem; color:var(--muted);
     font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
   .src a { color:inherit; text-decoration:none; border-bottom:1px dotted currentColor; }
@@ -553,7 +758,7 @@
   /* The message the pane opened on: the chain's newest, which is what the row
      that was opened was a summary of. It flashes and then settles — the mark is
      about the arrival, not a state the message is in — so the class is taken off
-     when the animation ends (see ChainMessages). It repeats the :target pair
+     when the animation ends (see ThreadMessages). It repeats the :target pair
      above rather than reusing them, because landing is not following a permalink:
      nothing is navigated to, and no anchor in the address names this message. */
   .msg.landed .bub { animation:flash 1.6s ease-out 1; border-color:var(--accent); }
@@ -803,3 +1008,35 @@
   .pullnote { margin:0 0 .8rem; padding:.55rem .85rem; font-size:.85rem;
     color:var(--fg); background:var(--card); border:1px solid var(--accent);
     border-left-width:3px; border-radius:6px; }
+
+/* --- what a write leaves to say --- */
+/* The bottom-right corner, over every page. These are accounts of work that is
+   over and reasons a write was refused, and neither is a fact about the page the
+   reader is looking at: in the flow of the header they covered the top of the
+   page, and in the flow of the panel they took a line from the thread being read
+   and had to be dropped by hand when the reader moved on. Out of the flow they
+   cover nothing that is being read — the same reason a mail client puts them
+   where the eye is not working. */
+.toasts { position:fixed; z-index:80; right:.9rem; bottom:.9rem;
+  display:flex; flex-direction:column; align-items:flex-end; gap:.4rem;
+  max-width:min(26rem, calc(100vw - 1.8rem)); pointer-events:none; }
+.toast { display:flex; align-items:flex-start; gap:.5rem; pointer-events:auto;
+  padding:.5rem .55rem .5rem .7rem; font-size:.78rem; line-height:1.35;
+  color:var(--fg); background:var(--card); border:1px solid var(--line);
+  border-left-width:3px; border-radius:7px;
+  box-shadow:0 6px 20px rgba(0,0,0,.22); }
+/* A refusal is the one thing here that is not a moment passing: it is something
+   to act on, so it is marked, and it keeps its own way out (the ×) rather than
+   relying on a clock. */
+.toast.bad { border-color:crimson; }
+.toast .toasttext { flex:1 1 auto; }
+.toast .toastx { flex:none; font:inherit; line-height:1; padding:0 .1rem;
+  color:var(--muted); background:none; border:none; cursor:pointer; }
+.toast .toastx:hover { color:var(--accent); }
+@media (min-width:60rem) {
+  /* A wide window has room for the thing arriving to be seen arriving. */
+  @media (prefers-reduced-motion: no-preference) {
+    @keyframes toastin { from { opacity:0; transform:translateY(.4rem); } }
+    .toast { animation:toastin .16s ease-out; }
+  }
+}

@@ -106,11 +106,18 @@ func TestAnEmptyEntryInTheListMarksNothing(t *testing.T) {
 // depending on which surface the reader was looking at.
 func TestThePaneMarksTheReadersMailFromTheStoredSetting(t *testing.T) {
 	s := trail(t)
-	if err := s.PutSetting(corpus.SettingMe, "ada@loomworks.example"); err != nil {
-		t.Fatalf("PutSetting: %v", err)
+	// The setting names the person, and the pane reads the addresses out of the
+	// identity graph: what is stored is who the reader is, not the aliases they
+	// had at the time they said so.
+	reader, err := corpus.PersonByIdentity(s, corpus.KindEmail, "ada@loomworks.example")
+	if err != nil {
+		t.Fatalf("PersonByIdentity: %v", err)
 	}
-	const reader = "ada@loomworks.example"
-	sp := generate(t, s, Options{Containers: []string{"T1"}, Me: []string{reader}})
+	if err := s.SetMePerson(reader); err != nil {
+		t.Fatalf("SetMePerson: %v", err)
+	}
+	const readerAddress = "ada@loomworks.example"
+	sp := generate(t, s, Options{Containers: []string{"T1"}, Me: []string{readerAddress}})
 
 	ids := make([]string, 0, len(sp.Messages))
 	for _, m := range sp.Messages {

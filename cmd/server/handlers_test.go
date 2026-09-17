@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zachpmanson/chainmail/internal/corpus"
 	"github.com/zachpmanson/chainmail/internal/spec"
 	"github.com/zachpmanson/chainmail/internal/status"
 )
@@ -1227,53 +1228,150 @@ func TestSettingsRefusesAVerbItDoesNotTake(t *testing.T) {
 	}
 }
 
-// The addresses that are the reader's round-trip the way the folder does: served
-// as the list they were stored as, and omitted entirely when nobody has named
-// one, because "they have never said" is not the same answer as "they said
-// nothing".
-func TestTheReadersAddressesRoundTripThroughTheSettings(t *testing.T) {
+// The reader round-trips through the settings as a person, and the addresses
+// that person is are served beside the id: the control shows the person, and the
+// sentence under it names the aliases being marked, so what the reader reads back
+// is what the corpus resolved rather than what they typed.
+func TestTheReadersPersonRoundTripsThroughTheSettings(t *testing.T) {
 	srv, api := testServer(t), loadAPI(t)
+	ada := personOf(t, srv, "ada@loomworks.example")
 
 	res := srv.do(t, "GET", "/v1/settings", nil)
 	if res.status != 200 {
 		t.Fatalf("status = %d: %s", res.status, res.body)
 	}
 	api.assert(t, "SettingsResponse", res.body)
-	if strings.Contains(string(res.body), `"me"`) {
-		t.Errorf("a reader who has named no address is served one: %s", res.body)
+	if strings.Contains(string(res.body), `"mePersonId"`) {
+		t.Errorf("a corpus nobody has configured names a reader: %s", res.body)
 	}
 
-	// The whole value of the field, with the spacing and the trailing comma a
-	// reader leaves behind: what is stored is the addresses, not the punctuation.
-	res = srv.do(t, "POST", "/v1/settings", []byte(`{"me":[" Ada@loomworks.example , bo@fjordline.example,"]}`))
+	res = srv.do(t, "POST", "/v1/settings", fmt.Appendf(nil, `{"mePersonId":%d}`, ada))
 	if res.status != 200 {
-		t.Fatalf("setting the addresses: status = %d: %s", res.status, res.body)
+		t.Fatalf("setting the reader: status = %d: %s", res.status, res.body)
 	}
 	api.assert(t, "SettingsResponse", res.body)
-	if got := readSettings(t, srv); len(got.Me) != 2 ||
-		got.Me[0] != "Ada@loomworks.example" || got.Me[1] != "bo@fjordline.example" {
-		t.Fatalf("after setting, me = %q; the write answered %s", got.Me, res.body)
+	got := readSettings(t, srv)
+	if got.MePersonID == nil || *got.MePersonID != ada {
+		t.Fatalf("after setting, mePersonId = %v; the write answered %s", got.MePersonID, res.body)
+	}
+	if len(got.Me) != 1 || got.Me[0] != "ada@loomworks.example" {
+		t.Fatalf("after setting, me = %q, want that person's address", got.Me)
 	}
 
-	// Clearing is a state of its own, and both ways a caller asks for it mean the
-	// same thing: a list of blanks (what an emptied field posts) and an empty
-	// list. Neither is the same as not naming me at all, which is what leaves it
-	// alone — that is the pairing the next test pins.
-	for _, body := range []string{`{"me":["  "]}`, `{"me":[]}`} {
-		if res := srv.do(t, "POST", "/v1/settings",
-			[]byte(`{"me":["ada@loomworks.example"]}`)); res.status != 200 {
-			t.Fatalf("setting the addresses: status = %d: %s", res.status, res.body)
-		}
-		if res := srv.do(t, "POST", "/v1/settings", []byte(body)); res.status != 200 {
-			t.Fatalf("clearing with %s: status = %d: %s", body, res.status, res.body)
-		}
-		res = srv.do(t, "GET", "/v1/settings", nil)
-		if got := readSettings(t, srv); len(got.Me) != 0 {
-			t.Errorf("after clearing with %s, me = %q", body, got.Me)
-		}
-		if strings.Contains(string(res.body), `"me"`) {
-			t.Errorf("a cleared setting is served as a key: %s", res.body)
-		}
+	// Clearing is a state of its own, and it is asked for with a zero — which is
+	// not a person id, so nobody has to send a null to say they are nobody.
+	res = srv.do(t, "POST", "/v1/settings", []byte(`{"mePersonId":0}`))
+	if res.status != 200 {
+		t.Fatalf("clearing: status = %d: %s", res.status, res.body)
+	}
+	got = readSettings(t, srv)
+	if got.MePersonID != nil || len(got.Me) != 0 {
+		t.Errorf("after clearing, mePersonId = %v, me = %q", got.MePersonID, got.Me)
+	}
+	if strings.Contains(string(res.body), `"me"`) {
+		t.Errorf("a cleared setting is served as a key: %s", res.body)
+	}
+
+	// The addresses the setting used to be are not another way to say who the
+	// reader is: a caller reading the old contract hears about it rather than
+	// having a list stored that nothing else in the corpus knows how to read.
+	res = srv.do(t, "POST", "/v1/settings", []byte(`{"me":["ada@loomworks.example"]}`))
+	if res.status != 400 || !strings.Contains(res.errText(t), "me") {
+		t.Errorf("posting an address list: status = %d, error = %q; want 400 naming the field",
+			res.status, res.errText(t))
+	}
+}
+
+// The addresses are read out of the identity graph at each read rather than
+// stored with the setting, which is the whole reason the setting names a person:
+// an alias the corpus learns after the reader said who they were is marked, and
+// is visible to the page, without the reader going back and saying it again.
+func TestTheSettingsServeTheAliasesTheCorpusLearnsLater(t *testing.T) {
+	srv := testServer(t)
+	ada := personOf(t, srv, "ada@loomworks.example")
+	if res := srv.do(t, "POST", "/v1/settings",
+		fmt.Appendf(nil, `{"mePersonId":%d}`, ada)); res.status != 200 {
+		t.Fatalf("setting the reader: status = %d: %s", res.status, res.body)
+	}
+
+	// An address the reader never listed, because it did not exist when they told
+	// the corpus who they are.
+	if err := corpus.AddAlias(srv.store, ada, corpus.KindEmail, "ada+salsa@loomworks.example", "test"); err != nil {
+		t.Fatalf("AddAlias: %v", err)
+	}
+	got := readSettings(t, srv)
+	if len(got.Me) != 2 || got.Me[0] != "ada+salsa@loomworks.example" ||
+		got.Me[1] != "ada@loomworks.example" {
+		t.Errorf("me = %q, want both of the person's addresses", got.Me)
+	}
+}
+
+// A person the corpus does not hold, and one no address can have sent from, are
+// refused rather than stored: the setting marks the reader's own mail, and either
+// would mark nothing while reading back as a choice that had been made.
+func TestASettingThatNamesNoPersonIsRefused(t *testing.T) {
+	srv := testServer(t)
+	res := srv.do(t, "POST", "/v1/settings", []byte(`{"mePersonId":404}`))
+	if res.status != 400 {
+		t.Fatalf("status = %d, want 400: %s", res.status, res.body)
+	}
+	if !strings.Contains(res.errText(t), "404") {
+		t.Errorf("the refusal does not name the id: %s", res.body)
+	}
+
+	// A person the corpus knows only by a name recovered from somebody else's
+	// quote has no mailbox, so no message could ever have come from them.
+	ben, err := corpus.Resolve(srv.store, corpus.KindDisplayName, "Ben", "Ben")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	res = srv.do(t, "POST", "/v1/settings", fmt.Appendf(nil, `{"mePersonId":%d}`, ben))
+	if res.status != 400 || !strings.Contains(res.errText(t), "Ben") {
+		t.Errorf("a person with no address: status = %d, error = %q; want 400 naming them",
+			res.status, res.errText(t))
+	}
+	if got := readSettings(t, srv); got.MePersonID != nil {
+		t.Errorf("a refused write named reader %d anyway", *got.MePersonID)
+	}
+}
+
+// A corpus configured before the setting named a person keeps saying who its
+// reader is, and keeps marking their mail: the address list is read, and there is
+// no person id to serve with it because a list of addresses is not a person.
+func TestAnAddressListStoredBeforeTheSettingNamedAPersonIsStillRead(t *testing.T) {
+	srv, api := testServer(t), loadAPI(t)
+	if err := srv.store.PutSetting(corpus.SettingMe, "ada@loomworks.example"); err != nil {
+		t.Fatalf("PutSetting: %v", err)
+	}
+	res := srv.do(t, "GET", "/v1/settings", nil)
+	if res.status != 200 {
+		t.Fatalf("status = %d: %s", res.status, res.body)
+	}
+	api.assert(t, "SettingsResponse", res.body)
+	got := readSettings(t, srv)
+	if got.MePersonID != nil {
+		t.Errorf("an address list was served as person %d", *got.MePersonID)
+	}
+	if len(got.Me) != 1 || got.Me[0] != "ada@loomworks.example" {
+		t.Errorf("me = %q, want the list that was stored", got.Me)
+	}
+
+	// Picking a person replaces the list rather than sitting beside it, so the two
+	// cannot disagree about whose mail is the reader's, and clearing the person
+	// does not resurrect the list it replaced.
+	ada := personOf(t, srv, "ada@loomworks.example")
+	if res := srv.do(t, "POST", "/v1/settings",
+		fmt.Appendf(nil, `{"mePersonId":%d}`, ada)); res.status != 200 {
+		t.Fatalf("setting the reader: status = %d: %s", res.status, res.body)
+	}
+	if v, ok, _ := srv.store.Setting(corpus.SettingMe); ok {
+		t.Errorf("the address list survived being replaced: %q", v)
+	}
+	if res := srv.do(t, "POST", "/v1/settings", []byte(`{"mePersonId":0}`)); res.status != 200 {
+		t.Fatalf("clearing: status = %d: %s", res.status, res.body)
+	}
+	if got := readSettings(t, srv); got.MePersonID != nil || len(got.Me) != 0 {
+		t.Errorf("after clearing, mePersonId = %v, me = %q", got.MePersonID, got.Me)
 	}
 }
 
@@ -1286,8 +1384,10 @@ func TestTheReadersAddressesRoundTripThroughTheSettings(t *testing.T) {
 // in destroyed the addresses that say which mail is theirs.
 func TestAPostThatNamesOneSettingLeavesTheOtherAlone(t *testing.T) {
 	srv := testServer(t)
+	ada := personOf(t, srv, "ada@loomworks.example")
+	bo := personOf(t, srv, "bo@fjordline.example")
 	if res := srv.do(t, "POST", "/v1/settings",
-		[]byte(`{"defaultFolder":"INBOX","me":["ada@loomworks.example"]}`)); res.status != 200 {
+		fmt.Appendf(nil, `{"defaultFolder":"INBOX","mePersonId":%d}`, ada)); res.status != 200 {
 		t.Fatalf("setting both: status = %d: %s", res.status, res.body)
 	}
 
@@ -1298,19 +1398,20 @@ func TestAPostThatNamesOneSettingLeavesTheOtherAlone(t *testing.T) {
 	if got.DefaultFolder == nil || *got.DefaultFolder != "SENT" {
 		t.Errorf("defaultFolder = %v, want the folder that was named", got.DefaultFolder)
 	}
-	if len(got.Me) != 1 || got.Me[0] != "ada@loomworks.example" {
-		t.Errorf("me = %q — saving a folder cleared the reader's addresses", got.Me)
+	if got.MePersonID == nil || *got.MePersonID != ada {
+		t.Errorf("mePersonId = %v — saving a folder unset the reader", got.MePersonID)
 	}
 
-	if res := srv.do(t, "POST", "/v1/settings", []byte(`{"me":["bo@fjordline.example"]}`)); res.status != 200 {
-		t.Fatalf("setting the addresses alone: status = %d: %s", res.status, res.body)
+	if res := srv.do(t, "POST", "/v1/settings",
+		fmt.Appendf(nil, `{"mePersonId":%d}`, bo)); res.status != 200 {
+		t.Fatalf("setting the reader alone: status = %d: %s", res.status, res.body)
 	}
 	got = readSettings(t, srv)
 	if got.DefaultFolder == nil || *got.DefaultFolder != "SENT" {
-		t.Errorf("defaultFolder = %v — saving addresses cleared the folder", got.DefaultFolder)
+		t.Errorf("defaultFolder = %v — saving the reader cleared the folder", got.DefaultFolder)
 	}
-	if len(got.Me) != 1 || got.Me[0] != "bo@fjordline.example" {
-		t.Errorf("me = %q, want the addresses that were named", got.Me)
+	if got.MePersonID == nil || *got.MePersonID != bo {
+		t.Errorf("mePersonId = %v, want the person that was named", got.MePersonID)
 	}
 
 	// And a field that IS named is still written, including when it is named as
@@ -1322,8 +1423,8 @@ func TestAPostThatNamesOneSettingLeavesTheOtherAlone(t *testing.T) {
 	if got.DefaultFolder != nil {
 		t.Errorf("defaultFolder = %q, want it cleared by the empty value that named it", *got.DefaultFolder)
 	}
-	if len(got.Me) != 1 || got.Me[0] != "bo@fjordline.example" {
-		t.Errorf("me = %q after the folder was cleared", got.Me)
+	if got.MePersonID == nil || *got.MePersonID != bo {
+		t.Errorf("mePersonId = %v after the folder was cleared", got.MePersonID)
 	}
 }
 
@@ -1341,10 +1442,12 @@ func TestTheChainMarksTheReadersOwnEntries(t *testing.T) {
 		t.Errorf("a reader who has named no address has a marked message: %s", before.body)
 	}
 
-	// Ada's two messages came from the address named below; Bo's did not.
+	// Ada's two messages came from the address that person is known by; Bo's did
+	// not, and he is a person of his own.
+	ada := personOf(t, srv, "ada@loomworks.example")
 	if res := srv.do(t, "POST", "/v1/settings",
-		[]byte(`{"me":["ada@loomworks.example"]}`)); res.status != 200 {
-		t.Fatalf("setting the addresses: status = %d: %s", res.status, res.body)
+		fmt.Appendf(nil, `{"mePersonId":%d}`, ada)); res.status != 200 {
+		t.Fatalf("setting the reader: status = %d: %s", res.status, res.body)
 	}
 
 	res := srv.do(t, "GET", entryPath("/v1/chains/", extAda1), nil)
@@ -1366,5 +1469,82 @@ func TestTheChainMarksTheReadersOwnEntries(t *testing.T) {
 		if e.Mine != want {
 			t.Errorf("%s: mine = %v, want %v", e.ExtID, e.Mine, want)
 		}
+	}
+}
+
+// A message's files travel with the chain read, drawn as a page build draws them:
+// the same name, the same kind and the same size wording, from one function (see
+// spec.AttachmentOf). This is the read that used to answer nothing at all — the
+// rows were in the corpus, and no query on this path asked for them — so an
+// attachment could be visible in a built page and invisible in the reading pane.
+func TestChainCarriesAMessagesAttachments(t *testing.T) {
+	srv, api := testServer(t), loadAPI(t)
+	res := srv.do(t, "GET", entryPath("/v1/chains/", extAda1), nil)
+	if res.status != 200 {
+		t.Fatalf("status = %d: %s", res.status, res.body)
+	}
+	api.assert(t, "ChainResponse", res.body)
+	got := decode[struct {
+		Entries []struct {
+			ExtID       string `json:"extId"`
+			Attachments []struct {
+				Name    string `json:"name"`
+				Kind    string `json:"kind"`
+				Size    string `json:"size"`
+				Link    string `json:"link"`
+				BlobSHA string `json:"blobSha"`
+				Open    string `json:"open"`
+				View    string `json:"view"`
+			} `json:"attachments"`
+		} `json:"entries"`
+	}](t, res)
+	var att *struct {
+		Name    string `json:"name"`
+		Kind    string `json:"kind"`
+		Size    string `json:"size"`
+		Link    string `json:"link"`
+		BlobSHA string `json:"blobSha"`
+		Open    string `json:"open"`
+		View    string `json:"view"`
+	}
+	for i := range got.Entries {
+		if got.Entries[i].ExtID == extAda1 {
+			if len(got.Entries[i].Attachments) != 1 {
+				t.Fatalf("%s: %d attachments, want 1", extAda1, len(got.Entries[i].Attachments))
+			}
+			att = &got.Entries[i].Attachments[0]
+		} else if len(got.Entries[i].Attachments) != 0 {
+			t.Errorf("%s: %d attachments on a message that carries none",
+				got.Entries[i].ExtID, len(got.Entries[i].Attachments))
+		}
+	}
+	if att == nil {
+		t.Fatalf("the message with the file is not in the chain")
+	}
+	if att.Name != "shed.csv" || att.Kind != "CSV" || att.Size != "512 B" {
+		t.Errorf("chip: %+v, want shed.csv / CSV / 512 B", *att)
+	}
+	// The fixture has pulled the bytes, so the chip is one the reader can act on:
+	// the digest is what asks for them, and open/view say what a click and the
+	// window over the transcript do with them. The link is empty here because the
+	// fixture stores no per-file permalink — which is the case this fallback is for.
+	if att.BlobSHA != shedSHA {
+		t.Errorf("digest: %q, want %q", att.BlobSHA, shedSHA)
+	}
+	if att.Open != "popup" || att.View != "text" {
+		t.Errorf("open/view: %q/%q, want popup/text for a stored csv", att.Open, att.View)
+	}
+	if att.Link != "" {
+		t.Errorf("link: %q, want empty when the corpus has no source URL to offer", att.Link)
+	}
+	// And the entry read carries the same thing, because both go through one
+	// mapping — a reader arriving at a message directly sees what the pane shows.
+	one := decode[struct {
+		Attachments []struct {
+			Name string `json:"name"`
+		} `json:"attachments"`
+	}](t, srv.do(t, "GET", entryPath("/v1/entries/", extAda1), nil))
+	if len(one.Attachments) != 1 || one.Attachments[0].Name != "shed.csv" {
+		t.Errorf("entry read: %+v, want the same single file", one.Attachments)
 	}
 }

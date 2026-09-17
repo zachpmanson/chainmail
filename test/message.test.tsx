@@ -40,6 +40,21 @@ describe("a bubble drawn from its props alone", () => {
     expect(msg.querySelector(".to")!.textContent).toBe("to —");
   });
 
+  it("states the message's own subject in the receipt, where it had one", () => {
+    // The header line is who and when; a second title there would compete with the
+    // thread's own, and a reply that renames a thread would be nowhere on the page.
+    // So a message states the subject it carried in the receipt it opens.
+    const { container } = draw({ subject: "Solar install quote: dates" });
+    const subj = container.querySelector(".hdet .subj")!;
+    expect(subj.textContent).toBe("Solar install quote: dates");
+    // The whole subject on hover, since the line can be long and the panel ellipses
+    // nothing: a title is what a reader checks a truncated one against.
+    expect(subj.getAttribute("title")).toBe("Solar install quote: dates");
+    // And a message that stated none says nothing: not an empty line, and not a
+    // word standing in for the absence.
+    expect(draw().container.querySelector(".hdet .subj")).toBeNull();
+  });
+
   it("carries the flags it is given as the classes the stylesheet reads", () => {
     const { container } = draw({ me: true, quoted: true, chainStart: true });
     expect(container.querySelector(".msg")!.className).toBe("msg o2 me q chstart");

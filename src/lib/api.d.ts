@@ -521,6 +521,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/people/{personId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Edit one person: their name, or the identities attached to them.
+         * @description The ops screen's own editor, and the corpus's only hand-made identity write. Fields left out are left alone. An identity another person already holds is refused with 409 naming them: moving an address between people is the same act as merging them, and the merge plan is where that act carries evidence. A rename writes the name and adds it as an identity; the spellings the corpus read from headers are kept, because a name is evidence too. There is deliberately no delete: a person is a thing the mail says, not a row a screen owns.
+         */
+        post: operations["editPerson"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -560,6 +580,8 @@ export interface components {
             matched: number;
             /** @description Distinct people involved in the whole chain, authors and recipients — the same "who was involved" answer the spec's participant list gives. 0 only when no entry carries a person row. */
             people: number;
+            /** @description Files the whole chain carries, counted over every entry in it. 0 for a chain whose mail arrived with none recorded — what a corpus looks like when its ingest never saw a part id — and 0 for one whose entries have no mailbox copy at all. */
+            attachments: number;
             /** @description How many of the chain's messages the mailbox still calls unread. 0 for a chain that has been read, one that never was unread, and one with no mailbox copy at all — the same number the sidebar shows beside the UNREAD folder, scoped to a conversation. POST /v1/read is what changes it. */
             unread: number;
             /**
@@ -670,6 +692,8 @@ export interface components {
             sightings?: components["schemas"]["Sighting"][];
             /** @description Everyone recorded on it, senders first. */
             participants?: components["schemas"]["Participant"][];
+            /** @description The files this message carries, in the sender's order. Absent when it carries none, which is most mail. The same chip a built page draws for the same message — one schema, Attachment — reached from the message rather than from the page, which is why "link" here is the message's own permalink: the corpus knows the mail, not a per-file source URL. */
+            attachments?: components["schemas"]["Attachment"][];
         };
         /** @description Every entry reachable from the named one, in time order. */
         ChainResponse: {
@@ -806,7 +830,13 @@ export interface components {
             /** @description A mailbox label the home page opens in. Omitted when nothing has been chosen — no default is a state, not a default of nothing. */
             defaultFolder?: string;
             /**
-             * @description The addresses the reader has named as their own, so their outbound messages can be marked as theirs on a page and in the reading pane. Nothing in the corpus records which mailbox it was collected from, so this can only be told rather than inferred. Omitted when the reader has never named one — which is also what an emptied field leaves behind.
+             * Format: int64
+             * @description The person the reader has named as themselves, as the id of a person on /v1/people — which is what their outbound messages are marked as theirs by. Omitted when they have named nobody, which is also what clearing the setting leaves behind.
+             * @example 12
+             */
+            mePersonId?: number;
+            /**
+             * @description The addresses that are the reader's own: the mailboxes of "mePersonId", resolved by the corpus at this read rather than stored, so a page built today marks the aliases the corpus knows today. Served beside the id because the two answer different questions — the control shows the person, and the sentence under it names the addresses being marked — and a client deriving this from the id would be a second reading of the identity graph. Also served for the address list a corpus was configured with before this setting was a person, so an upgrade does not silently stop marking anyone. Omitted when the reader has named nobody.
              * @example [
              *       "ada@loomworks.example"
              *     ]
@@ -818,12 +848,15 @@ export interface components {
              */
             slurpEvery: string;
         };
-        /** @description The same shape written back, field by field: a field that is present sets it, and a field that is absent is left as it stands. An empty value clears its setting, so "defaultFolder": "" and "me": [] are both requests to unset one. */
+        /** @description The same shape written back, field by field: a field that is present sets it, and a field that is absent is left as it stands — absence and emptiness have to be told apart, because both preferences travel in one body and a reader saving the folder they are in must not clear the person that says which mail is theirs. An empty value clears its setting, so "defaultFolder": "" and "mePersonId": 0 are both requests to unset one. */
         SettingsRequest: {
             /** @description The label to open in, or an empty string for no default. */
             defaultFolder?: string;
-            /** @description The addresses that are the reader's, as the whole value of the field they typed them into — one comma-separated string is as valid as a list of one address per element, and the two are stored as the same list. An empty array (or a list of blanks) clears the setting. */
-            me?: string[];
+            /**
+             * Format: int64
+             * @description The person whose mail is the reader's own, as an id from /v1/people. Written as a person rather than as the addresses that person is: which addresses are one human is the identity graph's answer, and a server that accepted a list would be storing a second one that goes stale the first time an alias is learned or two people are merged. The id is validated — a person that is not in the corpus would mark nothing, and no later sweep can bring a person into existence the way it can bring in a folder — and an unknown id is refused with 400, naming this field. 0 is nobody: no person is id 0, so clearing needs no second field and no caller has to send a null to say they are nobody. The addresses this setting used to be are not part of this contract at all — "me" is not a field here, and a caller that still sends a list is reading a different one.
+             */
+            mePersonId?: number;
             /** @description How often to sweep the mailbox: a duration word between 1m and 24h in whole minutes or hours, or "off" for never. Anything else is refused with the reason — a cadence drives a walk of the whole mailbox, so it is not stored and quietly defaulted. An empty string clears the choice, leaving the default cadence in force. */
             slurpEvery?: string;
         };
@@ -1243,6 +1276,33 @@ export interface components {
             }[];
             messages: components["schemas"]["TimelineEntry"][];
         };
+        Attachment: {
+            name: string;
+            kind?: string;
+            size?: string;
+            /** @description Links to the message in Gmail. Only ever present on real messages. */
+            gmailId?: string;
+            /** @description Opens the attachment at its source, for attachments not reached through Gmail. */
+            link?: string;
+            /** @description Thumbnail as a data: URI. Never a URL — the page renders without a network. */
+            preview?: string;
+            /** @description Digest of the attachment's bytes in the corpus, present only once they have been pulled. It is what lets a client ask for the file rather than send the reader back to Gmail for something we already hold. */
+            blobSha?: string;
+            /**
+             * @description What a click should do with bytes we hold, decided by the server from the stored MIME — the same rule that sets Content-Disposition when the file is served, because the two must not be able to disagree. Absent when there is nothing local to open, which is what gmailId and link are for.
+             * @enum {string}
+             */
+            open?: "popup" | "download";
+            /**
+             * @description How the bytes are shown in the window over the page: an image, a block of text, a framed PDF. Decided by the server from the stored MIME, like open and for the same reason — the renderers must not be able to drift. Empty when the file can only be taken rather than looked at, which is most formats. Not derived from open: a PDF downloads on click and still shows in the window.
+             * @enum {string}
+             */
+            view?: "image" | "text" | "pdf";
+            /** @description Why the corpus does not hold these bytes, recorded when a pull decided it never will: too large, gone from the sender's copy, nothing to fetch by. Present means the file is not coming, so a page can explain the chip and stop offering to fetch it. The value is the corpus's own word; the page owns the phrasing. */
+            skip?: string;
+            previewW?: number;
+            previewH?: number;
+        };
         TimelineEntry: {
             /**
              * @description 'note' is a meeting or event that never existed as an email. Omitted means message.
@@ -1439,6 +1499,19 @@ export interface components {
         SlurpResponse: {
             /** @description The per-phase lines the ingest printed. */
             report: string;
+        };
+        /** @description A hand-made change to one person. Every field is optional, and an omitted one is left alone: a screen saving the name in front of it must not clear the identities it was not asked about. An empty body is a 400 — an edit that says nothing is likelier a bug than a request. */
+        PersonEditRequest: {
+            /** @description What to call this person. Kept alongside the spellings read from headers, not in place of them. */
+            displayName?: string;
+            /** @description Identities to attach, as "kind:value" — e.g. "email:ada@example.com", "slack_uid:U0123", "display_name:ada o". Values are normalised (addresses folded to lower case, display names to single-spaced lower case) so a hand-typed address cannot become a second spelling of one the corpus already holds. */
+            addIdentities?: string[];
+            /** @description Identities to detach, as "kind:value". Detaching the last one leaves a person known by name alone, which the corpus already tolerates: some participants are only ever a first name in someone else's quoted header. */
+            removeIdentities?: string[];
+        };
+        /** @description One person, as the write left them. */
+        PersonResponse: {
+            person: components["schemas"]["PersonSummary"];
         };
     };
     responses: never;
@@ -2328,6 +2401,60 @@ export interface operations {
             };
             /** @description Malformed body, a spec with no messages, or a spec version this build cannot reproduce. */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    editPerson: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The person to edit, from PeopleResponse. */
+                personId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PersonEditRequest"];
+            };
+        };
+        responses: {
+            /** @description The person as it now stands — show this, not what was asked for. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonResponse"];
+                };
+            };
+            /** @description Malformed body, nothing to do, or an identity that is not kind:value. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No person with that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An identity or name belongs to another person. The message names them. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

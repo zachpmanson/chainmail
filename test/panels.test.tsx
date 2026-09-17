@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
-import { ParticipantsPanel, SourcesPanel } from "../src/components/Panels";
+import { SourcesPanel } from "../src/components/Panels";
+import { ParticipantsPanel } from "../src/components/Participants";
 import { Timeline } from "../src/components/Timeline";
 import { derive } from "../src/lib/derive";
 import { normalise } from "../src/lib/normalise";
@@ -27,7 +28,7 @@ function chainRows() {
 }
 
 describe("sources panel", () => {
-  it("renders a checkbox per chain, tagged with the chain root", () => {
+  it("renders a checkbox per thread, tagged with the thread root", () => {
     const { v, chains } = chainRows();
     const html = renderToStaticMarkup(
       <SourcesPanel v={v} filter={{ chains, excluded: new Set(), onToggle: () => {} }} />,
@@ -36,12 +37,12 @@ describe("sources panel", () => {
     expect(tagged).toHaveLength(7);
     expect(html.match(/type="checkbox"/g)).toHaveLength(7);
 
-    // the tag must be a real chain root, or hovering cannot light the tree
+    // the tag must be a real thread root, or hovering cannot light the tree
     const roots = new Set(v.layout.chains.map((c) => c.root));
     expect(tagged.every((t) => roots.has(t))).toBe(true);
   });
 
-  it("offers a start link for every chain and a mail link where one exists", () => {
+  it("offers a start link for every thread and a mail link where one exists", () => {
     const { v, chains } = chainRows();
     const html = renderToStaticMarkup(
       <SourcesPanel v={v} filter={{ chains, excluded: new Set(), onToggle: () => {} }} />,
@@ -64,7 +65,7 @@ describe("sources panel", () => {
     const { v } = chainRows();
     const html = renderToStaticMarkup(<SourcesPanel v={v} />);
     expect(html).not.toContain("type=\"checkbox\"");
-    expect(html).not.toContain("data-chain");
+    expect(html).not.toContain("data-thread");
   });
 });
 

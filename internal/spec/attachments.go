@@ -239,3 +239,35 @@ func humanSize(n int64) string {
 	}
 	return ""
 }
+
+// AttachmentOf builds the mechanical half of an attachment chip: what the file is
+// called, what kind of thing it is, how big it is, and what this host will do with
+// the bytes it holds.
+//
+// One function rather than four lines copied into every caller, because there are
+// now two callers — a page build, and the server drawing a chain read — and a chip
+// that says "PDF · 93 KB" on one page and something else in the pane is the drift
+// this file exists to stop. It is also where open and view are decided, and those
+// must be decided once: they have to agree with the Content-Disposition the server
+// sets when it serves the file, and with whether a window over the page can hold
+// it at all.
+//
+// Who the attachment belongs to is NOT here. Whether a chip opens the message in
+// Gmail or a permalink at its source depends on where the file was found — a
+// direct message, an inline image re-attributed to the quote that placed it — and
+// that is knowledge only a caller has (see the page builder, and the server's
+// toCorpusAttachment).
+func AttachmentOf(name, mime string, size int64, blobSHA, skip string) Attachment {
+	a := Attachment{
+		Name: name,
+		Kind: attachmentKind(mime, name),
+		Size: humanSize(size),
+		// The digest travels so a renderer can ask for the file itself; it is set
+		// whenever the bytes are in the corpus, previewed or not.
+		BlobSHA: blobSHA,
+		Skip:    skip,
+	}
+	a.Open = attachmentOpen(mime, name, blobSHA != "")
+	a.View = attachmentView(mime, name, blobSHA != "")
+	return a
+}

@@ -287,6 +287,18 @@ func putPerson(t *testing.T, s *corpus.Store, name, addr string) int64 {
 	return id
 }
 
+// personOf is the person the fixture's address belongs to, for a test that has to
+// name the same human the corpus resolved those messages to — the reader is
+// stored as a person id, and an id picked out of the air would be the wrong one.
+func personOf(t *testing.T, h *harness, addr string) int64 {
+	t.Helper()
+	id, err := corpus.PersonByIdentity(h.store, corpus.KindEmail, addr)
+	if err != nil {
+		t.Fatalf("PersonByIdentity(%s): %v", addr, err)
+	}
+	return id
+}
+
 func putMail(t *testing.T, s *corpus.Store, m mailFixture) int64 {
 	t.Helper()
 	ts, err := time.Parse(time.RFC3339, m.ts)

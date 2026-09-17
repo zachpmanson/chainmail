@@ -6,6 +6,7 @@ import (
 	"os"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -214,16 +215,20 @@ func TestEveryDocumentedPathIsServed(t *testing.T) {
 	if err := json.Unmarshal(blob, &doc); err != nil {
 		t.Fatal(err)
 	}
-	if len(doc.Paths) != 24 {
-		t.Errorf("the contract declares %d paths; the handler table lists 24", len(doc.Paths))
+	if len(doc.Paths) != 25 {
+		t.Errorf("the contract declares %d paths; the handler table lists 25", len(doc.Paths))
 	}
 	srv := testServer(t)
+	// A path parameter that names a row has to name a row that exists, or the
+	// probe reads the 404 it is looking for as an unrouted path.
+	adaID := personOf(t, srv, "ada@loomworks.example")
 	for path, ops := range doc.Paths {
 		for verb := range ops {
 			// Path parameters are filled with the fixture's own ids, so a routed
 			// path answers 200 and an unrouted one 404 for the right reason.
 			concrete := strings.NewReplacer(
 				"{extId}", extAda1, "{rootExtId}", extAda1, "{name}", "demo",
+				"{personId}", strconv.FormatInt(adaID, 10),
 				"{sha}", shedSHA).Replace(path)
 			var res *response
 			if verb == "post" {
@@ -268,4 +273,43 @@ func sortedKeys(m map[string]any) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// The chain read draws the same chip a built page draws, so both point at one
+// schema. It cannot be shared the other way round — components.schemas.TimelineEntry
+// is schema/timeline.schema.json unchanged, so its attachment item cannot become a
+// $ref — which leaves a copy, and a copy is only safe while something says so. This
+// is that something: change the published schema and the component has to change with
+// it, in one commit, rather than the read quietly growing a second shape.
+func TestTheSharedAttachmentSchemaIsThePublishedOne(t *testing.T) {
+	d := loadAPI(t)
+	entry, ok := d.schemas["TimelineEntry"].(map[string]any)
+	if !ok {
+		t.Fatal("the contract has no TimelineEntry")
+	}
+	props := entry["properties"].(map[string]any)
+	atts, ok := props["attachments"].(map[string]any)
+	if !ok {
+		t.Fatal("the published entry has no attachments; the copy below has no source now")
+	}
+	shared, ok := d.schemas["Attachment"]
+	if !ok {
+		t.Fatal("the contract has no Attachment")
+	}
+	if !reflect.DeepEqual(atts["items"], shared) {
+		t.Error("components.schemas.Attachment is no longer TimelineEntry's attachment item — " +
+			"the published schema is the source, so fix the component rather than the entry")
+	}
+	corpus, ok := d.schemas["CorpusEntry"].(map[string]any)
+	if !ok {
+		t.Fatal("the contract has no CorpusEntry")
+	}
+	item, ok := corpus["properties"].(map[string]any)["attachments"].(map[string]any)
+	if !ok {
+		t.Fatal("CorpusEntry has no attachments — the pane has nothing to draw a chip from")
+	}
+	ref, _ := item["items"].(map[string]any)["$ref"].(string)
+	if ref != "#/components/schemas/Attachment" {
+		t.Errorf("CorpusEntry.attachments points at %q, want the shared schema", ref)
+	}
 }

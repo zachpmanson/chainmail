@@ -189,7 +189,6 @@ export function OpsOrgs() {
 
   return (
     <>
-      <h2 className="ophead">Organisations</h2>
       <p className="opnote">
         A bubble is coloured by its sender's organisation. The corpus reads one
         from the mail domain; where that reads wrong, write the name here — two

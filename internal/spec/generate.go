@@ -288,7 +288,7 @@ func (b *builder) add(r *entryRow) {
 	}
 
 	for _, a := range r.Atts {
-		att := Attachment{Name: a.Name, Kind: attachmentKind(a.Mime, a.Name), Size: humanSize(a.Size)}
+		att := AttachmentOf(a.Name, a.Mime, a.Size, a.BlobSHA, a.Skip)
 		if r.Direct {
 			// Only a real message can be opened in Gmail.
 			att.GmailID = r.GmailID
@@ -310,13 +310,6 @@ func (b *builder) add(r *entryRow) {
 			continue
 		}
 		att.Preview, att.PreviewW, att.PreviewH = b.prev.preview(a)
-		// The digest travels so the renderer can ask for the file itself once
-		// there is a server to ask — a thumbnail is not the whole of what was
-		// pulled. Set whenever the bytes are in the corpus, previewed or not.
-		att.BlobSHA = a.BlobSHA
-		att.Open = attachmentOpen(a.Mime, a.Name, a.BlobSHA != "")
-		att.View = attachmentView(a.Mime, a.Name, a.BlobSHA != "")
-		att.Skip = a.Skip
 		e.Attachments = append(e.Attachments, att)
 	}
 

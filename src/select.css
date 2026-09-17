@@ -4,7 +4,15 @@
    selection, inbox, status, ops — fill the window rather than sitting in the
    transcript's 76rem measure; that rule is in styles.css beside `.wrap`. */
 
-.selform, .selbuild { display:flex; flex-wrap:wrap; align-items:flex-end; gap:.6rem;
+/* A row of labelled fields in a dialog: the page title and the sources the braid
+   asks about. It was the search page's own form until the search moved into the
+   nav (see NavSearch — the query, the mode, the person and the date live there
+   now, and the page below them is only the answer), and the layout outlived the
+   form because it is what a row of small fields wants to be: wrapping on a narrow
+   screen, its first field given the room. The build bar is the other row of
+   controls and is not in the page at all — it is drawn into the site header (see
+   ActionBar), so its layout is its own, beside `.ibbuild`. */
+.selform { display:flex; flex-wrap:wrap; align-items:flex-end; gap:.6rem;
   margin:1rem 0 .4rem; }
 .self { display:flex; flex-direction:column; gap:.18rem; }
 .self > span { font-size:.66rem; text-transform:uppercase; letter-spacing:.09em;
@@ -14,10 +22,10 @@
 .self:first-child { flex:1 1 18rem; }
 .self:first-child input { width:100%; }
 
-.selform button, .selbuild button { font:inherit; font-size:.78rem; font-weight:650;
+.selform button, .ibbuild button { font:inherit; font-size:.78rem; font-weight:650;
   padding:.32rem .7rem; border:1px solid var(--line); border-radius:6px;
   background:var(--mine); color:var(--fg); cursor:pointer; }
-.selform button:disabled, .selbuild button:disabled { opacity:.45; cursor:default; }
+.selform button:disabled, .ibbuild button:disabled { opacity:.45; cursor:default; }
 
 /* The ranked list is the inbox's list (see .iblist and .ibrow): same rows, same
    classes, because a chain is a chain whether it was browsed to or searched for.
@@ -25,7 +33,6 @@
    its own — this file's own history had one, and it is what made the same
    conversation look like two products. */
 
-.selbuild { border-top:1px solid var(--line); padding-top:.7rem; margin-top:.9rem; }
 .selnote { font-size:.78rem; color:var(--muted); margin:.5rem 0 0; flex:1 1 100%; }
 .selfail { font-size:.82rem; margin:.7rem 0 0; padding:.5rem .7rem;
   border:1px solid var(--line); border-left:3px solid crimson; border-radius:6px;
@@ -70,7 +77,8 @@
   border-radius:999px; padding:0 .35rem .05rem; }
 .selendate { margin-left:auto; font-size:.68rem; color:var(--muted);
   font-variant-numeric:tabular-nums; }
-.selensubj { font-size:.78rem; font-weight:650; margin-top:.25rem; overflow-wrap:anywhere; }
+.selensubj { font-size:.78rem; font-weight:650; margin-top:.25rem; overflow-wrap:anywhere;
+  font-family:var(--serif); }
 .selenbody { font-size:.78rem; line-height:1.5; margin:.3rem 0 0; color:var(--fg);
   white-space:pre-wrap; overflow-wrap:anywhere; max-height:11rem; overflow:auto; }
 .selenempty { font-size:.74rem; color:var(--muted); margin:.3rem 0 0; font-style:italic; }
@@ -87,27 +95,27 @@
 .sthead { font-size:.7rem; text-transform:uppercase; letter-spacing:.1em;
   color:var(--muted); margin:1.1rem 0 .1rem; }
 .stnote { font-size:.74rem; color:var(--muted); margin:.35rem 0 .5rem; }
-/* The sweep cadence, sitting inside the sentence that states it: the same field
+/* A setting's control, sitting inside the sentence that states it: the same field
    furniture as the home page's controls, at the size of the note it lives in, so
-   the line reads as one sentence with one thing in it that can be changed. */
-/* A setting's control: a select sized to the sentence it sits in rather than to
-   the field, because the line around it is what names what is being set. Three
-   settings, two classes: the two selects are the same kind of thing and share
-   one, and the addresses field is a text field — it would be a control whose
-   cursor and width lie about what it is. Same furniture either way, because one
-   drifting away from the other's padding is how a settings list starts looking
-   like two screens. */
+   the line reads as one sentence with one thing in it that can be changed. Sized
+   to the sentence rather than to the field, because the line around it is what
+   names what is being set.
+
+   All three settings are selects now — the cadence, the folder, and the person
+   whose mail is the reader's — so they share this one class. The addresses used
+   to be typed into a text field here, which was a control whose cursor and width
+   lied about what it was: the aliases behind one account are folded into a person
+   by the corpus, and who the reader is among those people is a choice from a list. */
 .stpick { font:inherit; font-size:.76rem; padding:.15rem .3rem; margin:0 .1rem;
   border:1px solid var(--line); border-radius:6px;
   background:var(--card); color:var(--fg); cursor:pointer; }
 .stpick:disabled { opacity:.6; cursor:default; }
-/* The addresses the reader's own mail is marked from, written in the sentence
-   that says so. Sized to a few addresses rather than to the sentence, because
-   the value is a list and the line should not reflow as it is typed. */
-.staddr { font:inherit; font-size:.76rem; padding:.15rem .3rem; margin:0 .1rem;
-  border:1px solid var(--line); border-radius:6px; background:var(--card);
-  color:var(--fg); width:19rem; max-width:100%; }
-.staddr:disabled { opacity:.6; }
+/* The reader's own person, in particular: capped at 20ch, the same cap the nav's
+   Person control wears (see .navperson). All three settings share `.stpick`, and
+   this is the one whose value is a person — a name that may carry the aliases
+   behind it, standing in the middle of a sentence, where the longest one in the
+   corpus must not be what decides how wide the sentence reads. */
+.stperson { max-width:20ch; }
 .stlist { list-style:none; margin:.5rem 0 0; padding:0; border:1px solid var(--line);
   border-radius:9px; background:var(--card); overflow:hidden; }
 .strow + .strow { border-top:1px solid var(--line); }
@@ -126,6 +134,21 @@
 .stdl dt { font-size:.76rem; color:var(--muted); text-transform:uppercase;
   letter-spacing:.06em; padding-right:1rem; }
 .stdl dd { margin:0; font-size:.86rem; font-variant-numeric:tabular-nums; }
+
+/* The settings, listed the way the corpus numbers above them are: the name of the
+   thing in the left column, the thing itself in the right. They were sentences —
+   "The mailbox is swept [15 minutes] — next 3:40pm." — which had to be read whole
+   to find the control, and re-read whenever any of the three changed; the same
+   three facts are a name and a value, and this is the shape that says so. The
+   columns come from `.stdl` (the same grid, so the page has one list of names and
+   values rather than two), narrowed here to fit the longest of the three names. */
+.stset { grid-template-columns:11rem 1fr; align-items:baseline; gap:.5rem 0;
+  margin:.55rem 0 0; }
+.stset dd { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+/* What a setting knows about itself — the schedule the cadence implies, the
+   addresses the reader's mail comes from. Muted and beside the control: it is the
+   one part of the row that is not something to press. */
+.sttail { font-size:.72rem; color:var(--muted); }
 
 /* The /ops screen: the people-merge review surface. Same visual family as the
    status screen — a browser-only control surface, and one that writes, so the
@@ -204,6 +227,27 @@
   margin:.6rem 0 0; padding-top:.6rem; border-top:1px solid var(--line); }
 .oporgadd .oporginput { margin-right:0; }
 
+/* The people editor: one person per row, with the name they are called and the
+   identities that resolve to them. The identities wrap rather than scroll — an
+   address is long and a person can have several, so the rule is the same as
+   everywhere else a list of small things shares a line. */
+.opperson { margin:0 0 .35rem; font-size:.86rem; line-height:1.3; }
+.opwho { font-weight:600; margin-left:.15rem; }
+.opwhoedit { display:flex; align-items:center; gap:.35rem; margin:.2rem 0 .1rem;
+  flex-wrap:wrap; }
+.opwhoedit .oporginput { margin-right:0; flex:0 1 16rem; }
+.opperson-id { display:inline-flex; align-items:center; gap:.15rem;
+  margin:0 .3rem .2rem 0; padding:.05rem .2rem .05rem .3rem;
+  background:var(--card); border:1px solid var(--line); border-radius:5px; }
+.opperson-id code { font-size:.72rem; overflow-wrap:anywhere; }
+.opx { font:inherit; font-size:.85rem; line-height:1; padding:0 .18rem;
+  color:var(--muted); background:none; border:none; border-radius:4px; cursor:pointer; }
+.opx:hover:not(:disabled) { color:crimson; background:var(--quote); }
+.opx:disabled { opacity:.4; }
+.opfilter { display:flex; align-items:center; gap:.4rem; margin:.5rem 0 .2rem;
+  font-size:.78rem; }
+.opfilter .oporginput { margin-right:0; flex:0 1 18rem; }
+
 /* The inbox: the home page with no query. Same file as the selection stage for
    the same reason — these controls exist only in the browser, and the static
    transcript ships this stylesheet minus none of it. */
@@ -217,10 +261,32 @@
    is on the line it shares with the time, and the time steps around it. */
 .ibrow { position:relative; --tick:1.5rem; }
 .ibrow + .ibrow { border-top:1px solid var(--line); }
-.ibrow:hover { background:var(--quote); }
+/* Read mail, marked by dimming it: the row sits back into the list and its sender
+   and subject go to regular weight (see .ibwho, below). The unread rows are the
+   ones left alone, which is the whole point — a mailbox is mostly read, so the
+   rows that still want something are the ones that look like ordinary rows, and
+   the alternative (a glyph on each unread one) makes the reader hunt for marks in
+   a column where nearly every row has one.
+
+   Grey mixed from `--muted` rather than a colour of its own, so the dimming is the
+   same step towards the background in both themes; and before `:hover` and `.sel`,
+   which are the two states that overrule it — the row under the pointer, and the
+   row the pane is showing. */
+.ibrow:not(.unread) { background:color-mix(in srgb, var(--muted) 12%, var(--card)); }
+/* The hover is the same on both kinds of row: the pointer is one fact, and the two
+   shades made a row under the cursor look like a third state — read mail hovered
+   went darker, unread went to `--quote`, so the one row you were pointing at was
+   the one row whose colour told you nothing about it. One step darker than the
+   read tint, so the mark still shows up on a dimmed row, and light enough to read
+   as a tint on a white one. Placed after the read rule, which is the same
+   specificity, and before `.sel`, which is the row the pane is showing. */
+.ibrow:hover { background:color-mix(in srgb, var(--muted) 22%, var(--card)); }
 /* The row the pane is showing. Marked with the same left rule the selected
-   candidates use, so "this one is open" reads the same on both pages. */
-.ibrow.sel { background:var(--quote); box-shadow:inset 2px 0 0 var(--accent); }
+   candidates use, so "this one is open" reads the same on both pages — and with
+   nothing else: it used to tint the row as well, which made the mark a third
+   colour that said neither of the two things a row can be (open, unread). The
+   rule is the whole mark now, and the row's own state stays readable behind it. */
+.ibrow.sel { box-shadow:inset 2px 0 0 var(--accent); }
 /* The tick's own box, and only the tick's: the top-right corner, which is where
    the tick is drawn and where the eye already is. Padded on the right so the hit
    area is the tick plus a little, not the glyph, and no taller than the line. */
@@ -240,20 +306,47 @@
 /* The subject and its count are one cell spanning the row, the count pushed to
    the end, rather than two cells in a column each: the count is the only thing
    on that line that wants the right edge, and a column of its own would have
-   shortened the subject to reserve width nothing else uses. */
-.ibsubrow { grid-area:2/1 / 2/3; display:flex; align-items:baseline; gap:.6rem; }
-.ibsubj { font-size:.84rem; overflow-wrap:anywhere; min-width:0; }
-/* Unread mail, marked the way a mail client marks it: a count in the accent and
-   a heavier subject. The row keeps the same height whether or not it is unread —
-   a list that shifts when the reader opens something is a list that moves under
-   the pointer — so the count is a pill of fixed line height rather than anything
-   that adds a line. */
-.ibunread { flex:none; font-size:.68rem; font-weight:700; line-height:1.4;
-  min-width:1.15rem; padding:0 .3rem; border-radius:999px; text-align:center;
-  background:var(--accent); color:var(--card); font-variant-numeric:tabular-nums; }
-.ibrow.unread .ibsubj { font-weight:650; }
+   shortened the subject to reserve width nothing else uses.
+
+   The extra step above it is the one place in the row where two different things
+   meet: the sender and the time are one line, and the subject is the reply's own
+   statement. The grid's own gap is the smallest step there is, and it is the
+   right size between the subject and what continues it — the snippet, the meta
+   line — but a hair too small to part the name from the subject. */
+.ibsubrow { grid-area:2/1 / 2/3; display:flex; align-items:baseline; gap:.6rem;
+  margin-top:.2rem; }
+/* One line, elided, like the snippet under it: the subjects are what the reader
+   scans down, and a subject that wrapped to three lines made every row a
+   different height, so the column they were reading down stopped being a column.
+   `flex:1 1 auto` with `min-width:0` is what gives the text a width to elide
+   against and keeps the counts at the row's end. The whole subject is on hover
+   and on the row's own accessible name (see ThreadRow), because a truncated word
+   is one the reader cannot get at any other way. */
+.ibsubj { font-size:.84rem; min-width:0; flex:1 1 auto; white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis; }
+/* Unread mail, marked by what is *not* done to it: a read row is dimmed and set in
+   regular weight (see .ibrow, above), and the rows left at full strength are the
+   ones with something unread in them. This is the same claim drawn the other way
+   round from the glyph it replaces — a count on the subject line, then a circle in
+   the gutter — and it is drawn this way because a mailbox is mostly read: the rows
+   that still want something should be the ordinary ones, rather than a handful of
+   marks to be found in a column where nearly every row carries one.
+
+   Both lines carry it, and both are set here rather than only the sender: a row
+   whose name is bold and whose subject is not reads as two rows glued together,
+   and the subject is what the list is read for.
+
+   The row keeps the same height in either state — a list that shifts when the
+   reader opens something is a list that moves under the pointer — which is what
+   weight and background can do and a glyph in the flow could not. */
+.ibrow:not(.unread) .ibwho { font-weight:400; }
 .ibrow.unread .ibwho { font-weight:750; }
-.ibcount { font-weight:700; }
+.ibrow.unread .ibsubj { font-weight:650; }
+/* A read row's subject is already at the weight every row starts at, so nothing is
+   set for it: `.ibsubj` above carries no weight of its own. */
+/* The two counts in the tail are the same weight as each other and as every other
+   count on the row: the mail count used to be bold, which made one number on a
+   muted line the loudest thing in a row whose subject is what is being scanned. */
 /* The tail of the subject line: how many people the chain holds, and how many
    messages. Both are counts a reader picks by, so both are numbers wearing their
    glyph — a person and an envelope — rather than words, because a row is scanned
@@ -262,9 +355,9 @@
    people count is on every row on every page: it is a fact about the chain, not
    about the search that found it. */
 .ibtail { margin-left:auto; flex:none; display:flex; align-items:center; gap:.5rem; }
-.ibppl, .ibcount { display:inline-flex; align-items:center; gap:.2rem; font-size:.68rem;
-  color:var(--muted); font-variant-numeric:tabular-nums; }
-.ibppl svg, .ibcount svg { flex:none; opacity:.75; }
+.ibppl, .ibcount, .ibatt { display:inline-flex; align-items:center; gap:.2rem;
+  font-size:.68rem; color:var(--muted); font-variant-numeric:tabular-nums; }
+.ibppl svg, .ibcount svg, .ibatt svg { flex:none; opacity:.75; }
 /* What only a ranked row knows: the similarity and the match, under the snippet
    rather than in place of the row. The thread's own span sits at the far end of
    this line — the bottom right of the row — because it is the one thing here that
@@ -277,8 +370,12 @@
 .ibsim { color:var(--strong); font-weight:600; }
 .ibspan { margin-left:auto; font-variant-numeric:tabular-nums; }
 /* One line, elided: a preview is a hint about what the message says, and a
-   paragraph of it would push the next row off the screen. */
+   paragraph of it would push the next row off the screen. Set lighter than the
+   rest of the row, on top of the muted colour: it is the one line here that is
+   never read as a whole, only sampled on the way past, and the weight is what
+   keeps it from competing with the subject above it. */
 .ibsnippet { grid-area:3/1 / 3/3; font-size:.78rem; color:var(--muted);
+  font-weight:300;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
 /* The end of the list: an empty marker the scroll watcher observes, so it has to
    have height to be seen at all, and it carries the one line a reader sees while
@@ -293,43 +390,92 @@
   background:var(--card); color:var(--muted); cursor:pointer; }
 .ibmore:hover:not(:disabled) { color:var(--accent); border-color:var(--accent); }
 .ibmore:disabled { opacity:.45; cursor:default; }
-/* Sticky, and only present once something is ticked: the bar follows the
-   selection down the list rather than living at a fixed point in a page whose
-   length the corpus decides. It sits outside the two panels, so ticking a chain
-   and then reading it does not take the bar away. */
-.ibbuild { position:sticky; bottom:.5rem; z-index:20; background:var(--card);
-  border:1px solid var(--line); border-radius:9px; padding:.6rem .7rem;
-  box-shadow:0 4px 18px rgba(0,0,0,.18); }
-/* The move control is the one field in the bar: the buttons before it are verbs,
-   and this is a verb with a place attached, so it is labelled like a field and
-   sized to the folder names rather than to the row. `.self:first-child` is the
-   title field's rule, and in this bar the first child is a button. */
-.ibbuild .self { flex:0 0 auto; }
-.ibbuild .self select { max-width:14rem; }
+/* The bar of things to do with the ticked chains. It is drawn into the site
+   header, in the row the nav was on (see ActionBar and .buildslot): the reader
+   ticked some rows, so what can be done with them is what the top of the page
+   has to say, and the nav comes back when the selection clears. One row, so the
+   verbs read left to right and the way out of the selection sits at the far end. */
+.ibbuild { display:flex; align-items:center; flex-wrap:nowrap; gap:.55rem;
+  margin:0; height:var(--navh); min-width:0; overflow-x:auto; overflow-y:hidden; }
+/* The two mailbox verbs are glyphs, and the row they are on is why: it also holds
+   a braid, a folder dropdown, the count and the way out, and spelling Archive and
+   Delete along it is what wrapped the bar on a laptop. The word is still the
+   button's name — the tooltip, and what a screen reader reads — but the row draws
+   the box and the bin, which is what every mail client draws too. */
+.ibbuild .ibicon { display:inline-flex; align-items:center; padding:.45rem .5rem;
+  flex:none; }
+/* The glyph is the whole of what an icon button says, and the size is set here
+   rather than in each set of `width`/`height` attributes — both glyphs in
+   MailVerbs are drawn at 14, and the read circle with them. One place to change,
+   and the bar and the pane's head cannot drift apart. 18 rather than the 14 the
+   markup draws them at because the button is a target rather than a mark: at 14
+   the box and the bin read as annotations on the line instead of the two things a
+   reader presses. 18px is the largest that still clears the bar's own padding
+   inside the row's height — the buttons come to 31.5px in a 34.4px row. */
+.ibicon svg { display:block; width:18px; height:18px; }
+/* The move control, in both places it stands: the selection bar's row and the pane's
+   own head. It is one control drawn as one thing — the icon button the verbs beside
+   it are (see .ibicon and MoveFolder) — with the platform's own <select> laid over
+   the box, invisible. The overlay is what makes it a real dropdown: the click opens
+   where the click happened, the folders are the mailbox's, and a keyboard and a
+   screen reader get a choice of folders rather than a picture. */
+.ibmovewrap { position:relative; justify-content:center; }
+.ibmovewrap > .ibmove { position:absolute; inset:0; width:100%; height:100%;
+  margin:0; padding:0; border:0; opacity:0; appearance:none; -webkit-appearance:none;
+  font:inherit; cursor:pointer; }
+/* A select cannot be disabled and the span around it cannot be :disabled, so the
+   wrapper reads the state off the control inside it. */
+.ibmovewrap:has(> .ibmove:disabled) { opacity:.45; }
+.ibmovewrap:has(> .ibmove:disabled) > .ibmove { cursor:default; }
+.ibmovewrap:has(> .ibmove:focus-visible) { outline:1px solid var(--accent); outline-offset:2px; }
+/* In the bar the buttons' own box comes from `.ibbuild button` (see .selform button,
+   .ibbuild button) and this is a span rather than a button — a <select> cannot live
+   inside one — so the box is named here, in the bar's own terms. */
+.ibbuild .ibmovewrap { border:1px solid var(--line); border-radius:6px;
+  background:var(--card); padding:.45rem .5rem; }
+.ibbuild .ibmovewrap:hover { color:var(--accent); border-color:var(--accent); }
+/* What the selection amounts to, and the way out of it, held at the far end of
+   the row: `margin-left:auto` is what keeps them there when the verbs do not
+   fill it. Deselecting is not an action on the mail, so its button is quieter
+   than the verbs beside it. */
+.ibright { margin-left:auto; flex:none; display:flex; align-items:center; gap:.7rem; }
+.ibselcount { font-size:.76rem; color:var(--muted); font-variant-numeric:tabular-nums; }
+.ibbuild .ibclear { background:var(--card); color:var(--muted); }
+.ibbuild .ibclear:hover { color:var(--accent); border-color:var(--accent); }
+/* A refusal is a paragraph under the row rather than an item in it, and the same
+   for the sentence an action leaves behind when nothing is ticked any more. */
+.ibbuild .selfail { flex:1 1 100%; margin:.2rem 0 0; }
 /* The braid dialog's form lives inside a modal, where there is no list under it
-   to separate from: the margin the bar's form carries would push the dialog's
-   fields against its own head. */
+   to separate from: the margin the search page's form carries would push the
+   dialog's fields against its own head. */
 .braidform { margin:.7rem .8rem .2rem; }
 
 /* Two panels: the list, and the chain it is showing. One column until there is
    room for both — at that width the choice of a row is what changes panels, so
    the list steps aside rather than stacking above a thread the reader has to
    scroll past to get back to it. */
-.ibsplit { display:grid; grid-template-columns:minmax(0, 1fr); gap:.9rem; margin-top:.9rem; }
-.ibcol { min-width:0; }
+.ibsplit { display:grid; grid-template-columns:minmax(0, 1fr); gap:.9rem; }
+/* The column puts the space round its own first control rather than the control
+   carrying margins of its own. A control with margins is a control that has to be
+   placed; a column that pads its top and leaves a gap under the button is a column
+   whose spacing survives anything being added above or below it. Both numbers are
+   the one number: the panel's inset from the window, the room above the button, and
+   the room between the button and the list are the same `.8rem` — a list panel
+   reads as one object, and three different gaps in it read as three objects. */
+.ibcol { min-width:0; display:flex; flex-direction:column; gap:.8rem;
+  padding-top:.8rem; }
 .iblistwrap { min-width:0; }
 
 /* The border between the panels, which is also the control that moves it. Eight
    pixels of target for a one-pixel line: a drag handle the reader has to aim at
-   is a drag handle they will miss. The space around the line is the two-column
-   layout's column gap, half of it on either side — see `.ibsplit` below. Only
-   where there are two panels to divide — in the single-column layout the list
-   steps aside instead of being narrowed. */
+   is a drag handle they will miss. The line is drawn on the handle's *right* edge,
+   which is the pane's left edge too — the pane begins at the border, so the header
+   it is painted with reaches across to it (see `.ibsplit` below). */
 .ibdrag { display:none; touch-action:none; cursor:col-resize; position:relative;
   /* The row's own height, not its content's: the items are aligned to the top, and
      a border between two columns has to run the length of both of them. */
   align-self:stretch; }
-.ibdrag::before { content:""; position:absolute; inset:0; margin:0 auto; width:1px;
+.ibdrag::before { content:""; position:absolute; inset:0 0 0 auto; margin:0; width:1px;
   background:var(--line); }
 .ibdrag:hover::before, .ibdrag:focus-visible::before, .ibsplit.dragging .ibdrag::before {
   width:2px; background:var(--accent); }
@@ -338,8 +484,11 @@
 /* The folder button: one control above the list saying which folder the list is
    showing. It sits outside the list's own scroller — a popup drawn inside a
    scrolling box is a popup clipped by it — and the column is not narrowed by it,
-   because the button is a title for the list rather than a column of its own. */
-.ibfolders { position:relative; z-index:30; margin:0 0 .4rem; }
+   because the button is a title for the list rather than a column of its own.
+   It carries no space of its own: the column it sits in pads its top and leaves a
+   gap under it (see .ibcol), so the room above the button and the room below it
+   are the column's to give rather than this control's to bring. */
+.ibfolders { position:relative; z-index:30; margin:0; }
 .ibfbtn { display:flex; align-items:center; gap:.4rem; width:100%; font:inherit;
   font-size:.8rem; font-weight:650; text-align:left; padding:.35rem .55rem;
   border:1px solid var(--line); border-radius:7px; background:var(--card);
@@ -369,63 +518,97 @@
    is the heading strip, which is the pane's own toolbar rather than a frame
    around the mail. */
 .ibread { min-width:0; }
-/* The pane heads itself, and keeps heading itself: the strip stays at the top of
-   whatever scrolls it, so a long thread never leaves the reader without the
-   subject, the count, or the read control — the three things about the chain
-   rather than about the message under the pointer. Sticky rather than fixed so
-   it keeps its place in the flow: the first message starts below it, not under
-   it. It needs an opaque background for that (it has one), and a stacking order
-   above the cards it slides over. */
-.ibread-head { position:sticky; top:0; z-index:2;
-  display:flex; align-items:baseline; gap:.5rem; padding:.5rem .7rem;
+/* The pane heads itself, and **outside** its own scroll: the strip is a line of
+   the pane rather than the first thing in the thread, so a long thread never
+   leaves the reader without the subject, the count, or the read control — the
+   three things about the chain rather than about the message under the pointer.
+   Above the scroll rather than sticky inside it: a sticky strip is part of what
+   scrolls — it has to be opaque, it needs a stacking order over the cards it
+   slides across, the messages need `scroll-margin-top` to land below rather than
+   under it, and the thread's first pixel is behind it. A row of the pane has none
+   of those obligations, and the strip is one less thing that moves.
+
+   Centred rather than sitting its text on a baseline: the strip holds four kinds
+   of thing — a button, a line of text, two counts with glyphs, and two round
+   controls — and a baseline is only a line for one of them. Every item used to
+   have to opt out of the baseline on its own (`align-self:center` on the circle
+   and the verbs, `align-items:center` inside the counts), which is the same
+   instruction written three times and a fourth thing away from the strip being
+   visibly off. It is one line in the middle now. */
+.ibread-head {
+  display:flex; align-items:center; gap:.5rem; padding:.5rem .7rem;
   border-bottom:1px solid var(--line); background:var(--mine); }
 .ibread-subj { font-weight:650; font-size:.86rem; overflow-wrap:anywhere; }
 .ibread-head .note { margin-left:auto; font-size:.72rem; color:var(--muted); white-space:nowrap; }
 /* The chain's counts in the pane's head, drawn with the row's own `.ibppl` and
    `.ibcount` (see PeopleCount / MailCount): the same marks the list scrolled past
    to get here. It takes the free space the way the row's tail does, so the pair
-   stays together at the right of the strip, before the read control. */
+   stays together at the right of the strip, before the two verbs and the read
+   control. */
 .ibread-counts { margin-left:auto; display:flex; align-items:center; gap:.5rem; }
+/* The two mailbox verbs in the strip, left of the read circle: the same box and bin
+   the selection bar draws (see MailVerbs). Quieter than the bar's copy of them,
+   because they stand on the reader's own line rather than in a row that exists to
+   hold them, and they are the only things here that destroy something — the
+   subject beside them is what is being read, so they wait to be pointed at. */
+.ibread-head .ibicon { flex:none; display:inline-flex; align-items:center;
+  padding:.25rem .3rem; border:1px solid transparent; border-radius:6px; background:none;
+  color:var(--muted); cursor:pointer; }
+.ibread-head .ibicon svg { display:block; }
+.ibread-head .ibicon:hover:not(:disabled) { color:var(--accent); border-color:var(--line);
+  background:var(--card); }
+.ibread-head .ibicon:disabled { opacity:.45; cursor:default; }
 .ibback { font:inherit; font-size:.78rem; font-weight:650; padding:.2rem .5rem;
   border:1px solid var(--line); border-radius:6px; background:var(--card);
   color:var(--fg); cursor:pointer; }
-/* The read-state control: the pane's toolbar is where a reader already is when
-   they have finished a thread. A circle, not a word — filled for unread, an
-   outline for read — so the state reads at a glance and the press is the opposite
-   of what is drawn. `align-self:center` because the strip aligns its text on the
-   baseline, which is not a line a circle sits on.
+/* The read-state control, drawn as the third of the strip's icon buttons — the
+   same box the archive bin and the trash can are in (see .ibread-head .ibicon),
+   with the state carried by the glyph inside it. A bare circle on the line was a
+   mark rather than a control: it read as the same kind of fact as the counts
+   beside it, and this is the button a reader presses most in this pane.
 
-   Sized in `rem` against the line rather than the text: the glyph is the whole
-   control, and a box that grew with the font would shrink the target on exactly
-   the screens this pane exists for.
-
-   The empty ring is drawn **heavier than the filled disc needs to be** (2px
-   against 1.5px, in `--muted` rather than the hairline `--line`): a full circle
-   carries its own weight, so an outline that only had to be an edge reads as a
-   smudge at this size — and the empty state is the one that has to look like
-   something to press. */
-.ibread-read { align-self:center; flex:none; width:1.05rem; height:1.05rem; padding:0;
-  border:2px solid var(--muted); border-radius:50%; background:transparent;
-  cursor:pointer; }
-/* Filled is unread: the accent the row's badge already uses, so the strip and the
-   list agree about what the same chain looks like. */
-.ibread-read.unread { border:1.5px solid var(--accent); background:var(--accent); }
-.ibread-read:hover { border-color:var(--accent); }
-.ibread-read.unread:hover { background:color-mix(in srgb, var(--accent) 75%, var(--mine)); }
-.ibread-read:disabled { border-color:var(--muted); background:transparent; cursor:default;
-  opacity:.6; }
-.ibread-read:disabled.unread { background:color-mix(in srgb, var(--accent) 45%, var(--mine));
-  border-color:transparent; opacity:1; }
+   The glyph is the state and nothing else: a filled disc for unread, an outline
+   for read, so the press is the opposite of what is drawn. Both states are the
+   button's own grey — the same grey the bin and the can are — because this is one
+   of three identical verbs on the line: an accent-coloured one reads as the
+   selected one, or as the one that matters, when all it is saying is what the
+   mail is. The shape is what tells the two states apart, and a filled disc against
+   an outline is a distinction a reader makes without a colour to help. Hover,
+   focus and disabled are the shared button's (muted to accent, a card behind it)
+   rather than a second set of rules for this one. */
+.ibread-read svg { display:block; }
+/* Heavier than the hairline glyphs beside it (1.6 against 1.5, in a box of the
+   same size): a circle is only its own edge, and an outline that had to be a mere
+   edge reads as a smudge next to the letter-like shapes it sits among. */
+.ibread-read circle { fill:none; stroke:currentColor; stroke-width:1.6; }
+.ibread-read.unread circle { fill:currentColor; stroke:none; }
 /* Flush: the pane's edge is the messages' edge. The gap above the first message
    is the gap between messages, so the heading reads as a heading rather than as
-   part of the first email. */
-.ibread > .stream { padding:.5rem 0 0; }
-/* Room for the pane's own sticky head when it lands on a message (see
-   ChainMessages): `scroll-margin-top` is what `scrollIntoView` leaves above the
-   target, and without it the head would sit on top of the message the reader
-   just arrived at. */
-.ibread .stream .msg { scroll-margin-top:2.6rem; }
-.ibread > .selnote { margin:.7rem .8rem 0; }
+   part of the first email — and the room below the last is what a reader sees when
+   they have scrolled a long chain to its end: the scroll container's own bottom,
+   so the last bubble is not sitting against the window's edge with nowhere to go.
+   Ten rems of it, because the end of a thread is also where the reader is reading
+   the last message — a couple of rems left it looking like there was more below,
+   and the bottom of a long scroll is the one place a reader wants a page's worth
+   of quiet rather than the next thing. */
+.ibread .stream { padding:.5rem 0 10rem; }
+/* The participants panel, at the top of the pane's scroll, with room under it: the
+   bubbles below are the thread and this is a heading over them, and flush against
+   the first message it read as part of that message's card. Its own top margin is
+   a document's (see .pan in styles.css) and is not wanted here — the stream's top
+   padding is the space above it. */
+.ibread .pan.people { margin:0 0 1.1rem; }
+/* The pane's own scroll: the head is a line of the pane (see .ibread-head) and
+   the thread is what scrolls, so the two are siblings rather than one inside the
+   other. The scroll box is what carries the height — `flex:1 1 auto` with
+   `min-height:0`, the same pair the list's wrapper uses. */
+.ibreadwrap { flex:1 1 auto; min-height:0; overflow:auto; scrollbar-gutter: stable; }
+/* No `scroll-margin-top` any more: the head is not over the thread's scroll (see
+   .ibread-head), so a landed message has nothing to be landed below. */
+.ibread .selnote { margin:.7rem .8rem 0; /* The pane is a column, and .selnote is written to fill a row of the search
+   panel (flex:1 1 100%). Loose in the pane it grew to a share of the height:
+   the empty line under the head stood as a band instead of a line. */
+  flex:none; }
 @media (min-width:60rem) {
   /* The app is one window: the nav, and under it the two panels, which scroll
      inside themselves. **`height`, not `min-height`** — a minimum lets the shell
@@ -452,21 +635,33 @@
   body.inbox #root, body.search #root { display:flex; flex-direction:column; height:100%; min-height:0; }
   .wrap.ibwrap, .wrap.selwrap { flex:1 1 auto; min-height:0;
     display:flex; flex-direction:column; }
-  /* The search reaches the window's edges like the inbox does: the form keeps its
-     own margin, and the build bar's `bottom` is the one thing below the split. */
+  /* The search reaches the window's edges like the inbox does, and the split is
+     the last thing in the page on both: the build bar is up in the header now,
+     so nothing sits below the panels but their own scroll. */
   .wrap.selwrap { padding-top:0; padding-bottom:0; }
   /* The list is bounded and the pane takes whatever is left: a row is skimmed,
      a thread is read, so the width goes where the reading is. Bounded by the
      grid until the reader drags the border — `--listw` is their width, and its
      absence is this minmax(), which is the layout's own answer for this screen. */
-  /* The border sits in a column of its own, and the gap is what the reader sees
-     on either side of the line: the same gap as everywhere else is a gutter wide
-     enough to read as a missing third panel, so the line carries *half* of it on
-     each side — `.9rem` split in two. The handle's own column is left alone, so
-     the eight-pixel target and the two panels' widths are unchanged. `row-gap`
+  /* The border sits in a column of its own, and the gap was what the reader saw
+     on either side of it: the same gap as everywhere else is a gutter wide enough
+     to read as a missing third panel, so the line carried *half* of it on each
+     side — `.9rem` split in two.
+
+     Now the pane begins *at* the line, so all of that space is on the list's side
+     and the column is the line's own: the old half-gap plus the old half-handle,
+     which puts the line exactly where it was and leaves the list alone. What the
+     pane gains is its own left edge, which its sticky head is painted on — the
+     header reaches across to the border instead of stopping short of it (see
+     .ibread-head and .ibread > .stream, below, which keep the thread and the
+     subject where they were). `--divider` is that width, named once here because
+     three rules need it. A drag moves the line by where the pointer has *been*
+     rather than by where it is (see SplitPane): the panel's edge is no longer
+     under the pointer, so a fixed offset would jump on the first move. `row-gap`
      keeps the base rule's `.9rem`, which is the stacked layout's spacing. */
-  .ibsplit { grid-template-columns:var(--listw, minmax(15rem, 24rem)) .55rem minmax(0, 1fr);
-    column-gap:.45rem;
+  .ibsplit { --divider:calc(.45rem + .55rem / 2);
+    grid-template-columns:var(--listw, minmax(15rem, 24rem)) var(--divider) minmax(0, 1fr);
+    column-gap:0;
     align-items:stretch; flex:1 1 auto; min-height:0; }
   .ibdrag { display:block; }
   /* Both columns are the height of the window's remainder and scroll themselves,
@@ -479,7 +674,7 @@
      past the window, which the body's overflow:hidden then cut off — a column,
      not two things each taking 100%, so the list gets what the button leaves. */
   .ibcol, .ibread { min-height:0; height:100%; }
-  .ibcol { display:flex; flex-direction:column; }
+  .ibcol { padding-left:.8rem; }
   /* Both scrollers reserve their scrollbar, whether or not it is there. A gutter
      that appears as the list grows past one screen takes ~15px off every row the
      moment it arrives — the timestamps jump left and the subject lines rewrap,
@@ -495,9 +690,43 @@
      leave above it. */
   .iblistwrap .sellist { border:0; border-radius:0; background:none; margin:0; }
   /* The pane scrolls the same way for the same reason: a thread that outgrows its
-     screen would otherwise rewrap every bubble once, on the way in. */
-  .ibread { overflow:auto; scrollbar-gutter: stable; }
-  .ibback { display:none; }
+     screen would otherwise rewrap every bubble once, on the way in.
+
+     The page gives up its right gutter here, because the pane takes it. What sits
+     to the right of both panels is `.wrap`'s padding, on an ancestor of the split
+     (see .wrap.ibwrap/.wrap.selwrap, below) — with two panels the pane *is* the
+     window's right edge, so that space is asked for a second time as the pane's
+     own padding, inside the area that scrolls rather than reserved beside it, and
+     the pane's surface and its scrollbar come out to the window with it. Both
+     rules are in this block because the stack is narrow enough for the list to be
+     the page: there the gutter belongs to the page, over the list and the pane
+     alike. The left one is left alone whatever the width: the list is a card, and
+     a card wants the page's margin. */
+  /* Both gutters, and both are the pane's now: the list's card is a column of the
+     app rather than of the page, and the page's margin (`.wrap`, 1.25rem) left it
+     further from the window than the chrome above it is wide. The nav keeps the
+     page's own inset — it is the site's, not the split's — so the two are no
+     longer on one vertical line, which is the cost of asking for this.
+
+     Nothing here for the stacked layout below: by then the list *is* the page, and
+     a card against the window with no margin at all is not a card. */
+  .wrap.ibwrap, .wrap.selwrap { padding-left:0; padding-right:0; }
+  .ibread { display:flex; flex-direction:column; }
+  /* The scroll section's padding, the same on both sides: the thread is a column of
+     cards inside one box, and an inset that differs by side reads as the content
+     having moved rather than as the box having walls. One number, so it is the
+     same one twice — the page's own gutter, which is what the pane's right inset
+     used to be before it moved in here. The head's own insets are not this number
+     (`.7rem` of its strip, plus the divider on the left): the strip keeps the
+     subject and the controls where they have always been. */
+  .ibreadwrap > .stream { padding-left:1.25rem; padding-right:1.25rem; }
+  /* The head's own inset, the same on both sides: `.7rem` is the strip's own
+     padding (base rule) and the divider is the pane's left edge, which the strip is
+     painted from — so the subject and the controls are inset the same distance from
+     the two edges of the box, and the subject and the verbs keep the places they
+     have always had. (The scroll section's padding is the page's gutter, a little
+     smaller: the thread's cards are not the strip's text.) */
+  .ibread-head { padding:.5rem calc(.7rem + var(--divider)); }  .ibback { display:none; }
 }
 @media (max-width:59.99rem) {
   .ibsplit.has-choice .ibcol { display:none; }
@@ -515,3 +744,18 @@
   border-radius:6px 6px 0 0; background:var(--card); color:var(--muted); }
 .ibfdefault .ibfname { font-weight:600; }
 .ibfmark { flex:0 0 .8rem; text-align:right; color:var(--accent); font-weight:700; }
+
+/* The ops tabs: the page manages three kinds of row — people, the organisations
+   their mail is drawn under, and the merges proposed between them — and they are
+   read one at a time rather than as sections of one long scroll. The row reuses
+   the page's own small caps as a control; the selected tab takes the foreground
+   colour and the accent rule, and the tab is the panel's heading, so no section
+   repeats its own name above itself. */
+.optabs { display:flex; align-items:stretch; gap:.15rem; margin:.5rem 0 .1rem;
+  border-bottom:1px solid var(--line); }
+.optab { font:inherit; font-size:.7rem; font-weight:700; letter-spacing:.08em;
+  text-transform:uppercase; color:var(--muted); background:none; border:none;
+  border-bottom:2px solid transparent; padding:.3rem .55rem .32rem; cursor:pointer; }
+.optab:hover { color:var(--fg); }
+.optab-on { color:var(--fg); border-bottom-color:var(--accent); }
+.oppanel { margin-top:.15rem; }

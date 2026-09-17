@@ -359,26 +359,152 @@ func (s *Store) Sight(entryID, seenIn int64, kind, detail string) error {
 	return err
 }
 
-// ResolveParents links entries whose parent_ref now matches an entry that is
-// present. Re-runnable: a parent dangling today may arrive next week once a
+// ResolveParents links entries whose headers name a parent that the corpus
+// holds. Re-runnable: a parent dangling today may arrive next week once a
 // forward containing it is extracted. Returns how many edges it resolved.
-func (s *Store) ResolveParents() (int64, error) {
-	// Scoped to mail. A parent_ref means a different thing in each source — a
-	// Message-ID here, a thread_ts in Slack — and without the scope a Slack entry
-	// whose thread_ts happened to equal some Message-ID would be given a mail
-	// parent, silently welding two conversations together. No real ts collides
-	// with a real Message-ID today, so this is a guard rather than a repair.
-	r, err := s.db.Exec(`
-		update entries set parent_id = (
-		  select p.id from mail_detail d join entries p on p.id = d.entry_id
-		  where d.message_id = entries.parent_ref
-		)
-		where parent_id is null and parent_ref is not null and source = 'mail'
-		  and exists (select 1 from mail_detail d where d.message_id = entries.parent_ref)`)
-	if err != nil {
-		return 0, fmt.Errorf("resolving parents: %w", err)
+//
+// A message names its ancestry twice over — References, oldest first, and then
+// In-Reply-To, which is the direct parent — and the newest of those ids that the
+// corpus holds is the parent here. Reading the two as one list is what makes a
+// reply whose own parent was never fetched land under its grandparent instead of
+// standing as a root of its own.
+//
+// Scoped to mail. A parent_ref means a different thing in each source — a
+// Message-ID here, a thread_ts in Slack — and without the scope a Slack entry
+// whose thread_ts happened to equal some Message-ID would be given a mail
+// parent, silently welding two conversations together. No real ts collides with
+// a real Message-ID today, so this is a guard rather than a repair.
+func (s *Store) ResolveParents() (int64, error) { return s.linkParents(false) }
+
+// ReassertParents is ResolveParents over edges that are already drawn: where a
+// message's own headers name a parent the corpus holds and the edge it has is to
+// something else, the header's parent wins.
+//
+// An edge is written by whoever asks first. Ingest resolves parents once at the
+// end of its walk, while the quoted pass links what a body nests *during* the
+// walk, and the guard both writers use — fill a NULL parent and nothing else —
+// means the first writer is the last word. That is the wrong precedence for a
+// header: nesting is a reading of the text, and In-Reply-To is a statement about
+// it, so the reading should not be able to keep the header's slot. Doing it here,
+// after the fact, also repairs the edges that were decided that way before the
+// quoted pass learned to leave a header alone — which is the whole existing
+// corpus.
+//
+// Only where the header resolves. A message whose parent is not in the corpus
+// keeps the edge it has, because that edge is the only thing placing it in a
+// conversation at all — half a trail beats none. Returns how many edges changed.
+func (s *Store) ReassertParents() (int64, error) { return s.linkParents(true) }
+
+// linkParents is both of the above: one reading of the same rows, differing only
+// in whether an edge that is already drawn may be replaced. Candidates are read
+// in id order — a pass that can refuse an edge has to visit the same rows in the
+// same order twice to be worth running twice.
+func (s *Store) linkParents(overwrite bool) (int64, error) {
+	type candidate struct {
+		id, parent int64
+		parentRef  string
+		refs       string
 	}
-	return r.RowsAffected()
+
+	// Read everything before writing anything: the same connection cannot walk a
+	// cursor and write through it at once, and a half-applied pass would be a
+	// graph with no record of where it stopped.
+	rows, err := s.db.Query(`
+		select e.id, coalesce(e.parent_id, 0), coalesce(e.parent_ref, ''), coalesce(d.refs, '')
+		from entries e left join mail_detail d on d.entry_id = e.id
+		where e.source = 'mail' and (e.parent_id is null or ?)
+		order by e.id`, overwrite)
+	if err != nil {
+		return 0, fmt.Errorf("reading parents: %w", err)
+	}
+	var cands []candidate
+	for rows.Next() {
+		var c candidate
+		if err := rows.Scan(&c.id, &c.parent, &c.parentRef, &c.refs); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		if c.parentRef != "" || strings.TrimSpace(c.refs) != "" {
+			cands = append(cands, c)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return 0, err
+	}
+	rows.Close()
+
+	// Every Message-ID the corpus can answer for. `min` because a twin collapse
+	// can leave two rows claiming one Message-ID, and the answer has to be the
+	// same one every run.
+	held := map[string]int64{}
+	ids, err := s.db.Query(`
+		select message_id, min(entry_id) from mail_detail
+		where message_id is not null and message_id <> '' group by message_id`)
+	if err != nil {
+		return 0, fmt.Errorf("reading message ids: %w", err)
+	}
+	for ids.Next() {
+		var mid string
+		var eid int64
+		if err := ids.Scan(&mid, &eid); err != nil {
+			ids.Close()
+			return 0, err
+		}
+		held[mid] = eid
+	}
+	if err := ids.Err(); err != nil {
+		ids.Close()
+		return 0, err
+	}
+	ids.Close()
+
+	var changed int64
+	for _, c := range cands {
+		// Newest last, so the walk below finds In-Reply-To before References:
+		// the header that names one message is a stronger claim than the list
+		// that names an ancestry.
+		named := strings.Fields(c.refs)
+		if c.parentRef != "" {
+			named = append(named, c.parentRef)
+		}
+		var parent int64
+		for i := len(named) - 1; i >= 0; i-- {
+			if id, ok := held[named[i]]; ok {
+				parent = id
+				break
+			}
+		}
+		if parent == 0 || parent == c.id || parent == c.parent {
+			continue
+		}
+		// A header can name a message that is already below this one — a thread
+		// quoted in full inside a reply names it both ways — and the walk reads a
+		// ring as no chain at all, so the edge is refused rather than drawn.
+		if bad, err := closesCycle(s.db, c.id, parent); err != nil {
+			return changed, err
+		} else if bad {
+			continue
+		}
+		q := `update entries set parent_id = ? where id = ? and parent_id is null`
+		if overwrite {
+			q = `update entries set parent_id = ? where id = ? and parent_id is not ?`
+		}
+		args := []any{parent, c.id}
+		if overwrite {
+			args = append(args, parent)
+		}
+		r, err := s.db.Exec(q, args...)
+		if err != nil {
+			return changed, fmt.Errorf("linking parent of %d: %w", c.id, err)
+		}
+		n, err := r.RowsAffected()
+		if err != nil {
+			return changed, err
+		}
+		changed += n
+	}
+	return changed, nil
 }
 
 // Stats is a summary of what is in the corpus, and of what is missing.

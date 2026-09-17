@@ -37,6 +37,38 @@ type Shown struct {
 	Sightings []Sighting
 	// Participants in role order.
 	Participants []Participant
+	// Attachments are the files this entry carries, in the order its client put
+	// them in. The rows are the corpus's own record of what the source stated —
+	// name, type, size, the place it can be fetched from — plus whatever the media
+	// phase has since made of it (the digest of bytes we hold, or why we never
+	// will). Nothing here says how a renderer should draw one; see
+	// ShownAttachment.
+	Attachments []ShownAttachment
+}
+
+// ShownAttachment is one file an entry carries, as the corpus holds it.
+//
+// It is deliberately the raw material of an attachment chip rather than the chip:
+// the wording ("PDF · 93 KB"), the decision of what a click does with bytes we
+// hold, and whether the file is shown in a window are all made from this in one
+// place (see spec.AttachmentOf), so a page build and the corpus's own read cannot
+// describe one file two ways. What is NOT here is who the file belongs to: the
+// entry's permalink is, and a caller turns that into wherever the chip should go.
+type ShownAttachment struct {
+	Name string
+	// Mime is what the source called it, empty when it called it nothing: a mail
+	// part with no Content-Type is a file, not an unknown one.
+	Mime      string
+	Size      int64
+	Permalink string
+	// SourceRef is how to ask the source for the bytes — a Gmail part id, in
+	// practice. Empty when there is nothing to fetch by.
+	SourceRef string
+	// BlobSHA is set once the bytes are in the corpus, and is what a client asks
+	// for instead of sending the reader back to the source.
+	BlobSHA string
+	// Skip is why the corpus will never hold these bytes, once a pull has decided.
+	Skip string
 }
 
 // Sighting is one place an entry was seen.
@@ -100,6 +132,30 @@ func (s *Store) Show(extID string) (Shown, error) {
 		e.Sightings = append(e.Sightings, g)
 	}
 	if err := rows.Err(); err != nil {
+		return e, err
+	}
+
+	// The files, in the order they were stated: a message's attachment list is the
+	// sender's, and rowid is the order the source gave them in (the rows are
+	// replaced wholesale on every ingest, so rowid means the newest statement of
+	// that order). Ordered explicitly rather than left to the planner.
+	arows, err := s.db.Query(`
+		select name, coalesce(mime, ''), size, coalesce(permalink, ''),
+		       coalesce(source_ref, ''), coalesce(blob_sha, ''), coalesce(media_skip, '')
+		from attachments where entry_id = ? order by rowid`, e.ID)
+	if err != nil {
+		return e, err
+	}
+	defer arows.Close()
+	for arows.Next() {
+		var a ShownAttachment
+		if err := arows.Scan(&a.Name, &a.Mime, &a.Size, &a.Permalink, &a.SourceRef,
+			&a.BlobSHA, &a.Skip); err != nil {
+			return e, err
+		}
+		e.Attachments = append(e.Attachments, a)
+	}
+	if err := arows.Err(); err != nil {
 		return e, err
 	}
 

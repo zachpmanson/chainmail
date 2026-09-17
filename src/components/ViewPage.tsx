@@ -9,7 +9,7 @@ import { Rendered } from "./Rendered";
 /**
  * One line saying what a refresh did. NothingNew is the calm default: a page
  * that was already current should not read as if it changed. The other states
- * are the four chain lists the report can hold, joined by comma, plus the
+ * are the four thread lists the report can hold, joined by comma, plus the
  * searches it recorded (the add-email search) and any twins it collapsed. A
  * page that changed only its counts (entries) is still reported — those are the
  * chains a reader can see grew.
@@ -187,7 +187,7 @@ export function ViewPage() {
     },
   });
 
-  // Accept, by root ext id, a chain the queries proposed but did not include.
+  // Accept, by root ext id, a thread the queries proposed but did not include.
   // Re-running the refresh with accept is how a proposal becomes membership.
   // Defined where `spec` is known non-null (the guard below narrows it).
 
@@ -220,8 +220,8 @@ export function ViewPage() {
       onAccept={(ids) =>
         refresh.mutate({ body: { spec, name, accept: ids } })
       }
-      // Adding a chain by hand sends the search that found it as well, so the
-      // page records it: an accepted chain whose query the spec does not hold
+      // Adding a thread by hand sends the search that found it as well, so the
+      // page records it: an accepted thread whose query the spec does not hold
       // is one nothing can explain or re-find. The server dedupes it against
       // what the spec already records, so re-adding from the same search is
       // harmless. The modal searches hybrid, and says so in the note.

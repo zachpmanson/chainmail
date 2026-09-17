@@ -145,6 +145,11 @@ export type OpsMerge = components["schemas"]["OpsMerge"];
 
 export type OpsMergeRecord = components["schemas"]["OpsMergeRecord"];
 
+/** One person, with every address and uid the corpus has folded into them. What
+ *  the services page picks the reader from, because several aliases behind one
+ *  account are one person in the identity graph and only the corpus knows it. */
+export type PersonSummary = components["schemas"]["PersonSummary"];
+
 /** One domain's mail, as the organisations screen shows it: what the mail is drawn
  *  as, whether that is the reader's own answer or the corpus's guess, and how much
  *  mail is behind it. */

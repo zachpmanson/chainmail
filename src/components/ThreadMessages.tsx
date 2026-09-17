@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { $api, type CorpusEntry } from "../lib/api";
+import { MEDIA_BASE } from "../lib/attachments";
 import { orgOrder, slotsFor } from "../lib/derive";
 import { newest } from "../lib/newest";
-import { Failure } from "./ChainPreview";
+import { gmailIdOf, sourceLine } from "../lib/sources";
+import { Failure } from "./ThreadPreview";
 import { Message, type StampData } from "./Message";
+import { ParticipantsPanel, castOfEntries } from "./Participants";
+import { Source } from "./Source";
 
 /**
  * A thread in the reading pane, drawn with the transcript's own `Message`.
@@ -16,14 +20,18 @@ import { Message, type StampData } from "./Message";
  * component is now shared, and the corpus renders the body (`html`) with the
  * same conversion a build uses, so a bubble here is a bubble there.
  *
- * What is drawn but not yet filled in, because the chain read does not carry it:
- * attachments. That lives in the spec's per-entry pipeline today, and the gap
- * shows as a gap rather than as a guess.
+ * The files a message carries come with the thread, mapped through the same
+ * spec.AttachmentOf a build uses, so the chip in the pane is the chip on the page
+ * — name, kind, size wording and all — rather than a second reading of the same
+ * rows. The bytes are reached from here where the server serves them
+ * (/v1/attachments/{sha}, the -media grant), and the sender's own link where it
+ * does not: a chip that cannot be opened is still worth showing, because "there
+ * was a file on this" is part of what the message said.
  *
- * The organisation behind the colour does come with the chain, resolved by the
+ * The organisation behind the colour does come with the thread, resolved by the
  * same resolver a page build uses, so a bubble here is coloured like the bubble
  * the page draws for the same sender. The slots are then assigned here, in the
- * order the chain's own entries present them — see orgOrder — because a pane has
+ * order the thread's own entries present them — see orgOrder — because a pane has
  * only the entries it was handed and no panel to take organisations from.
  */
 
@@ -70,7 +78,7 @@ function formatOffset(mins: number): string {
 }
 
 /** The anchor a bubble gets. The entry's own ext id is the only stable handle
- *  here, and it is not an id an HTML anchor can carry, so the chain's position
+ *  here, and it is not an id an HTML anchor can carry, so the thread's position
  *  names it: the timestamp's self-link only has to land on the message it is
  *  part of. */
 const anchor = (i: number) => `entry-${i}`;
@@ -105,39 +113,40 @@ function senderTitle(e: CorpusEntry): string {
   return `${name} <${e.fromEmail}>`;
 }
 
-export function ChainMessages({ chain }: { chain: { rootExtId: string } }) {
+
+export function ThreadMessages({ thread }: { thread: { rootExtId: string } }) {
   const fetched = $api.useQuery("get", "/v1/chains/{rootExtId}", {
-    params: { path: { rootExtId: chain.rootExtId } },
+    params: { path: { rootExtId: thread.rootExtId } },
   });
 
   const entries = fetched.data?.entries ?? [];
 
   // Where the pane lands: the newest entry, which is the message the list row
-  // was a summary of (see newest). A chain is drawn oldest-first, because that is
+  // was a summary of (see newest). A thread is drawn oldest-first, because that is
   // what makes it readable as a transcript — but the row that was clicked
   // previewed the last message, and opening a five-screen trail to its top reads
   // as the email not being there at all. Landing on it is the pane keeping the
   // promise the row made, and the flash is so the arrival is visible on a thread
   // longer than the screen.
   //
-  // Once per chain, and never again: a refetch redraws the open thread (saving
+  // Once per thread, and never again: a refetch redraws the open thread (saving
   // "who I am" invalidates it), and that must not drag a reader who has scrolled
   // back to the start away from where they were reading.
   const [landed, setLanded] = useState<string | null>(null);
   const landedFor = useRef<string | null>(null);
   const target = newest(entries);
   useEffect(() => {
-    if (!target || landedFor.current === chain.rootExtId) return;
-    landedFor.current = chain.rootExtId;
+    if (!target || landedFor.current === thread.rootExtId) return;
+    landedFor.current = thread.rootExtId;
     const el = document.getElementById(anchor(entries.indexOf(target)));
     // Absent in jsdom, and a landing that cannot scroll is still a landing: the
     // mark is what the reader sees either way.
     el?.scrollIntoView?.({ block: "start" });
     setLanded(target.extId);
-  }, [chain.rootExtId, entries, target]);
+  }, [thread.rootExtId, entries, target]);
 
   if (fetched.isError) return <Failure error={fetched.error} />;
-  if (fetched.isPending) return <p className="selnote">Loading the chain…</p>;
+  if (fetched.isPending) return <p className="selnote">Loading the thread…</p>;
 
   if (entries.length === 0) return <p className="selnote">No entries to show.</p>;
 
@@ -145,9 +154,51 @@ export function ChainMessages({ chain }: { chain: { rootExtId: string } }) {
   // entries this pane was handed. A sender whose org nothing established takes the
   // stylesheet's unknown slot, which is what the page draws for them too.
   const slot = slotsFor(orgOrder(entries.map((e) => e.org)));
+  const titles = new Map<string, string>();
+  for (const e of entries) if (e.author) titles.set(e.author, senderTitle(e));
+  // The provenance lines' own two lookups. A host is named by its mailbox id
+  // where it has one — the same name a built page prints — and an unspooled id
+  // links to this page's row for that message rather than out to the mailbox,
+  // because the message it names is right here.
+  const byExt = new Map<string, CorpusEntry>();
+  const anchorByGmail = new Map<string, string>();
+  entries.forEach((e, i) => {
+    byExt.set(e.extId, e);
+    const gmail = gmailIdOf(e);
+    if (gmail) anchorByGmail.set(gmail, anchor(i));
+  });
+  const mailName = (extId: string): string => {
+    const host = byExt.get(extId);
+    if (!host) return extId;
+    const gmail = gmailIdOf(host);
+    return gmail ? `msg ${gmail}` : host.extId;
+  };
 
   return (
     <div className="stream">
+      {/* Who is in the thread, over the messages themselves — a page built from the
+          same thread opens with the same panel, and both are read the same way.
+          It is here rather than in the pane's head because the head is one line of
+          the message the reader is on, and a cast of fifteen is a block: in the
+          stream it scrolls away with the thread, and the scroll position a reader
+          had is the same as it was. The panel is collapsible, and this is why the
+          summary line is a thing to press. */}
+      <ParticipantsPanel
+        // One row per message, which is what the panel counts people by and how it
+        // finds their faces; the same slots the bubbles are coloured on, so a
+        // person's row and their messages cannot disagree.
+        v={{
+          rows: entries.map((e) => ({
+            entry: { sender: e.author, org: e.org, fromEmail: e.fromEmail },
+          })),
+          orgSlot: slot,
+          // The bubbles' own hover title, by name rather than by entry: the panel
+          // holds people, and the entry it was reached through is not the one the
+          // reader is pointing at.
+          whoTitle: (name: string) => titles.get(name) ?? name,
+        }}
+        people={castOfEntries(entries)}
+      />
       {entries.map((e, i) => (
         <Message
           key={e.extId}
@@ -162,7 +213,7 @@ export function ChainMessages({ chain }: { chain: { rootExtId: string } }) {
           // the two cannot name two addresses for one message.
           senderTitle={senderTitle(e)}
           // The sender's organisation as the corpus resolved it, on the slot this
-          // chain's own first-appearance order gives it.
+          // thread's own first-appearance order gives it.
           orgSlot={slot(e.org)}
           // The reader's own message: the corpus resolved this entry's author
           // against the addresses the reader stored, so the pane makes no second
@@ -179,11 +230,24 @@ export function ChainMessages({ chain }: { chain: { rootExtId: string } }) {
           // whoever the page guessed. The corpus makes this string with the same
           // function a page build does.
           to={e.to}
+          subject={e.subject}
+          // Where this message was found, in the same receipt line a built page
+          // prints under the same bubble — the message's mailbox id, or the hosts
+          // a recovered one was unspooled from. The pane is a reader looking at
+          // one thread and the page is a reader looking at a built one; the id in
+          // the receipt is the thing both are holding in their hand.
+          source={<Source source={sourceLine(e, mailName)} anchorByGmail={anchorByGmail} />}
           stamp={stampOf(e)}
           // The corpus entry as it arrived, so a bubble that renders wrong can be
           // pasted somewhere and read whole — the same affordance, and the same
           // button, the page offers.
           copyJson={e}
+          // The files this message carried, as the corpus read them. mediaBase is
+          // the app's own route to stored bytes — the pane is a reader with a
+          // server behind it, unlike a shared export, so a pulled file opens
+          // here rather than sending the reader to the mailbox.
+          attachments={e.attachments}
+          mediaBase={MEDIA_BASE}
           // The message the pane landed on, flashed once and then let go. Only
           // that one message is handed the end-of-flash callback: a thread is one
           // landing, and every other bubble has no mark to take off.

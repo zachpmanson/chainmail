@@ -1,6 +1,8 @@
 package corpus
 
 import (
+	"errors"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -308,6 +310,57 @@ func TestMergeCarriesRenderOffsets(t *testing.T) {
 	}
 	if n != 2 {
 		t.Fatalf("render offsets under the survivor: got %d, want 2", n)
+	}
+}
+
+// The reader's own setting names a person, and a merge takes that person's row
+// away when it is the half being dropped. Left pointing at the emptied id the
+// reader would read as nobody, so a merge run to fold the two halves of their own
+// address together would quietly stop marking their own mail.
+func TestMergeCarriesTheReadersOwnSetting(t *testing.T) {
+	s := open(t)
+	reader := person(t, s, "dan@current.example", "Dan D")
+	if err := s.SetMePerson(reader); err != nil {
+		t.Fatal(err)
+	}
+
+	// A merge between two other people leaves the setting alone: the repoint names
+	// the id it follows rather than rewriting whatever happens to be stored.
+	bystander, err := Resolve(s, KindEmail, "ana@fjordline.example", "Ana Reyes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dropped, err := Resolve(s, KindEmail, "ana@old.example", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Merge(s, bystander, dropped); err != nil {
+		t.Fatalf("Merge: %v", err)
+	}
+	if id, ok, _ := s.MePerson(); !ok || id != reader {
+		t.Fatalf("MePerson = %d, %v after a merge that did not name the reader", id, ok)
+	}
+
+	// The reader is the half being dropped, which is the case that matters: the
+	// id moves to the survivor with the identities.
+	drop, err := Resolve(s, KindEmail, "dan@old.example", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Merge(s, reader, drop); err != nil {
+		t.Fatalf("Merge: %v", err)
+	}
+	if id, ok, err := s.MePerson(); err != nil || !ok || id != reader {
+		t.Fatalf("MePerson = %d, %v, %v after the reader's id was merged away", id, ok, err)
+	}
+	addresses, err := s.MeAddresses()
+	if err != nil {
+		t.Fatalf("MeAddresses: %v", err)
+	}
+	// Both halves are the reader's now, which is the point of merging them.
+	want := []string{"dan@current.example", "dan@old.example"}
+	if !reflect.DeepEqual(addresses, want) {
+		t.Errorf("addresses = %q, want %q", addresses, want)
 	}
 }
 
@@ -740,5 +793,150 @@ func TestAddressesResolveToThePeopleTheyWereMergedInto(t *testing.T) {
 		if len(got) != 0 {
 			t.Errorf("PeopleForAddresses(%q) resolved to %v, want nobody", nothing, got)
 		}
+	}
+}
+
+func TestUpdatePersonRenamesAndKeepsTheNamesItWasReadAs(t *testing.T) {
+	s := open(t)
+	ben, err := Resolve(s, KindDisplayName, "Ben", "Ben")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := UpdatePerson(s, ben, PersonEdit{DisplayName: "Ben Okoye"})
+	if err != nil {
+		t.Fatalf("UpdatePerson: %v", err)
+	}
+	if got.DisplayName != "Ben Okoye" {
+		t.Fatalf("display name: got %q, want Ben Okoye", got.DisplayName)
+	}
+	// The name the corpus read is kept: a name is evidence, and the screen's
+	// edit says what to CALL someone, not which spellings they have been
+	// written as.
+	if _, err := PersonByIdentity(s, KindDisplayName, "ben"); err != nil {
+		t.Fatalf("the name it was read as no longer resolves: %v", err)
+	}
+	// And the new name resolves to the same person, so a later header naming
+	// them lands here rather than on a stranger.
+	again, err := PersonByIdentity(s, KindDisplayName, "ben okoye")
+	if err != nil || again != ben {
+		t.Fatalf("the new name does not resolve to %d: %d %v", ben, again, err)
+	}
+	var rule string
+	if err := s.DB().QueryRow(
+		`select rule from identities where kind='display_name' and value='ben okoye'`,
+	).Scan(&rule); err != nil {
+		t.Fatal(err)
+	}
+	if rule != opsRule {
+		t.Fatalf("rule: got %q, want %q", rule, opsRule)
+	}
+}
+
+func TestUpdatePersonAttachesAndDetachesIdentities(t *testing.T) {
+	s := open(t)
+	ben, err := Resolve(s, KindDisplayName, "Ben", "Ben")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := UpdatePerson(s, ben, PersonEdit{Add: []string{"email:BEN@example.com "}})
+	if err != nil {
+		t.Fatalf("UpdatePerson: %v", err)
+	}
+	// Normalised on the way in: the box cannot make a second spelling of an
+	// address the corpus already knows.
+	if id, err := PersonByIdentity(s, KindEmail, "ben@example.com"); err != nil || id != ben {
+		t.Fatalf("the added address did not resolve to %d: %d %v", ben, id, err)
+	}
+	if !strings.Contains(strings.Join(got.Identities, " "), "email:ben@example.com") {
+		t.Fatalf("identities: %v", got.Identities)
+	}
+
+	if _, err := UpdatePerson(s, ben, PersonEdit{Remove: []string{"email:ben@example.com"}}); err != nil {
+		t.Fatalf("removing: %v", err)
+	}
+	if _, err := PersonByIdentity(s, KindEmail, "ben@example.com"); err == nil {
+		t.Fatal("the address still resolves after being detached")
+	}
+	// Detaching the last identity leaves a person known by name alone, and the
+	// corpus already tolerates that — name-only people are its own finding.
+	if _, err := UpdatePerson(s, ben, PersonEdit{Remove: []string{"display_name:ben"}}); err != nil {
+		t.Fatalf("detaching the last identity: %v", err)
+	}
+	if _, err := PersonByID(s, ben); err != nil {
+		t.Fatalf("the person went with its last identity: %v", err)
+	}
+}
+
+func TestUpdatePersonRefusesToMoveAnIdentityBetweenPeople(t *testing.T) {
+	s := open(t)
+	ben, err := Resolve(s, KindEmail, "ben@example.com", "Ben")
+	if err != nil {
+		t.Fatal(err)
+	}
+	frank, err := Resolve(s, KindEmail, "frank@example.com", "Frank F")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = UpdatePerson(s, frank, PersonEdit{Add: []string{"email:ben@example.com"}})
+	var taken *IdentityTakenError
+	if !errors.As(err, &taken) {
+		t.Fatalf("taking another person's address should be an IdentityTakenError: %v", err)
+	}
+	if taken.PersonID != ben || taken.Name != "Ben" {
+		t.Fatalf("the refusal should name the holder: %+v", taken)
+	}
+	// The holder is unchanged: a refusal is not a half-merge.
+	if id, err := PersonByIdentity(s, KindEmail, "ben@example.com"); err != nil || id != ben {
+		t.Fatalf("the address moved anyway: %d %v", id, err)
+	}
+	// A name another person answers to is refused the same way.
+	if _, err := Resolve(s, KindDisplayName, "Ada", "Ada"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := UpdatePerson(s, frank, PersonEdit{DisplayName: "Ada"}); err == nil {
+		t.Fatal("renaming onto another person's display name should be refused")
+	}
+}
+
+func TestUpdatePersonRejectsJunkIdentitiesAndUnknownPeople(t *testing.T) {
+	s := open(t)
+	ben, err := Resolve(s, KindDisplayName, "Ben", "Ben")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{"ben@example.com", "handle:ben", "email:", "email:   "} {
+		_, err := UpdatePerson(s, ben, PersonEdit{Add: []string{bad}})
+		if !errors.Is(err, ErrBadIdentity) {
+			t.Fatalf("%q should be ErrBadIdentity, got %v", bad, err)
+		}
+	}
+	if _, err := UpdatePerson(s, 9999, PersonEdit{DisplayName: "Nobody"}); !errors.Is(err, ErrNoPerson) {
+		t.Fatalf("an unknown person should be ErrNoPerson, got %v", err)
+	}
+}
+
+func TestUpdatePersonAppliesEveryPartOrNoneOfIt(t *testing.T) {
+	s := open(t)
+	ben, err := Resolve(s, KindDisplayName, "Ben", "Ben")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Resolve(s, KindEmail, "frank@example.com", "Frank F"); err != nil {
+		t.Fatal(err)
+	}
+	// The last part is refused, so the two before it must not have happened:
+	// half an edit is a person whose name and addresses disagree.
+	_, err = UpdatePerson(s, ben, PersonEdit{
+		DisplayName: "Ben Okoye",
+		Add:         []string{"email:ben@example.com", "email:frank@example.com"},
+	})
+	if err == nil {
+		t.Fatal("expected a refusal")
+	}
+	if _, err := PersonByIdentity(s, KindEmail, "ben@example.com"); err == nil {
+		t.Error("the address was added despite the refusal")
+	}
+	if _, err := PersonByIdentity(s, KindDisplayName, "ben okoye"); err == nil {
+		t.Error("the rename landed despite the refusal")
 	}
 }

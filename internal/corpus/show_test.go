@@ -96,3 +96,57 @@ func TestShowReportsAMissingIDAsSuch(t *testing.T) {
 		t.Errorf("Chain err = %v, want ErrNotFound", err)
 	}
 }
+
+// The files a message carries come back with it, and in the order the source
+// stated. A read that could not answer this is why an attachment showed nowhere in
+// the pane: the rows were there, and nothing on the read path asked for them.
+func TestShowCarriesAnEntrysAttachments(t *testing.T) {
+	s := open(t)
+	e := Entry{Source: SourceMail, ExtID: "with-files", Kind: "message",
+		TS: time.Date(2026, 9, 14, 2, 12, 0, 0, time.UTC), BodyText: "the file is attached"}
+	_, err := s.Put(e, &Mail{MessageID: "with-files"}, []Attachment{
+		{Name: "billing.csv", Mime: "text/csv", Size: 4096, SourceRef: "part-1",
+			Permalink: "https://mail.google.com/mail/u/0/#all/abc"},
+		{Name: "notes.txt", Mime: "text/plain", Size: 12, SourceRef: "part-2"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The bytes themselves, so the digest below is a real link rather than a
+	// string the test just agreed with itself about.
+	if err := s.PutBlob(Blob{Bytes: []byte("csv,bytes"), Mime: "text/csv", Source: SourceMail}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.LinkBlob("with-files", "part-1", BlobSHA([]byte("csv,bytes"))); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.Show("with-files")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Attachments) != 2 {
+		t.Fatalf("got %d attachments, want 2", len(got.Attachments))
+	}
+	one := got.Attachments[0]
+	if one.Name != "billing.csv" || one.Mime != "text/csv" || one.Size != 4096 ||
+		one.SourceRef != "part-1" || one.Permalink != "https://mail.google.com/mail/u/0/#all/abc" {
+		t.Errorf("first attachment: %+v", one)
+	}
+	// The digest is what lets a client ask for the bytes rather than send the
+	// reader back to the mailbox, so it has to survive the read.
+	if one.BlobSHA != BlobSHA([]byte("csv,bytes")) {
+		t.Errorf("first attachment digest: %q, want the digest of the bytes", one.BlobSHA)
+	}
+	if got.Attachments[1].Name != "notes.txt" {
+		t.Errorf("second attachment: %+v (order is the source's)", got.Attachments[1])
+	}
+	// And the chain read, which is what the pane goes through, carries them too.
+	chain, err := s.Chain("with-files")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(chain) != 1 || len(chain[0].Attachments) != 2 {
+		t.Fatalf("chain: %d entries, %d attachments on the first", len(chain), len(chain[0].Attachments))
+	}
+}

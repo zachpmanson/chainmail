@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/mail"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -500,7 +501,21 @@ func ResolveAddress(s *Store, a Address, rule string) (int64, error) {
 //
 // Re-pointing an identity that already belongs to someone else is an error, not
 // a silent steal: that is a merge, and merges are recorded.
+// execer is the smallest writer an identity write needs, satisfied by both
+// *sql.DB and *sql.Tx — AddAlias takes the first, and a multi-part edit takes a
+// transaction so it either happens whole or not at all.
+type execer interface {
+	Exec(query string, args ...any) (sql.Result, error)
+	QueryRow(query string, args ...any) *sql.Row
+}
+
 func AddAlias(s *Store, personID int64, kind, value, rule string) error {
+	return addAlias(s.db, personID, kind, value, rule)
+}
+
+// addAlias is AddAlias against either handle: one identity pointed at one
+// person, refusing to take one another person holds.
+func addAlias(q execer, personID int64, kind, value, rule string) error {
 	v, err := NormaliseIdentity(kind, value)
 	if err != nil {
 		return err
@@ -509,42 +524,45 @@ func AddAlias(s *Store, personID int64, kind, value, rule string) error {
 		rule = "manual:alias"
 	}
 	var owner int64
-	err = s.db.QueryRow(
+	err = q.QueryRow(
 		`select person_id from identities where kind=? and value=?`, kind, v).Scan(&owner)
 	switch {
 	case err == nil && owner == personID:
-		_, err := s.db.Exec(
+		_, err := q.Exec(
 			`update identities set rule=? where kind=? and value=?`, rule, kind, v)
 		return err
 	case err == nil:
-		return fmt.Errorf("identity %s %s already belongs to person %d; merge instead",
-			kind, v, owner)
+		var held string
+		if err := q.QueryRow(`select display_name from people where id=?`, owner).Scan(&held); err != nil {
+			return err
+		}
+		return &IdentityTakenError{Identity: kind + ":" + v, PersonID: owner, Name: held}
 	case err != sql.ErrNoRows:
 		return err
 	}
 	var exists int
-	if err := s.db.QueryRow(`select count(*) from people where id=?`, personID).
+	if err := q.QueryRow(`select count(*) from people where id=?`, personID).
 		Scan(&exists); err != nil {
 		return err
 	}
 	if exists == 0 {
 		return fmt.Errorf("no person %d", personID)
 	}
-	if _, err := s.db.Exec(
+	if _, err := q.Exec(
 		`insert into identities (person_id, kind, value, rule) values (?,?,?,?)`,
 		personID, kind, v, rule); err != nil {
 		return fmt.Errorf("adding alias %s %s: %w", kind, v, err)
 	}
 	return nil
-}
-
-// Merge folds drop into keep: every identity and every reference is repointed,
+} // Merge folds drop into keep: every identity and every reference is repointed,
 // then the emptied person row is deleted. All of it in one transaction, because a
 // half-merged person is worse than either an unmerged or a merged one — it is a
 // person with references to a row that no longer exists.
 //
 // No identity is lost: the dropped person's addresses still resolve, they just
-// resolve to keep, and person_merges says when and why they moved.
+// resolve to keep, and person_merges says when and why they moved. The same goes
+// for the one setting that names a person — the reader's own (SettingMePerson) —
+// so a merge cannot leave the reader reading as nobody.
 //
 // A merge is not reversible, and callers should not treat person_merges as
 // though it were. The row names the two people, the dropped display name and the
@@ -603,6 +621,15 @@ func mergeWithReason(s *Store, keep, drop int64, reason string) error {
 	}
 	if _, err := tx.Exec(`delete from participants where person_id=?`, drop); err != nil {
 		return err
+	}
+	// The reader's own person follows the merge for the same reason their
+	// identities do: the setting names a row, and this takes that row away. Left
+	// pointing at the emptied id, the reader would read as nobody and their own
+	// mail would stop being marked — on a merge they may well have run to fold the
+	// two halves of their own address together.
+	if _, err := tx.Exec(`update settings set value=? where key=? and value=?`,
+		strconv.FormatInt(keep, 10), SettingMePerson, strconv.FormatInt(drop, 10)); err != nil {
+		return fmt.Errorf("repointing the reader's own person: %w", err)
 	}
 	// The render-offset measurements — whose client rendered a quoted clock —
 	// are facts about the same human, so they follow the merge just like
@@ -706,6 +733,30 @@ func PeopleForAddresses(s *Store, addrs []string) (map[int64]bool, error) {
 		out[id] = true
 	}
 	return out, rows.Err()
+}
+
+// ErrNoPerson is returned when an id names nobody in `people`. Its own error
+// rather than a message, because the callers that meet it have to decide between
+// a refusal and an absence — a settings write is a 400, a setting that reads back
+// as nobody is not an error at all (see SetMePerson, MePerson).
+var ErrNoPerson = errors.New("no person with that id")
+
+// personMailbox reads a person the corpus holds: their name, and the mailboxes
+// they are known by, sorted so two reads of one person agree.
+//
+// An id the corpus does not hold is ErrNoPerson rather than an empty answer, so no
+// caller can read "there is no such person" and "this person has no address" as
+// the same fact: the first is a mistake to report and the second is a person
+// nobody could have received mail from.
+func personMailbox(s *Store, id int64) (name string, emails []string, err error) {
+	if err := s.db.QueryRow(`select display_name from people where id=?`, id).Scan(&name); err != nil {
+		if err == sql.ErrNoRows {
+			return "", nil, fmt.Errorf("%w: %d", ErrNoPerson, id)
+		}
+		return "", nil, err
+	}
+	emails, err = emailsOf(s, id)
+	return name, emails, err
 }
 
 // PersonByIdentity looks up an existing identity without creating one.
@@ -891,4 +942,146 @@ func AddHeader(s *Store, entryID int64, role, header string) ([]int64, error) {
 		ids = append(ids, id)
 	}
 	return ids, nil
+}
+
+// PersonEdit is one hand-made change to a person's setup: a name to write, and
+// identities to attach or detach. It is what the ops screen's own editor sends,
+// and it is deliberately not a merge — merging is a decision about two people
+// with evidence behind it (see Dedupe), while this is a reader correcting one.
+type PersonEdit struct {
+	// DisplayName, when not empty, becomes the person's name. The identities the
+	// name was read from are kept: a name is evidence like any other, and the
+	// screen's edit is a statement about what to CALL someone, not about which
+	// spellings they have been written as.
+	DisplayName string
+	// Add and Remove are identities as "kind:value" — the form identitiesOf
+	// returns and the wire carries, e.g. "email:ada@example.com".
+	Add    []string
+	Remove []string
+}
+
+// ErrBadIdentity is an identity string that is not one: not "kind:value", an
+// unknown kind, or a value that normalises to nothing. It is the caller's own
+// mistake, which is why the API turns it into a 400 rather than a conflict.
+var ErrBadIdentity = errors.New("not an identity")
+
+// opsRule marks an identity a human wrote on the ops screen, so a reader asking
+// why two people hold one address can tell a hand from a rule.
+const opsRule = "ops:manual"
+
+// IdentityTakenError is an edit that would move an identity onto a person who
+// does not hold it. Addresses are the corpus's own finding, and a screen that
+// could silently reassign one would be a screen that can undo a merge by
+// accident. Nothing here merges: the reader is told whose it is and can say so
+// on the merge plan, where the evidence is.
+type IdentityTakenError struct {
+	Identity string
+	PersonID int64
+	Name     string
+}
+
+func (e *IdentityTakenError) Error() string {
+	return fmt.Sprintf("%s belongs to %s (#%d) — merge instead: moving an address "+
+		"between people is the same act as merging them, and the merge plan is where "+
+		"that act has evidence behind it", e.Identity, e.Name, e.PersonID)
+}
+
+// UpdatePerson applies one PersonEdit to one person, in a transaction, and
+// answers with the person as it now stands.
+//
+// Identities are normalised on the way in (NormaliseIdentity), so the screen's
+// box cannot create a second spelling of an address the corpus already holds,
+// and every identity it writes is marked with the rule that put it there —
+// opsRule — because the next person to ask why two people hold one address
+// should be able to see that a human said so.
+func UpdatePerson(s *Store, id int64, edit PersonEdit) (PersonSummary, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return PersonSummary{}, err
+	}
+	defer tx.Rollback()
+
+	var name string
+	if err := tx.QueryRow(`select display_name from people where id = ?`, id).Scan(&name); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return PersonSummary{}, fmt.Errorf("%w: no person #%d", ErrNoPerson, id)
+		}
+		return PersonSummary{}, err
+	}
+
+	if want := strings.TrimSpace(edit.DisplayName); want != "" && want != name {
+		if _, err := tx.Exec(`update people set display_name = ? where id = ?`, want, id); err != nil {
+			return PersonSummary{}, err
+		}
+		// And as an identity, so the name is a thing the corpus resolves and
+		// folds by rather than only a label on a row. Its rule is this screen's,
+		// so the name is traceable to the hand that wrote it.
+		if err := addAlias(tx, id, KindDisplayName, want, opsRule); err != nil {
+			return PersonSummary{}, err
+		}
+	}
+
+	for _, raw := range edit.Add {
+		kind, value, err := splitIdentity(raw)
+		if err != nil {
+			return PersonSummary{}, err
+		}
+		if err := addAlias(tx, id, kind, value, opsRule); err != nil {
+			return PersonSummary{}, err
+		}
+	}
+	for _, raw := range edit.Remove {
+		kind, value, err := splitIdentity(raw)
+		if err != nil {
+			return PersonSummary{}, err
+		}
+		if _, err := tx.Exec(
+			`delete from identities where person_id = ? and kind = ? and value = ?`,
+			id, kind, value); err != nil {
+			return PersonSummary{}, err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return PersonSummary{}, err
+	}
+	return PersonByID(s, id)
+}
+
+// splitIdentity reads one "kind:value" identity, normalised.
+func splitIdentity(raw string) (string, string, error) {
+	kind, value, ok := strings.Cut(strings.TrimSpace(raw), ":")
+	if !ok {
+		return "", "", fmt.Errorf("%w: %q must be written kind:value, e.g. email:ada@example.com",
+			ErrBadIdentity, raw)
+	}
+	kind = strings.TrimSpace(kind)
+	value = strings.TrimSpace(value)
+	norm, err := NormaliseIdentity(kind, value)
+	if err != nil {
+		return "", "", fmt.Errorf("%w: %v", ErrBadIdentity, err)
+	}
+	return kind, norm, nil
+}
+
+// PersonByID is one person as People() reports them, for a screen that has just
+// changed one and needs to show what it now says.
+func PersonByID(s *Store, id int64) (PersonSummary, error) {
+	var p PersonSummary
+	err := s.db.QueryRow(`
+		select pe.id, pe.display_name,
+		       (select count(*) from participants x where x.person_id = pe.id and x.role = 'from'),
+		       (select count(*) from participants x where x.person_id = pe.id and x.role in ('to','cc'))
+		from people pe where pe.id = ?`, id).
+		Scan(&p.PersonID, &p.DisplayName, &p.Sent, &p.Received)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return p, fmt.Errorf("%w: no person #%d", ErrNoPerson, id)
+		}
+		return p, err
+	}
+	if p.Identities, err = identitiesOf(s, id); err != nil {
+		return p, err
+	}
+	return p, nil
 }

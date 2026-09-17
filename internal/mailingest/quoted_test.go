@@ -1,6 +1,7 @@
 package mailingest
 
 import (
+	"database/sql"
 	"testing"
 	"time"
 
@@ -264,5 +265,66 @@ func TestAnAnswerInsideAQuotedMessageIsADerivedCopy(t *testing.T) {
 	}
 	if parentOf == 0 {
 		t.Fatalf("the modified copy was not linked to its base")
+	}
+}
+
+// A reply quotes what it answers AND names it in In-Reply-To. The header is a
+// statement about the graph and the nesting is a reading of the text, so the
+// host keeps the parent its header names: the edge that says "the host replied
+// to this" is the host's own, and it is not the quoted pass's to write.
+//
+// Before this, the nesting edge won by arriving first — ingest resolves parents
+// once at the end of its walk, after every body has been read — and the message
+// the reply named in its header was left as a chain of its own.
+func TestAReplyKeepsTheParentItsHeaderNames(t *testing.T) {
+	s := openTest(t)
+	orig, err := s.Put(corpus.Entry{
+		Source: corpus.SourceMail, ExtID: "mail:<orig@x>", Kind: "message",
+		TS: time.Date(2026, 8, 19, 9, 0, 0, 0, time.UTC), Subject: "x", BodyText: "first",
+	}, &corpus.Mail{MessageID: "<orig@x>"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	msg := Message{
+		Envelope: Envelope{
+			ID: "h", MessageID: "<h@x>", ThreadID: "t", InReplyTo: "<orig@x>",
+			From: "Ana <ana@x.fed>", Subject: "Re: x",
+			Date: time.Date(2026, 8, 19, 11, 0, 0, 0, time.UTC).Format(time.RFC1123Z),
+			// In-Reply-To is the direct parent; References carries the chain. Both
+			// name the message being answered, which is the point.
+			References: []string{"<orig@x>"},
+		},
+		Body: "my reply\n\n" +
+			"On Wed, 19 Aug 2026 at 09:00, Bea <bea@x.fed> wrote:\n> first\n",
+	}
+	if _, err := Put(s, msg); err != nil {
+		t.Fatal(err)
+	}
+	n, err := s.ResolveParents()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("resolved %d edges, want 1 (the reply's own)", n)
+	}
+
+	var hostParent, quotedParent sql.NullInt64
+	err = s.DB().QueryRow(`
+		select (select parent_id from entries where ext_id = 'mail:<h@x>'),
+		       (select parent_id from entries where quoted = 1)`,
+	).Scan(&hostParent, &quotedParent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hostParent.Valid || hostParent.Int64 != orig.ID {
+		t.Errorf("host parent = %v, want the message its header names (%d)",
+			hostParent, orig.ID)
+	}
+	// The recovered block was found inside the host — that is its sighting — but
+	// this body says nothing about what the block replied to, so it stays a root
+	// here rather than being given the host as a parent on a guess.
+	if quotedParent.Valid {
+		t.Errorf("quoted block parent = %d, want none", quotedParent.Int64)
 	}
 }

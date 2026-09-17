@@ -63,6 +63,13 @@ export interface MessageProps {
   body: string;
   /** the sender as displayed; absent on a message with no name on it */
   sender?: string;
+  /** the message's own subject, as the message stated it; absent on a message
+   *  that carried none (a recovered entry, a note). Drawn in the header's
+   *  receipt rather than on the header line: the line is who and when, and a
+   *  subject there would be a second title under the thread's own — but a reply
+   *  that renames a thread is otherwise unrecoverable, so each message states
+   *  the one it had where the reader has gone to read *this* message. */
+  subject?: string;
   /** what hovering the sender says, e.g. "Ada Okoye <ada@example.com>"; absent
    *  falls back to the name */
   senderTitle?: string;
@@ -78,7 +85,7 @@ export interface MessageProps {
   /** reconstructed from quoted text; drawn dashed, since the page did not
    *  receive it as a standalone message */
   quoted?: boolean;
-  /** the message the pane landed on when this chain opened: the newest, which is
+  /** the message the pane landed on when this thread opened: the newest, which is
    *  what the row that was clicked was a summary of. Drawn as a one-shot flash
    *  (see .msg.landed), because landing is an arrival rather than a state the
    *  message is in. */
@@ -102,9 +109,9 @@ export interface MessageProps {
   stamp: StampData;
   /** where the bubble sits in the transcript grid, from the layout pass */
   style?: CSSProperties;
-  /** chain-column index, for the client's column view */
+  /** thread-column index, for the client's column view */
   lane?: number;
-  /** opens its chain; marked where the columns are shown */
+  /** opens its thread; marked where the columns are shown */
   chainStart?: boolean;
   /** what changed since a previous render, where there was one */
   mark?: "new" | "revised";
@@ -401,6 +408,14 @@ export function Message(p: MessageProps) {
             <span className="htail">{p.reply}</span>
           </summary>
           <div className="hdet">
+            {/* The subject, on its own line above the receipt's fields, and only
+                where the message had one: a message with no subject has nothing
+                to say here, and an empty line would say it anyway. */}
+            {p.subject ? (
+              <span className="subj" title={p.subject}>
+                {p.subject}
+              </span>
+            ) : null}
             <span className="to">to {p.to ?? "—"}</span>
             {p.source}
             {p.copyJson !== undefined ? <CopyJson data={p.copyJson} /> : null}

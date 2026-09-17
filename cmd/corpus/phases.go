@@ -272,6 +272,18 @@ func runRepair(path string) error {
 	} else {
 		fmt.Println("repair-graph: no rings in the reply graph")
 	}
+
+	// Then the edges a header disagrees with. The same repair in a different
+	// currency: a ring is a graph no walk can read, and an edge that contradicts
+	// its own message's In-Reply-To is a graph that reads as the wrong
+	// conversation — the two are one pass because both are the graph being
+	// rebuilt from the evidence rather than from whoever wrote first.
+	if n, err := s.ReassertParents(); err != nil {
+		return fmt.Errorf("redrawing parent edges from headers: %w", err)
+	} else if n > 0 {
+		fmt.Printf("repair-graph: redrew %d parent %s from the headers their messages carry\n",
+			int(n), plural(int(n), "edge", "edges"))
+	}
 	return nil
 }
 
@@ -437,8 +449,8 @@ func runWithMailbox(path string, o mailOpts, c mailingest.Mailbox) (mailingest.R
 	if err != nil {
 		return r, err
 	}
-	fmt.Printf("saw %d over %d page(s), created %d, changed %d, skipped %d draft(s), resolved %d parent edges\n",
-		r.Seen, r.Pages, r.Created, r.Changed, r.Drafts, r.Resolved)
+	fmt.Printf("saw %d over %d page(s), created %d, changed %d, skipped %d draft(s), resolved %d parent edges, redrew %d from headers\n",
+		r.Seen, r.Pages, r.Created, r.Changed, r.Drafts, r.Resolved, r.Reasserted)
 	switch r.Stop {
 	case mailingest.StopExhausted:
 		fmt.Println("complete: docket had no further page")

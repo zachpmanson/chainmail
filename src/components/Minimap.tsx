@@ -10,7 +10,7 @@ const X0 = 11;
 const Y0 = 9;
 const STEP = { v: 12, h: 14 } as const;
 const ACROSS = { v: 11, h: 16 } as const;
-/* keep just enough floor for a single chain lane to stay readable; the svg is
+/* keep just enough floor for a single thread lane to stay readable; the svg is
    otherwise sized to its lane count so the overlay panel can hug the tree */
 const MIN_W = 96;
 
@@ -83,7 +83,7 @@ function linkD(o: Orient, xp: number, yp: number, xc: number, yc: number): strin
     : `M${xp + 4.4} ${yp} H${xc - 4.5} Q${xc} ${yp} ${xc} ${yp + 4.5} V${yc - 4}`;
 }
 
-/** The cap marking a chain start: a bar above the node vertically, beside it
+/** The cap marking a thread start: a bar above the node vertically, beside it
  *  (upstream, on the time side) horizontally. */
 function capD(o: Orient, cx: number, cy: number): string {
   return o === "v"
@@ -94,7 +94,7 @@ function capD(o: Orient, cx: number, cy: number): string {
 /**
  * A standalone SVG of the whole reply-tree panel — the graph, the tally
  * (chains / lanes / deep / forks / dead ends) and the legend (message, note,
- * starts chain, reconstructed) — with every style baked in, since a downloaded
+ * starts thread, reconstructed) — with every style baked in, since a downloaded
  * .svg carries no page CSS. Horizontal mode lays the tree out left-to-right,
  * matching the bottom strip.
  */
@@ -118,7 +118,7 @@ export function treeSvgString(o: TreeExport): string {
     [`${forks}`, "forks"],
     [`${leaves}`, "dead ends"],
   ];
-  const legend = ["message", "note", "starts chain", "reconstructed"];
+  const legend = ["message", "note", "starts thread", "reconstructed"];
 
   const M = 14; // outer margin
   // Title and divider sit on their own offsets (RULE_Y = label + 10); the tree
@@ -328,7 +328,7 @@ export function Minimap({ v }: { v: View }) {
               <title>
                 {`${r.entry.kind === "note" ? r.entry.label : r.entry.sender} — ` +
                   [r.entry.date, r.entry.time].filter(Boolean).join(" ") +
-                  (n.isRoot ? " · starts a chain (no parent)" : "")}
+                  (n.isRoot ? " · starts a thread (no parent)" : "")}
               </title>
             </rect>
           );
@@ -389,7 +389,7 @@ export function Minimap({ v }: { v: View }) {
       <dl className="legend">
         <div><svg className="lg" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="2.9" fill="currentColor"/></svg><dt>message</dt></div>
         <div><svg className="lg" viewBox="0 0 10 10" aria-hidden="true"><rect x="2.6" y="2.6" width="4.8" height="4.8" fill="currentColor" transform="rotate(45 5 5)"/></svg><dt>note</dt></div>
-        <div><svg className="lg" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 2.6 H8" stroke="currentColor" strokeWidth="1.1"/><circle cx="5" cy="5.5" r="2.5" fill="currentColor"/></svg><dt>starts chain</dt></div>
+        <div><svg className="lg" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 2.6 H8" stroke="currentColor" strokeWidth="1.1"/><circle cx="5" cy="5.5" r="2.5" fill="currentColor"/></svg><dt>starts thread</dt></div>
         <div><svg className="lg" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="2.9" fill="none" stroke="currentColor" strokeWidth="1.2"/></svg><dt>reconstructed</dt></div>
       </dl>
     </div>

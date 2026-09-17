@@ -64,7 +64,7 @@ const DOMAINS = () => [
  *  are the server's, and the screen's job is to say them rather than invent them. */
 let shift = { messages: 0, people: 0, ambiguous: 0 };
 
-/** The one chain the pane is pointed at, with the organisations the resolver put
+/** The one thread the pane is pointed at, with the organisations the resolver put
  *  on each entry — the field this whole issue exists to carry. */
 const CHAIN_ENTRIES = [
   { extId: "mail:<a@example.fed>", ts: "2026-03-02T09:15:00Z", html: "<p>Ada's</p>", author: "Ada Byron", org: "Loomworks" },
@@ -138,7 +138,7 @@ const row = (domain: string) => screen.getByText(domain).closest(".oprow") as HT
 describe("the organisations screen", () => {
   it("lists each domain with its mail and whether the grouping is the reader's", async () => {
     handler = opsHandler;
-    await mountApp("/ops");
+    await mountApp("/ops?tab=orgs");
 
     expect(await screen.findByText("loomworks.example")).toBeTruthy();
     expect(screen.getByText("fjordline.example")).toBeTruthy();
@@ -154,7 +154,7 @@ describe("the organisations screen", () => {
   it("counts the change before the rule is written, and writes it only after", async () => {
     handler = opsHandler;
     shift = { messages: 1, people: 1, ambiguous: 0 };
-    await mountApp("/ops");
+    await mountApp("/ops?tab=orgs");
     await screen.findByText("fjordline.example");
 
     const field = screen.getByLabelText("Organisation for fjordline.example") as HTMLInputElement;
@@ -182,7 +182,7 @@ describe("the organisations screen", () => {
 
   it("cancels without writing", async () => {
     handler = opsHandler;
-    await mountApp("/ops");
+    await mountApp("/ops?tab=orgs");
     await screen.findByText("fjordline.example");
     fireEvent.change(screen.getByLabelText("Organisation for fjordline.example"), {
       target: { value: "Loomworks" },
@@ -200,7 +200,7 @@ describe("the organisations screen", () => {
       pathOf(c) === "/v1/ops/orgs" && c.method === "GET"
         ? json(200, { domains: [{ ...DOMAINS()[0]!, org: "The Loom", stored: true }] })
         : opsHandler(c);
-    await mountApp("/ops");
+    await mountApp("/ops?tab=orgs");
     expect(await screen.findByText(/cleared, it is read as Loomworks/)).toBeTruthy();
     click(within(row("loomworks.example")).getByRole("button", { name: "clear" }));
     await waitFor(() => expect(callsTo("POST", "/v1/ops/orgs/preview")).toHaveLength(1));
@@ -218,7 +218,7 @@ describe("the organisations screen", () => {
   });
 });
 
-describe("the reading pane's colours", () => {  it("draws each sender on their organisation's slot, in the chain's own order", async () => {
+describe("the reading pane's colours", () => {  it("draws each sender on their organisation's slot, in the thread's own order", async () => {
     handler = paneHandler;
     await mountApp(`/?open=${encodeURIComponent("mail:<a@example.fed>")}`);
 

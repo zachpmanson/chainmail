@@ -3,14 +3,14 @@ import { Timeline } from "./Timeline";
 import { attach } from "../client/behaviour";
 import { derive } from "../lib/derive";
 import { SpecView } from "./SpecView";
-import { ChainPreview } from "./ChainPreview";
-import { ChainRow, RankMeta } from "./ChainRow";
+import { ThreadPreview } from "./ThreadPreview";
+import { ThreadRow, RankMeta } from "./ThreadRow";
 import { $api, searchQuery, type ChainHit, type RefreshCandidate, type RefreshReport } from "../lib/api";
 import type { Timeline as Spec } from "../lib/spec";
 
 /**
- * A spec with its chain filter and transcript behaviour attached. Excluding a
- * chain re-derives ordering, lanes, spines, the minimap and every count —
+ * A spec with its thread filter and transcript behaviour attached. Excluding a
+ * thread re-derives ordering, lanes, spines, the minimap and every count —
  * hiding rows would leave holes in the grid and mis-drawn lanes.
  *
  * Rendered is the shared presentational half of the two page routes and the
@@ -66,8 +66,8 @@ export function Rendered({ spec, onBack, onRefresh, onAdd, onAccept, onPull, pul
   const chains = useMemo(
     () =>
       all.layout.chains.map((c) => {
-        // link to whichever entry in the chain names a mailbox id; a fully
-        // unspooled chain may have none, in which case only the anchor is offered
+        // link to whichever entry in the thread names a mailbox id; a fully
+        // unspooled thread may have none, in which case only the anchor is offered
         const withId = c.entries
           .map((id) => all.rows.find((r) => r.id === id)!)
           .find((r) => r.entry.threadId ?? r.entry.gmailId);
@@ -125,7 +125,7 @@ export function Rendered({ spec, onBack, onRefresh, onAdd, onAccept, onPull, pul
     return (
       <div className="wrap">
         <p style={{ padding: "2rem", color: "var(--muted)" }}>
-          Every chain is excluded. Re-enable one from Sources &amp; provenance —
+          Every thread is excluded. Re-enable one from Sources &amp; provenance —
           reload to reset.
         </p>
       </div>
@@ -169,15 +169,15 @@ export function Rendered({ spec, onBack, onRefresh, onAdd, onAccept, onPull, pul
 }
 
 /**
- * The "add email" search: find another chain in the corpus by a fresh query
- * and add it to this page. This is the home-page chain selection, scoped to a
+ * The "add email" search: find another thread in the corpus by a fresh query
+ * and add it to this page. This is the home-page thread selection, scoped to a
  * page instead of a build: the chosen roots go back through the same accept
- * path the refresh's proposals use (POST /v1/refresh accept=), so a chain the
+ * path the refresh's proposals use (POST /v1/refresh accept=), so a thread the
  * recorded queries never find can join the page anyway — being found once is
  * all it takes to name it.
  *
  * The query goes back with them, because this is the one place a search exists
- * that the page does not record. Without it the chain would sit on the page
+ * that the page does not record. Without it the thread would sit on the page
  * with no provenance: nothing would explain where it came from, and no later
  * refresh could find it again. The server records it before re-deriving, so it
  * is re-run like any recorded search from here on.
@@ -226,7 +226,7 @@ function AddEmailsModal({ onClose, onAdd }: {
       <div className="proposals-panel" onClick={(e) => e.stopPropagation()}>
         <div className="proposals-head">
           <b>add email</b>
-          <span className="note">search the corpus for a chain to add to this page</span>
+          <span className="note">search the corpus for a thread to add to this page</span>
         </div>
         <form className="addform" onSubmit={submit}>
           <label>
@@ -250,17 +250,17 @@ function AddEmailsModal({ onClose, onAdd }: {
         ) : null}
         {results.isFetching ? <p className="selnote">Searching…</p> : null}
         {asked && !results.isFetching && !results.isError && chains.length === 0 ? (
-          <p className="selnote">No chain matched.</p>
+          <p className="selnote">No thread matched.</p>
         ) : null}
         {chains.length > 0 ? (
           <ul className="proposals-list">
             {chains.map((c) => (
-              <ChainRow
+              <ThreadRow
                 key={c.rootExtId}
-                chain={c}
+                thread={c}
                 checked={chosen.includes(c.rootExtId)}
                 current={false}
-                meta={<RankMeta chain={c} />}
+                meta={<RankMeta thread={c} />}
                 onToggle={() => toggle(c.rootExtId)}
                 // Here the row opens the modal, not a pane: this list is already
                 // a dialog, and a second column inside one has nowhere to go.
@@ -274,7 +274,7 @@ function AddEmailsModal({ onClose, onAdd }: {
                   onClick={() => {
                     // asked, not the text box: the box may have been edited since
                     // the search ran, and the page records the search that found
-                    // the chain, not whatever is typed after it.
+                    // the thread, not whatever is typed after it.
                     if (asked) onAdd([...chosen], asked);
                   }}>
             {`add ${chosen.length} to page`}
@@ -285,7 +285,7 @@ function AddEmailsModal({ onClose, onAdd }: {
         </div>
         </div>
       </div>
-      {preview ? <ChainPreview chain={preview} onClose={() => setPreview(null)} /> : null}
+      {preview ? <ThreadPreview thread={preview} onClose={() => setPreview(null)} /> : null}
     </>
   );
 }
@@ -296,7 +296,7 @@ function AddEmailsModal({ onClose, onAdd }: {
  * is applied automatically, so its growth never lands here). Each row names what
  * the server printed for the CLI --accept: the root ext id, the subject and the
  * query that found it, with matched/entries as the honest measure of whether the
- * chain is about the query at all.
+ * thread is about the query at all.
  */
 function ProposalsModal({ proposals, open, refreshing, onClose, onAccept }: {
   proposals: RefreshCandidate[];
@@ -343,7 +343,7 @@ function ProposalsModal({ proposals, open, refreshing, onClose, onAccept }: {
                   </span>
                   <code className="proprowid">{p.rootExtId}</code>
                 </div>
-                {/* Preview reads the chain as data, the same modal the search
+                {/* Preview reads the thread as data, the same modal the search
                     page uses, so a proposal can be judged on its entries before
                     it is accepted. Kept out of the toggle label, so ticking it
                     and previewing it never fight over one hit area. */}
@@ -368,7 +368,7 @@ function ProposalsModal({ proposals, open, refreshing, onClose, onAccept }: {
           </div>
         </div>
       </div>
-      {preview ? <ChainPreview chain={preview} onClose={() => setPreview(null)} /> : null}
+      {preview ? <ThreadPreview thread={preview} onClose={() => setPreview(null)} /> : null}
     </>
   );
 }

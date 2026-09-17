@@ -1,8 +1,8 @@
-import { Fragment } from "react";
+import { Source } from "./Source";
 import { derive, type Row, type RowEdit, type View } from "../lib/derive";
 import type { Timeline as Spec } from "../lib/spec";
-import { COLLAPSE_FROM, msgCount, provenance, type SourceId } from "../lib/sources";
-import { DiffPanel, Legend, ParticipantsPanel, SourcesPanel, type ChainFilter } from "./Panels";
+import { DiffPanel, Legend, SourcesPanel, type ThreadFilter } from "./Panels";
+import { ParticipantsPanel } from "./Participants";
 import { Minimap } from "./Minimap";
 import { Message } from "./Message";
 import { trimBody } from "../lib/trimBody";
@@ -53,91 +53,6 @@ function Edits({ edits, v }: { edits?: RowEdit[]; v: View }) {
         </div>
       ))}
     </div>
-  );
-}
-
-/**
- * The ids on a provenance line, comma-run, each openable where it can be.
- *
- * The separator sits outside .sid so that the only place the line may break is
- * after a comma: inside .sid, "msg" and its handle are one token to the reader
- * and splitting them across lines reads as two truncated ids.
- */
-function SourceIds({ ids, unspooled, anchorByGmail }: {
-  ids: SourceId[];
-  /** the line is "unspooled from …"; its ids name the message the content was lifted out of */
-  unspooled: boolean;
-  /** gmailId -> this page's anchor for that message, where it is present as a row */
-  anchorByGmail: Map<string, string>;
-}) {
-  return (
-    <>
-      {ids.map((s, i) => {
-        // An unspooled id names a sibling message on this very page, so it links
-        // there (a fragment anchor) instead of shipping the reader out to Gmail.
-        // A direct message's own id still opens its mailbox copy.
-        const anchor = unspooled && s.gmailId ? anchorByGmail.get(s.gmailId) : undefined;
-        return (
-          <Fragment key={i}>
-            {i ? ", " : ""}
-            <span className="sid">
-              {anchor ? (
-                <a href={`#${anchor}`} title="The message this was unspooled from, on this page">
-                  {s.text}
-                </a>
-              ) : unspooled || !s.gmailId ? (
-                s.text
-              ) : (
-                <a
-                  href={`https://mail.google.com/mail/u/0/#all/${s.gmailId}`}
-                  target="_blank"
-                  rel="noopener"
-                >
-                  {s.text}
-                </a>
-              )}
-            </span>
-          </Fragment>
-        );
-      })}
-    </>
-  );
-}
-
-/**
- * Where an entry was found. The ids are the useful part of the line — each names
- * a message the reader can open — so a collapsed line says how many there are
- * and keeps every id in the document, rather than summarising them away.
- *
- * A native <details>, matching the panels above, and not a scripted toggle: the
- * exported page is meant to be readable with scripting disabled, and <details>
- * is keyboard-operable and reachable by find-in-page without any of ours. A
- * folding mechanism elsewhere on the page can be the same element.
- */
-function Source({ source, anchorByGmail }: { source?: string; anchorByGmail: Map<string, string> }) {
-  if (!source) return null;
-  const p = provenance(source);
-  if (p.kind === "prose") return <span className="src">{p.text}</span>;
-  // "unspooled from …" lines carry an empty prefix only when not unspooled;
-  // prose never reaches here, so prefix !== "" means the ids were unspooled
-  const unspooled = p.prefix !== "";
-  const ids = <SourceIds ids={p.ids} unspooled={unspooled} anchorByGmail={anchorByGmail} />;
-  if (p.ids.length < COLLAPSE_FROM) {
-    return (
-      <span className="src">
-        {p.prefix}
-        {ids}
-      </span>
-    );
-  }
-  return (
-    <details className="src srcx">
-      <summary>
-        {p.prefix}
-        {msgCount(p.ids.length)}
-      </summary>
-      <div className="srcids">{ids}</div>
-    </details>
   );
 }
 
@@ -210,6 +125,7 @@ function EntryBlock({ row, v, mark, anchorByGmail, onPull, pulling, mediaBase }:
       pulling={pulling}
       mediaBase={mediaBase}
       to={e.to}
+      subject={e.subject}
       stamp={row.stamp}
       style={grid}
       lane={row.lane}
@@ -223,7 +139,7 @@ function EntryBlock({ row, v, mark, anchorByGmail, onPull, pulling, mediaBase }:
          that renders wrong can be pasted somewhere and inspected whole. */
       copyJson={{
         id: row.id,
-        chain: row.chain ?? null,
+        thread: row.chain ?? null,
         entry: row.entry,
         edits: row.edits?.length ? row.edits : undefined,
       }}
@@ -266,12 +182,12 @@ export interface TimelineProps {
   marks?: Map<string, "new" | "revised">;
   prevLabel?: string;
   /** supplied by the app; absent in the static export, which cannot re-derive */
-  filter?: ChainFilter;
+  filter?: ThreadFilter;
   /** app-only: the static export has no place to put an interactive panel */
   onShowSpec?: () => void;
   /** app-only: brings a saved page up to date from the corpus (refresh.go). */
   onRefresh?: () => void;
-  /** app-only: opens a search to add another email's chain to this page. */
+  /** app-only: opens a search to add another email's thread to this page. */
   onAdd?: () => void;
   /** app-only: opens the proposal evaluator, when the last refresh proposed chains. */
   onEval?: () => void;
@@ -306,7 +222,7 @@ export function Timeline({ spec, marks, prevLabel, filter, onShowSpec, onRefresh
       {v.avatarCss ? <style dangerouslySetInnerHTML={html(v.avatarCss)} /> : null}
       <div className="toolbar">
         <button className="tbtn" id="viewtog" type="button" aria-pressed="false"
-                aria-label="Chain columns view">columns</button>
+                aria-label="Thread columns view">columns</button>
         {onShowSpec ? (
           <button className="tbtn" id="spectog" type="button" onClick={onShowSpec}
                   aria-label="Show the spec as JSON">json</button>
@@ -341,7 +257,7 @@ export function Timeline({ spec, marks, prevLabel, filter, onShowSpec, onRefresh
         </h1>
         <p className="sub" dangerouslySetInnerHTML={html(s.subtitle ?? `${s.messages.length} messages.`)} />
         <Legend />
-        <ParticipantsPanel v={v} />
+        <ParticipantsPanel v={v} open />
         {marks ? <DiffPanel v={v} marks={marks} prevLabel={prevLabel ?? "the previous run"} /> : null}
         <SourcesPanel v={v} filter={filter} />
       </header>

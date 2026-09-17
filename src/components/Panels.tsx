@@ -1,137 +1,37 @@
-import { initials, type View } from "../lib/derive";
+import type { View } from "../lib/derive";
 import type { Timeline as Spec } from "../lib/spec";
 import { msgCount } from "../lib/sources";
 import { attHref } from "../lib/attachments";
 
-/** A participant as the panel needs it, however the spec supplied them. */
-type Person = NonNullable<Spec["participants"]>[number];
 type Thread = NonNullable<Spec["threads"]>[number];
 
 const html = (s: string) => ({ __html: s });
 
-function Face({ p, v }: { p: Person; v: View }) {
-  // The org comes from the participant's own row, not from a message they sent.
-  // Five of the fifteen people on the reference trail send nothing, so looking a
-  // colour up through the transcript left them on the unknown grey while the
-  // heading directly above them named their org and their colleagues in the same
-  // group were coloured.
-  const slot = v.orgSlot(p.org);
-  // reuses the per-avatar CSS rule rather than inlining the image again
-  const pic = v.rows.find((r) => r.entry.sender === p.name)?.avatarClass;
-  return (
-    <div className={`av ${slot}${pic ? ` pic ${pic}` : ""}`}>
-      {pic ? null : <span className="ini">{initials(p.name)}</span>}
-    </div>
-  );
-}
-
-/**
- * Who is in the trail, with addresses. Auto-derives from senders when the spec
- * omits `participants`, but a spec should pass them explicitly: the derivation
- * can only see people who sent something, and a trail's cast is always larger
- * than its set of senders.
- */
-export function ParticipantsPanel({ v }: { v: View }) {
-  const s = v.spec;
-  const people: Person[] =
-    s.participants ??
-    [...new Map(v.rows.filter((r) => r.entry.sender).map((r) => [r.entry.sender!, r])).values()].map(
-      (r): Person => ({ name: r.entry.sender!, org: r.entry.org, email: r.entry.fromEmail }),
-    );
-
-  const stats = new Map<string, { n: number }>();
-  for (const r of v.rows) {
-    if (!r.entry.sender) continue;
-    stats.set(r.entry.sender, { n: (stats.get(r.entry.sender)?.n ?? 0) + 1 });
-  }
-
-  const groups: { org: string; people: Person[] }[] = [];
-  for (const p of people) {
-    const org = p.org ?? "";
-    const g = groups.find((x) => x.org === org);
-    if (g) g.people.push(p);
-    else groups.push({ org, people: [p] });
-  }
-
-  return (
-    <details className="pan people" open>
-      <summary>Participants ({people.length})</summary>
-      <div className="pbody">
-        <div className="who">
-          {groups.map((g) => (
-            <div key={g.org || "other"} style={{ display: "contents" }}>
-              {/* Tinted like the org label beside a sender's name, which is how
-                  the bubble strip decodes without a legend. One heading per org
-                  rather than a mark per row: the transcript is 57 bubbles where a
-                  strip reads as structure, and this is a dense list of a dozen
-                  rows where a dozen strips would read as noise. The avatars
-                  already carry the colour per person. */}
-              <div className={`ogh ${v.orgSlot(g.org || undefined)}`}>{g.org || "Other"}</div>
-              {g.people.map((p, i) => {
-                const n = stats.get(p.name)?.n;
-                // The note is shown alongside the count, not only in its absence:
-                // it says how a person was seen, which is exactly the thing a
-                // count of their messages does not tell you.
-                const bits = [
-                  p.role,
-                  n ? msgCount(n) : undefined,
-                  p.note,
-                ].filter(Boolean);
-                // Keyed by position, because a name is not unique: two corpus
-                // people can carry one display name, and both are listed rather
-                // than one silently winning.
-                return (
-                  <div className="p1" key={i}>
-                    <div className="pd">
-                      <div className="pn">
-                        <Face p={p} v={v} />
-                        <span title={v.whoTitle(p.name)}>{p.name}</span>
-                      </div>
-                      {p.email ? (
-                        <a className="pe" href={`mailto:${p.email}`}>
-                          {p.email}
-                        </a>
-                      ) : (
-                        <span className="pr">address not in the trail</span>
-                      )}
-                      <div className="pr">{bits.join(" · ")}</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-        </div>
-      </div>
-    </details>
-  );
-}
-
-export interface ChainFilter {
-  /** every chain in the unfiltered trail, so excluded ones stay listed */
+export interface ThreadFilter {
+  /** every thread in the unfiltered trail, so excluded ones stay listed */
   chains: {
     root: string;
     subject?: string;
     opener: string;
     date: string;
     count: number;
-    /** mailbox id of the chain's thread, where any entry in it names one */
+    /** mailbox id of the thread's thread, where any entry in it names one */
     gmailId?: string;
-    /** anchor of the chain's first entry, for jumping to it in the page */
+    /** anchor of the thread's first entry, for jumping to it in the page */
     anchor: string;
   }[];
-  /** chain roots currently excluded from the view */
+  /** thread roots currently excluded from the view */
   excluded: Set<string>;
   onToggle: (root: string) => void;
 }
 
 /**
  * Everything the page was built from: chains, searches, threads, attachments,
- * caveats. When a filter is supplied, each chain gets a checkbox — a trail often
+ * caveats. When a filter is supplied, each thread gets a checkbox — a trail often
  * picks up a thread that turns out not to belong, and dropping it should re-lay
  * the page rather than just blank out rows.
  */
-export function SourcesPanel({ v, filter }: { v: View; filter?: ChainFilter }) {
+export function SourcesPanel({ v, filter }: { v: View; filter?: ThreadFilter }) {
   const s: Spec = v.spec;
   const groups: { title: string; items: React.ReactNode[] }[] = [];
 
@@ -165,7 +65,7 @@ export function SourcesPanel({ v, filter }: { v: View; filter?: ChainFilter }) {
             <a
               className="srclink"
               href={`#${c.anchor}`}
-              title="Jump to the start of this chain"
+              title="Jump to the start of this thread"
               onClick={(e) => e.stopPropagation()}
             >
               start

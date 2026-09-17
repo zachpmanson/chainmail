@@ -179,13 +179,21 @@ func ExtractQuoted(store *corpus.Store, hostID int64, host corpus.Entry, body st
 	// host replies to ids[0], ids[0] replies to ids[1], and the deepest block has
 	// no parent here — whatever it replied to was not quoted in this body.
 	//
-	// SetParent only fills a NULL parent, so a header-derived edge on the host
-	// always wins over this structural guess. In-Reply-To is authoritative;
-	// nesting is the fallback for the messages that have no headers at all.
+	// The host keeps the parent its own headers name. Nesting is the fallback for
+	// the messages that have no headers at all — the recovered blocks, which is
+	// every edge below the first — and a host with an In-Reply-To is not one of
+	// them: it has said what it replies to, and a reading of its text must not
+	// take that slot, because the guard on the other side of this only fills a
+	// NULL parent and the header would then never be resolvable at all.
 	for i, id := range ids {
-		child := hostID
-		if i > 0 {
+		var child int64
+		switch {
+		case i > 0:
 			child = ids[i-1]
+		case host.ParentRef != "":
+			continue
+		default:
+			child = hostID
 		}
 		if err := store.SetParent(child, id); err != nil {
 			return r, err

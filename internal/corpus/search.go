@@ -251,6 +251,15 @@ type ChainHit struct {
 	// not just the authors of the hits.
 	People int
 
+	// Attachments is how many files the whole chain carries, over every entry in
+	// it rather than the ones the query hit: a reader picking a thread out of a
+	// list is asking whether the documents are in it, and "the part of this chain
+	// that happens to be about your query has two files" is not that answer. A
+	// count of files rather than of messages with files — the paperclip is stuck
+	// to the document, and a message carrying three of them is three things to
+	// open.
+	Attachments int
+
 	// Unread is how many of the chain's messages the mailbox still calls unread;
 	// 0 for a chain that has been read, one that never was unread, and one with
 	// no mailbox copy at all. A count rather than a flag because a chain is not
@@ -417,18 +426,19 @@ func (s *Store) SearchChains(q Query) ([]ChainHit, error) {
 	for _, sr := range scored {
 		m := meta[sr.root]
 		ch := ChainHit{
-			RootID:    sr.root,
-			RootExtID: m.extID,
-			Subject:   m.subject,
-			Container: m.container,
-			Sources:   m.sources,
-			Entries:   m.entries,
-			Matched:   len(byRoot[sr.root]),
-			First:     m.first,
-			Last:      m.last,
-			Score:     sr.score,
-			People:    m.people,
-			Unread:    m.unread,
+			RootID:      sr.root,
+			RootExtID:   m.extID,
+			Subject:     m.subject,
+			Container:   m.container,
+			Sources:     m.sources,
+			Entries:     m.entries,
+			Matched:     len(byRoot[sr.root]),
+			First:       m.first,
+			Last:        m.last,
+			Score:       sr.score,
+			People:      m.people,
+			Attachments: m.attachments,
+			Unread:      m.unread,
 		}
 		members := byRoot[sr.root]
 		if len(members) > q.PerChain {
@@ -812,15 +822,16 @@ func (s *Store) rootsOf(ids []int64) (map[int64]int64, error) {
 }
 
 type chainMetaRow struct {
-	extID     string
-	subject   string
-	container string
-	sources   []string
-	entries   int
-	first     time.Time
-	last      time.Time
-	people    int
-	unread    int
+	extID       string
+	subject     string
+	container   string
+	sources     []string
+	entries     int
+	first       time.Time
+	last        time.Time
+	people      int
+	attachments int
+	unread      int
 }
 
 // chainMeta walks each root's descendants so a chain can report its true size
@@ -838,6 +849,11 @@ func (s *Store) chainMeta(roots []int64) (map[int64]chainMetaRow, error) {
 	// is user text and like would read % and _ in it as wildcards. It is bound as
 	// the query's last argument, after the depth cap — placeholders bind in the
 	// order they appear in the text, and this one is in the outer select.
+	//
+	// Attachments are joined and counted the same way, and for the same reason
+	// they have to be distinct twice over: the join multiplies by the cast *and*
+	// by the files, so `a.rowid` is the only thing that names one attachment —
+	// the table has no id of its own (see schema.go).
 	rows, err := s.db.Query(`
 		with recursive down(root, id, depth) as (
 		  select id, id, 0 from entries where id in (`+ph+`)
@@ -854,11 +870,13 @@ func (s *Store) chainMeta(roots []int64) (map[int64]chainMetaRow, error) {
 		       min(e.ts), max(e.ts),
 		       group_concat(distinct e.source),
 		       count(distinct p.person_id),
+		       count(distinct a.rowid),
 		       count(distinct case when
 		         instr(',' || md.labels || ',', ',' || ? || ',') > 0 then d.id end)
 		from down d join entries e on e.id = d.id
 		     left join participants p on p.entry_id = e.id
 		     left join mail_detail md on md.entry_id = e.id
+		     left join attachments a on a.entry_id = e.id
 		group by d.root`,
 		append(args, walkDepthCap, UnreadLabel)...)
 	if err != nil {
@@ -872,7 +890,7 @@ func (s *Store) chainMeta(roots []int64) (map[int64]chainMetaRow, error) {
 		var first, last int64
 		var srcs sql.NullString
 		if err := rows.Scan(&root, &m.extID, &m.subject, &m.container,
-			&m.entries, &first, &last, &srcs, &m.people, &m.unread); err != nil {
+			&m.entries, &first, &last, &srcs, &m.people, &m.attachments, &m.unread); err != nil {
 			return nil, err
 		}
 		m.first = time.Unix(first, 0).UTC()

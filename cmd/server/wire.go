@@ -33,6 +33,10 @@ type chainHit struct {
 	Entries   int      `json:"entries"`
 	Matched   int      `json:"matched"`
 	People    int      `json:"people"`
+	// Attachments is how many files the whole chain carries. Emitted always, like
+	// unread: 0 is the answer for a chain with nothing attached, and a client that
+	// cannot see the key cannot tell that from a server that does not count.
+	Attachments int `json:"attachments"`
 	// Unread is how many of the chain's messages the mailbox still calls unread.
 	// Always emitted, never omitempty: 0 is the answer for a chain that has been
 	// read, and a client that cannot see the key cannot tell that from a server
@@ -112,6 +116,10 @@ type corpusEntry struct {
 	ParentRef    string        `json:"parentRef,omitempty"`
 	Sightings    []sighting    `json:"sightings,omitempty"`
 	Participants []participant `json:"participants,omitempty"`
+	// Attachments are the files this message carries, in the sender's order.
+	// Absent when it carries none, which is most mail: an empty list on every
+	// entry would be a paragraph of nothing in every response.
+	Attachments []spec.Attachment `json:"attachments,omitempty"`
 }
 
 type sighting struct {
@@ -165,6 +173,22 @@ type personSummary struct {
 	Received    int64    `json:"received"`
 }
 
+// personEditRequest is one hand-made change to a person's setup, as the ops
+// screen's editor sends it. A field left out is left alone — the same rule the
+// settings write follows, and for the same reason: a screen that saves the name
+// it has in front of it must not clear the identities it was not asked about.
+type personEditRequest struct {
+	DisplayName      string   `json:"displayName,omitempty"`
+	AddIdentities    []string `json:"addIdentities,omitempty"`
+	RemoveIdentities []string `json:"removeIdentities,omitempty"`
+}
+
+// personResponse answers a write with the person as it now stands, so the screen
+// shows what the corpus holds rather than what it asked for.
+type personResponse struct {
+	Person personSummary `json:"person"`
+}
+
 // labelsResponse is the folder list a mailbox-style sidebar opens: every label
 // on a mailbox message, with how many messages carry it. Messages rather than
 // chains — a chain count for a label is a walk over the reply graph, and a mail
@@ -196,15 +220,23 @@ type versionResponse struct {
 
 // settingsResponse is the reader's own choices, which are not facts about the
 // mail. Absent means the choice has not been made — a folder the home page opens
-// in by default, the addresses that are theirs — so a client cannot mistake
+// in by default, the person whose mail is theirs — so a client cannot mistake
 // "unset" for a default of nothing.
 type settingsResponse struct {
 	DefaultFolder *string `json:"defaultFolder,omitempty"`
-	// Me is the addresses the reader has named as their own, in the form they
-	// typed rather than a normalised one: it is read back into the field it came
-	// from, and rewriting a reader's own address for them is a change they did not
-	// ask for. Absent when they have named none, which is also absent when they
-	// have cleared the field.
+	// MePersonID is the person the reader has named as themselves, as the id of a
+	// person on /v1/people. Omitted when they have named nobody — which is also
+	// what clearing the setting leaves behind.
+	MePersonID *int64 `json:"mePersonId,omitempty"`
+	// Me is the addresses that are the reader's own: the mailboxes of MePersonID,
+	// resolved by the corpus at this read rather than stored, so a page built
+	// today marks the aliases the corpus knows today. Both fields are served
+	// because they answer different questions — the control that sets this shows
+	// the person, and the sentence under it names the addresses being marked — and
+	// a client deriving the second from the first would be a second reading of the
+	// identity graph. Also served for the address list a corpus was configured
+	// with before this was a person (corpus.SettingMe). Absent when the reader has
+	// named nobody, which is also what clearing the setting leaves behind.
 	Me []string `json:"me,omitempty"`
 	// SlurpEvery is how often this server sweeps the mailbox by itself, as a
 	// duration word (`10m`) or `off`. Always served, unlike the two above: the
@@ -219,19 +251,24 @@ type settingsResponse struct {
 //
 // That is the opposite of what the rule was while there was one preference, and
 // it has to be this way once there are two: a reader saving the folder they are
-// in would otherwise clear the addresses that say which mail is theirs, since
+// in would otherwise clear the person that says which mail is theirs, since
 // both travel in one body. Nothing on the wire changed meaning with it — every
 // caller already names the field it is writing, including the empty string it
 // sends to clear one — but "I did not mention it" and "I want it gone" are now
 // told apart by whether the field is there at all.
 //
 // DefaultFolder says that with a pointer, since a string has no absent value.
-// Me says it with the slice encoding/json leaves nil for a missing key while a
-// present-but-empty list decodes to a non-nil empty one: nil is "not mentioned",
-// and any list at all — including one empty string — is a value to store.
+// MePersonID says it with a pointer too, and its zero is "nobody" rather than
+// "unset": no person is id 0, so clearing the setting needs no second field and
+// no reader has to send a null to say they are nobody.
+//
+// The addresses the setting used to be are not written here at all. They were how
+// a reader said who they were; the setting is a person now, and a caller that
+// still sends a list is reading a different contract — refused, rather than
+// resolved into a person the caller did not name.
 type settingsRequest struct {
-	DefaultFolder *string  `json:"defaultFolder,omitempty"`
-	Me            []string `json:"me,omitempty"`
+	DefaultFolder *string `json:"defaultFolder,omitempty"`
+	MePersonID    *int64  `json:"mePersonId,omitempty"`
 	// SlurpEvery sets the sweep cadence, or clears it back to the default with an
 	// empty string — hence the pointer, like DefaultFolder's: a preference that
 	// can be unset needs a way to say "this field is here, and it is empty".
@@ -445,8 +482,9 @@ func toChainHit(c corpus.ChainHit) chainHit {
 	out := chainHit{
 		RootExtID: c.RootExtID, Subject: c.Subject, Container: c.Container,
 		Sources: c.Sources, Entries: c.Entries, Matched: c.Matched,
-		People: c.People, Unread: c.Unread, First: stamp(c.First),
-		Last: stamp(c.Last), Score: c.Score,
+		People: c.People, Attachments: c.Attachments, Unread: c.Unread,
+		First: stamp(c.First),
+		Last:  stamp(c.Last), Score: c.Score,
 	}
 	for _, b := range c.Best {
 		out.Best = append(out.Best, toEntryHit(b))
@@ -605,7 +643,30 @@ func toCorpusEntry(s corpus.Shown, r spec.Rendered) corpusEntry {
 		e.Participants = append(e.Participants,
 			participant{PersonID: p.PersonID, Name: p.DisplayName, Role: p.Role})
 	}
+	// The files, drawn the way a page build draws them — same name, same kind, same
+	// size, same rule for what a click does with bytes this host holds (see
+	// spec.AttachmentOf). Only the destination differs, and it differs because the
+	// corpus knows the message rather than the file: every attachment of a message
+	// opens the message it arrived in.
+	for _, a := range s.Attachments {
+		e.Attachments = append(e.Attachments, toCorpusAttachment(a))
+	}
 	return e
+}
+
+// toCorpusAttachment draws one of the corpus's attachment rows as a chip.
+//
+// Link rather than GmailID, even for mail: the row carries the message's permalink
+// — which IS the Gmail URL the id would build — and two expressions of one
+// destination is how a chip ends up opening something else than it names. A client
+// that knows the id prefers it (see attHref); this host does not need to hand it
+// over for that to work.
+func toCorpusAttachment(a corpus.ShownAttachment) spec.Attachment {
+	att := spec.AttachmentOf(a.Name, a.Mime, a.Size, a.BlobSHA, a.Skip)
+	if att.Link == "" {
+		att.Link = a.Permalink
+	}
+	return att
 }
 
 // statusResponse is the connection snapshot the server serves from the file

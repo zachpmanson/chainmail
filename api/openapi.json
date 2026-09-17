@@ -3,7 +3,7 @@
   "info": {
     "title": "chainmail API",
     "version": "1.0.0",
-    "description": "Read-only HTTP over a local chainmail corpus: search for candidate chains, choose which belong on a page, then build the timeline spec the renderer consumes.\n\nTwo stages on purpose. Search selects; POST /v1/spec renders a chosen set. A spec built straight from a query takes whatever the query returned, and then the only way to remove a thread is to regenerate the page.\n\nThis serves personal mail and has no authentication of any kind. It binds to loopback and refuses a non-loopback address unless explicitly overridden, and spec bodies carry unsanitised sender HTML (issue #14) — so the loopback bind is what makes the whole surface safe, not a default to be relaxed.\n\nOperator commands — ingest, embed, eval, dedupe, twins, repair, merge, alias, refresh — are absent in their mailbox-touching forms; that reach belongs to the CLI, with one opt-in exception: POST /v1/slurp runs the same ingest the CLI does, and answers 403 unless the server was started with -slurp \u2014 which also lets it sweep on a schedule of its own (slurpEvery, ten minutes by default) rather than leaving every ingest to a person. Two local exceptions, both refusal-based and both carrying the audit trail: POST /v1/refresh re-derives a saved page and, before redrawing, collapses stored twin copies with the same sweep the CLI's slurp runs; GET /v1/ops/plan and POST /v1/ops/merge review people merges, the one write applying a single pair from the re-derived plan, never a whole plan."
+    "description": "Read-only HTTP over a local chainmail corpus: search for candidate chains, choose which belong on a page, then build the timeline spec the renderer consumes.\n\nTwo stages on purpose. Search selects; POST /v1/spec renders a chosen set. A spec built straight from a query takes whatever the query returned, and then the only way to remove a thread is to regenerate the page.\n\nThis serves personal mail and has no authentication of any kind. It binds to loopback and refuses a non-loopback address unless explicitly overridden, and spec bodies carry unsanitised sender HTML (issue #14) — so the loopback bind is what makes the whole surface safe, not a default to be relaxed.\n\nOperator commands — ingest, embed, eval, dedupe, twins, repair, merge, alias, refresh — are absent in their mailbox-touching forms; that reach belongs to the CLI, with one opt-in exception: POST /v1/slurp runs the same ingest the CLI does, and answers 403 unless the server was started with -slurp — which also lets it sweep on a schedule of its own (slurpEvery, ten minutes by default) rather than leaving every ingest to a person. Two local exceptions, both refusal-based and both carrying the audit trail: POST /v1/refresh re-derives a saved page and, before redrawing, collapses stored twin copies with the same sweep the CLI's slurp runs; GET /v1/ops/plan and POST /v1/ops/merge review people merges, the one write applying a single pair from the re-derived plan, never a whole plan."
   },
   "servers": [
     {
@@ -64,7 +64,7 @@
             "name": "label",
             "in": "query",
             "required": false,
-            "description": "Only chains with a message carrying this mailbox label \u2014 a folder, in the reading a mail client uses. Repeatable, and the labels are ORed: a message in two folders is in both, so `label=INBOX&label=STARRED` is the answer to either question. It selects messages rather than chains, so a chain is returned when any of its messages carries the label: a reply that went out under SENT does not take the thread out of the inbox its first message landed in. A folder with nothing in it is an empty list, not an error. The label is matched literally, so the % and _ in a name are characters rather than wildcards.",
+            "description": "Only chains with a message carrying this mailbox label — a folder, in the reading a mail client uses. Repeatable, and the labels are ORed: a message in two folders is in both, so `label=INBOX&label=STARRED` is the answer to either question. It selects messages rather than chains, so a chain is returned when any of its messages carries the label: a reply that went out under SENT does not take the thread out of the inbox its first message landed in. A folder with nothing in it is an empty list, not an error. The label is matched literally, so the % and _ in a name are characters rather than wildcards.",
             "schema": {
               "type": "string"
             },
@@ -192,73 +192,73 @@
       }
     },
     "/v1/mail": {
-        "post": {
-          "summary": "Archive, trash or move a chain's messages in the mailbox itself.",
-          "description": "The second write this surface makes to the mailbox, beside /v1/read: the labels of every message in the named chains are changed, and the labels the mailbox answers with are stored beside them. What each action means is the mailbox's own vocabulary — archive is the removal of INBOX, trash is the Trash label, and a move is the target label plus the way out of the inbox — so nothing here invents a folder model of its own.\n\nPlural, because the bar acts on what a reader ticked: every chain is resolved before anything is written, and a set naming one unknown chain changes nothing at all rather than half of it.\n\nAn entry with no mailbox copy — a message recovered from somebody's quote, a Slack post — is counted in `skipped`, never failed, exactly as in /v1/read.\n\nOpt-in and off by default, with its own switch rather than -mark-read: a host that lets the read circle write has not thereby asked this server to be able to delete mail. A server started without -mail-write answers 403, naming the switch. The credential is the mail grant the unit already holds.",
-          "operationId": "mailAction",
-          "requestBody": {
-            "required": true,
+      "post": {
+        "summary": "Archive, trash or move a chain's messages in the mailbox itself.",
+        "description": "The second write this surface makes to the mailbox, beside /v1/read: the labels of every message in the named chains are changed, and the labels the mailbox answers with are stored beside them. What each action means is the mailbox's own vocabulary — archive is the removal of INBOX, trash is the Trash label, and a move is the target label plus the way out of the inbox — so nothing here invents a folder model of its own.\n\nPlural, because the bar acts on what a reader ticked: every chain is resolved before anything is written, and a set naming one unknown chain changes nothing at all rather than half of it.\n\nAn entry with no mailbox copy — a message recovered from somebody's quote, a Slack post — is counted in `skipped`, never failed, exactly as in /v1/read.\n\nOpt-in and off by default, with its own switch rather than -mark-read: a host that lets the read circle write has not thereby asked this server to be able to delete mail. A server started without -mail-write answers 403, naming the switch. The credential is the mail grant the unit already holds.",
+        "operationId": "mailAction",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MailActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "What changed, in total and per chain, and how much of each chain the mailbox does not hold.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MailActionRequest"
+                  "$ref": "#/components/schemas/MailActionResponse"
                 }
               }
             }
           },
-          "responses": {
-            "200": {
-              "description": "What changed, in total and per chain, and how much of each chain the mailbox does not hold.",
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/MailActionResponse"
-                  }
+          "400": {
+            "description": "No chains named, an unknown action, or a move with no labels.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
-            },
-            "400": {
-              "description": "No chains named, an unknown action, or a move with no labels.",
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/Error"
-                  }
+            }
+          },
+          "403": {
+            "description": "Changing mail is disabled: the server was started without -mail-write.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
-            },
-            "403": {
-              "description": "Changing mail is disabled: the server was started without -mail-write.",
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/Error"
-                  }
+            }
+          },
+          "404": {
+            "description": "No chain rooted at one of the ext ids named. Nothing was changed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
-            },
-            "404": {
-              "description": "No chain rooted at one of the ext ids named. Nothing was changed.",
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/Error"
-                  }
-                }
-              }
-            },
-            "502": {
-              "description": "The mailbox refused: the error names how many messages were changed before it did, and how many chains were finished.",
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/Error"
-                  }
+            }
+          },
+          "502": {
+            "description": "The mailbox refused: the error names how many messages were changed before it did, and how many chains were finished.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
           }
         }
+      }
     },
     "/v1/media/pull": {
       "post": {
@@ -693,7 +693,7 @@
     "/v1/ops/orgs": {
       "get": {
         "summary": "Every mail domain the corpus holds mail from, and what it is drawn as.",
-        "description": "A bubble is coloured by its sender's organisation, and an organisation is read from the sender's mail domain: the label left of the public suffix, skipping freemail. That guess is right until a company mails from two domains, or a domain's guess reads badly, and this is the list where the reader overrides it. Domains are counted from the mail itself \u2014 entries whose own From header names the domain \u2014 so mail recovered from a quote is absent here and counted under its sender instead. org is what the mail is drawn as (the stored rule, else the domain's own name), stored tells an undecided domain from one the reader has ruled on, and guess is what an undecided one would be called.",
+        "description": "A bubble is coloured by its sender's organisation, and an organisation is read from the sender's mail domain: the label left of the public suffix, skipping freemail. That guess is right until a company mails from two domains, or a domain's guess reads badly, and this is the list where the reader overrides it. Domains are counted from the mail itself — entries whose own From header names the domain — so mail recovered from a quote is absent here and counted under its sender instead. org is what the mail is drawn as (the stored rule, else the domain's own name), stored tells an undecided domain from one the reader has ruled on, and guess is what an undecided one would be called.",
         "operationId": "getOpsOrgs",
         "responses": {
           "200": {
@@ -710,7 +710,7 @@
       },
       "post": {
         "summary": "Say what one domain is.",
-        "description": "Three answers arrive in one shape. A named org groups this domain with every other domain of that name \u2014 grouping is nothing more than a shared name, there is no separate group entity to keep in step. An empty org is a decision that the domain is not an organisation, which is not the same claim as no rule at all. An absent org drops the rule and puts the domain back to being read from its own name. Nothing is validated against the list: a domain the corpus has no mail from yet is a rule about mail that has not arrived, which is a thing an operator may know before the corpus does. Answers with the rules as they now stand, not with what was asked for.",
+        "description": "Three answers arrive in one shape. A named org groups this domain with every other domain of that name — grouping is nothing more than a shared name, there is no separate group entity to keep in step. An empty org is a decision that the domain is not an organisation, which is not the same claim as no rule at all. An absent org drops the rule and puts the domain back to being read from its own name. Nothing is validated against the list: a domain the corpus has no mail from yet is a rule about mail that has not arrived, which is a thing an operator may know before the corpus does. Answers with the rules as they now stand, not with what was asked for.",
         "operationId": "setOpsOrg",
         "requestBody": {
           "required": true,
@@ -749,7 +749,7 @@
     "/v1/ops/orgs/preview": {
       "post": {
         "summary": "What one proposed rule would redraw, counted over the corpus.",
-        "description": "The consequence shown before the write, as the rest of Ops does it, and computed by the resolver that will apply the rule rather than by a second estimate of it. A rule about a domain is not a rule about that domain's mail alone: mail with no organisation of its own \u2014 a message recovered from a quote, or a personal address by someone who also mails from work \u2014 takes the name its sender's own mail established, and follows the rule. Nothing is stored. ambiguous is the entries left out of both counts, because their sender's own mail names two organisations and which one colours them depends on the order a trail is read in; they are reported rather than silently dropped, since the count otherwise reads as a claim about all of them.",
+        "description": "The consequence shown before the write, as the rest of Ops does it, and computed by the resolver that will apply the rule rather than by a second estimate of it. A rule about a domain is not a rule about that domain's mail alone: mail with no organisation of its own — a message recovered from a quote, or a personal address by someone who also mails from work — takes the name its sender's own mail established, and follows the rule. Nothing is stored. ambiguous is the entries left out of both counts, because their sender's own mail names two organisations and which one colours them depends on the order a trail is read in; they are reported rather than silently dropped, since the count otherwise reads as a claim about all of them.",
         "operationId": "previewOpsOrg",
         "requestBody": {
           "required": true,
@@ -788,7 +788,7 @@
     "/v1/labels": {
       "get": {
         "summary": "The mailbox's labels, which are its folders.",
-        "description": "Every label the mailbox put on a message, with how many messages carry it, busiest first. The labels are Gmail's own \u2014 the system folders (INBOX, SENT, UNREAD, STARRED, IMPORTANT, CATEGORY_*) and whatever was filed by hand \u2014 because a folder list invented here would be a guess about the mailbox rather than a description of it. Messages rather than chains: a chain count for a label is a walk over the reply graph, and a mail client's sidebar counts messages.",
+        "description": "Every label the mailbox put on a message, with how many messages carry it, busiest first. The labels are Gmail's own — the system folders (INBOX, SENT, UNREAD, STARRED, IMPORTANT, CATEGORY_*) and whatever was filed by hand — because a folder list invented here would be a guess about the mailbox rather than a description of it. Messages rather than chains: a chain count for a label is a walk over the reply graph, and a mail client's sidebar counts messages.",
         "operationId": "getLabels",
         "responses": {
           "200": {
@@ -807,7 +807,7 @@
     "/v1/version": {
       "get": {
         "summary": "What is running, and since when.",
-        "description": "The deploy stamp: the revision this process was built from and when it started. Served rather than baked into the bundle, because the bundle is byte-identical across deploys of one revision \u2014 a stamp built into it could not tell \"the new code is live\" from \"this tab is still the old build\", which is the only question it answers. A changed startedAt with an unchanged rev is a restart, not a deploy. rev is omitted when nobody told the process which revision it is (a `go run` under the devshell), because a stamp naming the wrong commit is worse than no stamp.",
+        "description": "The deploy stamp: the revision this process was built from and when it started. Served rather than baked into the bundle, because the bundle is byte-identical across deploys of one revision — a stamp built into it could not tell \"the new code is live\" from \"this tab is still the old build\", which is the only question it answers. A changed startedAt with an unchanged rev is a restart, not a deploy. rev is omitted when nobody told the process which revision it is (a `go run` under the devshell), because a stamp naming the wrong commit is worse than no stamp.",
         "operationId": "getVersion",
         "responses": {
           "200": {
@@ -826,7 +826,7 @@
     "/v1/settings": {
       "get": {
         "summary": "The reader's own choices, which are not facts about the mail.",
-        "description": "The reader's own choices, which are not facts about the mail: the folder the home page opens in, and the addresses that are theirs. Each is served with the absence of a choice preserved \u2014 defaultFolder and me are omitted when nothing has been chosen, because a client has to be able to tell \"no default\" from \"a default of nothing\", and \"nobody has said who the reader is\" from a list of addresses. Stored server-side rather than in the browser: the reader has more than one browser, and the point of a stored preference is that it is true on the phone as well.",
+        "description": "The reader's own choices, which are not facts about the mail: the folder the home page opens in, and the addresses that are theirs. Each is served with the absence of a choice preserved — defaultFolder and me are omitted when nothing has been chosen, because a client has to be able to tell \"no default\" from \"a default of nothing\", and \"nobody has said who the reader is\" from a list of addresses. Stored server-side rather than in the browser: the reader has more than one browser, and the point of a stored preference is that it is true on the phone as well.",
         "operationId": "getSettings",
         "responses": {
           "200": {
@@ -843,7 +843,7 @@
       },
       "post": {
         "summary": "Set the reader's own choices.",
-        "description": "Each field the body names is written, and a field the body leaves out is left as it stands. That is the opposite of the rule while there was one preference \u2014 absent meant cleared \u2014 and it cannot survive a second one: both settings travel in one body, so a reader saving the folder they are in would clear the addresses that say which mail is theirs. Nothing on the wire changed meaning with it, because every caller already names the field it writes, including the empty string it sends to clear one; what is new is that not mentioning a field now leaves it alone. me is stored in the one form the field is typed in \u2014 trimmed, de-duplicated, comma separated \u2014 and is served back split, because the same text is both what the reader wrote and what the mark on a message is resolved from. The folder is not validated against the label list \u2014 it may be one the next slurp brings in \u2014 so a folder that is not there shows an empty list under its own name rather than being refused. Answers with the settings as they now stand, not with what was asked for.",
+        "description": "Each field the body names is written, and a field the body leaves out is left as it stands. That is the opposite of the rule while there was one preference — absent meant cleared — and it cannot survive a second one: both settings travel in one body, so a reader saving the folder they are in would clear the addresses that say which mail is theirs. Nothing on the wire changed meaning with it, because every caller already names the field it writes, including the empty string it sends to clear one; what is new is that not mentioning a field now leaves it alone. me is stored in the one form the field is typed in — trimmed, de-duplicated, comma separated — and is served back split, because the same text is both what the reader wrote and what the mark on a message is resolved from. The folder is not validated against the label list — it may be one the next slurp brings in — so a folder that is not there shows an empty list under its own name rather than being refused. Answers with the settings as they now stand, not with what was asked for.",
         "operationId": "setSettings",
         "requestBody": {
           "required": true,
@@ -1044,6 +1044,79 @@
           }
         }
       }
+    },
+    "/v1/people/{personId}": {
+      "post": {
+        "summary": "Edit one person: their name, or the identities attached to them.",
+        "description": "The ops screen's own editor, and the corpus's only hand-made identity write. Fields left out are left alone. An identity another person already holds is refused with 409 naming them: moving an address between people is the same act as merging them, and the merge plan is where that act carries evidence. A rename writes the name and adds it as an identity; the spellings the corpus read from headers are kept, because a name is evidence too. There is deliberately no delete: a person is a thing the mail says, not a row a screen owns.",
+        "operationId": "editPerson",
+        "parameters": [
+          {
+            "name": "personId",
+            "in": "path",
+            "required": true,
+            "description": "The person to edit, from PeopleResponse.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PersonEditRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The person as it now stands — show this, not what was asked for.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed body, nothing to do, or an identity that is not kind:value.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No person with that id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "An identity or name belongs to another person. The message names them.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "ops"
+        ]
+      }
     }
   },
   "components": {
@@ -1101,6 +1174,7 @@
           "entries",
           "matched",
           "people",
+          "attachments",
           "unread",
           "first",
           "last",
@@ -1144,6 +1218,10 @@
           "people": {
             "type": "integer",
             "description": "Distinct people involved in the whole chain, authors and recipients — the same \"who was involved\" answer the spec's participant list gives. 0 only when no entry carries a person row."
+          },
+          "attachments": {
+            "type": "integer",
+            "description": "Files the whole chain carries, counted over every entry in it. 0 for a chain whose mail arrived with none recorded — what a corpus looks like when its ingest never saw a part id — and 0 for one whose entries have no mailbox copy at all."
           },
           "unread": {
             "type": "integer",
@@ -1281,7 +1359,7 @@
           },
           "mine": {
             "type": "boolean",
-            "description": "True when the reader wrote this, resolved by the corpus's own identity graph rather than by comparing address strings: naming one of their addresses marks their mail sent from any of them, and marks a message recovered from a quote \u2014 which has no From header to match \u2014 too. Omitted for a message that is not the reader's, which is also every message for a reader who has never named an address."
+            "description": "True when the reader wrote this, resolved by the corpus's own identity graph rather than by comparing address strings: naming one of their addresses marks their mail sent from any of them, and marks a message recovered from a quote — which has no From header to match — too. Omitted for a message that is not the reader's, which is also every message for a reader who has never named an address."
           },
           "ts": {
             "type": "string",
@@ -1356,6 +1434,13 @@
             "description": "Everyone recorded on it, senders first.",
             "items": {
               "$ref": "#/components/schemas/Participant"
+            }
+          },
+          "attachments": {
+            "type": "array",
+            "description": "The files this message carries, in the sender's order. Absent when it carries none, which is most mail. The same chip a built page draws for the same message — one schema, Attachment — reached from the message rather than from the page, which is why \"link\" here is the message's own permalink: the corpus knows the mail, not a per-file source URL.",
+            "items": {
+              "$ref": "#/components/schemas/Attachment"
             }
           }
         }
@@ -1639,7 +1724,7 @@
         "properties": {
           "rev": {
             "type": "string",
-            "description": "The revision this process was built from. Absent when nobody told the process which revision it is \u2014 the header then shows no stamp, rather than a commit this code cannot know."
+            "description": "The revision this process was built from. Absent when nobody told the process which revision it is — the header then shows no stamp, rather than a commit this code cannot know."
           },
           "startedAt": {
             "type": "string",
@@ -1668,7 +1753,7 @@
       },
       "SettingsResponse": {
         "type": "object",
-        "description": "The reader's own choices. Absent means the choice has not been made \u2014 except for slurpEvery, which is always present because a host sweeps at some cadence whether or not anyone chose one.",
+        "description": "The reader's own choices. Absent means the choice has not been made — except for slurpEvery, which is always present because a host sweeps at some cadence whether or not anyone chose one.",
         "required": [
           "slurpEvery"
         ],
@@ -1676,11 +1761,17 @@
         "properties": {
           "defaultFolder": {
             "type": "string",
-            "description": "A mailbox label the home page opens in. Omitted when nothing has been chosen \u2014 no default is a state, not a default of nothing."
+            "description": "A mailbox label the home page opens in. Omitted when nothing has been chosen — no default is a state, not a default of nothing."
+          },
+          "mePersonId": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The person the reader has named as themselves, as the id of a person on /v1/people — which is what their outbound messages are marked as theirs by. Omitted when they have named nobody, which is also what clearing the setting leaves behind.",
+            "example": 12
           },
           "me": {
             "type": "array",
-            "description": "The addresses the reader has named as their own, so their outbound messages can be marked as theirs on a page and in the reading pane. Nothing in the corpus records which mailbox it was collected from, so this can only be told rather than inferred. Omitted when the reader has never named one \u2014 which is also what an emptied field leaves behind.",
+            "description": "The addresses that are the reader's own: the mailboxes of \"mePersonId\", resolved by the corpus at this read rather than stored, so a page built today marks the aliases the corpus knows today. Served beside the id because the two answer different questions — the control shows the person, and the sentence under it names the addresses being marked — and a client deriving this from the id would be a second reading of the identity graph. Also served for the address list a corpus was configured with before this setting was a person, so an upgrade does not silently stop marking anyone. Omitted when the reader has named nobody.",
             "items": {
               "type": "string"
             },
@@ -1697,23 +1788,21 @@
       },
       "SettingsRequest": {
         "type": "object",
-        "description": "The same shape written back, field by field: a field that is present sets it, and a field that is absent is left as it stands. An empty value clears its setting, so \"defaultFolder\": \"\" and \"me\": [] are both requests to unset one.",
+        "description": "The same shape written back, field by field: a field that is present sets it, and a field that is absent is left as it stands — absence and emptiness have to be told apart, because both preferences travel in one body and a reader saving the folder they are in must not clear the person that says which mail is theirs. An empty value clears its setting, so \"defaultFolder\": \"\" and \"mePersonId\": 0 are both requests to unset one.",
         "additionalProperties": false,
         "properties": {
           "defaultFolder": {
             "type": "string",
             "description": "The label to open in, or an empty string for no default."
           },
-          "me": {
-            "type": "array",
-            "description": "The addresses that are the reader's, as the whole value of the field they typed them into \u2014 one comma-separated string is as valid as a list of one address per element, and the two are stored as the same list. An empty array (or a list of blanks) clears the setting.",
-            "items": {
-              "type": "string"
-            }
+          "mePersonId": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The person whose mail is the reader's own, as an id from /v1/people. Written as a person rather than as the addresses that person is: which addresses are one human is the identity graph's answer, and a server that accepted a list would be storing a second one that goes stale the first time an alias is learned or two people are merged. The id is validated — a person that is not in the corpus would mark nothing, and no later sweep can bring a person into existence the way it can bring in a folder — and an unknown id is refused with 400, naming this field. 0 is nobody: no person is id 0, so clearing needs no second field and no caller has to send a null to say they are nobody. The addresses this setting used to be are not part of this contract at all — \"me\" is not a field here, and a caller that still sends a list is reading a different one."
           },
           "slurpEvery": {
             "type": "string",
-            "description": "How often to sweep the mailbox: a duration word between 1m and 24h in whole minutes or hours, or \"off\" for never. Anything else is refused with the reason \u2014 a cadence drives a walk of the whole mailbox, so it is not stored and quietly defaulted. An empty string clears the choice, leaving the default cadence in force."
+            "description": "How often to sweep the mailbox: a duration word between 1m and 24h in whole minutes or hours, or \"off\" for never. Anything else is refused with the reason — a cadence drives a walk of the whole mailbox, so it is not stored and quietly defaulted. An empty string clears the choice, leaving the default cadence in force."
           }
         }
       },
@@ -1732,7 +1821,7 @@
           },
           "nextSlurpAt": {
             "type": "string",
-            "description": "UTC RFC3339 stamp of the next sweep: the last ingest this server made plus the cadence in force, computed per request rather than stored. Absent when nothing will sweep at all \u2014 no -slurp grant on this host, or a cadence of \"off\".",
+            "description": "UTC RFC3339 stamp of the next sweep: the last ingest this server made plus the cadence in force, computed per request rather than stored. Absent when nothing will sweep at all — no -slurp grant on this host, or a cadence of \"off\".",
             "format": "date-time"
           },
           "services": {
@@ -2224,7 +2313,7 @@
           },
           "messages": {
             "type": "integer",
-            "description": "Entries whose own From header names this domain. Mail recovered from a quote has no domain of its own, so it is counted under its sender and absent here \u2014 a change to this domain's grouping still moves it, which is what the preview counts."
+            "description": "Entries whose own From header names this domain. Mail recovered from a quote has no domain of its own, so it is counted under its sender and absent here — a change to this domain's grouping still moves it, which is what the preview counts."
           },
           "people": {
             "type": "integer",
@@ -2232,7 +2321,7 @@
           },
           "org": {
             "type": "string",
-            "description": "The organisation this domain's mail is drawn as: the stored rule, else the name the domain itself gives. Omitted when there is no label at all \u2014 both \"the reader said it is not an organisation\" and \"nothing can be read out of this domain\" \u2014 which is what stored is for."
+            "description": "The organisation this domain's mail is drawn as: the stored rule, else the name the domain itself gives. Omitted when there is no label at all — both \"the reader said it is not an organisation\" and \"nothing can be read out of this domain\" — which is what stored is for."
           },
           "stored": {
             "type": "boolean",
@@ -2708,6 +2797,70 @@
           }
         }
       },
+      "Attachment": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "size": {
+            "type": "string"
+          },
+          "gmailId": {
+            "type": "string",
+            "description": "Links to the message in Gmail. Only ever present on real messages."
+          },
+          "link": {
+            "type": "string",
+            "description": "Opens the attachment at its source, for attachments not reached through Gmail."
+          },
+          "preview": {
+            "type": "string",
+            "description": "Thumbnail as a data: URI. Never a URL — the page renders without a network.",
+            "pattern": "^data:image/"
+          },
+          "blobSha": {
+            "type": "string",
+            "description": "Digest of the attachment's bytes in the corpus, present only once they have been pulled. It is what lets a client ask for the file rather than send the reader back to Gmail for something we already hold."
+          },
+          "open": {
+            "type": "string",
+            "enum": [
+              "popup",
+              "download"
+            ],
+            "description": "What a click should do with bytes we hold, decided by the server from the stored MIME — the same rule that sets Content-Disposition when the file is served, because the two must not be able to disagree. Absent when there is nothing local to open, which is what gmailId and link are for."
+          },
+          "view": {
+            "type": "string",
+            "enum": [
+              "image",
+              "text",
+              "pdf"
+            ],
+            "description": "How the bytes are shown in the window over the page: an image, a block of text, a framed PDF. Decided by the server from the stored MIME, like open and for the same reason — the renderers must not be able to drift. Empty when the file can only be taken rather than looked at, which is most formats. Not derived from open: a PDF downloads on click and still shows in the window."
+          },
+          "skip": {
+            "type": "string",
+            "description": "Why the corpus does not hold these bytes, recorded when a pull decided it never will: too large, gone from the sender's copy, nothing to fetch by. Present means the file is not coming, so a page can explain the chip and stop offering to fetch it. The value is the corpus's own word; the page owns the phrasing."
+          },
+          "previewW": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "previewH": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
       "TimelineEntry": {
         "type": "object",
         "required": [
@@ -2976,108 +3129,108 @@
         "additionalProperties": false
       },
       "MailActionRequest": {
-          "type": "object",
-          "description": "What to do to which chains: one action, the chains it applies to, and where a move goes.",
-          "required": [
-            "chains",
-            "action"
-          ],
-          "properties": {
-            "chains": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              },
-              "description": "The root ext ids of the chains to change, as chain hits carry them in `rootExtId`. All of them, or none: an unknown id in the set leaves the mailbox as it was.",
-              "example": [
-                "mail:<c0ffee-1@example.com>"
-              ]
+        "type": "object",
+        "description": "What to do to which chains: one action, the chains it applies to, and where a move goes.",
+        "required": [
+          "chains",
+          "action"
+        ],
+        "properties": {
+          "chains": {
+            "type": "array",
+            "items": {
+              "type": "string"
             },
-            "action": {
-              "type": "string",
-              "enum": [
-                "archive",
-                "trash",
-                "move"
-              ],
-              "description": "What to do to every mailbox message in the chains: archive removes INBOX, trash puts the messages in the Trash and out of the inbox, and move adds the labels below and leaves the inbox. One action per call, because the counts in the answer are about one change."
-            },
-            "labels": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              },
-              "description": "Where a move goes: label names, as /v1/labels serves them. Required for `move` and refused with it when empty; ignored by the other actions. A name the mailbox does not have is refused by the mailbox, not created.",
-              "example": [
-                "Work"
-              ]
-            }
+            "description": "The root ext ids of the chains to change, as chain hits carry them in `rootExtId`. All of them, or none: an unknown id in the set leaves the mailbox as it was.",
+            "example": [
+              "mail:<c0ffee-1@example.com>"
+            ]
           },
-          "additionalProperties": false
+          "action": {
+            "type": "string",
+            "enum": [
+              "archive",
+              "trash",
+              "move"
+            ],
+            "description": "What to do to every mailbox message in the chains: archive removes INBOX, trash puts the messages in the Trash and out of the inbox, and move adds the labels below and leaves the inbox. One action per call, because the counts in the answer are about one change."
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Where a move goes: label names, as /v1/labels serves them. Required for `move` and refused with it when empty; ignored by the other actions. A name the mailbox does not have is refused by the mailbox, not created.",
+            "example": [
+              "Work"
+            ]
+          }
         },
-        "MailActionResponse": {
-          "type": "object",
-          "description": "What the write did: how many messages changed, how many entries have no mailbox copy, and the same counts per chain — because the reader ticked a set, and a total cannot tell them which thread stayed put.",
-          "required": [
-            "action",
-            "changed",
-            "skipped",
-            "chains"
-          ],
-          "properties": {
-            "action": {
-              "type": "string",
-              "enum": [
-                "archive",
-                "trash",
-                "move"
-              ],
-              "description": "The action that ran, echoed back so a client does not have to infer it from the request it sent."
-            },
-            "labels": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              },
-              "description": "Where a move went. Absent for the actions that name no label."
-            },
-            "changed": {
-              "type": "integer",
-              "description": "Mailbox messages whose labels were changed and stored, across every chain."
-            },
-            "skipped": {
-              "type": "integer",
-              "description": "Entries with no mailbox copy, so there was nothing to change. Recovered text and Slack posts, normally."
-            },
-            "chains": {
-              "type": "array",
-              "description": "One row per chain named, in the order it was named.",
-              "items": {
-                "type": "object",
-                "required": [
-                  "rootExtId",
-                  "changed",
-                  "skipped"
-                ],
-                "properties": {
-                  "rootExtId": {
-                    "type": "string",
-                    "description": "The chain, as it was named."
-                  },
-                  "changed": {
-                    "type": "integer",
-                    "description": "Its mailbox messages that changed."
-                  },
-                  "skipped": {
-                    "type": "integer",
-                    "description": "Its entries with no mailbox copy."
-                  }
-                },
-                "additionalProperties": false
-              }
-            }
+        "additionalProperties": false
+      },
+      "MailActionResponse": {
+        "type": "object",
+        "description": "What the write did: how many messages changed, how many entries have no mailbox copy, and the same counts per chain — because the reader ticked a set, and a total cannot tell them which thread stayed put.",
+        "required": [
+          "action",
+          "changed",
+          "skipped",
+          "chains"
+        ],
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "archive",
+              "trash",
+              "move"
+            ],
+            "description": "The action that ran, echoed back so a client does not have to infer it from the request it sent."
           },
-          "additionalProperties": false
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Where a move went. Absent for the actions that name no label."
+          },
+          "changed": {
+            "type": "integer",
+            "description": "Mailbox messages whose labels were changed and stored, across every chain."
+          },
+          "skipped": {
+            "type": "integer",
+            "description": "Entries with no mailbox copy, so there was nothing to change. Recovered text and Slack posts, normally."
+          },
+          "chains": {
+            "type": "array",
+            "description": "One row per chain named, in the order it was named.",
+            "items": {
+              "type": "object",
+              "required": [
+                "rootExtId",
+                "changed",
+                "skipped"
+              ],
+              "properties": {
+                "rootExtId": {
+                  "type": "string",
+                  "description": "The chain, as it was named."
+                },
+                "changed": {
+                  "type": "integer",
+                  "description": "Its mailbox messages that changed."
+                },
+                "skipped": {
+                  "type": "integer",
+                  "description": "Its entries with no mailbox copy."
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
       },
       "MarkReadRequest": {
         "type": "object",
@@ -3176,6 +3329,46 @@
           }
         },
         "additionalProperties": false
+      },
+      "PersonEditRequest": {
+        "type": "object",
+        "description": "A hand-made change to one person. Every field is optional, and an omitted one is left alone: a screen saving the name in front of it must not clear the identities it was not asked about. An empty body is a 400 — an edit that says nothing is likelier a bug than a request.",
+        "additionalProperties": false,
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "description": "What to call this person. Kept alongside the spellings read from headers, not in place of them."
+          },
+          "addIdentities": {
+            "type": "array",
+            "description": "Identities to attach, as \"kind:value\" — e.g. \"email:ada@example.com\", \"slack_uid:U0123\", \"display_name:ada o\". Values are normalised (addresses folded to lower case, display names to single-spaced lower case) so a hand-typed address cannot become a second spelling of one the corpus already holds.",
+            "items": {
+              "type": "string",
+              "example": "email:ada@example.com"
+            }
+          },
+          "removeIdentities": {
+            "type": "array",
+            "description": "Identities to detach, as \"kind:value\". Detaching the last one leaves a person known by name alone, which the corpus already tolerates: some participants are only ever a first name in someone else's quoted header.",
+            "items": {
+              "type": "string",
+              "example": "display_name:ada o"
+            }
+          }
+        }
+      },
+      "PersonResponse": {
+        "type": "object",
+        "description": "One person, as the write left them.",
+        "required": [
+          "person"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "person": {
+            "$ref": "#/components/schemas/PersonSummary"
+          }
+        }
       }
     }
   }

@@ -60,6 +60,9 @@ export function SplitPane({
   // one that was just replaced — a reset to the grid's own width left the
   // separator announcing 630 while the list had gone back to 384.
   const [shown, setShown] = useState(0);
+  // What the border was grabbed at, and what the list was drawn at then: a drag
+  // reads both to move the line by the pointer's travel rather than to it.
+  const grabbed = useRef<{ x: number; w: number } | null>(null);
   useEffect(() => {
     setShown(drawn());
   });
@@ -98,10 +101,16 @@ export function SplitPane({
   useEffect(() => {
     if (!dragging) return;
     const move = (ev: PointerEvent) => {
-      const box = split.current?.getBoundingClientRect();
-      if (box) setWidth(ev.clientX - box.left);
+      // By how far the pointer has travelled, not by where it is. The border sits
+      // in a column of its own and the pane begins at it, so the split's own edge
+      // is *not* the panel's: setting the width to `clientX - box.left` would put
+      // the line that column's width to the right of the pointer, where a delta
+      // leaves it exactly under the pointer the reader is dragging from.
+      const from = grabbed.current;
+      if (from) setWidth(from.w + (ev.clientX - from.x));
     };
     const up = () => {
+      grabbed.current = null;
       setDragging(false);
       // Once, at the end: a drag is a hundred moves, and the reader's browser has
       // no use for a hundred writes to say one width.
@@ -166,6 +175,7 @@ export function SplitPane({
           // one is a scroll.
           if (ev.button !== 0) return;
           ev.preventDefault();
+          grabbed.current = { x: ev.clientX, w: drawn() };
           setDragging(true);
         }}
         onDoubleClick={reset}

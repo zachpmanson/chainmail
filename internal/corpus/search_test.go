@@ -948,3 +948,46 @@ func TestATextQueryIsStillRankedByRelevance(t *testing.T) {
 		t.Errorf("a search is ranked by relevance: got %q first", chains[0].RootExtID)
 	}
 }
+
+// Attachments are counted over the whole chain — every entry in it, not the ones
+// the query hit — and they are counted as files rather than as messages holding
+// them. A reader picking a thread out of a list is asking whether the documents
+// are in it; "the part of this chain that happens to be about your query has two
+// files" is not that answer, and neither is "two messages carry files" when one
+// of them carries three.
+func TestChainAttachmentsCountTheWholeChainsFiles(t *testing.T) {
+	s := open(t)
+	put(t, s, msg{id: "<doc1@example.com>", subject: "Rebate paperwork",
+		body: "the rebate bundle", ts: may,
+		atts: []Attachment{{Name: "invoice.pdf"}, {Name: "statement.pdf"}}})
+	put(t, s, msg{id: "<doc2@example.com>", parent: "<doc1@example.com>",
+		body: "rebate received", ts: june,
+		atts: []Attachment{{Name: "scan.pdf"}}})
+	// A reply with nothing attached, and a second chain with no files at all: the
+	// count has to survive both the empty entry and the empty chain.
+	put(t, s, msg{id: "<doc3@example.com>", parent: "<doc2@example.com>",
+		body: "thanks, rebate closed", ts: july})
+	put(t, s, msg{id: "<bare1@example.com>", subject: "Meter swap",
+		body: "a passing rebate mention", ts: july})
+	if _, err := s.ResolveParents(); err != nil {
+		t.Fatal(err)
+	}
+
+	chains, err := s.SearchChains(Query{Text: "rebate"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(chains) != 2 {
+		t.Fatalf("got %d chains, want 2", len(chains))
+	}
+	byRoot := map[string]int{}
+	for _, c := range chains {
+		byRoot[c.RootExtID] = c.Attachments
+	}
+	if got := byRoot["mail:<doc1@example.com>"]; got != 3 {
+		t.Errorf("chain with three files: got %d, want 3", got)
+	}
+	if got := byRoot["mail:<bare1@example.com>"]; got != 0 {
+		t.Errorf("chain with no files: got %d, want 0", got)
+	}
+}

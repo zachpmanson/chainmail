@@ -376,6 +376,15 @@ func Run(store *corpus.Store, mb Mailbox, prev spec.Spec, opts Options) (Report,
 		}
 	}
 
+	// And the edges a header disagrees with, whether or not the mailbox was
+	// asked: the fetching passes write an edge for every message they read, and a
+	// body's own nesting was linking them while they ran. A refresh that only
+	// resolved NULL parents would leave a header that lost that race wrong
+	// forever, and the page it is about to build would be built over it.
+	if _, err := store.ReassertParents(); err != nil {
+		return rep, spec.Spec{}, err
+	}
+
 	// Discovery runs against the corpus either way, so a chain a plain
 	// `corpus ingest` brought in is proposed on the next refresh.
 	cands, sem, err := candidates(store, prev, opts)

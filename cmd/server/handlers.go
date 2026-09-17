@@ -175,6 +175,10 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("/v1/mail", post(s.mailAction))
 	mux.HandleFunc("/v1/media/pull", post(s.mediaPull))
 	mux.HandleFunc("/v1/attachments/{sha}", get(s.attachment))
+	// One person at a time, for the ops screen's own editor: a write is the shape
+	// of the settings write — the fields it names are written, the ones it leaves
+	// out are left alone — and it answers with the person as it now stands.
+	mux.HandleFunc("/v1/people/{personId}", post(s.editPerson))
 	mux.HandleFunc("/v1/ops/plan", get(s.opsPlan))
 	mux.HandleFunc("/v1/ops/merge", post(s.opsMerge))
 	// The colour rules: one path for the list and the write, because a rule is one
@@ -2044,11 +2048,11 @@ func (s *server) version(w http.ResponseWriter, r *http.Request) {
 }
 
 // getSettings reads the choices that are about the reader rather than about the
-// mail: the folder the home page opens in, and the addresses that are theirs.
+// mail: the folder the home page opens in, and the person whose mail is theirs.
 // Each is served with the absence of a choice preserved — a client has to be
 // able to tell "no default" from "a default of nothing", and "nobody has said
-// who the reader is" from a list of addresses — and an omitted key is how that
-// is said.
+// who the reader is" from a reader who has — and an omitted key is how that is
+// said.
 func (s *server) getSettings(w http.ResponseWriter, r *http.Request) {
 	out := settingsResponse{}
 	// Unlike the reader's other choices this one is always served: the cadence is
@@ -2073,6 +2077,18 @@ func (s *server) getSettings(w http.ResponseWriter, r *http.Request) {
 	if len(me) > 0 {
 		out.Me = me
 	}
+	// The person those addresses are, when the setting names one: the addresses
+	// are read out of the identity graph rather than stored, and a client cannot
+	// get back to the person from them — two people can share an address in the
+	// list a merge has yet to make, and one person's addresses are several.
+	id, ok, err := s.store.MePerson()
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	if ok {
+		out.MePersonID = &id
+	}
 	send(w, http.StatusOK, out)
 }
 
@@ -2082,7 +2098,7 @@ func (s *server) getSettings(w http.ResponseWriter, r *http.Request) {
 // That is the opposite of the rule while there was one preference — absent meant
 // cleared — and the rule could not survive a second one: both settings travel in
 // the same body, so a reader saving the folder they are in would clear the
-// addresses that say which mail is theirs, and every save would have to send the
+// person that says which mail is theirs, and every save would have to send the
 // whole state or silently destroy the part it did not mention. Nothing on the
 // wire changed meaning with it: every caller already names the field it writes,
 // including the empty string it sends to clear one, so a cleared folder is still
@@ -2095,10 +2111,14 @@ func (s *server) getSettings(w http.ResponseWriter, r *http.Request) {
 // about a mailbox it is behind on; a folder that is not there shows an empty
 // list under its own name, which is exactly true and one click from being fixed.
 //
-// The addresses are stored in one form — trimmed, de-duplicated and comma
-// separated (corpus.JoinAddresses) — because the same text is both what the
-// reader types and what the trail render parses, and two spellings of one list
-// is two answers to who the reader is.
+// The reader is written as a person (corpus.SetMePerson) and not as the addresses
+// that person is: which addresses are one human is the identity graph's answer,
+// and a server that accepted a list would be storing a second one that goes stale
+// the first time an alias is learned or two people are merged. The id is
+// validated, unlike the folder — a person that is not in the corpus would mark
+// nothing, and no later sweep can bring a person into existence the way it can
+// bring in a folder — and the addresses the setting used to be are cleared with
+// it, so a corpus configured before this cannot answer with a stale list.
 func (s *server) setSettings(w http.ResponseWriter, r *http.Request) {
 	var in settingsRequest
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequestBody))
@@ -2139,8 +2159,14 @@ func (s *server) setSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if in.Me != nil {
-		if err := s.store.PutSetting(corpus.SettingMe, corpus.JoinAddresses(in.Me)); err != nil {
+	if in.MePersonID != nil {
+		// 0 is nobody, and it is not a person id: clearing needs no second field,
+		// and the caller who wants to stop being anyone says so with a zero.
+		if err := s.store.SetMePerson(*in.MePersonID); err != nil {
+			if errors.Is(err, corpus.ErrNoPerson) {
+				fail(w, http.StatusBadRequest, fmt.Errorf("mePersonId: %w", err))
+				return
+			}
 			fail(w, http.StatusInternalServerError, err)
 			return
 		}
@@ -2229,4 +2255,72 @@ func send(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	w.Write(blob)
+}
+
+// editPerson is the ops screen's people editor: one hand-made change to one
+// person's setup, applied and answered with the person as it now stands.
+//
+// It is the corpus's first write of an identity by hand, and it is deliberately
+// small. Nothing here merges two people: an identity another person already
+// holds is refused, naming them, because moving an address is the same act as
+// merging and the merge plan is where that act has evidence behind it
+// (POST /v1/ops/merge). A rename is not a merge either — it is what to CALL
+// someone — so it writes the name and adds it as an identity without touching
+// the spellings the corpus read from headers.
+//
+// No switch gates this one. It writes to the corpus but reaches nothing else —
+// no mailbox, no credential, no third party — and the screen it serves is the
+// human review surface the rest of the ops routes belong to. The file it edits
+// is the corpus, which the reader can already rebuild from the mailbox.
+func (s *server) editPerson(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("personId"), 10, 64)
+	if err != nil || id == 0 {
+		fail(w, http.StatusBadRequest, fmt.Errorf(
+			"personId %q: want the id of a person, e.g. /v1/people/12", r.PathValue("personId")))
+		return
+	}
+	var req personEditRequest
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequestBody))
+	// A misspelled field is a caller reading a different contract, and a
+	// half-understood edit would write identities nobody asked for.
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		fail(w, http.StatusBadRequest, fmt.Errorf("reading the request body: %w", err))
+		return
+	}
+	if req.DisplayName == "" && len(req.AddIdentities) == 0 && len(req.RemoveIdentities) == 0 {
+		fail(w, http.StatusBadRequest, errors.New(
+			"nothing to do: name at least one of displayName, addIdentities, removeIdentities"))
+		return
+	}
+	person, err := corpus.UpdatePerson(s.store, id, corpus.PersonEdit{
+		DisplayName: req.DisplayName,
+		Add:         req.AddIdentities,
+		Remove:      req.RemoveIdentities,
+	})
+	switch {
+	case errors.Is(err, corpus.ErrNoPerson):
+		fail(w, http.StatusNotFound, err)
+		return
+	case err != nil:
+		var taken *corpus.IdentityTakenError
+		if errors.As(err, &taken) {
+			// A conflict, not a bad request: the body was well-formed and the
+			// corpus refuses the change it asks for.
+			fail(w, http.StatusConflict, err)
+			return
+		}
+		// A malformed identity is the caller's own mistake, and the only other
+		// error the corpus reports from here.
+		if errors.Is(err, corpus.ErrBadIdentity) {
+			fail(w, http.StatusBadRequest, err)
+			return
+		}
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	send(w, http.StatusOK, personResponse{Person: personSummary{
+		PersonID: person.PersonID, DisplayName: person.DisplayName,
+		Identities: person.Identities, Sent: person.Sent, Received: person.Received,
+	}})
 }

@@ -5,7 +5,6 @@ import {
   createRouter,
   Link,
   Outlet,
-  useNavigate,
   useRouterState,
   useSearch,
 } from "@tanstack/react-router";
@@ -22,8 +21,12 @@ import { Rendered } from "./components/Rendered";
 import { StatusView } from "./components/StatusView";
 import { SpecsView } from "./components/SpecsView";
 import { OpsView } from "./components/OpsView";
+import { validateOpsTab } from "./lib/opsTabs";
 import { DeployStamp } from "./components/DeployStamp";
+import { ToastHost } from "./components/Toasts";
 import { NavReading } from "./components/NavReading";
+import { NavRefresh } from "./components/NavRefresh";
+import { NavSearch } from "./components/NavSearch";
 import type { SearchMode } from "./lib/api";
 
 /**
@@ -34,7 +37,8 @@ import type { SearchMode } from "./lib/api";
  *                    Back from a built page restores them, and a reload restores
  *                    them too. The params are optional-typed so a partial or
  *                    empty search is a valid URL; validation applies the
- *                    defaults when they are read.
+ *                    defaults when they are read. The nav's box is the field
+ *                    that writes them (see NavSearch) — this route only reads.
  *   "/view/<name>" — a page POST /v1/spec saved under that name, reloadable by
  *                    the URL alone. The server answers any /view/* path with
  *                    the shell; everything deeper is this route's business.
@@ -110,52 +114,6 @@ function SignInBar() {
 }
 
 /** The full screen is the app shell; this root owns the legacy ways in. */
-/**
- * The corpus search, in the site nav: a button, not a box.
- *
- * The search is a page — a query, a mode, a person, a date, and a list of
- * candidates to judge — and a nav box is not that page: a second place to type
- * the same query is two boxes that disagree the moment either one changes, above
- * a list that answers whichever of them was last submitted. So the nav opens the
- * search and nothing more, and the typing happens in the one field that owns the
- * query.
- *
- * It carries the query it can see rather than clearing it: pressing it from a
- * built page opens the search page empty (there is no query anywhere on the
- * address), and pressing it while you are already searching keeps the query and
- * the filters you are in the middle of. `q` is written even when empty, which is
- * what makes the address the search page rather than the inbox.
- */
-function NavSearch() {
-  const navigate = useNavigate();
-  const search = useRouterState({
-    select: (s) => (s.location.pathname === "/" ? (s.location.search as Record<string, unknown>) : {}),
-  });
-  // What the address already asks. The nav's own state, so it is not the search
-  // page's form — a link, a Back or a reload has to move this too, which is why
-  // it is read from the location on every render rather than kept once.
-  const asking =
-    search.q !== undefined || search.person !== undefined || search.since !== undefined;
-
-  return (
-    <button
-      type="button"
-      className="navsearch"
-      aria-label="Search the corpus"
-      aria-current={asking ? "page" : undefined}
-      onClick={() => navigate({ to: "/", search: (prev) => ({ ...prev, q: prev.q ?? "" }) })}
-    >
-      {/* A magnifier rather than a word alone: the nav's other items are words,
-          and this is the one that opens a page instead of being one. */}
-      <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-        <circle cx="7" cy="7" r="4.6" fill="none" stroke="currentColor" strokeWidth="1.5" />
-        <path d="M10.4 10.4 14.4 14.4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      </svg>
-      Search
-    </button>
-  );
-}
-
 function RootLayout() {
   // ?spec= is read from the router's location, not declared on any route, so
   // it passes through on any path without a route schema having to know it.
@@ -244,29 +202,47 @@ function RootLayout() {
           separate Home link beside it. A built page keeps its own title — that
           one is the page's, not the site's. */}
       <header className="sitehead">
-        <Link to="/" className="brand">
-          chainmail
-        </Link>
-        <span className="sep">·</span>
-        <Link to="/specs">Browse</Link>
-        <span className="sep">·</span>
-        <Link to="/status">Services</Link>
-        <span className="sep">·</span>
-        <Link to="/ops">Ops</Link>
-        {/* The corpus being read is the one statement in the nav that is not a
-            destination, so it carries no separator and sits where the links
-            end. It is not in the right-hand group: see NavReading. */}
-        <NavReading />
-        {/* The stamp and the search box travel together: the stamp is about the
-            build this page was served from, and the search is the app's one way
-            in — both are site-level, both sit at the end of the nav. */}
-        <span className="navright">
-          <DeployStamp />
-          <NavSearch />
-        </span>
+        {/* The nav's items travel as one element so that the bar can replace all
+            of them at once: the row is the bar's while a selection stands, and
+            the links come back when it clears (see .sitenav in styles.css). */}
+        <nav className="sitenav">
+          <Link to="/" className="brand">
+            chainmail
+          </Link>
+          <span className="sep">·</span>
+          <Link to="/specs">Braids</Link>
+          <span className="sep">·</span>
+          <Link to="/status">Settings</Link>
+          <span className="sep">·</span>
+          <Link to="/ops">Ops</Link>
+          {/* The corpus being read is the one statement in the nav that is not a
+              destination, so it carries no separator and sits where the links
+              end. It is not in the right-hand group: see NavReading. */}
+          <NavReading />
+          {/* The stamp and the search box travel together: the stamp is about the
+              build this page was served from, the refresh beside it asks the
+              corpus again, and the search is the app's one way in — all
+              site-level, all at the end of the nav. The box is the search itself
+              while it is open, and it takes this row rather than sitting in it
+              (see .navsearch and .navopts in styles.css). */}
+          <span className="navright">
+            <DeployStamp />
+            <NavRefresh />
+            <NavSearch />
+          </span>
+        </nav>
+        {/* The bar's place. Empty until a chain is ticked, and then the whole row
+            — the nav beside it is hidden while the bar is here, and the sentence
+            a finished action leaves behind is a line of its own under the nav
+            (see .buildslot and .ibbuild). */}
+        <div className="buildslot" />
       </header>
       <SignInBar />
       <Outlet />
+      {/* What a write leaves to say, over everything and out of the flow of any
+          page: an account of work that is over must not take a row from the mail
+          being read, and a refusal must not be scrolled away from (see Toasts). */}
+      <ToastHost />
     </>
   );
 }
@@ -282,21 +258,23 @@ const rootRoute = createRootRoute({
 });
 
 /**
- * The home page, which is two pages: with a query it is the selection stage,
+ * The home page, which is two pages: with a question it is the selection stage,
  * and with none of q, person or since it is the inbox — the corpus in the order
  * it arrived. One route and one rule, so Back and a reload land where the person
  * was, and neither page needs a URL of its own to be shareable.
  */
 function Home() {
   const urlSearch = useSearch({ from: "/" });
-  // A query is being *composed* when the address carries one of the three fields
-  // that can ask a question — **including an empty one**. The nav opens the
-  // search page with `?q=` and nothing in it yet, and that is a query being
-  // typed rather than an inbox: the field it puts the caret in is the point.
-  // `mode` alone does not count, because a mode with nothing to ask is not a
-  // question, and `label`/`open` belong to the inbox.
-  const asking =
-    urlSearch.q !== undefined || urlSearch.person !== undefined || urlSearch.since !== undefined;
+  // A question is being asked when the address carries something to ask — a
+  // query, a person, or a date. An **empty** one is not a question: the nav's box
+  // is opened and cleared in place now, so `?q=` (or a query of spaces) is a box
+  // somebody emptied, and what belongs under it is the default view rather than a
+  // search page with nothing asked of it. `mode` alone does not count either,
+  // because a mode with nothing to ask is not a question, and `label`/`open`
+  // belong to the inbox.
+  const asking = Boolean(
+    urlSearch.q?.trim() || urlSearch.person?.trim() || urlSearch.since?.trim(),
+  );
   return asking ? <SelectView /> : <Inbox />;
 }
 
@@ -322,6 +300,7 @@ const specsRoute = createRoute({
 const opsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/ops",
+  validateSearch: validateOpsTab,
   component: OpsView,
 });
 

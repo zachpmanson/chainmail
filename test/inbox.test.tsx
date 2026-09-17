@@ -68,7 +68,7 @@ const scrollToEnd = () => {
   for (const see of [...watchers]) see();
 };
 
-/** The shape /v1/search answers with, for a chain a row is built from. Loose on
+/** The shape /v1/search answers with, for a thread a row is built from. Loose on
  *  purpose: a fixture only has to survive JSON to the client, and the fields a
  *  test reads back are typed here rather than inferred from each literal. */
 interface FixtureChain {
@@ -84,11 +84,11 @@ interface FixtureChain {
   best: unknown[];
 }
 
-function chain(over: Record<string, unknown>): FixtureChain {
+function thread(over: Record<string, unknown>): FixtureChain {
   return { sources: ["mail"], entries: 1, matched: 1, people: 2, score: 0.01, ...over } as FixtureChain;
 }
 
-/** An entry attached to a chain, as the wire's EntryHit: no ranking found it,
+/** An entry attached to a thread, as the wire's EntryHit: no ranking found it,
  *  so the snippet is the opening of the message and every rank is 0. */
 const entry = (over: Record<string, unknown>) => ({
   source: "mail",
@@ -101,7 +101,7 @@ const entry = (over: Record<string, unknown>) => ({
 });
 
 const CHAINS: FixtureChain[] = [
-  chain({
+  thread({
     rootExtId: "mail:<fence-panel-9@example.fed>",
     subject: "Fence panels",
     last: "2026-04-01T08:00:00Z",
@@ -115,7 +115,7 @@ const CHAINS: FixtureChain[] = [
       }),
     ],
   }),
-  chain({
+  thread({
     rootExtId: "mail:<loom-cutover-1@example.fed>",
     subject: "Loom cutover schedule",
     entries: 4,
@@ -160,8 +160,8 @@ const SPEC = {
  *  message first, each carrying the entries a row reads. */
 const pageOf = (chains: unknown[]) => json(200, { mode: "lexical", chains });
 
-/** The reading pane asks /v1/chains/<root> for whichever chain is selected, and
- *  every chain in the fixtures has a body of its own, so "the pane swapped" is a
+/** The reading pane asks /v1/chains/<root> for whichever thread is selected, and
+ *  every thread in the fixtures has a body of its own, so "the pane swapped" is a
  *  claim about what is on screen rather than about a call being made.
  *
  *  The body arrives as the rendered `html` a build would put in the bubble (the
@@ -219,9 +219,9 @@ const CHAIN_BODIES: Record<
   },
 };
 
-/** A chain of more than one, oldest first, where the newest entry is not the one
+/** A thread of more than one, oldest first, where the newest entry is not the one
  *  the list row starts from. A row is a summary of the newest message (see
- *  ChainRow), so a pane that opens the thread at its top is the row's promise
+ *  ThreadRow), so a pane that opens the thread at its top is the row's promise
  *  broken — see the landing test below. */
 const MULTI_ROOT = "mail:<solar-trail-1@example.fed>";
 const MULTI_ENTRIES = [
@@ -237,6 +237,10 @@ const MULTI_ENTRIES = [
     fromEmail: "ada@okoye.example",
     tz: "AEST",
     tzOffsetMinutes: 600,
+    // A message the mailbox holds: the receipt names it by the id the mailbox
+    // gave it, which is what its permalink opens.
+    permalink: "https://mail.google.com/mail/u/0/#all/19fee08b9d28e28b",
+    sightings: [{ kind: "direct" }],
   },
   {
     extId: "mail:<solar-trail-4@example.fed>",
@@ -248,6 +252,10 @@ const MULTI_ENTRIES = [
     html: "<p>Roof access is fine from the 14th.</p>",
     tz: "AEST",
     tzOffsetMinutes: 600,
+    // Recovered from the first message's quote, so its receipt names the host it
+    // was unspooled from — and that host is on this page, so the id links to it
+    // rather than out to a mailbox.
+    sightings: [{ kind: "quoted", seenIn: "mail:<solar-trail-2@example.fed>" }],
   },
 ];
 
@@ -260,10 +268,10 @@ const chainHandler: Handler = (c) => {
         rootExtId: root,
         entries: [{ extId: root, source: "mail", quoted: false, ts: "2026-04-01T08:00:00Z", ...b }],
       })
-    : json(404, { error: `no chain ${root}` });
+    : json(404, { error: `no thread ${root}` });
 };
 
-/** A handler that answers the pane for any chain, and lets the test's own
+/** A handler that answers the pane for any thread, and lets the test's own
  *  handler see everything else. */
 const withChains = (inner: Handler): Handler => (c) =>
   pathOf(c).startsWith("/v1/chains/") ? chainHandler(c) : inner(c);
@@ -273,6 +281,22 @@ const buildHandler: Handler = withChains((c) => {
   if (p === "/v1/spec" && c.method === "POST") return json(200, SPEC);
   if (p.startsWith("/v1/specs/")) return json(200, SPEC);
   if (p === "/v1/search") return pageOf(CHAINS);
+  // The people the corpus holds, for the nav's Person control: one person with
+  // two addresses, because folding a person's aliases into one person is the
+  // whole reason that control exists (see the same fixture in client.test.tsx).
+  if (p === "/v1/people") {
+    return json(200, {
+      people: [
+        {
+          personId: 1,
+          displayName: "Ada Byron",
+          identities: ["email:ada@okoye.example", "email:ada@work.example"],
+          sent: 340,
+          received: 121,
+        },
+      ],
+    });
+  }
   // No default folder unless a test says otherwise: the inbox opens on the
   // whole corpus, which is what every list test below assumes.
   if (p === "/v1/settings") return json(200, {});
@@ -336,7 +360,7 @@ async function braid() {
 const pane = () => document.querySelector(".ibread") as HTMLElement;
 
 describe("the home page with no query", () => {
-  it("lists every chain, newest message first", async () => {
+  it("lists every thread, newest message first", async () => {
     handler = buildHandler;
     await mountApp("/");
 
@@ -369,7 +393,7 @@ describe("the home page with no query", () => {
     expect(fenceRow.querySelector(".ibwhen")!.textContent).not.toBe(
       whenShort("2026-03-11T17:40:00Z"),
     );
-    // Gmail-minimal: the count appears only when a chain has more than one
+    // Gmail-minimal: the count appears only when a thread has more than one
     // message, and no participant or relevance metadata does at all.
     expect(document.querySelectorAll(".ibcount")).toHaveLength(1);
     expect(document.querySelectorAll(".ibcount")[0]!.textContent).toBe("4");
@@ -389,28 +413,114 @@ describe("the home page with no query", () => {
     expect(req.get("before") ?? "").toBe("");
   });
 
-  it("opens the search page from the nav, and the page's own field is the only box", async () => {
+  it("expands the nav's own box into the search, and leaves the list where it is", async () => {
     handler = buildHandler;
     const router = await mountApp("/");
     await screen.findByText("Loom cutover schedule");
 
-    click(screen.getByRole("button", { name: "Search the corpus" }));
+    const box = screen.getByRole("textbox", { name: "Search the corpus" });
+    fireEvent.focus(box);
 
-    // The search page's own fields, not the list's: the button opened the page
-    // rather than asking anything, so what the address records is a query being
-    // composed and nothing has been searched for yet.
-    expect(await screen.findByLabelText("Query")).toBeTruthy();
-    await waitFor(() => expect(router.state.location.searchStr).toBe("?q="));
-    expect(screen.queryByText("No chain matched.")).toBeNull();
-    // One box rather than two: the nav is a button, and the box that searches is
-    // the page's. The nav says it is where you already are.
-    expect(screen.queryByRole("textbox", { name: "Search the corpus" })).toBeNull();
-    expect(
-      screen.getByRole("button", { name: "Search the corpus" }).getAttribute("aria-current"),
-    ).toBe("page");
-    // And the page has the caret already, so the button is a way in rather than a
-    // click and then another click on the field.
-    expect(document.activeElement).toBe(screen.getByLabelText("Query"));
+    // The options are the nav's now, and only while it is open: the box is the
+    // whole of the search shut, and the four things a search is when it is not.
+    expect(await screen.findByLabelText("Mode")).toBeTruthy();
+    expect(screen.getByLabelText("Person")).toBeTruthy();
+    // A date field, because `since` is a date on the wire: the browser's own
+    // picker rather than a string the corpus has to interpret.
+    const since = screen.getByLabelText("Since") as HTMLInputElement;
+    expect(since.type).toBe("date");
+    // Opening it asks nothing: no address was written, so the list below is the
+    // list that was there — the default view, not a search page with nothing on
+    // it. This is what makes an empty box harmless.
+    expect(screen.getByText("Loom cutover schedule")).toBeTruthy();
+    expect(document.querySelector(".ibwrap")).toBeTruthy();
+    expect(router.state.location.searchStr).toBe("");
+    expect(screen.queryByText("No thread matched.")).toBeNull();
+  });
+
+  it("folds the panel away when the empty box loses the caret", async () => {
+    handler = buildHandler;
+    await mountApp("/");
+    await screen.findByText("Loom cutover schedule");
+
+    const box = screen.getByRole("textbox", { name: "Search the corpus" });
+    fireEvent.focus(box);
+    await screen.findByLabelText("Mode");
+
+    // Blurred with nothing in it, the panel goes: an empty box is nothing being
+    // searched, so what is left is the nav it was covering.
+    fireEvent.blur(box);
+    await waitFor(() => expect(screen.queryByLabelText("Mode")).toBeNull());
+    expect(screen.getByRole("textbox", { name: "Search the corpus" })).toBeTruthy();
+  });
+
+  it("keeps the panel open while the caret is inside it, and while it asks something", async () => {
+    handler = buildHandler;
+    const router = await mountApp("/");
+    await screen.findByText("Loom cutover schedule");
+
+    // Reaching for the mode dropdown is not leaving the search, so the panel
+    // stays open across the move — the blur that shut it would otherwise take the
+    // field away from whoever had just decided how to ask.
+    const box = screen.getByRole("textbox", { name: "Search the corpus" });
+    fireEvent.focus(box);
+    const mode = await screen.findByLabelText("Mode");
+    fireEvent.blur(box, { relatedTarget: mode });
+    expect(screen.getByLabelText("Mode")).toBeTruthy();
+
+    // And typing a query and clicking away searches: what was typed is committed
+    // as the caret leaves, which is the whole gesture — no button to find first.
+    fireEvent.change(box, { target: { value: "cutover" } });
+    fireEvent.blur(mode);
+    await waitFor(() => expect(router.state.location.searchStr).toBe("?q=cutover"));
+    // The list below is the answer to what was just typed: the search page, with
+    // the candidates the corpus answered with.
+    await waitFor(() => expect(document.querySelector(".selwrap")).toBeTruthy());
+    await screen.findByText("Fence panels", { selector: ".ibsubj" });
+    // The panel stays. A question in force is what its options are for, and one
+    // that folded itself away would put them behind another click to narrow the
+    // search that is on screen.
+    expect(screen.getByLabelText("Mode")).toBeTruthy();
+    expect((box as HTMLInputElement).value).toBe("cutover");
+
+    // Emptying it is the way out that is not Escape: with nothing being asked,
+    // the panel goes and the nav has its row back.
+    fireEvent.change(box, { target: { value: "" } });
+    fireEvent.blur(box);
+    await waitFor(() => expect(screen.queryByLabelText("Mode")).toBeNull());
+  });
+
+  it("clears the box and the question with Escape, and folds the panel away", async () => {
+    handler = buildHandler;
+    const router = await mountApp("/?q=cutover");
+    await screen.findByText("Fence panels", { selector: ".ibsubj" });
+
+    const box = screen.getByRole("textbox", { name: "Search the corpus" });
+    fireEvent.focus(box);
+    await screen.findByLabelText("Mode");
+
+    // Escape in a field empties it, and this is the field that shows the question
+    // in force — so the question goes too, rather than being dropped from the
+    // draft and turning up in the box again the moment the panel shuts. Nothing
+    // is asked, so what is below is the default view rather than a search page
+    // with nothing on it.
+    fireEvent.change(box, { target: { value: "cutover plum" } });
+    fireEvent.keyDown(box, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByLabelText("Mode")).toBeNull());
+    expect((box as HTMLInputElement).value).toBe("");
+    await waitFor(() => expect(router.state.location.searchStr).toBe(""));
+    expect(await screen.findByText("Loom cutover schedule")).toBeTruthy();
+
+    // And the box opens again on a click: Escape shuts the panel without moving
+    // the caret, so a box that answered only to focus would be one gesture short.
+    fireEvent.click(box);
+    await screen.findByLabelText("Mode");
+
+    // Escape in a box that asks nothing is only a way out: the address is left
+    // exactly as it was, folder and open thread included.
+    fireEvent.keyDown(box, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByLabelText("Mode")).toBeNull());
+    expect(router.state.location.searchStr).toBe("");
   });
 
   it("says on the body that this page is a workspace, and takes it off again", async () => {
@@ -418,7 +528,7 @@ describe("the home page with no query", () => {
     const router = await mountApp("/");
     await screen.findByText("Loom cutover schedule");
     // The layout itself is a browser's business — jsdom lays nothing out, and the
-    // height chain was checked in Chromium — but who claims the class, and that it
+    // height thread was checked in Chromium — but who claims the class, and that it
     // is given back, is this page's own promise.
     expect(document.body.classList.contains("inbox")).toBe(true);
     await act(async () => {
@@ -454,7 +564,12 @@ describe("the home page with no query", () => {
     ).toBe("true");
   });
 
-  it("empties the pane when the open row is clicked a second time", async () => {
+  it("keeps the row open when it is clicked again, and closes on the pane's own Back", async () => {
+    // A row's click is the opening, and it is the same thing however many times it
+    // is made: that is what lets a double click mark the row without the pane
+    // appearing and disappearing under it (see ThreadRow). Closing is the pane's
+    // own way out — its "← List" — which is a click the reader makes in the pane
+    // they want shut.
     handler = buildHandler;
     const router = await mountApp("/");
     await screen.findByText("Loom cutover schedule");
@@ -465,17 +580,21 @@ describe("the home page with no query", () => {
     );
 
     click(screen.getByRole("button", { name: "Loom cutover schedule" }));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(pane().querySelector(".msg")).not.toBeNull();
+    expect(router.state.location.search.open).toBe("mail:<loom-cutover-1@example.fed>");
+
+    click(within(pane()).getByRole("button", { name: "← List" }));
     await waitFor(() => expect(pane().querySelector(".msg")).toBeNull());
-    // The address lets go of it as well: closing is a state a reload lands on,
-    // the same way opening is.
+    // The address lets go of it as well: closing is a state a reload lands on, the
+    // same way opening is.
     expect(router.state.location.search.open).toBeUndefined();
     expect(
       screen.getByRole("button", { name: "Loom cutover schedule" }).getAttribute("aria-current"),
     ).toBeNull();
     expect(within(pane()).getByText(/Nothing open/)).toBeTruthy();
 
-    // And clicking a different row still opens that one — the second click closed
-    // the row it was on, it did not turn the pane off.
+    // And clicking a different row still opens that one.
     click(screen.getByRole("button", { name: "Fence panels" }));
     await waitFor(() =>
       expect(within(pane()).getByText(/and the gate needs a new hinge/)).toBeTruthy(),
@@ -533,6 +652,31 @@ describe("the home page with no query", () => {
     ).toBe("true");
   });
 
+  it("scrolls the list to the row the address names, once", async () => {
+    handler = buildHandler;
+    // jsdom has no scrollIntoView, and the list asks for one either way: which
+    // row it asks for is the whole claim. The pane scrolls too (to the message it
+    // lands on), so what is collected is the row's own root id.
+    const scrolled: string[] = [];
+    const orig = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function () {
+      scrolled.push((this as HTMLElement).dataset.root ?? this.id);
+    };
+    try {
+      await mountApp(`/?open=${encodeURIComponent("mail:<loom-cutover-1@example.fed>")}`);
+      const row = (await screen.findByRole("button", { name: "Loom cutover schedule" })).closest(
+        ".ibrow",
+      );
+      expect(row?.getAttribute("data-root")).toBe("mail:<loom-cutover-1@example.fed>");
+      await waitFor(() => expect(scrolled).toContain("mail:<loom-cutover-1@example.fed>"));
+      // Once, and not again as the list re-renders: a reader who scrolls away from
+      // the row they opened is not asking to be pulled back to it.
+      expect(scrolled.filter((s) => s === "mail:<loom-cutover-1@example.fed>")).toHaveLength(1);
+    } finally {
+      Element.prototype.scrollIntoView = orig;
+    }
+  });
+
   it("lands on the newest message of the thread it opens, and marks it", async () => {
     handler = buildHandler;
     // jsdom has no scrollIntoView, and the pane asks for one either way: which
@@ -561,9 +705,9 @@ describe("the home page with no query", () => {
   it("opens a thread the loaded page does not hold, and claims nothing about it", async () => {
     // Only the loom thread is in this page of the list, which is the position a
     // reader is in when an old thread is opened, then reloaded: the row is not
-    // there to be found. The pane reads the chain from its id — the only thing
+    // there to be found. The pane reads the thread from its id — the only thing
     // the address carries — so the head claims no subject or count it cannot
-    // know, and what the thread says is read from the chain itself.
+    // know, and what the thread says is read from the thread itself.
     handler = (c) =>
       pathOf(c).startsWith("/v1/chains/")
         ? chainHandler(c)
@@ -615,8 +759,11 @@ describe("the home page with no query", () => {
     expect(pane().querySelector(".bd b")?.textContent).toBe("Regards, Ada");
     expect(pane().querySelector(".bd")?.textContent).not.toContain("<b>");
     // The recipient line the message itself stated. It is the same receipt the
-    // page prints, filled from the chain read rather than left as "to —".
+    // page prints, filled from the thread read rather than left as "to —".
     expect(pane().querySelector(".msg .hdet .to")?.textContent).toBe("to Bo Halvorsen, cc Cy Okafor");
+    // The subject this message carried, in the same receipt: the thread's own is
+    // in the head, and the entry's is the only place a renamed thread is stated.
+    expect(pane().querySelector(".msg .hdet .subj")?.textContent).toBe("Fence panels");
   });
 
   it("names the sender's address on hover, and only where the entry has one", async () => {
@@ -662,6 +809,58 @@ describe("the home page with no query", () => {
     expect(pane().querySelector(".msg .hdet .to")?.textContent).toBe("to —");
   });
 
+  it("shows where each message was found, in the receipt a built page prints", async () => {
+    handler = buildHandler;
+    await mountApp(`/?open=${encodeURIComponent(MULTI_ROOT)}`);
+    await waitFor(() => expect(pane().querySelectorAll(".msg").length).toBe(2));
+
+    // The id in the receipt is the one thing a reader holds when they want to
+    // find the message somewhere else, and a built page has always printed it —
+    // the pane is the same reader looking at the same message.
+    const line = pane().querySelectorAll(".msg .hdet .src");
+    expect(line[0]?.textContent).toBe("msg 19fee08b9d28e28b");
+    // It opens the mailbox copy, which is where the id came from.
+    expect(line[0]?.querySelector("a")?.getAttribute("href")).toBe(
+      "https://mail.google.com/mail/u/0/#all/19fee08b9d28e28b",
+    );
+    // A recovered message has no id of its own, so the receipt names the message
+    // it was unspooled from — and links to the row for it on this page rather
+    // than sending the reader out to the mailbox for something already here.
+    expect(line[1]?.textContent?.trim()).toBe("unspooled from msg 19fee08b9d28e28b");
+    expect(line[1]?.querySelector("a")?.getAttribute("href")).toBe("#entry-0");
+    expect(document.getElementById("entry-0")).not.toBeNull();
+  });
+
+  it("drops every tick on Escape, and leaves the box's own Escape to the box", async () => {
+    // The ticks are built up by clicking rows, and the bar's Deselect all is the
+    // only way out of them otherwise: a control that appears with the selection and
+    // has to be found by eye. Escape is what the page's other open things already
+    // answer — and the box and the folder menu are skipped, so a reader who had
+    // ticked rows and then changed their mind about a search loses the search and
+    // not the selection.
+    handler = buildHandler;
+    await mountApp("/");
+    await screen.findByRole("button", { name: "Fence panels" });
+
+    click(screen.getByLabelText("Select Fence panels"));
+    click(screen.getByLabelText("Select Loom cutover schedule"));
+    await screen.findByRole("button", { name: "Deselect all" });
+
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    await waitFor(() => expect(document.querySelector(".ibbuild")).toBeNull());
+    expect((screen.getByLabelText("Select Loom cutover schedule") as HTMLInputElement).checked).toBe(false);
+
+    // Ticked again, and the caret put in the search box: its Escape closes the box
+    // and the ticks stay where they are.
+    click(screen.getByLabelText("Select Loom cutover schedule"));
+    await screen.findByRole("button", { name: "Deselect all" });
+    const box = screen.getByLabelText("Search the corpus");
+    click(box);
+    fireEvent.keyDown(box, { key: "Escape" });
+    expect((screen.getByLabelText("Select Loom cutover schedule") as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByRole("button", { name: "Deselect all" })).toBeTruthy();
+  });
+
   it("builds a page from the ticked chains, recording no query for it", async () => {
     handler = buildHandler;
     const router = await mountApp("/");
@@ -686,11 +885,11 @@ describe("the home page with no query", () => {
 describe("paging the inbox", () => {
   // Fifty chains fill a page (the client asks for 50), and the second page
   // repeats the boundary thread: the cursor includes its own second, so the
-  // alternative is losing a chain that ends beside it.
+  // alternative is losing a thread that ends beside it.
   const firstPage = Array.from({ length: 50 }, (_, i) =>
-    chain({
+    thread({
       rootExtId: `mail:<page-one-${i}@example.fed>`,
-      subject: `Chain ${i + 1}`,
+      subject: `Thread ${i + 1}`,
       first: `2026-05-${String(50 - i).padStart(2, "0")}T09:00:00Z`,
       last: `2026-05-${String(50 - i).padStart(2, "0")}T09:00:00Z`,
       best: [
@@ -707,7 +906,7 @@ describe("paging the inbox", () => {
   const boundary = firstPage[firstPage.length - 1]!;
   const secondPage = [
     boundary,
-    chain({
+    thread({
       rootExtId: "mail:<page-two-older@example.fed>",
       subject: "An older thread",
       first: "2026-04-02T09:00:00Z",
@@ -740,13 +939,13 @@ describe("paging the inbox", () => {
 
     // 50 + 1 new, not 52: the repeated thread is one row, keyed on its root.
     expect(screen.getAllByRole("checkbox")).toHaveLength(51);
-    expect(screen.getAllByText("Chain 50")).toHaveLength(1);
+    expect(screen.getAllByText("Thread 50")).toHaveLength(1);
     // A short page is the end of the corpus, so there is nothing left to watch.
     expect(document.querySelector(".ibend")).toBeNull();
   });
 
-  // A chain whose entries straddle the cursor is returned again on the next page
-  // (its `last` is the whole chain's newest message, not the newest inside the
+  // A thread whose entries straddle the cursor is returned again on the next page
+  // (its `last` is the whole thread's newest message, not the newest inside the
   // window), so a page can arrive having added nothing. Measured against the live
   // corpus: two hundred rows held 194 distinct threads. Asking forever after that
   // is how a "Load older" button becomes a spinner.
@@ -772,7 +971,7 @@ describe("paging the inbox", () => {
   it("stops watching the end when a page fails, and offers the retry", async () => {
     let second = 0;
     handler = (c) => {
-      // The pane asks for whichever chain is on screen; empty is enough here, and
+      // The pane asks for whichever thread is on screen; empty is enough here, and
       // an answer keeps its own failure out of the alert this test is reading.
       if (pathOf(c).startsWith("/v1/chains/")) return json(200, { entries: [] });
       if (pathOf(c) !== "/v1/search") return json(500, { error: "unexpected" });
@@ -1111,15 +1310,18 @@ describe("resizing the panels", () => {
     await screen.findByText("Loom cutover schedule");
 
     fireEvent.pointerDown(border(), { button: 0, clientX: 280 });
+    // The border moves by the pointer's travel, not to the pointer: it sits in a
+    // column of its own at the pane's edge, so the column's own width (300 in the
+    // stub) is where a drag of +240 starts from.
     fireEvent.pointerMove(window, { clientX: 520 });
-    expect(listw()).toBe("520px");
+    expect(listw()).toBe("540px");
     // Still following the pointer: a drag is not a single jump.
     fireEvent.pointerMove(window, { clientX: 610 });
-    expect(listw()).toBe("610px");
+    expect(listw()).toBe("630px");
 
     // And the width is the reader's, so it outlives the visit.
     fireEvent.pointerUp(window);
-    expect(localStorage.getItem("cm-list")).toBe("610");
+    expect(localStorage.getItem("cm-list")).toBe("630");
   });
 
   it("holds the border where both panels can still be read", async () => {
@@ -1214,12 +1416,12 @@ describe("the border's own idea of where it is", () => {
 /**
  * The reader's own messages in the pane.
  *
- * The mark is the corpus's, not the client's: the chain read carries `mine`,
+ * The mark is the corpus's, not the client's: the thread read carries `mine`,
  * which the service resolved from the addresses the reader stored as a setting,
  * and the pane draws the page's own `.msg.me` — the class the stylesheet already
  * tints — rather than inventing a second way to say "sent by you". The client
  * resolves nothing, which is why the handler below answers `mine` from the
- * setting it holds: that is the whole chain of custody this is testing.
+ * setting it holds: that is the whole thread of custody this is testing.
  *
  * A reader who has never named an address sees no marks, and that is a state to
  * pin rather than a gap to fill: the pane has no surface of its own for saying
@@ -1229,8 +1431,8 @@ describe("the border's own idea of where it is", () => {
 describe("the reader's own messages in the pane", () => {
   const READER = "mail:<fence-panel-9@example.fed>"; // CHAINS[0]; opened by its row
   const READER_ADDR = "ada@okoye.example";
-  /** The address that reads the reader's own chain: the pane starts empty now, so
-   *  a test about what the pane draws has to say which chain is open. */
+  /** The address that reads the reader's own thread: the pane starts empty now, so
+   *  a test about what the pane draws has to say which thread is open. */
   const OPEN_READER = `/?open=${encodeURIComponent(READER)}`;
 
   /** The settings API as the server behaves: a field the body names is written,

@@ -50,40 +50,44 @@ function EntryCard({ e }: { e: CorpusEntry }) {
   );
 }
 
-/** The chain fields the preview reads. Both a search hit (ChainHit) and a
+/** The thread fields the preview reads. Both a search hit (ChainHit) and a
  * refresh proposal (RefreshCandidate) carry them, so one modal serves the two
- * places a candidate chain needs judging before it is committed anywhere. */
-export interface PreviewableChain {
+ * places a candidate thread needs judging before it is committed anywhere. */
+export interface PreviewableThread {
   rootExtId: string;
   subject?: string;
-  /** How many messages the chain holds. Absent when the caller knows only the
+  /** How many messages the thread holds. Absent when the caller knows only the
    *  id — the inbox read from an address bar, say — in which case no count is
    *  claimed rather than a zero. */
   entries?: number;
   /** How many people it holds, senders and recipients alike. Absent for the same
    *  reason as entries, and read by the head beside the message count. */
   people?: number;
+  /** How many files it carries, over the whole thread. Absent for the same reason
+   *  as entries — and drawn when absent, like the other two: the head shows what
+   *  it was told and claims nothing. */
+  attachments?: number;
   /** How many of its messages the mailbox still calls unread. Absent for the
    *  same reason as entries: a caller holding only an id cannot say, and the
    *  pane's read-state control hides rather than guesses. */
   unread?: number;
 }
 
-/** A candidate chain read as data. This is deliberately NOT the rendered
- * transcript: reading a chain is a different act from rendering one, and the
+/** A candidate thread read as data. This is deliberately NOT the rendered
+ * transcript: reading a thread is a different act from rendering one, and the
  * /v1/chains endpoint returns plain entries without paying for spec assembly.
  * It shows enough to judge a candidate before committing it to a page — who said
  * what, in what order — and it is the same reading in either place it appears:
  * the search page's modal, and the inbox's right-hand pane. */
-export function ChainReading({ chain }: { chain: PreviewableChain }) {
+export function ThreadReading({ thread }: { thread: PreviewableThread }) {
   const fetched = $api.useQuery("get", "/v1/chains/{rootExtId}", {
-    params: { path: { rootExtId: chain.rootExtId } },
+    params: { path: { rootExtId: thread.rootExtId } },
   });
   const entries = fetched.data?.entries ?? [];
   return (
     <>
       {fetched.isError ? <Failure error={fetched.error} /> : null}
-      {fetched.isFetching ? <p className="selnote">Loading the chain…</p> : null}
+      {fetched.isFetching ? <p className="selnote">Loading the thread…</p> : null}
       {!fetched.isFetching && !fetched.isError && entries.length === 0 ? (
         <p className="selnote">No entries to show.</p>
       ) : null}
@@ -100,7 +104,7 @@ export function ChainReading({ chain }: { chain: PreviewableChain }) {
 
 /** The same reading, in a modal: for a candidate being judged from the search
  * page, where there is no room to put it beside the list. */
-export function ChainPreview({ chain, onClose }: { chain: PreviewableChain; onClose: () => void }) {
+export function ThreadPreview({ thread, onClose }: { thread: PreviewableThread; onClose: () => void }) {
   // Escape closes the modal, matching the transcript's dialog habits; the
   // listener lives here because the modal only exists while it is open.
   useEffect(() => {
@@ -112,16 +116,16 @@ export function ChainPreview({ chain, onClose }: { chain: PreviewableChain; onCl
   }, [onClose]);
 
   return (
-    <div className="selpv" role="dialog" aria-modal="true" aria-label="Chain preview" onClick={onClose}>
+    <div className="selpv" role="dialog" aria-modal="true" aria-label="Thread preview" onClick={onClose}>
       <div className="selpv-panel" onClick={(e) => e.stopPropagation()}>
         <div className="selpv-head">
           <b>preview</b>
-          <span className="note">{chain.subject || "(no subject)"}{chain.entries ? ` · ${chain.entries} entr${chain.entries === 1 ? "y" : "ies"}` : ""}</span>
+          <span className="note">{thread.subject || "(no subject)"}{thread.entries ? ` · ${thread.entries} entr${thread.entries === 1 ? "y" : "ies"}` : ""}</span>
           <button type="button" className="selpv-close" onClick={onClose}>
             Close
           </button>
         </div>
-        <ChainReading chain={chain} />
+        <ThreadReading thread={thread} />
       </div>
     </div>
   );
