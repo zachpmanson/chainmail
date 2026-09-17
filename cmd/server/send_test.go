@@ -233,6 +233,55 @@ func TestTheReplyAllTickCanOnlyNarrowTheReplyToItsSender(t *testing.T) {
 	}
 }
 
+// A reply is one message in two forms, and the mailbox is handed both: the plain
+// text that says what it says, and the same words marked up for a client that
+// renders them. The handler composes them in one call (spec.ComposeReply), so what
+// travels here is the pair rather than two renderings that were assembled
+// separately and hope to agree.
+func TestTheReplyGoesOutInBothForms(t *testing.T) {
+	h, fake := sendServer(t)
+
+	res := h.do(t, "POST", "/v1/send",
+		[]byte(`{"entry":"`+extAda3+`","body":"The 14th works."}`))
+	if res.status != 200 {
+		t.Fatalf("status %d: %s", res.status, res.body)
+	}
+	if len(fake.replies) != 1 {
+		t.Fatalf("the mailbox saw %+v, want one call", fake.replies)
+	}
+	body := fake.replies[0].body
+
+	// The text part is the reply as the plan shows it — the reader's words with the
+	// answered message quoted under them — and it is what every client can read.
+	for _, want := range []string{
+		"The 14th works.",
+		"On Tue 3 Mar 2026 10:00 AEDT, Ada Okoye <ada@loomworks.example> wrote:",
+		"> Roof access is fine from the 14th.",
+	} {
+		if !strings.Contains(body.Text, want) {
+			t.Errorf("the text part is missing %q:\n%s", want, body.Text)
+		}
+	}
+	// The HTML part is the same message: the words as paragraphs, and the answered
+	// message inside a blockquote — the markup a mail client folds a quote by, so the
+	// quote is not read as part of the answer.
+	for _, want := range []string{
+		"<p>The 14th works.</p>",
+		"Ada Okoye &lt;ada@loomworks.example&gt; wrote:",
+		"<blockquote class=\"gmail_quote\">",
+		"<p>Roof access is fine from the 14th.</p>",
+	} {
+		if !strings.Contains(body.HTML, want) {
+			t.Errorf("the HTML part is missing %q:\n%s", want, body.HTML)
+		}
+	}
+	// And the response is the plan of the text part: it is the form the pane shows,
+	// and the contract carries one body rather than a pair of them.
+	if got := decode[sendResponse](t, res); got.Body != body.Text {
+		t.Errorf("the plan's body is not the text part that was sent")
+	}
+}
+
 func TestARepliesCcIsAbsentWhenThereIsNobodyElse(t *testing.T) {
 	h, fake := sendServer(t)
 	// The mailbox answers a reply to a message the reader was the only recipient

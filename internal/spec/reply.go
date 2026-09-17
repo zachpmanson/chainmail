@@ -6,8 +6,28 @@ import (
 	"github.com/zachpmanson/chainmail/internal/corpus"
 )
 
-// ReplyBody is what a reply says: the reader's own words, then the message they
-// are answering, quoted and attributed the way a mail client quotes.
+// Reply is one answer in the two forms it is sent in: the plain text a transcript
+// shows and the HTML a mail client renders.
+//
+// They are composed together rather than one derived from the other, which is the
+// point of the type: the words, the attribution line and the quote are each written
+// once and rendered twice, so the two parts of a single message cannot come to say
+// different things. HTML built by converting the text would be a second reading of
+// it, and the first whitespace-only difference between them would be invisible.
+type Reply struct {
+	// Text is the reply as plain text: the part every client reads, and the one the
+	// plan shows (POST /v1/send without `confirm`).
+	Text string
+	// HTML is the same reply marked up: paragraphs, the attribution as its own
+	// block, and the message being answered inside a blockquote. It is not a
+	// reformatting of the text — nothing is reflowed, trimmed or re-wrapped — and it
+	// is always non-empty, because a reply is sent in both forms.
+	HTML string
+}
+
+// ComposeReply is what a reply says: the reader's own words, then the message they
+// are answering, quoted and attributed the way a mail client quotes — as text, and
+// as HTML.
 //
 // It is composed here rather than in the browser for the reason the recipient
 // line and the rendered body are (see render.go): the words an entry's clock is
@@ -15,8 +35,8 @@ import (
 // the same instant its own bubble prints. Composing it anywhere else would be a
 // second renderer of one message, which is exactly what the pane and a page build
 // were made to share. The send handler is the only caller, and the body it hands
-// to the mailbox is this — so what the reader is shown as the plan (POST /v1/send
-// without `confirm`) is the message itself rather than a draft of one.
+// to the mailbox is this — so what the reader is shown as the plan is the message
+// itself rather than a draft of one.
 //
 // The shape is the transcript's own:
 //
@@ -24,6 +44,11 @@ import (
 //
 //	On Mon 2 Jan 2026 15:04 AEDT, Ada Okoye <ada@loomworks.example> wrote:
 //	> the message being answered, a line at a time
+//
+// and the same shape in HTML: the words as paragraphs, the heading as a block of
+// its own, and the quoted message inside <blockquote class="gmail_quote"> — the
+// class a client (Gmail among them) keys off to fold a quote away, so the fold is
+// the client's decision and the markup is not pretending to be formatted prose.
 //
 // Nothing about the quote is trimmed, folded or excluded. The body is the one the
 // corpus holds — already unspooled from the quotes around it and stored as its own
@@ -35,37 +60,63 @@ import (
 // An entry with no body is quoted under a heading that still names it, with no
 // quoted lines beneath: an answer to a message with nothing in it is still an
 // answer to that message, and a heading with no quote under it says exactly that.
-func ReplyBody(own string, t corpus.ReplyTarget) string {
-	var b strings.Builder
-	b.WriteString(strings.TrimRight(own, " \t\r\n"))
-	b.WriteString("\n\n")
+func ComposeReply(own string, t corpus.ReplyTarget) Reply {
+	words := strings.TrimRight(own, " \t\r\n")
+	head := replyHeading(t)
 
-	// The heading names the instant with the words the entry's own bubble prints:
-	// stamp is the page's formatter, and the label is the one it publishes
-	// alongside the clock — the source's own where it agrees with the offset being
-	// shown, and a numeric offset where it does not (see zones.go).
-	//
-	// The one case that is spelled rather than passed on is an instant nothing
-	// placed: stamp then shows a UTC clock, and a page build records that as a
-	// caveat of its own. A quote has no room for a source note, and naming the
-	// sender's own label beside a UTC clock would be the lie zones.go exists to
-	// avoid — so the caveat is the word for it.
+	var text strings.Builder
+	text.WriteString(words)
+	text.WriteString("\n\n")
+	text.WriteString(head)
+	text.WriteString("\n")
+	text.WriteString(quoteText(t.Body))
+
+	var html strings.Builder
+	html.WriteString(blocks(words))
+	html.WriteString("\n<p>")
+	html.WriteString(escapeHTML(head))
+	html.WriteString("</p>\n")
+	if quoted := strings.TrimRight(t.Body, "\r\n"); strings.TrimSpace(quoted) != "" {
+		html.WriteString("<blockquote class=\"gmail_quote\">\n")
+		html.WriteString(blocks(quoted))
+		html.WriteString("\n</blockquote>\n")
+	}
+
+	return Reply{Text: text.String(), HTML: html.String()}
+}
+
+// replyHeading is the line a quote is introduced by: the instant in the page's own
+// words and the sender the way a client writes a person.
+//
+// The instant is named with the words the entry's own bubble prints: stamp is the
+// page's formatter, and the label is the one it publishes alongside the clock — the
+// source's own where it agrees with the offset being shown, and a numeric offset
+// where it does not (see zones.go).
+//
+// The one case that is spelled rather than passed on is an instant nothing placed:
+// stamp then shows a UTC clock, and a page build records that as a caveat of its
+// own. A quote has no room for a source note, and naming the sender's own label
+// beside a UTC clock would be the lie zones.go exists to avoid — so the caveat is
+// the word for it.
+func replyHeading(t corpus.ReplyTarget) string {
 	date, clock, label, resolved := stamp(t.TS, t.TZ, t.TZOffset)
 	if !resolved {
 		label = "UTC"
 	}
-	b.WriteString("On " + strings.TrimSpace(date+" "+clock+" "+label) + ", ")
-	if who := t.Who(); who != "" {
-		b.WriteString(who)
-	} else {
-		b.WriteString("somebody")
+	who := t.Who()
+	if who == "" {
+		who = "somebody"
 	}
-	b.WriteString(" wrote:\n")
+	return "On " + strings.TrimSpace(date+" "+clock+" "+label) + ", " + who + " wrote:"
+}
 
-	if strings.TrimSpace(t.Body) == "" {
-		return b.String()
+// quoteText is the message being answered, one line at a time, one level in.
+func quoteText(body string) string {
+	if strings.TrimSpace(body) == "" {
+		return ""
 	}
-	for _, line := range strings.Split(strings.TrimRight(t.Body, "\r\n"), "\n") {
+	var b strings.Builder
+	for _, line := range strings.Split(strings.TrimRight(body, "\r\n"), "\n") {
 		line = strings.TrimSuffix(line, "\r")
 		if strings.TrimSpace(line) == "" {
 			// A mark rather than "> " with a trailing space: every client writes
@@ -80,4 +131,55 @@ func ReplyBody(own string, t corpus.ReplyTarget) string {
 		b.WriteString("> " + line + "\n")
 	}
 	return b.String()
+}
+
+// blocks is text as HTML paragraphs.
+//
+// This is the whole of the markup a reply adds to the reader's words and the
+// message being answered: a blank line starts a new paragraph and a single line
+// break within one is a <br>, which is what the text already means. Nothing is
+// interpreted — no URLs are linked, no emphasis is guessed at, and anything that
+// looks like a tag was typed by a person and goes out as the characters they
+// typed (see escapeHTML). A mail client that renders this must be able to trust
+// that nothing in it came from anywhere but the two messages themselves.
+func blocks(text string) string {
+	var out []string
+	for _, para := range splitParagraphs(text) {
+		lines := strings.Split(para, "\n")
+		for i, line := range lines {
+			lines[i] = escapeHTML(strings.TrimSuffix(line, "\r"))
+		}
+		out = append(out, "<p>"+strings.Join(lines, "<br>")+"</p>")
+	}
+	return strings.Join(out, "\n")
+}
+
+// splitParagraphs cuts text at its blank lines, keeping the text itself whole:
+// a paragraph is what sits between two of them.
+func splitParagraphs(text string) []string {
+	var paras []string
+	var cur []string
+	flush := func() {
+		if len(cur) > 0 {
+			paras = append(paras, strings.Join(cur, "\n"))
+			cur = nil
+		}
+	}
+	for _, line := range strings.Split(strings.TrimRight(text, "\r\n"), "\n") {
+		if strings.TrimSpace(line) == "" {
+			flush()
+			continue
+		}
+		cur = append(cur, line)
+	}
+	flush()
+	return paras
+}
+
+// escapeHTML makes text safe to put in element content, which is every place this
+// package puts any: the quotes and the apostrophes are left as they are because
+// nothing here is written into an attribute, and the three characters that would
+// otherwise be read as markup are the three that are escaped.
+func escapeHTML(text string) string {
+	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;").Replace(text)
 }
