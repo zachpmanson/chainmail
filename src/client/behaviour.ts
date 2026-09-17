@@ -130,6 +130,31 @@ export function attach(doc: Document = document): () => void {
   /* ---------- enlarging a preview ---------- */
   cleanups.push(attachPopover(doc, on));
 
+  /* ---------- a download that was asked for before the bytes were here ----------
+   *
+   * A chip whose file is still in the mailbox is a download: the press asks the
+   * host for it and marks itself (`data-download`, see Attachments), and the
+   * renderer puts the bytes behind the chip a moment later — a rebuilt page, or a
+   * re-read thread. The press is replayed here, at the first moment it can mean
+   * what it meant.
+   *
+   * A click, rather than a second way to open things: whatever a chip does with
+   * bytes in hand is what the reader asked for — the window for what this host can
+   * show, the browser's own save for what it cannot — and one rule stays one rule.
+   * The element is the only place that fact could have waited, because the render
+   * that follows the pull replaces every attachment on the strip: state in the
+   * renderer would have to survive that, and an attribute does by being there.
+   *
+   * Only a chip that has bytes behind it is replayed. One whose fetch failed, or
+   * which the corpus then declined, keeps its mark and nothing happens: a later
+   * pull that does bring the file is still the thing the reader asked for.
+   */
+  for (const chip of doc.querySelectorAll<HTMLElement>(".att[data-download]")) {
+    if (!chip.dataset.get) continue;
+    chip.removeAttribute("data-download");
+    chip.click();
+  }
+
   /* ---------- highlight: one state, two drivers ---------- */
   const nodes = mini ? [...mini.querySelectorAll<SVGGElement>(".nd")] : [];
   const links = mini ? [...mini.querySelectorAll<SVGPathElement>(".lk")] : [];
@@ -285,22 +310,29 @@ export function attach(doc: Document = document): () => void {
 
   /* ---------- scroll-spy + hovering a message ---------- */
   const visible = new Map<string, number>();
-  const io = new IntersectionObserver(
-    (records) => {
-      for (const r of records) {
-        if (r.isIntersecting) visible.set(r.target.id, r.boundingClientRect.top);
-        else visible.delete(r.target.id);
-      }
-      let best: string | null = null;
-      let top = Infinity;
-      for (const [id, y] of visible) if (y < top) { top = y; best = id; }
-      if (best) { spyId = best; refresh(); }
-    },
-    { rootMargin: "-8% 0px -55% 0px" },
-  );
-  cleanups.push(() => io.disconnect());
+  // The spy is an enhancement — it tells the minimap which message is on screen,
+  // and a document with no minimap highlights nothing either way. Guarded rather
+  // than assumed because this module is attached by the reading pane too, and a
+  // runtime without IntersectionObserver must lose the highlight and not the
+  // thread: a throw in here comes out of the renderer's own effect.
+  const io = typeof IntersectionObserver === "function"
+    ? new IntersectionObserver(
+        (records) => {
+          for (const r of records) {
+            if (r.isIntersecting) visible.set(r.target.id, r.boundingClientRect.top);
+            else visible.delete(r.target.id);
+          }
+          let best: string | null = null;
+          let top = Infinity;
+          for (const [id, y] of visible) if (y < top) { top = y; best = id; }
+          if (best) { spyId = best; refresh(); }
+        },
+        { rootMargin: "-8% 0px -55% 0px" },
+      )
+    : null;
+  if (io) cleanups.push(() => io.disconnect());
   for (const el of entries) {
-    io.observe(el);
+    if (io) io.observe(el);
     on(el, "mouseenter", () => { if (nodeById.has(el.id)) { hovId = el.id; refresh(); } });
     on(el, "mouseleave", () => { if (hovId === el.id) { hovId = null; refresh(); } });
   }
