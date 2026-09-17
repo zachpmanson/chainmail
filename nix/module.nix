@@ -244,7 +244,10 @@ in {
         and its original To and Cc — minus every address the mailbox itself owns
         (the account's profile and its send-as aliases, which only the mailbox
         can answer: mail is usually addressed to an alias rather than to the
-        account's own name). There is nothing on the surface that can name a
+        account's own name). When that leaves nobody at all — a note to yourself,
+        or two of your own addresses in one thread — the reply answers you: the
+        sender comes back on, being the only address such a message has. There is
+        nothing on the surface that can name a
         different one, and the reader's own reply-all tick can only take people
         off that set. That is what keeps a loopback-only server with no
         authentication from becoming an outbound channel to anywhere — it can
