@@ -92,6 +92,15 @@ aliases, because mail is usually addressed to an alias rather than to the accoun
 The one thing the reader decides about that audience is a **reply all** tick under the
 field, on by default: clearing it answers the sender alone. It cannot do the opposite —
 there is no value of it that puts an address on the reply that the message did not carry.
+
+**A reply goes out in both forms.** The message is one `multipart/alternative`: the plain
+text it has always been, and the same words as HTML beside it — the reader's paragraphs,
+and the message being answered inside a `blockquote` so a client that renders markup does
+not read the quote as part of the answer. The two parts are composed in one call
+(`spec.ComposeReply`) from the same words and the same quote, so they cannot come to say
+different things; nothing is converted from the other, and nothing in either is markup
+that a person did not type. The preview shows the text part, which is the one that says
+what the message says.
 The server needs `-send-mail` to do it (`enableSendMail` in the nix module); without it
 the box says so and nothing is written. A reply is filed into the corpus in the same
 request, so the answer appears in the trail immediately rather than at the next slurp —

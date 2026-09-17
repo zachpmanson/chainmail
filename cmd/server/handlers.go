@@ -1017,7 +1017,7 @@ func (s *server) mediaPull(w http.ResponseWriter, r *http.Request) {
 type mailbox interface {
 	SetUnread(id string, unread bool) ([]string, error)
 	SetLabels(id string, add, remove []string) ([]string, error)
-	Reply(id, body string, all, send bool) (gmailclient.ReplyPlan, error)
+	Reply(id string, body gmailclient.ReplyBody, all, send bool) (gmailclient.ReplyPlan, error)
 	Read(id string) (mailingest.Message, error)
 }
 
@@ -1426,8 +1426,10 @@ func (s *server) sendReply(w http.ResponseWriter, r *http.Request) {
 	// The body, quoted and attributed, composed here rather than by the caller: what
 	// the plan previews and what the mailbox is handed are then the same bytes, and
 	// a second client cannot compose a quote this package would have written
-	// differently (see spec.ReplyBody).
-	body := spec.ReplyBody(req.Body, target)
+	// differently (see spec.ComposeReply). Both forms come out of the same call, so
+	// the text part and the HTML part of one reply are two renderings of one
+	// message rather than two messages that happen to agree.
+	body := spec.ComposeReply(req.Body, target)
 
 	// Absent means everyone, which is what this endpoint has always answered: a
 	// client that has not been rebuilt must not silently start answering one person
@@ -1439,7 +1441,9 @@ func (s *server) sendReply(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadGateway, fmt.Errorf("opening the mailbox: %w", err))
 		return
 	}
-	plan, err := mb.Reply(target.GmailID, body, all, req.Confirm)
+	plan, err := mb.Reply(target.GmailID, gmailclient.ReplyBody{
+		Text: body.Text, HTML: body.HTML,
+	}, all, req.Confirm)
 	if err != nil {
 		// Which half failed is the whole of what a reader can act on, and the two
 		// cases demand the opposite thing: a prepare that failed sent nothing, so

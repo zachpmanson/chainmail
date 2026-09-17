@@ -92,9 +92,10 @@ func run(args []string) error {
 			"host that does not grant it answers 403. Reply-all: there is no recipient "+
 			"in the request, and a reply answers the message being answered — its sender "+
 			"in To and the rest of its own audience in Cc, minus the addresses of this "+
-			"mailbox. The one thing the reader decides about that is whether the rest of "+
-			"the audience is on it, which can only narrow the reply. The credential is "+
-			"the mail grant this unit already reads.")
+			"mailbox, in both plain text and HTML so a client that renders markup does "+
+			"not read the quote as part of the answer. The one thing the reader decides "+
+			"about that is whether the rest of the audience is on it, which can only "+
+			"narrow the reply. The credential is the mail grant this unit already reads.")
 	// The deploy stamp's revision, passed in by the unit that starts this binary.
 	// Empty is honest for a build nobody labelled: the header then shows nothing
 	// rather than a commit this code cannot know.

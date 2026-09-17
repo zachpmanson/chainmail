@@ -231,6 +231,12 @@ in {
         press send on the message that press showed them — the two steps are the
         endpoint's, not a client's, so no client can send without one.
 
+        A reply goes out in both forms — the plain text and the same message as
+        HTML, one multipart/alternative — because a mail client that renders
+        markup otherwise reads the quoted message as part of the answer. Both
+        parts are composed by the server from the same words and the same quote,
+        so they cannot say different things.
+
         What bounds it is a shape rather than a permission: the request names
         the message being answered and has no field for a recipient, so the
         recipients are the ones that message's own headers carried — its sender,

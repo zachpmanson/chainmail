@@ -49,9 +49,14 @@ type fakeMailbox struct {
 }
 
 type fakeReply struct {
-	id, body string
-	all      bool
-	send     bool
+	id string
+	// body is the two forms the handler handed over, recorded apart: the text part
+	// and the HTML part of one message are the claim being tested, and a fake that
+	// kept only one of them could not tell a reply that had both from a reply that
+	// had one twice.
+	body gmailclient.ReplyBody
+	all  bool
+	send bool
 }
 
 func (f *fakeMailbox) SetUnread(id string, unread bool) ([]string, error) {
@@ -69,17 +74,17 @@ func (f *fakeMailbox) SetUnread(id string, unread bool) ([]string, error) {
 // Reply is the mailbox's half of POST /v1/send: the recipient and subject its own
 // headers give, and — when asked to send — the id of the message that went out.
 // The body is the caller's, because composing the quote is the server's and this
-// package quotes nothing (see spec.ReplyBody).
+// package quotes nothing (see spec.ComposeReply).
 //
 // The audience follows what it was asked for: the rest of the message's addresses
 // are only on the reply when all is set, which is what makes a request that forgot
 // the flag — or quietly dropped it — visible here rather than in the answer's cc.
-func (f *fakeMailbox) Reply(id, body string, all, send bool) (gmailclient.ReplyPlan, error) {
+func (f *fakeMailbox) Reply(id string, body gmailclient.ReplyBody, all, send bool) (gmailclient.ReplyPlan, error) {
 	f.replies = append(f.replies, fakeReply{id: id, body: body, all: all, send: send})
 	if err := f.fail[id]; err != nil {
 		return gmailclient.ReplyPlan{}, err
 	}
-	plan := gmailclient.ReplyPlan{To: f.to[id], Subject: f.subject[id], Body: body}
+	plan := gmailclient.ReplyPlan{To: f.to[id], Subject: f.subject[id], Body: body.Text}
 	if all {
 		plan.Cc = f.cc[id]
 	}

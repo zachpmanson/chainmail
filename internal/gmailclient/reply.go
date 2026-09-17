@@ -25,6 +25,19 @@ var (
 	ErrSendUnknown = errors.New("the send did not complete")
 )
 
+// ReplyBody is a reply's body in the two forms it is sent in: the plain text, and
+// the same message as HTML (see spec.ComposeReply, which produces both from one
+// reading of the words and the quote).
+//
+// They travel together rather than as two arguments because they are one message:
+// a caller that could pass a text body and an unrelated HTML one would be able to
+// send two messages in one envelope, and the parts of a multipart/alternative are
+// only meaningful as two renderings of the same thing.
+type ReplyBody struct {
+	Text string
+	HTML string
+}
+
 // ReplyPlan is a reply as the mailbox sees it: who it goes to and what it says,
 // and — once it has been sent — the id of the message that went out.
 //
@@ -32,7 +45,9 @@ var (
 // caller, which is the point of preparing one here: the recipients are the
 // addresses that message was addressed to and the subject is its own with one
 // "Re:", both as the mailbox holds them. Body is what the caller handed in,
-// already composed (see spec.ReplyBody) — this package quotes nothing.
+// already composed (see spec.ComposeReply) — this package quotes nothing, and it
+// renders nothing either: the two forms are the caller's, and docket writes both
+// into the message as they were given.
 //
 // Cc is empty either when the caller asked for the sender alone or when there was
 // nobody else on the message to begin with, and the server leaves it out of the
@@ -67,12 +82,12 @@ type ReplyPlan struct {
 // answered instead of executed. That is what makes the two-step in the UI a
 // preview of the message rather than of a draft — the recipients named are the
 // ones the mailbox will use, and the body is the body.
-func (c Client) Reply(id, body string, all, send bool) (ReplyPlan, error) {
+func (c Client) Reply(id string, body ReplyBody, all, send bool) (ReplyPlan, error) {
 	prepare := mail.PrepareReply
 	if all {
 		prepare = mail.PrepareReplyAll
 	}
-	plan, err := prepare(c.ctx, c.svc, id, body)
+	plan, err := prepare(c.ctx, c.svc, id, mail.Body{Text: body.Text, HTML: body.HTML})
 	if err != nil {
 		// Nothing has been handed to the mailbox, so a retry is safe and this is
 		// the one failure that can say so.
