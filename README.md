@@ -77,14 +77,18 @@ and fixes every stored label that disagrees with it.
 **Timeline** is one chronological column. **Columns** gives one lane per reply chain.
 The **reply tree** panel lights the ancestry of the entry you're reading.
 
-**Replying is reply-only, and off by default.** A thread in the reading pane ends with a
+**Replying is reply-all, and off by default.** A thread in the reading pane ends with a
 reply box: one field, the reader's own words, and the message being answered quoted under
 them by the server. Pressing *preview* sends nothing — the server composes the reply and
-returns it as a plan, and the reader sees the whole message, quote and all, before
-anything leaves. Pressing *send* sends that. There is deliberately no recipient field:
-the box answers the newest message in the thread Gmail holds, and the address is the one
-that message's own `From` header carried, so a loopback server behind a tunnel with no
-authentication can answer the reader's correspondence and cannot send mail anywhere else.
+returns it as a plan, and the reader sees the whole message, recipients and quote and all,
+before anything leaves. Pressing *send* sends that. There is deliberately no recipient
+field: the box answers the newest message in the thread Gmail holds, and the recipients are
+that message's own — its sender in `To`, and its original `To` and `Cc` in `Cc` — minus
+every address the mailbox itself owns, so a loopback server behind a tunnel with no
+authentication can answer the reader's correspondence and cannot send mail to an address
+that correspondence did not already carry. (Which addresses are the reader's own is the
+mailbox's answer, not a setting here: docket reads the account's profile and its send-as
+aliases, because mail is usually addressed to an alias rather than to the account's name.)
 The server needs `-send-mail` to do it (`enableSendMail` in the nix module); without it
 the box says so and nothing is written. A reply is filed into the corpus in the same
 request, so the answer appears in the trail immediately rather than at the next slurp —

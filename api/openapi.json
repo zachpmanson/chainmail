@@ -262,8 +262,8 @@
     },
     "/v1/send": {
       "post": {
-        "summary": "Answer one message the corpus holds, and file the answer into the corpus.",
-        "description": "The third write this surface makes to the mailbox, and the only one that creates something. One message is answered, threaded onto the message it replies to by the reply headers the mailbox builds, and the answer is filed into the corpus in the same request so the thread the reader is looking at shows it rather than waiting for the next ingest. If that filing fails the reply has still been sent: the failure is logged and the call still answers 200, because the mailbox is the source of truth and the corpus catches up.\n\nReply-only, and there is deliberately no recipient in the request. The message answered is named by its corpus ext id, and who the reply goes to and what it is called come from that message's own headers. A surface that can only answer mail the corpus already holds has no arbitrary recipient — no address to type, no way for a page behind a loopback bind with no authentication to become an outbound channel — which is what makes this a reading tool that can reply rather than a mail-sending endpoint.\n\nTwo steps, and the first sends nothing: without `confirm` the reply is prepared and the answer is the plan — the recipient the mailbox will use, the subject, and the whole body including the quote of the message being answered, which this server composes. That is a preview of the message rather than of a draft. With `confirm` the same prepare runs and is executed, and the answer carries the id of the message that went out.\n\nAn entry with no mailbox copy answers 400, unlike /v1/read and /v1/mail where such an entry is skipped and counted: those act on the part of a set that can be acted on, and a send cannot be half-performed — there is no mailbox message to thread against.\n\nA failure is one of two things and says which, because they demand the opposite next move: nothing was sent, so pressing send again is safe; or the mailbox did not answer the send, so whether it went out is unknown and only Gmail can say. A message that has gone out cannot be recalled, which is why this has its own switch: a server started without -send-mail answers 403, naming it.",
+        "summary": "Answer one message the corpus holds — everyone it was addressed to — and file the answer into the corpus.",
+        "description": "The third write this surface makes to the mailbox, and the only one that creates something. One message is answered, threaded onto the message it replies to by the reply headers the mailbox builds, and the answer is filed into the corpus in the same request so the thread the reader is looking at shows it rather than waiting for the next ingest. If that filing fails the reply has still been sent: the failure is logged and the call still answers 200, because the mailbox is the source of truth and the corpus catches up.\n\nReply-all, and there is deliberately no recipient in the request. The message answered is named by its corpus ext id, and who the reply goes to and what it is called come from that message's own headers: its sender (Reply-To when it has one, else From) in `to`, and the rest of its audience — the original To and Cc, each address once — in `cc`, minus every address the mailbox doing the replying owns. That last part is the mailbox's answer, not the caller's: mail is usually addressed to a send-as alias rather than to the account's own name, so it is the alias set that decides, and a reply to everyone is never a reply that cc's its own reader. A surface that can only answer mail the corpus already holds has no arbitrary recipient — no address to type, no address that the answered message did not already carry, no way for a page behind a loopback bind with no authentication to become an outbound channel — which is what makes this a reading tool that can reply rather than a mail-sending endpoint.\n\nTwo steps, and the first sends nothing: without `confirm` the reply is prepared and the answer is the plan — the recipients the mailbox will use, the subject, and the whole body including the quote of the message being answered, which this server composes. That is a preview of the message rather than of a draft. With `confirm` the same prepare runs and is executed, and the answer carries the id of the message that went out.\n\nAn entry with no mailbox copy answers 400, unlike /v1/read and /v1/mail where such an entry is skipped and counted: those act on the part of a set that can be acted on, and a send cannot be half-performed — there is no mailbox message to thread against.\n\nA failure is one of two things and says which, because they demand the opposite next move: nothing was sent, so pressing send again is safe; or the mailbox did not answer the send, so whether it went out is unknown and only Gmail can say. A message that has gone out cannot be recalled, which is why this has its own switch: a server started without -send-mail answers 403, naming it.",
         "operationId": "sendReply",
         "requestBody": {
           "required": true,
@@ -277,7 +277,7 @@
         },
         "responses": {
           "200": {
-            "description": "The reply as the mailbox has it: the recipient and subject from the headers of the message being answered, and the body with the quote under the reader's own words — plus whether this call sent it.",
+            "description": "The reply as the mailbox has it: the recipients and subject from the headers of the message being answered, and the body with the quote under the reader's own words — plus whether this call sent it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3383,7 +3383,7 @@
       },
       "SendRequest": {
         "type": "object",
-        "description": "A reply: which message is being answered, what the reader has to say, and whether this call is the preview or the send. There is no recipient field — the address is the one the message being answered arrived from.",
+        "description": "A reply: which message is being answered, what the reader has to say, and whether this call is the preview or the send. There is no recipient field — the recipients are the ones the answered message's own headers carried, and the addresses belonging to this mailbox are left off them.",
         "required": [
           "entry",
           "body"
@@ -3408,7 +3408,7 @@
       },
       "SendResponse": {
         "type": "object",
-        "description": "The reply as the mailbox has it, and whether this call sent it. The same three fields are answered by a preview and by a send, so what went out can be checked against the plan a reader was shown rather than trusted.",
+        "description": "The reply as the mailbox has it, and whether this call sent it. The same four fields are answered by a preview and by a send, so what went out can be checked against the plan a reader was shown rather than trusted.",
         "required": [
           "entry",
           "to",
@@ -3423,8 +3423,13 @@
           },
           "to": {
             "type": "string",
-            "description": "The recipient the mailbox will use, which is the address the message being answered arrived from — as that message's own header states it, names included, not a name the corpus resolved. Nothing here lets a caller choose it.",
+            "description": "The sender of the message being answered: its Reply-To when it has one and its From otherwise, as that message's own header states it, names included — not a name the corpus resolved. Nothing here lets a caller choose it.",
             "example": "Ada Okoye <ada@loomworks.example>"
+          },
+          "cc": {
+            "type": "string",
+            "description": "Everyone else the answered message was addressed to: its original To and then its Cc, in order, each address once, with the addresses belonging to this mailbox left out. Absent when the message went to the reader alone, rather than an empty string.",
+            "example": "Bo Halvorsen <bo@loomworks.example>, carl@example.net"
           },
           "subject": {
             "type": "string",

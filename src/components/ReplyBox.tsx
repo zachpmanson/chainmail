@@ -13,14 +13,17 @@ import { refusal, staleAfterMail, SAID_MS } from "./MailVerbs";
  * message, one field, plain text, and the message being answered quoted under the
  * reader's words.
  *
- * **There is no recipient field, and that is the feature rather than a scoping
- * shortcut.** The box answers the newest message in this thread the mailbox holds,
- * the server takes the address from that message's own From header, and there is
- * nothing on this screen that can name a different one. That is what keeps a
- * surface behind a loopback bind with no authentication from being an outbound
- * channel to anywhere: mail can only be answered, never addressed — so a host that
- * leaves this on is one where a reader can reply to their own correspondence, not
- * one where something else can send mail as them.
+ * **It answers everyone the message was addressed to, and there is still no
+ * recipient field — that is the feature rather than a scoping shortcut.** The box
+ * answers the newest message in this thread the mailbox holds: the server takes the
+ * recipients from that message's own headers — its sender, and its original To and
+ * Cc, minus the addresses of the reader's own mailbox — and there is nothing on
+ * this screen that can name a different one. So a reply reaches the audience the
+ * answered message already had, and no address that correspondence did not carry.
+ * That is what keeps a surface behind a loopback bind with no authentication from
+ * being an outbound channel to anywhere: mail can only be answered, never
+ * addressed — a host that leaves this on is one where a reader can reply to their
+ * own correspondence, not one where something else can send mail as them.
  *
  * **The quote is the server's, not this component's.** What the reader types is
  * their words alone; the message being answered is quoted and attributed by the
@@ -169,7 +172,8 @@ export function ReplyBox({
     <div className="replybox">
       <p className="replyto">
         Replying to {words.who || "the sender"}
-        {words.when ? `, ${words.when}` : ""} — the newest message here the mailbox holds.
+        {words.when ? `, ${words.when}` : ""} and everyone else the message was
+        addressed to — the newest message here the mailbox holds.
       </p>
       {error ? (
         <p className="selfail" role="alert">
@@ -180,8 +184,14 @@ export function ReplyBox({
         <div className="replyplan">
           <p className="replynote">
             <strong>Nothing has been sent yet.</strong> This is the whole message as
-            it will go: to <strong>{plan.to}</strong>, as <strong>{plan.subject}</strong>. Your words come first and
-            the message you are answering is quoted under them.
+            it will go: to <strong>{plan.to}</strong>
+            {plan.cc ? (
+              <>
+                , cc <strong>{plan.cc}</strong>
+              </>
+            ) : null}
+            , as <strong>{plan.subject}</strong>. Your words come first and the message you
+            are answering is quoted under them.
           </p>
           {/* The body as it will be sent, whitespace and all: a quote is line by
               line, and a reply that reflowed on its way out would not be this

@@ -90,6 +90,7 @@ const threaded = [
 const replyPlan = (sent: boolean) => ({
   entry: ROOT,
   to: "Bo Halvorsen <bo@fjordline.example>",
+  cc: "Cy Okafor <cy@loomworks.example>, carl@example.net",
   subject: "Re: Loom cutover schedule",
   body:
     "The 14th works.\n\n" +
@@ -227,6 +228,10 @@ describe("answering a message from the pane", () => {
     expect(to).toContain("Bo Halvorsen");
     expect(to).not.toContain("Cy Devlin");
     expect(to).toContain("Wed, 11 Mar 2026 17:40");
+    // And it says the reply reaches the message's whole audience, which is what
+    // the server is about to do: the box names the message it answers, and "who
+    // else" is not something it can know before the plan comes back.
+    expect(to).toContain("everyone else");
     // The words are the bubble's own, which is the point of the pairing: the head
     // above says when the message arrived, and this line must not say otherwise.
     expect(sends()).toHaveLength(0);
@@ -259,6 +264,12 @@ describe("answering a message from the pane", () => {
     expect(shown.querySelector(".replynote")!.textContent).toContain(
       "Bo Halvorsen <bo@fjordline.example>",
     );
+    // Everyone else is named too, because a reply-all's plan is only checkable if
+    // the reader can see who else is on it — the one thing the preview exists for.
+    expect(shown.querySelector(".replynote")!.textContent).toContain("cc");
+    expect(shown.querySelector(".replynote")!.textContent).toContain(
+      "Cy Okafor <cy@loomworks.example>, carl@example.net",
+    );
     expect(shown.querySelector(".replynote")!.textContent).toContain("Re: Loom cutover schedule");
     // The body, quote and all, as the exact lines that will be sent.
     const text = shown.querySelector(".replytext")!.textContent!;
@@ -269,6 +280,18 @@ describe("answering a message from the pane", () => {
     // being edited, and the text under the reader's cursor would be the one thing
     // they cannot check.
     expect(screen.queryByLabelText("Your reply")).toBeNull();
+  });
+
+  it("names no cc when the reply has nobody else on it", async () => {
+    // A message the reader was the only recipient of answers with no cc at all
+    // (see the contract's SendResponse), and the plan must not invent an empty
+    // recipient list to draw beside the one it does have.
+    await write("The 14th works.", () => json(200, { ...replyPlan(false), cc: undefined }));
+
+    await waitFor(() => expect(box()!.querySelector(".replynote")).toBeTruthy());
+    const note = box()!.querySelector(".replynote")!.textContent!;
+    expect(note).toContain("Bo Halvorsen <bo@fjordline.example>");
+    expect(note).not.toContain("cc");
   });
 
   it("sends the body the reader was shown, and re-reads the trail it lands in", async () => {

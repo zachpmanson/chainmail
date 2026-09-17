@@ -28,13 +28,18 @@ var (
 // ReplyPlan is a reply as the mailbox sees it: who it goes to and what it says,
 // and — once it has been sent — the id of the message that went out.
 //
-// To and Subject come from the message being answered rather than from the caller,
-// which is the point of preparing one here: the recipient is the address that
-// message arrived from and the subject is its own with one "Re:", both as the
-// mailbox holds them. Body is what the caller handed in, already composed (see
-// spec.ReplyBody) — this package quotes nothing.
+// To, Cc and Subject come from the message being answered rather than from the
+// caller, which is the point of preparing one here: the recipients are the
+// addresses that message was addressed to and the subject is its own with one
+// "Re:", both as the mailbox holds them. Body is what the caller handed in,
+// already composed (see spec.ReplyBody) — this package quotes nothing.
+//
+// Cc is empty for a message the reader was the only recipient of, and the server
+// leaves it out of the contract entirely when it is (see its sendResponse):
+// "nobody else" and "a field nobody filled in" are the same fact about a reply.
 type ReplyPlan struct {
 	To      string
+	Cc      string
 	Subject string
 	Body    string
 	// GmailID is empty until the message has been sent, and is what the caller
@@ -42,20 +47,31 @@ type ReplyPlan struct {
 	GmailID string
 }
 
-// Reply prepares a reply to one message, and sends it when send is true.
+// Reply prepares an answer to one message, and sends it when send is true.
 //
-// send=false is a plan and nothing else: the same metadata read a send begins
-// with, answered instead of executed. That is what makes the two-step in the UI a
-// preview of the message rather than of a draft — the recipient named is the one
-// the mailbox will use, and the body is the body.
+// It answers EVERYONE the message was addressed to — the sender in To, the rest of
+// its audience in Cc — and who that is is not the caller's to decide: the
+// recipients come from the message's own headers, and the addresses belonging to
+// this mailbox are left out of them by the mailbox itself (docket reads the
+// account's profile and its send-as aliases, which is the only place the answer to
+// "which of these addresses is the reader" exists — mail is usually addressed to an
+// alias rather than to the account's own name). A caller cannot name a recipient
+// here, and that is deliberate: a server bound to loopback with no authentication
+// must not be an outbound channel to anywhere, and there is no address on this
+// surface that the reader's own correspondence did not carry first.
+//
+// send=false is a plan and nothing else: the same reads a send begins with,
+// answered instead of executed. That is what makes the two-step in the UI a
+// preview of the message rather than of a draft — the recipients named are the
+// ones the mailbox will use, and the body is the body.
 func (c Client) Reply(id, body string, send bool) (ReplyPlan, error) {
-	plan, err := mail.PrepareReply(c.ctx, c.svc, id, body)
+	plan, err := mail.PrepareReplyAll(c.ctx, c.svc, id, body)
 	if err != nil {
 		// Nothing has been handed to the mailbox, so a retry is safe and this is
 		// the one failure that can say so.
 		return ReplyPlan{}, fmt.Errorf("%w: %v", ErrUnsent, err)
 	}
-	out := ReplyPlan{To: plan.To, Subject: plan.Subject, Body: plan.Body}
+	out := ReplyPlan{To: plan.To, Cc: plan.Cc, Subject: plan.Subject, Body: plan.Body}
 	if !send {
 		return out, nil
 	}
