@@ -53,6 +53,28 @@ describe("a bubble drawn from its props alone", () => {
     // And a message that stated none says nothing: not an empty line, and not a
     // word standing in for the absence.
     expect(draw().container.querySelector(".hdet .subj")).toBeNull();
+    expect(draw().container.querySelector(".hdet .hsub")).toBeNull();
+  });
+
+  it("puts the ids on the subject's own line, at its right end", () => {
+    // The subject is what the message is about and the ids under it are where it
+    // is: a reader inspecting a message is usually after one or the other, so they
+    // share the receipt's first line instead of the quiet line of ids taking one
+    // of its own under the recipient.
+    const { container } = draw({
+      subject: "Solar install quote: dates",
+      source: <span className="src">msg 18bd3f21</span>,
+    });
+    const line = container.querySelector(".hdet .hsub")!;
+    expect(line.querySelector(".subj")!.textContent).toBe("Solar install quote: dates");
+    // The subject first, the ids after it: one row, and the ids are its right end.
+    expect(line.firstElementChild!.className).toBe("subj");
+    expect(line.lastElementChild!.className).toBe("src");
+    // A message with no subject still shows where it was found — the row is the
+    // subject's line rather than a row that needs one.
+    const ids = draw({ source: <span className="src">msg 18bd3f21</span> });
+    expect(ids.container.querySelector(".hdet .hsub .src")).not.toBeNull();
+    expect(ids.container.querySelector(".hdet .hsub .subj")).toBeNull();
   });
 
   it("carries the flags it is given as the classes the stylesheet reads", () => {

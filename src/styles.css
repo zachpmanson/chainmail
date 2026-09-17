@@ -745,16 +745,29 @@
   .hdet { display:flex; flex-wrap:wrap; align-items:center; gap:.2rem .7rem;
     margin:0 0 .3rem; padding:.22rem .1rem 0; }
   .to { font-size:.66rem; color:var(--muted); }
-  /* The message's own subject, on a line of its own above the receipt's fields.
-     A subject is a sentence rather than a field of one, so it takes the whole
-     row instead of running into the recipient list; and it is read as a title —
-     quieter than the header line, louder than the receipt — which is what
-     `--fg` at this size against the asides' `--muted` looks like.
+  /* The message's own subject, and the ids it was found under, sharing the
+     receipt's first line: the subject keeps the left and the ids are pushed to
+     the right end of the same line. A subject is a sentence rather than a field
+     of one, so the row takes the whole width instead of running into the
+     recipient list below it; and it is read as a title — quieter than the header
+     line, louder than the receipt — which is what `--fg` at this size against the
+     asides' `--muted` looks like.
 
      Its leading is tighter than the page's: a title is one line read against the
      receipt under it, and the body's leading put as much air around the subject
-     as there was between it and the line it belongs to. */
-  .hdet .subj { flex:1 1 100%; font-size:.72rem; color:var(--fg); line-height:1.25; }
+     as there was between it and the line it belongs to.
+
+     The ids are what a reader looks for on the message they are inspecting, and
+     the subject is what they are inspecting: one line, one glance, rather than
+     the ids taking a quiet line of their own under the recipient — which was
+     mostly empty and pushed the receipt's fields a line further down. */
+  .hdet .hsub { flex:1 1 100%; display:flex; align-items:baseline; gap:.3rem .7rem; }
+  .hdet .hsub .subj { flex:1 1 auto; min-width:0;
+    font-size:.72rem; color:var(--fg); line-height:1.25; }
+  /* `margin-left:auto` rather than the subject taking the slack: a long subject
+     that wraps must not push the ids off the row, and the ids still end at the
+     right edge when the subject is short. */
+  .hdet .hsub .src { margin-left:auto; }
   .src { font-size:.64rem; color:var(--muted);
     font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
   .src a { color:inherit; text-decoration:none; border-bottom:1px dotted currentColor; }
