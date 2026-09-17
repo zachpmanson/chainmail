@@ -68,7 +68,9 @@ const same = (a: Asked, b: Asked) =>
  * read or refined, and folding it away would put its own options behind another
  * click. Escape empties the box and shuts it — the field, the question in force,
  * and the page below, back to the default view — and so does clearing the box by
- * hand.
+ * hand. What it does not take with it is the thread the reader has open: the pane
+ * is the reading rather than the question, so it stays open on the default view
+ * below (see commit).
  *
  * Nothing here navigates on the way in. Opening the search asks nothing, so the
  * list below is left alone — which is what makes an empty box the default view
@@ -89,6 +91,18 @@ export function NavSearch() {
         person: typeof search.person === "string" ? search.person : "",
         since: typeof search.since === "string" ? search.since : "",
       };
+    },
+  });
+
+  // The thread the reader has open, read from the same address the four come from
+  // and *not* part of them: it belongs to the reading rather than to the question.
+  // The panel drops it on the way out of a search (see commit), which is why it
+  // is read here rather than kept in state.
+  const openThread = useRouterState({
+    select: (s): string | undefined => {
+      if (s.location.pathname !== "/") return undefined;
+      const search = s.location.search as Record<string, unknown>;
+      return typeof search.open === "string" ? search.open : undefined;
     },
   });
 
@@ -133,6 +147,16 @@ export function NavSearch() {
         ...(four.mode !== "hybrid" ? { mode: four.mode } : {}),
         ...(four.person ? { person: four.person } : {}),
         ...(four.since ? { since: four.since } : {}),
+        // Giving the question up is not giving up the reading. Emptying the box
+        // (or Escape) puts the default view back below, and the pane the reader
+        // had open is the same pane on either page — so its thread is carried
+        // across rather than emptied by a box above it that has nothing in it.
+        //
+        // Only on the way out, and that asymmetry is the search page's own rule:
+        // a commit that still asks something is a new question, whose results are
+        // new, and the pane there starts empty until a result is clicked (see
+        // Select) — the last question's thread is not an answer to this one.
+        ...(asks(four) || openThread === undefined ? {} : { open: openThread }),
       },
       // Replaced, not pushed: the search IS the home page, and Back from a built
       // page (which is pushed) lands straight back on it.

@@ -1637,6 +1637,65 @@ describe("the search lives in the URL", () => {
     expect((box as HTMLInputElement).value).toBe("");
   });
 
+  it("leaves the thread the reader has open alone when the question goes", async () => {
+    handler = buildHandler;
+    const router = await mountApp("/?q=cutover");
+    await screen.findByText("Loom cutover schedule", { selector: ".ibsubj" });
+
+    // Read one of the candidates. The pane is on a thread, and the address says
+    // which, because that is what a reload or a Back has to land on.
+    const row = screen
+      .getByText("Loom cutover schedule", { selector: ".ibsubj" })
+      .closest(".ibrow") as HTMLElement;
+    click(within(row).getByRole("button", { name: "Loom cutover schedule" }));
+    const head = () => document.querySelector(".ibread-subj")?.textContent ?? null;
+    await waitFor(() => expect(head()).toBe("Loom cutover schedule"));
+    await waitFor(() => expect(router.state.location.searchStr).toContain("open="));
+
+    // Empty the box and give the question up. The default view comes back below
+    // and the reading stays where it was: the pane is the thread the reader has
+    // open rather than the answer to the question above it, and a search that
+    // emptied the pane would be a box throwing away the mail somebody was in the
+    // middle of reading.
+    const box = openSearch();
+    fireEvent.change(box, { target: { value: "" } });
+    fireEvent.submit(box.closest("form")!);
+
+    await waitFor(() => expect(document.querySelector(".ibwrap")).toBeTruthy());
+    expect(document.querySelector(".selwrap")).toBeNull();
+    expect(router.state.location.searchStr).not.toContain("q=");
+    expect(router.state.location.searchStr).toContain("open=");
+    // The reading is the same one: the inbox behind it finds the thread in its
+    // own list a moment later (the list is a read of its own), and the head is
+    // then the same head it was on the search page.
+    await waitFor(() => expect(head()).toBe("Loom cutover schedule"));
+  });
+
+  it("starts a new question with nothing open, whatever the last one was reading", async () => {
+    // The other half of the rule, and the search page's own: a commit that still
+    // asks something is a new question, whose candidates have not been judged —
+    // so the thread the last question was reading is not carried into it.
+    handler = buildHandler;
+    const router = await mountApp("/?q=cutover");
+    await screen.findByText("Loom cutover schedule", { selector: ".ibsubj" });
+    const row = screen
+      .getByText("Loom cutover schedule", { selector: ".ibsubj" })
+      .closest(".ibrow") as HTMLElement;
+    click(within(row).getByRole("button", { name: "Loom cutover schedule" }));
+    await waitFor(() =>
+      expect(document.querySelector(".ibread-subj")?.textContent).toBe("Loom cutover schedule"),
+    );
+
+    const box = openSearch();
+    fireEvent.change(box, { target: { value: "warehouse" } });
+    submitSearch();
+
+    await waitFor(() => expect(router.state.location.searchStr).toContain("q=warehouse"));
+    expect(router.state.location.searchStr).not.toContain("open=");
+    await waitFor(() => expect(document.querySelector(".ibread-subj")).toBeNull());
+    expect(within(document.querySelector(".ibread") as HTMLElement).getByText(/Nothing open/)).toBeTruthy();
+  });
+
   it("searches from the panel's button, not only from its Enter key", async () => {
     handler = buildHandler;
     const router = await mountApp("/");
