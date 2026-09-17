@@ -1759,6 +1759,31 @@ describe("in-page anchor links", () => {
   });
 });
 
+describe("the reply link on a built page", () => {
+  it("names the message each one answers, and links to its row here", async () => {
+    handler = (c) =>
+      pathOf(c) === "/v1/specs/loom-cutover"
+        ? json(200, EDIT_SPEC)
+        : json(500, { error: "unexpected call" });
+    await mountApp("/view/loom-cutover");
+    await screen.findByText("CSV layout");
+
+    // The reply: the parent's own name and clock, in the words the parent's
+    // bubble prints them in, pointing at the parent's row on this page.
+    const par = document.querySelector(".msg .hdr .par");
+    expect(par?.getAttribute("href")).toBe("#c-orig");
+    expect(par?.querySelector(".parlbl")?.textContent).toBe(
+      "in reply to Charles XPTO, Fri 21 Aug 2026 09:00",
+    );
+    expect(par?.getAttribute("title")).toBe("In reply to Charles XPTO, Fri 21 Aug 2026 09:00");
+    expect(document.getElementById("c-orig")?.textContent).toContain("Charles XPTO");
+
+    // The opener answers nothing and says so, rather than leaving the line off.
+    const first = document.querySelector(".msg .hdr .tstart");
+    expect(first?.textContent).toBe("thread start");
+  });
+});
+
 describe("a quoter's edit in the transcript", () => {
   it("renders the edited quote and an attributed 'original from … at …' header", async () => {
     handler = (c) =>
