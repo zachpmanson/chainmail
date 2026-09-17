@@ -208,6 +208,10 @@ function openSearch(): HTMLInputElement {
 
 const searchCalls = () => calls.filter((c) => pathOf(c) === "/v1/search");
 
+/** Every press of the nav's ↻ that reached the mailbox: the ingest half of the
+ *  gesture, which is what separates it from a plain re-read. */
+const slurpCalls = () => calls.filter((c) => c.method === "POST" && pathOf(c) === "/v1/slurp");
+
 /**
  * Search from the inbox: the nav's box is the search, so the query is typed where
  * it lives and committed there. That is the journey a person takes, and the one
@@ -229,6 +233,10 @@ const buildHandler: Handler = (c) => {
   if (p === "/v1/spec" && c.method === "POST") return json(200, SPEC);
   if (p === "/v1/specs/loom-cutover") return json(200, SPEC);
   if (p === "/v1/search") return json(200, { mode: "lexical", chains: CHAINS });
+  // The nav's refresh slurps first (see NavRefresh): a host that may reach the
+  // mailbox answers with the ingest's own transcript, one line per phase.
+  if (p === "/v1/slurp" && c.method === "POST")
+    return json(200, { report: "[1/6] mail: created 1, changed 0\n" });
   // The nav's Person control reads the same people /status does, and only while
   // the panel is open — a test that never opens it never asks.
   if (p === "/v1/people") return json(200, PEOPLE);
@@ -1078,6 +1086,77 @@ describe("the site navigation", () => {
     });
     await waitFor(() => expect(button.getAttribute("aria-busy")).toBe("false"));
     expect(button).toHaveProperty("disabled", false);
+  });
+
+  it("fetches what has arrived before it re-reads what is on the page", async () => {
+    handler = buildHandler;
+    await mountApp("/");
+    await screen.findByText("Loom cutover schedule");
+    const reads = searchCalls().length;
+
+    // The ingest is held open, so what the press does *while* it is out is
+    // assertable: the refetch must not have happened yet, because a re-read of a
+    // corpus the fetch has not written to is the same page twice and the new mail
+    // invisible until somebody presses again.
+    let release: (r: Response) => void = () => {};
+    handler = (c) =>
+      pathOf(c) === "/v1/slurp"
+        ? new Promise<Response>((res) => (release = res))
+        : buildHandler(c);
+
+    click(screen.getByRole("button", { name: "Refresh" }));
+
+    await waitFor(() => expect(slurpCalls()).toHaveLength(1));
+    expect(searchCalls().length).toBe(reads);
+
+    await act(async () => {
+      release(json(200, { report: "[1/6] mail: created 2, changed 0\n" }));
+    });
+    await waitFor(() => expect(searchCalls().length).toBeGreaterThan(reads));
+  });
+
+  it("re-reads anyway on a host that cannot reach the mailbox, and says so", async () => {
+    // The read-most fallback, kept: a refresh on a host started without -slurp is
+    // what it always was, rather than an error about a feature nobody asked for.
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    handler = (c) =>
+      pathOf(c) === "/v1/slurp"
+        ? json(403, {
+            error:
+              "slurping is disabled: this server was started without -slurp, so it " +
+              "cannot reach the work mailbox.",
+          })
+        : buildHandler(c);
+    await mountApp("/");
+    await screen.findByText("Loom cutover schedule");
+    const reads = searchCalls().length;
+
+    click(screen.getByRole("button", { name: "Refresh" }));
+
+    await waitFor(() => expect(searchCalls().length).toBeGreaterThan(reads));
+    expect(err).toHaveBeenCalledWith(expect.stringMatching(/no mailbox reach on this host/));
+    // The refusal is the console's business; the nav's glyph stays quiet about
+    // what it found, as it does about everything else.
+    expect(document.querySelector(".toast")).toBeNull();
+  });
+
+  it("re-reads while an ingest is already running, and says which it was", async () => {
+    // The one-at-a-time latch: a second press while the schedule (or another
+    // press) is walking the mailbox is not a failure, it is work already in hand —
+    // and the refetch reads the corpus that run is writing into.
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    handler = (c) =>
+      pathOf(c) === "/v1/slurp"
+        ? json(409, { error: "a sweep is already running: the mailbox is being ingested right now" })
+        : buildHandler(c);
+    await mountApp("/");
+    await screen.findByText("Loom cutover schedule");
+    const reads = searchCalls().length;
+
+    click(screen.getByRole("button", { name: "Refresh" }));
+
+    await waitFor(() => expect(searchCalls().length).toBeGreaterThan(reads));
+    expect(err).toHaveBeenCalledWith(expect.stringMatching(/a sweep is already running/));
   });
 });
 

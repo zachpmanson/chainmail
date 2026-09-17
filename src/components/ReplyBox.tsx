@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { $api, type CorpusEntry, type SendResponse } from "../lib/api";
-import { refusal, staleAfterMail } from "./MailVerbs";
+import { dismissToast, pushToast } from "../lib/toasts";
+import { refusal, staleAfterMail, SAID_MS } from "./MailVerbs";
 
 /**
  * The reply box: the one thing this pane can say back.
@@ -47,6 +48,14 @@ import { refusal, staleAfterMail } from "./MailVerbs";
  * does nothing. Neither failure claims the other's outcome — a mailbox that would
  * not prepare the reply sent nothing, and a mailbox that did not answer the send
  * may have sent it, which the server's own message says.
+ *
+ * **The refusal is drawn here and the sent account is not**, which is the
+ * difference between something to act on and something that is over. A failure
+ * leaves the plan on screen with the reader's words in it and says what went
+ * wrong beside them; what a send *did* goes to the shell's corner (see Toasts),
+ * because a sentence about a message that has gone is not state of the box — it
+ * must not take a row from the trail the reader is reading, and it outlives this
+ * box the moment somebody clicks another thread.
  */
 export function ReplyBox({
   thread,
@@ -78,8 +87,26 @@ export function ReplyBox({
   // The plan the preview came back with, while the reader is looking at it.
   const [plan, setPlan] = useState<SendResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [last, setLast] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // What the last send here has to say is drawn in the shell's corner (see
+  // Toasts), and what this keeps is the id of its own notification, for the
+  // reason the pane keeps its own: the box is not remounted between threads, only
+  // its contents change, so an account of a reply is a claim about a trail the
+  // reader may have left by the time they read it. Taken down by hand when the
+  // thread changes rather than left to its clock, and the next send takes down the
+  // one before it — a reply cannot be recalled, so the account of it must not be
+  // either, and it must not be one of two.
+  const said = useRef<number | null>(null);
+  const say = (text: string) => {
+    if (said.current !== null) dismissToast(said.current);
+    said.current = pushToast(text, "note", SAID_MS);
+  };
+
+  useEffect(() => {
+    if (said.current !== null) dismissToast(said.current);
+    said.current = null;
+  }, [thread.rootExtId]);
 
   const send = $api.useMutation("post", "/v1/send");
 
@@ -89,7 +116,6 @@ export function ReplyBox({
   // reader nothing and left nothing behind.
   async function review() {
     setError(null);
-    setLast(null);
     setBusy(true);
     try {
       const res = await send.mutateAsync({
@@ -126,7 +152,10 @@ export function ReplyBox({
       });
       setPlan(null);
       setOwn("");
-      setLast(`Answered ${words.who || "the sender"} — sent, and filed in the trail below.`);
+      // Said in the corner rather than here, and in the same words: an answer that
+      // has gone out is over, and what the reader is looking at now is the trail
+      // it was filed into.
+      say(`Answered ${words.who || "the sender"} — sent, and filed in the trail below.`);
     } catch (e) {
       // The plan stays on screen: the reader's words are still theirs, and the
       // server's message says which of the two failures this was.
@@ -145,11 +174,6 @@ export function ReplyBox({
       {error ? (
         <p className="selfail" role="alert">
           {error}
-        </p>
-      ) : null}
-      {last ? (
-        <p className="pullnote" role="status">
-          {last}
         </p>
       ) : null}
       {plan ? (

@@ -58,6 +58,14 @@ npm run dev             # vite, proxying /v1 to the server
 Search, tick the chains that belong, build a page from them. Without the server, a spec
 on disk still renders: `corpus spec -q "…" -o spec.json && npm run render -- spec.json -o page.html`.
 
+**Saying "now" fetches first.** The nav's ↻ and the saved page's own refresh button both
+start with `POST /v1/slurp` — the same ingest the hourly sweep runs — and only then ask the
+corpus again (the nav) or re-derive the page (the page's button). Fetch, then read: a
+re-read of a corpus the fetch has not written to is the same page twice. Without `-slurp`
+the endpoint answers 403 and both controls fall back to re-reading what the corpus already
+holds, which is what they were before; a press while a sweep is already running answers
+409, since the work is being done.
+
 **Unread state is the mailbox's, not the corpus's.** A row carries how many of its
 messages Gmail still calls unread, and the reading pane's mark read / mark unread button
 changes that in the mailbox itself — so the reader's phone agrees with the page. The
