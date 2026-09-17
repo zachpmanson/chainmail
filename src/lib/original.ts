@@ -38,6 +38,86 @@ export const ORIGINAL_BASE = "/v1/entries";
  */
 const asked = new Map<string, Promise<string>>();
 
+/**
+ * Which senders the reader reads as their sender wrote them.
+ *
+ * The switch is per sender and not per message, because the mail that needs it
+ * is mail that was never meant for this pipeline: a booking confirmation, a
+ * newsletter, anything a script sent. Those arrive from one address and arrive
+ * as a series, and a reader who has decided that GitHub's notifications are
+ * illegible should not have to say so again on every one of them.
+ *
+ * Held in localStorage rather than in the session, for the same reason the
+ * decision is about the sender rather than the message: the next slurp brings
+ * more of their mail, and the reader's answer to "how do I read this person" is
+ * not something to re-answer every time the corpus grows. Keyed by the address
+ * the entry came from (`fromEmail`), which is the only handle a sender has: the
+ * display name is neither unique nor always present.
+ *
+ * A message with no address of its own — one recovered from somebody else's
+ * quote — has no sender to hold the answer, so the caller keys it on the message
+ * instead (see `stylesKey`), and it is the message that is remembered, not a
+ * person the corpus cannot name.
+ */
+const STYLED_KEY = "chainmail:styled-senders";
+
+let styled: Set<string> | null = null;
+const watchers = new Set<() => void>();
+
+function store(): Set<string> {
+  if (styled) return styled;
+  styled = new Set<string>();
+  try {
+    const held = globalThis.localStorage?.getItem(STYLED_KEY);
+    if (held) for (const key of JSON.parse(held) as unknown[]) {
+      if (typeof key === "string" && key !== "") styled.add(key);
+    }
+  } catch {
+    // No storage, or somebody else's key under this name: an unreadable answer
+    // is the same as no answer, and the reader starts from the default rather
+    // than from a broken page.
+  }
+  return styled;
+}
+
+function save(): void {
+  try {
+    globalThis.localStorage?.setItem(STYLED_KEY, JSON.stringify([...store()]));
+  } catch {
+    // The switch still holds for this session; it just will not be remembered.
+  }
+}
+
+/** Whether the reader reads this sender's mail as the sender wrote it. */
+export function isStyled(key: string): boolean {
+  return key !== "" && store().has(key);
+}
+
+/**
+ * Flip one sender's switch, and tell every bubble that asked about it.
+ *
+ * The notification is the point of this being here rather than in the bubble: a
+ * sender's mail is usually a run of messages, all of them mounted, and pressing
+ * the control on one of them has to reach the others. Who is listening is the
+ * bubble's business — this only knows that something changed.
+ */
+export function toggleStyled(key: string): void {
+  if (key === "") return;
+  const held = store();
+  if (held.has(key)) held.delete(key);
+  else held.add(key);
+  save();
+  for (const w of [...watchers]) w();
+}
+
+/** Listen for any sender's switch moving. Returns the unsubscribe. */
+export function watchStyled(fn: () => void): () => void {
+  watchers.add(fn);
+  return () => {
+    watchers.delete(fn);
+  };
+}
+
 export function fetchOriginal(extID: string): Promise<string> {
   const held = asked.get(extID);
   if (held) return held;

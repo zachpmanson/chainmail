@@ -10,7 +10,7 @@ import {
   type Attachment,
 } from "../lib/attachments";
 import type { ZoneState } from "../lib/chronological";
-import { mountOriginal } from "../lib/original";
+import { isStyled, mountOriginal, toggleStyled, watchStyled } from "../lib/original";
 import { trimBody } from "../lib/trimBody";
 
 /**
@@ -95,6 +95,12 @@ export interface MessageProps {
   onLandedEnd?: () => void;
   /** people @-named in the body, shown above it */
   mentions?: string[];
+  /** the address this message came from, e.g. "ada@loomworks.example". It is
+   *  what the styles switch is kept against (see lib/original): the reader's
+   *  answer to "show me this sender's own html" is about the sender, so it is
+   *  the address that holds it. Absent on a recovered entry, which has no From
+   *  header of its own, and then the switch is kept against the message. */
+  fromEmail?: string;
   attachments?: Attachment[];
   /** the corpus's handle for this message, which the fetch button asks for */
   extId?: string;
@@ -430,13 +436,28 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
  * wrong for this message.
  *
  * The state lives here, at the bubble, rather than in either end of the swap: the
- * control belongs in the receipt (where the reader goes to inspect a message) and
+ * control is drawn in the receipt or on the header line (see OriginalControl) and
  * the body it replaces belongs in the bubble, and one of them cannot own the other
  * without the other reaching for it. The control is drawn only where a caller
  * passed somewhere to fetch from, so a built page and a static export never show
  * one — see MessageProps.original.
+ *
+ * The switch behind the control is per sender rather than per message, and it is
+ * kept in lib/original: the mail this is for arrives as a run of notifications
+ * from one address, and the reader who has decided how to read that address has
+ * decided it for all of it. So this hook holds two things — whether this
+ * bubble's sender is currently read their way, and what became of this one
+ * message's fetch — and the second only exists while the first is true.
  */
-function useOriginal(original?: MessageProps["original"]) {
+function useOriginal(original?: MessageProps["original"], fromEmail?: string) {
+  // Whose switch this bubble follows: the address it came from, or the message
+  // itself where there is no address to hold the answer (a recovered entry has
+  // no From header, so it names no sender to remember anything about).
+  const key = fromEmail || original?.extId || "";
+  const extId = original?.extId;
+  const load = original?.load;
+
+  const [on, setOn] = useState(() => isStyled(key));
   const [state, setState] = useState<Original>({ at: "read" });
   // What arrived, held apart from what is on screen: the reader who flips back and
   // forth is comparing two renderings of one body, and re-asking for bytes this
@@ -446,73 +467,109 @@ function useOriginal(original?: MessageProps["original"]) {
   // itself free.
   const arrived = useRef<string | null>(null);
 
-  const ask = () => {
-    if (!original) return;
-    if (state.at === "sent") {
-      // Back to the transcript: the bytes stay in `arrived`, so coming back to
-      // them costs nothing.
-      setState({ at: "read" });
+  // A sender's mail is usually several bubbles at once, so the press that
+  // happens on one of them has to reach the others: this bubble follows the
+  // switch rather than owning it, and follows it wherever it was pressed. The
+  // initial read happens in the state above so that a reader who has already
+  // answered for this sender opens on their answer rather than on the default.
+  useEffect(() => {
+    setOn(isStyled(key));
+    return watchStyled(() => setOn(isStyled(key)));
+  }, [key]);
+
+  // The switch, turned into a rendering. On: ask for this message's own part and
+  // mount it in place of the transcript's rendering. Off: back to the
+  // transcript's, with the bytes held so the flip back costs nothing.
+  useEffect(() => {
+    if (!extId || !load) return;
+    if (!on) {
+      // Same object when there is nothing to change, so switching off does not
+      // re-render every bubble that was already off.
+      setState((s) => (s.at === "read" ? s : { at: "read" }));
       return;
     }
-    if (state.at !== "read") return;
     if (arrived.current !== null) {
       setState({ at: "sent", html: arrived.current });
       return;
     }
+    // A fetch that arrives after the switch went back off must not swap the body
+    // back out from under the reader.
+    let live = true;
     setState({ at: "asking" });
-    original.load(original.extId).then(
+    load(extId).then(
       (html) => {
         arrived.current = html;
-        setState({ at: "sent", html });
+        if (live) setState({ at: "sent", html });
       },
-      (err: unknown) =>
-        setState({
-          at: "none",
-          why: err instanceof Error && err.message ? err.message : "the original is not available",
-        }),
+      (err: unknown) => {
+        if (live) {
+          setState({
+            at: "none",
+            why: err instanceof Error && err.message ? err.message : "the original is not available",
+          });
+        }
+      },
     );
-  };
+    return () => {
+      live = false;
+    };
+  }, [on, extId, load]);
 
-  return { state, ask };
+  // The control is only ever a press on the sender's switch. Whether that press
+  // means "fetch this one" or "fetch the rest of them" is not the control's to
+  // know: it is one switch, drawn wherever the reader is looking at the mail it
+  // governs.
+  const ask = () => toggleStyled(key);
+
+  return { on, state, ask };
 }
 
 /**
- * The control, in the bubble's receipt beside the copy button.
+ * The control, drawn wherever the reader can see the mail it governs.
  *
- * The receipt is where a reader goes to inspect a message rather than read it: the
- * ids it was found under, the address it was sent to, the JSON behind it. This asks
- * for the same message a second way, so it belongs with those rather than on the
- * bubble — as chrome over the body it would be a control on every message that had
- * one (most of them), while the reader who needs it is the one who has already
- * noticed the rendering is wrong.
+ * While the sender's own rendering is off, that is the bubble's receipt: the place
+ * a reader goes to inspect a message rather than read it, next to the button that
+ * copies the message whole. It is deliberately not on the bubble, because most mail
+ * renders correctly and a control on every bubble is chrome traded for a rare need.
  *
- * `none` is the one answer that leaves nothing to press: the corpus was asked and
- * said there is nothing of the sender's to show. The server's own sentence is the
- * answer, so it rides the note's title rather than being replaced with a word.
+ * Once it is on, it moves out to the header line. The reader who has swapped the
+ * body has somebody else's html in front of them and the receipt behind them, and
+ * the receipt is a disclosure that is shut until it is opened again — a way back
+ * that a reader has to go looking for is a switch they cannot turn off, which is
+ * the one thing this control exists to do. So pressed, it rides the line the bubble
+ * is scanned by, where the way back is always on screen; and pressed is the only
+ * state it draws there, so nothing is added to the mail that was never swapped.
+ *
+ * The note is the corpus's answer that the message carries nothing of the sender's
+ * own, and it is drawn *beside* the control rather than in place of it: the switch
+ * it belongs to is the sender's and not this message's, so a message with no part
+ * is still a way to stop reading the rest of them this way. The server's own
+ * sentence is the answer for this message, so it rides the note's title rather than
+ * being replaced with a word.
  */
-function OriginalControl({ state, ask }: { state: Original; ask: () => void }) {
-  if (state.at === "none") {
-    return (
-      <span className="origwhy" title={state.why}>
-        nothing to show
-      </span>
-    );
-  }
+function OriginalControl({ on, state, ask }: { on: boolean; state: Original; ask: () => void }) {
   return (
-    <button
-      type="button"
-      className="origbtn"
-      aria-pressed={state.at === "sent"}
-      disabled={state.at === "asking"}
-      title={
-        state.at === "sent"
-          ? "Back to the rendered body: the same message with the sender's own styling removed"
-          : "Show this message as it was written: the sender's own markup and its own stylesheet, in a shadow root, which is where the stylesheet cannot reach this page"
-      }
-      onClick={ask}
-    >
-      {state.at === "asking" ? "loading…" : "original"}
-    </button>
+    <>
+      <button
+        type="button"
+        className="origbtn"
+        aria-pressed={on}
+        disabled={state.at === "asking"}
+        title={
+          on
+            ? "Back to the page's own rendering of this sender's mail"
+            : "Read this sender's mail as they wrote it, with their own styling"
+        }
+        onClick={ask}
+      >
+        {state.at === "asking" ? "loading…" : "Toggle Styles"}
+      </button>
+      {state.at === "none" ? (
+        <span className="origwhy" title={state.why}>
+          nothing to show
+        </span>
+      ) : null}
+    </>
   );
 }
 
@@ -540,16 +597,17 @@ function Body({ body, state }: { body: string; state: Original }) {
   return <div className="bd" dangerouslySetInnerHTML={html(trimBody(body))} />;
 }
 
-/** What the reader has asked for, and what came back.
+/** What became of this message's fetch, while its sender's switch is on.
  *
- * `read` is the transcript's own rendering and the state a bubble opens in;
- * `asking` is a fetch in flight, during which the transcript's rendering is
+ * `read` is the transcript's own rendering and what a bubble shows with the switch
+ * off; `asking` is a fetch in flight, during which the transcript's rendering is
  * still what is on screen, because taking the body away before the replacement
  * arrives would be a blank bubble on a slow corpus. `sent` is the sender's own
- * html, mounted. `none` is the corpus's answer that there is nothing of theirs
- * to show — an answer rather than a failure, and the only state with no way back
- * to `read` except reloading the thread, because there is nothing to go back to:
- * what was on screen is still on screen. */
+ * html, mounted. `none` is the corpus's answer that there is nothing of theirs to
+ * show on this message — an answer rather than a failure, and the one state where
+ * the switch is on and this message's body cannot follow it: what was on screen is
+ * still on screen, and the way back is the same switch, which belongs to every
+ * message from that sender rather than to this one. */
 type Original =
   | { at: "read" }
   | { at: "asking" }
@@ -565,11 +623,10 @@ export function Message(p: MessageProps) {
     p.chainStart && "chstart", p.mark === "new" && "isnew", p.landed && "landed"]
     .filter(Boolean)
     .join(" ");
-  // The receipt's controls are the last thing on the line, and the two of them
-  // sit together: the tail of the receipt is where a reader inspects the message
-  // rather than reads it, and a second way to read it belongs beside the way to
-  // copy it, not on the bubble.
-  const original = useOriginal(p.original);
+  // The switch, and what became of this message's fetch. Both are the bubble's,
+  // because the two halves of the swap are on either side of it: the control in
+  // the receipt, the body in the bubble.
+  const original = useOriginal(p.original, p.fromEmail);
   // The name's hover title, and the avatar's: both name the person the same way,
   // and a caller that supplies no title gets the name it already gave us.
   const who = p.senderTitle ?? p.sender ?? "";
@@ -606,6 +663,15 @@ export function Message(p: MessageProps) {
             <Stamp id={p.id} stamp={p.stamp} />
             {p.mark === "new" ? <span className="newpill">new</span> : null}
             {p.mark === "revised" ? <span className="revpill">revised</span> : null}
+            {/* The way back, once the body has been swapped. While the switch is
+                off this control is in the receipt, where inspecting a message
+                lives; while it is on it belongs out here, on the line the bubble
+                is scanned by, so that the reader who has swapped the body can
+                turn it back without opening a disclosure to do it — see
+                OriginalControl. */}
+            {p.original !== undefined && original.on ? (
+              <OriginalControl on={original.on} state={original.state} ask={original.ask} />
+            ) : null}
             {/* The line's right end, and always drawn even when the caller has
                 no reply to put in it: the caret lives inside this box, so an
                 empty tail still closes the line at the right edge. */}
@@ -624,8 +690,8 @@ export function Message(p: MessageProps) {
             {p.source}
             {p.original !== undefined || p.copyJson !== undefined ? (
               <span className="hdetend">
-                {p.original !== undefined ? (
-                  <OriginalControl state={original.state} ask={original.ask} />
+                {p.original !== undefined && !original.on ? (
+                  <OriginalControl on={original.on} state={original.state} ask={original.ask} />
                 ) : null}
                 {p.copyJson !== undefined ? <CopyJson data={p.copyJson} /> : null}
               </span>
@@ -643,8 +709,8 @@ export function Message(p: MessageProps) {
             </div>
           ) : null}
           {/* The body, and the second reading of it: this is where the sender's own
-              html is mounted in place of the rendered one. Which one to draw is
-              the receipt's control's state, held at the bubble above. */}
+              html is mounted in place of the rendered one. Which one to draw is the
+              sender's switch, held at the bubble above. */}
           <Body body={p.body} state={original.state} />
           {p.edits}
           <Attachments

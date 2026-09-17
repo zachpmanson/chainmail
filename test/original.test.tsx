@@ -23,13 +23,17 @@ afterEach(() => {
  *
  * Every test names its own ext id, because lib/original holds what it fetched for
  * the session — the same caching a reader gets, and the same reason two tests
- * sharing an id would be observing each other.
+ * sharing an id would be observing each other. For the same reason every test that
+ * presses the control names its own sender: the switch behind it is per sender and
+ * is held for the session (and in localStorage), so two tests sharing an address
+ * would be watching one switch between them.
  *
- * Note for whoever writes the next one: the control lives inside the bubble's
- * receipt, so in a browser it is one click away. jsdom does not hide a closed
- * <details>, so a role query finds it here whether the receipt is open or not —
- * these tests are about the swap, not about it being on screen. The one test that
- * does assert where it is drawn is the placement test at the end.
+ * Note for whoever writes the next one: while the switch is off the control lives
+ * inside the bubble's receipt, and while it is on it is out on the header line (see
+ * OriginalControl in Message.tsx). jsdom does not hide a closed <details>, so a
+ * role query finds it here whether the receipt is open or not — these tests are
+ * about the swap, not about it being on screen. The tests that do assert where it
+ * is drawn are the two placement tests at the end.
  */
 
 const bubble = (over: Partial<MessageProps> = {}): MessageProps => ({
@@ -48,7 +52,7 @@ const sent = "<style>:host{background:#eef}</style><p class=\"card\">Booking con
 
 const draw = (over: Partial<MessageProps> = {}) => render(<Message {...bubble(over)} />);
 
-const control = () => screen.queryByRole("button", { name: /original|loading/ });
+const control = () => screen.queryByRole("button", { name: /toggle styles|loading/i });
 
 describe("a message whose own html the corpus holds", () => {
   it("swaps the rendered body for the sender's, and back", async () => {
@@ -109,9 +113,12 @@ describe("a message whose own html the corpus holds", () => {
   });
 
   it("says so where the reader asked, when the corpus has nothing to show", async () => {
-    // The one answer this control can get that leaves it with nothing to press.
-    // The sentence is the server's own — it says which nothing it found — so it
-    // rides the note's hover rather than being replaced with a word here.
+    // The corpus's own sentence says which nothing it found, so it rides the note's
+    // hover rather than being replaced with a word here. The switch stays where the
+    // reader put it and stays pressable: it is the sender's switch and not this
+    // message's, so a message with no part of its own is still how the reader stops
+    // reading the rest of that sender's mail this way — which is the thing a control
+    // that vanished here could not do.
     const why = "mail:<orig-none@loomworks.example> carries no text/html part of its own";
     const load = vi.fn(async () => {
       throw new ApiError(404, why);
@@ -119,10 +126,14 @@ describe("a message whose own html the corpus holds", () => {
     const { container } = draw({ original: { extId: "mail:<orig-none@loomworks.example>", load } });
     fireEvent.click(control()!);
     await waitFor(() => expect(container.querySelector(".origwhy")).not.toBeNull());
-    expect(control()).toBeNull();
     expect(container.querySelector(".origwhy")!.getAttribute("title")).toBe(why);
+    expect(control()!.getAttribute("aria-pressed")).toBe("true");
     // What was on screen is still on screen: the ask changed nothing but the note.
     expect(container.querySelector(".bd")!.innerHTML).toBe("<p>invented body</p>");
+    // And pressing it again is still the way back, whatever this one message
+    // could show.
+    fireEvent.click(control()!);
+    expect(control()!.getAttribute("aria-pressed")).toBe("false");
   });
 
   it("draws no control where the caller has nowhere to fetch from", () => {
@@ -149,12 +160,111 @@ describe("a message whose own html the corpus holds", () => {
     const det = hdr.querySelector(".hdet")!;
     expect(det.querySelector(".bub .origbtn")).toBeNull();
     const end = det.querySelector(".hdetend")!;
-    expect(end.querySelector(".origbtn")!.textContent).toBe("original");
+    expect(end.querySelector(".origbtn")!.textContent).toBe("Toggle Styles");
     expect(end.querySelector(".copyjson")).not.toBeNull();
     // The clip is the last thing on the line and the swap sits immediately before
     // it: both in the one group that is pushed to the right edge, so the pair
     // stays together however the receipt's fields above them wrap.
     expect(end.lastElementChild!.className).toBe("copyjson");
+  });
+
+  it("moves the pressed control out to the header line, where the way back is", async () => {
+    // The receipt is a disclosure, shut until it is opened: a way back drawn inside
+    // it is a switch the reader has to go looking for, and the reader holding this
+    // one is looking at somebody else's html. Pressed, it rides the header line
+    // instead — the line the bubble is scanned by, which is on screen whenever the
+    // bubble is.
+    const load = vi.fn(async () => sent);
+    const { container } = draw({
+      original: { extId: "mail:<orig-line@loomworks.example>", load },
+      fromEmail: "line@loomworks.example",
+      copyJson: { id: "m1" },
+    });
+    fireEvent.click(control()!);
+    await waitFor(() => expect(container.querySelector(".bdo")).not.toBeNull());
+
+    const hdr = container.querySelector("details.hdr")!;
+    const on = hdr.querySelector("summary .origbtn") as HTMLElement;
+    expect(on.textContent).toBe("Toggle Styles");
+    expect(on.getAttribute("aria-pressed")).toBe("true");
+    // One control, in one place: the receipt keeps only the clip.
+    expect(hdr.querySelector(".hdetend .origbtn")).toBeNull();
+    expect(hdr.querySelector(".hdetend .copyjson")).not.toBeNull();
+
+    // And it is still the way back.
+    fireEvent.click(on);
+    expect(container.querySelector(".bdo")).toBeNull();
+    expect(hdr.querySelector("summary .origbtn")).toBeNull();
+    expect(hdr.querySelector(".hdetend .origbtn")!.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("switches one sender's whole run of mail, not the message pressed", async () => {
+    // The mail this is for arrives as a series from one address — GitHub's
+    // notifications, a booking system — and the reader who has decided that one of
+    // them is illegible has decided it for all of them. Two bubbles from one sender
+    // are mounted here, which is what a thread from a notification sender is.
+    const load = vi.fn(async (extId: string) => `<p>${extId}</p>`);
+    const sender = "notifications@github.example";
+    const one: Partial<MessageProps> = {
+      original: { extId: "mail:<gh-1@github.example>", load },
+      fromEmail: sender,
+    };
+    const two: Partial<MessageProps> = {
+      id: "m2",
+      original: { extId: "mail:<gh-2@github.example>", load },
+      fromEmail: sender,
+    };
+    const { container } = render(
+      <>
+        <Message {...bubble(one)} />
+        <Message {...bubble(two)} />
+      </>,
+    );
+    const bubbles = () => [...container.querySelectorAll(".bd")] as HTMLElement[];
+    // Two bubbles, two controls: one switch, drawn wherever the reader is looking
+    // at the mail it governs.
+    const switches = () =>
+      [...container.querySelectorAll(".origbtn")] as HTMLElement[];
+    expect(bubbles().map((b) => b.className)).toEqual(["bd", "bd"]);
+
+    fireEvent.click(switches()[0]);
+    await waitFor(() => expect(container.querySelectorAll(".bdo").length).toBe(2));
+    // Both bubbles swapped, and each asked for its own part rather than sharing one.
+    expect(load.mock.calls.map((c) => c[0])).toEqual([
+      "mail:<gh-1@github.example>",
+      "mail:<gh-2@github.example>",
+    ]);
+
+    // Pressing the control on either of them turns the pair back together.
+    fireEvent.click(switches()[0]);
+    await waitFor(() => expect(container.querySelectorAll(".bdo").length).toBe(0));
+    expect(bubbles().map((b) => b.className)).toEqual(["bd", "bd"]);
+  });
+
+  it("answers a sender's mail from the stored switch, without being asked again", async () => {
+    // Held in localStorage rather than in the session: the next slurp brings more
+    // mail from the same sender, and "how do I read this person" is not a question
+    // to re-answer every time the corpus grows.
+    const sender = "receipts@loomworks.example";
+    const load = vi.fn(async () => sent);
+    const first = draw({
+      original: { extId: "mail:<stored-1@loomworks.example>", load },
+      fromEmail: sender,
+    });
+    fireEvent.click(control()!);
+    await waitFor(() => expect(first.container.querySelector(".bdo")).not.toBeNull());
+    first.unmount();
+
+    // A later message from the same address, mounted cold: it opens on the
+    // reader's answer rather than on the default.
+    const second = draw({
+      id: "m2",
+      original: { extId: "mail:<stored-2@loomworks.example>", load },
+      fromEmail: sender,
+    });
+    await waitFor(() => expect(second.container.querySelector(".bdo")).not.toBeNull());
+    expect(second.container.querySelector(".bd")!.innerHTML).not.toContain("invented body");
+    expect(control()!.getAttribute("aria-pressed")).toBe("true");
   });
 });
 
