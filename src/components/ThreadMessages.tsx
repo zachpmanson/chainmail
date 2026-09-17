@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { $api, type CorpusEntry } from "../lib/api";
-import { MEDIA_BASE } from "../lib/attachments";
+import { useQueryClient } from "@tanstack/react-query";
+import { ApiError, $api, type CorpusEntry } from "../lib/api";
+import { MEDIA_BASE, pullSummary } from "../lib/attachments";
 import { orgOrder, slotsFor } from "../lib/derive";
 import { newest } from "../lib/newest";
 import { gmailIdOf, sourceLine } from "../lib/sources";
@@ -28,6 +29,13 @@ import { Source } from "./Source";
  * (/v1/attachments/{sha}, the -media grant), and the sender's own link where it
  * does not: a chip that cannot be opened is still worth showing, because "there
  * was a file on this" is part of what the message said.
+ *
+ * The two halves of that are the two halves a built page has, and the pane offers
+ * both: the chip opens bytes the corpus holds, and `fetch files` under a message
+ * whose files it does not hold asks for them (POST /v1/media/pull, the same grant
+ * the page's own button presses). The difference is only what a pane does with the
+ * answer — a page takes back a rebuilt spec, while the pane draws the corpus and
+ * so re-reads the thread it is already holding (see the pull below).
  *
  * The organisation behind the colour does come with the thread, resolved by the
  * same resolver a page build uses, so a bubble here is coloured like the bubble
@@ -116,11 +124,54 @@ function senderTitle(e: CorpusEntry): string {
 
 
 export function ThreadMessages({ thread }: { thread: { rootExtId: string } }) {
+  const queryClient = useQueryClient();
   const fetched = $api.useQuery("get", "/v1/chains/{rootExtId}", {
     params: { path: { rootExtId: thread.rootExtId } },
   });
 
   const entries = fetched.data?.entries ?? [];
+
+  // The message whose files are being fetched. One at a time: a pull is mailbox
+  // round trips, and a pane is a place a reader reads rather than a queue they
+  // fill — so every other button is held while one is out, exactly as the page's
+  // own button holds the rest (see Attachments).
+  const [pulling, setPulling] = useState<string | null>(null);
+  // Why the last pull failed, when it did. It goes on the pane and not only in
+  // the console, for the reason it does on the page: a press that spends mailbox
+  // round trips and then fails must not look like nothing happening.
+  const [pullNote, setPullNote] = useState<string | null>(null);
+
+  // Fetch one message's attachment bytes into the corpus.
+  //
+  // The pane draws the corpus, so there is nothing to patch when the bytes land:
+  // the files appear by re-reading the thread that is already on screen. That is
+  // the one way this differs from the page, which is handed the rebuilt spec by
+  // the endpoint and has a name to be handed it for — a pane opened from an
+  // address bar has no page name, and asking for one would make a saved page the
+  // price of looking at a picture. The refetch is the same read the corpus would
+  // have been asked for anyway, and the endpoint has already written the bytes,
+  // so the state is right however this request ends.
+  //
+  // Let go of only when the read that shows the files has landed, so the button
+  // cannot be pressed again against a thread still being redrawn — and so
+  // "fetching…" means the picture is coming, not that a request went out.
+  const pull = $api.useMutation("post", "/v1/media/pull", {
+    onSuccess: (data) => {
+      console.log(`fetch: ${pullSummary(data)}`);
+      setPullNote(null);
+      void queryClient
+        .invalidateQueries({ queryKey: ["get", "/v1/chains/{rootExtId}"] })
+        .finally(() => setPulling(null));
+    },
+    onError: (e) => {
+      setPulling(null);
+      setPullNote(
+        e instanceof ApiError && e.status === 403
+          ? "This host cannot fetch files (it was started without -media)."
+          : `Fetching the files failed: ${e instanceof Error ? e.message : String(e)}. Nothing was stored — press again to retry.`,
+      );
+    },
+  });
 
   // Where the pane lands: the newest entry, which is the message the list row
   // was a summary of (see newest). A thread is drawn oldest-first, because that is
@@ -177,6 +228,11 @@ export function ThreadMessages({ thread }: { thread: { rootExtId: string } }) {
 
   return (
     <div className="stream">
+      {pullNote ? (
+        <p className="pullnote" role="status">
+          {pullNote}
+        </p>
+      ) : null}
       {/* Who is in the thread, over the messages themselves — a page built from the
           same thread opens with the same panel, and both are read the same way.
           It is here rather than in the pane's head because the head is one line of
@@ -255,6 +311,20 @@ export function ThreadMessages({ thread }: { thread: { rootExtId: string } }) {
           // server behind it, unlike a shared export, so a pulled file opens
           // here rather than sending the reader to the mailbox.
           attachments={e.attachments}
+          // The corpus's handle for this entry, which is what a fetch button asks
+          // for. The pane has it on every message it draws — a recovered entry
+          // included, since that is an id the corpus minted for the row rather
+          // than a mailbox id the message always had.
+          extId={e.extId}
+          // The fetch itself, on the same grant a built page's button presses.
+          // Both are passed together or not at all: the button is offered only
+          // where somebody can answer it (see Attachments).
+          onPull={(extId) => {
+            setPulling(extId);
+            setPullNote(null);
+            pull.mutate({ body: { entry: extId } });
+          }}
+          pulling={pulling}
           mediaBase={MEDIA_BASE}
           // The message the pane landed on, flashed once and then let go. Only
           // that one message is handed the end-of-flash callback: a thread is one

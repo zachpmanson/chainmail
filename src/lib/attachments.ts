@@ -1,3 +1,4 @@
+import type { MediaPull } from "./api";
 import type { Entry } from "./spec";
 
 export type Attachment = NonNullable<Entry["attachments"]>[number];
@@ -94,4 +95,31 @@ export function skipNote(a: Attachment): string | undefined {
     default:
       return `not stored (${a.skip})`;
   }
+}
+
+/**
+ * One line saying what a pull did. The response carries counts and one row per
+ * file, and the rows are the part a person needs: "nothing was fetched" is not
+ * an answer when one file was too large and another has moved out of the
+ * sender's mailbox. Console-only, like the refresh verdict — the surface's job is
+ * the surface, and a chip that became a picture says the rest.
+ *
+ * Shared by the two places a pull can be pressed (the built page and the reading
+ * pane), because one account of one operation written twice is how two renderers
+ * come to say different things about the same fetch.
+ */
+export function pullSummary(media: MediaPull): string {
+  if (!media.wanted) return "no files needed fetching";
+  const parts = [`${media.pulled}/${media.wanted} files fetched`];
+  const declined = media.files.filter((f) => f.reason);
+  if (declined.length)
+    parts.push(
+      `${declined.length} declined (${declined.map((f) => `${f.name}: ${f.reason}`).join(", ")})`,
+    );
+  const failed = media.files.filter((f) => f.error);
+  if (failed.length)
+    parts.push(
+      `${failed.length} failed, will retry (${failed.map((f) => `${f.name}: ${f.error}`).join(", ")})`,
+    );
+  return parts.join(", ");
 }

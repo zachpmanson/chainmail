@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "@tanstack/react-router";
-import { ApiError, $api, type MediaPull, type RefreshReport } from "../lib/api";
+import { ApiError, $api, type RefreshReport } from "../lib/api";
 import { normalise } from "../lib/normalise";
 import type { Timeline } from "../lib/spec";
-import { MEDIA_BASE } from "../lib/attachments";
+import { MEDIA_BASE, pullSummary } from "../lib/attachments";
 import { Rendered } from "./Rendered";
 
 /**
@@ -28,29 +28,6 @@ function refreshSummary(r: RefreshReport): string {
   if (r.twinsCollapsed)
     parts.push(`${r.twinsCollapsed} twin ${r.twinsCollapsed === 1 ? "copy" : "copies"} collapsed`);
   return parts.length ? `refresh: ${parts.join(", ")}` : "refresh: nothing changed";
-}
-
-/**
- * One line saying what a pull did. The response carries counts and one row per
- * file, and the rows are the part a person needs: "nothing was fetched" is not
- * an answer when one file was too large and another has moved out of the
- * sender's mailbox. Console-only, like the refresh verdict — the page's job is
- * the page, and a chip that became a picture says the rest.
- */
-function pullSummary(media: MediaPull): string {
-  if (!media.wanted) return "no files needed fetching";
-  const parts = [`${media.pulled}/${media.wanted} files fetched`];
-  const declined = media.files.filter((f) => f.reason);
-  if (declined.length)
-    parts.push(
-      `${declined.length} declined (${declined.map((f) => `${f.name}: ${f.reason}`).join(", ")})`,
-    );
-  const failed = media.files.filter((f) => f.error);
-  if (failed.length)
-    parts.push(
-      `${failed.length} failed, will retry (${failed.map((f) => `${f.name}: ${f.error}`).join(", ")})`,
-    );
-  return parts.join(", ");
 }
 
 /**
