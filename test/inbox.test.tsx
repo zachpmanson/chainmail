@@ -1958,6 +1958,61 @@ describe("drawing a thread as a reply tree", () => {
     expect(localStorage.getItem("cm-nest")).toBe("0");
   });
 
+  it("hands the switch to the browser as a view transition, with the new view already in the DOM", async () => {
+    handler = forkHandler;
+    await openThread();
+
+    // The switch is the one control here that moves what the reader is looking
+    // at, so it is the one that animates: the bubbles are named by their anchors
+    // and the browser morphs them to their new places. What the transition sees
+    // is the point — the browser snapshots the page when the callback RETURNS,
+    // so a state change that landed a render later would animate between two
+    // copies of the same view. The stub runs the callback the way the browser
+    // does and records what is on the page when it comes back.
+    const seen: { names: string; drawn: string; depths: string }[] = [];
+    type VTDoc = Document & { startViewTransition?: unknown };
+    const original = (document as VTDoc).startViewTransition;
+    Object.assign(document, {
+      startViewTransition: (cb: () => void) => {
+        const names = [...pane().querySelectorAll(".stream .msg")]
+          .map((m) => (m as HTMLElement).style.viewTransitionName)
+          .join(",");
+        cb();
+        seen.push({ names, drawn: drawn().join(","), depths: depths().join(",") });
+        return { finished: Promise.resolve(), ready: Promise.resolve(), updateCallbackDone: Promise.resolve() };
+      },
+    });
+    try {
+      click(switchBtn());
+    } finally {
+      if (original) Object.assign(document, { startViewTransition: original });
+      else Object.assign(document, { startViewTransition: undefined });
+    }
+
+    await waitFor(() => expect(switchBtn().getAttribute("aria-pressed")).toBe("true"));
+    expect(seen).toHaveLength(1);
+    // Named by the anchor the bubble already carries, which is the entry's place
+    // in the corpus: the same message in both views, so the browser can follow it.
+    expect(seen[0]!.names).toBe("entry-0,entry-1,entry-2,entry-3");
+    // And the page the callback left behind is the nested one, ready to be the
+    // second snapshot.
+    expect(seen[0]!.drawn).toBe("entry-0,entry-1,entry-3,entry-2");
+    expect(seen[0]!.depths).toBe("0,1,2,1");
+    expect(localStorage.getItem("cm-nest")).toBe("1");
+  });
+
+  it("still switches where the browser will not animate it", async () => {
+    handler = forkHandler;
+    await openThread();
+
+    // No `startViewTransition` is the browser saying it cannot do this, and jsdom
+    // says the same. The switch is a request to read the thread the other way
+    // rather than a request to watch something, so the view changes regardless.
+    expect((document as Document & { startViewTransition?: unknown }).startViewTransition).toBeUndefined();
+    click(switchBtn());
+    await waitFor(() => expect(drawn()).toEqual(["entry-0", "entry-1", "entry-3", "entry-2"]));
+  });
+
   it("leaves the reply link pointing at the message that was answered", async () => {
     handler = forkHandler;
     await openThread();
