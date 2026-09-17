@@ -285,15 +285,16 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
             <span className="afn">{a.name}</span>
             <span className="ameta">
               {fetching && fetchable ? (
-                <>
-                  {/* The same ↻ and the same 0.8s turn the nav's refresh wears
-                      (see .navrefresh .spinner): one glyph for "this is being
-                      worked on", in both the places this app asks a server for
-                      something that takes a moment. Decorative — the word beside
-                      it says the same thing to a reader who cannot see it turn. */}
-                  <span className="spinner" aria-hidden="true" />
-                  downloading…
-                </>
+                /* The same ↻ and the same 0.8s turn the nav's refresh wears (see
+                   .navrefresh .spinner): one glyph for "this is being worked on",
+                   in both the places this app asks a server for something that
+                   takes a moment. The turn is the whole of it — the words that
+                   used to sit beside it changed the chip's width mid-download and
+                   reflowed the line of files, and the file's own name still says
+                   which one is being fetched. Named rather than hidden for a
+                   reader who cannot see it turn, and announced because it is the
+                   state of the chip they just pressed. */
+                <span className="spinner" role="status" aria-label="Downloading…" />
               ) : (
                 <>
                   {a.kind ?? "file"} · {a.size ?? ""}
