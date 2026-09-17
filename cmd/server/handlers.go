@@ -124,11 +124,19 @@ type server struct {
 	// mailbox, and the difference between this and -mark-read is which field of
 	// the message changes rather than how far the server reaches.
 	mailWriteEnabled bool
-	// openUnreadMailbox opens the mailbox the writes go through, called once per
+	// sendMailEnabled is the -send-mail grant: whether POST /v1/send may answer a
+	// message in the mailbox. Off unless the host says so, for the same reason as
+	// the other two writers and with the same 403 — and it is the third grant
+	// rather than a piece of either of them, because a send is the one write here
+	// that cannot be undone or retried: a label can be put back by the same button
+	// and an archived thread is still in All Mail, while a message that has gone
+	// out is out.
+	sendMailEnabled bool
+	// openMailbox opens the mailbox the writes go through, called once per
 	// request and only when the chain has something writable in it, so a chain of
 	// recovered text never needs a grant. Injected so the handlers are testable
 	// without a mailbox (see mailbox).
-	openUnreadMailbox func() (mailbox, error)
+	openMailbox func() (mailbox, error)
 	// runMediaPull is one message's pull, injected so the handler can be tested
 	// without a mailbox. The real one (defaultMediaPull) is the same
 	// internal/media walk the `corpus media pull` command runs, called in-process
@@ -173,6 +181,7 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("/v1/refresh", post(s.refresh))
 	mux.HandleFunc("/v1/read", post(s.markRead))
 	mux.HandleFunc("/v1/mail", post(s.mailAction))
+	mux.HandleFunc("/v1/send", post(s.sendReply))
 	mux.HandleFunc("/v1/media/pull", post(s.mediaPull))
 	mux.HandleFunc("/v1/attachments/{sha}", get(s.attachment))
 	// One person at a time, for the ops screen's own editor: a write is the shape
@@ -994,13 +1003,22 @@ func (s *server) mediaPull(w http.ResponseWriter, r *http.Request) {
 // Returning the labels rather than taking them is the whole point — the local
 // copy is what the mailbox said, not what the caller assumed it would say.
 //
-// One interface for both writes rather than two, because they are one power:
+// One interface for the writes rather than three, because they are one power:
 // the server is allowed to change what is in the mailbox. Reading state and
-// folder are different fields of the same message, and a host that granted one
-// but not the other would be a distinction without a difference to the reader.
+// folder are different fields of the same message, and a reply is a new message
+// in it — a host that granted one but not another would be a distinction without
+// a difference to the reader, and the grants that DO differ are separate switches
+// on the server rather than separate methods here.
+//
+// Read is on it because the reply is filed into the corpus in the same request
+// that sends it (see sendReply), and the ingest path takes a mailbox — so the
+// one write's own read and the file-it-away that follows it come through one
+// transport here, rather than two built from the same credential.
 type mailbox interface {
 	SetUnread(id string, unread bool) ([]string, error)
 	SetLabels(id string, add, remove []string) ([]string, error)
+	Reply(id, body string, send bool) (gmailclient.ReplyPlan, error)
+	Read(id string) (mailingest.Message, error)
 }
 
 // markRead is the one write this server makes to the mailbox itself: every
@@ -1070,7 +1088,7 @@ func (s *server) markRead(w http.ResponseWriter, r *http.Request) {
 	// such a chain on screen.
 	var mb mailbox
 	if markable > 0 {
-		if mb, err = s.openUnreadMailbox(); err != nil {
+		if mb, err = s.openMailbox(); err != nil {
 			fail(w, http.StatusBadGateway, fmt.Errorf("opening the mailbox: %w", err))
 			return
 		}
@@ -1205,7 +1223,7 @@ func (s *server) mailAction(w http.ResponseWriter, r *http.Request) {
 	var mb mailbox
 	if writable > 0 {
 		var err error
-		if mb, err = s.openUnreadMailbox(); err != nil {
+		if mb, err = s.openMailbox(); err != nil {
 			fail(w, http.StatusBadGateway, fmt.Errorf("opening the mailbox: %w", err))
 			return
 		}
@@ -1316,6 +1334,192 @@ type mailActionChain struct {
 	Skipped   int    `json:"skipped"`
 }
 
+// sendReply is the third write this server makes to the mailbox, and the only one
+// that creates something: one message is answered, and the answer is a new
+// message in the thread.
+//
+// Opt-in and off by default, with its own switch (-send-mail), for a stronger
+// reason than the two writes beside it: both of those change a field of mail that
+// is already there and can be changed back from the same control, while this one
+// cannot be undone at all. A host without the grant answers 403, naming it.
+//
+// Reply-only, and the shape follows from that rather than from a reluctance to
+// build a composer. There is no recipient field anywhere in this request: the
+// message answered is named by its corpus id and everything else — who it goes to
+// and the subject — comes from the mailbox's own headers (see gmailclient.Reply).
+// A surface that can only answer mail the corpus already holds has no arbitrary
+// recipient, which is what makes it a reading tool that can reply rather than a
+// mail-sending endpoint sitting inside a page that binds to loopback with no
+// authentication.
+//
+// Two steps, and the first one sends nothing: without `confirm` the reply is
+// PREPARED and answered with the plan — the recipient the mailbox will use, the
+// subject, and the whole body including the quote of the message being answered.
+// That is the preview the reader confirms, and it is of the message rather than of
+// a draft, because the body the reader is shown is the body that was handed to the
+// mailbox. The second call repeats the prepare and executes it.
+func (s *server) sendReply(w http.ResponseWriter, r *http.Request) {
+	if !s.sendMailEnabled {
+		fail(w, http.StatusForbidden, fmt.Errorf(
+			"answering mail is disabled: this server was started without -send-mail, so "+
+				"it will not send anything. A restart with -send-mail enables POST /v1/send."))
+		return
+	}
+	var req sendRequest
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequestBody))
+	// A misspelled field is a caller reading a different contract, and `confirm` is
+	// the field that decides whether this call writes to a real mailbox: guessing at
+	// an unknown one is the one place a typo sends mail.
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		fail(w, http.StatusBadRequest, fmt.Errorf("reading the request body: %w", err))
+		return
+	}
+	if strings.TrimSpace(req.Entry) == "" {
+		fail(w, http.StatusBadRequest, errors.New(
+			"a reply answers one message: POST /v1/send takes {\"entry\": "+
+				"\"mail:<message-id>\", \"body\": \"...\"}, naming the entry as the thread "+
+				"read carries it"))
+		return
+	}
+	if strings.TrimSpace(req.Body) == "" {
+		fail(w, http.StatusBadRequest, errors.New(
+			"a reply needs something to say: the quote of the message being answered is "+
+				"added by this server, and an empty body would send that alone"))
+		return
+	}
+
+	target, err := s.store.ReplyTarget(req.Entry)
+	if err != nil {
+		failLookup(w, err)
+		return
+	}
+	if target.GmailID == "" {
+		// The opposite of /v1/read and /v1/mail, where an entry with no mailbox copy
+		// is skipped and counted: those act on the part of a set that can be acted
+		// on, and this cannot be half-performed. There is no mailbox message to
+		// thread an answer against — a message recovered from somebody's quote is
+		// part of the chain and is not a thing the mailbox holds.
+		fail(w, http.StatusBadRequest, fmt.Errorf(
+			"%q has no mailbox copy, so there is nothing to answer: it was recovered from "+
+				"somebody else's message (or is not mail at all), and a reply threads against "+
+				"the message the mailbox holds", req.Entry))
+		return
+	}
+
+	// The body, quoted and attributed, composed here rather than by the caller: what
+	// the plan previews and what the mailbox is handed are then the same bytes, and
+	// a second client cannot compose a quote this package would have written
+	// differently (see spec.ReplyBody).
+	body := spec.ReplyBody(req.Body, target)
+
+	mb, err := s.openMailbox()
+	if err != nil {
+		fail(w, http.StatusBadGateway, fmt.Errorf("opening the mailbox: %w", err))
+		return
+	}
+	plan, err := mb.Reply(target.GmailID, body, req.Confirm)
+	if err != nil {
+		// Which half failed is the whole of what a reader can act on, and the two
+		// cases demand the opposite thing: a prepare that failed sent nothing, so
+		// pressing send again is safe, while a send that did not answer may have
+		// gone out and pressing send again might send it twice.
+		if errors.Is(err, gmailclient.ErrUnsent) {
+			fail(w, http.StatusBadGateway, fmt.Errorf(
+				"the mailbox would not prepare the reply, so nothing was sent: %w", err))
+			return
+		}
+		fail(w, http.StatusBadGateway, fmt.Errorf(
+			"the mailbox did not answer the send, so whether it went out is not known from "+
+				"here — check Gmail before sending it again: %w", err))
+		return
+	}
+
+	out := sendResponse{
+		Entry: target.ExtID, To: plan.To, Subject: plan.Subject, Body: plan.Body,
+		Sent: plan.GmailID != "",
+	}
+	if out.Sent {
+		out.GmailID = plan.GmailID
+		s.fileSent(mb, plan.GmailID)
+	}
+	// Journaled like the other two writes, and for a stronger reason: this one
+	// cannot be taken back, so "what did the server send, and to whom" has to be
+	// answerable from the host afterwards.
+	log.Printf("send: %s to=%s sent=%t", target.ExtID, plan.To, out.Sent)
+	send(w, http.StatusOK, out)
+}
+
+// fileSent puts a message the server has just sent into the corpus, so the answer
+// is in the trail the reader is looking at rather than missing until the next
+// slurp — which is up to a cadence away, and on a thread the reader is reading
+// right now that reads as the reply having failed.
+//
+// Failures are logged, never raised. The message is already sent: answering 502
+// here would tell the reader their reply did not go out when it did, which is the
+// one wrong thing this handler could say. The mailbox is the source of truth and
+// the reply is in it, so a corpus that missed it holds a gap the next ingest
+// fills, and the ingest is idempotent by body hash.
+func (s *server) fileSent(mb mailbox, id string) {
+	msg, err := mb.Read(id)
+	if err != nil {
+		log.Printf("send: sent %s but could not read it back to file it: %v", id, err)
+		return
+	}
+	res, err := mailingest.Put(s.store, msg)
+	if err != nil {
+		log.Printf("send: sent %s but storing it failed: %v", id, err)
+		return
+	}
+	// Resolve after the put, not before: the reply carries the In-Reply-To the
+	// mailbox built for it (gmailclient.Reply), and this is what joins the answer to
+	// the message it answers in the trail's own reply graph rather than leaving it a
+	// chain of its own.
+	if _, err := s.store.ResolveParents(); err != nil {
+		log.Printf("send: filed %s but joining it to its thread failed: %v", id, err)
+		return
+	}
+	log.Printf("send: filed %s (created=%t skipped=%t)", id, res.Created, res.Skipped)
+}
+
+// sendRequest is what a caller may say, and it is the whole of the surface: which
+// message is being answered, the reader's own words, and whether this call is the
+// preview or the send.
+type sendRequest struct {
+	// Entry is the corpus ext id of the message being answered — as a thread read
+	// carries it in entries[].extId. One entry rather than a chain, because a reply
+	// is to a message: which thread it belongs to is the mailbox's answer, by way of
+	// the In-Reply-To it threads on.
+	Entry string `json:"entry"`
+	// Body is the reader's own words, with no quote in them: the quoted message and
+	// its attribution are added by this server, and the answer's body is what the
+	// two make together.
+	Body string `json:"body"`
+	// Confirm false asks what the reply would be; true sends it. Nothing is written
+	// without it, which is why a client that forgets the field previews rather than
+	// sends.
+	Confirm bool `json:"confirm,omitempty"`
+}
+
+// sendResponse is the contract's SendResponse: the reply as the mailbox has it,
+// and whether this call sent it.
+//
+// To, Subject and Body are the mailbox's, not the caller's: the recipient and the
+// subject come from the headers of the message being answered, and the body is the
+// reader's words with the quote under them. The same three are answered by the
+// preview and by the send, so a client that showed a reader a plan can be checked
+// against what actually went out rather than trusting that it did.
+type sendResponse struct {
+	Entry   string `json:"entry"`
+	To      string `json:"to"`
+	Subject string `json:"subject"`
+	Body    string `json:"body"`
+	Sent    bool   `json:"sent"`
+	// GmailID is the id of the message that went out, and is absent from a preview:
+	// nothing has an id until it exists.
+	GmailID string `json:"gmailId,omitempty"`
+}
+
 // markReadRequest is what a caller may say: which chain, and the state it wants
 // every mailbox message in it to be left in. No message list and no "mark all":
 // the chain IS the scope, and the store resolves it.
@@ -1335,18 +1539,24 @@ type markReadResponse struct {
 	Skipped int    `json:"skipped"`
 }
 
-// defaultUnreadMailbox is the real write: the docket library's label modify
-// (PrepareLabel + Execute, i.e. Users.Messages.Modify), through the mail grant
-// this unit already holds in its own HOME — the same credential the ingest and
-// the media pull read, so -mark-read asks for no access the host had not already
-// given this user. What changes is that the server now changes the mailbox, not
-// only reads it.
+// defaultMailbox is the real write path: the docket library's own calls
+// (PrepareLabel + Execute for a label change, Users.Messages.Modify; and
+// PrepareReply + SendPlan.Execute for a reply, Users.Messages.Send), through the
+// mail grant this unit already holds in its own HOME — the same credential the
+// ingest and the media pull read, so -mark-read, -mail-write and -send-mail ask
+// for no access the host had not already given this user. What they change is that
+// the server now changes the mailbox, and in the send's case adds to it, rather
+// than only reading it.
+//
+// It is one opener for all three writers because it is one power and one
+// credential: which of them a host granted is a switch on the server (see the
+// handlers' own 403s), not three transports built from the same token.
 //
 // The client is opened per call rather than kept: this is a one-click write a
 // reader makes, the label cache it loads is fresh on every pass, and a
 // long-lived token source in a process that may run for weeks is a worse trade
 // than one token read per click.
-func defaultUnreadMailbox() func() (mailbox, error) {
+func defaultMailbox() func() (mailbox, error) {
 	return func() (mailbox, error) { return gmailclient.New() }
 }
 

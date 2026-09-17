@@ -69,6 +69,20 @@ and fixes every stored label that disagrees with it.
 **Timeline** is one chronological column. **Columns** gives one lane per reply chain.
 The **reply tree** panel lights the ancestry of the entry you're reading.
 
+**Replying is reply-only, and off by default.** A thread in the reading pane ends with a
+reply box: one field, the reader's own words, and the message being answered quoted under
+them by the server. Pressing *preview* sends nothing — the server composes the reply and
+returns it as a plan, and the reader sees the whole message, quote and all, before
+anything leaves. Pressing *send* sends that. There is deliberately no recipient field:
+the box answers the newest message in the thread Gmail holds, and the address is the one
+that message's own `From` header carried, so a loopback server behind a tunnel with no
+authentication can answer the reader's correspondence and cannot send mail anywhere else.
+The server needs `-send-mail` to do it (`enableSendMail` in the nix module); without it
+the box says so and nothing is written. A reply is filed into the corpus in the same
+request, so the answer appears in the trail immediately rather than at the next slurp —
+and if that filing fails the reply has still been sent, which the log records rather than
+the reply falsely failing.
+
 ## Re-running
 
 Every rendered page embeds the spec that produced it, so a later pass reloads

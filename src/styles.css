@@ -1070,6 +1070,34 @@
     color:var(--fg); background:var(--card); border:1px solid var(--accent);
     border-left-width:3px; border-radius:6px; }
 
+/* --- answering a message --- */
+/* The reply box is the pane's own foot: it sits in the stream under everything
+   said so far, because the newest message on screen is the one it answers. Its
+   box is the card every other control in this pane is drawn on, and it takes the
+   width it is given rather than a measure of its own — the bubbles above it are
+   the thing being read, and a field that narrowed them would be the wrong end of
+   the pane growing. */
+.replybox { margin:.9rem 0 .3rem; padding:.6rem .7rem; border:1px solid var(--line);
+  border-radius:8px; background:var(--card); }
+/* Which message is being answered, in the words its own bubble wears — the same
+   name and clock the link above it prints, because both read the same entry. */
+.replyto { margin:0 0 .45rem; font-size:.74rem; color:var(--muted); }
+.replyinput { display:block; width:100%; font:inherit; font-size:.82rem;
+  line-height:1.45; padding:.45rem .55rem; color:var(--fg); background:var(--bg);
+  border:1px solid var(--line); border-radius:6px; resize:vertical; }
+.replyinput:disabled { opacity:.55; }
+/* The plan: what will be sent, in the whole. The body is monospaced and
+   pre-wrapped so that the quote is read as the lines that will be sent — the
+   quote marks the server added are the thing being checked, and a proportional
+   rendering of them is a drawing of the message rather than the message. */
+.replyplan { font-size:.76rem; line-height:1.5; }
+.replynote { margin:0 0 .45rem; }
+.replytext { margin:.4rem 0 0; padding:.5rem .6rem; max-height:22rem;
+  overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font-size:.76rem;
+  line-height:1.45; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  color:var(--fg); background:var(--bg); border:1px solid var(--line);
+  border-radius:6px; }
+
 /* --- what a write leaves to say --- */
 /* The bottom-right corner, over every page. These are accounts of work that is
    over and reasons a write was refused, and neither is a fact about the page the

@@ -197,7 +197,7 @@ func TestMailIsRefusedWithoutItsOwnGrant(t *testing.T) {
 	h.mailWriteEnabled = false
 	h.markReadEnabled = true
 	opened := false
-	h.openUnreadMailbox = func() (mailbox, error) {
+	h.openMailbox = func() (mailbox, error) {
 		opened = true
 		return fake, nil
 	}
@@ -224,7 +224,7 @@ func TestMailIsRefusedWithoutItsOwnGrant(t *testing.T) {
 // mailbox grant can still be told so. The mailbox is not opened at all.
 func TestAChainWithNoMailboxCopyNeedsNoMailboxForMailEither(t *testing.T) {
 	h, _ := mailServer(t)
-	h.openUnreadMailbox = func() (mailbox, error) {
+	h.openMailbox = func() (mailbox, error) {
 		t.Error("a chain of recovered text opened the mailbox")
 		return nil, errors.New("no mailbox")
 	}

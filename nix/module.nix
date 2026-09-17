@@ -47,6 +47,22 @@
 # the same ask as letting the page move mail out of the inbox, and every action
 # here is the mailbox's own vocabulary rather than a folder model of this
 # server's.
+# A fifth, and the third writer — and the first that CREATES something:
+# enableSendMail passes -send-mail, which turns POST /v1/send into an answer to
+# one message the corpus already holds, sent from the reader's own mailbox and
+# filed back into the corpus in the same request. It is the reading pane's reply
+# box. Off by default, and for the strongest reason of the five: the other two
+# writers change labels, which the mailbox can be reconciled with and which a
+# reader can undo from the same button, while a message that has gone out cannot
+# be recalled at all.
+#
+# What bounds it is not a permission but a shape: the endpoint answers a message
+# and has no recipient field, so the address is the one that message arrived
+# from. A server reachable only over a tunnel is still a server with no
+# authentication, and this is the one flag here that would otherwise be an
+# outbound channel to anywhere — reply-only is what keeps it answering the
+# reader's own correspondence instead.
+#
 self: { config, lib, pkgs, ... }:
 
 let
@@ -190,6 +206,40 @@ in {
         credential is the mail grant this unit already holds.
       '';
     };
+
+    enableSendMail = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Permit POST /v1/send: answer one message the corpus holds, from the
+        reader's own mailbox, with the message being answered quoted under their
+        words. This is what the reading pane's reply box presses, and it is the
+        first switch here that lets the server CREATE mail rather than change a
+        message that already exists.
+
+        Off by default for a stronger reason than the two writers beside it:
+        marking read and archiving are label changes, which the corpus is
+        reconciled with from the mailbox afterwards and which a reader can undo,
+        while a reply that has gone out cannot be called back. Nothing is
+        prepared until a person presses preview, and nothing is sent until they
+        press send on the message that press showed them — the two steps are the
+        endpoint's, not a client's, so no client can send without one.
+
+        What bounds it is a shape rather than a permission: the request names
+        the message being answered and has no field for a recipient, so the
+        address is the one that message's own headers carried and there is
+        nothing on the surface that can name a different one. That is what keeps
+        a loopback-only server with no authentication from becoming an outbound
+        channel to anywhere — it can answer the reader's correspondence and
+        nothing else. The mail grant this unit already holds is the credential,
+        and it is a send grant already.
+
+        A reply is filed into the corpus in the same request, so the thread the
+        reader is looking at shows the answer rather than waiting for the next
+        slurp; if that filing fails the reply has still been sent and the
+        failure is logged, because the mailbox is the source of truth.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -226,7 +276,8 @@ in {
             " -slurp -slurp-timeout ${cfg.slurpTimeout}") +
           lib.optionalString cfg.enableMedia " -media" +
           lib.optionalString cfg.enableMarkRead " -mark-read" +
-          lib.optionalString cfg.enableMailWrite " -mail-write";
+          lib.optionalString cfg.enableMailWrite " -mail-write" +
+          lib.optionalString cfg.enableSendMail " -send-mail";
         User = cfg.user;
         Group = cfg.user;
         StateDirectory = "chainmail";

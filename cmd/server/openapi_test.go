@@ -215,8 +215,8 @@ func TestEveryDocumentedPathIsServed(t *testing.T) {
 	if err := json.Unmarshal(blob, &doc); err != nil {
 		t.Fatal(err)
 	}
-	if len(doc.Paths) != 26 {
-		t.Errorf("the contract declares %d paths; the handler table lists 26", len(doc.Paths))
+	if len(doc.Paths) != 27 {
+		t.Errorf("the contract declares %d paths; the handler table lists 27", len(doc.Paths))
 	}
 	srv := testServer(t)
 	// A path parameter that names a row has to name a row that exists, or the

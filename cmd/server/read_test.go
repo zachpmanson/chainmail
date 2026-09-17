@@ -9,9 +9,11 @@ import (
 	"time"
 
 	"github.com/zachpmanson/chainmail/internal/corpus"
+	"github.com/zachpmanson/chainmail/internal/gmailclient"
+	"github.com/zachpmanson/chainmail/internal/mailingest"
 )
 
-// fakeMailbox is the mailbox the read-state tests write to.
+// fakeMailbox is the mailbox the write tests work through.
 //
 // It records what it was asked to change, because "the chain was marked read" is
 // only true if every message in it was, and answers with the labels a real
@@ -22,6 +24,31 @@ type fakeMailbox struct {
 	calls []string // "<gmail id>:<read|unread>", in the order the write asked
 	base  map[string][]string
 	fail  map[string]error
+
+	// replies is every reply the fake was asked for, in order: what it was told to
+	// answer, the body it was handed, and whether the call was the send or the
+	// preview. Recorded as three facts because three different claims rest on them —
+	// which message was answered, what the quoted body said, and that pressing the
+	// preview button wrote nothing.
+	replies []fakeReply
+	// to and subject are what the mailbox answers a reply with, per message
+	// answered: its own From header and its own subject with one Re:. They are
+	// deliberately not derived from the request, so a handler that echoed what the
+	// caller sent back as "the plan" fails rather than passes.
+	to      map[string]string
+	subject map[string]string
+	// sentID is the id the mailbox gives a message it has sent, and unanswered is
+	// what a preview carries in its place.
+	sentID string
+	// filing is what Read answers for a sent message: the mailbox's own view of what
+	// went out, which is what the handler files into the corpus.
+	filing  mailingest.Message
+	readErr error
+}
+
+type fakeReply struct {
+	id, body string
+	send     bool
 }
 
 func (f *fakeMailbox) SetUnread(id string, unread bool) ([]string, error) {
@@ -34,6 +61,34 @@ func (f *fakeMailbox) SetUnread(id string, unread bool) ([]string, error) {
 		return nil, err
 	}
 	return corpus.SetUnread(f.base[id], unread), nil
+}
+
+// Reply is the mailbox's half of POST /v1/send: the recipient and subject its own
+// headers give, and — when asked to send — the id of the message that went out.
+// The body is the caller's, because composing the quote is the server's and this
+// package quotes nothing (see spec.ReplyBody).
+func (f *fakeMailbox) Reply(id, body string, send bool) (gmailclient.ReplyPlan, error) {
+	f.replies = append(f.replies, fakeReply{id: id, body: body, send: send})
+	if err := f.fail[id]; err != nil {
+		return gmailclient.ReplyPlan{}, err
+	}
+	plan := gmailclient.ReplyPlan{To: f.to[id], Subject: f.subject[id], Body: body}
+	if send {
+		plan.GmailID = f.sentID
+	}
+	return plan, nil
+}
+
+// Read is what the handler files a sent message by: the same read the ingest does,
+// so the corpus receives the mailbox's own copy of the message rather than a
+// second rendering of it.
+func (f *fakeMailbox) Read(id string) (mailingest.Message, error) {
+	if f.readErr != nil {
+		return mailingest.Message{}, f.readErr
+	}
+	msg := f.filing
+	msg.ID = id
+	return msg, nil
 }
 
 // SetLabels is the same fake for the mail actions: what it records is the two
@@ -126,7 +181,7 @@ func readServer(t *testing.T) (*harness, *fakeMailbox) {
 			"g-3": {"SENT"},
 		},
 	}
-	h.openUnreadMailbox = func() (mailbox, error) { return fake, nil }
+	h.openMailbox = func() (mailbox, error) { return fake, nil }
 	return h, fake
 }
 
@@ -192,7 +247,7 @@ func TestReadingIsRefusedWithoutTheGrant(t *testing.T) {
 	h, fake := readServer(t)
 	h.markReadEnabled = false
 	opened := false
-	h.openUnreadMailbox = func() (mailbox, error) {
+	h.openMailbox = func() (mailbox, error) {
 		opened = true
 		return fake, nil
 	}
@@ -214,7 +269,7 @@ func TestReadingIsRefusedWithoutTheGrant(t *testing.T) {
 // mailbox grant can still be told so. The mailbox is not opened at all.
 func TestAChainWithNoMailboxCopyNeedsNoMailbox(t *testing.T) {
 	h, _ := readServer(t)
-	h.openUnreadMailbox = func() (mailbox, error) {
+	h.openMailbox = func() (mailbox, error) {
 		t.Error("a chain of recovered text opened the mailbox")
 		return nil, errors.New("no mailbox")
 	}
