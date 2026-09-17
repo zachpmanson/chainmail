@@ -1,5 +1,5 @@
 import { Fragment } from "react";
-import { COLLAPSE_FROM, msgCount, provenance, type SourceId } from "../lib/sources";
+import { provenance, type SourceId } from "../lib/sources";
 
 /**
  * The ids on a provenance line, comma-run, each openable where it can be.
@@ -50,14 +50,15 @@ function SourceIds({ ids, unspooled, anchorByGmail }: {
 }
 
 /**
- * Where an entry was found. The ids are the useful part of the line — each names
- * a message the reader can open — so a collapsed line says how many there are
- * and keeps every id in the document, rather than summarising them away.
+ * Where an entry was found: `msg <id>`, `unspooled from msg <id>, msg <id>`, or
+ * the corpus handle where no mailbox id is known.
  *
- * A native <details>, matching the panels above, and not a scripted toggle: the
- * exported page is meant to be readable with scripting disabled, and <details>
- * is keyboard-operable and reachable by find-in-page without any of ours. A
- * folding mechanism elsewhere on the page can be the same element.
+ * The whole line, never a disclosure of its own. It is drawn inside the bubble's
+ * receipt, and the receipt is already a <details> (see Message): a second one
+ * nested in it asked the reader to open the receipt and then open the line to
+ * see the ids, which are the one useful thing on it. Opened, the receipt is
+ * exactly where a reader wants them — every host this message came out of, in
+ * one line that can be read, copied and found by find-in-page.
  */
 export function Source({ source, anchorByGmail }: { source?: string; anchorByGmail: Map<string, string> }) {
   if (!source) return null;
@@ -66,22 +67,10 @@ export function Source({ source, anchorByGmail }: { source?: string; anchorByGma
   // "unspooled from …" lines carry an empty prefix only when not unspooled;
   // prose never reaches here, so prefix !== "" means the ids were unspooled
   const unspooled = p.prefix !== "";
-  const ids = <SourceIds ids={p.ids} unspooled={unspooled} anchorByGmail={anchorByGmail} />;
-  if (p.ids.length < COLLAPSE_FROM) {
-    return (
-      <span className="src">
-        {p.prefix}
-        {ids}
-      </span>
-    );
-  }
   return (
-    <details className="src srcx">
-      <summary>
-        {p.prefix}
-        {msgCount(p.ids.length)}
-      </summary>
-      <div className="srcids">{ids}</div>
-    </details>
+    <span className="src">
+      {p.prefix}
+      <SourceIds ids={p.ids} unspooled={unspooled} anchorByGmail={anchorByGmail} />
+    </span>
   );
 }
