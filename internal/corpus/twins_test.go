@@ -234,6 +234,99 @@ func TestCollapseRepointsTheChildrenOfTheDroppedCopy(t *testing.T) {
 	}
 }
 
+// A copy marked DERIVED holds its base as a parent, and that edge is not a reply:
+// it is the message the copy was judged a modified re-quote OF (FindDerived). So
+// absorbing one must not hand the base to a mailbox survivor, whose parent comes
+// from its own headers — the survivor's thread would move under a chain its
+// headers never named. Found in the wild on 2026-09-18: a thread root with no
+// In-Reply-To was filed under an unrelated chain this way, because the base was
+// the only edge its dropped copy held.
+func TestCollapseWillNotFileAMailboxRootUnderADerivedCopysBase(t *testing.T) {
+	s := open(t)
+	deniz := person(t, s, "deniz.aslan@quarry.fed", "Deniz Aslan")
+	tui := person(t, s, "tui.walker@moana.fed", "Tui Walker")
+	sent := twinAt(t, "2026-05-20 01:38:14")
+
+	// A message from another chain, and the copy's judgement that it modified it.
+	// Nothing here is a reply to the root, which is the point.
+	base := mailbox(t, s, deniz, "fork@quarry.fed", otherBody, sent.Add(-72*time.Hour))
+	keep := mailbox(t, s, deniz, "ask@quarry.fed", askBody, sent)
+	h := host(t, s, tui, "reply@moana.fed", sent.Add(3*time.Hour))
+	drop := recovered(t, s, deniz, "abc", askQuoted, sent.Add(10*time.Hour), h)
+	if _, err := s.DB().Exec(
+		`update entries set derived = 1, parent_id = ? where id = ?`, base, drop); err != nil {
+		t.Fatal(err)
+	}
+
+	plan, err := CollapseTwins(s, true)
+	if err != nil {
+		t.Fatalf("CollapseTwins: %v", err)
+	}
+	if len(plan.Collapse) != 1 || plan.Collapse[0].Keep != keep {
+		t.Fatalf("plan = %+v, want the mailbox copy %d kept", plan.Collapse, keep)
+	}
+	var parent int64
+	var derived bool
+	if err := s.DB().QueryRow(
+		`select coalesce(parent_id,0), derived from entries where id=?`, keep).
+		Scan(&parent, &derived); err != nil {
+		t.Fatal(err)
+	}
+	if parent != 0 {
+		t.Fatalf("the survivor's parent is %d, want none: %d is the base the dropped "+
+			"copy was judged a modified re-quote of, not a reply", parent, parent)
+	}
+	if derived {
+		t.Fatal("the survivor was marked a modified copy, but it is the mailbox original")
+	}
+}
+
+// The same edge, adopted by a survivor that IS a recovered copy: there parent_id
+// already means "the message this block sits in", so the base is the right slot —
+// but only with the flag that says which relation it is. Parent and flag travel
+// together, or the renderer draws a thread edge where an edit belongs.
+func TestCollapseCarriesTheDerivedFlagWithTheBaseItAdopts(t *testing.T) {
+	s := open(t)
+	deniz := person(t, s, "deniz.aslan@quarry.fed", "Deniz Aslan")
+	tui := person(t, s, "tui.walker@moana.fed", "Tui Walker")
+	sent := twinAt(t, "2026-05-20 01:38:14")
+
+	base := mailbox(t, s, deniz, "fork@quarry.fed", otherBody, sent.Add(-72*time.Hour))
+	h1 := host(t, s, tui, "reply@moana.fed", sent.Add(20*time.Hour))
+	h2 := host(t, s, deniz, "onward@quarry.fed", sent.Add(30*time.Hour))
+	// No mailbox copy of the message line in this corpus: the fuller copy of the
+	// two wins the collapse.
+	full := recovered(t, s, deniz, "abc", askBody, sent.Add(10*time.Hour), h1)
+	drop := recovered(t, s, deniz, "def", askQuoted, sent.Add(12*time.Hour), h2)
+	if _, err := s.DB().Exec(
+		`update entries set derived = 1, parent_id = ? where id = ?`, base, drop); err != nil {
+		t.Fatal(err)
+	}
+
+	plan, err := CollapseTwins(s, true)
+	if err != nil {
+		t.Fatalf("CollapseTwins: %v", err)
+	}
+	if len(plan.Collapse) != 1 || plan.Collapse[0].Keep != full {
+		t.Fatalf("plan = %+v, want the fuller copy %d kept", plan.Collapse, full)
+	}
+	var parent int64
+	var derived bool
+	if err := s.DB().QueryRow(
+		`select coalesce(parent_id,0), derived from entries where id=?`, full).
+		Scan(&parent, &derived); err != nil {
+		t.Fatal(err)
+	}
+	if parent != base {
+		t.Fatalf("the survivor's parent is %d, want the base the dropped copy held, %d",
+			parent, base)
+	}
+	if !derived {
+		t.Fatal("the survivor holds a base as its parent but is not marked derived, " +
+			"so the renderer reads an edit as a thread edge")
+	}
+}
+
 // The case an unordered comparison gets wrong: two questions a fortnight apart
 // from one person whose signature and disclaimer are most of both. The gap
 // between them is a plausible offset and the words mostly agree, so only the

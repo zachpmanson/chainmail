@@ -864,12 +864,31 @@ func absorb(tx *sql.Tx, s *Store, keep, drop int64) error {
 	// the original — adopting its parent would ring the graph: survivor -> reply
 	// -> ... -> survivor. The reply edge already carries the connection, so the
 	// survivor stays a root rather than close the loop.
+	//
+	// A DERIVED copy's parent is not a reply edge at all: it is the BASE the copy
+	// was judged a modified re-quote OF, which is what the flag marks and what the
+	// renderer reads the edge as (spec/edits.go). The two mean one thing together,
+	// so inheriting the edge without the flag would silently change what the column
+	// says — the survivor's thread would move under the base. That is exactly how
+	// a message with no In-Reply-To of its own came to be filed under an unrelated
+	// chain (2026-09-18): the base was the only edge its dropped copy held, and the
+	// survivor adopted it as a reply.
+	//
+	// So a mailbox survivor keeps only a thread edge, and where a base IS adopted —
+	// by a survivor that is itself a recovered copy, where parent_id already means
+	// "the message this block sits in" — the derived flag comes with it.
 	var dropParent int64
-	if err := tx.QueryRow(`select coalesce(parent_id, 0) from entries where id = ?`, drop).
-		Scan(&dropParent); err != nil {
+	var dropDerived int
+	if err := tx.QueryRow(
+		`select coalesce(parent_id, 0), derived from entries where id = ?`, drop).
+		Scan(&dropParent, &dropDerived); err != nil {
 		return fmt.Errorf("reading the parent of %d: %w", drop, err)
 	}
-	if dropParent != 0 && dropParent != keep {
+	var keepQuoted int
+	if err := tx.QueryRow(`select quoted from entries where id=?`, keep).Scan(&keepQuoted); err != nil {
+		return err
+	}
+	if dropParent != 0 && dropParent != keep && (dropDerived == 0 || keepQuoted == 1) {
 		if bad, err := closesCycle(tx, keep, dropParent); err != nil {
 			return err
 		} else if !bad {
@@ -877,6 +896,13 @@ func absorb(tx *sql.Tx, s *Store, keep, drop int64) error {
 				`update entries set parent_id = ? where id = ? and parent_id is null`,
 				dropParent, keep); err != nil {
 				return fmt.Errorf("adopting the parent of %d: %w", drop, err)
+			}
+			if dropDerived == 1 {
+				if _, err := tx.Exec(
+					`update entries set derived = 1 where id = ?`, keep); err != nil {
+					return fmt.Errorf("marking %d a modified copy of %d: %w",
+						keep, dropParent, err)
+				}
 			}
 		}
 	}
@@ -890,10 +916,6 @@ func absorb(tx *sql.Tx, s *Store, keep, drop int64) error {
 		select coalesce(subject,''), coalesce(tz,''), coalesce(person_id,0), coalesce(body_text,'')
 		from entries where id=?`, drop).
 		Scan(&e.Subject, &e.TZ, &e.PersonID, &e.BodyText); err != nil {
-		return err
-	}
-	var keepQuoted int
-	if err := tx.QueryRow(`select quoted from entries where id=?`, keep).Scan(&keepQuoted); err != nil {
 		return err
 	}
 	if keepQuoted == 1 {
