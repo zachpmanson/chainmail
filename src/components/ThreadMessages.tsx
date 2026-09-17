@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError, $api, type CorpusEntry } from "../lib/api";
 import { MEDIA_BASE, pullSummary } from "../lib/attachments";
@@ -7,6 +7,7 @@ import { orgOrder, slotsFor } from "../lib/derive";
 import { newest } from "../lib/newest";
 import { gmailIdOf, sourceLine } from "../lib/sources";
 import { fetchOriginal } from "../lib/original";
+import { nest } from "../lib/threading";
 import { Failure } from "./ThreadPreview";
 import { Message, type StampData } from "./Message";
 import { ParticipantsPanel, castOfEntries } from "./Participants";
@@ -131,7 +132,18 @@ function senderTitle(e: CorpusEntry): string {
 }
 
 
-export function ThreadMessages({ thread }: { thread: { rootExtId: string } }) {
+export function ThreadMessages({
+  thread,
+  threaded = false,
+}: {
+  thread: { rootExtId: string };
+  /** Draw the replies under the message they answer, indented by depth, rather
+   *  than in the order they were sent (see lib/threading). The pane's own switch
+   *  is what sets it, and the default is the transcript's own order — a caller
+   *  that knows nothing about threading gets what this component has always
+   *  drawn. */
+  threaded?: boolean;
+}) {
   const queryClient = useQueryClient();
   const fetched = $api.useQuery("get", "/v1/chains/{rootExtId}", {
     params: { path: { rootExtId: thread.rootExtId } },
@@ -275,6 +287,15 @@ export function ThreadMessages({ thread }: { thread: { rootExtId: string } }) {
     };
   };
 
+  // The order the bubbles are drawn in, and how far in each one is: the
+  // transcript's own order, or the reply tree when the pane's switch is on (see
+  // lib/threading). Nothing about the entries changes — same corpus read, same
+  // reply graph, same links — only which one comes next and which column it sits
+  // in, so a switch that is off is the component this pane has always drawn.
+  const rows = threaded
+    ? nest(entries, (e) => e.extId, (e) => e.parent)
+    : entries.map((entry) => ({ entry, depth: 0 }));
+
   return (
     <div className="stream">
       {pullNote ? (
@@ -305,10 +326,15 @@ export function ThreadMessages({ thread }: { thread: { rootExtId: string } }) {
         }}
         people={castOfEntries(entries)}
       />
-      {entries.map((e, i) => (
+      {rows.map(({ entry: e, depth }) => (
         <Message
           key={e.extId}
-          id={anchor(i)}
+          // The anchor is the entry's place in the thread as the corpus sent it,
+          // not in the order it is drawn: the reply link under a bubble and the
+          // id on a source line both name a message, and nesting moves bubbles
+          // without moving what they are called. `indexOf` is the same map the
+          // links are built from, so the two cannot disagree.
+          id={anchor(indexOf.get(e.extId) ?? 0)}
           body={e.html ?? ""}
           sender={e.author}
           // Hovering the name (or the avatar) names the person fully: the address
@@ -349,6 +375,13 @@ export function ThreadMessages({ thread }: { thread: { rootExtId: string } }) {
           // rows and the pane through the entries it was handed — the same mark,
           // the same words, one component (see ReplyLink).
           reply={<ReplyLink parent={replyOf(e)} />}
+          // How deep this message is in the reply tree, for the stylesheet to
+          // indent and to rule off by (see .ibread .stream .msg). It rides on the
+          // prop the page uses to place a bubble in the transcript's grid, which
+          // is the same question — where does this bubble sit — asked by a layout
+          // this pane does not have. Flat, every message is at zero and the
+          // stylesheet draws nothing.
+          style={{ "--nest": depth } as CSSProperties}
           stamp={stampOf(e)}
           // The corpus entry as it arrived, so a bubble that renders wrong can be
           // pasted somewhere and read whole — the same affordance, and the same
