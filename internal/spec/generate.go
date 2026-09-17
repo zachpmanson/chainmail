@@ -428,10 +428,10 @@ func (b *builder) source(r *entryRow) string {
 // quote, so the edit is Jason's at Jason's time, even though the copy still
 // names Charles (the quoted author) as its sender.
 //
-// Both the base and the host must be in this selection. When either is not —
-// the change is anchored outside the page, or the quoting message was never
-// collected — the derived entry keeps its own unspooled row and link, and no
-// edit is attached, so the trail is not silently lost.
+// Which copy belongs to which host, and whether base and host are both here at
+// all, is derivedEdits' question rather than this one's — the same question the
+// trail read asks, so the two renderers cannot come to different answers about
+// which message carries an edit (see edits.go).
 func (b *builder) attachEdits(rows []*entryRow) {
 	// rows[i] built b.messages[i] in b.add, so this maps a corpus id to the
 	// entry it became, letting us mutate a host and read the base's id.
@@ -439,30 +439,14 @@ func (b *builder) attachEdits(rows []*entryRow) {
 	for i, r := range rows {
 		at[r.ID] = i
 	}
-	for _, r := range rows {
-		if !r.Derived || r.ParentID == 0 {
-			continue
-		}
-		if _, ok := at[r.ParentID]; !ok {
-			continue // the base it changed is not on this page
-		}
-		// The host is whichever collected message the copy was sighted inside.
-		var host *Entry
-		for _, h := range r.SeenIn {
-			if j, ok := at[h]; ok {
-				host = &b.messages[j]
-				break
-			}
-		}
-		if host == nil {
-			continue // the quoting message is not in this timeline
-		}
+	for _, d := range derivedEdits(rows) {
+		host := &b.messages[at[d.Host.ID]]
 		host.Edits = append(host.Edits, Edit{
-			ID:   b.idOf[r.ID],
-			Base: b.idOf[r.ParentID],
+			ID:   b.idOf[d.Copy.ID],
+			Base: b.idOf[d.Base.ID],
 			Who:  host.Sender,
 			Time: host.Time,
-			Body: r.BodyText,
+			Body: d.Copy.BodyText,
 		})
 	}
 }

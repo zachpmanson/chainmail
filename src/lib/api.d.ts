@@ -718,6 +718,21 @@ export interface components {
             participants?: components["schemas"]["Participant"][];
             /** @description The files this message carries, in the sender's order. Absent when it carries none, which is most mail. The same chip a built page draws for the same message — one schema, Attachment — reached from the message rather than from the page, which is why "link" here is the message's own permalink: the corpus knows the mail, not a per-file source URL. */
             attachments?: components["schemas"]["Attachment"][];
+            /** @description A quoter's in-place changes to messages this one quoted (issue #42), where this entry is the message that quoted them. The same relation a page build draws inline inside the quoting bubble, resolved by the same function; the renderer must draw them here too rather than letting the derived copy float as its own entry. Absent on a message nobody edited, which is almost all of them. */
+            edits?: components["schemas"]["TrailEdit"][];
+        };
+        /** @description A quoter's in-place change to a message they quoted, as a trail read carries it: the derived (edited) copy they pasted, and the original it was made against. `id` and `base` are ext ids — a chain read's own names for entries, which is what its anchors are made of — and the renderer resolves them against the entries it holds, exactly as a page build resolves a spec id against its rows. */
+        TrailEdit: {
+            /** @description Ext id of the derived (edited) copy: the message the quoter actually pasted, and the diff source. It is an entry of this same chain, and a renderer hoists it out of the timeline rather than drawing it as its own bubble. */
+            id?: string;
+            /** @description Ext id of the original message the change was made to, which is the anchor the 'original from …' link lands on. */
+            base?: string;
+            /** @description Who made the change. Absent in a trail read, where the quoting message's own bubble already names them. */
+            who?: string;
+            /** @description When the quoting message was sent, e.g. '14:00'. Absent in a trail read, for the same reason as `who`. */
+            time?: string;
+            /** @description The quoter's modified text of the quote, as stored (plain text, not HTML). */
+            body?: string;
         };
         /** @description Every entry reachable from the named one, in time order. */
         ChainResponse: {

@@ -275,9 +275,76 @@ const MULTI_ENTRIES = [
   },
 ];
 
+/** The quoter's-edit shape from issue #42, invented: an opener, the copy of it a
+ *  quoter pasted with a word changed inside it, and the reply that re-quoted that
+ *  copy. The corpus classifies the copy as DERIVED (a modified copy of the
+ *  message it quotes) and sends it as an entry of the chain like any other; the
+ *  reply carries the `edits` relation, naming the copy and the base it modified.
+ *
+ *  What the pane must do with that is what a built page does: draw the change
+ *  inside the message that made it, and NOT draw the copy as a bubble of its own.
+ *  The copy's id is here rather than a plausible-looking one because the hoist is
+ *  keyed on it. */
+const EDIT_ROOT = "mail:<csv-layout-1@example.fed>";
+const EDIT_ENTRIES = [
+  {
+    extId: "mail:<csv-layout-1@example.fed>",
+    source: "mail",
+    quoted: false,
+    ts: "2026-03-02T09:00:00Z",
+    author: "Charles Nelaturi",
+    subject: "CSV layout",
+    body: "CSV layout: … E: Amount Due",
+    html: "<p>CSV layout: … E: Amount Due</p>",
+    fromEmail: "charles@ruralco.example",
+    tz: "AEST",
+    tzOffsetMinutes: 600,
+    sightings: [{ kind: "direct" }],
+  },
+  {
+    // The edited copy: the same message with Jason's word woven into it, sighted
+    // inside his reply. It occupies no row — the reply's edit is where it belongs.
+    extId: "quote:csv-edit",
+    source: "mail",
+    quoted: true,
+    ts: "2026-03-02T09:00:00Z",
+    author: "Charles Nelaturi",
+    subject: "CSV layout",
+    body: "CSV layout: … E: Invoice Amount",
+    html: "<p>CSV layout: … E: Invoice Amount</p>",
+    parent: "mail:<csv-layout-1@example.fed>",
+    tz: "AEST",
+    tzOffsetMinutes: 600,
+    sightings: [{ kind: "quoted", seenIn: "mail:<csv-layout-2@example.fed>" }],
+  },
+  {
+    extId: "mail:<csv-layout-2@example.fed>",
+    source: "mail",
+    quoted: false,
+    ts: "2026-03-02T14:00:00Z",
+    author: "Jason Yarrow",
+    subject: "Re: CSV layout",
+    body: "One change — we track Invoice Amount.",
+    html: "<p>One change — we track Invoice Amount.</p>",
+    fromEmail: "jason@termina.example",
+    parent: "mail:<csv-layout-1@example.fed>",
+    tz: "AEST",
+    tzOffsetMinutes: 600,
+    sightings: [{ kind: "direct" }],
+    edits: [
+      {
+        id: "quote:csv-edit",
+        base: "mail:<csv-layout-1@example.fed>",
+        body: "CSV layout: … E: Invoice Amount",
+      },
+    ],
+  },
+];
+
 const chainHandler: Handler = (c) => {
   const root = decodeURIComponent(pathOf(c).slice("/v1/chains/".length));
   if (root === MULTI_ROOT) return json(200, { rootExtId: root, entries: MULTI_ENTRIES });
+  if (root === EDIT_ROOT) return json(200, { rootExtId: root, entries: EDIT_ENTRIES });
   const b = CHAIN_BODIES[root];
   return b
     ? json(200, {
@@ -869,6 +936,38 @@ describe("the home page with no query", () => {
     expect(par?.getAttribute("title")).toBe("In reply to Ada Okoye, Mon, 2 Mar 2026 19:15");
     // The anchor it names is the parent's own bubble, so the link lands on it.
     expect(document.getElementById("entry-0")?.textContent).toContain("Ada Okoye");
+  });
+
+  it("draws a quoter's edit in the message that made it, and floats no copy", async () => {
+    handler = buildHandler;
+    await mountApp(`/?open=${encodeURIComponent(EDIT_ROOT)}`);
+
+    // Two bubbles: the opener and the reply. The DERIVED copy is the third entry
+    // of the thread and occupies no row of its own — a third bubble here is the
+    // floating duplicate issue #42 was about, drawn directly under the message it
+    // was edited from.
+    await waitFor(() => expect(pane().querySelectorAll(".msg").length).toBe(2));
+    const bubbles = [...pane().querySelectorAll(".msg .bd")].map((b) => b.textContent ?? "");
+    expect(bubbles.some((t) => t.includes("Invoice Amount") && !t.includes("One change"))).toBe(false);
+
+    // The edit is drawn inside the reply that made it: attributed to the person
+    // who sent that reply, anchored to the original it changed, and marked as a
+    // diff — the inserted word highlighted, the original's word gone from the
+    // copy it modified.
+    const reply = pane().querySelectorAll(".msg")[1]!;
+    const edit = reply.querySelector(".edits .edit");
+    expect(edit).not.toBeNull();
+    expect(edit!.querySelector(".editwho")?.textContent).toBe("Jason Yarrow");
+    const original = edit!.querySelector("a");
+    expect(original?.getAttribute("href")).toBe("#entry-0");
+    expect(original?.textContent).toBe("original");
+    expect(edit!.textContent).toContain("original from Charles Nelaturi at Mon, 2 Mar 2026 19:00");
+    expect(edit!.querySelector(".eins")?.textContent).toBe("Invoice");
+    expect(edit!.querySelector(".ebd")?.textContent).toBe("CSV layout: … E: Invoice Amount");
+
+    // The anchor the edit names is the bubble it was diffed against, so the link
+    // lands on the message the reader has to compare it with.
+    expect(document.getElementById("entry-0")?.textContent).toContain("Amount Due");
   });
 
   it("says a message that carried no body, rather than drawing a gap", async () => {

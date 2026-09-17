@@ -1,14 +1,16 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError, $api, type CorpusEntry } from "../lib/api";
 import { MEDIA_BASE, pullSummary } from "../lib/attachments";
 import { attach } from "../client/behaviour";
 import { orgOrder, slotsFor } from "../lib/derive";
+import { resolveEdits, type EditEntry, type RowEdit } from "../lib/edits";
 import { newest } from "../lib/newest";
 import { gmailIdOf, sourceLine } from "../lib/sources";
 import { fetchOriginal } from "../lib/original";
 import { nest } from "../lib/threading";
 import { Failure } from "./ThreadPreview";
+import { Edits } from "./Edits";
 import { Message, type StampData } from "./Message";
 import { ParticipantsPanel, castOfEntries } from "./Participants";
 import { ReplyLink, type ReplyTarget } from "./ReplyLink";
@@ -51,6 +53,13 @@ import { Source } from "./Source";
  * a parent is found — the spec's rows there, the entries handed to the pane here
  * — and the pane resolves it against the thread it is already holding, so the link
  * lands on the parent's bubble on this page rather than asking anyone for it.
+ *
+ * A quoter's edit to a quoted message is the page's own mark as well, from the
+ * page's own component (see Edits): `/v1/chains` carries the relation,
+ * `spec.RenderTrail` resolves it with the same function a build does, and the
+ * pane draws it inside the message that made it. The derived copy it names is
+ * hoisted out of the transcript rather than drawn as a bubble of its own — that
+ * ghost is what issue #42 was about.
  */
 
 /** The transcript's clock, written the way the spec writes it ("Mon 2 Jan 2006",
@@ -151,6 +160,37 @@ export function ThreadMessages({
 
   const entries = fetched.data?.entries ?? [];
 
+  // A quoter's edit to a quoted message is drawn INSIDE the message that quoted
+  // it, so the derived copy that relation names is not a bubble of its own: it is
+  // hoisted out of the transcript here, exactly as a page build hoists it out of
+  // its rows (see derive.ts). Without this the pane drew that copy as a second
+  // bubble under the message it was edited from — the floating duplicate issue
+  // #42 was about — and drew no edit at all, because the copy's id is what the
+  // page's own mark is anchored through.
+  //
+  // A reply anchored to a hoisted copy is re-pointed at the copy's own parent (the
+  // base it derives from), so the link under it lands on a bubble that is on this
+  // page rather than on an id nothing occupies. The reply graph is the corpus's,
+  // walked server side; this is where that meets the renderer's own rows.
+  const { shown, parentOf } = useMemo(() => {
+    const at = new Map(entries.map((e) => [e.extId, e]));
+    const hoisted = new Set<string>();
+    for (const e of entries) {
+      for (const ed of e.edits ?? []) if (ed.id && at.has(ed.id)) hoisted.add(ed.id);
+    }
+    const effective = (id?: string): string | undefined => {
+      const seen = new Set<string>();
+      let cur = id;
+      while (cur && at.has(cur) && hoisted.has(cur) && !seen.has(cur)) {
+        seen.add(cur);
+        cur = at.get(cur)!.parent;
+      }
+      return cur && at.has(cur) ? cur : undefined;
+    };
+    const shown = entries.filter((e) => !hoisted.has(e.extId));
+    return { shown, parentOf: new Map(shown.map((e) => [e.extId, effective(e.parent)])) };
+  }, [entries]);
+
   // The message whose files are being fetched. One at a time: a pull is mailbox
   // round trips, and a pane is a place a reader reads rather than a queue they
   // fill — so every other button is held while one is out, exactly as the page's
@@ -219,41 +259,50 @@ export function ThreadMessages({
     const detach = attach(document);
     return detach;
   }, [entries]);
-  const target = newest(entries);
+  const target = newest(shown);
   useEffect(() => {
     if (!target || landedFor.current === thread.rootExtId) return;
     landedFor.current = thread.rootExtId;
-    const el = document.getElementById(anchor(entries.indexOf(target)));
+    const el = document.getElementById(anchor(shown.indexOf(target)));
     // Absent in jsdom, and a landing that cannot scroll is still a landing: the
     // mark is what the reader sees either way.
     el?.scrollIntoView?.({ block: "start" });
     setLanded(target.extId);
-  }, [thread.rootExtId, entries, target]);
+  }, [thread.rootExtId, shown, target]);
 
   if (fetched.isError) return <Failure error={fetched.error} />;
   if (fetched.isPending) return <p className="selnote">Loading the thread…</p>;
 
-  if (entries.length === 0) return <p className="selnote">No entries to show.</p>;
+  if (shown.length === 0) return <p className="selnote">No entries to show.</p>;
 
   // One colour rule, two callers: the same function the page build uses, over the
   // entries this pane was handed. A sender whose org nothing established takes the
   // stylesheet's unknown slot, which is what the page draws for them too.
-  const slot = slotsFor(orgOrder(entries.map((e) => e.org)));
+  const slot = slotsFor(orgOrder(shown.map((e) => e.org)));
   const titles = new Map<string, string>();
-  for (const e of entries) if (e.author) titles.set(e.author, senderTitle(e));
+  for (const e of shown) if (e.author) titles.set(e.author, senderTitle(e));
   // The provenance lines' own two lookups. A host is named by its mailbox id
   // where it has one — the same name a built page prints — and an unspooled id
   // links to this page's row for that message rather than out to the mailbox,
   // because the message it names is right here.
+  //
+  // Built from the DRAWN entries: a hoisted copy occupies no row, so a link to it
+  // would land nowhere. A host that is one is named rather than linked, which is
+  // what mailName already does with an id it cannot draw.
   const byExt = new Map<string, CorpusEntry>();
   const indexOf = new Map<string, number>();
   const anchorByGmail = new Map<string, string>();
-  entries.forEach((e, i) => {
+  shown.forEach((e, i) => {
     byExt.set(e.extId, e);
     indexOf.set(e.extId, i);
     const gmail = gmailIdOf(e);
     if (gmail) anchorByGmail.set(gmail, anchor(i));
   });
+  // Every entry the thread handed over, drawn or not. An edit names the copy the
+  // quoter pasted, which is exactly the entry the hoist took out of the rows — so
+  // the edit's own diff would have nothing to read if this lookup were the drawn
+  // entries.
+  const everyExt = new Map(entries.map((e) => [e.extId, e]));
   const mailName = (extId: string): string => {
     const host = byExt.get(extId);
     if (!host) return extId;
@@ -272,7 +321,8 @@ export function ThreadMessages({
   // does not hold: an entry with no parent opens the chain, and the link says so
   // rather than guessing at what is missing.
   const replyOf = (e: CorpusEntry): ReplyTarget | null => {
-    const parent = e.parent ? byExt.get(e.parent) : undefined;
+    const parentId = parentOf.get(e.extId);
+    const parent = parentId ? byExt.get(parentId) : undefined;
     if (!parent) return null;
     const i = indexOf.get(parent.extId);
     // Unreachable — the parent was reached through byExt, which is built from the
@@ -287,14 +337,48 @@ export function ThreadMessages({
     };
   };
 
+  // A quoter's edit, resolved for this message's bubble by the same function the
+  // page uses (see lib/edits). Who and when are this message's own — the person
+  // who sent the quoting message is the person who made the edit — and the copy
+  // the diff is made from is looked up among every entry, not only the drawn
+  // ones, because that copy is the entry the hoist removed.
+  //
+  // The base comes back as an ext id, which is what the trail read has, and every
+  // link on this page names a bubble the other way (see anchor). The base is one
+  // of the drawn rows unless the message being quoted was itself an edited copy
+  // of something — in which case it has been hoisted and there is no row to land
+  // on, so the raw id stays and the link honestly points nowhere rather than at
+  // somebody else's bubble.
+  const editsOf = (e: CorpusEntry, at: StampData): RowEdit[] | undefined => {
+    const resolved = resolveEdits(
+      e.edits,
+      (id) => {
+        const copy = id ? everyExt.get(id) : undefined;
+        if (!copy) return undefined;
+        const cAt = stampOf(copy);
+        return {
+          html: copy.html ?? "",
+          who: copy.author ?? "",
+          stamp: [cAt.date, cAt.time].filter(Boolean).join(" "),
+        } satisfies EditEntry;
+      },
+      { who: e.author ?? "", time: at.time ?? "" },
+    );
+    for (const ed of resolved ?? []) {
+      const i = indexOf.get(ed.base);
+      if (i !== undefined) ed.base = anchor(i);
+    }
+    return resolved;
+  };
+
   // The order the bubbles are drawn in, and how far in each one is: the
   // transcript's own order, or the reply tree when the pane's switch is on (see
   // lib/threading). Nothing about the entries changes — same corpus read, same
   // reply graph, same links — only which one comes next and which column it sits
   // in, so a switch that is off is the component this pane has always drawn.
   const rows = threaded
-    ? nest(entries, (e) => e.extId, (e) => e.parent)
-    : entries.map((entry) => ({ entry, depth: 0 }));
+    ? nest(shown, (e) => e.extId, (e) => parentOf.get(e.extId))
+    : shown.map((entry) => ({ entry, depth: 0 }));
 
   return (
     <div className="stream">
@@ -315,7 +399,7 @@ export function ThreadMessages({
         // finds their faces; the same slots the bubbles are coloured on, so a
         // person's row and their messages cannot disagree.
         v={{
-          rows: entries.map((e) => ({
+          rows: shown.map((e) => ({
             entry: { sender: e.author, org: e.org, fromEmail: e.fromEmail },
           })),
           orgSlot: slot,
@@ -324,7 +408,7 @@ export function ThreadMessages({
           // reader is pointing at.
           whoTitle: (name: string) => titles.get(name) ?? name,
         }}
-        people={castOfEntries(entries)}
+        people={castOfEntries(shown)}
       />
       {rows.map(({ entry: e, depth }) => (
         <Message
@@ -375,6 +459,12 @@ export function ThreadMessages({
           // rows and the pane through the entries it was handed — the same mark,
           // the same words, one component (see ReplyLink).
           reply={<ReplyLink parent={replyOf(e)} />}
+          // A quoter's edit to a message this one quoted, drawn inside this bubble
+          // exactly as a page build draws it — the same relation, the same diff,
+          // the same component (see Edits and lib/edits). The derived copy it was
+          // made against has been hoisted out of these rows, so this is the only
+          // place the edit appears.
+          edits={<Edits edits={editsOf(e, stampOf(e))} />}
           // How deep this message is in the reply tree, for the stylesheet to
           // indent and to rule off by (see .ibread .stream .msg). It rides on the
           // prop the page uses to place a bubble in the transcript's grid, which

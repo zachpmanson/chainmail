@@ -38,6 +38,13 @@ const (
 	// every assertion about what a message says.
 	extHTML  = "mail:<c0ffee-6@loomworks.example>"
 	extPlain = "mail:<c0ffee-7@loomworks.example>"
+
+	// The quoter's edited copy of a message, and the reply that pasted it. Its own
+	// fixture for the same reason as the others: an extra entry in the shared
+	// corpus changes the counts every other test's assertions are made of.
+	extEditBase = "mail:<c0ffee-8@loomworks.example>"
+	extEditHost = "mail:<c0ffee-4@loomworks.example>"
+	extEditCopy = "quote:edit1a2b3c4d"
 )
 
 // shedBytes is the fixture attachment's content, filed as a blob so that the
@@ -211,6 +218,77 @@ func quotedServer(t *testing.T) *harness {
 	}
 	if err := s.Sight(id, host, "quoted", ""); err != nil {
 		t.Fatalf("Sight: %v", err)
+	}
+	return harnessOver(t, s)
+}
+
+// editServer is the server over a corpus holding the one shape issue #42 is
+// about: a message a reply pasted with the answer woven INTO it. The ingest
+// classifies such a copy as DERIVED — a modified copy of the message it quotes,
+// neither a twin to collapse nor a message of its own — and this fixture
+// constructs what that write leaves behind: the copy, sighted inside the reply
+// that pasted it, with its reply edge at the original it modified.
+//
+// It is its own corpus because it is its own chain of three, and because adding
+// a derived relation to the shared fixture would put an edit on a bubble three
+// other tests assert the exact text of.
+func editServer(t *testing.T) *harness {
+	t.Helper()
+	s, err := corpus.Open(":memory:")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+
+	charles := putPerson(t, s, "Charles Nelaturi", "charles@ruralco.example")
+	jason := putPerson(t, s, "Jason Yarrow", "jason@termina.example")
+
+	base := putMail(t, s, mailFixture{
+		ext: extEditBase, ts: "2026-03-02T09:00:00+11:00", tz: "AEDT", offset: mins(660),
+		person: charles, container: "T3", subject: "CSV layout",
+		messageID: "<c0ffee-8@loomworks.example>",
+		from:      "Charles Nelaturi <charles@ruralco.example>",
+		to:        "Jason Yarrow <jason@termina.example>",
+		text:      "CSV layout: … E: Amount Due",
+	})
+	host := putMail(t, s, mailFixture{
+		ext: extEditHost, ts: "2026-03-02T14:00:00+11:00", tz: "AEDT", offset: mins(660),
+		person: jason, container: "T3", subject: "Re: CSV layout",
+		messageID: "<c0ffee-4@loomworks.example>",
+		inReplyTo: "<c0ffee-8@loomworks.example>",
+		from:      "Jason Yarrow <jason@termina.example>",
+		to:        "Charles Nelaturi <charles@ruralco.example>",
+		text:      "One change — we track Invoice Amount.",
+	})
+	ts, err := time.Parse(time.RFC3339, "2026-03-02T09:00:00+11:00")
+	if err != nil {
+		t.Fatalf("bad ts: %v", err)
+	}
+	copyID, _, err := s.PutQuoted(corpus.Entry{
+		Source: corpus.SourceMail, ExtID: extEditCopy, Kind: "message",
+		TS: ts, TZ: "AEDT", PersonID: charles, Container: "T3", Subject: "CSV layout",
+		BodyText: "CSV layout: … E: Invoice Amount",
+		// DERIVED, as the ingest's FindDerived classifies a modified re-quote.
+		Derived: true,
+	})
+	if err != nil {
+		t.Fatalf("PutQuoted: %v", err)
+	}
+	// The edit was made inside Jason's reply, and the copy replaced the message
+	// he edited: the sighting is the host, the reply edge the base.
+	if err := s.Sight(copyID, host, "quoted", "inline edit"); err != nil {
+		t.Fatalf("Sight: %v", err)
+	}
+	if err := s.SetParent(copyID, base); err != nil {
+		t.Fatalf("SetParent: %v", err)
+	}
+	for _, id := range []int64{base, host} {
+		if err := s.Sight(id, 0, "direct", ""); err != nil {
+			t.Fatalf("Sight: %v", err)
+		}
+	}
+	if _, err := s.ResolveParents(); err != nil {
+		t.Fatalf("ResolveParents: %v", err)
 	}
 	return harnessOver(t, s)
 }

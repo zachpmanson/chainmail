@@ -1,11 +1,12 @@
 import { Source } from "./Source";
-import { derive, type Row, type RowEdit, type View } from "../lib/derive";
+import { derive, type Row, type View } from "../lib/derive";
 import type { Timeline as Spec } from "../lib/spec";
 import { DiffPanel, Legend, SourcesPanel, type ThreadFilter } from "./Panels";
 import { ParticipantsPanel } from "./Participants";
 import { Minimap } from "./Minimap";
 import { Message } from "./Message";
 import { ReplyLink, type ReplyTarget } from "./ReplyLink";
+import { Edits } from "./Edits";
 import { trimBody } from "../lib/trimBody";
 
 const html = (s: string) => ({ __html: s });
@@ -20,36 +21,6 @@ function replyTarget(row: Row, v: View): ReplyTarget | null {
   const who = parent.entry.kind === "note" ? parent.entry.label : parent.entry.sender;
   const when = [parent.entry.date, parent.entry.time].filter(Boolean).join(" ");
   return { anchor: parent.id, who, when };
-}
-
-/** A quoter's inline edit to a message this one quoted (issue #42): the
- *  modified text with the change marked, anchored to the original, attributed
- *  to the quoter — rendered here so the edit reads inside the message that
- *  made it rather than floating as its own unspooled node. */
-function Edits({ edits, v }: { edits?: RowEdit[]; v: View }) {
-  if (!edits?.length) return null;
-  return (
-    <div className="edits">
-      {edits.map((ed, i) => (
-        <div className="edit" key={ed.base || i}>
-          <div className="ehdr">
-            edited by <span className="editwho">{ed.who || v.title || "someone"}</span>
-            {ed.origWho || ed.origStamp ? (
-              <>
-                ,{" "}
-                <a href={`#${ed.base}`} title="the message this change was made to">
-                  original
-                </a>
-                {ed.origWho ? <span> from {ed.origWho}</span> : null}
-                {ed.origStamp ? <span className="ets"> at {ed.origStamp}</span> : null}
-              </>
-            ) : null}
-          </div>
-          <div className="ebd" dangerouslySetInnerHTML={html(ed.html)} />
-        </div>
-      ))}
-    </div>
-  );
 }
 
 /**
@@ -128,7 +99,7 @@ function EntryBlock({ row, v, mark, anchorByGmail, onPull, pulling, mediaBase }:
       chainStart={row.isChainStart}
       mark={mark}
       reply={<ReplyLink parent={replyTarget(row, v)} />}
-      edits={<Edits edits={row.edits} v={v} />}
+      edits={<Edits edits={row.edits} fallbackWho={v.title} />}
       source={<Source source={e.source} anchorByGmail={anchorByGmail} />}
       /* The spec entry as the renderer saw it, plus the row id and any resolved
          quote-edits (the "edited by … original from …" attribution), so a message

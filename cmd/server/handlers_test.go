@@ -494,6 +494,74 @@ func TestTheOriginalRouteNamesWhichNothingItFound(t *testing.T) {
 	res.errText(t)
 }
 
+// A quoter's edit is a corpus relation, and the reading pane reads the corpus
+// through the chain route: the edit has to arrive on the entry that made it, or
+// the pane has nothing to draw and the edited copy can only appear as a message
+// of its own — the duplicate issue #42 reports.
+//
+// The single-entry route is not asserted here, and cannot answer this: it renders
+// a trail of the one entry it was asked for, and a trail that does not hold the
+// copy has no edit to attach — the same reason a lone entry names no reply target
+// sitting outside it. No client load of the pane goes through it (it serves the
+// one message read, and GET /v1/entries/{extId}/original), so there is nothing to
+// draw the edit for.
+func TestAQuotersEditRidesTheEntryThatMadeIt(t *testing.T) {
+	srv, api := editServer(t), loadAPI(t)
+	const wantBody = "CSV layout: … E: Invoice Amount"
+
+	type edit struct {
+		ID   string `json:"id"`
+		Base string `json:"base"`
+		Body string `json:"body"`
+	}
+	type drawn struct {
+		ExtID string `json:"extId"`
+		Edits []edit `json:"edits"`
+	}
+
+	res := srv.do(t, "GET", entryPath("/v1/chains/", extEditBase), nil)
+	if res.status != 200 {
+		t.Fatalf("status = %d: %s", res.status, res.body)
+	}
+	// Asserted against the contract as well as read: a field the server sends and
+	// the document never declares is one no generated client will have.
+	api.assert(t, "ChainResponse", res.body)
+	chain := decode[struct {
+		Entries []drawn `json:"entries"`
+	}](t, res)
+	// The copy is still an entry of the chain. The pane hoists it out of the flow
+	// as it draws — the renderer's call, made from the ids the edits name, exactly
+	// as the page makes it — but the trail itself is a faithful read, and the copy
+	// is the text the diff is made from.
+	if len(chain.Entries) != 3 {
+		t.Fatalf("the trail has %d entries, want the copy among the three", len(chain.Entries))
+	}
+	var hosts, copies, others int
+	for _, e := range chain.Entries {
+		switch {
+		case e.ExtID == extEditCopy:
+			copies++
+			if len(e.Edits) != 0 {
+				t.Errorf("the copy %s carries its own edit: %+v", e.ExtID, e.Edits)
+			}
+		case len(e.Edits) > 0:
+			hosts++
+			if e.ExtID != extEditHost || len(e.Edits) != 1 {
+				t.Fatalf("%s carries %+v, want the one edit on %s", e.ExtID, e.Edits, extEditHost)
+			}
+			if got := e.Edits[0]; got.ID != extEditCopy || got.Base != extEditBase || got.Body != wantBody {
+				t.Errorf("chain edit = %+v, want %q editing %q", got, extEditCopy, extEditBase)
+			}
+		default:
+			others++
+		}
+	}
+	if hosts != 1 || copies != 1 || others != 1 {
+		t.Errorf("the trail drew %d hosts, %d copies and %d other entries, want one of each",
+			hosts, copies, others)
+	}
+}
+
 // A chain read is where the pane gets its messages from, so the flag has to be on
 // the chain's entries as well as the single-entry read: a client that only asked
 // the entry route would have to fetch each one again to decide what to draw.

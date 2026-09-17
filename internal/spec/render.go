@@ -64,6 +64,18 @@ type Rendered struct {
 	// this hover exists to avoid. Empty for an entry that has an address of its
 	// own, which has nothing to explain away.
 	QuotedBy string
+	// Edits are a quoter's in-place changes to a message this one quoted (issue
+	// #42): the same relation a page build draws inline inside the quoting bubble,
+	// carried here so the reading pane can draw it too rather than floating the
+	// derived copy as its own node. `id` and `base` are ext ids — the names the
+	// pane's own entries carry — and the renderer resolves them against the thread
+	// it holds, exactly as a page resolves a spec id against its rows.
+	//
+	// Who and when are left empty: the pane draws the host's own clock and name on
+	// its bubble from the same stampOf and author, and stating them again here
+	// would be a second answer to a question the bubble already answers. A page
+	// build fills both in because a spec entry has no other place to keep them.
+	Edits []Edit
 }
 
 // RenderTrail renders the named entries as the entries a page build would draw,
@@ -97,6 +109,10 @@ type Rendered struct {
 // trail is what keeps the colours inside one trail consistent with each other. A
 // page build reads the same rules the same way (see Generate), so the pane and
 // the page cannot colour one sender two ways.
+//
+// A quoter's edit to a quoted message is attached here too, through the same
+// function a page build uses (derivedEdits), so a thread read in the pane carries
+// the same edits the same page does.
 func RenderTrail(store *corpus.Store, extIDs []string) (map[string]Rendered, error) {
 	out := make(map[string]Rendered, len(extIDs))
 	if len(extIDs) == 0 {
@@ -179,6 +195,20 @@ func RenderTrail(store *corpus.Store, extIDs []string) (map[string]Rendered, err
 	if err != nil {
 		return nil, err
 	}
+	// A quoter's edit is pinned to the message that carries it before the entries
+	// are drawn, through the same function a page build uses: the relation is the
+	// corpus's, and the two renderers have to reach the same verdict about which
+	// bubble holds an edit. The ids on the wire are ext ids because that is what
+	// this read's own entries carry; the base is resolved by the client against
+	// the entries it was handed, exactly as a page resolves a spec id.
+	edited := map[int64][]Edit{}
+	for _, d := range derivedEdits(rows) {
+		edited[d.Host.ID] = append(edited[d.Host.ID], Edit{
+			ID:   extOf[d.Copy.ID],
+			Base: extOf[d.Base.ID],
+			Body: d.Copy.BodyText,
+		})
+	}
 	for _, r := range rows {
 		// The address is parsed once and used for every fact it carries: a page
 		// build reads the same expression for the same ones, and asking for it
@@ -192,6 +222,7 @@ func RenderTrail(store *corpus.Store, extIDs []string) (map[string]Rendered, err
 			FromEmail: from.Address,
 			Org:       resolver.org(r.PersonID, from.Address),
 			QuotedBy:  quoters[r.ID],
+			Edits:     edited[r.ID],
 		}
 	}
 	return out, nil
