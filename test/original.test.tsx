@@ -28,12 +28,11 @@ afterEach(() => {
  * is held for the session (and in localStorage), so two tests sharing an address
  * would be watching one switch between them.
  *
- * Note for whoever writes the next one: while the switch is off the control lives
- * inside the bubble's receipt, and while it is on it is out on the header line (see
- * OriginalControl in Message.tsx). jsdom does not hide a closed <details>, so a
- * role query finds it here whether the receipt is open or not — these tests are
- * about the swap, not about it being on screen. The tests that do assert where it
- * is drawn are the two placement tests at the end.
+ * Note for whoever writes the next one: the control lives inside the bubble's
+ * receipt, pressed or not. jsdom does not hide a closed <details>, so a role query
+ * finds it here whether the receipt is open or not — these tests are about the
+ * swap, not about it being on screen. The test that does assert where it is drawn
+ * is the placement test at the end.
  */
 
 const bubble = (over: Partial<MessageProps> = {}): MessageProps => ({
@@ -168,12 +167,12 @@ describe("a message whose own html the corpus holds", () => {
     expect(end.lastElementChild!.className).toBe("copyjson");
   });
 
-  it("moves the pressed control out to the header line, where the way back is", async () => {
-    // The receipt is a disclosure, shut until it is opened: a way back drawn inside
-    // it is a switch the reader has to go looking for, and the reader holding this
-    // one is looking at somebody else's html. Pressed, it rides the header line
-    // instead — the line the bubble is scanned by, which is on screen whenever the
-    // bubble is.
+  it("keeps the control in the receipt once the body has been swapped", async () => {
+    // The control does not move when it is pressed. The receipt is where a reader
+    // inspects a message, the bubble's own line is where they read one, and the
+    // pressed state is carried by the colour rather than by a second home — so a
+    // reader who has shut the receipt can see from the line that this message is
+    // being read the other way, and opens the same receipt to turn it back.
     const load = vi.fn(async () => sent);
     const { container } = draw({
       original: { extId: "mail:<orig-line@loomworks.example>", load },
@@ -184,17 +183,15 @@ describe("a message whose own html the corpus holds", () => {
     await waitFor(() => expect(container.querySelector(".bdo")).not.toBeNull());
 
     const hdr = container.querySelector("details.hdr")!;
-    const on = hdr.querySelector("summary .origbtn") as HTMLElement;
+    expect(hdr.querySelector("summary .origbtn")).toBeNull();
+    const on = hdr.querySelector(".hdetend .origbtn") as HTMLElement;
     expect(on.textContent).toBe("Toggle Styles");
     expect(on.getAttribute("aria-pressed")).toBe("true");
-    // One control, in one place: the receipt keeps only the clip.
-    expect(hdr.querySelector(".hdetend .origbtn")).toBeNull();
     expect(hdr.querySelector(".hdetend .copyjson")).not.toBeNull();
 
     // And it is still the way back.
     fireEvent.click(on);
     expect(container.querySelector(".bdo")).toBeNull();
-    expect(hdr.querySelector("summary .origbtn")).toBeNull();
     expect(hdr.querySelector(".hdetend .origbtn")!.getAttribute("aria-pressed")).toBe("false");
   });
 

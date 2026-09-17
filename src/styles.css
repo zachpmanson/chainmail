@@ -456,13 +456,6 @@
   details.hdr[open] > summary > .htail::after { transform:rotate(-90deg);
     border-right-color:var(--accent); }
   details.hdr > summary:focus-visible { outline:1px solid var(--accent); outline-offset:2px; }
-  /* The styles switch, out on the header line — and only ever there while it is
-     pressed (see OriginalControl). It takes the free space the reply's box
-     otherwise takes, so the one line still closes at the right edge with the
-     switch as the last thing on it rather than with a gap in the middle; the
-     reply and the caret then tuck in behind it. */
-  details.hdr > summary > .origbtn { margin-left:auto; }
-  details.hdr > summary > .origbtn ~ .htail { margin-left:0; }
   .nm { font-size:.83rem; font-weight:650; }
   /* Tinted to match the bubble strip, so the colour is self-describing and the
      page needs no legend. Falls back to --muted for an entry with no org. */
@@ -524,10 +517,11 @@
 
      So it is drawn in the receipt's own dialect rather than the toolbar's — a
      small quiet label, like the copy button beside it, and the shared shape above
-     so the pair reads as one line of controls. Pressed is the exception: a reader
-     who has swapped the body is a reader who needs the way back, and the receipt
-     is shut until it is opened, so the pressed control is drawn out on the header
-     line instead (see the summary rule above, and OriginalControl in Message). */
+     so the pair reads as one line of controls. Pressed is the exception the colour
+     carries, so a reader who has shut the receipt can see from the line that
+     something of this message is being read the other way; the control itself
+     stays put either way, because the receipt is one click and the bubble's own
+     line is not where a reader goes to change how a message is read. */
   .hdetend { margin-left:auto; display:inline-flex; align-items:center; gap:.35rem; }
   .origbtn[aria-pressed="true"] { color:var(--accent); background:var(--mine);
     border-color:var(--accent); }

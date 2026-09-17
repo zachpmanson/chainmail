@@ -436,7 +436,7 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
  * wrong for this message.
  *
  * The state lives here, at the bubble, rather than in either end of the swap: the
- * control is drawn in the receipt or on the header line (see OriginalControl) and
+ * control belongs in the receipt (where the reader goes to inspect a message) and
  * the body it replaces belongs in the bubble, and one of them cannot own the other
  * without the other reaching for it. The control is drawn only where a caller
  * passed somewhere to fetch from, so a built page and a static export never show
@@ -525,27 +525,29 @@ function useOriginal(original?: MessageProps["original"], fromEmail?: string) {
 }
 
 /**
- * The control, drawn wherever the reader can see the mail it governs.
+ * The control, in the bubble's receipt beside the copy button — pressed or not.
  *
- * While the sender's own rendering is off, that is the bubble's receipt: the place
- * a reader goes to inspect a message rather than read it, next to the button that
- * copies the message whole. It is deliberately not on the bubble, because most mail
- * renders correctly and a control on every bubble is chrome traded for a rare need.
+ * The receipt is where a reader goes to inspect a message rather than read it: the
+ * ids it was found under, the address it was sent to, the JSON behind it, and the
+ * subject and the ids on the line above. This asks for the same message a second
+ * way, so it belongs with those rather than on the bubble — as chrome over the body
+ * it would be a control on every message that had one (most of them), while the
+ * reader who needs it is the one who has already noticed the rendering is wrong.
  *
- * Once it is on, it moves out to the header line. The reader who has swapped the
- * body has somebody else's html in front of them and the receipt behind them, and
- * the receipt is a disclosure that is shut until it is opened again — a way back
- * that a reader has to go looking for is a switch they cannot turn off, which is
- * the one thing this control exists to do. So pressed, it rides the line the bubble
- * is scanned by, where the way back is always on screen; and pressed is the only
- * state it draws there, so nothing is added to the mail that was never swapped.
+ * It stays here when the switch is on, where Zach wants it: the receipt is one
+ * click away and the bubble's own line is not where a reader goes to change how a
+ * message is read. What the reader who has swapped the body needs is that the way
+ * back still exists at all, and that is what the note below is about.
  *
- * The note is the corpus's answer that the message carries nothing of the sender's
+ * The note is the corpus's answer that this message carries nothing of the sender's
  * own, and it is drawn *beside* the control rather than in place of it: the switch
  * it belongs to is the sender's and not this message's, so a message with no part
- * is still a way to stop reading the rest of them this way. The server's own
- * sentence is the answer for this message, so it rides the note's title rather than
- * being replaced with a word.
+ * is still a way to stop reading the rest of them this way. That is the dead end
+ * this control used to have — the note replaced the button, so a fetch that came
+ * back with nothing left the reader a switch they could not press, on the one
+ * sender they had just asked to read differently. The server's own sentence is the
+ * answer for this message, so it rides the note's title rather than being replaced
+ * with a word.
  */
 function OriginalControl({ on, state, ask }: { on: boolean; state: Original; ask: () => void }) {
   return (
@@ -663,15 +665,6 @@ export function Message(p: MessageProps) {
             <Stamp id={p.id} stamp={p.stamp} />
             {p.mark === "new" ? <span className="newpill">new</span> : null}
             {p.mark === "revised" ? <span className="revpill">revised</span> : null}
-            {/* The way back, once the body has been swapped. While the switch is
-                off this control is in the receipt, where inspecting a message
-                lives; while it is on it belongs out here, on the line the bubble
-                is scanned by, so that the reader who has swapped the body can
-                turn it back without opening a disclosure to do it — see
-                OriginalControl. */}
-            {p.original !== undefined && original.on ? (
-              <OriginalControl on={original.on} state={original.state} ask={original.ask} />
-            ) : null}
             {/* The line's right end, and always drawn even when the caller has
                 no reply to put in it: the caret lives inside this box, so an
                 empty tail still closes the line at the right edge. */}
@@ -704,7 +697,7 @@ export function Message(p: MessageProps) {
             <span className="to">to {p.to ?? "—"}</span>
             {p.original !== undefined || p.copyJson !== undefined ? (
               <span className="hdetend">
-                {p.original !== undefined && !original.on ? (
+                {p.original !== undefined ? (
                   <OriginalControl on={original.on} state={original.state} ask={original.ask} />
                 ) : null}
                 {p.copyJson !== undefined ? <CopyJson data={p.copyJson} /> : null}
