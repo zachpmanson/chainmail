@@ -848,7 +848,7 @@ func addressNamesPerson(local, name string) bool {
 }
 
 // planPersonalMailboxes folds a webmail account into the work account of the same
-// human: the shape where one person is zach@company and zachpmanson@gmail, two
+// human: the shape where one person is nella@company and nellaforge@gmail, two
 // addresses with no domain in common and no local part in common either.
 //
 // Neither of the other rules can reach it. A webmail host is not an employer, so
@@ -858,7 +858,7 @@ func addressNamesPerson(local, name string) bool {
 // name has to be corroborated by the address it is claimed to belong to:
 //
 //   - the display names must match, after normalisation, and carry a surname.
-//     One first name is refused outright: `clin01673388437@gmail.com` against a
+//     One first name is refused outright: `nella01673388437@gmail.com` against a
 //     colleague called "Clin" is a name spelt in a local part and nothing more,
 //     and a first name is exactly what two people share.
 //   - every word of the name must appear in the webmail local part, so

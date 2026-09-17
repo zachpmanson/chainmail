@@ -29,14 +29,14 @@ const gmailQuotedText = "Here is the column mapping we agreed:\n" +
 
 func TestAMailtoMentionOpeningStillRecoversTheTable(t *testing.T) {
 	// The #20 shape: the quoted message opens on a pasted mention — the needle
-	// holds "@Siobhan Murphy <mailto:siobhan@termina.io>" while the host renders
+	// holds "@Nella Forge <mailto:nella@loomworks.example>" while the host renders
 	// the same mention as a link whose visible text is only the name. The
 	// mailto: address adds needle tokens that never appear in the block, which
 	// used to fail the head alignment and drop the whole body to plain text.
-	host := `<div dir="ltr"><a href="mailto:siobhan@termina.io">@Siobhan Murphy</a>, pls help</div>` +
+	host := `<div dir="ltr"><a href="mailto:nella@loomworks.example">@Nella Forge</a>, pls help</div>` +
 		`<div class="gmail_quote">` +
 		`<div class="gmail_attr">On Tue, 4 Aug 2026 at 13:26, Tosh Chak wrote:</div>` +
-		`<div dir="ltr">Hi <a href="mailto:siobhan@termina.io">@Siobhan Murphy</a>,</div>` +
+		`<div dir="ltr">Hi <a href="mailto:nella@loomworks.example">@Nella Forge</a>,</div>` +
 		`<div>This ICP has been added to the database under Multiplex Cinemas Ltd. Since this is an ` +
 		`unbundled ICP, no online review was completed.</div>` +
 		`<table><tr><th>ICP</th><th>Remarks</th></tr>` +
@@ -45,7 +45,7 @@ func TestAMailtoMentionOpeningStillRecoversTheTable(t *testing.T) {
 		`</div>`
 	r := &entryRow{
 		Source: "mail",
-		BodyText: "Hi @Siobhan Murphy <mailto:siobhan@termina.io>,\n" +
+		BodyText: "Hi @Nella Forge <mailto:nella@loomworks.example>,\n" +
 			"This ICP has been added to the database under Multiplex Cinemas Ltd. Since this is an " +
 			"unbundled ICP, no online review was completed.\n" +
 			"ICP\tRemarks\n003002002122PCDA3\tUnbundle\nThanks!",
@@ -345,7 +345,7 @@ func TestAttributeFilenamesMentionedInChildText(t *testing.T) {
 	}
 	child := &entryRow{
 		ID: 4, Source: "mail", Direct: false, SeenIn: []int64{3},
-		BodyText: "+fyi @Siobhan Murphy <mailto:siobhan@termina.io>\n<image.png>",
+		BodyText: "+fyi @Nella Forge <mailto:nella@loomworks.example>\n<image.png>",
 	}
 	rows := []*entryRow{host, child}
 	attributeAttachments(rows)

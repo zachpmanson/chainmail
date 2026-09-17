@@ -104,8 +104,8 @@ func TestOrgForDomain(t *testing.T) {
 		in, want string
 	}{
 		{"ada@loomworks.example", "Loomworks"},
-		{"bo@fjord.co.nz", "Fjord"},
-		{"cy@fjord.com.au", "Fjord"},
+		{"bo@loomworks.co.nz", "Loomworks"},
+		{"cy@loomworks.com.au", "Loomworks"},
 		{"di@mail.loomworks.example", "Loomworks"},
 		{"someone@gmail.com", ""},
 		{"not-an-address", ""},

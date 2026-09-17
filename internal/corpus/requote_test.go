@@ -31,7 +31,7 @@ func foldForwardBody() string {
 		"Date: Wed, 16 Sep 2026 at 8:14 PM\n" +
 		"Subject: Ruralco sites\n" +
 		"To: Lane Whittaker <lane@termina.example>\n" +
-		"Cc: dona@termina.example <dona@termina.example>, Sam Bennett <\n" +
+		"Cc: nella@loomworks.example <nella@loomworks.example>, Bo Vantel <\n" +
 		foldResidue + "\n" +
 		foldMessage + "\n"
 }

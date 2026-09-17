@@ -203,13 +203,13 @@ func parseBlock(markup string) *html.Node {
 }
 
 // mailtoMention matches the address Gmail appends to a pasted mention: the
-// quoted recovery's needle text holds "@Siobhan Murphy <mailto:siobhan@...>"
+// quoted recovery's needle text holds "@Nella Forge <mailto:siobhan@...>"
 // while the same mention in the host's markup is rendered as a link whose
 // visible text is only the name. The mailto: address therefore contributes tokens
 // that exist in the needle but nowhere in the block, so a body opening on a
 // mention failed the head alignment: three of the first eight tokens were
 // mailto: address fragments that could never match. Remove the address and the
-// name counts the way it does in markup: "@Siobhan Murphy", then the content.
+// name counts the way it does in markup: "@Nella Forge", then the content.
 var mailtoMention = regexp.MustCompile(`<mailto:[^>]+>`)
 
 // stripMailtoMentions drops an @mention's trailing mailto address from text

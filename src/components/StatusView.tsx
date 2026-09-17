@@ -81,7 +81,7 @@ const STORED_ADDRESSES = "addresses";
  *
  * A person rather than a field of addresses, because the addresses are the
  * corpus's to fold and not the reader's to retype: one account behind
- * zach@termina.io and zach@threadlet.com.au is one person in the identity graph,
+ * zach@loomworks.example and zach@millrace.example is one person in the identity graph,
  * and a field asked the reader to do that folding by hand, again for every alias
  * they would rather their own mail were marked from.
  *

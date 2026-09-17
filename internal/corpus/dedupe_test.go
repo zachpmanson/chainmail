@@ -213,14 +213,14 @@ func TestDedupeDoesNotMergeOneFirstNameAcrossTwoOrganisations(t *testing.T) {
 // them into one person.
 func TestDedupeRefusesTwoSurnamesUnderOneFirstName(t *testing.T) {
 	s := open(t)
-	person(t, s, "bryn@quarry.fed", "Bryn Lowther")
-	person(t, s, "bryn.eames@quarry.fed", "Bryn Eames")
+	person(t, s, "nella@quarry.fed", "Nella Forge")
+	person(t, s, "nella.eames@quarry.fed", "Nella Eames")
 
 	plan := dedupe(t, s, true)
 	if len(plan.Merges) != 0 {
 		t.Fatalf("merged %+v; two surnames are two people", plan.Merges)
 	}
-	r := refusalFor(plan, "bryn@quarry.fed")
+	r := refusalFor(plan, "nella@quarry.fed")
 	if r == nil {
 		t.Fatalf("no refusal named the group: %+v", plan.Refusals)
 	}
@@ -230,17 +230,17 @@ func TestDedupeRefusesTwoSurnamesUnderOneFirstName(t *testing.T) {
 }
 
 // A From header may put anybody's name on anybody's mailbox — an assistant sends
-// on her employer's behalf and the header reads `Bryn Lowther <nia@…>`. The name
+// on her employer's behalf and the header reads `Nella Forge <nia@…>`. The name
 // in it is no evidence about whose mailbox that is, so the local part has to
 // agree with the name before the address counts as theirs.
 func TestDedupeIgnoresAMailboxWhoseAddressContradictsTheName(t *testing.T) {
 	s := open(t)
-	person(t, s, "bryn@quarry.fed", "Bryn Lowther")
-	person(t, s, "nia@quarry.fed", "Bryn Lowther")
+	person(t, s, "nella@quarry.fed", "Nella Forge")
+	person(t, s, "nia@quarry.fed", "Nella Forge")
 
 	plan := dedupe(t, s, true)
 	if len(plan.Merges) != 0 {
-		t.Fatalf("merged %+v; nia@ is not Bryn's address", plan.Merges)
+		t.Fatalf("merged %+v; nia@ is not Nella's address", plan.Merges)
 	}
 	if countPeople(t, s) != 2 {
 		t.Fatalf("people = %d, want 2", countPeople(t, s))
@@ -381,7 +381,7 @@ func TestGenericLocalPart(t *testing.T) {
 		{"tom", false},
 		{"dai.rhys", false},
 		{"l.mccorley", false}, // "hr" and friends must not fire from inside a name
-		{"bryn", false},
+		{"nella", false},
 	} {
 		if got := genericLocalPart(c.local); got != c.want {
 			t.Errorf("genericLocalPart(%q) = %v, want %v", c.local, got, c.want)
@@ -394,14 +394,14 @@ func TestAddressNamesPerson(t *testing.T) {
 		local, name string
 		want        bool
 	}{
-		{"bryn", "Bryn Lowther", true},
-		{"bryn.lowther", "Bryn Lowther", true},
-		{"brynlowther88", "Bryn Lowther", true},
-		{"blowther", "Bryn Lowther", true}, // initial and surname
-		{"blowth", "Bryn Lowther", true},   // initial and the start of the surname
-		{"nia", "Bryn Lowther", false},     // somebody else's mailbox
-		{"reception", "Bryn Lowther", false},
-		{"bl", "Bryn Lowther", false},                // two letters name nobody
+		{"nella", "Nella Forge", true},
+		{"nella.forge", "Nella Forge", true},
+		{"nellaforge88", "Nella Forge", true},
+		{"nforge", "Nella Forge", true}, // initial and surname
+		{"nforg", "Nella Forge", true},   // initial and the start of the surname
+		{"nia", "Nella Forge", false},     // somebody else's mailbox
+		{"reception", "Nella Forge", false},
+		{"bl", "Nella Forge", false},                // two letters name nobody
 		{"support", "Nia Prentice (Support)", false}, // the annotation is not a name
 		{"arvida", "Klara Belk | Arvida", false},
 	} {
@@ -533,8 +533,8 @@ func TestDedupeStillFoldsAPlaceholderIntoASharedInboxAHumanAnswers(t *testing.T)
 // profile and every later header will go on matching.
 func TestDedupeFoldsAWebmailAccountIntoTheWorkAccountItSpells(t *testing.T) {
 	s := open(t)
-	work := person(t, s, "bryn@quarry.fed", "Bryn Lowther")
-	home := person(t, s, "brynlowther@gmail.com", "Bryn Lowther")
+	work := person(t, s, "nella@quarry.fed", "Nella Forge")
+	home := person(t, s, "nellaforge@gmail.com", "Nella Forge")
 
 	plan := dedupe(t, s, true)
 	if len(plan.Merges) != 1 {
@@ -550,15 +550,15 @@ func TestDedupeFoldsAWebmailAccountIntoTheWorkAccountItSpells(t *testing.T) {
 // evidence. Refused, with the merge that settles it if a human knows better.
 func TestDedupeRefusesAWebmailAccountWithNoSurname(t *testing.T) {
 	s := open(t)
-	person(t, s, "bryn@quarry.fed", "Bryn")
-	person(t, s, "bryn0198773@gmail.com", "Bryn")
+	person(t, s, "nella@quarry.fed", "Nella")
+	person(t, s, "nella0198773@gmail.com", "Nella")
 
 	plan := dedupe(t, s, true)
 	if len(plan.Merges) != 0 {
 		t.Fatalf("merged %+v; one first name proves nothing", plan.Merges)
 	}
-	r := refusalFor(plan, "bryn0198773@gmail.com")
-	if r == nil || !strings.Contains(r.Reason, "corpus merge -keep bryn@quarry.fed") {
+	r := refusalFor(plan, "nella0198773@gmail.com")
+	if r == nil || !strings.Contains(r.Reason, "corpus merge -keep nella@quarry.fed") {
 		t.Fatalf("refusal = %+v, want the command that would settle it", r)
 	}
 }
@@ -568,14 +568,14 @@ func TestDedupeRefusesAWebmailAccountWithNoSurname(t *testing.T) {
 // guessed, and reported so a human can settle it.
 func TestDedupeRefusesAWebmailAccountThatSpellsOnlyPartOfTheName(t *testing.T) {
 	s := open(t)
-	person(t, s, "bryn@quarry.fed", "Bryn Lowther")
-	person(t, s, "blowth@gmail.com", "Bryn Lowther")
+	person(t, s, "nella@quarry.fed", "Nella Forge")
+	person(t, s, "nforg@gmail.com", "Nella Forge")
 
 	plan := dedupe(t, s, true)
 	if len(plan.Merges) != 0 {
-		t.Fatalf("merged %+v; blowth@ spells one name of two", plan.Merges)
+		t.Fatalf("merged %+v; nfor@ spells one name of two", plan.Merges)
 	}
-	if r := refusalFor(plan, "blowth@gmail.com"); r == nil {
+	if r := refusalFor(plan, "nforg@gmail.com"); r == nil {
 		t.Fatalf("no refusal reported: %+v", plan.Refusals)
 	}
 }
@@ -587,9 +587,9 @@ func TestDedupeRefusesAWebmailAccountThatSpellsOnlyPartOfTheName(t *testing.T) {
 // is.
 func TestDedupeRefusesAWebmailAccountWhenTwoOrganisationsHoldTheName(t *testing.T) {
 	s := open(t)
-	person(t, s, "bryn.lowther@quarry.fed", "Bryn Lowther")
-	person(t, s, "bryn.lowther@millrace.fed", "Bryn Lowther")
-	home := person(t, s, "brynlowther@gmail.com", "Bryn Lowther")
+	person(t, s, "nella.forge@quarry.fed", "Nella Forge")
+	person(t, s, "nella.forge@millrace.fed", "Nella Forge")
+	home := person(t, s, "nellaforge@gmail.com", "Nella Forge")
 
 	plan := dedupe(t, s, true)
 	for _, m := range plan.Merges {
@@ -608,9 +608,9 @@ func TestDedupeRefusesAWebmailAccountWhenTwoOrganisationsHoldTheName(t *testing.
 // is refused with the alias that collapses the three, and lands once that exists.
 func TestDedupeFoldsAWebmailAccountOnlyOnceTheRebrandIsDeclared(t *testing.T) {
 	s := open(t)
-	person(t, s, "bryn@quarry.fed", "Bryn Lowther")
-	person(t, s, "bryn@millrace.fed", "Bryn Lowther")
-	home := person(t, s, "brynlowther@gmail.com", "Bryn Lowther")
+	person(t, s, "nella@quarry.fed", "Nella Forge")
+	person(t, s, "nella@millrace.fed", "Nella Forge")
+	home := person(t, s, "nellaforge@gmail.com", "Nella Forge")
 	onEntry(t, s, "mail:<one@x>", home)
 
 	before := dedupe(t, s, false)
@@ -619,7 +619,7 @@ func TestDedupeFoldsAWebmailAccountOnlyOnceTheRebrandIsDeclared(t *testing.T) {
 			t.Fatalf("folded %+v while the work account was two people", m)
 		}
 	}
-	r := refusalFor(before, "brynlowther@gmail.com")
+	r := refusalFor(before, "nellaforge@gmail.com")
 	if r == nil || !strings.Contains(r.Reason, "corpus alias -from") {
 		t.Fatalf("refusal = %+v, want the alias that collapses the work accounts", r)
 	}
@@ -640,13 +640,13 @@ func TestDedupeFoldsAWebmailAccountOnlyOnceTheRebrandIsDeclared(t *testing.T) {
 func TestDedupeSuggestsTheAliasTowardTheLiveDomain(t *testing.T) {
 	s := open(t)
 	// millrace is where the organisation is now: more of its people are there.
-	person(t, s, "bryn@quarry.fed", "Bryn Lowther")
-	person(t, s, "bryn.lowther@millrace.fed", "Bryn Lowther")
+	person(t, s, "nella@quarry.fed", "Nella Forge")
+	person(t, s, "nella.forge@millrace.fed", "Nella Forge")
 	person(t, s, "cass.enright@millrace.fed", "Cass Enright")
 	person(t, s, "dai.rhys@millrace.fed", "Dai Rhys")
 
 	plan := dedupe(t, s, false)
-	r := refusalFor(plan, "bryn")
+	r := refusalFor(plan, "nella")
 	if r == nil {
 		t.Fatalf("no refusal for the split first name: %+v", plan.Refusals)
 	}
@@ -663,8 +663,8 @@ func TestDedupeAppliedTwiceIsANoOpForEveryRule(t *testing.T) {
 	ghost := placeholder(t, s, "Dai Rhys")
 	inThread(t, s, "thread-1", "mail:<one@x>", real)
 	inThread(t, s, "thread-1", "mail:<two@x>", ghost)
-	person(t, s, "bryn@quarry.fed", "Bryn Lowther")
-	person(t, s, "brynlowther@gmail.com", "Bryn Lowther")
+	person(t, s, "nella@quarry.fed", "Nella Forge")
+	person(t, s, "nellaforge@gmail.com", "Nella Forge")
 
 	first := dedupe(t, s, true)
 	if len(first.Merges) != 2 {
@@ -694,8 +694,8 @@ func TestDedupeDryRunWritesNothingForTheNewRules(t *testing.T) {
 		ghost := placeholder(t, s, "Dai Rhys")
 		inThread(t, s, "thread-1", "mail:<one@x>", real)
 		inThread(t, s, "thread-1", "mail:<two@x>", ghost)
-		person(t, s, "bryn@quarry.fed", "Bryn Lowther")
-		person(t, s, "brynlowther@gmail.com", "Bryn Lowther")
+		person(t, s, "nella@quarry.fed", "Nella Forge")
+		person(t, s, "nellaforge@gmail.com", "Nella Forge")
 	}()
 	before := digest(t, path)
 
@@ -728,7 +728,7 @@ func TestUnattendedMailbox(t *testing.T) {
 		{"manager.eastreach", false}, // a shared inbox is answered by a human
 		{"accounts", false},
 		{"support", false},
-		{"bryn", false},
+		{"nella", false},
 	} {
 		if got := unattendedMailbox(c.local); got != c.want {
 			t.Errorf("unattendedMailbox(%q) = %v, want %v", c.local, got, c.want)
@@ -741,14 +741,14 @@ func TestLocalPartSpellsName(t *testing.T) {
 		addr, name string
 		want       bool
 	}{
-		{"brynlowther@gmail.com", "Bryn Lowther", true},
-		{"bryn.lowther88@gmail.com", "Bryn Lowther", true},
-		{"brynlowther+salsa@gmail.com", "Bryn Lowther", true},
-		{"blowther@gmail.com", "Bryn Lowther", false}, // an initial spells nothing
-		{"bryn@gmail.com", "Bryn Lowther", false},
-		{"lowther@gmail.com", "Bryn Lowther", false},
-		{"levpony@gmail.com", "Bryn Lowther", false},
-		{"brynlowther", "Bryn Lowther", false}, // not an address
+		{"nellaforge@gmail.com", "Nella Forge", true},
+		{"nella.forge88@gmail.com", "Nella Forge", true},
+		{"nellaforge+salsa@gmail.com", "Nella Forge", true},
+		{"nforge@gmail.com", "Nella Forge", false}, // an initial spells nothing
+		{"nella@gmail.com", "Nella Forge", false},
+		{"forge@gmail.com", "Nella Forge", false},
+		{"ponylev@gmail.com", "Nella Forge", false},
+		{"nellaforge", "Nella Forge", false}, // not an address
 	} {
 		if got := localPartSpellsName(c.addr, c.name); got != c.want {
 			t.Errorf("localPartSpellsName(%q, %q) = %v, want %v",

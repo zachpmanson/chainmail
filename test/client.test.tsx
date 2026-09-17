@@ -887,8 +887,8 @@ describe("the default folder on /status", () => {
  * page from. This screen is where the settings are, so it is where this one is
  * set.
  *
- * A person is picked, not a list of addresses: zach@termina.io and
- * zach@threadlet.com.au behind one account are one person in the corpus's
+ * A person is picked, not a list of addresses: zach@loomworks.example and
+ * zach@millrace.example behind one account are one person in the corpus's
  * identity graph, and retyping that folding by hand is what this control stopped
  * asking for. What is stored is that person's id — not their addresses, which the
  * server resolves from the identity graph on every read and serves beside it —
@@ -1914,11 +1914,11 @@ const OPS_PLAN_BEFORE = {
   candidates: [
     {
       aId: 14,
-      aName: "Bryn Lowther",
+      aName: "Nella Forge",
       aAddresses: ["bryn@quarry.example"],
       bId: 15,
-      bName: "Bryn Lowther",
-      bAddresses: ["bryn.lowther@millrace.example"],
+      bName: "Nella Forge",
+      bAddresses: ["nella.forge@millrace.example"],
       reason: "same local part, different domain",
       suggest: "corpus alias -from quarry.example -to millrace.example",
     },
