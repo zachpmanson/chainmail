@@ -62,22 +62,9 @@ export function provenance(source: string): Provenance {
 }
 
 /**
- * How many ids it takes before the line is worth collapsing.
- *
- * Two, because one id inline is strictly better than a click that reveals one
- * id, and because from two the summary is already shorter than what it replaces:
- * two Gmail handles run to about sixty characters against the twenty-one of
- * "unspooled from 2 msgs". Raising it to three would put a two-host line back on
- * the page at three times the width of the summary, buying the reader nothing
- * they could not get with one click.
- */
-export const COLLAPSE_FROM = 2;
-
-/**
- * "1 msg", not "1 msgs". The singular is unreachable from the collapse at the
- * current threshold — the participants panel and the thread list are what
- * exercise it — and it is stated here so moving the threshold cannot introduce a
- * grammar bug.
+ * "1 msg", not "1 msgs". The participants panel and the thread list are what
+ * exercise it; the singular is stated here so a caller that ever renders one
+ * cannot introduce a grammar bug.
  */
 export function msgCount(n: number): string {
   return `${n} msg${n === 1 ? "" : "s"}`;

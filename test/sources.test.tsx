@@ -80,23 +80,27 @@ describe("counting messages", () => {
 });
 
 describe("the source line under a bubble", () => {
-  it("collapses many hosts to a count and keeps every id in the document", () => {
+  it("names every host on one line, since the receipt above it is the disclosure", () => {
     const rec = receipt([
       entry({ quoted: true, source: `unspooled from ${H.map((h) => `msg ${h}`).join(", ")}` }),
     ]);
-    expect(rec).toContain("unspooled from 7 msgs");
-    // collapsed, not dropped: every id is in the document, behind a closed
-    // <details>. Dropping them would pass a count assertion just as well.
-    // a native <details>/<summary>, which is what makes it operable from the
-    // keyboard and with scripting off; a div and a click handler would be neither
-    expect(rec).toContain('<details class="src srcx"><summary>');
-    expect(rec).not.toContain("open=");
+    // Every id is drawn, in order, on one line. The receipt this sits in is a
+    // <details> already, so a second disclosure here asked the reader to open the
+    // receipt and then open the line to reach the ids — which are the only reason
+    // to open either.
+    expect(rec).not.toContain("<details");
+    expect(rec).toContain('unspooled from <span class="sid">');
+    let at = -1;
     for (const h of H) {
-      // the ids stay in the document, but none of these hosts is a row on this
-      // page, so no unspooled id is an outbound Gmail link any more
-      expect(rec).toContain(`msg ${h}`);
+      // named where it is, and in the thread's order: the commas outside .sid are
+      // the only break opportunity, so the line cannot reorder itself by wrapping
+      expect(rec.indexOf(`msg ${h}`, at + 1)).toBeGreaterThan(at);
+      at = rec.indexOf(`msg ${h}`, at + 1);
+      // none of these hosts is a row on this page, so no unspooled id is an
+      // outbound Gmail link either
       expect(rec).not.toContain(`href="https://mail.google.com/mail/u/0/#all/${h}"`);
     }
+    expect(rec).not.toMatch(/\b\d+ msgs?\b/);
   });
 
   it("shows one host inline, and never says '1 msgs'", () => {
@@ -122,12 +126,6 @@ describe("the source line under a bubble", () => {
     // the named message's own receipt still opens its mailbox copy
     const realFooter = all.find((f) => f.includes(`msg ${H[0]}`) && !f.includes("unspooled"))!;
     expect(realFooter).toContain(`href="https://mail.google.com/mail/u/0/#all/${H[0]}"`);
-  });
-
-  it("collapses from two, since two handles outrun the summary that replaces them", () => {
-    const rec = receipt([entry({ quoted: true, source: `unspooled from msg ${H[0]}, msg ${H[1]}` })]);
-    expect(rec).toContain("unspooled from 2 msgs");
-    expect(rec).toContain('<details class="src srcx">');
   });
 
   it("links the mailbox's own id on a direct message", () => {
