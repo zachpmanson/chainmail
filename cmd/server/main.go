@@ -89,9 +89,10 @@ func run(args []string) error {
 			"mail that is already there. That is why it is gated apart from the other "+
 			"two: a label can be put back by the same button and an archived thread is "+
 			"still in All Mail, while a message that has gone out cannot be recalled. A "+
-			"host that does not grant it answers 403. Reply-only: there is no recipient "+
-			"in the request, and every reply goes to the address the message being "+
-			"answered arrived from. The credential is the mail grant this unit already "+
+			"host that does not grant it answers 403. Reply-all: there is no recipient "+
+			"in the request, and every reply answers the message being answered — its "+
+			"sender in To and the rest of its own audience in Cc, minus the addresses "+
+			"of this mailbox. The credential is the mail grant this unit already "+
 			"reads.")
 	// The deploy stamp's revision, passed in by the unit that starts this binary.
 	// Empty is honest for a build nobody labelled: the header then shows nothing

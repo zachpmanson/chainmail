@@ -24,6 +24,7 @@ func sendServer(t *testing.T) (*harness, *fakeMailbox) {
 	h, fake := readServer(t)
 	h.sendMailEnabled = true
 	fake.to = map[string]string{"g-3": "Bo Halvorsen <bo@fjordline.example>"}
+	fake.cc = map[string]string{"g-3": "Cy Okafor <cy@loomworks.example>"}
 	fake.subject = map[string]string{"g-3": "Re: Solar install quote: dates"}
 	fake.sentID = "g-4"
 	fake.filing = mailingest.Message{
@@ -102,6 +103,12 @@ func TestThePreviewSendsNothingAndAnswersTheMailboxsOwnPlan(t *testing.T) {
 	if got.To != "Bo Halvorsen <bo@fjordline.example>" {
 		t.Errorf("to = %q, want the recipe the mailbox holds rather than one from the request", got.To)
 	}
+	// The rest of the audience is the mailbox's answer too — this is a reply to
+	// everyone the message was addressed to, and who that is comes from the
+	// message's own headers rather than from anything the caller sent.
+	if got.Cc != "Cy Okafor <cy@loomworks.example>" {
+		t.Errorf("cc = %q, want the mailbox's other recipients", got.Cc)
+	}
 	if got.Subject != "Re: Solar install quote: dates" {
 		t.Errorf("subject = %q, want the mailbox's", got.Subject)
 	}
@@ -162,6 +169,28 @@ func TestSendingAnswersTheMessageAndFilesTheAnswerIntoTheCorpus(t *testing.T) {
 	}
 	if parent := chainTrail(t, h, extAda1)["mail:<sent-4@loomworks.example>"]; parent != extAda3 {
 		t.Errorf("the reply's parent = %q, want the message it answers (%s)", parent, extAda3)
+	}
+}
+
+func TestARepliesCcIsAbsentWhenThereIsNobodyElse(t *testing.T) {
+	h, fake := sendServer(t)
+	// The mailbox answers a reply to a message the reader was the only recipient
+	// of: the field is left out of the contract rather than sent as an empty
+	// string, because "nobody else" and "a field nobody filled in" would
+	// otherwise be the same bytes to a client drawing them.
+	fake.cc = map[string]string{}
+
+	res := h.do(t, "POST", "/v1/send",
+		[]byte(`{"entry":"`+extAda3+`","body":"The 14th works."}`))
+	if res.status != 200 {
+		t.Fatalf("status %d: %s", res.status, res.body)
+	}
+	loadAPI(t).assert(t, "SendResponse", res.body)
+	if strings.Contains(string(res.body), `"cc"`) {
+		t.Errorf("a reply with no other recipients carries a cc: %s", res.body)
+	}
+	if got := decode[sendResponse](t, res); got.Cc != "" {
+		t.Errorf("cc = %q, want empty", got.Cc)
 	}
 }
 

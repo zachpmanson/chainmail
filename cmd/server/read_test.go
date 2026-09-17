@@ -31,11 +31,13 @@ type fakeMailbox struct {
 	// which message was answered, what the quoted body said, and that pressing the
 	// preview button wrote nothing.
 	replies []fakeReply
-	// to and subject are what the mailbox answers a reply with, per message
-	// answered: its own From header and its own subject with one Re:. They are
-	// deliberately not derived from the request, so a handler that echoed what the
-	// caller sent back as "the plan" fails rather than passes.
+	// to, cc and subject are what the mailbox answers a reply with, per message
+	// answered: its own From header, the rest of the message's audience, and its
+	// own subject with one Re:. They are deliberately not derived from the request,
+	// so a handler that echoed what the caller sent back as "the plan" fails rather
+	// than passes.
 	to      map[string]string
+	cc      map[string]string
 	subject map[string]string
 	// sentID is the id the mailbox gives a message it has sent, and unanswered is
 	// what a preview carries in its place.
@@ -72,7 +74,7 @@ func (f *fakeMailbox) Reply(id, body string, send bool) (gmailclient.ReplyPlan, 
 	if err := f.fail[id]; err != nil {
 		return gmailclient.ReplyPlan{}, err
 	}
-	plan := gmailclient.ReplyPlan{To: f.to[id], Subject: f.subject[id], Body: body}
+	plan := gmailclient.ReplyPlan{To: f.to[id], Cc: f.cc[id], Subject: f.subject[id], Body: body}
 	if send {
 		plan.GmailID = f.sentID
 	}

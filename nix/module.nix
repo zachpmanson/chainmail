@@ -57,11 +57,14 @@
 # be recalled at all.
 #
 # What bounds it is not a permission but a shape: the endpoint answers a message
-# and has no recipient field, so the address is the one that message arrived
-# from. A server reachable only over a tunnel is still a server with no
+# and has no recipient field, so the audience is the one that message already
+# carried — its sender, and the original To and Cc, minus every address the
+# mailbox doing the replying owns (which the mailbox itself decides, since mail
+# is usually addressed to a send-as alias rather than to the account's own name).
+# A server reachable only over a tunnel is still a server with no
 # authentication, and this is the one flag here that would otherwise be an
-# outbound channel to anywhere — reply-only is what keeps it answering the
-# reader's own correspondence instead.
+# outbound channel to anywhere — answering a message's own audience, and nobody
+# it did not already address, is what keeps it the reader's own correspondence.
 #
 self: { config, lib, pkgs, ... }:
 
@@ -227,12 +230,15 @@ in {
 
         What bounds it is a shape rather than a permission: the request names
         the message being answered and has no field for a recipient, so the
-        address is the one that message's own headers carried and there is
-        nothing on the surface that can name a different one. That is what keeps
-        a loopback-only server with no authentication from becoming an outbound
-        channel to anywhere — it can answer the reader's correspondence and
-        nothing else. The mail grant this unit already holds is the credential,
-        and it is a send grant already.
+        recipients are the ones that message's own headers carried — its sender,
+        and its original To and Cc — minus every address the mailbox itself owns
+        (the account's profile and its send-as aliases, which only the mailbox
+        can answer: mail is usually addressed to an alias rather than to the
+        account's own name). There is nothing on the surface that can name a
+        different one. That is what keeps a loopback-only server with no
+        authentication from becoming an outbound channel to anywhere — it can
+        answer the reader's correspondence and nothing else. The mail grant this
+        unit already holds is the credential, and it is a send grant already.
 
         A reply is filed into the corpus in the same request, so the thread the
         reader is looking at shows the answer rather than waiting for the next

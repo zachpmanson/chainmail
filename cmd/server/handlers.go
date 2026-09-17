@@ -1343,7 +1343,7 @@ type mailActionChain struct {
 // is already there and can be changed back from the same control, while this one
 // cannot be undone at all. A host without the grant answers 403, naming it.
 //
-// Reply-only, and the shape follows from that rather than from a reluctance to
+// Reply-ALL, and the shape follows from that rather than from a reluctance to
 // build a composer. There is no recipient field anywhere in this request: the
 // message answered is named by its corpus id and everything else — who it goes to
 // and the subject — comes from the mailbox's own headers (see gmailclient.Reply).
@@ -1352,8 +1352,18 @@ type mailActionChain struct {
 // mail-sending endpoint sitting inside a page that binds to loopback with no
 // authentication.
 //
+// Answering everyone the message was addressed to is the same property rather
+// than a widening of it: the audience is the original message's own To and Cc,
+// minus every address the mailbox doing the replying owns — which the mailbox
+// itself decides, because the mail a reader answers is usually addressed to a
+// send-as alias and that is exactly the address a guessed list would CC them on
+// (docket reads the account's profile and its aliases; see gmailclient.Reply). So
+// the set a reply can reach is not one the caller composes or the reader types:
+// it is the set the answered message already carried, which is what keeps
+// "nowhere but back down a thread that is already in the corpus" true.
+//
 // Two steps, and the first one sends nothing: without `confirm` the reply is
-// PREPARED and answered with the plan — the recipient the mailbox will use, the
+// PREPARED and answered with the plan — the recipients the mailbox will use, the
 // subject, and the whole body including the quote of the message being answered.
 // That is the preview the reader confirms, and it is of the message rather than of
 // a draft, because the body the reader is shown is the body that was handed to the
@@ -1436,7 +1446,7 @@ func (s *server) sendReply(w http.ResponseWriter, r *http.Request) {
 	}
 
 	out := sendResponse{
-		Entry: target.ExtID, To: plan.To, Subject: plan.Subject, Body: plan.Body,
+		Entry: target.ExtID, To: plan.To, Cc: plan.Cc, Subject: plan.Subject, Body: plan.Body,
 		Sent: plan.GmailID != "",
 	}
 	if out.Sent {
@@ -1445,8 +1455,9 @@ func (s *server) sendReply(w http.ResponseWriter, r *http.Request) {
 	}
 	// Journaled like the other two writes, and for a stronger reason: this one
 	// cannot be taken back, so "what did the server send, and to whom" has to be
-	// answerable from the host afterwards.
-	log.Printf("send: %s to=%s sent=%t", target.ExtID, plan.To, out.Sent)
+	// answerable from the host afterwards. Who it reached is part of that, so the
+	// Cc is in the line rather than only the To.
+	log.Printf("send: %s to=%s cc=%s sent=%t", target.ExtID, plan.To, plan.Cc, out.Sent)
 	send(w, http.StatusOK, out)
 }
 
@@ -1504,14 +1515,18 @@ type sendRequest struct {
 // sendResponse is the contract's SendResponse: the reply as the mailbox has it,
 // and whether this call sent it.
 //
-// To, Subject and Body are the mailbox's, not the caller's: the recipient and the
-// subject come from the headers of the message being answered, and the body is the
-// reader's words with the quote under them. The same three are answered by the
+// To, Cc, Subject and Body are the mailbox's, not the caller's: the recipients and
+// the subject come from the headers of the message being answered, and the body is
+// the reader's words with the quote under them. The same four are answered by the
 // preview and by the send, so a client that showed a reader a plan can be checked
 // against what actually went out rather than trusting that it did.
 type sendResponse struct {
-	Entry   string `json:"entry"`
-	To      string `json:"to"`
+	Entry string `json:"entry"`
+	To    string `json:"to"`
+	// Cc is everyone else the answered message was addressed to, absent when it
+	// went to the reader alone. Absent rather than empty: a client drawing "cc "
+	// with nothing after it would be describing a recipient list it does not have.
+	Cc      string `json:"cc,omitempty"`
 	Subject string `json:"subject"`
 	Body    string `json:"body"`
 	Sent    bool   `json:"sent"`
