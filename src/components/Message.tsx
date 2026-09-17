@@ -681,13 +681,27 @@ export function Message(p: MessageProps) {
             {/* The subject, on its own line above the receipt's fields, and only
                 where the message had one: a message with no subject has nothing
                 to say here, and an empty line would say it anyway. */}
-            {p.subject ? (
-              <span className="subj" title={p.subject}>
-                {p.subject}
+            {/* The subject, and the ids it was found under, on one line: the
+                subject is what the message is about and the id is where it is,
+                and a reader who is looking for one of them is usually looking
+                for the other. So the subject keeps the left of the line and the
+                ids sit at its right, rather than the ids taking a line of their
+                own under the recipient — a line that was mostly empty on every
+                message that carried one.
+
+                Only where the message had a subject: a message with no subject
+                has nothing to put here, and an empty line would say it anyway. */}
+            {p.subject || p.source ? (
+              <span className="hsub">
+                {p.subject ? (
+                  <span className="subj" title={p.subject}>
+                    {p.subject}
+                  </span>
+                ) : null}
+                {p.source}
               </span>
             ) : null}
             <span className="to">to {p.to ?? "—"}</span>
-            {p.source}
             {p.original !== undefined || p.copyJson !== undefined ? (
               <span className="hdetend">
                 {p.original !== undefined && !original.on ? (
