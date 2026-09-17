@@ -207,6 +207,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/entries/{extId}/original": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One entry's own HTML, as the sender wrote it, for a caller that will mount it in a shadow root.
+         * @description The sender's own text/html part for this entry, so a reader can see the message as its author's client drew it — the calendar invite that arrives as an unstyled list of fields in the transcript, the newsletter with its own fonts. This is a second rendering policy, not a leak of the first: the transcript body is stripped of stylesheets, classes and ids precisely so it cannot fight the page, and this route keeps them because the caller contains them instead (a shadow root, where a stylesheet cannot reach the page and the page cannot style in). What both policies refuse is the executable surface — script, on* handlers, javascript: URLs — since a shadow root has no sandbox attribute and no per-message CSP.
+         *
+         *     Served only where the entry's read says `original` is true; an entry with no html part of its own, or one whose part reduces to nothing showable, is a 404 rather than an empty 200. Fetched on demand rather than carried on chain reads because a mail client's html is tens of kilobytes: the toggle is what asks for it.
+         */
+        get: operations["getEntryOriginal"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/chains/{rootExtId}": {
         parameters: {
             query?: never;
@@ -672,6 +694,8 @@ export interface components {
             body?: string;
             /** @description The body rendered for reading, by the same conversion a page build uses. `body` stays the raw text: it is what the corpus holds, and what anything matching text should read. Absent when there is nothing to render. */
             html?: string;
+            /** @description True when this entry has an html part of its own that can be shown as the sender wrote it: GET /v1/entries/{extId}/original answers with that part when this is true, and this is what the control that offers it is drawn from. It says the part exists, not that the part is showable — an html part with no words in it still 404s there. Omitted for an entry with no html part at all: one that arrived as plain text, or one recovered from someone else's quote. */
+            original?: boolean;
             /** @description The recipient line a page build prints under the bubble, e.g. `Bo Halvorsen, cc Cy Okafor`. Absent where the entry stated no recipients — every entry recovered from someone else's quote has no headers of its own. */
             to?: string;
             /** @description The address the entry was sent from, lowercased, as a page build's own entry carries it. Absent where the entry has no From header of its own, which is every entry recovered from someone else's quote. */
@@ -1942,6 +1966,41 @@ export interface operations {
                 };
             };
             /** @description No entry carries that id. Distinct from a search that matched nothing, which is a 200 with an empty array. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getEntryOriginal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Corpus natural key, as search reports it. Percent-encode it: it contains a colon and usually angle brackets.
+                 * @example mail:<c0ffee-1@example.com>
+                 */
+                extId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The entry's own html, as a fragment: its stylesheets first, then its content. Styled for a shadow root, so `html`, `body` and `:root` rules arrive rewritten as `:host` and no html, head or body element appears. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description No entry carries that id, or it carries no showable html part of its own. Both carry the same JSON error shape as every other failure, so a caller meeting one here parses it the same way. */
             404: {
                 headers: {
                     [name: string]: unknown;

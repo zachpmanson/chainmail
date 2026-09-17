@@ -77,11 +77,13 @@ func OriginalBody(raw string) (string, bool) {
 		return "", false
 	}
 	var b strings.Builder
-	// The <body> element's own presentation comes first, then the stylesheets in
-	// document order, then the body's content. That is the order a browser would
-	// have applied them in, and the order is load-bearing: a presentational
-	// attribute loses to a stylesheet rule of equal specificity, so the canvas
-	// written on the body has to be emitted before the rule that may override it.
+	// The app's own canvas first, then the <body> element's presentation, then the
+	// stylesheets in document order, then the body's content. That is the order a
+	// browser would have applied them in, and the order is load-bearing: all of
+	// these reach the host element at equal specificity, so the last one to state a
+	// property is the one that holds — which is what lets a sender's own canvas
+	// override ours and ours override nothing but the app's theme.
+	b.WriteString(appCanvas)
 	if canvas := hostCanvas(body); canvas != "" {
 		b.WriteString(canvas)
 	}
@@ -93,6 +95,20 @@ func OriginalBody(raw string) (string, bool) {
 	}
 	return b.String(), true
 }
+
+// appCanvas is the canvas the app writes for a message that says nothing about
+// its own: white paper, black ink, and a light colour scheme, because that is
+// what mail is designed for and the app around it is a dark theme.
+//
+// It is emitted FIRST and not into the app's own stylesheet, and both halves of
+// that matter. Inside the shadow root because a rule in the outer document wins
+// over a `:host` rule written from within — the sender's stylesheet is in here,
+// so a canvas out there is a canvas the mail has no way to correct. First
+// because equal specificity means the last declaration holds: anything the mail
+// does say about its own canvas (a `body {}` rule rewritten to `:host`, a
+// `bgcolor`) comes after this and wins, which is the whole point of preferring
+// the sender's own design over a better-looking default.
+const appCanvas = "<style>:host{background:#fff;color:#000;color-scheme:light}</style>"
 
 // hostCanvas turns the <body> element's own presentation into a :host rule.
 //

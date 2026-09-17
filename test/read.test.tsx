@@ -115,7 +115,14 @@ const CHAIN_BODY = {
 };
 
 /** The whole surface the inbox reads, with /v1/search answerable per test. */
-const server = (search: () => Response, read?: Handler, mail?: Handler): Handler => (c) => {
+const server = (
+  search: () => Response,
+  read?: Handler,
+  mail?: Handler,
+  /** The thread the pane opens, for a test that needs an entry the shared body
+   *  above does not have. Absent is the shared one, unchanged. */
+  chain?: () => Response,
+): Handler => (c) => {
   const p = pathOf(c);
   if (p === "/v1/search") return search();
   if (p === "/v1/read") return read ? read(c) : json(200, { chain: ROOT, unread: false, marked: 3, skipped: 0 });
@@ -123,7 +130,7 @@ const server = (search: () => Response, read?: Handler, mail?: Handler): Handler
     return mail
       ? mail(c)
       : json(200, { action: "archive", changed: 3, skipped: 0, chains: [] });
-  if (p.startsWith("/v1/chains/")) return json(200, CHAIN_BODY);
+  if (p.startsWith("/v1/chains/")) return chain ? chain() : json(200, CHAIN_BODY);
   // The mailbox's folders, for the pane's move control. The inbox is in the list the
   // service gives, and is what the control has to leave out.
   if (p === "/v1/labels") {
@@ -583,5 +590,56 @@ describe("what the pane does to the thread it has open", () => {
     expect(watchers).toHaveLength(0);
     const refusal = document.querySelector(".toasts .toast.bad");
     expect(refusal?.textContent).toContain("without -mail-write");
+  });
+});
+
+describe("the pane's second reading of a message", () => {
+  /** The thread the pane opens, with the read's own answer about whether the
+   *  corpus holds the sender's html for the entry it carries. */
+  const entryWith = (original: boolean) => () =>
+    json(200, {
+      ...CHAIN_BODY,
+      entries: [{ ...CHAIN_BODY.entries[0], original }],
+    });
+
+  const SENT = '<style>body{background:#eef}</style><p class="card">Roof access is fine.</p>';
+
+  it("swaps the rendered body for the sender's own html, fetched from the entry route", async () => {
+    // The flag on the read is what draws the control, and the route is what
+    // answers it: both halves, or the pane offers a button that cannot answer.
+    handler = (c) => {
+      const p = pathOf(c);
+      if (p.endsWith("/original")) {
+        return new Response(SENT, { status: 200, headers: { "content-type": "text/html" } });
+      }
+      return server(page([thread({})]), undefined, undefined, entryWith(true))(c);
+    };
+    await mountApp();
+    await openRow();
+    const button = await waitFor(() => {
+      const b = pane().querySelector(".origrow .tbtn") as HTMLElement;
+      expect(b).toBeTruthy();
+      return b;
+    });
+    expect(button.textContent).toBe("original");
+
+    fireEvent.click(button);
+    await waitFor(() => expect(pane().querySelector(".bdo")).toBeTruthy());
+    const host = pane().querySelector(".bdo") as HTMLElement;
+    expect(host.shadowRoot!.innerHTML).toBe(SENT);
+    // Asked for once per message: the flip back is the same control, pressed.
+    expect(chains().length).toBeGreaterThan(0);
+    const asks = () => calls.filter((c) => pathOf(c).endsWith("/original"));
+    expect(asks()).toHaveLength(1);
+    fireEvent.click(pane().querySelector(".origrow .tbtn") as HTMLElement);
+    expect(asks()).toHaveLength(1);
+  });
+
+  it("offers nothing on a message the read says has no part of its own", async () => {
+    handler = server(page([thread({})]), undefined, undefined, entryWith(false));
+    await mountApp();
+    await openRow();
+    await waitFor(() => expect(pane().querySelector(".bd")).toBeTruthy());
+    expect(pane().querySelector(".origrow")).toBeNull();
   });
 });

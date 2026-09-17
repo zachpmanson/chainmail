@@ -90,6 +90,18 @@ type corpusEntry struct {
 	// uses (spec.RenderTrail); Body stays the plain text, which is what the
 	// corpus holds and what anything matching text should read.
 	HTML string `json:"html,omitempty"`
+	// Original is whether this entry has a text/html part of its own that can be
+	// shown as the sender wrote it: GET /v1/entries/{extId}/original answers with
+	// that part when this is true, and the control that asks for it is drawn from
+	// this and nothing else. It says the part EXISTS, not that it would survive
+	// spec.OriginalBody — a client that only offers the toggle here and still gets
+	// a 404 is showing an empty message, which is the honest reading of one that
+	// carries no words; the alternative is running the whole sanitiser over every
+	// entry of every chain read to answer a question about one of them.
+	//
+	// Absent means false: an entry that arrived as plain text has no html part of
+	// its own, and neither has one recovered from someone else's quote.
+	Original bool `json:"original,omitempty"`
 	// To is the recipient line a page build prints under the bubble, e.g.
 	// "Bo Halvorsen, cc Cy Okafor". Absent where the entry stated no recipients,
 	// which is every entry recovered from someone else's quote.
@@ -631,7 +643,7 @@ func toCorpusEntry(s corpus.Shown, r spec.Rendered) corpusEntry {
 		ExtID: s.ExtID, Source: s.Source, Quoted: s.Quoted, TS: stamp(s.TS),
 		TZ: s.TZ, TZOffsetMinutes: s.TZOffset, Author: s.Author, Subject: s.Subject,
 		Body: s.Body, HTML: r.HTML, To: r.To, Mine: r.Mine, FromEmail: r.FromEmail,
-		Org: r.Org, QuotedBy: r.QuotedBy,
+		Org: r.Org, QuotedBy: r.QuotedBy, Original: s.HasOriginal,
 		Container: s.Container,
 		Permalink: s.Permalink,
 		Parent:    s.Parent, ParentRef: s.ParentRef,

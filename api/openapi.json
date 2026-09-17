@@ -3,7 +3,7 @@
   "info": {
     "title": "chainmail API",
     "version": "1.0.0",
-    "description": "Read-only HTTP over a local chainmail corpus: search for candidate chains, choose which belong on a page, then build the timeline spec the renderer consumes.\n\nTwo stages on purpose. Search selects; POST /v1/spec renders a chosen set. A spec built straight from a query takes whatever the query returned, and then the only way to remove a thread is to regenerate the page.\n\nThis serves personal mail and has no authentication of any kind. It binds to loopback and refuses a non-loopback address unless explicitly overridden, and spec bodies carry unsanitised sender HTML (issue #14) — so the loopback bind is what makes the whole surface safe, not a default to be relaxed.\n\nOperator commands — ingest, embed, eval, dedupe, twins, repair, merge, alias, refresh — are absent in their mailbox-touching forms; that reach belongs to the CLI, with one opt-in exception: POST /v1/slurp runs the same ingest the CLI does, and answers 403 unless the server was started with -slurp — which also lets it sweep on a schedule of its own (slurpEvery, ten minutes by default) rather than leaving every ingest to a person. Two local exceptions, both refusal-based and both carrying the audit trail: POST /v1/refresh re-derives a saved page and, before redrawing, collapses stored twin copies with the same sweep the CLI's slurp runs; GET /v1/ops/plan and POST /v1/ops/merge review people merges, the one write applying a single pair from the re-derived plan, never a whole plan."
+    "description": "Read-only HTTP over a local chainmail corpus: search for candidate chains, choose which belong on a page, then build the timeline spec the renderer consumes.\n\nTwo stages on purpose. Search selects; POST /v1/spec renders a chosen set. A spec built straight from a query takes whatever the query returned, and then the only way to remove a thread is to regenerate the page.\n\nThis serves personal mail and has no authentication of any kind. It binds to loopback and refuses a non-loopback address unless explicitly overridden, so the loopback bind is what makes the whole surface safe, not a default to be relaxed. Sender HTML is not trusted on that account: what the transcript renders is the sanitised body (issue #14), and the one route that serves a message's own html unread (GET /v1/entries/{extId}/original) serves it for a shadow root, under its own rule set — see that operation for what it keeps and what it still refuses.\n\nOperator commands — ingest, embed, eval, dedupe, twins, repair, merge, alias, refresh — are absent in their mailbox-touching forms; that reach belongs to the CLI, with one opt-in exception: POST /v1/slurp runs the same ingest the CLI does, and answers 403 unless the server was started with -slurp — which also lets it sweep on a schedule of its own (slurpEvery, ten minutes by default) rather than leaving every ingest to a person. Two local exceptions, both refusal-based and both carrying the audit trail: POST /v1/refresh re-derives a saved page and, before redrawing, collapses stored twin copies with the same sweep the CLI's slurp runs; GET /v1/ops/plan and POST /v1/ops/merge review people merges, the one write applying a single pair from the re-derived plan, never a whole plan."
   },
   "servers": [
     {
@@ -551,6 +551,48 @@
           },
           "404": {
             "description": "No entry carries that id. Distinct from a search that matched nothing, which is a 200 with an empty array.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/entries/{extId}/original": {
+      "get": {
+        "summary": "One entry's own HTML, as the sender wrote it, for a caller that will mount it in a shadow root.",
+        "description": "The sender's own text/html part for this entry, so a reader can see the message as its author's client drew it — the calendar invite that arrives as an unstyled list of fields in the transcript, the newsletter with its own fonts. This is a second rendering policy, not a leak of the first: the transcript body is stripped of stylesheets, classes and ids precisely so it cannot fight the page, and this route keeps them because the caller contains them instead (a shadow root, where a stylesheet cannot reach the page and the page cannot style in). What both policies refuse is the executable surface — script, on* handlers, javascript: URLs — since a shadow root has no sandbox attribute and no per-message CSP.\n\nServed only where the entry's read says `original` is true; an entry with no html part of its own, or one whose part reduces to nothing showable, is a 404 rather than an empty 200. Fetched on demand rather than carried on chain reads because a mail client's html is tens of kilobytes: the toggle is what asks for it.",
+        "operationId": "getEntryOriginal",
+        "parameters": [
+          {
+            "name": "extId",
+            "in": "path",
+            "description": "Corpus natural key, as search reports it. Percent-encode it: it contains a colon and usually angle brackets.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": ""
+            },
+            "example": "mail:<c0ffee-1@example.com>"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The entry's own html, as a fragment: its stylesheets first, then its content. Styled for a shadow root, so `html`, `body` and `:root` rules arrive rewritten as `:host` and no html, head or body element appears.",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No entry carries that id, or it carries no showable html part of its own. Both carry the same JSON error shape as every other failure, so a caller meeting one here parses it the same way.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1389,6 +1431,10 @@
           "html": {
             "type": "string",
             "description": "The body rendered for reading, by the same conversion a page build uses. `body` stays the raw text: it is what the corpus holds, and what anything matching text should read. Absent when there is nothing to render."
+          },
+          "original": {
+            "type": "boolean",
+            "description": "True when this entry has an html part of its own that can be shown as the sender wrote it: GET /v1/entries/{extId}/original answers with that part when this is true, and this is what the control that offers it is drawn from. It says the part exists, not that the part is showable — an html part with no words in it still 404s there. Omitted for an entry with no html part at all: one that arrived as plain text, or one recovered from someone else's quote."
           },
           "to": {
             "type": "string",

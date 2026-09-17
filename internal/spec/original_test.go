@@ -202,6 +202,32 @@ func TestOriginalKeepsWhatTheTranscriptStrips(t *testing.T) {
 	}
 }
 
+func TestOriginalWritesTheAppsCanvasFirstSoTheMailCanOverrideIt(t *testing.T) {
+	// A mail designed for paper, drawn inside a dark app, is dark-on-dark unless
+	// something says otherwise — and the something cannot be the app's stylesheet,
+	// because a rule in the outer document beats a :host rule written from inside.
+	// So the app writes a canvas into the fragment, first, at the same specificity
+	// as everything the sender states: whatever they say about their own canvas
+	// comes later and wins.
+	got := originalBody(t, `<html><head><style>body{background:#eef}</style></head><body><p>x</p></body></html>`)
+	canvas := strings.Index(got, "background:#fff")
+	sender := strings.Index(got, "background:#eef")
+	if canvas < 0 {
+		t.Fatalf("the app's canvas is not in the fragment: %q", got)
+	}
+	if sender < 0 {
+		t.Fatalf("the sender's own canvas is missing: %q", got)
+	}
+	if canvas > sender {
+		t.Errorf("the app's canvas must come first, so the sender's overrides it: %q", got)
+	}
+	// And a mail that says nothing about its canvas still gets one: the fragment is
+	// mounted into the app's page, not into a document of its own.
+	if bare := originalBody(t, `<body><p>nothing stated</p></body>`); !strings.Contains(bare, "color-scheme:light") {
+		t.Errorf("a fragment with no canvas of its own has no canvas at all: %q", bare)
+	}
+}
+
 func TestOriginalCarriesTheBodyCanvasAsAHostRule(t *testing.T) {
 	// The body element does not survive into a shadow tree, so the canvas written
 	// on it has to become a rule about the element the caller mounts this into.

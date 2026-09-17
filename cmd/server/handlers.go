@@ -197,6 +197,11 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("/v1/specs", get(s.savedSpecs))
 	mux.HandleFunc("/v1/specs/{name}", get(s.savedSpec))
 	mux.HandleFunc("/v1/entries/{extId}", get(s.entry))
+	// The entry's own markup, under the entry rather than beside it: it is one
+	// field of that resource (whether it exists is `original` on the reads), and
+	// keeping it here means the corpus's id space is enough to ask for it — a
+	// client never has to hold a second id for the same message.
+	mux.HandleFunc("/v1/entries/{extId}/original", get(s.original))
 	mux.HandleFunc("/v1/chains/{rootExtId}", get(s.chain))
 	mux.HandleFunc("/v1/stats", get(s.stats))
 	mux.HandleFunc("/v1/labels", get(s.labels))
@@ -1916,6 +1921,51 @@ func (s *server) acquireSpecSlot(ctx context.Context) bool {
 		return false
 	case <-ctx.Done():
 		return false
+	}
+}
+
+// original serves the entry's own text/html part: the sender's markup, sanitised
+// for a reader who wants to see it as it was written rather than as this renderer
+// reads it.
+//
+// Sanitised, not raw. The corpus stores what the sender sent, and caddy puts a
+// Basic-auth gate in front of this server in production (issue #14), but neither
+// of those is a reason to hand a browser markup with a script tag in it: the
+// client mounts this into a shadow root in a page that is otherwise signed in to
+// the reader's own mailbox, and "the gate is in front of it" stops being true the
+// moment anyone else gets the panel. spec.OriginalBody is the decision — a second
+// rule set that keeps the sender's CSS, classes and ids (which is the whole point:
+// the stripped-down body is what failed to draw a calendar invite) while refusing
+// what a shadow root cannot contain.
+//
+// no-cache, not no-store: this is derived from a corpus that is rewritten by
+// every slurp, so an intermediary holding it is holding yesterday's message. The
+// client is the thing that makes a flip cheap — it holds the part for the length
+// of the session (src/lib/original.ts), which is what a reader comparing the two
+// renderings is doing — and the part is only asked for on the first flip, which
+// is why this is a route of its own rather than a field on every chain read.
+func (s *server) original(w http.ResponseWriter, r *http.Request) {
+	extID := r.PathValue("extId")
+	raw, err := s.store.OriginalHTML(extID)
+	if err != nil {
+		failLookup(w, err)
+		return
+	}
+	body, ok := spec.OriginalBody(raw)
+	if !ok {
+		// Distinguishable from the 404 above on purpose: "no such entry" and "an
+		// entry with no html part" are different answers, and a client that only
+		// ever toggles on entries its own read marked `original` never sees this.
+		fail(w, http.StatusNotFound, fmt.Errorf(
+			"%s carries no text/html part of its own, so there is no original to show", extID))
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	if _, err := io.WriteString(w, body); err != nil {
+		// Nothing to do about a write that failed to a client that has gone: the
+		// status line and the content type are already out.
+		log.Printf("serving the original of %s: %v", extID, err)
 	}
 }
 
