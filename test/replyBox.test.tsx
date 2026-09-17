@@ -283,7 +283,13 @@ describe("answering a message from the pane", () => {
     // One call, and it is a preview: the reply was prepared and answered with, and
     // no mailbox was written to.
     await waitFor(() => expect(sends()).toHaveLength(1));
-    expect(sent(0)).toEqual({ entry: ROOT, body: "The 14th works.", all: true, confirm: false });
+    expect(sent(0)).toEqual({
+      entry: ROOT,
+      body: "The 14th works.",
+      all: true,
+      html: true,
+      confirm: false,
+    });
 
     // What the reader is shown is the whole message as it will go, and the first
     // thing it says is that nothing has left yet — a preview that did not say so
@@ -300,6 +306,9 @@ describe("answering a message from the pane", () => {
       "Cy Okafor <cy@loomworks.example>, carl@example.net",
     );
     expect(shown.querySelector(".replynote")!.textContent).toContain("Re: Loom cutover schedule");
+    // And which forms it goes in, since that is the other thing the reader can
+    // change and the other thing the two-step is there to let them check.
+    expect(shown.querySelector(".replynote")!.textContent).toContain("text and HTML");
     // The body, quote and all, as the exact lines that will be sent.
     const text = shown.querySelector(".replytext")!.textContent!;
     expect(text).toContain("The 14th works.");
@@ -323,9 +332,9 @@ describe("answering a message from the pane", () => {
     const tick = within(box()!).getByRole("checkbox", { name: /reply all/ }) as HTMLInputElement;
     expect(tick.checked).toBe(true);
     expect(box()!.querySelector(".replyto")!.textContent).toContain("everyone else");
-    // It is the left end of the row whose buttons are at the right: the choice
-    // under the field, the press past it.
-    expect(box()!.querySelector(".replyacts .replyall")).toBeTruthy();
+    // It is the left end of the row whose buttons are at the right: the choices
+    // under the field, the press past them.
+    expect(box()!.querySelector(".replyacts .replyopts .replytick")).toBeTruthy();
 
     fireEvent.click(tick);
     expect(tick.checked).toBe(false);
@@ -340,7 +349,67 @@ describe("answering a message from the pane", () => {
     // box says: answering one person when twelve are on the message is the thing
     // this control exists to make possible.
     await waitFor(() => expect(sends()).toHaveLength(1));
-    expect(sent(0)).toEqual({ entry: ROOT, body: "The 14th works.", all: false, confirm: false });
+    expect(sent(0)).toEqual({
+      entry: ROOT,
+      body: "The 14th works.",
+      all: false,
+      html: true,
+      confirm: false,
+    });
+  });
+
+  it("sends the words alone when the html tick is cleared", async () => {
+    handler = server(
+      () => json(200, chainBody(threaded)),
+      () => json(200, replyPlan(false)),
+    );
+    await mountApp();
+    await openThread();
+
+    // Two ticks, one row, both on — and the second is a choice about the form of
+    // the message rather than about what it says, which is what its label and its
+    // title have to make clear enough to tick without fear.
+    const ticks = within(box()!).getAllByRole("checkbox") as HTMLInputElement[];
+    expect(ticks.map((t) => (t.parentElement!.textContent || "").trim())).toEqual([
+      "reply all",
+      "send html",
+    ]);
+    expect(ticks.every((t) => t.checked)).toBe(true);
+
+    fireEvent.click(within(box()!).getByRole("checkbox", { name: /send html/ }));
+    fireEvent.change(field(), { target: { value: "The 14th works." } });
+    press("preview");
+
+    // What the server is asked for, rather than only what the box says: the form
+    // is the reader's to choose, and their correspondents' clients never see a
+    // quote they were not sent.
+    await waitFor(() => expect(sends()).toHaveLength(1));
+    expect(sent(0)).toEqual({
+      entry: ROOT,
+      body: "The 14th works.",
+      all: true,
+      html: false,
+      confirm: false,
+    });
+    // Said before the second press as well as sent on it: a preview that named one
+    // form and a send that used the other would be the one thing the two-step
+    // exists to prevent. The plan is otherwise the same message — the words and the
+    // quote are untouched, so the reader's check of them still stands.
+    const note = box()!.querySelector(".replynote")!.textContent!;
+    expect(note).toContain("plain text alone");
+    expect(box()!.querySelector(".replytext")!.textContent).toContain(
+      "> Roof access is fine from the 14th.",
+    );
+
+    press("send this reply");
+    await waitFor(() => expect(sends()).toHaveLength(2));
+    expect(sent(1)).toEqual({
+      entry: ROOT,
+      body: "The 14th works.",
+      all: true,
+      html: false,
+      confirm: true,
+    });
   });
 
   it("names no cc when the reply has nobody else on it", async () => {
@@ -363,7 +432,13 @@ describe("answering a message from the pane", () => {
     fireEvent.click(within(box()!).getByRole("button", { name: "send this reply" }));
 
     await waitFor(() => expect(sends()).toHaveLength(2));
-    expect(sent(1)).toEqual({ entry: ROOT, body: "The 14th works.", all: true, confirm: true });
+    expect(sent(1)).toEqual({
+      entry: ROOT,
+      body: "The 14th works.",
+      all: true,
+      html: true,
+      confirm: true,
+    });
     // The reply is filed into the corpus by the server, so the trail the reader is
     // looking at is re-read rather than guessed at: the answer appears in it as the
     // mailbox's own copy of the message.

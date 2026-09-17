@@ -235,7 +235,8 @@ in {
         HTML, one multipart/alternative — because a mail client that renders
         markup otherwise reads the quoted message as part of the answer. Both
         parts are composed by the server from the same words and the same quote,
-        so they cannot say different things.
+        so they cannot say different things, and a reader who wants the words
+        alone can send the text by itself (the request's `html` field).
 
         What bounds it is a shape rather than a permission: the request names
         the message being answered and has no field for a recipient, so the

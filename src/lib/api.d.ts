@@ -1530,7 +1530,7 @@ export interface components {
                 skipped: number;
             }[];
         };
-        /** @description A reply: which message is being answered, what the reader has to say, whether the conversation's other participants are on it, and whether this call is the preview or the send. There is no recipient field — the recipients are the ones the answered message's own headers carried, and the addresses belonging to this mailbox are left off them. */
+        /** @description A reply: which message is being answered, what the reader has to say, whether the conversation's other participants are on it, whether the HTML part goes with the text, and whether this call is the preview or the send. There is no recipient field — the recipients are the ones the answered message's own headers carried, and the addresses belonging to this mailbox are left off them. */
         SendRequest: {
             /**
              * @description The corpus ext id of the message being answered, as a thread read carries it in `entries[].extId`. One entry rather than a chain: a reply is to a message, and which thread it belongs to is the mailbox's answer by way of the reply headers. An entry with no mailbox copy — a message recovered from somebody's quote, a Slack post — is refused, because there is nothing to thread against.
@@ -1547,6 +1547,11 @@ export interface components {
              * @example true
              */
             all?: boolean;
+            /**
+             * @description Whether the reply carries the HTML part beside the plain text: the same words marked up, with the message being answered in a `blockquote` a client folds. Absent means it does, which is what this endpoint has always sent, so an older client sends the message it had. The text part is unchanged either way — the HTML is a second rendering of it, never the source — so turning this off does not change what the reply says, only what it looks like.
+             * @example true
+             */
+            html?: boolean;
             /** @description False (or absent) prepares the reply and sends nothing, answering with the plan; true sends it. A client that forgets the field therefore previews rather than sends. */
             confirm?: boolean;
         };

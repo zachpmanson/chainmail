@@ -1436,6 +1436,16 @@ func (s *server) sendReply(w http.ResponseWriter, r *http.Request) {
 	// instead of the message's whole audience.
 	all := req.All == nil || *req.All
 
+	// Both renderings are composed and one may be dropped here rather than asked
+	// for separately: the HTML is built from the same reading of the words as the
+	// text (see spec.ComposeReply), so a call that does not send it has still been
+	// composed as the pair it is, and the two can never be two messages wearing one
+	// envelope.
+	html := req.HTML == nil || *req.HTML
+	if !html {
+		body.HTML = ""
+	}
+
 	mb, err := s.openMailbox()
 	if err != nil {
 		fail(w, http.StatusBadGateway, fmt.Errorf("opening the mailbox: %w", err))
@@ -1472,7 +1482,7 @@ func (s *server) sendReply(w http.ResponseWriter, r *http.Request) {
 	// cannot be taken back, so "what did the server send, and to whom" has to be
 	// answerable from the host afterwards. Who it reached is part of that, so the
 	// Cc is in the line rather than only the To.
-	log.Printf("send: %s to=%s cc=%s sent=%t", target.ExtID, plan.To, plan.Cc, out.Sent)
+	log.Printf("send: %s to=%s cc=%s html=%t sent=%t", target.ExtID, plan.To, plan.Cc, html, out.Sent)
 	send(w, http.StatusOK, out)
 }
 
@@ -1534,6 +1544,17 @@ type sendRequest struct {
 	// the ones beyond its sender are on it. There is no value of this field that
 	// reaches an address the message did not carry.
 	All *bool `json:"all,omitempty"`
+	// HTML says whether the reply carries the HTML part of it, the same message
+	// marked up, beside the plain text (see spec.ComposeReply, which composes the
+	// two together). Absent means it does, which is what this endpoint has always
+	// sent, so the older shape of this request keeps the message it always sent.
+	//
+	// What is on the wire is one message either way: the words and the quote are
+	// not the caller's to supply, and this only decides whether the second
+	// rendering of them travels with the first. A reader who knows their
+	// correspondent reads plain text can say so, and the text part is byte for byte
+	// the one they would have had anyway.
+	HTML *bool `json:"html,omitempty"`
 }
 
 // sendResponse is the contract's SendResponse: the reply as the mailbox has it,
