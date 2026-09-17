@@ -621,18 +621,24 @@ describe("the pane's second reading of a message", () => {
       expect(b).toBeTruthy();
       return b;
     });
-    expect(button.textContent).toBe("original");
+    expect(button.textContent).toBe("Toggle Styles");
 
     fireEvent.click(button);
     await waitFor(() => expect(pane().querySelector(".bdo")).toBeTruthy());
     const host = pane().querySelector(".bdo") as HTMLElement;
     expect(host.shadowRoot!.innerHTML).toBe(SENT);
-    // Asked for once per message: the flip back is the same control, pressed.
+    // Asked for once per message: the flip back is the same control, pressed —
+    // which is drawn out on the header line, where the reader who has swapped the
+    // body can reach it without opening the receipt to do it.
     expect(chains().length).toBeGreaterThan(0);
     const asks = () => calls.filter((c) => pathOf(c).endsWith("/original"));
     expect(asks()).toHaveLength(1);
-    fireEvent.click(pane().querySelector(".hdetend .origbtn") as HTMLElement);
+    const wayBack = pane().querySelector("details.hdr > summary .origbtn") as HTMLElement;
+    expect(wayBack.getAttribute("aria-pressed")).toBe("true");
+    expect(pane().querySelector(".hdetend .origbtn")).toBeNull();
+    fireEvent.click(wayBack);
     expect(asks()).toHaveLength(1);
+    await waitFor(() => expect(pane().querySelector(".bdo")).toBeNull());
   });
 
   it("offers nothing on a message the read says has no part of its own", async () => {

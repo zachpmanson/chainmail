@@ -361,6 +361,11 @@ export function ThreadMessages({ thread }: { thread: { rootExtId: string } }) {
           // it is this pane's to pass because the pane is a reader with a server
           // behind it — a built page has none and gets no control.
           original={e.original ? { extId: e.extId, load: fetchOriginal } : undefined}
+          // The address the switch is kept against, so that pressing the control
+          // on one of a sender's messages reads the rest of them the same way.
+          // A recovered entry has no address of its own and then the switch is
+          // kept against the message — see MessageProps.fromEmail.
+          fromEmail={e.fromEmail}
           // The files this message carried, as the corpus read them. mediaBase is
           // the app's own route to stored bytes — the pane is a reader with a
           // server behind it, unlike a shared export, so a pulled file opens

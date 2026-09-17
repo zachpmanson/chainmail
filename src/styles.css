@@ -456,6 +456,13 @@
   details.hdr[open] > summary > .htail::after { transform:rotate(-90deg);
     border-right-color:var(--accent); }
   details.hdr > summary:focus-visible { outline:1px solid var(--accent); outline-offset:2px; }
+  /* The styles switch, out on the header line — and only ever there while it is
+     pressed (see OriginalControl). It takes the free space the reply's box
+     otherwise takes, so the one line still closes at the right edge with the
+     switch as the last thing on it rather than with a gap in the middle; the
+     reply and the caret then tuck in behind it. */
+  details.hdr > summary > .origbtn { margin-left:auto; }
+  details.hdr > summary > .origbtn ~ .htail { margin-left:0; }
   .nm { font-size:.83rem; font-weight:650; }
   /* Tinted to match the bubble strip, so the colour is self-describing and the
      page needs no legend. Falls back to --muted for an entry with no org. */
@@ -467,7 +474,7 @@
   .tm { font-size:.71rem; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
   /* The receipt's two controls are one shape, so they read as one line of them:
      the clip that copies the message whole, and the swap to the sender's own
-     rendering (see .origbtn further down for why that one is here). */
+     rendering (see .origbtn further down for where each of them is drawn). */
   .copyjson, .origbtn { display:inline-flex; align-items:center; gap:.3rem;
     font:inherit; font-size:.66rem; font-weight:650; color:var(--muted);
     background:transparent; border:1px solid transparent; border-radius:5px;
@@ -508,19 +515,19 @@
   .msg.me .bub { background:var(--mine); border-color:var(--o3); }
   .ment { margin:0 0 .3rem; display:flex; flex-wrap:wrap; gap:.25rem; }
   /* The reader's second reading of one message: the sender's own html, swapped in
-     for this pipeline's stripped one. The control lives in the receipt, beside the
-     copy button — the receipt is where a reader inspects a message (the ids it was
-     found under, the address it was sent to, the JSON behind it), and this asks
-     for the same message a second way, so it belongs with those rather than on the
-     bubble. Bubbles are what a thread is scanned by, and most mail renders
-     correctly: a control that asks to be noticed on every one of them trades one
-     kind of noise for another.
+     for this pipeline's stripped one. The control is drawn in the receipt — the
+     place a reader inspects a message (the ids it was found under, the address it
+     was sent to, the JSON behind it) — beside the copy button, because it asks for
+     the same message a second way. Bubbles are what a thread is scanned by, and
+     most mail renders correctly: a control asking to be noticed on every one of
+     them trades one kind of noise for another.
 
      So it is drawn in the receipt's own dialect rather than the toolbar's — a
      small quiet label, like the copy button beside it, and the shared shape above
-     so the pair reads as one line of controls. Pressed is the exception the colour
-     carries: the reader who has swapped the body is the one who needs the way
-     back, and they may well have closed the receipt by then. */
+     so the pair reads as one line of controls. Pressed is the exception: a reader
+     who has swapped the body is a reader who needs the way back, and the receipt
+     is shut until it is opened, so the pressed control is drawn out on the header
+     line instead (see the summary rule above, and OriginalControl in Message). */
   .hdetend { margin-left:auto; display:inline-flex; align-items:center; gap:.35rem; }
   .origbtn[aria-pressed="true"] { color:var(--accent); background:var(--mine);
     border-color:var(--accent); }
