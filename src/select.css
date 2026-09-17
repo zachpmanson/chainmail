@@ -150,6 +150,29 @@
    one part of the row that is not something to press. */
 .sttail { font-size:.72rem; color:var(--muted); }
 
+/* The palette table, at the foot of the status screen: a debugging aid rather
+   than a setting, so it is the one thing there with nothing to press in it. Two
+   colour columns, because a palette is chosen for working in both themes and
+   the failure being looked for is a colour that works in only one of them. */
+.paltab { border-collapse:collapse; margin:.55rem 0 0; font-size:.76rem; }
+.paltab th { text-align:left; font-size:.64rem; font-weight:700; letter-spacing:.08em;
+  text-transform:uppercase; color:var(--muted); padding:0 .9rem .2rem 0;
+  border-bottom:1px solid var(--line); }
+.paltab td { padding:.22rem .9rem .22rem 0; border-bottom:1px solid var(--line);
+  vertical-align:middle; white-space:nowrap; }
+.paltab th:last-child, .paltab td:last-child { padding-right:0; }
+.paltab code { font:inherit; font-size:.74rem; }
+/* What the colour is for is the one column with a sentence in it, and the one
+   that may wrap: the names to its left are fixed and the table reads as a list
+   of them. */
+.palwhat { white-space:normal; color:var(--muted); }
+/* The swatch is the resolved colour itself, drawn as an inline block so it sits
+   on the baseline of the value beside it. Its height is the row's, not the
+   text's: a swatch the size of a swatch is not a colour anybody can judge. */
+.palsw { display:inline-block; width:1rem; height:.82rem; border:1px solid var(--line);
+  border-radius:3px; vertical-align:-.09rem; margin-right:.4rem; }
+.palval { font-variant-numeric:tabular-nums; color:var(--muted); }
+
 /* The /ops screen: the people-merge review surface. Same visual family as the
    status screen — a browser-only control surface, and one that writes, so the
    apply buttons are the only thing here styled to be pressed. */

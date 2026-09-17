@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { $api, type PersonSummary, type ServiceStatus, type Stats } from "../lib/api";
 import { when } from "../lib/stamp";
+import { Palette } from "./Palette";
 
 function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -397,6 +398,18 @@ export function StatusView() {
       ) : (
         <p className="stnote">Reading the corpus…</p>
       )}
+
+      {/* The palette, last and after everything that reports: it says nothing
+          about the corpus or the operator, and nothing on this screen is read
+          through it — it is here because this is the page somebody with the app
+          open goes looking for the colours of the thing in front of them, and
+          because the values it prints are the stylesheet's own rather than a
+          copy of it (see lib/palette). */}
+      <h2 className="sthead">Palette</h2>
+      <p className="stnote">
+        The colours in force, and in the other theme, as the browser resolves them.
+      </p>
+      <Palette />
     </div>
   );
 }
