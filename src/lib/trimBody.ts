@@ -177,6 +177,38 @@ function resolvesToFold(body: string, span: { start: number; end: number }): boo
   return false;
 }
 
+/** Whether a body has anything in it at all — the question a bubble asks before it
+ *  draws one.
+ *
+ * A message whose text part was empty is a real thing: a mail that carried only a
+ * file, a calendar reply that was only its invitation, an entry recovered from a
+ * quote that held none. Drawn as it stands, that bubble is a gap, and a gap reads
+ * as a failure to render rather than as the answer that there was nothing to
+ * render.
+ *
+ * The same vocabulary as the trim, deliberately: a span is content when it is the
+ * signature fold or holds visible text, an image or a preformatted block, which is
+ * exactly what the trim already means by content (see subtreeHasContent and the
+ * fold marking in topLevelSpans). So the notice is drawn by the same judgement
+ * that decides what is worth keeping, rather than by a second one that could
+ * disagree with it — with one deliberate difference: a body of nothing but
+ * comments is stripped first, because the trim keeps a comment as text and no
+ * reader has ever seen one.
+ */
+export function hasBody(body: string): boolean {
+  // What a browser draws nothing for is stripped before the question is asked:
+  // a comment is invisible wherever it stands, and a conditional comment is how
+  // some clients send a whole table that only their own reader ever draws. A body
+  // of nothing but those is a body the reader sees as blank, which is the case
+  // the notice is for — so it is asked of what is left once they are gone.
+  const drawn = body
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/<(script|style)\b[\s\S]*?<\/\1\s*>/gi, "");
+  return topLevelSpans(drawn).some(
+    (s) => s.fold || subtreeHasContent(drawn, s.start, s.end),
+  );
+}
+
 /** Trim the whitespace-only edges of a serialized message body. */
 export function trimBody(body: string): string {
   const spans = topLevelSpans(body);

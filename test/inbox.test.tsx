@@ -217,6 +217,19 @@ const CHAIN_BODIES: Record<
     tz: "AEST",
     tzOffsetMinutes: 600,
   },
+  // A message that carried no text at all: a mail that was only its file, or a
+  // calendar reply that was only its invitation. The corpus sends an empty body
+  // rather than a sentence about it, so the pane has to decide what a bubble with
+  // nothing in it looks like.
+  "mail:<invite-only-1@example.fed>": {
+    author: "Ada Okoye",
+    subject: "Quote for the north shed",
+    body: "",
+    html: "",
+    fromEmail: "ada@okoye.example",
+    tz: "AEST",
+    tzOffsetMinutes: 600,
+  },
 };
 
 /** A thread of more than one, oldest first, where the newest entry is not the one
@@ -856,6 +869,19 @@ describe("the home page with no query", () => {
     expect(par?.getAttribute("title")).toBe("In reply to Ada Okoye, Mon, 2 Mar 2026 19:15");
     // The anchor it names is the parent's own bubble, so the link lands on it.
     expect(document.getElementById("entry-0")?.textContent).toContain("Ada Okoye");
+  });
+
+  it("says a message that carried no body, rather than drawing a gap", async () => {
+    handler = buildHandler;
+    await mountApp(`/?open=${encodeURIComponent("mail:<invite-only-1@example.fed>")}`);
+
+    await waitFor(() => expect(pane().querySelector(".msg .bd")).not.toBeNull());
+    // The words are the page's, not the sender's — nothing arrived to quote — and
+    // they sit where the body would have been, so the bubble is drawn complete
+    // rather than as a hole the reader has to interpret.
+    const bd = pane().querySelector(".msg .bd")!;
+    expect(bd.querySelector(".nobody")?.textContent).toBe("No body");
+    expect(bd.children).toHaveLength(1);
   });
 
   it("drops every tick on Escape, and leaves the box's own Escape to the box", async () => {

@@ -572,6 +572,12 @@
      pushing the column out, and a table that cannot shrink any further scrolls
      in its own strip rather than widening the whole timeline. */
   .bd { overflow-x:auto; }
+  /* A message that was sent with nothing in it. The page's own voice — muted and
+     italic, the same register as the receipt's notes — because the words are ours
+     rather than the sender's: the answer to "why is this empty" is the corpus
+     speaking, and a bold or coloured line would be read as something the message
+     said. */
+  .bd .nobody { margin:0; font-size:.8rem; color:var(--muted); font-style:italic; }
   .bd img { max-width:100%; height:auto; }
   .bd table { min-width:0; max-width:100%; }
   .bd td, .bd th { vertical-align:top; }
