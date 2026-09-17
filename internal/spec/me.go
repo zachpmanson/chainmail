@@ -25,6 +25,29 @@ type meSet struct {
 	people map[int64]bool
 }
 
+// markedAs resolves what a build marks with: the addresses the caller named, or
+// — when it named none — the corpus's own stored answer.
+//
+// The second half is not a fallback for a caller that forgot. The stored setting
+// is the only answer, and the addresses in a request are a copy of it taken at
+// request time by an intermediary that can hold an old one or none at all: a
+// browser braiding a page reads the setting, a CLI build reads the flags it was
+// given, and a page built from either used to have whatever that caller happened
+// to know that day. The pane has always marked from the store, so a page that
+// marked from a copy answered the same question differently — and the difference
+// is exactly what a reader reports as "my own messages are not coloured on this
+// page": the entries were drawn plain because the request carried no list,
+// while the same thread in the pane was tinted.
+//
+// Naming addresses therefore overrides, for the one caller that means it (a
+// build on a host whose corpus has no setting: `corpus build --me`).
+func markedAs(store *corpus.Store, named []string) ([]string, error) {
+	if len(named) > 0 {
+		return named, nil
+	}
+	return store.MeAddresses()
+}
+
 // newMeSet resolves the reader's addresses: the strings themselves, and the
 // people the corpus has already decided they belong to.
 func newMeSet(store *corpus.Store, addresses []string) (meSet, error) {

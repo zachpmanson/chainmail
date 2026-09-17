@@ -40,6 +40,10 @@ type Options struct {
 	// so the reader says. One of their addresses is enough: the corpus has
 	// already merged the rest of them into the same person, and the mark is
 	// about the human rather than the string (see me.go).
+	//
+	// Left empty, the corpus's stored setting answers instead — which is the
+	// same answer the reading pane marks by, and the one a caller that has no
+	// opinion should get rather than an unmarked page (see markedAs).
 	Me []string
 
 	// UploadDir is the archive's upload root, where the downloader that fed the
@@ -91,7 +95,11 @@ func Generate(store *corpus.Store, opts Options) (Spec, error) {
 		return Spec{}, err
 	}
 
-	me, err := newMeSet(store, opts.Me)
+	addresses, err := markedAs(store, opts.Me)
+	if err != nil {
+		return Spec{}, fmt.Errorf("resolving the reader's own addresses: %w", err)
+	}
+	me, err := newMeSet(store, addresses)
 	if err != nil {
 		return Spec{}, err
 	}
