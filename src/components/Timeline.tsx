@@ -5,25 +5,21 @@ import { DiffPanel, Legend, SourcesPanel, type ThreadFilter } from "./Panels";
 import { ParticipantsPanel } from "./Participants";
 import { Minimap } from "./Minimap";
 import { Message } from "./Message";
+import { ReplyLink, type ReplyTarget } from "./ReplyLink";
 import { trimBody } from "../lib/trimBody";
 
 const html = (s: string) => ({ __html: s });
 
-function ReplyLink({ row, v }: { row: Row; v: View }) {
+function replyTarget(row: Row, v: View): ReplyTarget | null {
   const parent = row.entry.parent
     ? v.rows.find((r) => r.id === row.entry.parent)
     : undefined;
-  if (!parent) return <span className="tstart">thread start</span>;
+  if (!parent) return null;
+  // A note has no sender: what it answers is named by its label, which is the
+  // word it was drawn under.
   const who = parent.entry.kind === "note" ? parent.entry.label : parent.entry.sender;
   const when = [parent.entry.date, parent.entry.time].filter(Boolean).join(" ");
-  return (
-    <a className="par" href={`#${parent.id}`} title={`In reply to ${who}, ${when}`}>
-      <span className="arw">&#8617;</span>
-      <span className="parlbl">
-        in reply to <b>{who}</b>, {when}
-      </span>
-    </a>
-  );
+  return { anchor: parent.id, who, when };
 }
 
 /** A quoter's inline edit to a message this one quoted (issue #42): the
@@ -102,7 +98,7 @@ function EntryBlock({ row, v, mark, anchorByGmail, onPull, pulling, mediaBase }:
         </div>
         <div className="syslabel">{e.label}</div>
         <div className="bd" dangerouslySetInnerHTML={html(trimBody(e.body))} />
-        <ReplyLink row={row} v={v} />
+        <ReplyLink parent={replyTarget(row, v)} />
       </div>
     );
   }
@@ -131,7 +127,7 @@ function EntryBlock({ row, v, mark, anchorByGmail, onPull, pulling, mediaBase }:
       lane={row.lane}
       chainStart={row.isChainStart}
       mark={mark}
-      reply={<ReplyLink row={row} v={v} />}
+      reply={<ReplyLink parent={replyTarget(row, v)} />}
       edits={<Edits edits={row.edits} v={v} />}
       source={<Source source={e.source} anchorByGmail={anchorByGmail} />}
       /* The spec entry as the renderer saw it, plus the row id and any resolved

@@ -10,6 +10,7 @@ import { fetchOriginal } from "../lib/original";
 import { Failure } from "./ThreadPreview";
 import { Message, type StampData } from "./Message";
 import { ParticipantsPanel, castOfEntries } from "./Participants";
+import { ReplyLink, type ReplyTarget } from "./ReplyLink";
 import { Source } from "./Source";
 
 /**
@@ -43,6 +44,12 @@ import { Source } from "./Source";
  * the page draws for the same sender. The slots are then assigned here, in the
  * order the thread's own entries present them — see orgOrder — because a pane has
  * only the entries it was handed and no panel to take organisations from.
+ *
+ * The line that says what a message answers is the page's own mark too, from one
+ * component (see ReplyLink). What differs between the two renderers is only where
+ * a parent is found — the spec's rows there, the entries handed to the pane here
+ * — and the pane resolves it against the thread it is already holding, so the link
+ * lands on the parent's bubble on this page rather than asking anyone for it.
  */
 
 /** The transcript's clock, written the way the spec writes it ("Mon 2 Jan 2006",
@@ -227,9 +234,11 @@ export function ThreadMessages({ thread }: { thread: { rootExtId: string } }) {
   // links to this page's row for that message rather than out to the mailbox,
   // because the message it names is right here.
   const byExt = new Map<string, CorpusEntry>();
+  const indexOf = new Map<string, number>();
   const anchorByGmail = new Map<string, string>();
   entries.forEach((e, i) => {
     byExt.set(e.extId, e);
+    indexOf.set(e.extId, i);
     const gmail = gmailIdOf(e);
     if (gmail) anchorByGmail.set(gmail, anchor(i));
   });
@@ -238,6 +247,32 @@ export function ThreadMessages({ thread }: { thread: { rootExtId: string } }) {
     if (!host) return extId;
     const gmail = gmailIdOf(host);
     return gmail ? `msg ${gmail}` : host.extId;
+  };
+
+  // What this message answers, resolved against the thread the pane is holding:
+  // the parent's own bubble is on this page, so the link lands on it rather than
+  // asking the mailbox or the corpus for anything. Who and when are the parent's
+  // — the name its head wears and the clock it states, which is the same clock
+  // its own bubble prints, because both come from stampOf.
+  //
+  // A thread arrives whole from /v1/chains (the reply graph is walked server
+  // side), so a parent that is not among these entries is a message the corpus
+  // does not hold: an entry with no parent opens the chain, and the link says so
+  // rather than guessing at what is missing.
+  const replyOf = (e: CorpusEntry): ReplyTarget | null => {
+    const parent = e.parent ? byExt.get(e.parent) : undefined;
+    if (!parent) return null;
+    const i = indexOf.get(parent.extId);
+    // Unreachable — the parent was reached through byExt, which is built from the
+    // same walk — but a link with no anchor in it would be a worse answer than
+    // saying the thread starts here.
+    if (i === undefined) return null;
+    const at = stampOf(parent);
+    return {
+      anchor: anchor(i),
+      who: parent.author,
+      when: [at.date, at.time].filter(Boolean).join(" "),
+    };
   };
 
   return (
@@ -308,6 +343,12 @@ export function ThreadMessages({ thread }: { thread: { rootExtId: string } }) {
           // one thread and the page is a reader looking at a built one; the id in
           // the receipt is the thing both are holding in their hand.
           source={<Source source={sourceLine(e, mailName)} anchorByGmail={anchorByGmail} />}
+          // What this message answers, as a built page prints it under the same
+          // bubble: the arrow and the parent's name and clock, linking to the
+          // parent's row here. The page resolves the parent through the spec's
+          // rows and the pane through the entries it was handed — the same mark,
+          // the same words, one component (see ReplyLink).
+          reply={<ReplyLink parent={replyOf(e)} />}
           stamp={stampOf(e)}
           // The corpus entry as it arrived, so a bubble that renders wrong can be
           // pasted somewhere and read whole — the same affordance, and the same

@@ -252,6 +252,9 @@ const MULTI_ENTRIES = [
     html: "<p>Roof access is fine from the 14th.</p>",
     tz: "AEST",
     tzOffsetMinutes: 600,
+    // It answers the first message of the thread, which is what the pane's reply
+    // link points at — the corpus resolves a parent to the entry it names.
+    parent: "mail:<solar-trail-2@example.fed>",
     // Recovered from the first message's quote, so its receipt names the host it
     // was unspooled from — and that host is on this page, so the id links to it
     // rather than out to a mailbox.
@@ -829,6 +832,30 @@ describe("the home page with no query", () => {
     expect(line[1]?.textContent?.trim()).toBe("unspooled from msg 19fee08b9d28e28b");
     expect(line[1]?.querySelector("a")?.getAttribute("href")).toBe("#entry-0");
     expect(document.getElementById("entry-0")).not.toBeNull();
+  });
+
+  it("links each message to the one it replies to, as a built page does", async () => {
+    handler = buildHandler;
+    await mountApp(`/?open=${encodeURIComponent(MULTI_ROOT)}`);
+    await waitFor(() => expect(pane().querySelectorAll(".msg").length).toBe(2));
+
+    // The opener answers nothing, and the line says so rather than being left
+    // out: a head with no reply mark on it reads as a rendering failure.
+    const tails = pane().querySelectorAll(".msg .hdr .htail");
+    expect(tails[0]?.querySelector(".par")).toBeNull();
+    expect(tails[0]?.querySelector(".tstart")?.textContent).toBe("thread start");
+
+    // The reply names what it answers, in the words that message's own bubble
+    // wears — its sender and its clock, in the same form the bubble prints it —
+    // and points at the row for it here.
+    const par = tails[1]?.querySelector(".par");
+    expect(par?.getAttribute("href")).toBe("#entry-0");
+    expect(par?.querySelector(".parlbl")?.textContent).toBe(
+      "in reply to Ada Okoye, Mon, 2 Mar 2026 19:15",
+    );
+    expect(par?.getAttribute("title")).toBe("In reply to Ada Okoye, Mon, 2 Mar 2026 19:15");
+    // The anchor it names is the parent's own bubble, so the link lands on it.
+    expect(document.getElementById("entry-0")?.textContent).toContain("Ada Okoye");
   });
 
   it("drops every tick on Escape, and leaves the box's own Escape to the box", async () => {
