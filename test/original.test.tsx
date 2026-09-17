@@ -75,10 +75,15 @@ describe("a message whose own html the corpus holds", () => {
     expect(host.shadowRoot).not.toBeNull();
     expect(host.shadowRoot!.innerHTML).toBe(sent);
 
-    // And the way back is the same control, pressed.
+    // And the way back is the same control, pressed. The host itself has to go:
+    // a shadow root cannot be detached from the element it was created on, so an
+    // element React keeps across the swap keeps *drawing* the sender's html
+    // whatever the light DOM says — the class coming off is not enough.
     fireEvent.click(control()!);
     expect(container.querySelector(".bdo")).toBeNull();
     expect(container.querySelector(".bd")!.innerHTML).toBe("<p>invented body</p>");
+    expect(host.shadowRoot === null || !host.isConnected).toBe(true);
+    expect([...container.querySelectorAll(".bd")].some((el) => el.shadowRoot)).toBe(false);
     expect(control()!.getAttribute("aria-pressed")).toBe("false");
   });
 
