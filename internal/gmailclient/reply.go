@@ -34,9 +34,10 @@ var (
 // "Re:", both as the mailbox holds them. Body is what the caller handed in,
 // already composed (see spec.ReplyBody) — this package quotes nothing.
 //
-// Cc is empty for a message the reader was the only recipient of, and the server
-// leaves it out of the contract entirely when it is (see its sendResponse):
-// "nobody else" and "a field nobody filled in" are the same fact about a reply.
+// Cc is empty either when the caller asked for the sender alone or when there was
+// nobody else on the message to begin with, and the server leaves it out of the
+// contract entirely when it is (see its sendResponse): "nobody else" and "a field
+// nobody filled in" are the same fact about a reply.
 type ReplyPlan struct {
 	To      string
 	Cc      string
@@ -49,23 +50,29 @@ type ReplyPlan struct {
 
 // Reply prepares an answer to one message, and sends it when send is true.
 //
-// It answers EVERYONE the message was addressed to — the sender in To, the rest of
-// its audience in Cc — and who that is is not the caller's to decide: the
-// recipients come from the message's own headers, and the addresses belonging to
-// this mailbox are left out of them by the mailbox itself (docket reads the
-// account's profile and its send-as aliases, which is the only place the answer to
-// "which of these addresses is the reader" exists — mail is usually addressed to an
-// alias rather than to the account's own name). A caller cannot name a recipient
-// here, and that is deliberate: a server bound to loopback with no authentication
-// must not be an outbound channel to anywhere, and there is no address on this
-// surface that the reader's own correspondence did not carry first.
+// It answers the message's whole audience when all is true — the sender in To, the
+// rest of it in Cc — and the sender alone when it is false. Either way who that is
+// is not the caller's to decide: the recipients come from the message's own headers,
+// and the addresses belonging to this mailbox are left out of them by the mailbox
+// itself (docket reads the account's profile and its send-as aliases, which is the
+// only place the answer to "which of these addresses is the reader" exists — mail is
+// usually addressed to an alias rather than to the account's own name). all can
+// therefore only narrow the reply to the person who wrote, never widen it to anyone
+// else: a caller cannot name a recipient here, and that is deliberate, because a
+// server bound to loopback with no authentication must not be an outbound channel to
+// anywhere, and there is no address on this surface that the reader's own
+// correspondence did not carry first.
 //
 // send=false is a plan and nothing else: the same reads a send begins with,
 // answered instead of executed. That is what makes the two-step in the UI a
 // preview of the message rather than of a draft — the recipients named are the
 // ones the mailbox will use, and the body is the body.
-func (c Client) Reply(id, body string, send bool) (ReplyPlan, error) {
-	plan, err := mail.PrepareReplyAll(c.ctx, c.svc, id, body)
+func (c Client) Reply(id, body string, all, send bool) (ReplyPlan, error) {
+	prepare := mail.PrepareReply
+	if all {
+		prepare = mail.PrepareReplyAll
+	}
+	plan, err := prepare(c.ctx, c.svc, id, body)
 	if err != nil {
 		// Nothing has been handed to the mailbox, so a retry is safe and this is
 		// the one failure that can say so.

@@ -89,6 +89,9 @@ authentication can answer the reader's correspondence and cannot send mail to an
 that correspondence did not already carry. (Which addresses are the reader's own is the
 mailbox's answer, not a setting here: docket reads the account's profile and its send-as
 aliases, because mail is usually addressed to an alias rather than to the account's name.)
+The one thing the reader decides about that audience is a **reply all** tick under the
+field, on by default: clearing it answers the sender alone. It cannot do the opposite —
+there is no value of it that puts an address on the reply that the message did not carry.
 The server needs `-send-mail` to do it (`enableSendMail` in the nix module); without it
 the box says so and nothing is written. A reply is filed into the corpus in the same
 request, so the answer appears in the trail immediately rather than at the next slurp —
