@@ -1902,7 +1902,7 @@ const EDIT_SPEC = {
   messages: [
     {
       id: "c-orig", date: "Fri 21 Aug 2026", time: "09:00", tz: "+1000",
-      sender: "Charles XPTO", org: "ruralco",
+      sender: "Charles XPTO", org: "fernbrook",
       body: "<p>CSV layout: A: Member Number &middot; E: Amount Due</p>",
     },
     {

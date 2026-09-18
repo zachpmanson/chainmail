@@ -160,12 +160,12 @@ func TestFoldedRecipientListDoesNotTruncateTheBlock(t *testing.T) {
 // the twin pass could not match against the real mailbox copy.
 func TestFoldedFinalRecipientLineStaysInTheBlock(t *testing.T) {
 	body := "---------- Forwarded message ---------\r\n" +
-		"From: Zoe Robson <zoe@meridian.example>\r\n" +
+		"From: Zoe Arden <zoe@lodestar.example>\r\n" +
 		"Date: Wed, 16 Sep 2026 at 8:14 PM\r\n" +
-		"Subject: RE: Ruralco sites\r\n" +
-		"To: Lane Whittaker <lane@termina.example>\r\n" +
+		"Subject: RE: Fernbrook sites\r\n" +
+		"To: Lena Whitfield <lane@termina.example>\r\n" +
 		"Cc: nella@loomworks.example <nella@loomworks.example>, Bo Vantel <\r\n" +
-		"sam@meridian.example>, Zach Manson <zach@termina.example>\r\n" +
+		"sam@lodestar.example>, Zach Manson <zach@termina.example>\r\n" +
 		"\r\n" +
 		"Hiya Lane\r\n"
 	blocks := Peel(body)
@@ -173,11 +173,11 @@ func TestFoldedFinalRecipientLineStaysInTheBlock(t *testing.T) {
 		t.Fatalf("got %d blocks, want 1", len(blocks))
 	}
 	// The recipients past the wrap must survive: losing them loses participants.
-	if got := blocks[0].Sentinel; !strings.Contains(got, "sam@meridian.example") ||
+	if got := blocks[0].Sentinel; !strings.Contains(got, "sam@lodestar.example") ||
 		!strings.Contains(got, "zach@termina.example") {
 		t.Errorf("sentinel = %q, lost the recipients past the fold", got)
 	}
-	if strings.Contains(blocks[0].Text, "@meridian.example") {
+	if strings.Contains(blocks[0].Text, "@lodestar.example") {
 		t.Errorf("header tail leaked into the body: %q", blocks[0].Text)
 	}
 	if !strings.HasPrefix(blocks[0].Text, "Hiya Lane") {

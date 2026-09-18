@@ -86,7 +86,7 @@ export function derive(input: Timeline): View {
   //
   // A copy is hoisted however many replies it has, because each of those replies is
   // anchored to the message the edit is diffed against, not to this ghost of it. A
-  // real thread (the Termina x Ruralco CSV thread) has the host — the message that
+  // real thread (the Termina x Fernbrook CSV thread) has the host — the message that
   // re-quotes and therefore carries the edit — as a DIRECT descendant of the
   // edited copy, because the thread was replied-to from the copied row before the
   // corpus realised it was a derivative. Re-parenting those replies up to the

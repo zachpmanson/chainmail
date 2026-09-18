@@ -112,7 +112,7 @@ function formatOffset(mins: number): string {
 const anchor = (i: number) => `entry-${i}`;
 
 /** What hovering the sender says: their name and the address the mail came from,
- *  e.g. "Lane Whittaker <lane@whittaker.example>". The same string a page build
+ *  e.g. "Lena Whitfield <lane@whitfield.example>". The same string a page build
  *  makes for the same entry (see derive.ts's whoTitle), because a reader reading
  *  one thread in two places should be told the same thing about it.
  *
@@ -143,7 +143,7 @@ function senderTitle(e: CorpusEntry): string {
 
 
 /** The sender's name and the clock of a message, in the words its own bubble
- *  prints — "Lane Whittaker" and "Mon 2 Mar 2026 09:15".
+ *  prints — "Lena Whitfield" and "Mon 2 Mar 2026 09:15".
  *
  *  One function, two callers with the same obligation: the line that says what a
  *  message answers (ReplyLink) and the reply box that says which message is being

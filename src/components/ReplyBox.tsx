@@ -90,7 +90,7 @@ export function ReplyBox({
   answer: CorpusEntry;
   /** How that message's own bubble names it — the name and clock its head wears
    *  (see ThreadMessages' stamp words). Passed in rather than written again here:
-   *  the box says "replying to Lane Whittaker, Mon 2 Mar 2026 09:15", and a reader
+   *  the box says "replying to Lena Whitfield, Mon 2 Mar 2026 09:15", and a reader
    *  looking at the same message in the same pane must not be told a different
    *  clock by the reply box than by the bubble above it. */
   words: { who: string; when: string };

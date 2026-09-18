@@ -292,11 +292,11 @@ const EDIT_ENTRIES = [
     source: "mail",
     quoted: false,
     ts: "2026-03-02T09:00:00Z",
-    author: "Charles Nelaturi",
+    author: "Charles Marchetti",
     subject: "CSV layout",
     body: "CSV layout: … E: Amount Due",
     html: "<p>CSV layout: … E: Amount Due</p>",
-    fromEmail: "charles@ruralco.example",
+    fromEmail: "charles@fernbrook.example",
     tz: "AEST",
     tzOffsetMinutes: 600,
     sightings: [{ kind: "direct" }],
@@ -308,7 +308,7 @@ const EDIT_ENTRIES = [
     source: "mail",
     quoted: true,
     ts: "2026-03-02T09:00:00Z",
-    author: "Charles Nelaturi",
+    author: "Charles Marchetti",
     subject: "CSV layout",
     body: "CSV layout: … E: Invoice Amount",
     html: "<p>CSV layout: … E: Invoice Amount</p>",
@@ -961,7 +961,7 @@ describe("the home page with no query", () => {
     const original = edit!.querySelector("a");
     expect(original?.getAttribute("href")).toBe("#entry-0");
     expect(original?.textContent).toBe("original");
-    expect(edit!.textContent).toContain("original from Charles Nelaturi at Mon, 2 Mar 2026 19:00");
+    expect(edit!.textContent).toContain("original from Charles Marchetti at Mon, 2 Mar 2026 19:00");
     expect(edit!.querySelector(".eins")?.textContent).toBe("Invoice");
     expect(edit!.querySelector(".ebd")?.textContent).toBe("CSV layout: … E: Invoice Amount");
 

@@ -777,8 +777,8 @@ func noReplyDomain(domain string) bool {
 //
 // The name is cut at a parenthesis or a pipe first, because what follows one is
 // an annotation and not part of anybody's name — "Paul Stevens (Customer
-// Support)" and "Klara Belk | Arvida". Keeping the annotation would let
-// support@ corroborate the first and arvida@ the second, which is the wrong
+// Support)" and "Klara Belk | Ardenlee". Keeping the annotation would let
+// support@ corroborate the first and ardenlee@ the second, which is the wrong
 // direction for a gate whose job is to disqualify.
 func nameTokens(name string) []string {
 	if i := strings.IndexAny(name, "(|"); i >= 0 {

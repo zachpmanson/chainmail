@@ -250,13 +250,13 @@ func TestADirectEntryNamesNoQuoter(t *testing.T) {
 // nowhere else to keep them.
 func TestATrailReadCarriesTheEditsAPageBuildDraws(t *testing.T) {
 	s := open(t)
-	charles := person(t, s, "Charles Nelaturi", "charles@ruralco.example")
+	charles := person(t, s, "Charles Marchetti", "charles@fernbrook.example")
 	jason := person(t, s, "Jason Yarrow", "jason@termina.example")
 
 	base := put(t, s, msg{
-		ext: "mail:<c@ruralco>", ts: "2026-08-21T09:00:00+10:00", tz: "+1000",
+		ext: "mail:<c@fernbrook>", ts: "2026-08-21T09:00:00+10:00", tz: "+1000",
 		person: charles, container: "r", subject: "CSV layout",
-		messageID: "<c@ruralco>", from: "Charles Nelaturi <charles@ruralco.example>",
+		messageID: "<c@fernbrook>", from: "Charles Marchetti <charles@fernbrook.example>",
 		to: "Jason Yarrow <jason@termina.example>", gmail: "g-c",
 		text: "CSV layout: A: Member Number · B: ATS Number · C: Property Name · " +
 			"D: Statement Date · E: Amount Due",
@@ -264,9 +264,9 @@ func TestATrailReadCarriesTheEditsAPageBuildDraws(t *testing.T) {
 	host := put(t, s, msg{
 		ext: "mail:<j@termina>", ts: "2026-08-21T14:00:00+10:00", tz: "+1000",
 		person: jason, container: "r", subject: "Re: CSV layout",
-		messageID: "<j@termina>", inReplyTo: "<c@ruralco>",
+		messageID: "<j@termina>", inReplyTo: "<c@fernbrook>",
 		from: "Jason Yarrow <jason@termina.example>",
-		to:   "Charles Nelaturi <charles@ruralco.example>", gmail: "g-j",
+		to:   "Charles Marchetti <charles@fernbrook.example>", gmail: "g-j",
 		text: "Actually one change — we track Invoice Amount, not Amount Due.",
 	})
 	ds, err := time.Parse(time.RFC3339, "2026-08-21T09:00:00+10:00")
