@@ -69,6 +69,19 @@
 # outbound channel to anywhere — answering a message's own audience, and nobody
 # it did not already address, is what keeps it the reader's own correspondence.
 #
+# One mailbox per instance, and one instance per unit. The options on
+# `services.chainmail` itself describe the server a host already runs; every
+# entry of `services.chainmail.instances` is that same server again, declared
+# for a second mailbox. Nothing about the server differs between them — it is
+# one program reading one corpus — so what cannot be SHARED is what the host
+# must name: the unit is `chainmail-<name>`, and the user, the store and the
+# port each belong to one instance. A Google grant lives in the store, which
+# is why a second mailbox is a second instance rather than a second setting on
+# the first — this server reads the account whose token is in its own HOME,
+# and one process has one HOME. What the host decides about that mailbox (the
+# switches below) is likewise decided per instance: a reply that may go out as
+# the work account says nothing about the personal one.
+#
 self: { config, lib, pkgs, ... }:
 
 let
@@ -79,8 +92,10 @@ let
   # has no rev, and then the flag is dropped and the header shows no stamp rather
   # than a wrong commit.
   rev = self.shortRev or self.dirtyShortRev or "";
-in {
-  options.services.chainmail = {
+
+  # One server's whole option surface, declared once and used twice: by the
+  # flat options below, and by every entry of `instances`.
+  serverOptions = {
     enable = lib.mkEnableOption "chainmail server";
 
     package = lib.mkOption {
@@ -97,25 +112,43 @@ in {
 
     user = lib.mkOption {
       type = lib.types.str;
-      default = "chainmail";
       description = ''
         System user running the server. Fixed rather than DynamicUser so the
-        corpus can be transferred in by hand with a known owner: the
+        store can be transferred in by hand with a known owner: the
         `StateDirectory` is created and chowned to this user on start, and the
         snapshot copy step can then `install -o chainmail` into it.
+
+        Required for every instance but the first, whose value this module
+        supplies (`chainmail`). A default here would be that first instance's
+        user, which is precisely the answer a second instance must not have.
       '';
     };
 
     stateDir = lib.mkOption {
       type = lib.types.str;
-      default = "/var/lib/chainmail";
-      description = "Holds the corpus database (transferred in by hand).";
+      description = ''
+        Holds the corpus database (transferred in by hand, or built by the
+        server's own ingest) and the mailbox token the same ingest reads.
+        systemd's StateDirectory is always relative to /var/lib, so this must
+        live under it: the unit names the store by this path's last component.
+
+        Required for every instance but the first, whose value this module
+        supplies (/var/lib/chainmail). It is what separates two mailboxes —
+        one store, one grant, one mailbox — so two enabled instances may not
+        share it, and the module refuses rather than letting one server read
+        the other's mail.
+      '';
     };
 
     corpus = lib.mkOption {
-      type = lib.types.str;
-      default = "/var/lib/chainmail/corpus.db";
-      description = "Path to the SQLite corpus the server reads.";
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = ''
+        Path to the SQLite corpus the server reads. Unset means
+        <stateDir>/corpus.db, which is what every instance of this module has
+        ever used: the store is one directory, and the corpus and the mailbox
+        grant that fills it both live in it.
+      '';
     };
 
     uploads = lib.mkOption {
@@ -266,15 +299,19 @@ in {
     };
   };
 
-  config = lib.mkIf cfg.enable {
-    users.users.${cfg.user} = {
-      isSystemUser = true;
-      group = cfg.user;
-      description = "chainmail corpus server";
-    };
-    users.groups.${cfg.user} = { };
+  # One instance's unit, as a value. The unit's NAME is derived from the
+  # instance's name — `chainmail` for the one the flat options describe, which
+  # is the name it has always had, and `chainmail-<name>` for the others — and
+  # everything inside reads that instance's own options.
+  unitName = name: if name == null then "chainmail" else "chainmail-${name}";
 
-    systemd.services.chainmail = {
+  mkUnit = cfg:
+    let
+      # The corpus follows the store unless a host says otherwise, so the
+      # identity a second instance must state is one thing (stateDir), not two
+      # that could disagree.
+      corpus = if cfg.corpus != null then cfg.corpus else "${cfg.stateDir}/corpus.db";
+    in {
       description = "chainmail server (loopback API over the corpus)";
       wantedBy = [ "multi-user.target" ];
       after = [ "network.target" ];
@@ -293,7 +330,7 @@ in {
         # /var/empty, which holds nothing either way).
         ExecStart = "${cfg.package}/bin/chainmail-server " +
           "-addr 127.0.0.1:${toString cfg.port} " +
-          "-corpus ${cfg.corpus}" +
+          "-corpus ${corpus}" +
           lib.optionalString (rev != "") " -rev ${rev}" +
           lib.optionalString (cfg.uploads != "") " -uploads ${cfg.uploads}" +
           lib.optionalString cfg.enableSlurp (
@@ -304,25 +341,32 @@ in {
           lib.optionalString cfg.enableSendMail " -send-mail";
         User = cfg.user;
         Group = cfg.user;
-        StateDirectory = "chainmail";
-        # The slurp units run as the same chainmail user (they own the work-
-        # mailbox token they read), so no other principal touches the state
-        # dir — 0700. StateDirectoryMode is REQUIRED, not cosmetic: systemd
-        # adjusts an existing StateDirectory to this mode on every start and
-        # defaults to 0755, which silently clobbers any tmpfiles mode at each
-        # restart (the beltino-sharing 0770 era is over; see the machine config).
+        # Named by the store rather than hardcoded: systemd resolves it
+        # against /var/lib, and stateDir's own default already carries the
+        # instance's name, so the two are one fact and cannot drift (see the
+        # option's description for why stateDir must live under /var/lib).
+        StateDirectory = baseNameOf cfg.stateDir;
+        # The instance's own user owns the store it reads (it holds the
+        # mailbox token the ingest reaches the mailbox with), so no other
+        # principal touches it — 0700. StateDirectoryMode is REQUIRED, not
+        # cosmetic: systemd adjusts an existing StateDirectory to this mode on
+        # every start and defaults to 0755, which silently clobbers any
+        # tmpfiles mode at each restart (the beltino-sharing 0770 era is over;
+        # see the machine config).
         StateDirectoryMode = "0700";
         WorkingDirectory = cfg.stateDir;
         # The server hosts the /auth/google served sign-in (chainmail#75): as
         # a system user with no home, HOME must point at the StateDirectory or
-        # the OAuth flow would write the token where the slurps cannot read it
-        # (the /v1/status + gmail-backend slurps read the very same store).
+        # the OAuth flow would write the token where the ingest cannot read it
+        # (the /v1/status + gmail-backend reads use the very same store). This
+        # is also what keeps two instances apart: one process, one HOME, one
+        # grant — the mailbox a token names is the mailbox in this directory.
         Environment = "HOME=${cfg.stateDir}";
         # No network namespace beyond loopback and whatever a later slurper
         # needs; ProtectSystem=strict makes the store and /etc read-only.
         ProtectSystem = "strict";
         PrivateTmp = true;
-        # setuid-denied unless the server may slurp: reaching the work mailbox is
+        # setuid-denied unless the server may slurp: reaching the mailbox is
         # a scoped sudo INTO the docket runner that holds the token, and the
         # setuid wrapper is what carries that. With slurp off the read-only
         # posture keeps NoNewPrivileges; with it on the grant is pinned to the
@@ -337,5 +381,100 @@ in {
         RestartSec = "5s";
       };
     };
+
+in {
+  # The flat options are the instance that predates `instances` — one server,
+  # named by nothing — and each entry of `instances` is another one.
+  options.services.chainmail = serverOptions // {
+    instances = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.submodule { options = serverOptions; });
+      default = { };
+      description = ''
+        Additional chainmail servers, keyed by name, for additional mailboxes.
+
+        Each is the same server as the options above — one program, one
+        corpus — with an identity of its own, because the mailbox a server
+        reads is the one whose Google grant sits in its own store: one
+        process, one HOME, one grant. So `user` and `stateDir` must be given
+        here (they have no default for exactly that reason, and two instances
+        may not share them — the module refuses), `corpus` follows the store
+        unless named, `port` must be its own, and the unit is named after the
+        instance (`chainmail-<name>`).
+
+        An instance that is not `enable`d does nothing: what the host decides
+        about a mailbox is a decision about that instance, and off is the
+        default for every one of them.
+      '';
+      example = lib.literalExpression ''
+        {
+          personal = {
+            enable = true;
+            port = 8766;
+            user = "chainmail-personal";
+            stateDir = "/var/lib/chainmail-personal";
+            enableSlurp = true;
+          };
+        }
+      '';
+    };
   };
+
+  config =
+    let
+      # The servers that are ON: the one the flat options describe, plus every
+      # named instance that is enabled. One list, built once, because every
+      # answer below is per server — which units exist, which users exist,
+      # which stores get touched, which ports are taken.
+      #
+      # It is built HERE, inside the values below, rather than as the shape of
+      # the config itself. A `lib.mkMerge` of a list whose LENGTH comes from
+      # `cfg.instances` recurses: the module system must know a config's keys
+      # before it can merge it, so the keys would depend on an option this very
+      # module declares (learned 2026-09-18).
+      servers = lib.filter (s: s.cfg.enable) (
+        [ { name = null; cfg = cfg; } ]
+        ++ lib.mapAttrsToList (name: instance: { inherit name; cfg = instance; }) cfg.instances
+      );
+    in {
+      # The first instance's identity, which it has always had. mkDefault, so a
+      # host that names any of the three wins — and so a NAMED instance has no
+      # default to fall back on, which is what keeps a second mailbox from
+      # being pointed at the first one's store by omission.
+      services.chainmail.user = lib.mkDefault "chainmail";
+      services.chainmail.stateDir = lib.mkDefault "/var/lib/chainmail";
+
+      users.users = lib.listToAttrs (map (s: lib.nameValuePair s.cfg.user {
+        isSystemUser = true;
+        group = s.cfg.user;
+        description = "chainmail corpus server"
+          + lib.optionalString (s.name != null) " (${s.name})";
+      }) servers);
+
+      users.groups = lib.listToAttrs (map (s: lib.nameValuePair s.cfg.user { }) servers);
+
+      systemd.services = lib.listToAttrs (
+        map (s: lib.nameValuePair (unitName s.name) (mkUnit s.cfg)) servers
+      );
+
+      # Two servers that share one of these are not two servers. A store holds
+      # one mailbox's corpus AND the Google grant that reaches it, so a shared
+      # store is one mailbox read by two processes, with both writing labels to
+      # it; a shared port is a bind collision; a shared user is a shared home.
+      # Refused here rather than worked out later from a corpus that has the
+      # wrong mail in it.
+      assertions = [
+        {
+          assertion = lib.length (lib.unique (map (s: s.cfg.user) servers)) == lib.length servers;
+          message = "services.chainmail: two instances name the same `user`. Each instance reads the mailbox whose Google grant is in its own store, so its user — and so its home — must be its own.";
+        }
+        {
+          assertion = lib.length (lib.unique (map (s: s.cfg.stateDir) servers)) == lib.length servers;
+          message = "services.chainmail: two instances name the same `stateDir`. One store is one mailbox and one grant; two servers on one store conflate two mailboxes, and one of them gets written to by mistake.";
+        }
+        {
+          assertion = lib.length (lib.unique (map (s: s.cfg.port) servers)) == lib.length servers;
+          message = "services.chainmail: two instances name the same `port`. Give each instance its own loopback port — the first instance's is 8765.";
+        }
+      ];
+    };
 }
