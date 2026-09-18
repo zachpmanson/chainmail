@@ -143,7 +143,7 @@ const usage = `usage: corpus <command> [flags]
   stats                    counts, coverage and what is missing
   status        [-backend gmail|docket]
                            probe each backend and write the connection snapshot
-                           the /status screen serves; -backend defaults to gmail,
+                           the /settings screen serves; -backend defaults to gmail,
                            the in-process library the ingest reads through as well
   people                   everyone in the corpus, with their identities
   candidates               probable duplicate identities, unmerged, each with the

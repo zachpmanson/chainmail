@@ -49,7 +49,7 @@ interface Row {
  *  Everyone is offered, in the corpus's own order — most involved first, which is
  *  where the reader of their own corpus is. A person known only by a name is
  *  still a fact about who was on a thread, so they are offered too; the reader
- *  control on /status is the one that needs a mailbox, because mail has to have
+ *  control on /settings is the one that needs a mailbox, because mail has to have
  *  come from an address.
  *
  *  Deliberately short: this is a suggestion for a field, not a directory, and a

@@ -6,6 +6,7 @@ import { RouterProvider } from "@tanstack/react-router";
 import { makeQueryClient } from "../src/lib/queryClient";
 import { clearToasts } from "../src/lib/toasts";
 import { createChainmailRouter } from "../src/router";
+import { audience } from "../src/components/ReplyBox";
 
 /**
  * Answering a message from the reading pane: the box, the two presses, and the
@@ -72,8 +73,56 @@ const entry = (over: Record<string, unknown>) => ({
  *  entry nothing can be threaded onto. */
 const chainBody = (entries: unknown[]) => ({ rootExtId: ROOT, entries });
 
+/** One message as the corpus holds it, with the people on it. The sender is one
+ *  row and the audience is the rest, which is the split a reply makes: the reply
+ *  goes to the sender and cc's everyone else, so the two are told apart here the
+ *  way the box tells them apart. Marit is the reader — the person /v1/settings
+ *  names as "me" — and is on the message the way the mailbox owner usually is,
+ *  cc'd by somebody else, which is the case the audience line has to get right.
+ *  Carl appears twice because two person rows for one colleague is a thing the
+ *  corpus does; one name is what the line prints. */
+const onLoom = [
+  { personId: 1, name: "Bo Halvorsen", role: "from" },
+  { personId: 2, name: "Cy Okafor", role: "to" },
+  { personId: 3, name: "Carl Nkemdirim", role: "cc" },
+  { personId: 4, name: "Marit Solheim", role: "cc" },
+  { personId: 5, name: "Carl Nkemdirim", role: "cc" },
+];
+
+const ME = 4;
+
+/** The corpus's identity graph, as /v1/people answers it: the people on the thread,
+ *  with the addresses the read of the thread does not carry. Cy is in it with one
+ *  address and a name that is not an address; Carl is in it twice, because two
+ *  person rows for one colleague is a thing this corpus does, and the two rows
+ *  answer with two addresses. Bo is deliberately absent, which is the case of a
+ *  name the corpus knows nothing more about than the message already said. */
+const PEOPLE = [
+  {
+    personId: 2,
+    displayName: "Cy Okafor",
+    identities: ["display_name:cy okafor", "email:cy@loomworks.example"],
+    sent: 3,
+    received: 9,
+  },
+  {
+    personId: 3,
+    displayName: "Carl Nkemdirim",
+    identities: ["email:carl@loomworks.example"],
+    sent: 1,
+    received: 4,
+  },
+  {
+    personId: 5,
+    displayName: "Carl Nkemdirim",
+    identities: ["email:carl.n@loomworks.example"],
+    sent: 0,
+    received: 2,
+  },
+];
+
 const threaded = [
-  entry({ extId: ROOT }),
+  entry({ extId: ROOT, participants: onLoom }),
   entry({
     extId: QUOTED,
     author: "Cy Devlin",
@@ -101,7 +150,11 @@ const replyPlan = (sent: boolean) => ({
 });
 
 /** The page's list, and the endpoints the pane reaches for around it. */
-const server = (chain: () => Response, send?: Handler): Handler => (c) => {
+const server = (
+  chain: () => Response,
+  send?: Handler,
+  settings: Record<string, unknown> = { mePersonId: ME },
+): Handler => (c) => {
   const p = pathOf(c);
   if (p === "/v1/search") {
     return json(200, {
@@ -128,7 +181,8 @@ const server = (chain: () => Response, send?: Handler): Handler => (c) => {
   if (p === "/v1/send") return send ? send(c) : json(500, { error: "no send handler" });
   if (p === "/v1/labels") return json(200, { labels: [{ name: "INBOX", messages: 5 }] });
   if (p === "/v1/stats") return json(200, {});
-  if (p === "/v1/settings") return json(200, {});
+  if (p === "/v1/settings") return json(200, settings);
+  if (p === "/v1/people") return json(200, { people: PEOPLE });
   if (p === "/auth/status") return json(200, { signed_in: true });
   return json(500, { error: `unexpected call to ${c.method} ${p}` });
 };
@@ -228,13 +282,46 @@ describe("answering a message from the pane", () => {
     expect(to).toContain("Bo Halvorsen");
     expect(to).not.toContain("Cy Devlin");
     expect(to).toContain("Wed, 11 Mar 2026 17:40");
-    // And it says the reply reaches the message's whole audience, which is what
-    // the server is about to do: the box names the message it answers, and "who
-    // else" is not something it can know before the plan comes back.
-    expect(to).toContain("everyone else");
+    // And the reply reaches the message's whole audience, which the line names: the
+    // sender in its own clause and the rest of the message's people as the cc they
+    // will be. The reader is on that message and is not on that list — a reply is
+    // not addressed back to the person writing it — and a colleague the corpus holds
+    // two rows for is one name.
+    expect(to).toContain("cc Cy Okafor and Carl Nkemdirim");
+    expect(to).not.toContain("Marit Solheim");
     // The words are the bubble's own, which is the point of the pairing: the head
     // above says when the message arrived, and this line must not say otherwise.
     expect(sends()).toHaveLength(0);
+  });
+
+  it("says where each name it will cc answers to, without changing the sentence", async () => {
+    handler = server(() => json(200, chainBody(threaded)));
+    await mountApp();
+    await openThread();
+
+    // A name on its own is not a claim a reader can check, and the address of a
+    // person this thread was *sent to* is nowhere in the read: the entry carries a
+    // person id and a name and no address (see castOfEntries), so the corpus's
+    // identity graph is what answers. The line's own words are unchanged — this is
+    // a hover, not a second line of text — which is what the sentence assertions
+    // above are still watching for.
+    const line = () => box()!.querySelector(".replyto") as HTMLElement;
+    await waitFor(() =>
+      expect(within(line()).getByText("Cy Okafor").getAttribute("title")).toBe(
+        "Cy Okafor <cy@loomworks.example>",
+      ),
+    );
+    // Two rows, two addresses, one name: both are listed, because the reader is
+    // hovering a name that stands for both of them.
+    expect(within(line()).getByText("Carl Nkemdirim").getAttribute("title")).toBe(
+      "Carl Nkemdirim <carl@loomworks.example, carl.n@loomworks.example>",
+    );
+    // And a name nothing has an address for is left as a name: the title is the name
+    // itself, which is the fallback every hover in this app takes (see lib/who)
+    // rather than an empty tooltip or an invented address.
+    expect(within(line()).getByText("Bo Halvorsen").getAttribute("title")).toBe("Bo Halvorsen");
+    expect(line().querySelectorAll("[title='']").length).toBe(0);
+    expect(line().textContent).toContain("cc Cy Okafor and Carl Nkemdirim");
   });
 
   it("offers no box at all when nothing in the thread is in the mailbox", async () => {
@@ -331,7 +418,7 @@ describe("answering a message from the pane", () => {
     // about the audience they get to decide is also the one thing they are told.
     const tick = within(box()!).getByRole("checkbox", { name: /reply all/ }) as HTMLInputElement;
     expect(tick.checked).toBe(true);
-    expect(box()!.querySelector(".replyto")!.textContent).toContain("everyone else");
+    expect(box()!.querySelector(".replyto")!.textContent).toContain("cc Cy Okafor");
     // It is the left end of the row whose buttons are at the right: the choices
     // under the field, the press past them.
     expect(box()!.querySelector(".replyacts .replyopts .replytick")).toBeTruthy();
@@ -340,7 +427,11 @@ describe("answering a message from the pane", () => {
     expect(tick.checked).toBe(false);
     const said = box()!.querySelector(".replyto")!.textContent!;
     expect(said).toContain("nobody else");
-    expect(said).not.toContain("everyone else");
+    // The names go with the tick, because the names were the tick's own claim about
+    // the reply: leaving them up would have the box promise a cc the send no longer
+    // carries, which is the one lie this line exists to prevent.
+    expect(said).not.toContain("Cy Okafor");
+    expect(said).not.toContain("Carl Nkemdirim");
 
     fireEvent.change(field(), { target: { value: "The 14th works." } });
     press("preview");
@@ -502,5 +593,48 @@ describe("answering a message from the pane", () => {
     fireEvent.change(field(), { target: { value: "ok" } });
     expect(preview.hasAttribute("disabled")).toBe(false);
     expect(sends()).toHaveLength(0);
+  });
+});
+
+/**
+ * The audience line's own arithmetic, without a pane around it: which people on a
+ * message a reply-all would reach. The component tests above cover the sentence it
+ * ends up in; what is checked here is the reading it is built on, where the ways to
+ * get it wrong are all silent — a name printed twice, the sender listed as somebody
+ * the reply is also cc'ing, the reader listed among the recipients.
+ */
+describe("the people a reply-all reaches", () => {
+  const e = (participants: unknown[]) =>
+    entry({ participants }) as Parameters<typeof audience>[0];
+
+  it("names the message's people, and neither the sender nor the reader", () => {
+    expect(audience(e(onLoom), ME)).toEqual(["Cy Okafor", "Carl Nkemdirim"]);
+  });
+
+  it("subtracts nobody when the reader has not said who they are", () => {
+    // The setting is the only place "which of these people is me" is answered, so
+    // a reader who has named nobody gets the message's own audience — which is the
+    // honest reading rather than a guess at an address that might be theirs.
+    expect(audience(e(onLoom), undefined)).toEqual([
+      "Cy Okafor",
+      "Carl Nkemdirim",
+      "Marit Solheim",
+    ]);
+  });
+
+  it("is empty when the message was to nobody but the reader", () => {
+    // A message sent to the mailbox alone, and answered: there is no cc to name,
+    // which the box says in words rather than with an empty list.
+    expect(audience(e([{ personId: 1, name: "Bo Halvorsen", role: "from" }]), ME)).toEqual([]);
+  });
+
+  it("names the recipient of a message the reader wrote themselves", () => {
+    // The reader's own message, answered: the from row is the reader and is skipped
+    // as the sender, and the To row is somebody else and is named.
+    const mine = e([
+      { personId: ME, name: "Marit Solheim", role: "from" },
+      { personId: 1, name: "Bo Halvorsen", role: "to" },
+    ]);
+    expect(audience(mine, ME)).toEqual(["Bo Halvorsen"]);
   });
 });

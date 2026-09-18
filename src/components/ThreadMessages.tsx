@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError, $api, type CorpusEntry } from "../lib/api";
 import { MEDIA_BASE, pullSummary } from "../lib/attachments";
@@ -6,9 +6,17 @@ import { attach } from "../client/behaviour";
 import { orgOrder, slotsFor } from "../lib/derive";
 import { resolveEdits, type EditEntry, type RowEdit } from "../lib/edits";
 import { newest } from "../lib/newest";
+import { pushToast } from "../lib/toasts";
 import { gmailIdOf, sourceLine } from "../lib/sources";
 import { fetchOriginal } from "../lib/original";
-import { nest } from "../lib/threading";
+// `buildTree` rather than `tree` because the pane's own prop for the same idea is
+// called `tree`, and a prop of that name would shadow the builder here.
+import { tree as buildTree, type Knot } from "../lib/tree";
+// senderTitle moved to lib/who when the hover titles stopped being only the
+// bubbles' business: the pane, the participants panel, the reply box and the
+// preview all say where a name's address came from, and one module holds the
+// two ways of saying it.
+import { senderTitle, usePersonAddresses, withAddress } from "../lib/who";
 import { Failure } from "./ThreadPreview";
 import { Edits } from "./Edits";
 import { Message, type StampData } from "./Message";
@@ -111,39 +119,9 @@ function formatOffset(mins: number): string {
  *  part of. */
 const anchor = (i: number) => `entry-${i}`;
 
-/** What hovering the sender says: their name and the address the mail came from,
- *  e.g. "Lane Whittaker <lane@whittaker.example>". The same string a page build
- *  makes for the same entry (see derive.ts's whoTitle), because a reader reading
- *  one thread in two places should be told the same thing about it.
- *
- *  A message recovered from inside someone else's quote has no From header of its
- *  own, so there is no address to hang on the name — and the corpus will not lend
- *  one, because an address reached by matching the sender's name is not evidence
- *  about who sent this. The absence is named instead, with the address that is
- *  real here and labelled as what it is: the quoter's. Silence would read as the
- *  pane failing to fill in what it fills in on every other bubble in the thread.
- *
- *  The page answers a different question in its own source line, and should keep
- *  doing so: "unspooled from msg g-a" is about where the text came from, and is
- *  printed under every bubble whether or not anyone can be named. A hover is
- *  about the person, so it says which person's address this is rather than where
- *  the entry was found. */
-function senderTitle(e: CorpusEntry): string {
-  const name = e.author ?? "";
-  if (!e.fromEmail) {
-    if (!e.fromQuotedBy) return name;
-    // Nothing to hang the parenthesis on when the entry has no name either, so
-    // it stands alone rather than starting with a space and a bracket.
-    const unknown = `address unknown; quoted by ${e.fromQuotedBy}`;
-    return name ? `${name} (${unknown})` : unknown;
-  }
-  if (!name) return e.fromEmail;
-  return `${name} <${e.fromEmail}>`;
-}
-
 
 /** The sender's name and the clock of a message, in the words its own bubble
- *  prints — "Lane Whittaker" and "Mon 2 Mar 2026 09:15".
+ *  prints — "Lena Whitfield" and "Mon 2 Mar 2026 09:15".
  *
  *  One function, two callers with the same obligation: the line that says what a
  *  message answers (ReplyLink) and the reply box that says which message is being
@@ -151,25 +129,28 @@ function senderTitle(e: CorpusEntry): string {
  *  bubble between them states the same clock from the same source — so a reader
  *  must not be told two different times for one message by two lines of the same
  *  pane. */
-function wordsOf(e: CorpusEntry): { who: string; when: string } {
+function wordsOf(e: CorpusEntry): { who: string; whoTitle: string; when: string } {
   const at = stampOf(e);
   return {
     who: e.author ?? "",
+    // The same string the bubble wears, because it is the same claim: this line
+    // names the person the message is from, and the address is the part of that a
+    // reader can check.
+    whoTitle: senderTitle(e),
     when: [at.date, at.time].filter(Boolean).join(" "),
   };
 }
 
 export function ThreadMessages({
   thread,
-  threaded = false,
+  tree = false,
 }: {
   thread: { rootExtId: string };
-  /** Draw the replies under the message they answer, indented by depth, rather
-   *  than in the order they were sent (see lib/threading). The pane's own switch
-   *  is what sets it, and the default is the transcript's own order — a caller
-   *  that knows nothing about threading gets what this component has always
-   *  drawn. */
-  threaded?: boolean;
+  /** Draw the replies as a tree under the message they answer, rather than in the
+   *  order they were sent (see lib/tree). The pane's own switch is what sets it,
+   *  and the default is the transcript's own order — a caller that knows nothing
+   *  about the tree gets what this component has always drawn. */
+  tree?: boolean;
 }) {
   const queryClient = useQueryClient();
   const fetched = $api.useQuery("get", "/v1/chains/{rootExtId}", {
@@ -208,6 +189,51 @@ export function ThreadMessages({
     const shown = entries.filter((e) => !hoisted.has(e.extId));
     return { shown, parentOf: new Map(shown.map((e) => [e.extId, effective(e.parent)])) };
   }, [entries]);
+
+  // How a sender's mail is read is the one thing this pane writes about a person
+  // rather than about a message, and it is written to the corpus rather than kept
+  // in this browser: the reader who has decided how to read a run of
+  // notifications has decided it on the phone as well as here, and a merge of two
+  // spellings of the same person cannot lose it (see the corpus's
+  // people.prefer_original). The control is drawn from the entry the chain read
+  // already carried, so a bubble costs no second request to know what to show.
+  //
+  // The write is optimistic, because the switch it answers is a switch: pressing
+  // it and waiting a round trip to see it move reads as the press not landing.
+  // The cached chains are patched first — every bubble of that sender in every
+  // thread this session has read, since the answer is per person and not per
+  // message — and then marked stale, so the corpus's own answer is what is drawn
+  // as soon as it arrives. A failure takes the patch back the same way: what
+  // stands is what the corpus says, not what this pane hoped.
+  const prefer = $api.useMutation("post", "/v1/people/{personId}");
+
+  const flipStyle = (personId: number, next: boolean) => {
+    queryClient.setQueriesData<{ entries: CorpusEntry[] }>(
+      { queryKey: ["get", "/v1/chains/{rootExtId}"] },
+      (old) =>
+        old && {
+          ...old,
+          entries: old.entries.map((e) =>
+            e.personId === personId ? { ...e, preferOriginal: next } : e,
+          ),
+        },
+    );
+    prefer.mutate(
+      { params: { path: { personId } }, body: { preferOriginal: next } },
+      {
+        onError: (err) => {
+          pushToast(
+            `That reading style did not stick: ${err instanceof Error ? err.message : String(err)}. ` +
+              "Nothing was stored — press again to retry.",
+            "fail",
+          );
+        },
+        onSettled: () => {
+          void queryClient.invalidateQueries({ queryKey: ["get", "/v1/chains/{rootExtId}"] });
+        },
+      },
+    );
+  };
 
   // The message whose files are being fetched. One at a time: a pull is mailbox
   // round trips, and a pane is a place a reader reads rather than a queue they
@@ -264,6 +290,12 @@ export function ThreadMessages({
   // back to the start away from where they were reading.
   const [landed, setLanded] = useState<string | null>(null);
   const landedFor = useRef<string | null>(null);
+  // The corpus's people, by person id, as their addresses: read once for the whole
+  // pane (see lib/who), because the participants panel and the reply box both join
+  // against it. Here, among the hooks, rather than beside the titles it feeds — a
+  // thread that is still loading renders three hooks fewer than a thread that has
+  // arrived, and React counts them.
+  const people = usePersonAddresses();
   // The transcript's behaviour over the pane's bubbles, the same module a built
   // page attaches (see Rendered): a chip the corpus holds bytes for opens in the
   // window over the pane rather than in a new tab, and a download asked for before
@@ -297,8 +329,21 @@ export function ThreadMessages({
   // entries this pane was handed. A sender whose org nothing established takes the
   // stylesheet's unknown slot, which is what the page draws for them too.
   const slot = slotsFor(orgOrder(shown.map((e) => e.org)));
+  // The hover title for a name, which is what the participants panel and the reply
+  // box's audience line ask by. A sender is answered from their own entry's header,
+  // which is evidence about that message; everybody else — a recipient, a cc, a
+  // person whose only part in the thread is receiving it — has no address in the
+  // read at all (see castOfEntries), so the corpus's identity graph answers instead.
+  // The graph wins where it knows, because a title on a name is a claim about the
+  // person: the entry's own careful "address unknown; quoted by …" is the wording
+  // for the bubble, which is a claim about the message.
   const titles = new Map<string, string>();
   for (const e of shown) if (e.author) titles.set(e.author, senderTitle(e));
+  for (const e of shown)
+    for (const p of e.participants ?? []) {
+      const addresses = people.get(p.personId);
+      if (addresses) titles.set(p.name, withAddress(p.name, addresses));
+    }
   // The provenance lines' own two lookups. A host is named by its mailbox id
   // where it has one — the same name a built page prints — and an unspooled id
   // links to this page's row for that message rather than out to the mailbox,
@@ -347,8 +392,8 @@ export function ThreadMessages({
     // same walk — but a link with no anchor in it would be a worse answer than
     // saying the thread starts here.
     if (i === undefined) return null;
-    const { who, when } = wordsOf(parent);
-    return { anchor: anchor(i), who, when };
+    const { who, whoTitle, when } = wordsOf(parent);
+    return { anchor: anchor(i), who, whoTitle, when };
   };
 
   // A quoter's edit, resolved for this message's bubble by the same function the
@@ -388,7 +433,7 @@ export function ThreadMessages({
   // The message a reply would answer: the newest entry of this thread that the
   // mailbox holds, which is the last thing said in it that can be answered.
   //
-  // Newest rather than last drawn, because nesting reorders bubbles without
+  // Newest rather than last drawn, because drawing the tree reorders bubbles without
   // reordering the conversation — a reply under an older message is still the
   // newest message. Answerable rather than simply newest, because the newest thing
   // here may be a line recovered from inside somebody else's quote: that has no
@@ -405,14 +450,153 @@ export function ThreadMessages({
   // one would be naming a message with no bubble to read it against.
   const answer = newest(shown.filter((e) => gmailIdOf(e) !== undefined));
 
-  // The order the bubbles are drawn in, and how far in each one is: the
-  // transcript's own order, or the reply tree when the pane's switch is on (see
-  // lib/threading). Nothing about the entries changes — same corpus read, same
-  // reply graph, same links — only which one comes next and which column it sits
-  // in, so a switch that is off is the component this pane has always drawn.
-  const rows = threaded
-    ? nest(shown, (e) => e.extId, (e) => parentOf.get(e.extId))
-    : shown.map((entry) => ({ entry, depth: 0 }));
+  // The order the bubbles are drawn in and the replies that hang off each one:
+  // the transcript's own order, or the reply tree when the pane's switch is on
+  // (see lib/tree). Nothing about the entries changes — same corpus read,
+  // same reply graph, same links — only which one comes next and which of the
+  // tree's containers it is drawn inside, so a switch that is off is this pane
+  // with every bubble at the top level and no container drawn at all.
+  const forest = tree
+    ? buildTree(shown, (e) => e.extId, (e) => parentOf.get(e.extId))
+    : shown.map((entry) => ({ entry, replies: [] }));
+
+  /** One bubble. The whole of what the switch changes is where this sits, so the
+   *  element is named once and drawn the same way at every level and in both
+   *  views — flat, every message is a tree of one with no replies. */
+  const bubble = (e: CorpusEntry) => (
+    <Message
+          // The anchor is the entry's place in the thread as the corpus sent it,
+          // not in the order it is drawn: the reply link under a bubble and the
+          // id on a source line both name a message, and drawing the tree moves
+          // bubbles
+          // without moving what they are called. `indexOf` is the same map the
+          // links are built from, so the two cannot disagree.
+          id={anchor(indexOf.get(e.extId) ?? 0)}
+          body={e.html ?? ""}
+          sender={e.author}
+          // Hovering the name (or the avatar) names the person fully: the address
+          // the entry came from, as a page build's own title does. A recovered
+          // entry has no address of its own, and then the title names that
+          // absence and the person it was quoted by rather than borrowing an
+          // address from the people table — the same rule the page follows, so
+          // the two cannot name two addresses for one message.
+          senderTitle={senderTitle(e)}
+          // The sender's organisation as the corpus resolved it, on the slot this
+          // thread's own first-appearance order gives it.
+          orgSlot={slot(e.org)}
+          // The reader's own message: the corpus resolved this entry's author
+          // against the addresses the reader stored, so the pane makes no second
+          // guess about whose mail this is. The mark itself is the page's — the
+          // same `Message` with the same `me`, which is the class the stylesheet
+          // already tints (`.msg.me .bub`). That is the decision the issue left
+          // open, and it is settled this way on purpose: a pane-only vocabulary
+          // for one fact — a border, an alignment — would be a second thing to
+          // keep in step with what "sent by you" means on the page.
+          me={e.mine}
+          quoted={e.quoted}
+          // The recipients the message itself stated, or nothing: a recovered
+          // entry has no headers, and the line reads "to —" rather than naming
+          // whoever the page guessed. The corpus makes this string with the same
+          // function a page build does.
+          to={e.to}
+          // The receipt's names, by the same map the panel's rows and the reply
+          // box's audience line use: the people on this line are mostly the ones
+          // who sent nothing, so the thread read has no address for them and the
+          // corpus's identity graph is where one comes from.
+          toTitle={(name) => titles.get(name) ?? name}
+          subject={e.subject}
+          // Where this message was found, in the same receipt line a built page
+          // prints under the same bubble — the message's mailbox id, or the hosts
+          // a recovered one was unspooled from. The pane is a reader looking at
+          // one thread and the page is a reader looking at a built one; the id in
+          // the receipt is the thing both are holding in their hand.
+          source={<Source source={sourceLine(e, mailName)} anchorByGmail={anchorByGmail} />}
+          // What this message answers, as a built page prints it under the same
+          // bubble: the arrow and the parent's name and clock, linking to the
+          // parent's row here. The page resolves the parent through the spec's
+          // rows and the pane through the entries it was handed — the same mark,
+          // the same words, one component (see ReplyLink).
+          reply={<ReplyLink parent={replyOf(e)} />}
+          // A quoter's edit to a message this one quoted, drawn inside this bubble
+          // exactly as a page build draws it — the same relation, the same diff,
+          // the same component (see Edits and lib/edits). The derived copy it was
+          // made against has been hoisted out of these rows, so this is the only
+          // place the edit appears.
+          edits={<Edits edits={editsOf(e, stampOf(e))} />}
+          stamp={stampOf(e)}
+          // The corpus entry as it arrived, so a bubble that renders wrong can be
+          // pasted somewhere and read whole — the same affordance, and the same
+          // button, the page offers.
+          copyJson={e}
+          // The sender's own html, where the corpus holds a part for this message:
+          // `original` is the read's own answer to that (body_html is not empty),
+          // so the control is drawn for the messages that can answer it and for no
+          // others. The fetch is the app's one route to a message's own markup, and
+          // it is this pane's to pass because the pane is a reader with a server
+          // behind it — a built page has none and gets no control.
+          original={e.original ? { extId: e.extId, load: fetchOriginal } : undefined}
+          // The address the switch is kept against, so that pressing the control
+          // on one of a sender's messages reads the rest of them the same way.
+          // A recovered entry has no address of its own and then the switch is
+          // kept against the message — see MessageProps.fromEmail. It is the
+          // fallback now rather than the store: where the corpus resolved this
+          // sender to a person, the answer is that person's.
+          fromEmail={e.fromEmail}
+          // Whose reading style this bubble draws, and the write that changes it.
+          // Both go together or not at all: a person the corpus resolved this
+          // sender to is what the answer is stored against, and the handle to
+          // write it back with. An entry with nobody to hold the answer — one
+          // recovered from a quote — gets neither, and its switch falls back to
+          // this browser's own memory.
+          person={
+            e.personId ? { id: e.personId, preferOriginal: e.preferOriginal === true } : undefined
+          }
+          onPreferOriginal={
+            e.personId ? (next: boolean) => flipStyle(e.personId!, next) : undefined
+          }
+          // The files this message carried, as the corpus read them. mediaBase is
+          // the app's own route to stored bytes — the pane is a reader with a
+          // server behind it, unlike a shared export, so a pulled file opens
+          // here rather than sending the reader to the mailbox.
+          attachments={e.attachments}
+          // The corpus's handle for this entry, which is what a fetch button asks
+          // for. The pane has it on every message it draws — a recovered entry
+          // included, since that is an id the corpus minted for the row rather
+          // than a mailbox id the message always had.
+          extId={e.extId}
+          // The fetch itself, on the same grant a built page's button presses.
+          // Both are passed together or not at all: the button is offered only
+          // where somebody can answer it (see Attachments).
+          onPull={(extId) => {
+            setPulling(extId);
+            setPullNote(null);
+            pull.mutate({ body: { entry: extId } });
+          }}
+          pulling={pulling}
+          mediaBase={MEDIA_BASE}
+          // The message the pane landed on, flashed once and then let go. Only
+          // that one message is handed the end-of-flash callback: a thread is one
+          // landing, and every other bubble has no mark to take off.
+          landed={e.extId === landed}
+          onLandedEnd={e.extId === landed ? () => setLanded(null) : undefined}
+        />
+  );
+
+  /** A message and, underneath it, the replies to it in one container of their
+   *  own: the container is the indent and its own left border is the line beside
+   *  them (see .ibread .stream .replies), which is how unroller draws its tree.
+   *  One container per message rather than a number per bubble is what makes a
+   *  level's line run unbroken from the first answer to the last and stop where
+   *  the subtree does. A message with no replies draws no container at all, so a
+   *  thread with no graph in it is drawn exactly as the flat view draws it. */
+  const draw = (node: Knot<CorpusEntry>): ReactNode => (
+    <Fragment key={node.entry.extId}>
+      {bubble(node.entry)}
+      {node.replies.length ? (
+        <div className="replies">{node.replies.map((n) => draw(n))}</div>
+      ) : null}
+    </Fragment>
+  );
 
   return (
     <div className="stream">
@@ -444,112 +628,7 @@ export function ThreadMessages({
         }}
         people={castOfEntries(shown)}
       />
-      {rows.map(({ entry: e, depth }) => (
-        <Message
-          key={e.extId}
-          // The anchor is the entry's place in the thread as the corpus sent it,
-          // not in the order it is drawn: the reply link under a bubble and the
-          // id on a source line both name a message, and nesting moves bubbles
-          // without moving what they are called. `indexOf` is the same map the
-          // links are built from, so the two cannot disagree.
-          id={anchor(indexOf.get(e.extId) ?? 0)}
-          body={e.html ?? ""}
-          sender={e.author}
-          // Hovering the name (or the avatar) names the person fully: the address
-          // the entry came from, as a page build's own title does. A recovered
-          // entry has no address of its own, and then the title names that
-          // absence and the person it was quoted by rather than borrowing an
-          // address from the people table — the same rule the page follows, so
-          // the two cannot name two addresses for one message.
-          senderTitle={senderTitle(e)}
-          // The sender's organisation as the corpus resolved it, on the slot this
-          // thread's own first-appearance order gives it.
-          orgSlot={slot(e.org)}
-          // The reader's own message: the corpus resolved this entry's author
-          // against the addresses the reader stored, so the pane makes no second
-          // guess about whose mail this is. The mark itself is the page's — the
-          // same `Message` with the same `me`, which is the class the stylesheet
-          // already tints (`.msg.me .bub`). That is the decision the issue left
-          // open, and it is settled this way on purpose: a pane-only vocabulary
-          // for one fact — a border, an alignment — would be a second thing to
-          // keep in step with what "sent by you" means on the page.
-          me={e.mine}
-          quoted={e.quoted}
-          // The recipients the message itself stated, or nothing: a recovered
-          // entry has no headers, and the line reads "to —" rather than naming
-          // whoever the page guessed. The corpus makes this string with the same
-          // function a page build does.
-          to={e.to}
-          subject={e.subject}
-          // Where this message was found, in the same receipt line a built page
-          // prints under the same bubble — the message's mailbox id, or the hosts
-          // a recovered one was unspooled from. The pane is a reader looking at
-          // one thread and the page is a reader looking at a built one; the id in
-          // the receipt is the thing both are holding in their hand.
-          source={<Source source={sourceLine(e, mailName)} anchorByGmail={anchorByGmail} />}
-          // What this message answers, as a built page prints it under the same
-          // bubble: the arrow and the parent's name and clock, linking to the
-          // parent's row here. The page resolves the parent through the spec's
-          // rows and the pane through the entries it was handed — the same mark,
-          // the same words, one component (see ReplyLink).
-          reply={<ReplyLink parent={replyOf(e)} />}
-          // A quoter's edit to a message this one quoted, drawn inside this bubble
-          // exactly as a page build draws it — the same relation, the same diff,
-          // the same component (see Edits and lib/edits). The derived copy it was
-          // made against has been hoisted out of these rows, so this is the only
-          // place the edit appears.
-          edits={<Edits edits={editsOf(e, stampOf(e))} />}
-          // How deep this message is in the reply tree, for the stylesheet to
-          // indent and to rule off by (see .ibread .stream .msg). It rides on the
-          // prop the page uses to place a bubble in the transcript's grid, which
-          // is the same question — where does this bubble sit — asked by a layout
-          // this pane does not have. Flat, every message is at zero and the
-          // stylesheet draws nothing.
-          style={{ "--nest": depth } as CSSProperties}
-          stamp={stampOf(e)}
-          // The corpus entry as it arrived, so a bubble that renders wrong can be
-          // pasted somewhere and read whole — the same affordance, and the same
-          // button, the page offers.
-          copyJson={e}
-          // The sender's own html, where the corpus holds a part for this message:
-          // `original` is the read's own answer to that (body_html is not empty),
-          // so the control is drawn for the messages that can answer it and for no
-          // others. The fetch is the app's one route to a message's own markup, and
-          // it is this pane's to pass because the pane is a reader with a server
-          // behind it — a built page has none and gets no control.
-          original={e.original ? { extId: e.extId, load: fetchOriginal } : undefined}
-          // The address the switch is kept against, so that pressing the control
-          // on one of a sender's messages reads the rest of them the same way.
-          // A recovered entry has no address of its own and then the switch is
-          // kept against the message — see MessageProps.fromEmail.
-          fromEmail={e.fromEmail}
-          // The files this message carried, as the corpus read them. mediaBase is
-          // the app's own route to stored bytes — the pane is a reader with a
-          // server behind it, unlike a shared export, so a pulled file opens
-          // here rather than sending the reader to the mailbox.
-          attachments={e.attachments}
-          // The corpus's handle for this entry, which is what a fetch button asks
-          // for. The pane has it on every message it draws — a recovered entry
-          // included, since that is an id the corpus minted for the row rather
-          // than a mailbox id the message always had.
-          extId={e.extId}
-          // The fetch itself, on the same grant a built page's button presses.
-          // Both are passed together or not at all: the button is offered only
-          // where somebody can answer it (see Attachments).
-          onPull={(extId) => {
-            setPulling(extId);
-            setPullNote(null);
-            pull.mutate({ body: { entry: extId } });
-          }}
-          pulling={pulling}
-          mediaBase={MEDIA_BASE}
-          // The message the pane landed on, flashed once and then let go. Only
-          // that one message is handed the end-of-flash callback: a thread is one
-          // landing, and every other bubble has no mark to take off.
-          landed={e.extId === landed}
-          onLandedEnd={e.extId === landed ? () => setLanded(null) : undefined}
-        />
-      ))}
+      {forest.map((node) => draw(node))}
       {/* The reply box, under everything said so far: the newest thing on this
           screen is the message it answers, and an answer belongs at the bottom of
           the conversation it continues. It is inside the pane's scroll box with

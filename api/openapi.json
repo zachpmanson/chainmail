@@ -1521,6 +1521,15 @@
             "type": "string",
             "description": "The person whose message this entry was recovered from, written as a client writes a person on hover (\"Ada Okoye <ada@loomworks.example>\"), with several joined by \", \". Present only where `fromEmail` is absent: a recovered entry has no address of its own, and the quoter is where it came from rather than a guess at who sent it."
           },
+          "personId": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The person the corpus resolved this entry's sender to, as an id from /v1/people. Absent where it resolved nobody, which is every entry recovered from somebody else's quote. `author` and `fromEmail` say what the corpus found; this says who it found them to be, and it is the handle a client needs for anything the reader decides about that person rather than about this message — POST /v1/people/{personId} is the write."
+          },
+          "preferOriginal": {
+            "type": "boolean",
+            "description": "Whether the reader reads this entry's sender as that sender wrote them: the state of the staged/original control the bubble offers, which is decided by the person above rather than by this message. Absent means false, and false is also what an entry with nobody to hold the answer gets. Set it with POST /v1/people/{personId}, where the answer is stored — one answer per person, so a sender's mail reads the same way on every device and in every thread."
+          },
           "container": {
             "type": "string",
             "description": "Mail thread id or Slack channel id. Absent when the source stated none."
@@ -2051,6 +2060,10 @@
           "received": {
             "type": "integer",
             "description": "Entries they were a to: or cc: on. Sent 0 with received above 0 is a recipient-only participant, which is a quarter of a real cast."
+          },
+          "preferOriginal": {
+            "type": "boolean",
+            "description": "Whether the reader reads this person's mail as they wrote it. Absent means false. One answer per person rather than per browser or per message, because the mail it is for arrives as a run from one address and a reader who has decided how to read someone has decided it for all of it — and for every device they read it on."
           }
         }
       },
@@ -3583,6 +3596,10 @@
               "type": "string",
               "example": "display_name:ada o"
             }
+          },
+          "preferOriginal": {
+            "type": "boolean",
+            "description": "The reading style for this person's mail: true for the sender's own rendering, false for the transcript's. Absent leaves the answer as it stands, which is the rule every other field here follows — a request that renamed somebody must not switch their reading style off by leaving it out. This is what the staged/original control on a message sends, and it is the only write in this API that is about how mail is read rather than about what the corpus holds."
           }
         }
       },

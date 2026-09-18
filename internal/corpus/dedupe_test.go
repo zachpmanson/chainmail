@@ -403,7 +403,7 @@ func TestAddressNamesPerson(t *testing.T) {
 		{"reception", "Nella Forge", false},
 		{"bl", "Nella Forge", false},                 // two letters name nobody
 		{"support", "Nia Prentice (Support)", false}, // the annotation is not a name
-		{"arvida", "Klara Belk | Arvida", false},
+		{"ardenlee", "Klara Belk | Ardenlee", false},
 	} {
 		if got := addressNamesPerson(c.local, c.name); got != c.want {
 			t.Errorf("addressNamesPerson(%q, %q) = %v, want %v",

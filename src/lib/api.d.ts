@@ -95,6 +95,8 @@ export interface paths {
          *
          *     Whether the rest of the audience is on the reply is the one thing the caller decides: `all` narrows the reply to the person who wrote and cannot widen it past the message's own headers, so both settings share the one property that matters here — the recipients are not the caller's to name.
          *
+         *     A reply is one message in two renderings: the plain text, and the same words as HTML with the answered message quoted inside a `blockquote`, composed together so the reader's words, the subject and the heading cannot differ between them. The quote is the one part of a reply this server did not write — the HTML part carries the answered message's own markup where it had any, and its text where it did not, so answering an HTML mail sends the mail rather than a transcript of it. That markup passes the same allowlist every body in the reading pane passes, so a reply can relay to its recipients nothing the page would refuse to render. An `html` field of false sends the words alone, in text.
+         *
          *     Two steps, and the first sends nothing: without `confirm` the reply is prepared and the answer is the plan — the recipients the mailbox will use, the subject, and the whole body including the quote of the message being answered, which this server composes. That is a preview of the message rather than of a draft. With `confirm` the same prepare runs and is executed, and the answer carries the id of the message that went out.
          *
          *     An entry with no mailbox copy answers 400, unlike /v1/read and /v1/mail where such an entry is skipped and counted: those act on the part of a set that can be acted on, and a send cannot be half-performed — there is no mailbox message to thread against.
@@ -734,6 +736,13 @@ export interface components {
             org?: string;
             /** @description The person whose message this entry was recovered from, written as a client writes a person on hover ("Ada Okoye <ada@loomworks.example>"), with several joined by ", ". Present only where `fromEmail` is absent: a recovered entry has no address of its own, and the quoter is where it came from rather than a guess at who sent it. */
             fromQuotedBy?: string;
+            /**
+             * Format: int64
+             * @description The person the corpus resolved this entry's sender to, as an id from /v1/people. Absent where it resolved nobody, which is every entry recovered from somebody else's quote. `author` and `fromEmail` say what the corpus found; this says who it found them to be, and it is the handle a client needs for anything the reader decides about that person rather than about this message — POST /v1/people/{personId} is the write.
+             */
+            personId?: number;
+            /** @description Whether the reader reads this entry's sender as that sender wrote them: the state of the staged/original control the bubble offers, which is decided by the person above rather than by this message. Absent means false, and false is also what an entry with nobody to hold the answer gets. Set it with POST /v1/people/{personId}, where the answer is stored — one answer per person, so a sender's mail reads the same way on every device and in every thread. */
+            preferOriginal?: boolean;
             /** @description Mail thread id or Slack channel id. Absent when the source stated none. */
             container?: string;
             /** @description Opens the entry at its source. Absent when the source gave none. */
@@ -973,6 +982,8 @@ export interface components {
             sent: number;
             /** @description Entries they were a to: or cc: on. Sent 0 with received above 0 is a recipient-only participant, which is a quarter of a real cast. */
             received: number;
+            /** @description Whether the reader reads this person's mail as they wrote it. Absent means false. One answer per person rather than per browser or per message, because the mail it is for arrives as a run from one address and a reader who has decided how to read someone has decided it for all of it — and for every device they read it on. */
+            preferOriginal?: boolean;
         };
         /** @description The previous run being brought up to date. The spec itself is authoritative for what stays on the page; the other fields narrow or rename how that membership is reproduced, accept takes proposed chains the report returns, and queries records the search a newly accepted chain came from. */
         RefreshRequest: {
@@ -1628,6 +1639,8 @@ export interface components {
             addIdentities?: string[];
             /** @description Identities to detach, as "kind:value". Detaching the last one leaves a person known by name alone, which the corpus already tolerates: some participants are only ever a first name in someone else's quoted header. */
             removeIdentities?: string[];
+            /** @description The reading style for this person's mail: true for the sender's own rendering, false for the transcript's. Absent leaves the answer as it stands, which is the rule every other field here follows — a request that renamed somebody must not switch their reading style off by leaving it out. This is what the staged/original control on a message sends, and it is the only write in this API that is about how mail is read rather than about what the corpus holds. */
+            preferOriginal?: boolean;
         };
         /** @description One person, as the write left them. */
         PersonResponse: {

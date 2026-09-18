@@ -17,7 +17,7 @@ import (
 //
 // The cadence is a stored setting rather than a line in the host's config
 // because it is a decision about a corpus rather than about a machine: it is
-// read and changed on the services page (/status), and changing it there should
+// read and changed on the services page (/settings), and changing it there should
 // not cost a deploy — nor leave a second copy of the number in the unit file,
 // which is what the timer this replaced had, along with a Go function that
 // hardcoded the same hour and a comment admitting it had to follow the timer.

@@ -35,20 +35,20 @@ func TestAMailtoMentionOpeningStillRecoversTheTable(t *testing.T) {
 	// used to fail the head alignment and drop the whole body to plain text.
 	host := `<div dir="ltr"><a href="mailto:nella@loomworks.example">@Nella Forge</a>, pls help</div>` +
 		`<div class="gmail_quote">` +
-		`<div class="gmail_attr">On Tue, 4 Aug 2026 at 13:26, Tosh Chak wrote:</div>` +
+		`<div class="gmail_attr">On Tue, 4 Aug 2026 at 13:26, Tosh Ellery wrote:</div>` +
 		`<div dir="ltr">Hi <a href="mailto:nella@loomworks.example">@Nella Forge</a>,</div>` +
-		`<div>This ICP has been added to the database under Multiplex Cinemas Ltd. Since this is an ` +
-		`unbundled ICP, no online review was completed.</div>` +
+		`<div>This listing has been added to the register under Riverside Cinemas Ltd. As it came ` +
+		`in as a partial entry, no review was carried out.</div>` +
 		`<table><tr><th>ICP</th><th>Remarks</th></tr>` +
-		`<tr><td>0030020136PCDA3</td><td>Unbundle</td></tr></table>` +
+		`<tr><td>9941200036PCDQ7</td><td>Unbundle</td></tr></table>` +
 		`<div>Thanks!</div>` +
 		`</div>`
 	r := &entryRow{
 		Source: "mail",
 		BodyText: "Hi @Nella Forge <mailto:nella@loomworks.example>,\n" +
-			"This ICP has been added to the database under Multiplex Cinemas Ltd. Since this is an " +
-			"unbundled ICP, no online review was completed.\n" +
-			"ICP\tRemarks\n003002002122PCDA3\tUnbundle\nThanks!",
+			"This listing has been added to the register under Riverside Cinemas Ltd. As it came " +
+			"in as a partial entry, no review was carried out.\n" +
+			"ICP\tRemarks\n9941200022PCDQ7\tUnbundle\nThanks!",
 		HostHTML: []string{host},
 	}
 	got := bodyHTML(r)

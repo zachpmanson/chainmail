@@ -351,7 +351,7 @@ func runSlurp(w io.Writer, o slurpOpts, d slurpDeps) error {
 
 	// The status probe is the tail of every slurp, selected or not. It asks the
 	// same questions the standalone `corpus status` does and writes the answer
-	// beside the corpus, so the /v1/status screen is never staler than the last
+	// beside the corpus, so the /v1/status snapshot is never staler than the last
 	// run — and a host's -only list cannot drop it, because it is the point of
 	// the screen to reflect whatever the machine can reach right now. A write
 	// failure is a real fault (the screen cannot tell its truth without the

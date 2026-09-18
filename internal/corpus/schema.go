@@ -421,4 +421,23 @@ var migrations = []string{
 	  org    text not null default ''
 	);
 	`,
+
+	// 15: prefer_original — whether a sender's mail is read as the sender wrote it.
+	//
+	// A choice about a person rather than about a browser, which is what moved it
+	// out of this reader's localStorage and onto the corpus: the same reader has a
+	// desktop and a phone, and "read Ada's mail as Ada wrote it" is true on both or
+	// it is not true. It is stated as a person for the reason settings states
+	// mePersonId as one: which addresses are one human is the identity graph's
+	// answer, and a second copy of that answer here would go stale the first time
+	// an alias was learned or two people were merged. A merge moves the answer with
+	// the person it is about, which is the whole point of keying it this way.
+	//
+	// A column on people rather than a key/value row in settings, because this is
+	// not a reader-level preference: settings holds what the reader wants of the
+	// app, and this is what the reader has decided about one of their
+	// correspondents.
+	`
+	alter table people add column prefer_original integer not null default 0;
+	`,
 }

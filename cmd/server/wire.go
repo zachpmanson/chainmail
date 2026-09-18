@@ -121,13 +121,27 @@ type corpusEntry struct {
 	// with several joined by ", ". It is what the pane says where FromEmail is
 	// absent: a recovered entry has no address of its own, and the quoter is where
 	// it came from rather than a guess at who sent it.
-	QuotedBy     string        `json:"fromQuotedBy,omitempty"`
-	Container    string        `json:"container,omitempty"`
-	Permalink    string        `json:"permalink,omitempty"`
-	Parent       string        `json:"parent,omitempty"`
-	ParentRef    string        `json:"parentRef,omitempty"`
-	Sightings    []sighting    `json:"sightings,omitempty"`
-	Participants []participant `json:"participants,omitempty"`
+	QuotedBy string `json:"fromQuotedBy,omitempty"`
+	// PersonID is the person the corpus resolved this entry's sender to. It is what
+	// a client needs to act on the person rather than on the message — the reading
+	// style below is the first of those — and it is served as itself because
+	// Author and FromEmail are what the corpus found, not who it found them to be.
+	// Absent when the corpus resolved nobody, which is every entry recovered from
+	// somebody else's quote.
+	PersonID int64 `json:"personId,omitempty"`
+	// PreferOriginal is whether the reader reads this sender as that sender wrote
+	// them: the state of the bubble's staged/original control, which is decided by
+	// the person above rather than by this message (see POST /v1/people/{personId}).
+	// Absent means false, and false is also what an entry with no person to hold the
+	// answer gets — a message recovered from a quote has no sender to have decided
+	// anything about.
+	PreferOriginal bool          `json:"preferOriginal,omitempty"`
+	Container      string        `json:"container,omitempty"`
+	Permalink      string        `json:"permalink,omitempty"`
+	Parent         string        `json:"parent,omitempty"`
+	ParentRef      string        `json:"parentRef,omitempty"`
+	Sightings      []sighting    `json:"sightings,omitempty"`
+	Participants   []participant `json:"participants,omitempty"`
 	// Attachments are the files this message carries, in the sender's order.
 	// Absent when it carries none, which is most mail: an empty list on every
 	// entry would be a paragraph of nothing in every response.
@@ -190,6 +204,11 @@ type personSummary struct {
 	Identities  []string `json:"identities,omitempty"`
 	Sent        int64    `json:"sent"`
 	Received    int64    `json:"received"`
+	// PreferOriginal is whether the reader reads this person's mail as they wrote
+	// it. Absent means false, the same rule the entry carries it on its sender
+	// under: the two are one answer, and a client drawing a bubble and a client
+	// drawing a people list must not be able to read it two ways.
+	PreferOriginal bool `json:"preferOriginal,omitempty"`
 }
 
 // personEditRequest is one hand-made change to a person's setup, as the ops
@@ -200,6 +219,12 @@ type personEditRequest struct {
 	DisplayName      string   `json:"displayName,omitempty"`
 	AddIdentities    []string `json:"addIdentities,omitempty"`
 	RemoveIdentities []string `json:"removeIdentities,omitempty"`
+	// PreferOriginal sets the person's reading style. A pointer because the three
+	// states differ: absent leaves the answer as it stands, true is the reader
+	// asking for their mail as they wrote it, and false is the reader asking for
+	// the transcript's rendering again. A plain bool could not say the first, and
+	// an edit that only renamed somebody would silently switch the style off.
+	PreferOriginal *bool `json:"preferOriginal,omitempty"`
 }
 
 // personResponse answers a write with the person as it now stands, so the screen
@@ -651,6 +676,7 @@ func toCorpusEntry(s corpus.Shown, r spec.Rendered) corpusEntry {
 		TZ: s.TZ, TZOffsetMinutes: s.TZOffset, Author: s.Author, Subject: s.Subject,
 		Body: s.Body, HTML: r.HTML, To: r.To, Mine: r.Mine, FromEmail: r.FromEmail,
 		Org: r.Org, QuotedBy: r.QuotedBy, Original: s.HasOriginal,
+		PersonID: s.PersonID, PreferOriginal: s.PreferOriginal,
 		Container: s.Container,
 		Permalink: s.Permalink,
 		Parent:    s.Parent, ParentRef: s.ParentRef,

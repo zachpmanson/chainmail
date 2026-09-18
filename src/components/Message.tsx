@@ -1,12 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { initials } from "../lib/anchors";
+import { receiptNames } from "../lib/who";
 import {
   attHref,
-  hasPreview,
   isSkipped,
   localHref,
   skipNote,
+  thumbnail,
   type Attachment,
 } from "../lib/attachments";
 import type { ZoneState } from "../lib/chronological";
@@ -96,11 +97,23 @@ export interface MessageProps {
   /** people @-named in the body, shown above it */
   mentions?: string[];
   /** the address this message came from, e.g. "ada@loomworks.example". It is
-   *  what the styles switch is kept against (see lib/original): the reader's
-   *  answer to "show me this sender's own html" is about the sender, so it is
-   *  the address that holds it. Absent on a recovered entry, which has no From
-   *  header of its own, and then the switch is kept against the message. */
+   *  what the styles switch is kept against where the corpus cannot say whose
+   *  mail this is (see lib/original): the reader's answer to "show me this
+   *  sender's own html" is about the sender, so it is the address that holds
+   *  it. Absent on a recovered entry, which has no From header of its own. */
   fromEmail?: string;
+  /** the person the corpus resolved this sender to, and whether the reader reads
+   *  them as they wrote it — the stored half of the switch below (see
+   *  prefs). Both come from the entry, so a bubble draws the control without a
+   *  second read, and the pair is passed together because the answer is useless
+   *  without the handle to write it back with. Absent in a built page and in a
+   *  static export: those have no corpus to store the answer in, and they fall
+   *  back to this browser's own memory. */
+  person?: { id: number; preferOriginal: boolean };
+  /** flip that preference, for a caller with a corpus behind it. The pane passes
+   *  one that writes the person and repaints the transcript; a page passes
+   *  nothing, and the switch stays local. */
+  onPreferOriginal?: (next: boolean) => void;
   attachments?: Attachment[];
   /** the corpus's handle for this message, which the fetch button asks for */
   extId?: string;
@@ -113,6 +126,13 @@ export interface MessageProps {
   mediaBase?: string;
   /** as it appeared on the message, e.g. "Bo Halvorsen, cc …"; absent reads "—" */
   to?: string;
+  /** What hovering a name on the `to:` line says, when the caller can do better
+   *  than the name alone — a caller that holds the addresses answers with
+   *  "Name <address>" (see lib/who) and one that does not leaves this out and gets
+   *  the name. A function rather than a string because the line holds several names
+   *  and each one is a different person; the names are split by lib/who's
+   *  receiptNames, which is where that format is understood. */
+  toTitle?: (name: string) => string;
   stamp: StampData;
   /** where the bubble sits in the transcript grid, from the layout pass */
   style?: CSSProperties;
@@ -168,14 +188,25 @@ function Avatar({ name, orgSlot, pic, title }: {
  * entry as the renderer saw it, so a message that renders wrong can be pasted
  * somewhere and inspected whole; all this end knows is that it is JSON.
  */
+/**
+ * The copy control, as an icon button: the same 18px glyph in the same box as every
+ * other one in the app (see .copyjson in styles.css).
+ *
+ * Its two states are two glyphs rather than a glyph and the word "copied", because
+ * a button that grows a word when it is pressed moves the receipt's line under the
+ * reader's hand — and the tick is the state, in the same vocabulary as the read
+ * circle next to the timestamp, which is one box either way. The word is not lost:
+ * it is the title and the label, which is where a word belongs on a shape this small.
+ */
 function CopyJson({ data }: { data: unknown }) {
   const [done, setDone] = useState(false);
+  const label = done ? "Copied" : "Copy this message's JSON";
   return (
     <button
       type="button"
       className="copyjson"
-      title="Copy this message's JSON"
-      aria-label="Copy this message's JSON"
+      title={label}
+      aria-label={label}
       onClick={() => {
         navigator.clipboard?.writeText(JSON.stringify(data, null, 2)).then(
           () => setDone(true),
@@ -184,8 +215,13 @@ function CopyJson({ data }: { data: unknown }) {
         window.setTimeout(() => setDone(false), 1200);
       }}
     >
-      {done ? "copied" : (
-        <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+      {done ? (
+        <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true">
+          <path d="M3.7 8.3 6.8 11.4 12.3 4.8" fill="none" stroke="currentColor"
+            strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true">
           <rect x="5.5" y="5.5" width="8" height="8" rx="1.2" fill="none"
             stroke="currentColor" strokeWidth="1.4" />
           <path d="M3 10.5 V3.5 a.5.5 0 0 1 .5-.5 H10" fill="none"
@@ -268,12 +304,24 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
         // the reason is recorded, not the answer — so it stays the plain link to
         // its source that every chip used to be.
         const fetchable = !local && !isSkipped(a) && onPull !== undefined && extId !== undefined;
-       const thumb = hasPreview(a) ? (
+        // The picture on the chip, where there is one: the bytes this host holds,
+        // once they have been pulled, or the thumbnail a built page embedded (see
+        // lib/attachments' thumbnail). A file that has been downloaded is a file the
+        // reader can now recognise at a glance, which is the whole of what a preview
+        // is for — and nothing appears before that, because until the bytes are here
+        // there is nothing to draw.
+        const shot = thumbnail(a, mediaBase ?? "");
+        const thumb = shot ? (
           <img
-            className="athumb"
-            src={a.preview}
-            width={a.previewW}
-            height={a.previewH}
+            className={shot.blob ? "athumb ablob" : "athumb"}
+            src={shot.src}
+            {...(shot.w !== undefined ? { width: shot.w } : {})}
+            {...(shot.h !== undefined ? { height: shot.h } : {})}
+            /* Bytes are asked for as the chip nears the viewport and decoded off the
+               main thread: a deep thread can hold a dozen pictures and none of them
+               is what the reader came for. An embedded thumbnail is already here,
+               and has nothing to defer. */
+            {...(shot.blob ? { loading: "lazy" as const, decoding: "async" as const } : {})}
             /* Decorative here: the filename beside it already names the file, so
                announcing it twice only makes the chip longer to listen to. */
             alt=""
@@ -325,7 +373,7 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
         // Everything else is the server's `view`, which a fresh derivation
         // carries and an old one cannot — so a PDF in an old page stays a chip
         // until the page is rebuilt.
-        const showsImage = thumb !== null || (Boolean(local) && a.kind === "image");
+        const showsImage = shot !== undefined;
         const view = showsImage ? "image" : Boolean(local) ? a.view ?? "" : "";
         const opens = view !== "";
         // The chip stays the same link it always was, and the popover is layered
@@ -447,21 +495,43 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
  * one — see MessageProps.original.
  *
  * The switch behind the control is per sender rather than per message, and it is
- * kept in lib/original: the mail this is for arrives as a run of notifications
+ * kept against the person: the mail this is for arrives as a run of notifications
  * from one address, and the reader who has decided how to read that address has
- * decided it for all of it. So this hook holds two things — whether this
- * bubble's sender is currently read their way, and what became of this one
- * message's fetch — and the second only exists while the first is true.
+ * decided it for all of it. Storing it on the person rather than in this browser
+ * is what makes that decision true on the phone as well as here, and keeps it
+ * true through an identity merge — see prefs.ts, and lib/original for the local
+ * fallback that a built page still uses.
+ *
+ * So this hook holds two things — whether this bubble's sender is currently read
+ * their way, and what became of this one message's fetch — and the second only
+ * exists while the first is true. Where the caller passed a person, the first is
+ * just what the corpus said, and the press is handed straight back out to be
+ * written; without one, it is this browser's memory of the same answer, watched
+ * so a second bubble for the same sender follows it.
  */
-function useOriginal(original?: MessageProps["original"], fromEmail?: string) {
-  // Whose switch this bubble follows: the address it came from, or the message
-  // itself where there is no address to hold the answer (a recovered entry has
-  // no From header, so it names no sender to remember anything about).
+function useOriginal(
+  original: MessageProps["original"],
+  fromEmail: string | undefined,
+  person: MessageProps["person"],
+  onPreferOriginal: MessageProps["onPreferOriginal"],
+) {
+  // Whose switch this bubble follows where nothing stored answers it: the
+  // address it came from, or the message itself where there is no address to hold
+  // the answer (a recovered entry has no From header, so it names no sender to
+  // remember anything about).
   const key = fromEmail || original?.extId || "";
   const extId = original?.extId;
   const load = original?.load;
+  // Whether the corpus is what answers: a caller with a person has passed both
+  // halves of that answer, and one without them is a page with no corpus behind
+  // it at all.
+  const stored = person !== undefined && onPreferOriginal !== undefined;
 
-  const [on, setOn] = useState(() => isStyled(key));
+  const [on, setOn] = useState(() => (stored ? person.preferOriginal : isStyled(key)));
+  // The corpus's answer, held out of the dependency list as a plain value: the
+  // effect below must re-read the switch when the corpus's answer changes, and
+  // reading it off `person` inside the effect would hide that from the array.
+  const storedOn = person?.preferOriginal === true;
   const [state, setState] = useState<Original>({ at: "read" });
   // What arrived, held apart from what is on screen: the reader who flips back and
   // forth is comparing two renderings of one body, and re-asking for bytes this
@@ -471,15 +541,22 @@ function useOriginal(original?: MessageProps["original"], fromEmail?: string) {
   // itself free.
   const arrived = useRef<string | null>(null);
 
-  // A sender's mail is usually several bubbles at once, so the press that
-  // happens on one of them has to reach the others: this bubble follows the
-  // switch rather than owning it, and follows it wherever it was pressed. The
-  // initial read happens in the state above so that a reader who has already
-  // answered for this sender opens on their answer rather than on the default.
+  // The switch, wherever it is kept. Stored: it is the corpus's word and this
+  // bubble follows it, including when the write comes back and the entry is read
+  // again. Local: a sender's mail is usually several bubbles at once, so the
+  // press that happens on one of them has to reach the others — this bubble
+  // follows the switch rather than owning it, and follows it wherever it was
+  // pressed. The initial read happens in the state above so that a reader who has
+  // already answered for this sender opens on their answer rather than on the
+  // default.
   useEffect(() => {
+    if (stored) {
+      setOn(storedOn);
+      return;
+    }
     setOn(isStyled(key));
     return watchStyled(() => setOn(isStyled(key)));
-  }, [key]);
+  }, [key, stored, storedOn]);
 
   // The switch, turned into a rendering. On: ask for this message's own part and
   // mount it in place of the transcript's rendering. Off: back to the
@@ -522,8 +599,10 @@ function useOriginal(original?: MessageProps["original"], fromEmail?: string) {
   // The control is only ever a press on the sender's switch. Whether that press
   // means "fetch this one" or "fetch the rest of them" is not the control's to
   // know: it is one switch, drawn wherever the reader is looking at the mail it
-  // governs.
-  const ask = () => toggleStyled(key);
+  // governs. Where the answer is stored, the press is handed out rather than
+  // written here — whether it lands in the corpus is the caller's business, and
+  // the corpus is what will answer this bubble next time it is read.
+  const ask = () => (stored ? onPreferOriginal(!on) : toggleStyled(key));
 
   return { on, state, ask };
 }
@@ -552,23 +631,51 @@ function useOriginal(original?: MessageProps["original"], fromEmail?: string) {
  * sender they had just asked to read differently. The server's own sentence is the
  * answer for this message, so it rides the note's title rather than being replaced
  * with a word.
+ *
+ * The button is an icon button, the same 18px box as every other one in the app
+ * (see .copyjson and .origbtn in styles.css). It said "Toggle Styles" and
+ * "loading…" — a word, and then a different word — which is two widths in the one
+ * place a reader is looking when they press it, and made the receipt's line ragged
+ * beside the copy control's glyph. What the words meant is the title and the label
+ * now, where a word belongs on a shape this small; the glyph is `</>` because what
+ * the switch asks for is the sender's own markup, and the waiting is the same ↻
+ * the nav's refresh turns.
  */
 function OriginalControl({ on, state, ask }: { on: boolean; state: Original; ask: () => void }) {
+  const asking = state.at === "asking";
+  const label =
+    state.at === "asking"
+      ? "Fetching the sender's own rendering…"
+      : on
+        ? "Back to the page's own rendering of this sender's mail"
+        : "Read this sender's mail as they wrote it, with their own styling";
   return (
     <>
       <button
         type="button"
-        className="origbtn"
+        className={asking ? "origbtn busy" : "origbtn"}
         aria-pressed={on}
-        disabled={state.at === "asking"}
-        title={
-          on
-            ? "Back to the page's own rendering of this sender's mail"
-            : "Read this sender's mail as they wrote it, with their own styling"
-        }
+        disabled={asking}
+        title={label}
+        aria-label={label}
         onClick={ask}
       >
-        {state.at === "asking" ? "loading…" : "Toggle Styles"}
+        {asking ? (
+          <span className="spinner" aria-hidden="true" />
+        ) : (
+          /* The sender's own markup, as one glyph: the two carets and the slash
+             between them. Nothing marks the pressed state here — that is the colour
+             and the background the rule gives a pressed button, which is how this
+             app states which of a switch's two readings is on. */
+          <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true">
+            <path d="M5.6 4.6 2.6 8 5.6 11.4" fill="none" stroke="currentColor"
+              strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M10.4 4.6 13.4 8 10.4 11.4" fill="none" stroke="currentColor"
+              strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M9.1 3.2 6.9 12.8" fill="none" stroke="currentColor"
+              strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+        )}
       </button>
       {state.at === "none" ? (
         <span className="origwhy" title={state.why}>
@@ -652,7 +759,7 @@ export function Message(p: MessageProps) {
   // The switch, and what became of this message's fetch. Both are the bubble's,
   // because the two halves of the swap are on either side of it: the control in
   // the receipt, the body in the bubble.
-  const original = useOriginal(p.original, p.fromEmail);
+  const original = useOriginal(p.original, p.fromEmail, p.person, p.onPreferOriginal);
   // The name's hover title, and the avatar's: both name the person the same way,
   // and a caller that supplies no title gets the name it already gave us.
   const who = p.senderTitle ?? p.sender ?? "";
@@ -718,7 +825,23 @@ export function Message(p: MessageProps) {
                 {p.source}
               </span>
             ) : null}
-            <span className="to">to {p.to ?? "—"}</span>
+            <span className="to">
+              to{" "}
+              {p.to ? (
+                receiptNames(p.to).map((r, i) => (
+                  <Fragment key={`${r.name}-${i}`}>
+                    {i === 0 ? "" : ", "}
+                    {/* One span per name, because the address behind a name is the
+                        part a reader can check and this line is mostly people who
+                        sent nothing in the thread — the ones the read carries no
+                        address for at all (see lib/who). */}
+                    <span title={p.toTitle ? p.toTitle(r.name) : r.name}>{r.text}</span>
+                  </Fragment>
+                ))
+              ) : (
+                "—"
+              )}
+            </span>
             {p.original !== undefined || p.copyJson !== undefined ? (
               <span className="hdetend">
                 {p.original !== undefined ? (

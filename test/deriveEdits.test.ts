@@ -8,12 +8,12 @@ import type { Timeline, Entry } from "../src/lib/spec";
 const csv = (): Timeline => {
   const base: Entry = {
     id: "c-orig", date: "Fri 21 Aug 2026", time: "09:00", tz: "+1000",
-    sender: "Charles", org: "ruralco",
+    sender: "Charles", org: "fernbrook",
     body: "<p>CSV layout: ... E: Amount Due</p>",
   };
   const edited: Entry = {
     id: "c-edit", date: "Fri 21 Aug 2026", time: "09:00", tz: "+1000",
-    sender: "Charles", org: "ruralco", quoted: true, parent: base.id,
+    sender: "Charles", org: "fernbrook", quoted: true, parent: base.id,
     body: "<p>CSV layout: ... E: Invoice Amount</p>",
   };
   const host: Entry = {
@@ -65,7 +65,7 @@ describe("hoist for a quoter's edit (#42)", () => {
   });
 
   it("hoists the copy even when the host replied to it (the real chain)", () => {
-    // The Termina x Ruralco CSV thread: Zach re-sends his own 14:40 message
+    // The Termina x Fernbrook CSV thread: Zach re-sends his own 14:40 message
     // edited at 16:41, and Jason's 20:04 reply re-quotes and carries that edit.
     // So in the spec the host's parent is the EDITED COPY, not the base — the
     // shape the CSV worked example did not cover. This is the #42 example Zach
@@ -82,7 +82,7 @@ describe("hoist for a quoter's edit (#42)", () => {
     };
     const host: Entry = {
       id: "j-2004", date: "Thu 20 Aug 2026", time: "20:04", tz: "AEST",
-      sender: "Jason", org: "ruralco", parent: edited.id, // host replier replied TO the copy
+      sender: "Jason", org: "fernbrook", parent: edited.id, // host replier replied TO the copy
       body: "<p>Morning Charles ... I answered #3 in red below.</p>",
       edits: [{
         id: edited.id, base: base.id, who: "Jason", time: "20:04",

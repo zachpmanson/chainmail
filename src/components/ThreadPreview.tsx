@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { $api, ApiError, type CorpusEntry } from "../lib/api";
+import { senderTitle } from "../lib/who";
 
 /**
  * Names the status so two declines are told apart. "Not found" and "Rejected"
@@ -27,7 +28,7 @@ export function Failure({ error }: { error: unknown }) {
 }
 
 /** The wire's yyyy-mm-dd day is the part worth showing here; the clock is
- * the operator's own, left to them (same convention as the /status screen). */
+ * the operator's own, left to them (same convention as the /settings screen). */
 function dayOf(stamp?: string): string {
   return stamp ? stamp.slice(0, 10) : "";
 }
@@ -36,7 +37,16 @@ function EntryCard({ e }: { e: CorpusEntry }) {
   return (
     <div className="selen">
       <div className="selenh">
-        {e.author ? <span className="selena">{e.author}</span> : <em className="selenun">unknown author</em>}
+        {e.author ? (
+          // The hover says where the name came from, the same words the message's
+          // own bubble uses (see lib/who) — this card is a whole message shown on
+          // its own, so it answers the same question a bubble does.
+          <span className="selena" title={senderTitle(e)}>
+            {e.author}
+          </span>
+        ) : (
+          <em className="selenun">unknown author</em>
+        )}
         {e.quoted ? (
           <span className="selenq" title="this entry survived only inside a quoted block, not as a standalone message">
             quoted

@@ -20,17 +20,17 @@ you.
 
 Thanks heaps,
 
-Nia Coleridge | Energy Partner | Meridian Energy`
+Nia Coleridge | Energy Partner | Lodestar Energy`
 	// The tail the old parser took as the message's opening.
-	foldResidue = "sam@meridian.example>, Zach Manson <zach@termina.example>\n\n"
+	foldResidue = "sam@lodestar.example>, Zach Manson <zach@termina.example>\n\n"
 )
 
 func foldForwardBody() string {
 	return "FYI\n\n---------- Forwarded message ---------\n" +
-		"From: Nia Coleridge <nia@meridian.example>\n" +
+		"From: Nia Coleridge <nia@lodestar.example>\n" +
 		"Date: Wed, 16 Sep 2026 at 8:14 PM\n" +
-		"Subject: Ruralco sites\n" +
-		"To: Lane Whittaker <lane@termina.example>\n" +
+		"Subject: Fernbrook sites\n" +
+		"To: Lena Whitfield <lane@termina.example>\n" +
 		"Cc: nella@loomworks.example <nella@loomworks.example>, Bo Vantel <\n" +
 		foldResidue + "\n" +
 		foldMessage + "\n"
@@ -43,8 +43,8 @@ func foldForwardBody() string {
 func foldStored(t *testing.T) (s *Store, mailboxID, hostID, quotedID int64, recoveredText string) {
 	t.Helper()
 	s = open(t)
-	nia := person(t, s, "nia@meridian.example", "Nia Coleridge")
-	lane := person(t, s, "lane@termina.example", "Lane Whittaker")
+	nia := person(t, s, "nia@lodestar.example", "Nia Coleridge")
+	lane := person(t, s, "lane@termina.example", "Lena Whitfield")
 
 	hostBody := foldForwardBody()
 	q := RecoverQuotes(hostBody)
@@ -59,18 +59,18 @@ func foldStored(t *testing.T) (s *Store, mailboxID, hostID, quotedID int64, reco
 
 	off := 0
 	mb, err := s.Put(Entry{
-		Source: SourceMail, ExtID: "mail:<nia@meridian.example>",
+		Source: SourceMail, ExtID: "mail:<nia@lodestar.example>",
 		TS: time.Date(2026, 9, 16, 8, 14, 46, 0, time.UTC), TZ: "+0000", TZOffset: &off,
-		PersonID: nia, Container: "ruralco", Subject: "Ruralco sites",
+		PersonID: nia, Container: "fernbrook", Subject: "Fernbrook sites",
 		BodyText: foldMessage, BodyHTML: "<p>" + foldMessage + "</p>",
-	}, &Mail{MessageID: "<nia@meridian.example>"}, nil)
+	}, &Mail{MessageID: "<nia@lodestar.example>"}, nil)
 	if err != nil {
 		t.Fatalf("storing the mailbox copy: %v", err)
 	}
 	host, err := s.Put(Entry{
 		Source: SourceMail, ExtID: "mail:<lane@termina.example>",
 		TS: time.Date(2026, 9, 16, 9, 4, 32, 0, time.UTC), TZ: "+1200",
-		PersonID: lane, Container: "ruralco", Subject: "Ruralco sites",
+		PersonID: lane, Container: "fernbrook", Subject: "Fernbrook sites",
 		BodyText: hostBody,
 	}, &Mail{MessageID: "<lane@termina.example>"}, nil)
 	if err != nil {
@@ -80,7 +80,7 @@ func foldStored(t *testing.T) (s *Store, mailboxID, hostID, quotedID int64, reco
 	id, created, err := s.PutQuoted(Entry{
 		Source: SourceMail, ExtID: rec.Key,
 		TS: time.Date(2026, 9, 16, 20, 14, 0, 0, time.UTC),
-		TZ: "", PersonID: nia, Container: "ruralco", Subject: "Ruralco sites",
+		TZ: "", PersonID: nia, Container: "fernbrook", Subject: "Fernbrook sites",
 		BodyText: foldResidue + recoveredText,
 	})
 	if err != nil || !created {
@@ -119,7 +119,7 @@ func TestRepairQuotedBodiesRewritesTheOldParsersText(t *testing.T) {
 		t.Errorf("body = %q, want it to open on the message", body)
 	}
 	// The hash is the embedder's staleness test, so it must be the new body's.
-	if want := BodySHA("Ruralco sites", recovered); sha != want {
+	if want := BodySHA("Fernbrook sites", recovered); sha != want {
 		t.Errorf("body_sha = %s, want the re-derived body's %s", sha, want)
 	}
 	// The search index must follow the row, or the residue stays findable.
@@ -187,7 +187,7 @@ func TestRepairQuotedBodiesLeavesAMissingEntryAlone(t *testing.T) {
 	// A recovered entry whose host body contains no such block.
 	lonely, created, err := s.PutQuoted(Entry{
 		Source: SourceMail, ExtID: "quote:vanish", TS: time.Unix(1_700_000_000, 0),
-		Container: "ruralco", Subject: "Ruralco sites", BodyText: "a message of its own",
+		Container: "fernbrook", Subject: "Fernbrook sites", BodyText: "a message of its own",
 	})
 	if err != nil || !created {
 		t.Fatalf("storing the stray entry: created=%v err=%v", created, err)

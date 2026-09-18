@@ -20,7 +20,11 @@ function replyTarget(row: Row, v: View): ReplyTarget | null {
   // word it was drawn under.
   const who = parent.entry.kind === "note" ? parent.entry.label : parent.entry.sender;
   const when = [parent.entry.date, parent.entry.time].filter(Boolean).join(" ");
-  return { anchor: parent.id, who, when };
+  // The same "Name <address>" the bubble under that name wears, so a hover on the
+  // link and a hover on the message it points at say one thing about one person.
+  // A note's label is not a person and asks for no address (see the system note's
+  // own label in the panel above).
+  return { anchor: parent.id, who, whoTitle: parent.entry.kind === "note" ? undefined : v.whoTitle(who ?? ""), when };
 }
 
 /**
@@ -92,6 +96,10 @@ function EntryBlock({ row, v, mark, anchorByGmail, onPull, pulling, mediaBase }:
       pulling={pulling}
       mediaBase={mediaBase}
       to={e.to}
+      // The page's own answer for a name's address, the same one the panel and the
+      // bubble's sender use (see derive.ts's whoTitle): a page build knows the
+      // addresses it was built with, and says the name alone for anyone it does not.
+      toTitle={v.whoTitle}
       subject={e.subject}
       stamp={row.stamp}
       style={grid}

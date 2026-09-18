@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within, act } from "@testing-library/react";
+import { readFileSync } from "node:fs";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { makeQueryClient } from "../src/lib/queryClient";
@@ -292,11 +293,11 @@ const EDIT_ENTRIES = [
     source: "mail",
     quoted: false,
     ts: "2026-03-02T09:00:00Z",
-    author: "Charles Nelaturi",
+    author: "Charles Marchetti",
     subject: "CSV layout",
     body: "CSV layout: … E: Amount Due",
     html: "<p>CSV layout: … E: Amount Due</p>",
-    fromEmail: "charles@ruralco.example",
+    fromEmail: "charles@fernbrook.example",
     tz: "AEST",
     tzOffsetMinutes: 600,
     sightings: [{ kind: "direct" }],
@@ -308,7 +309,7 @@ const EDIT_ENTRIES = [
     source: "mail",
     quoted: true,
     ts: "2026-03-02T09:00:00Z",
-    author: "Charles Nelaturi",
+    author: "Charles Marchetti",
     subject: "CSV layout",
     body: "CSV layout: … E: Invoice Amount",
     html: "<p>CSV layout: … E: Invoice Amount</p>",
@@ -604,6 +605,86 @@ describe("the home page with no query", () => {
     fireEvent.keyDown(box, { key: "Escape" });
     await waitFor(() => expect(screen.queryByLabelText("Mode")).toBeNull());
     expect(router.state.location.searchStr).toBe("");
+  });
+
+  it("carries a drawn cross, outside the box, that does what Escape does", async () => {
+    handler = buildHandler;
+    const router = await mountApp("/?q=cutover");
+    await screen.findByText("Fence panels", { selector: ".ibsubj" });
+
+    // Shut, there is no ×: the box is the whole interface, and a dismissal for a
+    // panel that is not open is a control with nothing to dismiss.
+    expect(screen.queryByRole("button", { name: "Clear the search" })).toBeNull();
+    const box = screen.getByRole("textbox", { name: "Search the corpus" });
+    fireEvent.focus(box);
+    await screen.findByLabelText("Mode");
+
+    // A control of its own, beside the box rather than in it: the box is the field
+    // and the four controls that ask a question, and a dismissal is not one of the
+    // things a search is made of. Standing outside the form also means no click has
+    // to be stopped from reaching it — the form's own handler is what opens the
+    // panel, and a press that folded the panel away and then reopened it would be a
+    // control that does nothing.
+    const cross = screen.getByRole("button", { name: "Clear the search" });
+    const form = screen.getByRole("search");
+    expect(cross.closest("form")).toBeNull();
+    expect(cross.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    // And it is a cross drawn rather than typed: the `×` character is a letter of
+    // its own in some fonts, with a weight and a baseline the row does not choose,
+    // and this one has to line up with the magnifier in the box beside it.
+    expect(cross.querySelector("svg path")).toBeTruthy();
+    expect(cross.textContent).toBe("");
+
+    fireEvent.change(box, { target: { value: "cutover plum" } });
+    fireEvent.click(cross);
+
+    // Escape's own work, done with a pointer: what was typed goes, the question
+    // in force goes with it, and the panel folds away — so the default view is
+    // what is left below, and nothing was asked of the corpus on the way out.
+    await waitFor(() => expect(screen.queryByLabelText("Mode")).toBeNull());
+    expect((box as HTMLInputElement).value).toBe("");
+    await waitFor(() => expect(router.state.location.searchStr).toBe(""));
+    expect(await screen.findByText("Loom cutover schedule")).toBeTruthy();
+
+    // And a box that asks nothing is left exactly where it was: the × is a way
+    // out rather than a navigation, the same rule Escape follows.
+    fireEvent.click(box);
+    await screen.findByLabelText("Mode");
+    fireEvent.click(screen.getByRole("button", { name: "Clear the search" }));
+    await waitFor(() => expect(screen.queryByLabelText("Mode")).toBeNull());
+    expect(router.state.location.searchStr).toBe("");
+  });
+
+  it("grows the panel into the row, and back, on a width the row is not deciding", () => {
+    // The panel becomes the row rather than appearing at its width, and that
+    // movement is the animation — in both directions, which is what this test is
+    // here for. Twice now the animation has looked right and carried one way
+    // only. In flow, open, the panel was a flex item with `flex-grow`, so the
+    // width it ended up with was the row's free space rather than its own `width`
+    // property, and no transition can interpolate `flex-grow`; the growth was
+    // carried by `max-width` instead, because a clamp is applied to the flex
+    // result. Shut, though, `flex-grow` flipped to 0 and the panel's own `width`
+    // sized it again in a single frame, while the group around it collapsed from
+    // the whole row to the stamp and the button — so the shrink stepped.
+    //
+    // Positioned against the nav, the panel is out of that argument: nothing in a
+    // flex line sizes it, there is no free space to be given a share of, and `100%`
+    // is the nav's own width — the same in both states, because the panel is not
+    // one of the things deciding it. So `width` is the property that carries it,
+    // and this pins the arrangement that makes that true.
+    const css = readFileSync("src/styles.css", "utf8");
+    const rule = (selector: string) => {
+      const from = css.indexOf(`\n  ${selector} {`);
+      return css.slice(from, css.indexOf("\n  }", from));
+    };
+    expect(rule(".sitenav")).toContain("position:relative");
+    const box = rule(".navsearch");
+    expect(box).toContain("position:absolute");
+    expect(box).toContain("width:12rem");
+    const open = css.slice(css.indexOf(".navsearch.open) .navsearch {"));
+    expect(open.slice(0, open.indexOf("}"))).toContain("width:calc(100% - var(--searchgap))");
+    expect(css).toMatch(/@media \(prefers-reduced-motion: no-preference\) \{ \.navsearch \{ transition:width/);
   });
 
   it("says on the body that this page is a workspace, and takes it off again", async () => {
@@ -933,7 +1014,13 @@ describe("the home page with no query", () => {
     expect(par?.querySelector(".parlbl")?.textContent).toBe(
       "in reply to Ada Okoye, Mon, 2 Mar 2026 19:15",
     );
-    expect(par?.getAttribute("title")).toBe("In reply to Ada Okoye, Mon, 2 Mar 2026 19:15");
+    // And the hover says who that is: the same "Name <address>" the bubble under
+    // it wears (see lib/who), inside the sentence rather than instead of it,
+    // because in column mode the label is collapsed to the arrow and this title
+    // is the only thing that says which message the arrow answers.
+    expect(par?.getAttribute("title")).toBe(
+      "In reply to Ada Okoye <ada@okoye.example>, Mon, 2 Mar 2026 19:15",
+    );
     // The anchor it names is the parent's own bubble, so the link lands on it.
     expect(document.getElementById("entry-0")?.textContent).toContain("Ada Okoye");
   });
@@ -961,7 +1048,7 @@ describe("the home page with no query", () => {
     const original = edit!.querySelector("a");
     expect(original?.getAttribute("href")).toBe("#entry-0");
     expect(original?.textContent).toBe("original");
-    expect(edit!.textContent).toContain("original from Charles Nelaturi at Mon, 2 Mar 2026 19:00");
+    expect(edit!.textContent).toContain("original from Charles Marchetti at Mon, 2 Mar 2026 19:00");
     expect(edit!.querySelector(".eins")?.textContent).toBe("Invoice");
     expect(edit!.querySelector(".ebd")?.textContent).toBe("CSV layout: … E: Invoice Amount");
 
@@ -1891,16 +1978,26 @@ describe("drawing a thread as a reply tree", () => {
 
   /** The bubbles in the order they are drawn, as the anchors they carry: the id
    *  of a bubble is the entry's place in the thread as the corpus sent it, so the
-   *  order and the naming are asserted in one list — nesting may move a bubble,
+   *  order and the naming are asserted in one list — the tree may move a bubble,
    *  and nothing else may change about what it is called. */
   const drawn = () =>
     [...pane().querySelectorAll(".stream .msg")].map((m) => m.getAttribute("id") ?? "");
-  /** How deep each drawn bubble is, from the one number the stylesheet indents by. */
+  /** How deep each drawn bubble is, read off the DOM: a reply is inside the
+   *  container its parent's replies were given (see .ibread .stream .replies), so
+   *  a message's depth is how many of those it sits in. The container IS the
+   *  indent and its own border is the line beside the level, so counting them is
+   *  counting what the reader is looking at. */
   const depths = () =>
-    [...pane().querySelectorAll(".stream .msg")].map((m) =>
-      (m as HTMLElement).style.getPropertyValue("--nest"),
-    );
-  const switchBtn = () => within(pane()).getByRole("button", { name: /nested under what they answer|order they were sent/ });
+    [...pane().querySelectorAll(".stream .msg")].map((m) => {
+      let depth = 0;
+      for (let p = m.parentElement; p; p = p.parentElement)
+        if (p.classList.contains("replies")) depth++;
+      return String(depth);
+    });
+  /** The containers, which is what the tree is drawn with: one per message that
+   *  has replies, and none at all for a message that has none. */
+  const containers = () => pane().querySelectorAll(".stream .replies").length;
+  const switchBtn = () => within(pane()).getByRole("button", { name: /each answer under the message it answers|the order they were sent/ });
 
   const openThread = async () => {
     await mountApp(OPEN_ROOT);
@@ -1908,7 +2005,7 @@ describe("drawing a thread as a reply tree", () => {
   };
 
   // The switch is remembered in the browser, so a test that turned it on would
-  // otherwise hand the next test a nested thread it never asked for.
+  // otherwise hand the next test a tree it never asked for.
   beforeEach(() => localStorage.clear());
   afterEach(() => localStorage.clear());
 
@@ -1918,12 +2015,17 @@ describe("drawing a thread as a reply tree", () => {
 
     expect(drawn()).toEqual(["entry-0", "entry-1", "entry-2", "entry-3"]);
     expect(depths()).toEqual(["0", "0", "0", "0"]);
+    // The transcript's own order is not a tree: no message is drawn inside
+    // another's replies, so there is nothing for the stylesheet to rule off and
+    // the flat view draws no containers at all.
+    expect(containers()).toBe(0);
     const btn = switchBtn();
     expect(btn.getAttribute("aria-pressed")).toBe("false");
     // The switch is a glyph in the head's strip, like the verbs beside it, and its
     // name says what a press would do.
     expect(btn.className).toContain("ibicon");
-    expect(btn.getAttribute("title")).toMatch(/^Messages are in the order they were sent/);
+    expect(btn.className).toContain("ibtree");
+    expect(btn.getAttribute("title")).toMatch(/^Reply tree: the order they were sent/);
   });
 
   it("puts each reply under the message it answers when it is pressed", async () => {
@@ -1938,13 +2040,20 @@ describe("drawing a thread as a reply tree", () => {
     await waitFor(() => expect(drawn()).toEqual(["entry-0", "entry-1", "entry-3", "entry-2"]));
     expect(depths()).toEqual(["0", "1", "2", "1"]);
     expect(pane().querySelectorAll(".stream .msg")).toHaveLength(4);
+    // One container per message that has replies: Ada's opener holds Bo, Bo's
+    // answer holds Ada's answer to it, and Cy's answer to the opener and Ada's
+    // answer to Bo hold nothing — so the two levels are drawn with two boxes, and
+    // each box's own border is the line beside it.
+    expect(containers()).toBe(2);
+    expect(pane().querySelectorAll("#entry-0 + .replies > .msg#entry-1")).toHaveLength(1);
+    expect(pane().querySelectorAll("#entry-1 + .replies > .msg#entry-3")).toHaveLength(1);
     // Which way it is set is on the button, and remembered for the next visit.
     expect(switchBtn().getAttribute("aria-pressed")).toBe("true");
-    expect(localStorage.getItem("cm-nest")).toBe("1");
+    expect(localStorage.getItem("cm-treeview")).toBe("1");
   });
 
   it("reads the switch back at mount, and puts the transcript back when it is pressed again", async () => {
-    localStorage.setItem("cm-nest", "1");
+    localStorage.setItem("cm-treeview", "1");
     handler = forkHandler;
     await openThread();
 
@@ -1955,7 +2064,7 @@ describe("drawing a thread as a reply tree", () => {
     await waitFor(() => expect(drawn()).toEqual(["entry-0", "entry-1", "entry-2", "entry-3"]));
     expect(depths()).toEqual(["0", "0", "0", "0"]);
     expect(switchBtn().getAttribute("aria-pressed")).toBe("false");
-    expect(localStorage.getItem("cm-nest")).toBe("0");
+    expect(localStorage.getItem("cm-treeview")).toBe("0");
   });
 
   it("hands the switch to the browser as a view transition, with the new view already in the DOM", async () => {
@@ -1969,7 +2078,7 @@ describe("drawing a thread as a reply tree", () => {
     // so a state change that landed a render later would animate between two
     // copies of the same view. The stub runs the callback the way the browser
     // does and records what is on the page when it comes back.
-    const seen: { names: string; drawn: string; depths: string }[] = [];
+    const seen: { names: string; namesAfter: string; drawn: string; depths: string }[] = [];
     type VTDoc = Document & { startViewTransition?: unknown };
     const original = (document as VTDoc).startViewTransition;
     Object.assign(document, {
@@ -1978,7 +2087,17 @@ describe("drawing a thread as a reply tree", () => {
           .map((m) => (m as HTMLElement).style.viewTransitionName)
           .join(",");
         cb();
-        seen.push({ names, drawn: drawn().join(","), depths: depths().join(",") });
+        // The names on the far side, which are the ones the browser pairs with the
+        // ones above. They are taken again inside the transition because drawing the
+        // tree gives every reply a container of its own, so React makes new nodes for
+        // the bubbles rather than moving them: the names taken before the change are
+        // on elements that have left the document, and an unnamed pair does not
+        // morph — the browser crossfades the root instead, which is a switch that
+        // fades rather than one that moves.
+        const namesAfter = [...pane().querySelectorAll(".stream .msg")]
+          .map((m) => (m as HTMLElement).style.viewTransitionName)
+          .join(",");
+        seen.push({ names, namesAfter, drawn: drawn().join(","), depths: depths().join(",") });
         return { finished: Promise.resolve(), ready: Promise.resolve(), updateCallbackDone: Promise.resolve() };
       },
     });
@@ -1994,11 +2113,16 @@ describe("drawing a thread as a reply tree", () => {
     // Named by the anchor the bubble already carries, which is the entry's place
     // in the corpus: the same message in both views, so the browser can follow it.
     expect(seen[0]!.names).toBe("entry-0,entry-1,entry-2,entry-3");
-    // And the page the callback left behind is the nested one, ready to be the
+    // And the names are on the bubbles the change made, in the order the tree drew
+    // them: the same anchors, other nodes, which is what makes the morph a morph.
+    // (Read as they were before the change, they would be empty — the elements that
+    // carried them have left the document.)
+    expect(seen[0]!.namesAfter).toBe("entry-0,entry-1,entry-3,entry-2");
+    // And the page the callback left behind is the tree, ready to be the
     // second snapshot.
     expect(seen[0]!.drawn).toBe("entry-0,entry-1,entry-3,entry-2");
     expect(seen[0]!.depths).toBe("0,1,2,1");
-    expect(localStorage.getItem("cm-nest")).toBe("1");
+    expect(localStorage.getItem("cm-treeview")).toBe("1");
   });
 
   it("still switches where the browser will not animate it", async () => {
@@ -2022,11 +2146,12 @@ describe("drawing a thread as a reply tree", () => {
 
     click(switchBtn());
 
-    // Nested, the link is the same link: the anchor is the message's place in the
-    // thread rather than its place on the page, so indenting a reply cannot make
+    // Drawn as a tree, the link is the same link: the anchor is the message's place in
+    // the thread rather than its place on the page, so indenting a reply cannot make
     // its own arrow miss. What changes is only how far the reader scrolls.
     await waitFor(() => expect(depths()[2]).toBe("2"));
     expect(pane().querySelector("#entry-3 .par")?.getAttribute("href")).toBe("#entry-1");
     expect(pane().querySelector("#entry-2 .par")?.getAttribute("href")).toBe("#entry-0");
   });
+
 });

@@ -240,14 +240,14 @@ func editServer(t *testing.T) *harness {
 	}
 	t.Cleanup(func() { s.Close() })
 
-	charles := putPerson(t, s, "Charles Nelaturi", "charles@ruralco.example")
+	charles := putPerson(t, s, "Charles Marchetti", "charles@fernbrook.example")
 	jason := putPerson(t, s, "Jason Yarrow", "jason@termina.example")
 
 	base := putMail(t, s, mailFixture{
 		ext: extEditBase, ts: "2026-03-02T09:00:00+11:00", tz: "AEDT", offset: mins(660),
 		person: charles, container: "T3", subject: "CSV layout",
 		messageID: "<c0ffee-8@loomworks.example>",
-		from:      "Charles Nelaturi <charles@ruralco.example>",
+		from:      "Charles Marchetti <charles@fernbrook.example>",
 		to:        "Jason Yarrow <jason@termina.example>",
 		text:      "CSV layout: … E: Amount Due",
 	})
@@ -257,7 +257,7 @@ func editServer(t *testing.T) *harness {
 		messageID: "<c0ffee-4@loomworks.example>",
 		inReplyTo: "<c0ffee-8@loomworks.example>",
 		from:      "Jason Yarrow <jason@termina.example>",
-		to:        "Charles Nelaturi <charles@ruralco.example>",
+		to:        "Charles Marchetti <charles@fernbrook.example>",
 		text:      "One change — we track Invoice Amount.",
 	})
 	ts, err := time.Parse(time.RFC3339, "2026-03-02T09:00:00+11:00")

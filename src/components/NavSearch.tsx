@@ -68,9 +68,9 @@ const same = (a: Asked, b: Asked) =>
  * read or refined, and folding it away would put its own options behind another
  * click. Escape empties the box and shuts it — the field, the question in force,
  * and the page below, back to the default view — and so does clearing the box by
- * hand. What it does not take with it is the thread the reader has open: the pane
- * is the reading rather than the question, so it stays open on the default view
- * below (see commit).
+ * hand, and so does the × at the panel's left end. What none of them take with
+ * them is the thread the reader has open: the pane is the reading rather than the
+ * question, so it stays open on the default view below (see commit).
  *
  * Nothing here navigates on the way in. Opening the search asks nothing, so the
  * list below is left alone — which is what makes an empty box the default view
@@ -164,49 +164,116 @@ export function NavSearch() {
     });
   };
 
+  /**
+   * Give the whole thing up: the draft, the box, and the question in force.
+   *
+   * This is what Escape does, and the × in the panel does the same thing with a
+   * pointer — one action with two gestures, because a reader who opened the panel
+   * with a mouse should not have to reach for the keyboard to dismiss it. Both
+   * leave the address asking nothing (`NOTHING`), which is what puts the default
+   * view back below: a box that emptied its field while the address still asked
+   * would fill itself back in the moment it shut, because what a shut box shows is
+   * what the address says. An address that already asks nothing is left alone
+   * entirely — the commit is a no-op when the four are the same — so a reader who
+   * opened an empty box and dismissed it has not navigated anywhere.
+   *
+   * The draft is set to `NOTHING` rather than dropped, and that is not a detail:
+   * the × unmounts with the panel, and a browser that fires a blur for a node it
+   * has just taken away brings the form's own blur handler back in *after* this
+   * ran. With the draft empty, what that handler commits is this same nothing —
+   * whereas a dropped draft would leave it reading the question from the address
+   * and committing that, undoing the press. (The blur is also swallowed while the
+   * caret moves to the × itself, which is inside the form: see onBlur.)
+   */
+  const dismiss = () => {
+    setDraft(NOTHING);
+    setOpen(false);
+    commit(NOTHING);
+  };
+
   return (
-    <form
-      className={open ? "navsearch open" : "navsearch"}
-      role="search"
-      onSubmit={(ev) => {
-        ev.preventDefault();
-        commit(shown);
-      }}
-      // The caret arriving anywhere in the panel is what opens it, and the panel
-      // does not close while focus is inside it — the blur handler below would
-      // otherwise shut the field on the way to the mode dropdown.
-      onFocus={() => setOpen(true)}
-      // And clicking it opens it again even when the caret never left: Escape
-      // shuts the panel without moving focus, and a box that could not be opened
-      // again would be the same control with one gesture fewer.
-      onClick={() => setOpen(true)}
-      // Escape empties the box and shuts it, which is Escape's plain sense in a
-      // field: what was typed goes, and so does the question the box was showing.
-      // A box that emptied its field while the address still asked would fill
-      // itself back in the moment it shut, because what a shut box shows is what
-      // the address says — so leaving the question behind is not an option, and
-      // clearing it asks nothing (`NOTHING`), which puts the default view back
-      // below. An address that already asks nothing is left alone entirely: the
-      // commit below is a no-op when the four are the same, so a reader who
-      // opened an empty box and pressed Escape has not navigated anywhere. It
-      // searches nothing — Escape is the way out, not the way in.
-      onKeyDown={(ev) => {
-        if (ev.key !== "Escape") return;
-        setDraft(null);
-        setOpen(false);
-        commit(NOTHING);
-      }}
-      onBlur={(ev) => {
-        if (ev.currentTarget.contains(ev.relatedTarget as Node | null)) return;
-        // Leaving commits what was typed — type and click away and the search
-        // runs — and folds the panel away only when there is nothing to ask. A
-        // question in force keeps the panel: its options are how it gets refined,
-        // and a search that had to be reopened to be narrowed would be a box
-        // hiding its own controls.
-        commit(shown);
-        if (!asks(shown)) setOpen(false);
-      }}
-    >
+    <>
+      {/* The panel's way out for a mouse: Escape is the same act (see dismiss),
+          and a panel opened with a pointer should not need the keyboard to be
+          dismissed.
+
+          It stands OUTSIDE the box — before it in the row, its own control —
+          because that is what it is: the box is the field and the four controls
+          that ask a question, and a dismissal is not one of the things a search
+          is made of. Outside, it also keeps the row's own rhythm, where every
+          control in this group is spaced by the group's gap, so it reads as one
+          more control that happens to be about the box beside it rather than as
+          part of the box.
+
+          A cross drawn rather than typed: the `×` character is a letter of its
+          own in some fonts, with a weight and a baseline the row does not
+          choose, and this one has to line up with the magnifier in the field
+          beside it (which is a path, and the same 12px square).
+
+          `type="button"` and the pressed mouse-down are both about the box: the
+          first, because a button in a row with a form is a submit until it says
+          otherwise; the second, because the caret must not leave the field
+          before the press lands. The field's own blur is what commits a search
+          (see onBlur), so a press that moved the caret onto this button would
+          run the very search it is here to throw away — and the panel would shut
+          on that blur, taking the button with it before the click arrived. */}
+      {open ? (
+        <button
+          type="button"
+          className="navcancel"
+          title="Clear the search and shut the panel — Escape"
+          aria-label="Clear the search"
+          onMouseDown={(ev) => ev.preventDefault()}
+          onClick={dismiss}
+        >
+          {/* Drawn at the app's own glyph size (18px in a 16 box, a 1.5 stroke — see
+              `.ibicon svg`), because it is the same kind of control the pane's strip
+              draws: this button and the ↻ beside it wear the same box as the archive
+              bin and the trash can. The magnifier inside the field stays the smaller
+              12px it was, since it is part of the box rather than a control in the
+              nav. */}
+          <svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+            <path
+              d="M3.6 3.6 12.4 12.4M12.4 3.6 3.6 12.4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
+      ) : null}
+      <form
+        className={open ? "navsearch open" : "navsearch"}
+        role="search"
+        onSubmit={(ev) => {
+          ev.preventDefault();
+          commit(shown);
+        }}
+        // The caret arriving anywhere in the panel is what opens it, and the panel
+        // does not close while focus is inside it — the blur handler below would
+        // otherwise shut the field on the way to the mode dropdown.
+        onFocus={() => setOpen(true)}
+        // And clicking it opens it again even when the caret never left: Escape
+        // shuts the panel without moving focus, and a box that could not be opened
+        // again would be the same control with one gesture fewer.
+        onClick={() => setOpen(true)}
+        // Escape gives the whole search up: see dismiss, which is the same act.
+        onKeyDown={(ev) => {
+          if (ev.key !== "Escape") return;
+          dismiss();
+        }}
+        onBlur={(ev) => {
+          if (ev.currentTarget.contains(ev.relatedTarget as Node | null)) return;
+          // Leaving commits what was typed — type and click away and the search
+          // runs — and folds the panel away only when there is nothing to ask. A
+          // question in force keeps the panel: its options are how it gets refined,
+          // and a search that had to be reopened to be narrowed would be a box
+          // hiding its own controls.
+          commit(shown);
+          if (!asks(shown)) setOpen(false);
+        }}
+      >
       {/* A magnifier rather than nothing: an empty box at the end of a nav is a
           box with no label, and this is the one glyph that says what it takes. */}
       <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
@@ -336,6 +403,7 @@ export function NavSearch() {
           </button>
         </span>
       ) : null}
-    </form>
+      </form>
+    </>
   );
 }

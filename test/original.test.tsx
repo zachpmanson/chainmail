@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Message, type MessageProps } from "../src/components/Message";
 import { ApiError } from "../src/lib/api";
-import { fetchOriginal, mountOriginal } from "../src/lib/original";
+import { fetchOriginal, dropSchemeVariants, mountOriginal } from "../src/lib/original";
 
 afterEach(() => {
   cleanup();
@@ -51,7 +51,8 @@ const sent = "<style>:host{background:#eef}</style><p class=\"card\">Booking con
 
 const draw = (over: Partial<MessageProps> = {}) => render(<Message {...bubble(over)} />);
 
-const control = () => screen.queryByRole("button", { name: /toggle styles|loading/i });
+const control = () =>
+  screen.queryByRole("button", { name: /read this sender|back to the page|fetching the sender/i });
 
 describe("a message whose own html the corpus holds", () => {
   it("swaps the rendered body for the sender's, and back", async () => {
@@ -164,12 +165,50 @@ describe("a message whose own html the corpus holds", () => {
     const det = hdr.querySelector(".hdet")!;
     expect(det.querySelector(".bub .origbtn")).toBeNull();
     const end = det.querySelector(".hdetend")!;
-    expect(end.querySelector(".origbtn")!.textContent).toBe("Toggle Styles");
+    // The style switch is a glyph, not a word: the sender's own markup, in the same
+    // 18px box as the copy control beside it (the shape itself is the stylesheet's
+    // test, in message.test.tsx). Its aria-label is where the word lives now.
+    const sw = end.querySelector(".origbtn") as HTMLElement;
+    expect(sw.textContent).toBe("");
+    expect(sw.querySelector("svg")).not.toBeNull();
+    expect(sw.getAttribute("aria-label")).toMatch(/^Read this sender's mail/);
+    expect(sw.getAttribute("aria-pressed")).toBe("false");
     expect(end.querySelector(".copyjson")).not.toBeNull();
     // The clip is the last thing on the line and the swap sits immediately before
     // it: both in the one group that is pushed to the right edge, so the pair
     // stays together however the receipt's fields above them wrap.
     expect(end.lastElementChild!.className).toBe("copyjson");
+  });
+
+  it("turns the same ↻ the rest of the app turns while it is being fetched", async () => {
+    // The button states the wait in its glyph rather than in a word: "loading…" was a
+    // second width in the one place the reader is watching, and it moved the receipt's
+    // line under the hand that had just pressed it. The glyph it turns is the one the
+    // nav's refresh and the attachment chips turn (see .navrefresh .spinner).
+    let release: (html: string) => void = () => {};
+    const load = vi.fn(
+      () => new Promise<string>((res) => { release = res; }),
+    );
+    const { container } = draw({
+      original: { extId: "mail:<orig-asking@loomworks.example>", load },
+      fromEmail: "asking@loomworks.example",
+    });
+    fireEvent.click(control()!);
+    const busy = await waitFor(() => {
+      const b = container.querySelector(".origbtn.busy") as HTMLButtonElement;
+      expect(b).toBeTruthy();
+      return b;
+    });
+    expect(busy.disabled).toBe(true);
+    expect(busy.querySelector(".spinner")).not.toBeNull();
+    expect(busy.querySelector("svg")).toBeNull();
+    expect(busy.getAttribute("aria-label")).toMatch(/^Fetching the sender's own/);
+    release(sent);
+    await waitFor(() => expect(container.querySelector(".bdo")).not.toBeNull());
+    const after = container.querySelector(".origbtn") as HTMLElement;
+    expect(after.className).toBe("origbtn");
+    expect(after.querySelector(".spinner")).toBeNull();
+    expect(after.querySelector("svg")).not.toBeNull();
   });
 
   it("keeps the control in the receipt once the body has been swapped", async () => {
@@ -190,8 +229,11 @@ describe("a message whose own html the corpus holds", () => {
     const hdr = container.querySelector("details.hdr")!;
     expect(hdr.querySelector("summary .origbtn")).toBeNull();
     const on = hdr.querySelector(".hdetend .origbtn") as HTMLElement;
-    expect(on.textContent).toBe("Toggle Styles");
+    expect(on.querySelector("svg")).not.toBeNull();
     expect(on.getAttribute("aria-pressed")).toBe("true");
+    // And the same one glyph says the other thing now: what a press would do is the
+    // label, because the shape has no room for two words and needs none.
+    expect(on.getAttribute("aria-label")).toMatch(/^Back to the page's own rendering/);
     expect(hdr.querySelector(".hdetend .copyjson")).not.toBeNull();
 
     // And it is still the way back.
@@ -270,6 +312,55 @@ describe("a message whose own html the corpus holds", () => {
   });
 });
 
+describe("a sender the corpus has an answer about", () => {
+  /**
+   * Where the answer is stored is what makes it the reader's rather than this
+   * browser's: the corpus holds it against the person the sender resolved to, so
+   * the reader's phone reads the same mail the same way and a merge of two
+   * spellings of that person cannot lose it (see people.prefer_original). What is
+   * asserted here is that the bubble is drawn from that answer and hands the press
+   * back out rather than writing a second, private copy of it.
+   */
+  const stored = (preferOriginal: boolean) => ({
+    original: { extId: "mail:<corpus-answer@loomworks.example>", load: vi.fn(async () => sent) },
+    fromEmail: "corpus-answer@loomworks.example",
+    person: { id: 42, preferOriginal },
+    onPreferOriginal: vi.fn(),
+  });
+
+  it("opens on the corpus's answer, and hands the press back out", async () => {
+    const props = stored(true);
+    const { container } = draw(props);
+    // On, because the corpus says so: nothing was pressed, and the sender's own
+    // html is fetched because the switch was already on when the bubble mounted.
+    await waitFor(() => expect(container.querySelector(".bdo")).not.toBeNull());
+    expect(control()!.getAttribute("aria-pressed")).toBe("true");
+
+    fireEvent.click(control()!);
+    // Handed out rather than written here: whether the press lands in the corpus
+    // is the caller's business, and the corpus is what will answer this bubble
+    // next time it is read.
+    expect(props.onPreferOriginal).toHaveBeenCalledWith(false);
+    const held = JSON.parse(localStorage.getItem("chainmail:styled-senders") ?? "[]") as string[];
+    expect(held).not.toContain("corpus-answer@loomworks.example");
+  });
+
+  it("follows the corpus when the entry is read again", async () => {
+    // A built page remembers the switch in this browser and nothing else can move
+    // it. Where the corpus is behind the bubble, the corpus is what moves it: the
+    // write comes back, the thread is read again, and the entry that arrives says
+    // the other thing.
+    const { container, rerender } = draw(stored(true));
+    await waitFor(() => expect(control()!.getAttribute("aria-pressed")).toBe("true"));
+
+    rerender(<Message {...bubble(stored(false))} />);
+    await waitFor(() => expect(control()!.getAttribute("aria-pressed")).toBe("false"));
+    // And the body goes back to the transcript's, because the switch that put the
+    // sender's own rendering there is off.
+    expect(container.querySelector(".bdo")).toBeNull();
+  });
+});
+
 describe("fetching and mounting one message's own html", () => {
   it("asks the entry's own route, percent-encoded, and takes the server's sentence", async () => {
     const seen: string[] = [];
@@ -310,5 +401,76 @@ describe("fetching and mounting one message's own html", () => {
     mountOriginal(host, "<p>one</p>");
     expect(() => mountOriginal(host, "<p>two</p>")).not.toThrow();
     expect(host.shadowRoot!.innerHTML).toBe("<p>two</p>");
+  });
+});
+
+describe("the sender's own colour-scheme rules", () => {
+  /**
+   * The mail's stylesheets have to be real ones for this to mean anything, so they
+   * are parsed by the document: jsdom's shadow roots have no `styleSheets` at all
+   * (the mount in the last test of the describe above is given one for that
+   * reason), and the walk is written to take whatever has them.
+   */
+  function sheetOf(css: string): CSSStyleSheet {
+    const style = document.createElement("style");
+    style.textContent = css;
+    document.head.appendChild(style);
+    return (style as HTMLStyleElement).sheet!;
+  }
+
+  it("takes the dark-scheme variant out, and keeps the rest of the mail's rules", () => {
+    // The app draws a mail on white paper with black ink — the paper its sender
+    // wrote it for (see the canvas in internal/spec/original.go) — while the app's
+    // own dark theme is a `prefers-color-scheme` query too, and a query inside a
+    // shadow root is answered by the document rather than by the host's
+    // `color-scheme`. So a sender's dark variant lands on the white paper: measured
+    // on a Google Calendar invitation, `#e8eaed` ink on `#fff`, which is 1.1:1 and
+    // a mail nobody can read.
+    const sheet = sheetOf(
+      `p { margin:0 } @media (prefers-color-scheme: dark) { p { color:#e8eaed } } h1 { font-size:20px }`,
+    );
+    dropSchemeVariants({ styleSheets: [sheet] });
+    expect(sheet.cssRules.length).toBe(2);
+    expect([...sheet.cssRules].map((r) => (r as CSSStyleRule).selectorText)).toEqual(["p", "h1"]);
+  });
+
+  it("leaves the modes that are about the reader's display alone", () => {
+    // A width query, a forced-colours block and a contrast query all mean what
+    // they say about the display they are read on; dropping them to fix a colour
+    // would be losing an accessibility mode.
+    const sheet = sheetOf(
+      `@media (max-width:580px) { p { font-size:12px } }
+       @media (forced-colors: active) { p { border:1px solid } }
+       @media (prefers-contrast: more) { p { font-weight:700 } }`,
+    );
+    const before = [...sheet.cssRules].map((r) => r.cssText);
+    dropSchemeVariants({ styleSheets: [sheet] });
+    expect([...sheet.cssRules].map((r) => r.cssText)).toEqual(before);
+  });
+
+  it("reaches a colour-scheme block nested inside another query", () => {
+    // A scheme block inside a width query is still a scheme block, and it is the
+    // shape a mail uses when its dark variant is only for phones.
+    const sheet = sheetOf(
+      `@media (max-width:580px) { @media (prefers-color-scheme: dark) { p { color:#eee } } p { font-size:12px } }`,
+    );
+    dropSchemeVariants({ styleSheets: [sheet] });
+    const outer = sheet.cssRules[0] as CSSMediaRule;
+    expect(outer.conditionText).toBe("(max-width:580px)");
+    expect(outer.cssRules.length).toBe(1);
+    expect((outer.cssRules[0] as CSSStyleRule).selectorText).toBe("p");
+  });
+
+  it("is what a mount does, so no mail is drawn from its dark rules by accident", () => {
+    // jsdom's shadow root has no `styleSheets`, so the host is handed a root that
+    // does: what is under test is that the walk is on the mount's path at all.
+    const sheet = sheetOf(`@media (prefers-color-scheme: dark) { p { color:#e8eaed } } p { margin:0 }`);
+    const root = { innerHTML: "", styleSheets: [sheet] };
+    const host = document.createElement("div");
+    Object.defineProperty(host, "shadowRoot", { value: root });
+    mountOriginal(host, `<style>${sheet.ownerNode!.textContent}</style><p>words</p>`);
+    expect(root.innerHTML).toContain("<p>words</p>");
+    expect(sheet.cssRules.length).toBe(1);
+    expect((sheet.cssRules[0] as CSSStyleRule).selectorText).toBe("p");
   });
 });

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import { Message, type MessageProps } from "../src/components/Message";
 
 afterEach(cleanup);
@@ -38,6 +39,67 @@ describe("a bubble drawn from its props alone", () => {
     // the timestamp links to the bubble it is printed on
     expect(msg.querySelector(".tm")!.getAttribute("href")).toBe("#m1");
     expect(msg.querySelector(".to")!.textContent).toBe("to —");
+  });
+
+  it("says each name on the receipt line separately, so each can answer a hover", () => {
+    // The line arrives as one string (see lib/who's receiptNames), and it is mostly
+    // people who sent nothing in the thread — the ones a thread read holds no
+    // address for at all. So every name is its own element with the caller's own
+    // title, and the line still reads exactly as the corpus wrote it, `cc` marker
+    // and all.
+    const { container } = draw({
+      to: "Ada Byron, cc Cy Devlin",
+      toTitle: (name) => `${name} <${name.split(" ")[0]!.toLowerCase()}@loomworks.example>`,
+    });
+    const spans = [...container.querySelectorAll(".to span")];
+    expect(spans.map((s) => s.textContent)).toEqual(["Ada Byron", "cc Cy Devlin"]);
+    expect(spans.map((s) => s.getAttribute("title"))).toEqual([
+      "Ada Byron <ada@loomworks.example>",
+      // The marker is part of what the line prints, and the name is what the hover
+      // is about: the address behind "Cy Devlin", not behind "cc Cy Devlin".
+      "Cy Devlin <cy@loomworks.example>",
+    ]);
+    expect(container.querySelector(".to")!.textContent).toBe("to Ada Byron, cc Cy Devlin");
+  });
+
+  it("names the people on the receipt line as names when the caller holds no address", () => {
+    // No invented address and no empty tooltip: the name, which is the fallback
+    // every hover in this app takes (see lib/who).
+    const { container } = draw({ to: "Ada Byron, Bo Halvorsen" });
+    const spans = [...container.querySelectorAll(".to span")];
+    expect(spans.map((s) => s.getAttribute("title"))).toEqual(["Ada Byron", "Bo Halvorsen"]);
+    expect(container.querySelector(".to")!.textContent).toBe("to Ada Byron, Bo Halvorsen");
+  });
+
+  it("draws the copy control as the app's own icon button, and copies", async () => {
+    // The box is the stylesheet's, not the component's: jsdom computes no cascade, so
+    // what is asserted here is the shape the rule states — the 18px glyph and the
+    // padding the pane strip's five icon buttons and the nav's pair are built from.
+    // The receipt's two controls share the one rule, so the pair cannot drift apart.
+    const css = readFileSync("src/styles.css", "utf8");
+    const rule = /\.copyjson, \.origbtn \{([^}]*)\}/.exec(css)?.[1] ?? "";
+    expect(rule).toContain("padding:.25rem .3rem");
+    expect(rule).toContain("border-radius:6px");
+    expect(rule).toContain("border:1px solid transparent");
+    const glyph = /\.copyjson svg, \.origbtn svg \{([^}]*)\}/.exec(css)?.[1] ?? "";
+    expect(glyph).toContain("width:18px");
+    expect(glyph).toContain("height:18px");
+
+    // And the state is the glyph, not a word: pressing it must not change the size of
+    // what the reader is holding, which is what the word "copied" used to do.
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    const { container } = draw({ copyJson: { hello: "world" } });
+    const btn = container.querySelector(".copyjson") as HTMLButtonElement;
+    expect(btn.textContent).toBe("");
+    expect(btn.getAttribute("title")).toBe("Copy this message's JSON");
+    expect(btn.querySelector("svg rect")).not.toBeNull();
+    fireEvent.click(btn);
+    expect(writeText).toHaveBeenCalledWith(JSON.stringify({ hello: "world" }, null, 2));
+    await waitFor(() => expect(btn.getAttribute("title")).toBe("Copied"));
+    expect(btn.className).toBe("copyjson");
+    expect(btn.querySelector("svg rect")).toBeNull();
+    expect(btn.querySelector("svg path")).not.toBeNull();
   });
 
   it("states the message's own subject in the receipt, where it had one", () => {

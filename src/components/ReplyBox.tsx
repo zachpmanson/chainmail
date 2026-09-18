@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { $api, type CorpusEntry, type SendResponse } from "../lib/api";
 import { dismissToast, pushToast } from "../lib/toasts";
+import { usePersonAddresses, withAddress } from "../lib/who";
 import { refusal, staleAfterMail, SAID_MS } from "./MailVerbs";
 
 /**
@@ -51,6 +52,16 @@ import { refusal, staleAfterMail, SAID_MS } from "./MailVerbs";
  * nothing here that can add anyone to it — the reply-all tick can only take people
  * off it (see gmailclient.Reply).
  *
+ * **The line above the field names that audience, by name.** "everyone the message
+ * was addressed to" was the box asking the reader to trust that it knew; the names
+ * are the corpus's own rows for the people on that message (see `audience` below),
+ * so a reader can see that the reply is going to the same six colleagues the thread
+ * has, and see the one they meant to leave off before they press anything. It is the
+ * same audience the mailbox will use and not a second opinion about it: the names
+ * come from the same headers, read by the corpus instead of by docket, and the
+ * preview still prints the addresses the mailbox itself resolved — that, and not
+ * this line, is the last word before a send.
+ *
  * **The two ticks are both subtractions, and both are on.** The reply is one message
  * in two renderings — the words as text, and the same words as HTML with the quote
  * inside a blockquote a client folds — and the second tick takes the second
@@ -73,6 +84,49 @@ import { refusal, staleAfterMail, SAID_MS } from "./MailVerbs";
  * must not take a row from the trail the reader is reading, and it outlives this
  * box the moment somebody clicks another thread.
  */
+/**
+ * Everyone a reply-all would reach besides the person who wrote the message: the
+ * names recorded on it in To or Cc, minus the reader's own person, in the order
+ * the message carried them.
+ *
+ * Read off the entry's participants rather than by taking the header text apart
+ * here, because those rows are the corpus's own answer about who is on a message —
+ * the same rows the participants panel and the "to" line under the bubble are drawn
+ * from — and a split of the display line on commas would be a second, worse reading
+ * of it. Minus the reader for the reason the mailbox leaves them out of its cc: a
+ * reply is not addressed back to the person writing it, and a line naming the reader
+ * as somebody this goes to would be the box asking them to check a list it had got
+ * wrong. Names are deduplicated as they are printed: two person rows for one
+ * colleague are one name on this line.
+ *
+ * This is the audience the mailbox will use, not a rival to it — the same headers,
+ * read by the corpus instead of by docket, and the preview prints the addresses the
+ * mailbox itself resolved. `me` is the reader's person id as /v1/settings gives it;
+ * with none named, nothing is subtracted, which is the honest reading of a reader
+ * who has not said who they are.
+ */
+export function audience(entry: CorpusEntry, me: number | undefined): string[] {
+  const names: string[] = [];
+  for (const p of entry.participants ?? []) {
+    if (p.role === "from" || (me !== undefined && p.personId === me)) continue;
+    if (!names.includes(p.name)) names.push(p.name);
+  }
+  return names;
+}
+
+/** A list as a sentence says it: "Ada", "Ada and Bo", "Ada, Bo and Cy" — and each
+ *  name is its own element, because each one carries the addresses behind it as a
+ *  hover title. The separators are between the names rather than inside them: a
+ *  title on "Ada and Bo" would answer a hover about one person with two. */
+function names(names: string[], title: (name: string) => string) {
+  return names.map((name, i) => (
+    <Fragment key={name}>
+      {i === 0 ? "" : i === names.length - 1 ? " and " : ", "}
+      <span title={title(name)}>{name}</span>
+    </Fragment>
+  ));
+}
+
 export function ReplyBox({
   thread,
   answer,
@@ -90,10 +144,10 @@ export function ReplyBox({
   answer: CorpusEntry;
   /** How that message's own bubble names it — the name and clock its head wears
    *  (see ThreadMessages' stamp words). Passed in rather than written again here:
-   *  the box says "replying to Lane Whittaker, Mon 2 Mar 2026 09:15", and a reader
+   *  the box says "replying to Lena Whitfield, Mon 2 Mar 2026 09:15", and a reader
    *  looking at the same message in the same pane must not be told a different
    *  clock by the reply box than by the bubble above it. */
-  words: { who: string; when: string };
+  words: { who: string; whoTitle?: string; when: string };
 }) {
   const queryClient = useQueryClient();
   // What the reader has written, in their own words: plain text, and no quote of
@@ -139,6 +193,26 @@ export function ReplyBox({
   }, [thread.rootExtId]);
 
   const send = $api.useMutation("post", "/v1/send");
+
+  // Who the reply would reach besides the sender, named above the field. The
+  // settings read is what knows which of the people on the message is the reader;
+  // it is a read of the local store, and the pane's neighbours already keep it
+  // warm.
+  const settings = $api.useQuery("get", "/v1/settings", {});
+  const others = audience(answer, settings.data?.mePersonId);
+
+  // The addresses behind those names. The message carries a person id and a name for
+  // each of them and no address (see castOfEntries in Participants.tsx, and lib/who),
+  // because nothing in a thread read records where a recipient's copy was sent — so
+  // the corpus's identity graph is asked, and a name whose person has an address
+  // gets it as a hover title. Every row for a printed name contributes, since the
+  // line prints one name for what may be two rows of the same person.
+  const people = usePersonAddresses();
+  const addressOf = (name: string) =>
+    withAddress(
+      name,
+      (answer.participants ?? []).filter((p) => p.name === name).flatMap((p) => people.get(p.personId) ?? []),
+    );
 
   // The first press: a read. The server composes the reply and answers with the
   // plan, and nothing is written to the mailbox — so a press that fails here, from
@@ -198,11 +272,17 @@ export function ReplyBox({
   return (
     <div className="replybox">
       <p className="replyto">
-        Replying to {words.who || "the sender"}
+        Replying to <span title={words.whoTitle ?? words.who}>{words.who || "the sender"}</span>
         {words.when ? `, ${words.when}` : ""}
-        {all
-          ? " and everyone else the message was addressed to"
-          : " and nobody else on it"}{" "}
+        {all && others.length ? (
+          // A fragment rather than a template string, because each name in the list
+          // is an element now: it carries the addresses behind it as a title.
+          <>
+            , cc {names(others, addressOf)}
+          </>
+        ) : (
+          ", and nobody else on it"
+        )}{" "}
         — the newest message here the mailbox holds.
       </p>
       {error ? (

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { attach } from "../src/client/behaviour";
+import { attach, lineAt, messageAt } from "../src/client/behaviour";
 
 /** The renderer's scroll-spy builds one on mount, and jsdom has none. The last
  *  one built is kept so a test can drive it: only the callback can say which
@@ -245,3 +245,150 @@ describe("the tree panel's scroll follow", () => {
     detach();
   });
 });
+/**
+ * The reading pane's reply lines, as the reader's pointer meets them.
+ *
+ * jsdom lays nothing out, so every box's rect is stubbed: what is being asserted is
+ * the arithmetic between a point and a line — which line a point is on, and which
+ * message that line's mark lands on — rather than anything jsdom could compute.
+ */
+const linePane = () => {
+  document.body.innerHTML = `
+    <div class="ibread"><div class="stream">
+      <div class="msg" id="entry-0"><div class="bub">root</div></div>
+      <div class="replies">
+        <div class="msg" id="entry-1"><div class="bub">answer</div></div>
+        <div class="replies">
+          <div class="msg" id="entry-2"><div class="bub">answer to the answer</div></div>
+        </div>
+      </div>
+      <div class="msg" id="entry-9"><div class="bub">a separate message, no answers</div></div>
+    </div></div>`;
+  //      x:  100        200        300
+  //     ┌──────────────────────────────┐  entry-0      y 0..40
+  //     │ ┌────────────────────────────┐│  line of entry-0 at 116, entry-1 at 216
+  const rects: Record<string, [number, number, number, number]> = {
+    "entry-0": [100, 0, 400, 40],
+    "entry-1": [130, 50, 400, 90],
+    "entry-2": [160, 100, 400, 140],
+    "entry-9": [100, 150, 400, 190],
+  };
+  document.querySelectorAll<HTMLElement>(".msg").forEach((el) => {
+    const [left, top, right, bottom] = rects[el.id]!;
+    el.getBoundingClientRect = () => ({ left, top, right, bottom, width: right - left, height: bottom - top }) as DOMRect;
+  });
+  document.querySelectorAll<HTMLElement>(".replies").forEach((el, i) => {
+    // the outer line hangs under entry-0 (at 116) and the inner one under entry-1 (at 216)
+    const left = 116 + i * 100;
+    el.getBoundingClientRect = () => ({ left, top: 50 + i * 50, right: 400, bottom: 140 + i * -0 }) as DOMRect;
+  });
+  return { detach: attach(document) };
+};
+
+const pointAt = (x: number, y: number, target?: Element) => {
+  const ev = new MouseEvent("mousemove", { clientX: x, clientY: y, bubbles: true });
+  (target ?? document.querySelector(".ibread .stream")!).dispatchEvent(ev);
+};
+
+describe("pointing at a reply line", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  it("takes the line under the pointer, and only within reach of it", () => {
+    const { detach } = linePane();
+    // On the rule itself, a few pixels either side of it, and not at arm's length:
+    // a line is two pixels wide and a pointer is not.
+    expect(lineAt(document, 116, 80)?.previousElementSibling?.id).toBe("entry-0");
+    expect(lineAt(document, 111, 80)?.previousElementSibling?.id).toBe("entry-0");
+    expect(lineAt(document, 121, 80)?.previousElementSibling?.id).toBe("entry-0");
+    expect(lineAt(document, 140, 80)).toBeNull();
+    // Above the line's first pixel and below its last, there is no line to be on.
+    expect(lineAt(document, 116, 49)).toBeNull();
+    expect(lineAt(document, 116, 80)).not.toBeNull();
+    detach();
+  });
+
+  it("takes the nearest line where two of them run side by side", () => {
+    const { detach } = linePane();
+    // Both lines are in reach at their own x, and the inner one is the answer for a
+    // point inside it: the lines nest a step apart, so the one furthest in is also
+    // the one nearest the reader's pointer — and marking the outer one too would mark
+    // a whole ancestry of messages from a single pointer.
+    expect(lineAt(document, 216, 120)?.previousElementSibling?.id).toBe("entry-1");
+    expect(lineAt(document, 116, 120)?.previousElementSibling?.id).toBe("entry-0");
+    detach();
+  });
+
+  it("reads the space between two messages as the upper one's", () => {
+    const { detach } = linePane();
+    // The gap under a card is that card's own margin, and a pointer in it is still on
+    // the card: without this the path would go out for eight pixels at every boundary
+    // as a reader runs the pointer up a thread, since a gap between two bubbles has
+    // neither a line nor a card in it to hold on to.
+    expect(messageAt(document, 200, 92)?.id).toBe("entry-1");
+    expect(messageAt(document, 200, 95)?.id).toBe("entry-1");
+    // past the last card's own margin is nobody's
+    expect(messageAt(document, 120, 202)).toBeNull();
+    // and a point beside a card, in the gutter the indent opened, is not on it
+    expect(messageAt(document, 110, 70)).toBeNull();
+    detach();
+  });
+
+  it("lights every line a message descends through, and no bubbles", () => {
+    const { detach } = linePane();
+    const lines = () => document.querySelectorAll(".rhov").length;
+    // entry-2 is the innermost answer: pointing at it lights the two lines it
+    // descends through — the line under entry-1's answers, and the line under
+    // entry-0's — which is the tree view's one answer to "where did this come from".
+    pointAt(200, 120, document.getElementById("entry-2")!);
+    expect(lines()).toBe(2);
+    expect(document.querySelectorAll(".rhov.msg").length).toBe(0);
+
+    // The line that hangs off entry-1 is a way of pointing at entry-1 — the inner
+    // line belongs to entry-1's answers — so the very same line is lit, which is the
+    // point of walking the DOM for both: pointing at a line and pointing at its
+    // message cannot disagree about what the reader is asking about.
+    pointAt(200, 70, document.getElementById("entry-1")!);
+    const byBubble = [...document.querySelectorAll(".rhov")];
+    expect(byBubble.length).toBe(1);
+    pointAt(216, 120);
+    expect([...document.querySelectorAll(".rhov")]).toEqual(byBubble);
+
+    // A message shallower in the tree lights a shorter path: the lines above it, not
+    // the ones below it — the line of a message's own answers says where *they* came
+    // from, and the reader is not pointing at any of them.
+    pointAt(200, 20, document.getElementById("entry-0")!);
+    expect(lines()).toBe(0);
+
+    // A message at the top of the tree has no lines above it at all
+    pointAt(200, 170, document.getElementById("entry-9")!);
+    expect(lines()).toBe(0);
+
+    // Away from every line and every card, nothing is lit
+    pointAt(200, 220);
+    expect(lines()).toBe(0);
+    detach();
+  });
+
+  it("keeps the path lit while the pointer stays on it, and drops it on the way out", () => {
+    const { detach } = linePane();
+    pointAt(216, 120);
+    const lit = () => [...document.querySelectorAll(".rhov")].map((e) => e.tagName + (e.id || "line")).join(",");
+    const once = lit();
+    // The same path, reported again by the next few pixels of the same movement: not
+    // one class is touched, because touching one would start its fade over — a mark
+    // that is already lit must not flicker back in on every mouse event.
+    const add = vi.spyOn(DOMTokenList.prototype, "add");
+    pointAt(216, 124);
+    pointAt(216, 128);
+    expect(add).not.toHaveBeenCalled();
+    add.mockRestore();
+    expect(lit()).toBe(once);
+    // and the pointer leaving the transcript ends the path where it ends
+    document.querySelector(".ibread .stream")!.dispatchEvent(new MouseEvent("mouseleave", { bubbles: true }));
+    expect(document.querySelectorAll(".rhov").length).toBe(0);
+    detach();
+  });
+});
+

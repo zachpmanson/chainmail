@@ -8,7 +8,7 @@ import { withTransition } from "../src/lib/viewTransition";
  * the change happens either way.
  *
  * Both callers of this are covered here rather than through their own trees: the
- * page's timeline/columns switch and the pane's nest switch differ in how they
+ * page's timeline/columns switch and the pane's tree switch differ in how they
  * apply the change (DOM classes, React state) and not at all in what the
  * transition is — which messages are named, how many, and what a browser that
  * cannot do this is asked to do instead.
@@ -50,6 +50,48 @@ describe("naming the bubbles a view switch moves", () => {
       // element left named would be excluded from the next one's root snapshot
       await Promise.resolve();
       expect(bubbles.map((b) => b.style.viewTransitionName)).toEqual(["", "", ""]);
+    } finally {
+      Object.assign(document, { startViewTransition: undefined });
+      cleanup();
+    }
+  });
+
+  it("names the bubbles the change made, not only the ones it named first", async () => {
+    const { cleanup } = doc();
+    const orphaned: HTMLElement[] = [];
+    const live = () => [...document.querySelectorAll<HTMLElement>(".msg")];
+    const namesOn = () => live().map((e) => e.style.viewTransitionName);
+    const after: string[][] = [];
+    Object.assign(document, {
+      startViewTransition: (cb: () => void) => {
+        cb();
+        after.push(namesOn());
+        return { finished: Promise.resolve() };
+      },
+    });
+    try {
+      withTransition(document, () => {
+        // A change that re-parents a bubble makes a new node for it — how the tree
+        // switch moves a reply into its container, which React cannot do by moving
+        // the element it drew. The name taken before this is on a node that is no
+        // longer in the document, and an unnamed pair does not morph: the browser
+        // falls back to crossfading the whole root, which is the animation failing
+        // quietly rather than not happening.
+        for (const b of live()) {
+          const fresh = b.cloneNode(true) as HTMLElement;
+          fresh.style.viewTransitionName = "";
+          orphaned.push(b);
+          b.replaceWith(fresh);
+        }
+      });
+      // so they are named twice: once on the way in, once on the nodes the change
+      // left behind, which are the ones the browser's second snapshot is taken of
+      expect(after).toEqual([["entry-0", "entry-1", "entry-2"]]);
+      await Promise.resolve();
+      // and both passes are cleared, including the nodes that left the document:
+      // an element left named is excluded from the next transition's root snapshot
+      expect(namesOn()).toEqual(["", "", ""]);
+      expect(orphaned.map((b) => b.style.viewTransitionName)).toEqual(["", "", ""]);
     } finally {
       Object.assign(document, { startViewTransition: undefined });
       cleanup();

@@ -1121,7 +1121,7 @@ func TestShortCopyWithDroppedSubjectConvergesByThread(t *testing.T) {
 	res, err := s.Put(Entry{
 		Source: SourceMail, ExtID: "mail:<morning@acme.test>", TS: sent,
 		TZ: "AEST", TZOffset: &[]int{600}[0], PersonID: aria, Container: "thread-7",
-		Subject: "Multiplex Cinemas Ltd", BodyText: "I will look into this this morning.",
+		Subject: "Riverside Cinemas Ltd", BodyText: "I will look into this this morning.",
 	}, &Mail{MessageID: "<morning@acme.test>"}, nil)
 	if err != nil {
 		t.Fatalf("storing the mailbox copy: %v", err)

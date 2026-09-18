@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { $api } from "../lib/api";
 import { dropFromLists, markInLists, putBackLists } from "../lib/lists";
 import { dismissToast, pushToast } from "../lib/toasts";
-import { readThreaded, rememberThreaded } from "../lib/threading";
+import { readTree, rememberTree } from "../lib/tree";
 import { withTransition } from "../lib/viewTransition";
 import { ThreadMessages } from "./ThreadMessages";
 import { AttachmentCount, MailCount, PeopleCount } from "./ThreadRow";
@@ -59,14 +59,15 @@ export function ThreadPane({
 }) {
   const queryClient = useQueryClient();
 
-  // The pane's own view switch: replies drawn under the message they answer, or
-  // the transcript's flat order (see lib/threading). Read once, at mount, and
-  // written when it is pressed — this button is the only thing that sets it, so
-  // there is nothing to watch for. It sits above the threads rather than in one,
-  // because a reader's answer about how they read a thread is not a fact about
-  // the thread they happen to have open — and the pane is not remounted between
-  // threads, only its contents change, so the switch survives opening another.
-  const [threaded, setThreaded] = useState(readThreaded);
+  // The pane's own view switch: replies drawn as a tree under the message they
+  // answer, or the transcript's flat order (see lib/tree). Read once, at mount,
+  // and written when it is pressed — this button is the only thing that sets it,
+  // so there is nothing to watch for. It sits above the threads rather than in
+  // one, because a reader's answer about how they read a thread is not a fact
+  // about the thread they happen to have open — and the pane is not remounted
+  // between threads, only its contents change, so the switch survives opening
+  // another.
+  const [tree, setTree] = useState(readTree);
 
   // What the last write here has to say is drawn in the shell's corner, not in
   // this pane (see Toasts): an account of work that is over must not take a row
@@ -186,10 +187,10 @@ export function ThreadPane({
                 outermost of them on every thread (see .ibread-read). */}
             <button
               type="button"
-              className="ibicon ibnest"
-              aria-pressed={threaded}
-              aria-label={nestLabel(threaded)}
-              title={nestLabel(threaded)}
+              className="ibicon ibtree"
+              aria-pressed={tree}
+              aria-label={treeLabel(tree)}
+              title={treeLabel(tree)}
               onClick={() => {
                 // The switch is the one thing here that rearranges what the reader
                 // is looking at, so it is the one thing that animates: the bubbles
@@ -200,15 +201,15 @@ export function ThreadPane({
                 // between two copies of the same view.
                 withTransition(document, () =>
                   flushSync(() =>
-                    setThreaded((on) => {
-                      rememberThreaded(!on);
+                    setTree((on) => {
+                      rememberTree(!on);
                       return !on;
                     }),
                   ),
                 );
               }}
             >
-              <NestGlyph />
+              <TreeGlyph />
             </button>
             {/* The two mailbox verbs, beside the read circle and on the thread
                 that is open rather than on a ticked set. Glyphs, and the same two
@@ -305,7 +306,7 @@ export function ThreadPane({
               own scroll box, so the head above is a line of the pane rather than
               the first thing in the thread (see .ibreadwrap). */}
           <div className="ibreadwrap">
-            <ThreadMessages thread={thread} threaded={threaded} />
+            <ThreadMessages thread={thread} tree={tree} />
           </div>
         </>
       ) : (
@@ -318,19 +319,19 @@ export function ThreadPane({
 /** What the switch says it is, and what pressing it does — the same shape the
  *  page's own reply-tree button names itself in (see behaviour.ts's treeLabel):
  *  the state, then the press. The words are the reader's two options rather than
- *  the feature's name, because "threading" is what this build calls it and what
+ *  the feature's name, because "a reply tree" is what this build calls it and what
  *  a reader sees is the difference between two shapes of transcript. */
-function nestLabel(on: boolean): string {
+function treeLabel(on: boolean): string {
   return on
-    ? "Replies are nested under what they answer — click to show them in the order they were sent"
-    : "Messages are in the order they were sent — click to nest each reply under what it answers";
+    ? "Reply tree: each answer under the message it answers — click for the order they were sent"
+    : "Reply tree: the order they were sent — click to draw each answer under the message it answers";
 }
 
 /** The switch's mark: a message, two answers to it, and an answer to one of
- *  those — the three levels the indent draws, in the four lines a 14px glyph has
+ *  those — the three levels the tree draws, in the four lines a 14px glyph has
  *  room for. Drawn with the same stroke and the same box as the two verbs beside
  *  it rather than as a filled shape, so the strip stays one kind of thing. */
-function NestGlyph() {
+function TreeGlyph() {
   return (
     <svg
       width="14"

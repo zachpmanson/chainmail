@@ -27,7 +27,15 @@ export default defineConfig({
   // Every test file runs against the same module graph, and the notification
   // store is module state: the reset in here is what keeps one test's sentence
   // out of the next one's corner.
-  test: { setupFiles: ["./test/setup.ts"] },
+  test: {
+    setupFiles: ["./test/setup.ts"],
+    // `nix develop` leaves a source snapshot of this repo in .direnv/flake-inputs,
+    // which the default include glob picks up as a second copy of the suite —
+    // those files are symlinks into the store and fail to load, so `make check`
+    // reported 13 failed files next to 531 passing tests. Excluded, not skipped:
+    // they are not this checkout's tests.
+    exclude: ["**/node_modules/**", "**/.direnv/**", "**/dist/**"],
+  },
   server: {
     open: "/?spec=/synthetic.json",
     // The API is a separate localhost process, so /v1 is proxied rather than

@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 // All names, addresses and domains here are invented. The real cases they stand
@@ -938,5 +939,174 @@ func TestUpdatePersonAppliesEveryPartOrNoneOfIt(t *testing.T) {
 	}
 	if _, err := PersonByIdentity(s, KindDisplayName, "ben okoye"); err == nil {
 		t.Error("the rename landed despite the refusal")
+	}
+}
+
+// How a sender's mail is read is stored on the person, so it outlives the
+// browser it was decided in and follows the sender through a merge. It is one
+// answer per person rather than per message: the mail it is for arrives as a run
+// from one address, and a reader who has decided how to read that address has
+// decided it for all of it.
+func TestAPersonsMailIsReadTheWayTheyWroteIt(t *testing.T) {
+	s := open(t)
+	ada, err := Resolve(s, KindEmail, "ada@example.com", "Ada Okoye")
+	if err != nil {
+		t.Fatal(err)
+	}
+	on := true
+	if _, err := UpdatePerson(s, ada, PersonEdit{PreferOriginal: &on}); err != nil {
+		t.Fatalf("turning it on: %v", err)
+	}
+	got, err := PersonByID(s, ada)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.PreferOriginal {
+		t.Fatalf("PersonByID says %+v, want preferOriginal", got)
+	}
+
+	// An edit that says nothing about the reading style leaves it alone: a screen
+	// saving a name in front of it must not switch the style off by omission.
+	if _, err := UpdatePerson(s, ada, PersonEdit{DisplayName: "Ada Nwosu"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err = PersonByID(s, ada); err != nil || !got.PreferOriginal {
+		t.Fatalf("after a rename: %+v, %v", got, err)
+	}
+
+	// And off is a claim rather than an absence: the reader asking for the
+	// transcript's rendering again is an answer, and it is a different one.
+	off := false
+	if _, err := UpdatePerson(s, ada, PersonEdit{PreferOriginal: &off}); err != nil {
+		t.Fatalf("turning it off: %v", err)
+	}
+	if got, err = PersonByID(s, ada); err != nil || got.PreferOriginal {
+		t.Fatalf("after turning it off: %+v, %v", got, err)
+	}
+
+	// Everyone, as the list serves them, carries the same answer: the bubble and
+	// the people screen must not be able to disagree about one sender.
+	people, err := People(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, p := range people {
+		if p.PersonID != ada {
+			continue
+		}
+		found = true
+		if p.PreferOriginal {
+			t.Errorf("the list still has the style on: %+v", p)
+		}
+	}
+	if !found {
+		t.Fatalf("ada is missing from the list: %+v", people)
+	}
+}
+
+// The entry read carries both halves of the answer: whose mail this is, and how
+// the reader reads it. A bubble draws its control from the entry alone rather
+// than asking again per message, and it needs the id to write the answer back.
+func TestAnEntryCarriesWhoseMailItIsAndHowItIsRead(t *testing.T) {
+	s := open(t)
+	ada, err := Resolve(s, KindEmail, "ada@example.com", "Ada Okoye")
+	if err != nil {
+		t.Fatal(err)
+	}
+	on := true
+	if _, err := UpdatePerson(s, ada, PersonEdit{PreferOriginal: &on}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := s.Put(Entry{
+		Source: SourceMail, ExtID: "hers", Kind: "message",
+		TS: time.Unix(1_700_000_000, 0), BodyText: "hello", PersonID: ada,
+	}, &Mail{MessageID: "hers"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Somebody else's message, recovered from a quote: it has no sender of its
+	// own, so there is nobody to hold an answer and nothing to show.
+	quoted, _, err := s.PutQuoted(Entry{
+		Source: SourceMail, ExtID: "quoted", Kind: "message",
+		TS: time.Unix(1_700_000_100, 0), BodyText: "an older word",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetParent(quoted, res.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	entry, err := s.Show("hers")
+	if err != nil {
+		t.Fatalf("Show: %v", err)
+	}
+	if entry.PersonID != ada || !entry.PreferOriginal {
+		t.Fatalf("her entry reads personId=%d preferOriginal=%v, want %d and true",
+			entry.PersonID, entry.PreferOriginal, ada)
+	}
+
+	// And through the chain read, which is the query the pane actually makes.
+	chain, err := s.Chain("hers")
+	if err != nil {
+		t.Fatalf("Chain: %v", err)
+	}
+	if len(chain) != 2 {
+		t.Fatalf("chain has %d entries, want 2", len(chain))
+	}
+	for _, e := range chain {
+		if e.ExtID != "quoted" {
+			continue
+		}
+		if e.PersonID != 0 || e.PreferOriginal {
+			t.Errorf("a recovered entry reads personId=%d preferOriginal=%v, want nobody and false",
+				e.PersonID, e.PreferOriginal)
+		}
+	}
+}
+
+// A merge carries how mail is read, because the decision was about the human and
+// not about the spelling of their name: the reader may well have made it before
+// the two halves were known to be one person, and a merge that dropped it would
+// switch the reading style off as a side effect of tidying the identity graph.
+// It is never turned ON by a merge, though — see mergeWithReason.
+func TestAMergeCarriesTheReadingStyleAndDoesNotInventOne(t *testing.T) {
+	s := open(t)
+	half1, err := Resolve(s, KindEmail, "ada@example.com", "Ada Okoye")
+	if err != nil {
+		t.Fatal(err)
+	}
+	half2, err := Resolve(s, KindDisplayName, "ada nwosu", "Ada Nwosu")
+	if err != nil {
+		t.Fatal(err)
+	}
+	on := true
+	if _, err := UpdatePerson(s, half2, PersonEdit{PreferOriginal: &on}); err != nil {
+		t.Fatal(err)
+	}
+	if err := MergePlanned(s, PlannedMerge{KeepID: half1, DropID: half2, Rule: RuleSameName}); err != nil {
+		t.Fatalf("merging: %v", err)
+	}
+	if got, err := PersonByID(s, half1); err != nil || !got.PreferOriginal {
+		t.Errorf("the merged person reads %+v (%v), want the style carried over", got, err)
+	}
+
+	// The other way round: nobody has answered for either half, and a merge is
+	// not an answer. The kept person's off is the absence of a decision, so
+	// nothing is switched on behind the reader's back.
+	bo, err := Resolve(s, KindEmail, "bo@example.com", "Bo Halvorsen")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bo2, err := Resolve(s, KindDisplayName, "bo halvorsen", "Bo Halvorsen")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := MergePlanned(s, PlannedMerge{KeepID: bo, DropID: bo2, Rule: RuleSameName}); err != nil {
+		t.Fatalf("merging: %v", err)
+	}
+	if got, err := PersonByID(s, bo); err != nil || got.PreferOriginal {
+		t.Errorf("an unanswered pair merged into %+v (%v), want the style still off", got, err)
 	}
 }

@@ -24,6 +24,10 @@ export interface ReplyTarget {
   /** Who wrote it, in the words their own bubble wears — a name, or a note's
    *  label, which is what a page draws for a system note. */
   who?: string;
+  /** What hovering the name says, when the caller can do better than the name
+   *  alone: the same "Name <address>" a bubble wears (see lib/who). Absent for a
+   *  caller that holds no address, and then the label is the whole of the title. */
+  whoTitle?: string;
   /** Their clock as the parent bubble states it, e.g. "Mon 2 Mar 2026 09:15". */
   when?: string;
 }
@@ -36,8 +40,11 @@ export function ReplyLink({ parent }: { parent: ReplyTarget | null }) {
       href={`#${parent.anchor}`}
       /* The label is what the link says; the title repeats it in full for the
          hover, and is the whole of it in column mode, where CSS collapses the
-         label to the arrow alone (see .parlbl in styles.css). */
-      title={`In reply to ${parent.who}, ${parent.when}`}
+         label to the arrow alone (see .parlbl in styles.css). The address goes
+         inside the title with the name rather than replacing the sentence: this
+         is the only place a reader in column mode finds out which message the
+         arrow answers, and it is also the only place the name's address is said. */
+      title={`In reply to ${parent.whoTitle ?? parent.who}, ${parent.when}`}
     >
       <span className="arw">&#8617;</span>
       <span className="parlbl">

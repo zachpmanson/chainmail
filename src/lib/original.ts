@@ -39,7 +39,23 @@ export const ORIGINAL_BASE = "/v1/entries";
 const asked = new Map<string, Promise<string>>();
 
 /**
- * Which senders the reader reads as their sender wrote them.
+ * Which senders the reader reads as their sender wrote them — this browser's own
+ * copy of that answer, and the whole of it for a caller with no corpus to ask.
+ *
+ * The store of record is the corpus, not here: the answer belongs to the person
+ * the sender resolves to (the corpus's people.prefer_original), it is served on
+ * every entry as `preferOriginal`, and it is written back with POST
+ * /v1/people/{personId} — see useOriginal in components/Message.tsx, and the pane
+ * that makes the write. Storing it there rather than here is what makes "read
+ * Ada's mail as Ada wrote it" true on the reader's phone as well as on this
+ * browser, and what stops an identity merge of two spellings of one person from
+ * forgetting which way their mail is read.
+ *
+ * What is left here is the fallback, for the two callers the corpus cannot answer
+ * for. A built page has no server behind it at all, and its control still has to
+ * do something. And a message with no sender to ask about — one recovered from
+ * somebody else's quote — has nobody for the answer to be about, so the message is
+ * what is remembered instead.
  *
  * The switch is per sender and not per message, because the mail that needs it
  * is mail that was never meant for this pipeline: a booking confirmation, a
@@ -51,13 +67,13 @@ const asked = new Map<string, Promise<string>>();
  * decision is about the sender rather than the message: the next slurp brings
  * more of their mail, and the reader's answer to "how do I read this person" is
  * not something to re-answer every time the corpus grows. Keyed by the address
- * the entry came from (`fromEmail`), which is the only handle a sender has: the
- * display name is neither unique nor always present.
+ * the entry came from (`fromEmail`), which is the only handle a sender has here:
+ * the display name is neither unique nor always present.
  *
  * A message with no address of its own — one recovered from somebody else's
  * quote — has no sender to hold the answer, so the caller keys it on the message
- * instead (see `stylesKey`), and it is the message that is remembered, not a
- * person the corpus cannot name.
+ * instead (the `key` useOriginal builds), and it is the message that is
+ * remembered, not a person the corpus cannot name.
  */
 const STYLED_KEY = "chainmail:styled-senders";
 
@@ -173,4 +189,65 @@ async function whyNot(res: Response): Promise<string> {
 export function mountOriginal(host: HTMLElement, html: string): void {
   const root = host.shadowRoot ?? host.attachShadow({ mode: "open" });
   root.innerHTML = html;
+  dropSchemeVariants(root);
+}
+
+/**
+ * Take the sender's colour-scheme variants out of their own stylesheets.
+ *
+ * A mail that writes `@media (prefers-color-scheme: dark)` is answering a
+ * question about the canvas it has been drawn on, and the answer this app gets is
+ * the wrong one. The mail is mounted on the app's paper — white, black ink,
+ * `color-scheme:light` (see appCanvas in internal/spec/original.go) — and inside a
+ * shadow root the media query is answered by the *document*, not by the host's
+ * `color-scheme`: the app's own theme is the same query (see styles.css), so in
+ * dark mode the sender's dark rules apply and the sender's paper stays white.
+ *
+ * Measured on a Google Calendar invitation, whose dark block is
+ * `color:#e8eaed !important` on its body text and `#e8eaed` on the two classes
+ * beside it: mounted in dark mode the ink came out `rgb(232,234,237)` over
+ * `rgb(255,255,255)` — 1.1:1, which is a mail nobody can read — and the same
+ * mount with `color-scheme: only light` in the canvas came out identically, so
+ * this is not something the canvas can win. That mail is not unusual: of the
+ * senders this corpus holds, forty write a colour-scheme variant, and the shape
+ * is always the same one — the dark block restates the *ink* and leaves the paper
+ * to the client, because the client it was written for darkens the paper.
+ *
+ * So the variant is not applied, and the mail is drawn once: as its author wrote
+ * it for the paper it is actually on. That is the same preference the canvas
+ * already states one layer down — the sender's design over the app's, and the
+ * sender's *light* design over a dark one this app has no way to draw.
+ *
+ * Only `prefers-color-scheme`, and the narrowness is deliberate: the other
+ * conditional modes a mail can ask about (`forced-colors`, `prefers-contrast`, a
+ * width query) are statements about the reader's own display and mean what they
+ * say there, and dropping those would be losing an accessibility mode to fix a
+ * colour. Nested rules are walked, because a colour-scheme block inside a width
+ * query is still a colour-scheme block.
+ *
+ * The parameter is what it needs and no more — something with stylesheets — so
+ * that the walk can be reached by a test: the shadow root's own `styleSheets` is
+ * not implemented everywhere this app runs (jsdom has none), and a rule about
+ * which of a sender's styles apply is worth testing for real rather than
+ * trusting.
+ */
+export function dropSchemeVariants(root: { styleSheets?: ArrayLike<CSSStyleSheet> | null }): void {
+  for (const sheet of Array.from(root.styleSheets ?? [])) dropFrom(sheet);
+}
+
+function dropFrom(group: CSSStyleSheet | CSSGroupingRule): void {
+  const rules = group.cssRules;
+  // Backwards: deleting a rule shifts every rule after it.
+  for (let i = rules.length - 1; i >= 0; i--) {
+    // Duck-typed rather than `instanceof CSSMediaRule`, because what is being
+    // asked for is a rule with a condition and a body — which is also what
+    // `@supports` is — and this walk should not depend on a constructor.
+    const rule = rules[i] as CSSRule & { cssRules?: CSSRuleList; conditionText?: string };
+    if (!rule.cssRules) continue;
+    if (/prefers-color-scheme/i.test(rule.conditionText ?? "")) {
+      group.deleteRule(i);
+      continue;
+    }
+    dropFrom(rule as unknown as CSSGroupingRule);
+  }
 }

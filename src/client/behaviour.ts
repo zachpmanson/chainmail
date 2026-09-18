@@ -11,6 +11,69 @@ import { withTransition } from "../lib/viewTransition";
 /** The listener registrar `attach` hands to the behaviours it delegates to. */
 type On = (el: EventTarget, type: string, fn: (ev: Event) => void, opts?: AddEventListenerOptions) => void;
 
+/**
+ * How far to either side of a line a pointer still counts as being on it. A line
+ * is two pixels wide and a reader's hand is not, so the mark cannot be asked for
+ * by landing on the rule itself; ten pixels is a mouse's width of forgiveness and
+ * less than the gutter the indent leaves between a line and the bubble beside it,
+ * so nothing can be reached by accident.
+ */
+const LINE_REACH = 5;
+
+/**
+ * The reply line under a point, if there is one: the deepest line whose strip the
+ * point is in.
+ *
+ * The lines run down the indent, each nested a step inside the last, so the
+ * deepest one under a point is also the nearest — there is only ever one answer,
+ * and it is decided by comparing two rectangles rather than by asking the browser.
+ * This cannot be a CSS `:hover`, which is why the arithmetic is here: hovering a
+ * nested line hovers every container it is nested in, so a rule written with
+ * `:has()` marks a message, and its parent, and its parent's — a whole ancestry lit
+ * up by one pointer. Narrowing that to the nearest line needs a `:has()` inside a
+ * `:has()`, which the selector syntax forbids.
+ */
+export function lineAt(doc: Document, x: number, y: number): HTMLElement | null {
+  let found: HTMLElement | null = null;
+  let deepest = -Infinity;
+  for (const line of doc.querySelectorAll<HTMLElement>(".ibread .stream .replies")) {
+    const r = line.getBoundingClientRect();
+    if (x < r.left - LINE_REACH || x > r.left + LINE_REACH) continue;
+    if (y < r.top || y > r.bottom) continue;
+    if (r.left > deepest) { deepest = r.left; found = line; }
+  }
+  return found;
+}
+
+/**
+ * The margin a card owns below itself, as far as the pointer is concerned. The
+ * space between two messages is the upper one's `margin-bottom` (styles.css), so a
+ * pointer in it is still on the upper card — which is what stops the mark blinking
+ * out for eight pixels at every boundary as the reader runs the pointer up a thread.
+ * A little over the half rem that margin is, and still less than a card is tall.
+ */
+const MARGIN_REACH = 9;
+
+/**
+ * The message the pointer is on: the deepest card whose box holds the point, its
+ * own bottom margin included.
+ *
+ * Cards at different depths overlap in x — an answer is drawn inside its parent's
+ * span — so the deepest one containing the point is the one being pointed at. Its
+ * margin is part of it for this purpose and for no other: nothing is drawn there.
+ */
+export function messageAt(doc: Document, x: number, y: number): HTMLElement | null {
+  let found: HTMLElement | null = null;
+  let deepest = -Infinity;
+  for (const card of doc.querySelectorAll<HTMLElement>(".ibread .stream .msg")) {
+    const r = card.getBoundingClientRect();
+    if (x < r.left || x > r.right) continue;
+    if (y < r.top || y > r.bottom + MARGIN_REACH) continue;
+    if (r.left > deepest) { deepest = r.left; found = card; }
+  }
+  return found;
+}
+
 export function attach(doc: Document = document): () => void {
   const cleanups: Array<() => void> = [];
   const on = <K extends keyof HTMLElementEventMap>(
@@ -300,6 +363,67 @@ export function attach(doc: Document = document): () => void {
         if (hovId === id) { hovId = null; refresh(); }
       });
     }
+  }
+
+  /* ---------- pointing at a message, or at a line ----------
+   * What the pointer marks is a path, and it is marked on the lines: every line
+   * from the message pointed at up to the line under the root, so that pointing at
+   * a reply six answers deep lights the whole way down to it (see `.rhov` in
+   * styles.css — the mark itself, and why the bubbles are left alone).
+   *
+   * Every line above a message is a `.replies` box it is inside, and the box is
+   * drawn under the card whose line hangs off it (see `.replies` in select.css) — so
+   * the path is the ancestor chain, walked in the DOM rather than in the tree's own
+   * data: this runs on the pane's rendered bubbles, in both views, and in a built
+   * page there is neither tree nor data to walk.
+   *
+   * The line under the pointer is found by arithmetic (`lineAt`) rather than by CSS
+   * hover, for the reason given there: lines nest, so a hovered line hovers every
+   * line it is nested in, and a `:has()` rule would mark a whole ancestry — which is
+   * what this wants, but only one of the two things it wants, and only by accident.
+   * Here the walk up the DOM is the same walk in both cases, so pointing at a line
+   * and pointing at its message cannot disagree about what is lit.
+   *
+   * Only a change of path touches the DOM: a pointer moving along a line or across a
+   * message reports every few pixels, and re-adding a class that is already there
+   * would restart the fades under it. */
+  const stream = doc.querySelector<HTMLElement>(".ibread .stream");
+  if (stream) {
+    let lit: HTMLElement[] = [];
+    let litFor: HTMLElement | null = null;
+    const clear = () => {
+      for (const el of lit) el.classList.remove("rhov");
+      lit = [];
+      litFor = null;
+    };
+    const light = (msg: HTMLElement | null) => {
+      if (msg === litFor) return;
+      clear();
+      if (!msg) return;
+      litFor = msg;
+      // up the boxes the message is inside, which are the lines it descends
+      // through — the box under its parent card, then the one under its
+      // grandparent's, as far as the top of the thread
+      for (let node = msg.parentElement; node && node !== stream; node = node.parentElement) {
+        if (!node.classList.contains("replies")) continue;
+        node.classList.add("rhov");
+        lit.push(node);
+      }
+    };
+    on(stream, "mousemove", (ev) => {
+      const e = ev as MouseEvent;
+      const under = lineAt(doc, e.clientX, e.clientY);
+      // A line is a way of pointing at the message it hangs off, and the walk above
+      // is the same walk from there: the path leads to the message the reader is
+      // asking about, not to the line they happened to find it by.
+      const msg = under
+        ? (under.previousElementSibling as HTMLElement | null)
+        : messageAt(doc, e.clientX, e.clientY);
+      light(msg?.classList.contains("msg") ? msg : null);
+    });
+    // The pointer leaving the stream leaves the transcript, and a lit path that
+    // outlived the hover would sit on lines the reader has stopped pointing at.
+    on(stream, "mouseleave", clear);
   }
 
   /* ---------- hovering a chain row in the sources panel ---------- */

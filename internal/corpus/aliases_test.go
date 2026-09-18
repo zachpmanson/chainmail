@@ -342,7 +342,7 @@ func TestMergeCandidatesReportsWithoutMerging(t *testing.T) {
 // was visible and this is not.
 func TestAliasedAddressStillResolvesToItsOwnPersonWhenTheAliasRefusedIt(t *testing.T) {
 	s := open(t)
-	old := person(t, s, "alys@quarry.fed", "Alys Salado")
+	old := person(t, s, "alys@quarry.fed", "Alys Sorensen")
 	cur := person(t, s, "alys@millrace.fed", "Alys Nguyen")
 	r, err := AddDomainAlias(s, "quarry.fed", "millrace.fed", "rebrand")
 	if err != nil {
@@ -352,7 +352,7 @@ func TestAliasedAddressStillResolvesToItsOwnPersonWhenTheAliasRefusedIt(t *testi
 		t.Fatalf("refused %d pairs, want the one with two surnames", len(r.Refused))
 	}
 
-	got, err := ResolveAddress(s, Address{Addr: "alys@quarry.fed", Name: "Alys Salado"},
+	got, err := ResolveAddress(s, Address{Addr: "alys@quarry.fed", Name: "Alys Sorensen"},
 		"mail:from-header")
 	if err != nil {
 		t.Fatal(err)

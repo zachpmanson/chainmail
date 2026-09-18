@@ -18,7 +18,7 @@ import { Inbox } from "./components/Inbox";
 import { ViewPage } from "./components/ViewPage";
 import { NotFound } from "./components/NotFound";
 import { Rendered } from "./components/Rendered";
-import { StatusView } from "./components/StatusView";
+import { SettingsView } from "./components/SettingsView";
 import { SpecsView } from "./components/SpecsView";
 import { OpsView } from "./components/OpsView";
 import { validateOpsTab } from "./lib/opsTabs";
@@ -42,7 +42,7 @@ import type { SearchMode } from "./lib/api";
  *   "/view/<name>" — a page POST /v1/spec saved under that name, reloadable by
  *                    the URL alone. The server answers any /view/* path with
  *                    the shell; everything deeper is this route's business.
- *   "/status"      — which backends the corpus reads through are logged in.
+ *   "/settings"      — which backends the corpus reads through are logged in.
  *   "/specs"      — every page saved under /view/<name>, newest first, so a
  *                     saved build can be reopened without remembering its name.
  *   "/ops"        — the people-merge review surface: the dedupe plan, shown
@@ -212,7 +212,7 @@ function RootLayout() {
           <span className="sep">·</span>
           <Link to="/specs">Braids</Link>
           <span className="sep">·</span>
-          <Link to="/status">Settings</Link>
+          <Link to="/settings">Settings</Link>
           <span className="sep">·</span>
           <Link to="/ops">Ops</Link>
           {/* The corpus being read is the one statement in the nav that is not a
@@ -285,10 +285,10 @@ const searchRoute = createRoute({
   component: Home,
 });
 
-const statusRoute = createRoute({
+const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/status",
-  component: StatusView,
+  path: "/settings",
+  component: SettingsView,
 });
 
 const specsRoute = createRoute({
@@ -310,7 +310,7 @@ const viewRoute = createRoute({
   component: ViewPage,
 });
 
-const routeTree = rootRoute.addChildren([searchRoute, statusRoute, specsRoute, opsRoute, viewRoute]);
+const routeTree = rootRoute.addChildren([searchRoute, settingsRoute, specsRoute, opsRoute, viewRoute]);
 
 /** The app's router, bound to the browser's history. */
 export const router = createRouter({

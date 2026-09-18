@@ -5,7 +5,7 @@
 
 :root {
     --bg:#f6f4f1; --fg:#1e1c1a; --muted:#6f6963; --line:#e3ded7; --card:#fff;
-    --accent:#8a5a2b; --mine:#ece1d2; --quote:#faf8f5; --dash:#eae5dc;
+    --accent:#8a5a2b; --mine:#f2dcb4; --quote:#faf8f5; --dash:#eae5dc;
     --o1:#2f6f5f; --o2:#4a5b9c; --o3:#8a5a2b; --o4:#8c4a6b; --o5:#77716a;
     --strong:#2e7d4f;
     /* The serif a subject is set in, where a subject is drawn: the select panel's
@@ -21,14 +21,14 @@
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       --bg:#141317; --fg:#ece9e4; --muted:#9d968e; --line:#2d2a31; --card:#1d1c21;
-      --accent:#d3a06a; --mine:#33291f; --quote:#232127; --dash:#26232c;
+      --accent:#d3a06a; --mine:#45301b; --quote:#232127; --dash:#26232c;
       --o1:#3d8d78; --o2:#5f74c4; --o3:#a9713a; --o4:#b8688c; --o5:#4d4a52;
       --strong:#5fcf8f;
     }
   }
   :root[data-theme="dark"] {
       --bg:#141317; --fg:#ece9e4; --muted:#9d968e; --line:#2d2a31; --card:#1d1c21;
-      --accent:#d3a06a; --mine:#33291f; --quote:#232127; --dash:#26232c;
+      --accent:#d3a06a; --mine:#45301b; --quote:#232127; --dash:#26232c;
       --o1:#3d8d78; --o2:#5f74c4; --o3:#a9713a; --o4:#b8688c; --o5:#4d4a52;
       --strong:#5fcf8f;
   }
@@ -80,8 +80,13 @@
      the box together do not fit (see --navh above), and exactly `--navh` tall
      however long the line is — this is the row the bar is measured against, and
      both are the same number rather than two numbers that happen to agree. */
-  .sitenav { display:flex; align-items:center; flex-wrap:nowrap; flex:1 1 auto;
+  .sitenav { position:relative; display:flex; align-items:center; flex-wrap:nowrap; flex:1 1 auto;
     min-width:0; overflow-x:auto; overflow-y:hidden; height:var(--navh); }
+  /* The panel's containing block is this row, and that is the one ancestor whose
+     width is the same whether the panel is open or shut: it is the header's own
+     content width (see `flex:1 1 100%` below), and the panel no longer holds any
+     of it. Which matters because the panel is positioned against it — see
+     `.navsearch`. */
   /* The bar's place in the header, and the sentence an action leaves behind. It
      is empty while nothing is ticked, and a line of its own when it is not: the
      bar takes the whole row because the nav it replaces has gone, and the report
@@ -97,34 +102,81 @@
      the one the results answered, so the nav's copy could only ever disagree with
      it. The four controls that ask the question live in here now, and the page
      below is the answer. */
-  /* The nav's right end: the deploy stamp, then the search box, held together by
-     one `margin-left:auto` so the stamp stays immediately left of it rather
-     than drifting into the middle of a wide screen. `flex-end` is what keeps the
-     box against the right edge while it grows: for the length of the transition
-     the row is wider than the box is, and the box has to grow leftward from
-     where it was rather than jump to the row's left end and grow right.
+  /* The nav's right end: the deploy stamp, then the search panel's place, held
+     together by one `margin-left:auto` so the stamp stays immediately left of the
+     panel rather than drifting into the middle of a wide screen.
+
+     The panel itself is out of this row (see `.navsearch`), so its place is kept
+     for it as padding rather than by an item: the panel's own width, against the
+     row's right edge, which is where the panel is pinned — plus the one gap this
+     group would have put between the panel and the refresh button if the panel were
+     still an item in it. Nothing else can put that gap there: a box out of the flow
+     takes no gap with it, and a refresh button flush against the search panel reads
+     as the two being one control. Shut, the stamp and the button sit where they
+     always sat, moved left by that one gap; open, the padding is behind the panel
+     and costs nothing.
+
+     `--navgap` is the gap, named once, because three distances in this nav are that
+     one number: the space between the group's items, the space reserved in front of
+     the panel here, and the space the panel leaves for its own dismissal button
+     when it is open (see `--searchgap` below, which is inherited from here).
 
      Nothing here is nudged vertically: the group is centred in a row that is
      already `--navh`, so the stamp sits on the same line as the links and the
-     box, and the row is the bar's height exactly. A `padding-top` of a couple of
+     panel, and the row is the bar's height exactly. A `padding-top` of a couple of
      pixels used to live here, which is what made the nav's row a hair taller
      than the bar that replaces it. */
-  .navright { margin-left:auto; display:flex; align-items:center; gap:.85rem;
-    flex-wrap:nowrap; justify-content:flex-end; }
+  .navright { --navgap:.85rem; margin-left:auto; display:flex; align-items:center;
+    gap:var(--navgap); flex-wrap:nowrap; justify-content:flex-end;
+    padding-right:calc(12rem + var(--navgap)); }
   /* Shut: a field showing what the address asks, and the whole of the search. The
-     height is the row's, so the box is the same size open as shut and the page
-     below never moves for it. */
-  .navsearch { display:flex; align-items:center; gap:.4rem; flex:0 0 auto;
+     height is the row's, so the panel is the same size open as shut and the page
+     below never moves for it.
+
+     It is out of the row's flow, and that is what makes it animatable. In flow it
+     was a flex item with `flex-grow:1`, so on the way open the width it ended up
+     with was decided by the flex algorithm (the row's free space) and its own
+     `width` never sized it; on the way shut `flex-grow` flipped to 0 and the width
+     it ended up with was its `width` property again, in one frame, while the group
+     around it collapsed from the whole row to the stamp and the button. Either
+     direction, the property it was drawn at was not the property the transition
+     asked for: `max-width` carried the growth (the clamp is applied to the flex
+     result) and carried nothing on the way back, which is why the panel grew open
+     and snapped shut. Positioned against `.sitenav`, with no clamp on it and no
+     share of a line to be given, its `width` is what sizes it in both directions.
+
+     The panel starts after the dismissal button, so the row's left-hand control
+     and the panel do not overlap: `--searchgap` is the button's own width and the
+     gap this group puts between it and the next thing. The two are one sum rather
+     than two numbers because they are one distance, and it is the only arithmetic
+     in the arrangement: 1.85rem is the dismissal's box (an 18px glyph in .25rem
+     .3rem of padding with a 1px border — see the icon button above), and
+     `--navgap` is the same gap `.navright` puts between its own items. */
+  .navsearch { position:absolute; top:0; right:0;
+    --searchgap: calc(1.85rem + var(--navgap));
+    display:flex; align-items:center; gap:.4rem;
     width:12rem; height:var(--navh); padding:.26rem .5rem;
     border:1px solid var(--line);
     border-radius:6px; background:var(--card); overflow:hidden; }
-  /* The width is grown rather than switched: the box becoming the row is one
+  /* The width is grown rather than switched: the panel becoming the row is one
      thing turning into the other, and the movement is what says so. The house
-     rule for a reader who has asked for less motion: no animation, same layout. */
+     rule for a reader who has asked for less motion: no animation, same layout.
+
+     `12rem` and `calc(100% - --searchgap)` are both length-percentages, so there
+     is something to interpolate at every frame, and the `100%` is `.sitenav`'s own
+     width — 1260px at a 1300px window, open or shut, because the panel is not one
+     of the things deciding it. A percentage against a box that is resized by the
+     state you are leaving is a percentage that steps. */
   @media (prefers-reduced-motion: no-preference) { .navsearch { transition:width .18s ease; } }
   .navsearch:hover, .navsearch:focus-within { border-color:var(--accent); }
   .navsearch .navq { flex:1 1 auto; min-width:6rem; font:inherit; font-size:.84rem;
     padding:.12rem 0; border:0; background:none; color:var(--fg); }
+  /* The panel's own way out, and it stands outside the box rather than in it: the
+     box is the field and the four controls that ask a question, and a dismissal is
+     not one of the things a search is made of. It wears the nav's icon button (see
+     .navrefresh above), and its glyph is the 12px square the magnifier inside the
+     box is: two controls on one line, drawn to one size. */
+  .navcancel svg { display:block; width:18px; height:18px; }
   /* The box's own border is the focus indicator (`:focus-within` above), so the
      field inside it does not draw a second one around itself: two rings for one
      focus says the field and the box are two things to the reader, and they are
@@ -137,28 +189,24 @@
      own mail, which turned the box brown when a search was run and said "you are
      here" in a colour that already means something else. The box's background is
      the box's. */
-  /* Open: the box is the row. The links beside it are taken out of the row
-     rather than covered by it, so the box can be exactly as wide as the row is
-     (`width:100%` of a line holding nothing else) and the row keeps the nav's
-     own height. `.sitenav` is the ancestor that can see the state: the panel
-     sits in `.navright`, whose siblings the links are, and no selector reaches
-     them from the panel itself. */
+  /* Open: the panel is the row. The links beside it are taken out of the row
+     rather than covered by it, so the row holds the dismissal and the panel and
+     nothing else — and the dismissal takes the row's left end, which is where a
+     way out of a panel belongs. `.sitenav` is the ancestor that can see the state:
+     the panel sits in `.navright`, whose siblings the links are, and no selector
+     reaches them from the panel itself. */
   header.sitehead:has(.navsearch.open) .sitenav > :not(.navright),
-  header.sitehead:has(.navsearch.open) .navright > :not(.navsearch) { display:none; }
-  /* Open, the panel is the row, and it gets there by growing — three of them, in
-     a chain: the nav takes the row, the group takes the nav, the box takes the
-     group.
-
-     The nav's `flex-basis:100%` is the load-bearing one, because it is the only
-     one of the three that resolves against something definite — the header's own
-     width. Everything inside the row was sizing itself to its own contents (a
-     percentage against a width that is itself being decided by its contents is
-     no width at all), which is why the panel opened a third of the way across
-     the row and stopped: a third of a wide screen is what its four controls and
-     its field come to when nothing tells them otherwise. */
+  header.sitehead:has(.navsearch.open) .navright > :not(.navsearch):not(.navcancel) { display:none; }
+  /* Open, the panel is the row less the dismissal's place, and it gets there by
+     growing — three of them, in a chain: the nav takes the row, which is what
+     makes `100%` in the panel the row's width in both states (the only one of the
+     three that resolves against something definite — everything inside the row was
+     sizing itself to its own contents, which is why the panel used to open a third
+     of the way across and stop), the group takes the nav, and the panel is the nav
+     less the distance to its own left edge. */
   header.sitehead:has(.navsearch.open) .sitenav { flex:1 1 100%; }
-  header.sitehead:has(.navsearch.open) .navright { flex:1 1 auto; }
-  header.sitehead:has(.navsearch.open) .navsearch { flex:1 1 auto; width:100%; }
+  header.sitehead:has(.navsearch.open) .navright { flex:1 1 auto; justify-content:flex-start; }
+  header.sitehead:has(.navsearch.open) .navsearch { width:calc(100% - var(--searchgap)); }
   /* The options, which exist only while the panel is open: shut, the box is the
      whole interface, and a row of pickers beside a field being read is in the way
      of it. `overflow:hidden` on the panel above is the reveal — they arrive
@@ -244,19 +292,33 @@
   /* The refresh button: the stamp's neighbour, and the one control in the nav
      that asks the corpus again for what is on screen. Quiet like the stamp it
      sits beside — it is small print on every page, read when something is being
-     checked — and it lifts to the accent on hover, which is the nav's way of
-     saying a thing is pressable. */
-  .navrefresh { display:inline-flex; align-items:center; justify-content:center;
-    padding:.16rem .24rem; border:1px solid transparent; border-radius:6px;
-    background:none; color:var(--muted); font:inherit; cursor:pointer; }
-  .navrefresh:hover { color:var(--accent); border-color:var(--line); }
+     checked.
+
+     It and the panel's own dismissal are one rule, because they are one thing: a
+     glyph in a transparent box that lifts to the accent when it is pointed at.
+     This is the shape every icon button in this app has, down to the radius, the
+     hairline that arrives on hover and the 18px glyph inside it (see .ibicon svg),
+     which is what the padding is measured against — .ibread-head .ibicon and
+     .ibbuild .ibicon come out 29.6x28 with it, so these two do as well. A size
+     smaller than the strip's read as small type rather than as controls, which is
+     the opposite of what the nav's two presses are. */
+  .navrefresh, .navcancel { flex:none; display:inline-flex; align-items:center;
+    justify-content:center; padding:.25rem .3rem; border:1px solid transparent;
+    border-radius:6px; background:none; color:var(--muted); font:inherit; cursor:pointer; }
+  .navrefresh:hover, .navcancel:hover { color:var(--accent); border-color:var(--line);
+    background:var(--card); }
   .navrefresh:disabled { cursor:default; }
   /* dripfeed-web's spinner, glyph and all (src/index.css there): the same ↻, the
      same 0.8s linear turn, so the act reads the same in both apps. It spins only
      while the button is working — as a button's own icon, a still ↻ is what the
-     control *is*, and a turning one is what it is doing. */
-  .navrefresh .spinner { display:inline-block; font-size:.95rem; line-height:1;
-    vertical-align:middle; }
+     control *is*, and a turning one is what it is doing.
+
+     The box is the app's glyph size, 18px — the same as the svg glyphs in every
+     other icon button in the app (see .ibicon svg) — and it is what the button's
+     own size is made of. The character is set at that size too, so its ink comes
+     out looking like a drawn glyph of the same box rather than smaller than one. */
+  .navrefresh .spinner { display:inline-block; width:1.125rem; height:1.125rem;
+    font-size:1.125rem; line-height:1.125rem; vertical-align:middle; }
   .navrefresh .spinner::before { content:"\21BB"; }
   .navrefresh.busy .spinner { animation:spin .8s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
@@ -467,13 +529,33 @@
   .tm { font-size:.71rem; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
   /* The receipt's two controls are one shape, so they read as one line of them:
      the clip that copies the message whole, and the swap to the sender's own
-     rendering (see .origbtn further down for where each of them is drawn). */
-  .copyjson, .origbtn { display:inline-flex; align-items:center; gap:.3rem;
-    font:inherit; font-size:.66rem; font-weight:650; color:var(--muted);
-    background:transparent; border:1px solid transparent; border-radius:5px;
-    padding:.12rem .3rem; cursor:pointer; }
-  .copyjson:hover, .origbtn:hover { color:var(--accent); border-color:var(--line);
-    background:var(--card); }
+     rendering (see .origbtn further down for where each of them is drawn).
+
+     Both are icon buttons and the same box as every other one in the app — the pane
+     strip's five and the nav's pair: an 18px glyph in .25rem .3rem of padding inside
+     a transparent 1px border, which is 29.6×28. The style switch used to be a word,
+     and a word is the wrong shape for a control whose own state changes: "Toggle
+     Styles" and "loading…" are two different widths in the one place the reader is
+     looking when they press it, and beside the copy control's glyph it made the
+     line ragged. The state is the glyph now — `</>` for the sender's own markup,
+     the spinner while it is being fetched — and the pressed colour below is what
+     says which of the two renderings is on. */
+  .copyjson, .origbtn { flex:none; display:inline-flex; align-items:center; justify-content:center;
+    padding:.25rem .3rem; border:1px solid transparent; border-radius:6px;
+    background:transparent; color:var(--muted); font:inherit; cursor:pointer; }
+  .copyjson:hover, .origbtn:hover { color:var(--accent); border-color:var(--line); background:var(--card); }
+  .copyjson svg, .origbtn svg { display:block; width:18px; height:18px; }
+  /* While the sender's part is being fetched: the same ↻ and the same 0.8s turn as
+     the nav's refresh and the attachment chips (see .navrefresh .spinner), in the
+     button's own 18px box. The turn is the whole of it — the word that used to sit
+     here changed the button's width mid-fetch, which moved the receipt's line under
+     the hand of the one reader who was watching it. */
+  .origbtn.busy { cursor:progress; }
+  .origbtn.busy .spinner { display:inline-block; width:1.125rem; height:1.125rem;
+    font-size:1.125rem; line-height:1.125rem; vertical-align:middle;
+    animation:spin .8s linear infinite; }
+  .origbtn.busy .spinner::before { content:"\21BB"; }
+  @media (prefers-reduced-motion: reduce) { .origbtn.busy .spinner { animation:none; } }
   .tz { font-size:.9em; opacity:.75; }
   /* an inferred zone must not read as a stated one */
   .tz.tzi { opacity:.55; border-bottom:1px dotted currentColor; cursor:help; }
@@ -515,13 +597,13 @@
      most mail renders correctly: a control asking to be noticed on every one of
      them trades one kind of noise for another.
 
-     So it is drawn in the receipt's own dialect rather than the toolbar's — a
-     small quiet label, like the copy button beside it, and the shared shape above
-     so the pair reads as one line of controls. Pressed is the exception the colour
-     carries, so a reader who has shut the receipt can see from the line that
-     something of this message is being read the other way; the control itself
-     stays put either way, because the receipt is one click and the bubble's own
-     line is not where a reader goes to change how a message is read. */
+     So it is drawn in the receipt, in the shape the app draws its icon buttons in
+     (see the shared rule above), beside the copy control and reading as one line of
+     them. Pressed is the exception the colour carries, so a reader who has shut the
+     receipt can see from the line that something of this message is being read the
+     other way; the control itself stays put either way, because the receipt is one
+     click and the bubble's own line is not where a reader goes to change how a
+     message is read. */
   .hdetend { margin-left:auto; display:inline-flex; align-items:center; gap:.35rem; }
   .origbtn[aria-pressed="true"] { color:var(--accent); background:var(--mine);
     border-color:var(--accent); }
@@ -641,6 +723,15 @@
      and its top-left corner is the part that says which screenshot it is. */
   .athumb { display:block; height:2.1rem; width:auto; max-width:9rem; object-fit:cover;
     object-position:top left; border-radius:3px; border:1px solid var(--line); }
+  /* A thumbnail drawn from bytes this host holds, rather than from one embedded in
+     a built page. Those bytes are a file being fetched rather than a picture that
+     is already in the markup, so there is no width to declare until they arrive —
+     and a chip that grew as its image loaded would reflow the line of files, which
+     is the one thing the chips' own layout is built to avoid (see .att.busy). So
+     the box is stated here instead of measured: three rems by the chip's height,
+     which is about what a screenshot's own ratio wants at that height, cropped the
+     same way. Nothing shifts when the picture lands. */
+  .athumb.ablob { width:3rem; }
   .att.haspop::after { content:"\2922"; font-size:.7rem; color:var(--muted); }
   .att.haspop:hover::after, .att.haspop:focus-visible::after { color:var(--accent); }
   /* Enlarged picture. Above the spec viewer's siblings but below it: the spec
@@ -881,6 +972,53 @@
      (solid card and dashed quote) without shifting layout. */
   .msg.mhov .bub, .sys.mhov { border-color:var(--accent);
     box-shadow:0 0 0 2.5px var(--accent), 0 1px 8px -2px var(--accent); }
+  /* The same idea at a lower volume, for the reading pane's reply lines.
+
+     There are two marks here because there are two ways to arrive at one: the
+     loud one answers a reader who set the pointer down on a minimap row, and
+     this one follows a pointer that is only travelling through the pane — often
+     on its way somewhere else, never having asked about a message at all. A mark
+     that shouts under a passing pointer is noise on every line of a deep thread,
+     so this one is a shade of the line itself: the line's own colour taken one
+     step towards `--muted`. That is darker than the line in the light theme and
+     lighter in the dark one, which is the same move in both — a step away from
+     the background, on the part of the picture the pointer is actually near. It
+     is deliberately not the accent: the accent is the other mark's voice, and it
+     says "this one" about a bubble the reader chose rather than about a line they
+     crossed on the way past. The step is a third of the way to the muted ink: a
+     fifteenth was tried first and was too little to find, and the accent — which
+     is the same move taken all the way — is the wrong volume for a pointer that is
+     only passing through. The mark's job here is to be found by an eye following a
+     pointer, not to be noticed by one that is reading the messages.
+
+     Nothing but the line is painted. The bubble keeps its own border, dashes and
+     all, and what is marked is a path rather than a message: every line from the
+     message pointed at up to the first one under the root, so that pointing at a
+     reply six answers deep lights the whole way down to it. A path drawn on six
+     cards is six rings to read, and the reader already knows which message they
+     are pointing at; the lines are the part of the tree that says where it came
+     from. It is worked out in client/behaviour, from the pointer's coordinates,
+     and `.rhov` is the class it puts on each line of that path (`:hover` cannot be
+     asked this question: a hovered line hovers every container it is nested in,
+     which is an ancestry, but not the one that ends where the reader is pointing).
+
+     Written here rather than in select.css so the two marks — one idea, two
+     volumes — are read together; it matches nothing on a built page, which has
+     no pane. */
+  .ibread .stream .replies.rhov {
+    border-left-color:color-mix(in srgb, var(--line) 65%, var(--muted)); }
+  /* The path arrives rather than snaps — and it is one thing appearing on several
+     lines at once, which is what makes a fade the right arrival: a pointer crosses
+     a thread quickly and often without meaning to, and the lighting of six lines in
+     a blink reads as a flicker at exactly the moment the reader is moving on.
+
+     The transition is declared on the resting rule, not on the hovering one,
+     because a transition declared by the rule that arrives does nothing on the way
+     back out — the mark would fade in and then vanish. Nothing here moves anything:
+     a line's colour is paint only. Under `no-preference`, as the rest of the sheet's
+     motion is. */
+  @media (prefers-reduced-motion: no-preference) {
+    .ibread .stream .replies { transition:border-left-color .18s ease; } }
   .mini .foot2 { border-top:1px solid var(--line); padding:.28rem .6rem .35rem;
     font-size:.58rem; color:var(--muted); line-height:1.25;
     display:flex; flex-direction:column; gap:.22rem; }

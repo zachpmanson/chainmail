@@ -141,6 +141,91 @@ func TestEditPersonRejectsJunkBodiesAndUnknownPeople(t *testing.T) {
 	}
 }
 
+// The reading style is the one thing this endpoint writes that is about the
+// reader rather than about who somebody is, and it lives here because it is a
+// fact about a person rather than a preference of the browser: the reader who has
+// decided how to read a run of notifications has decided it on every device they
+// read it on, and a merge of two spellings of that person cannot lose it.
+func TestEditPersonRemembersHowTheirMailIsRead(t *testing.T) {
+	srv, api := testServer(t), loadAPI(t)
+	ada := personOf(t, srv, "ada@loomworks.example")
+
+	// Absent from the body, the style is left where it stands — the rule every
+	// other field here follows, and the reason it is a pointer on the wire: a
+	// screen that renamed somebody must not switch their reading style off by
+	// leaving the field out.
+	res := srv.do(t, "POST", fmt.Sprintf("/v1/people/%d", ada),
+		jsonBody(t, personEditRequest{DisplayName: "Ada Nwosu"}))
+	if res.status != 200 {
+		t.Fatalf("renaming: status = %d: %s", res.status, res.body)
+	}
+	if got := decode[personResponse](t, res); got.Person.PreferOriginal {
+		t.Fatalf("a rename turned the style on: %+v", got.Person)
+	}
+
+	on := true
+	res = srv.do(t, "POST", fmt.Sprintf("/v1/people/%d", ada),
+		jsonBody(t, personEditRequest{PreferOriginal: &on}))
+	if res.status != 200 {
+		t.Fatalf("turning it on: status = %d: %s", res.status, res.body)
+	}
+	api.assert(t, "PersonResponse", res.body)
+	if got := decode[personResponse](t, res); !got.Person.PreferOriginal {
+		t.Fatalf("the write answered with %+v, want the reading style on", got.Person)
+	}
+
+	// The list carries the same answer, so the people screen and the bubble can
+	// never disagree about one sender.
+	list := decode[peopleResponse](t, srv.do(t, "GET", "/v1/people", nil))
+	var found bool
+	for _, p := range list.People {
+		if p.PersonID != ada {
+			continue
+		}
+		found = true
+		if !p.PreferOriginal {
+			t.Errorf("the list still says the style is off: %+v", p)
+		}
+	}
+	if !found {
+		t.Fatalf("ada is missing from the list: %+v", list.People)
+	}
+
+	// And every entry she sent carries it, because that is where the bubble reads
+	// it from: the control is drawn from the chain read alone, with no second
+	// request per message.
+	got := decode[chainResponse](t, srv.do(t, "GET", entryPath("/v1/chains/", extAda1), nil))
+	var sawAda bool
+	for _, e := range got.Entries {
+		if e.ExtID != extAda1 && e.ExtID != extAda3 {
+			if e.PreferOriginal {
+				t.Errorf("%s: a style set on ada reached this entry", e.ExtID)
+			}
+			continue
+		}
+		sawAda = true
+		if e.PersonID != ada || !e.PreferOriginal {
+			t.Errorf("%s reads personId=%d preferOriginal=%v, want %d and true",
+				e.ExtID, e.PersonID, e.PreferOriginal, ada)
+		}
+	}
+	if !sawAda {
+		t.Fatalf("the chain holds none of ada's messages: %+v", got.Entries)
+	}
+
+	// Off is a claim rather than an absence: the reader asking for the
+	// transcript's rendering again is an answer, and it is served as one.
+	off := false
+	res = srv.do(t, "POST", fmt.Sprintf("/v1/people/%d", ada),
+		jsonBody(t, personEditRequest{PreferOriginal: &off}))
+	if res.status != 200 {
+		t.Fatalf("turning it off: status = %d: %s", res.status, res.body)
+	}
+	if got := decode[personResponse](t, res); got.Person.PreferOriginal {
+		t.Fatalf("turning the style off answered with %+v", got.Person)
+	}
+}
+
 func jsonBody(t *testing.T, v any) []byte {
 	t.Helper()
 	b, err := json.Marshal(v)

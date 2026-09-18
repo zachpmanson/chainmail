@@ -13,9 +13,19 @@
  *
  * Shared by the two callers that rearrange a transcript: the page's own
  * timeline/columns switch, which is DOM-attached behaviour (`attach`), and the
- * reading pane's nest switch, which is React state (ThreadPane). What the React
+ * reading pane's tree switch, which is React state (ThreadPane). What the React
  * caller passes as `apply` has to land in the DOM before the browser takes its
  * second snapshot, so it wraps its state change in `flushSync` — see ThreadPane.
+ *
+ * The naming is done TWICE — before the change and again inside it — because the
+ * change can replace the elements it named. Drawing the replies as a tree puts
+ * every bubble inside a container of its own (see ThreadMessages), which is a new
+ * parent, so React makes new DOM nodes for them rather than moving the old ones;
+ * a name set on the old node is a name the browser cannot find on the other side
+ * of the change, and an unnamed pair is not morphable: the whole switch degrades
+ * to the root crossfade, which is exactly what a reader sees as "it just faded".
+ * Naming again after `apply` names the bubbles the browser is about to snapshot,
+ * and a name is all the pairing needs — the node objects are allowed to differ.
  *
  * Not a React hook, and not a component: what it needs is the document, and the
  * two callers hold it differently. Both go through this one function because the
@@ -39,16 +49,32 @@ export function withTransition(doc: Document, apply: () => void) {
   const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
   if (!d.startViewTransition || reduce) { apply(); return; }
 
-  const named: HTMLElement[] = [];
-  const vh = window.innerHeight;
-  for (const el of doc.querySelectorAll<HTMLElement>(".msg[id], .sys[id]")) {
-    if (named.length >= 24) break;
-    const r = el.getBoundingClientRect();
-    if (r.bottom > -vh * 0.25 && r.top < vh * 1.25) {
+  // Everything named, across both passes, so clearing afterwards leaves nothing
+  // named whether or not the change kept the node — an element left named is
+  // excluded from the next transition's root snapshot.
+  const named = new Set<HTMLElement>();
+  const nameOnScreen = () => {
+    const vh = window.innerHeight;
+    let count = 0;
+    for (const el of doc.querySelectorAll<HTMLElement>(".msg[id], .sys[id]")) {
+      if (count >= 24) break;
+      const r = el.getBoundingClientRect();
+      if (r.bottom <= -vh * 0.25 || r.top >= vh * 1.25) continue;
       el.style.viewTransitionName = el.id;
-      named.push(el);
+      named.add(el);
+      count++;
     }
-  }
-  const clear = () => { for (const el of named) el.style.viewTransitionName = ""; };
-  d.startViewTransition(apply).finished.then(clear, clear);
+  };
+  const clear = () => {
+    for (const el of named) el.style.viewTransitionName = "";
+    named.clear();
+  };
+
+  nameOnScreen();
+  d.startViewTransition(() => {
+    apply();
+    // The bubbles are the change's own output, and the ones `apply` left behind
+    // are the ones the browser names its second snapshot from.
+    nameOnScreen();
+  }).finished.then(clear, clear);
 }

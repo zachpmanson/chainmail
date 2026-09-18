@@ -2510,6 +2510,7 @@ func (s *server) people(w http.ResponseWriter, r *http.Request) {
 		out.People = append(out.People, personSummary{
 			PersonID: p.PersonID, DisplayName: p.DisplayName,
 			Identities: p.Identities, Sent: p.Sent, Received: p.Received,
+			PreferOriginal: p.PreferOriginal,
 		})
 	}
 	send(w, http.StatusOK, out)
@@ -2611,15 +2612,18 @@ func (s *server) editPerson(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, fmt.Errorf("reading the request body: %w", err))
 		return
 	}
-	if req.DisplayName == "" && len(req.AddIdentities) == 0 && len(req.RemoveIdentities) == 0 {
+	if req.DisplayName == "" && len(req.AddIdentities) == 0 && len(req.RemoveIdentities) == 0 &&
+		req.PreferOriginal == nil {
 		fail(w, http.StatusBadRequest, errors.New(
-			"nothing to do: name at least one of displayName, addIdentities, removeIdentities"))
+			"nothing to do: name at least one of displayName, addIdentities, removeIdentities, "+
+				"preferOriginal"))
 		return
 	}
 	person, err := corpus.UpdatePerson(s.store, id, corpus.PersonEdit{
-		DisplayName: req.DisplayName,
-		Add:         req.AddIdentities,
-		Remove:      req.RemoveIdentities,
+		DisplayName:    req.DisplayName,
+		Add:            req.AddIdentities,
+		Remove:         req.RemoveIdentities,
+		PreferOriginal: req.PreferOriginal,
 	})
 	switch {
 	case errors.Is(err, corpus.ErrNoPerson):
@@ -2645,5 +2649,6 @@ func (s *server) editPerson(w http.ResponseWriter, r *http.Request) {
 	send(w, http.StatusOK, personResponse{Person: personSummary{
 		PersonID: person.PersonID, DisplayName: person.DisplayName,
 		Identities: person.Identities, Sent: person.Sent, Received: person.Received,
+		PreferOriginal: person.PreferOriginal,
 	}})
 }

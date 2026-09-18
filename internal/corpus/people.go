@@ -631,6 +631,20 @@ func mergeWithReason(s *Store, keep, drop int64, reason string) error {
 		strconv.FormatInt(keep, 10), SettingMePerson, strconv.FormatInt(drop, 10)); err != nil {
 		return fmt.Errorf("repointing the reader's own person: %w", err)
 	}
+	// The reading style travels with the human, like their identities and the
+	// entries they sent: "read Ada's mail as Ada wrote it" is a decision about the
+	// person, and it was made looking at one of the two spellings a merge is about
+	// to fold together. Dropping it would turn the switch off as a side effect of
+	// tidying the identity graph, which is not something a merge was ever asked
+	// about. Only on is carried, though: the kept person's false is the absence of
+	// a decision rather than a decision, and a merge that argued the other way
+	// would turn a switch on nobody had pressed.
+	if _, err := tx.Exec(`
+		update people set prefer_original = 1
+		where id = ? and 0 < (select prefer_original from people where id = ?)`,
+		keep, drop); err != nil {
+		return fmt.Errorf("carrying the reading style of %d: %w", drop, err)
+	}
 	// The render-offset measurements — whose client rendered a quoted clock —
 	// are facts about the same human, so they follow the merge just like
 	// participation, with the same collision handling: repoint what does not
@@ -861,19 +875,26 @@ type PersonSummary struct {
 	Identities  []string
 	Sent        int64
 	Received    int64 // to + cc
+	// PreferOriginal is whether the reader reads this person's mail as they wrote
+	// it — the stored half of the bubble's staged/original control. It is stored
+	// here rather than in settings because it is a fact about this person: the mail
+	// it is for arrives as a run from one address, and the reader who has decided
+	// how to read them has decided it for all of it, on every device they read it
+	// on.
+	PreferOriginal bool
 }
 
 // People lists everyone in the corpus with their identities and counts, ordered
 // most-involved first.
 func People(s *Store) ([]PersonSummary, error) {
 	rows, err := s.db.Query(`
-		select pe.id, pe.display_name,
+		select pe.id, pe.display_name, pe.prefer_original,
 		       (select count(*) from participants x
 		         where x.person_id = pe.id and x.role = 'from'),
 		       (select count(*) from participants x
 		         where x.person_id = pe.id and x.role in ('to','cc'))
 		from people pe
-		order by 3 desc, 4 desc, pe.display_name`)
+		order by 4 desc, 5 desc, pe.display_name`)
 	if err != nil {
 		return nil, err
 	}
@@ -881,7 +902,7 @@ func People(s *Store) ([]PersonSummary, error) {
 	var out []PersonSummary
 	for rows.Next() {
 		var p PersonSummary
-		if err := rows.Scan(&p.PersonID, &p.DisplayName, &p.Sent, &p.Received); err != nil {
+		if err := rows.Scan(&p.PersonID, &p.DisplayName, &p.PreferOriginal, &p.Sent, &p.Received); err != nil {
 			return nil, err
 		}
 		out = append(out, p)
@@ -958,6 +979,12 @@ type PersonEdit struct {
 	// returns and the wire carries, e.g. "email:ada@example.com".
 	Add    []string
 	Remove []string
+	// PreferOriginal is the reader's answer to whether this person's mail is read
+	// as they wrote it. A pointer because absence and false are different claims
+	// here as they are in an edit of the name: leaving it out leaves the answer
+	// where it stands, and asking for false is the reader turning the reading
+	// style off.
+	PreferOriginal *bool
 }
 
 // ErrBadIdentity is an identity string that is not one: not "kind:value", an
@@ -1042,6 +1069,13 @@ func UpdatePerson(s *Store, id int64, edit PersonEdit) (PersonSummary, error) {
 		}
 	}
 
+	if edit.PreferOriginal != nil {
+		if _, err := tx.Exec(
+			`update people set prefer_original = ? where id = ?`, boolInt(*edit.PreferOriginal), id); err != nil {
+			return PersonSummary{}, err
+		}
+	}
+
 	if err := tx.Commit(); err != nil {
 		return PersonSummary{}, err
 	}
@@ -1069,11 +1103,11 @@ func splitIdentity(raw string) (string, string, error) {
 func PersonByID(s *Store, id int64) (PersonSummary, error) {
 	var p PersonSummary
 	err := s.db.QueryRow(`
-		select pe.id, pe.display_name,
+		select pe.id, pe.display_name, pe.prefer_original,
 		       (select count(*) from participants x where x.person_id = pe.id and x.role = 'from'),
 		       (select count(*) from participants x where x.person_id = pe.id and x.role in ('to','cc'))
 		from people pe where pe.id = ?`, id).
-		Scan(&p.PersonID, &p.DisplayName, &p.Sent, &p.Received)
+		Scan(&p.PersonID, &p.DisplayName, &p.PreferOriginal, &p.Sent, &p.Received)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return p, fmt.Errorf("%w: no person #%d", ErrNoPerson, id)

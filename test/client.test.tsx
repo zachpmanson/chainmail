@@ -237,7 +237,7 @@ const buildHandler: Handler = (c) => {
   // mailbox answers with the ingest's own transcript, one line per phase.
   if (p === "/v1/slurp" && c.method === "POST")
     return json(200, { report: "[1/6] mail: created 1, changed 0\n" });
-  // The nav's Person control reads the same people /status does, and only while
+  // The nav's Person control reads the same people /settings does, and only while
   // the panel is open — a test that never opens it never asks.
   if (p === "/v1/people") return json(200, PEOPLE);
   // The shell's sign-in banner probes auth on every route; answer it signed in
@@ -246,7 +246,7 @@ const buildHandler: Handler = (c) => {
   return json(500, { error: `unexpected call to ${c.method} ${p}` });
 };
 
-/** The /status view's fixtures: three backends and a small corpus. */
+/** The /settings view's fixtures: three backends and a small corpus. */
 const STATUS = {
   checkedAt: "2026-08-22T15:04:00Z",
   nextSlurpAt: "2026-08-22T16:00:00Z",
@@ -268,7 +268,7 @@ const STATS = {
 
 /**
  * The people the corpus holds, for the controls that pick one: the reader's own on
- * /status, and the Person filter in the nav's search. Ada carries two addresses
+ * /settings, and the Person filter in the nav's search. Ada carries two addresses
  * because the folding of several aliases into one person is the whole reason both
  * of them pick a person, and the third has none at all — a name recovered from
  * somebody else's quote is not a mailbox anything can be marked as coming from.
@@ -737,10 +737,10 @@ describe("a spec named on the URL", () => {
   });
 });
 
-describe("the status route /status", () => {
+describe("the status route /settings", () => {
   it("shows each service's state and the corpus coverage", async () => {
     handler = statusHandler;
-    await mountApp("/status");
+    await mountApp("/settings");
 
     await waitFor(() => expect(calls.some((c) => pathOf(c) === "/v1/status")).toBe(true));
     expect(calls.some((c) => pathOf(c) === "/v1/stats")).toBe(true);
@@ -770,10 +770,10 @@ describe("the status route /status", () => {
 // there that writes: the server owns the schedule (cmd/server/schedule.go), so
 // what the page has to prove is that the value in force is the one shown and
 // that choosing another stores it.
-describe("the sweep cadence on /status", () => {
+describe("the sweep cadence on /settings", () => {
   it("shows the cadence in force with the next sweep it implies", async () => {
     handler = statusHandler;
-    await mountApp("/status");
+    await mountApp("/settings");
 
     const control = (await screen.findByLabelText("How often to sweep the mailbox")) as HTMLSelectElement;
     await waitFor(() => expect(control.value).toBe("10m"));
@@ -794,7 +794,7 @@ describe("the sweep cadence on /status", () => {
       }
       return statusHandler(c);
     };
-    await mountApp("/status");
+    await mountApp("/settings");
 
     const control = (await screen.findByLabelText("How often to sweep the mailbox")) as HTMLSelectElement;
     await waitFor(() => expect(control.value).toBe("10m"));
@@ -816,12 +816,12 @@ describe("the sweep cadence on /status", () => {
 // nothing to say. That last part is the one a reader never sees working and a
 // misplaced cell would break: an empty column is also the column that keeps the
 // names in one place.
-describe("the settings rows on /status", () => {
+describe("the settings rows on /settings", () => {
   const cellAfter = (el: Element) => el.nextElementSibling as HTMLElement | null;
 
   it("puts each setting's note in a column of its own, beside the control's cell", async () => {
     handler = statusHandler;
-    await mountApp("/status");
+    await mountApp("/settings");
 
     const sweep = (await screen.findByLabelText("How often to sweep the mailbox")) as HTMLSelectElement;
     // The cadence in force, which is also what puts a note in the third column:
@@ -844,7 +844,7 @@ describe("the settings rows on /status", () => {
 
   it("keeps the cell on a setting that has nothing to add", async () => {
     handler = statusHandler;
-    await mountApp("/status");
+    await mountApp("/settings");
 
     const folder = (await screen.findByLabelText(
       "Which folder the home page opens in",
@@ -857,10 +857,10 @@ describe("the settings rows on /status", () => {
   });
 });
 
-describe("the default folder on /status", () => {
+describe("the default folder on /settings", () => {
   it("shows the folder the home page opens in, from the labels the corpus has", async () => {
     handler = statusHandler;
-    await mountApp("/status");
+    await mountApp("/settings");
 
     const control = (await screen.findByLabelText(
       "Which folder the home page opens in",
@@ -890,7 +890,7 @@ describe("the default folder on /status", () => {
       }
       return statusHandler(c);
     };
-    await mountApp("/status");
+    await mountApp("/settings");
 
     const control = (await screen.findByLabelText(
       "Which folder the home page opens in",
@@ -923,7 +923,7 @@ describe("the default folder on /status", () => {
       if (p === "/v1/settings") return json(200, { slurpEvery: "10m", defaultFolder: "Later" });
       return statusHandler(c);
     };
-    await mountApp("/status");
+    await mountApp("/settings");
 
     const control = (await screen.findByLabelText(
       "Which folder the home page opens in",
@@ -948,7 +948,7 @@ describe("the default folder on /status", () => {
  * server resolves from the identity graph on every read and serves beside it —
  * so the tests assert the id travels and the addresses come back.
  */
-describe("who you are on /status", () => {
+describe("who you are on /settings", () => {
   const settingsWrites = () => calls.filter((c) => pathOf(c) === "/v1/settings" && c.method === "POST");
   // The addresses each person is known by, as the server would resolve them. The
   // client neither sends these nor derives them: it shows what it was served.
@@ -988,7 +988,7 @@ describe("who you are on /status", () => {
 
   it("offers the corpus's people, and writes the person that was picked", async () => {
     handler = settingsHandler();
-    await mountApp("/status");
+    await mountApp("/settings");
 
     const control = (await screen.findByLabelText("Which person you are")) as HTMLSelectElement;
     // The people the corpus has an address for, most involved first, and the
@@ -1021,7 +1021,7 @@ describe("who you are on /status", () => {
 
   it("opens on the person that is stored, and reads it without writing", async () => {
     handler = settingsHandler(1);
-    await mountApp("/status");
+    await mountApp("/settings");
 
     const control = (await screen.findByLabelText("Which person you are")) as HTMLSelectElement;
     await waitFor(() => expect(control.selectedOptions[0]!.textContent).toBe("Ada Byron"));
@@ -1036,7 +1036,7 @@ describe("who you are on /status", () => {
     // way the folder and cadence controls keep a value they cannot name — rather
     // than as nobody, which would be a setting that is not what is stored.
     handler = settingsHandler(undefined, ["old@elsewhere.example"]);
-    await mountApp("/status");
+    await mountApp("/settings");
 
     const control = (await screen.findByLabelText("Which person you are")) as HTMLSelectElement;
     await waitFor(() => expect(control.selectedOptions[0]!.textContent).toBe("old@elsewhere.example"));
@@ -1096,7 +1096,7 @@ describe("the site navigation", () => {
   it("names the site, and that name is the link home", async () => {
     handler = () => json(200, { signed_in: true });
     // A page away from home, so the brand is not simply where we already are.
-    await mountApp("/status");
+    await mountApp("/settings");
 
     const brand = document.querySelector("header.sitehead a.brand") as HTMLAnchorElement | null;
     if (!brand) throw new Error("no site name in the nav");
@@ -1902,7 +1902,7 @@ const EDIT_SPEC = {
   messages: [
     {
       id: "c-orig", date: "Fri 21 Aug 2026", time: "09:00", tz: "+1000",
-      sender: "Charles XPTO", org: "ruralco",
+      sender: "Charles XPTO", org: "fernbrook",
       body: "<p>CSV layout: A: Member Number &middot; E: Amount Due</p>",
     },
     {

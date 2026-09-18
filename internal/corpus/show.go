@@ -20,6 +20,21 @@ type Shown struct {
 	Quoted bool
 	TS     time.Time
 	TZ     string
+	// PersonID is the person the corpus resolved this entry's sender to, and 0
+	// where it resolved nobody. It is the handle a client needs for anything the
+	// reader decides about that person rather than about this message — the
+	// sender's reading style below is the first of those — and it is served as
+	// itself because the name and the address on the entry are what the corpus
+	// found, not who it found them to be.
+	PersonID int64
+	// PreferOriginal is whether the reader reads this entry's sender as that sender
+	// wrote them, which is a choice about the person above (see people's
+	// prefer_original). Carried on the entry rather than looked up by the client
+	// because every bubble draws the control and every bubble would otherwise need
+	// a second read to know what to draw; it is one boolean off a join this query
+	// already makes. False where there is no person to hold the answer, which is
+	// also what an entry whose sender the corpus cannot name gets.
+	PreferOriginal bool
 	// TZOffset is minutes east of UTC as the source stated it, nil when it stated
 	// none. Carried alongside TZ because a label does not determine an offset, so
 	// a caller placing this entry's wall clock has nothing else to place it with.
@@ -102,14 +117,15 @@ func (s *Store) Show(extID string) (Shown, error) {
 	err := s.db.QueryRow(`
 		select e.id, e.ext_id, e.source, e.quoted, e.ts, e.tz, e.tz_offset,
 		       p.display_name, e.subject, e.body_text, e.container, e.permalink,
-		       par.ext_id, e.parent_ref, e.body_html is not null and e.body_html != ''
+		       par.ext_id, e.parent_ref, e.body_html is not null and e.body_html != '',
+		       coalesce(e.person_id, 0), coalesce(p.prefer_original, 0)
 		from entries e
 		left join people p   on p.id = e.person_id
 		left join entries par on par.id = e.parent_id
 		where e.ext_id = ?`, extID).
 		Scan(&e.ID, &e.ExtID, &e.Source, &e.Quoted, &ts, &tz, &off,
 			&author, &subject, &body, &container, &permalink, &parent, &parentRef,
-			&e.HasOriginal)
+			&e.HasOriginal, &e.PersonID, &e.PreferOriginal)
 	if errors.Is(err, sql.ErrNoRows) {
 		return e, fmt.Errorf("%q: %w", extID, ErrNotFound)
 	}

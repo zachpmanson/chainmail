@@ -23,7 +23,7 @@ func TestReindexFTSRebuildsTheSearchIndexFromEntries(t *testing.T) {
 	defer s.Close()
 
 	put(t, s, msg{id: "csv-1", subject: "Hewson CSV", body: "the CSV is in red and blue"})
-	put(t, s, msg{id: "csv-2", subject: "Ruralco pilot", body: "the billing sheet"})
+	put(t, s, msg{id: "csv-2", subject: "Fernbrook pilot", body: "the billing sheet"})
 
 	// Run the rebuild on a healthy store: it must leave the index equal to the
 	// entries table (it rebuilds from entries every time), which is exactly

@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Timeline } from "../src/components/Timeline";
-import { MEDIA_BASE, attHref, localHref } from "../src/lib/attachments";
+import { MEDIA_BASE, attHref, localHref, thumbnail } from "../src/lib/attachments";
 import { normalise } from "../src/lib/normalise";
 import { attach } from "../src/client/behaviour";
 import type { Entry, Timeline as Spec } from "../src/lib/spec";
@@ -94,6 +94,70 @@ describe("where an attachment opens", () => {
   });
 });
 
+/**
+ * What a chip shows of a file before anyone clicks it. The two sources are not
+ * interchangeable and the order is not arbitrary — a thumbnail embedded in the
+ * markup costs nothing and leaves the popover a fallback, while bytes this host
+ * holds are the only picture available in the live app, where no builder ran — so
+ * which one a chip draws is asserted here rather than only at the chip.
+ */
+describe("the picture a chip shows", () => {
+  it("prefers the thumbnail the page already carries", () => {
+    expect(thumbnail(storedShot, MEDIA_BASE)).toEqual({
+      src: PIXEL,
+      blob: false,
+      w: 640,
+      h: 427,
+    });
+  });
+
+  it("draws the bytes this host holds where nothing embedded a picture", () => {
+    // The live app's case: the corpus serves a message and its attachments, and
+    // the file is a picture it has pulled. This is the download the reader just
+    // asked for, showing itself.
+    expect(thumbnail(storedSmall, MEDIA_BASE)).toEqual({
+      src: `${MEDIA_BASE}/${BARE}`,
+      blob: true,
+    });
+    // And the same file as the corpus held it before views had names: a live
+    // corpus is not rebuilt like a page, so the old shape must still draw.
+    expect(thumbnail(storedSmallOld, MEDIA_BASE)).toEqual({
+      src: `${MEDIA_BASE}/${storedSmallOld.blobSha}`,
+      blob: true,
+    });
+  });
+
+  it("shows the archived thumbnail, which is the only copy this host has", () => {
+    expect(thumbnail(archivedShot, MEDIA_BASE)).toEqual({
+      src: PIXEL,
+      blob: false,
+      w: 320,
+      h: 200,
+    });
+  });
+
+  it("draws nothing for a file that can only be framed or taken", () => {
+    // A PDF is unreadable at chip height, text is read in the window, and a zip
+    // has nothing to show at all. A preview of any of them would be a lie about
+    // what a chip is for.
+    for (const a of [storedPdf, storedText, storedLog, storedZip]) {
+      expect(thumbnail(a, MEDIA_BASE)).toBeUndefined();
+    }
+  });
+
+  it("draws nothing for bytes no host serves", () => {
+    // A page rendered to a file: the digest is there and the host is not, so a
+    // URL would be a broken picture on a chip that has no other source.
+    expect(thumbnail(storedSmall, "")).toBeUndefined();
+    expect(thumbnail({ ...storedSmall, preview: PIXEL }, "")).toEqual({
+      src: PIXEL,
+      blob: false,
+      w: undefined,
+      h: undefined,
+    });
+  });
+});
+
 describe("the chip a stored file sits on", () => {
   it("points at this host instead of Gmail", () => {
     const s = strip(page([entry({ attachments: [storedShot] })], MEDIA_BASE));
@@ -180,13 +244,22 @@ const mount = (messages: Entry[], fetcher?: (url: string) => Promise<Response>) 
 };
 
 describe("opening a file over the page", () => {
-  it("pops up a stored picture that has no thumbnail", () => {
-    // The case this was built for: a small screenshot is bytes with no preview —
-    // the builder embeds one only above a size floor — so the chip had nothing to
-    // arm it and the click left the page for a bare image in a tab.
+  it("opens a stored picture whose chip now shows it", () => {
+    // The case this was built for: a small screenshot is bytes with no embedded
+    // preview — the builder embeds one only above a size floor. The chip had
+    // nothing to arm it, so the click left the page for a bare image in a tab;
+    // what arms it now is the picture on the chip, drawn from this host's own
+    // bytes (see lib/attachments' thumbnail), and the window is where the reader
+    // takes the file or sees it at the size it was sent at.
     const s = strip(page([entry({ attachments: [storedSmall] })], MEDIA_BASE));
     expect(s).toContain('class="att haspop"');
-    expect(s).not.toContain("athumb");
+    expect(s).toContain(`<img class="athumb ablob" src="${MEDIA_BASE}/${BARE}"`);
+    // Asked for as the chip nears the viewport rather than with the page: a deep
+    // thread can hold a dozen pictures and none of them is what the reader came
+    // for. The box it lands in is stated by the stylesheet, so nothing reflows
+    // when it arrives (see .athumb.ablob).
+    expect(s).toContain('loading="lazy"');
+    expect(s).toContain('decoding="async"');
     expect(s).toContain(`data-pop="${storedSmall.name}"`);
     expect(s).toContain('data-view="image"');
 
@@ -195,9 +268,24 @@ describe("opening a file over the page", () => {
     expect(m.pop()!.hidden).toBe(false);
     expect(m.shot()!.getAttribute("src")).toBe(`${MEDIA_BASE}/${BARE}`);
     // The bytes are this host's, so the window carries the route to the original
-    // as well — which for a chip with no thumbnail is the only thing showing it.
+    // as well — which for a chip with no embedded thumbnail is the only other way
+    // to the file there is.
     expect(m.save()!.hidden).toBe(false);
     m.detach();
+  });
+
+  it("shows nothing on a chip whose bytes this host cannot serve", () => {
+    // The static export: a chip with a digest and no host behind it. A preview
+    // here would be a picture URL that resolves to nothing.
+    const s = strip(page([entry({ attachments: [storedSmall] })], ""));
+    expect(s).not.toContain("athumb");
+  });
+
+  it("shows nothing on a chip for a file that is not a picture", () => {
+    // Pulled bytes are no reason to draw a picture: the preview is of the files
+    // that have one, and the three here have a window instead.
+    const s = strip(page([entry({ attachments: [storedPdf, storedLog, storedZip] })], MEDIA_BASE));
+    expect(s).not.toContain("athumb");
   });
 
   it("shows the original rather than the embedded preview", () => {

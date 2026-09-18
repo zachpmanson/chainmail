@@ -137,6 +137,25 @@ const server = (
     return json(200, { labels: [{ name: "INBOX", messages: 5 }, { name: "Work", messages: 2 }] });
   }
   if (p === "/v1/settings") return json(200, {});
+  // The corpus's identity graph, for the hover titles on names. Only the two people
+  // this thread was addressed to are in it with an address: they sent nothing, so
+  // the thread read carries no address for them (see castOfEntries), and the graph
+  // is the only place one can come from. The sender is deliberately absent from it
+  // as well, so a test can tell the graph's answer from the entry's own header.
+  if (p === "/v1/people") {
+    return json(200, {
+      people: [
+        { personId: 2, displayName: "Ada Byron", identities: ["email:ada@example.net"], sent: 0, received: 4 },
+        {
+          personId: 3,
+          displayName: "Cy Devlin",
+          identities: ["display_name:cy devlin", "email:cy@example.net", "email:c.devlin@example.org"],
+          sent: 0,
+          received: 2,
+        },
+      ],
+    });
+  }
   if (p === "/auth/status") return json(200, { signed_in: true });
   return json(500, { error: `unexpected call to ${c.method} ${p}` });
 };
@@ -274,6 +293,31 @@ describe("what a thread's read state looks like", () => {
     const counts = pane().querySelector(".ibread-counts")!;
     expect(counts.querySelector(".ibatt")!.textContent!.trim()).toBe("3");
     expect(counts.querySelectorAll("svg")).toHaveLength(3);
+  });
+
+  it("names the address behind every name it lists, senders and recipients alike", async () => {
+    // A name in the panel is a claim about a person, and the address is the part of
+    // it a reader can check. The sender's comes from the message's own From header;
+    // the two people it was addressed to sent nothing, so the thread read carries no
+    // address for them at all (see castOfEntries) and the corpus's identity graph is
+    // asked instead — one read of /v1/people, which this test's server answers.
+    handler = server(page([thread({ people: 3, entries: 3 })]));
+    await mountApp();
+    const rows = await screen.findAllByRole("checkbox");
+    fireEvent.click(rows[0]!.closest(".ibrow")!.querySelector(".ibopen") as HTMLElement);
+    await waitFor(() => expect(pane().querySelectorAll(".p1").length).toBe(3));
+
+    const titled = (name: string) =>
+      [...pane().querySelectorAll(".pn span")].find((n) => n.textContent === name)?.getAttribute("title");
+    // A name nothing holds an address for is the name alone — here the sender, whose
+    // entry in this fixture carries no From header and whose name is in no row of the
+    // graph, so nothing is invented for them. (A bubble's own title is asked a
+    // message's question instead, and is covered in inbox.test.tsx.)
+    expect(titled("Bo Halvorsen")).toBe("Bo Halvorsen");
+    expect(titled("Ada Byron")).toBe("Ada Byron <ada@example.net>");
+    // Two addresses for one person are both listed, in the corpus's own order, and
+    // the display name it also keeps is not offered as an address.
+    expect(titled("Cy Devlin")).toBe("Cy Devlin <cy@example.net, c.devlin@example.org>");
   });
 
   it("opens the thread on a click, and marks the row on a double click", async () => {
@@ -621,7 +665,11 @@ describe("the pane's second reading of a message", () => {
       expect(b).toBeTruthy();
       return b;
     });
-    expect(button.textContent).toBe("Toggle Styles");
+    // The style switch, a glyph rather than a word now: what it does is the label,
+    // and the sender's own markup is what it draws (see message.test.tsx for the box).
+    expect(button.textContent).toBe("");
+    expect(button.querySelector("svg")).toBeTruthy();
+    expect(button.getAttribute("aria-label")).toMatch(/^Read this sender's mail/);
 
     fireEvent.click(button);
     await waitFor(() => expect(pane().querySelector(".bdo")).toBeTruthy());
@@ -650,5 +698,145 @@ describe("the pane's second reading of a message", () => {
     await openRow();
     await waitFor(() => expect(pane().querySelector(".bd")).toBeTruthy());
     expect(pane().querySelector(".origbtn")).toBeNull();
+  });
+});
+
+describe("how a sender's mail is read, stored against the person", () => {
+  /** One thread whose single entry the corpus resolved to a person, with the
+   *  reading style that person currently holds. The flag rides on the entry, which
+   *  is what lets a bubble draw its control without a second read. */
+  const entryOf = (preferOriginal: boolean) => () =>
+    json(200, {
+      ...CHAIN_BODY,
+      entries: [
+        {
+          ...CHAIN_BODY.entries[0],
+          original: true,
+          personId: 1,
+          fromEmail: "bo@loomworks.example",
+          preferOriginal,
+        },
+      ],
+    });
+
+  /** The corpus answering the one write this pane makes about a person.
+   *
+   *  The write is held open until the test lets it go, because the claim under
+   *  test is what the switch does *before* the corpus answers: a reply that
+   *  arrived instantly could be either the patch or the write, and the two differ
+   *  exactly when the service is slow. The thread read follows the flag the write
+   *  sets, so the read after a successful write agrees with it. */
+  const corpus = () => {
+    let preferOriginal = false;
+    let answer: ((res: Response) => void) | null = null;
+    const wrote = () => calls.filter((c) => pathOf(c) === "/v1/people/1");
+    return {
+      wrote,
+      held: () => answer !== null,
+      /** Let the write the reader made come back: accepted, or refused. */
+      answer: (status: number, body: unknown) => {
+        if (status === 200) preferOriginal = true;
+        answer!(json(status, body));
+      },
+      handler: (c: Call): Promise<Response> | Response => {
+        const p = pathOf(c);
+        if (p === "/v1/people/1" && c.method === "POST") {
+          return new Promise<Response>((resolve) => {
+            answer = resolve;
+          });
+        }
+        return server(page([thread({})]), undefined, undefined, entryOf(preferOriginal))(c);
+      },
+      /** What the corpus says, once a write has been taken. */
+      answers: () => preferOriginal,
+    };
+  };
+
+  const switchIn = () => pane().querySelector(".hdetend .origbtn") as HTMLElement;
+
+  it("writes the reader's answer onto the person the sender resolved to", async () => {
+    // The store of record is the corpus and not this browser: the answer is a fact
+    // about the person the sender resolved to, so the reader's phone reads the same
+    // mail the same way, and a merge of two spellings of that person cannot lose it.
+    const c = corpus();
+    handler = c.handler;
+    await mountApp();
+    await openRow();
+
+    const btn = await waitFor(() => {
+      const b = switchIn();
+      expect(b).toBeTruthy();
+      return b;
+    });
+    expect(btn.getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(btn);
+    // The switch moves while the write is still out. It is a switch: waiting a
+    // round trip to see it move reads as the press not landing — and the answer is
+    // per person rather than per message, so what the reader pressed is what every
+    // bubble of that sender is drawn from until the corpus answers.
+    await waitFor(() => expect(c.held()).toBe(true));
+    await waitFor(() => expect(switchIn().getAttribute("aria-pressed")).toBe("true"));
+    expect(c.wrote()).toHaveLength(1);
+    expect(JSON.parse(c.wrote()[0]!.body ?? "{}")).toEqual({ preferOriginal: true });
+    expect(c.answers()).toBe(false); // the corpus has not taken it yet
+
+    // And then the corpus answers, and it is asked again: what stands is what the
+    // corpus says rather than what this pane hoped.
+    const asked = chains().length;
+    act(() => c.answer(200, { person: { personId: 1, displayName: "Bo Halvorsen", sent: 3, received: 0, preferOriginal: true } }));
+    await waitFor(() => expect(c.answers()).toBe(true));
+    await waitFor(() => expect(chains().length).toBeGreaterThan(asked));
+    await waitFor(() => expect(switchIn().getAttribute("aria-pressed")).toBe("true"));
+  });
+
+  it("opens on the corpus's answer, with no press needed", async () => {
+    // The entry carried it, so a reader who has already answered for this sender
+    // sees their answer — on this device, in this browser, with no store of its own.
+    handler = server(page([thread({})]), undefined, undefined, () =>
+      json(200, {
+        ...CHAIN_BODY,
+        entries: [
+          { ...CHAIN_BODY.entries[0], original: true, personId: 1, preferOriginal: true },
+        ],
+      }),
+    );
+    await mountApp();
+    await openRow();
+    const btn = await waitFor(() => {
+      const b = switchIn();
+      expect(b).toBeTruthy();
+      return b;
+    });
+    expect(btn.getAttribute("aria-pressed")).toBe("true");
+    // And the body is the sender's own, fetched because the switch was already on
+    // rather than because anything was pressed.
+    await waitFor(() => expect(pane().querySelector(".bdo")).toBeTruthy());
+    expect(switchIn().getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("takes the answer back when the corpus refuses the write", async () => {
+    // The reverse of the optimistic patch, and the reason it is a patch rather
+    // than a store of the pane's own: a switch left standing on an answer the
+    // corpus never took is a lie the reader finds the next time they open the
+    // thread.
+    const c = corpus();
+    handler = c.handler;
+    await mountApp();
+    await openRow();
+
+    const btn = await waitFor(() => {
+      const b = switchIn();
+      expect(b).toBeTruthy();
+      return b;
+    });
+    fireEvent.click(btn);
+    await waitFor(() => expect(switchIn().getAttribute("aria-pressed")).toBe("true"));
+
+    act(() => c.answer(500, { error: "the corpus is at the vet" }));
+    const refusal = await screen.findByText(/did not stick/);
+    expect(refusal.closest(".toast.bad")).not.toBeNull();
+    // And it goes back to what the corpus says, which is where it started.
+    await waitFor(() => expect(switchIn().getAttribute("aria-pressed")).toBe("false"));
   });
 });

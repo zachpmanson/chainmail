@@ -180,7 +180,7 @@ function CorpusStats({ s }: { s: Stats }) {
 }
 
 /**
- * The /status route: which of the backends chainmail reads through are logged
+ * The /settings route: which of the backends chainmail reads through are logged
  * in, as the operator's `corpus status` last measured them, plus the corpus
  * coverage /v1/stats already reports and the two settings that decide how it is
  * read: how often the mailbox is swept, which folder the home page opens in, and
@@ -189,7 +189,7 @@ function CorpusStats({ s }: { s: Stats }) {
  * of the render/model boundary: the server never contacts docket or slackdump,
  * it serves what the CLI wrote.
  */
-export function StatusView() {
+export function SettingsView() {
   const queryClient = useQueryClient();
   const status = $api.useQuery("get", "/v1/status", {});
   const stats = $api.useQuery("get", "/v1/stats", {});

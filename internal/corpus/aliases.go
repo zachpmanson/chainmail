@@ -158,7 +158,7 @@ type aliasMerge struct {
 // whole content of the assertion — and one organisation's support@ is one inbox,
 // however many people have sent from it. Names cannot be asked here because a
 // role mailbox carries whoever last sent from it, so `support@old` reading
-// "Alyssa Salado" against `support@new` reading "Bo Nguyen" would be refused for
+// "Alyssa Sorensen" against `support@new` reading "Bo Nguyen" would be refused for
 // a contradiction between two names that were never claims about the same thing.
 // Refusing them instead would also strand them: CanonicalAddress already sends
 // every later sighting of support@old to the surviving support@new person, so the

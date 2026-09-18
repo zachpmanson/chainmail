@@ -139,7 +139,7 @@ func MergePlanned(s *Store, m PlannedMerge) error {
 // Two same-named colleagues do not track each other through a whole corpus.
 //
 // Nothing here corroborates the target's address against the name, and that is
-// on purpose: a header reading `Ainslee Portlock <manager.easterncreek@…>` names
+// on purpose: a header reading `Ainslee Ashby <manager.easterncreek@…>` names
 // a shared mailbox that really is hers, and demanding the address look like the
 // name would refuse exactly the merges this rule exists for. The one address the
 // target may not hold is an unattended mailbox — see anchorsAHuman.
@@ -777,8 +777,8 @@ func noReplyDomain(domain string) bool {
 //
 // The name is cut at a parenthesis or a pipe first, because what follows one is
 // an annotation and not part of anybody's name — "Paul Stevens (Customer
-// Support)" and "Klara Belk | Arvida". Keeping the annotation would let
-// support@ corroborate the first and arvida@ the second, which is the wrong
+// Support)" and "Klara Belk | Ardenlee". Keeping the annotation would let
+// support@ corroborate the first and ardenlee@ the second, which is the wrong
 // direction for a gate whose job is to disqualify.
 func nameTokens(name string) []string {
 	if i := strings.IndexAny(name, "(|"); i >= 0 {
