@@ -269,10 +269,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * The chain around an entry, in time order, as data.
+         * The chain around an entry, in conversation order, as data.
          * @description Kept even though selection makes it unnecessary for building a page, because reading a chain is a different act from rendering one: a client browsing a candidate wants its entries as data, cheaply, without paying for spec assembly or committing to a page.
          *
          *     Reachability is followed in BOTH directions, so ANY member's ext id returns the whole conversation — search reports the entry that matched, not the root. The parameter is named rootExtId because that is what search hands you.
+         *
+         *     The order is the conversation's, not the clock's: an entry recovered from someone's quotation carries the wall clock its quoter's client wrote, read as UTC, which can fall after the replies that came before it, so an entry is never placed before a parent that is in the response and the clock only breaks ties between entries the reply graph leaves unrelated.
          */
         get: operations["getChain"];
         put?: never;
@@ -773,11 +775,11 @@ export interface components {
             /** @description The quoter's modified text of the quote, as stored (plain text, not HTML). */
             body?: string;
         };
-        /** @description Every entry reachable from the named one, in time order. */
+        /** @description Every entry reachable from the named one, in conversation order. */
         ChainResponse: {
             /** @description The id that was asked for, echoed back. Note this is whatever the caller passed, which need not be the chain's root — see the path parameter. */
             rootExtId: string;
-            /** @description The whole chain in time order, never empty: an id that resolves to nothing is a 404. */
+            /** @description The whole chain in conversation order, never empty: an id that resolves to nothing is a 404. */
             entries: components["schemas"]["CorpusEntry"][];
         };
         /** @description One place an entry was found. A message quoted in five forwards has five, which is the evidence that it mattered. */
@@ -2195,7 +2197,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The chain in time order. */
+            /** @description The chain in conversation order: never before a parent that is in it, and chronological wherever the reply graph leaves a choice. */
             200: {
                 headers: {
                     [name: string]: unknown;

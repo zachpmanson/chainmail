@@ -1090,3 +1090,71 @@ func TestABuildWithNoAddressesNamedMarksFromTheStoredSetting(t *testing.T) {
 		}
 	}
 }
+
+// A reply whose parent is a message recovered from a quotation keeps its parent edge.
+//
+// The parent edge was resolved while rows were visited in ts order, and a recovered
+// entry's ts is the wall clock the quoter's client wrote, read as UTC (see
+// unnest.Attribution.Sent) — so on this chain the parent is visited LAST, its spec id
+// is not known when the reply is built, and the reply was read as an orphan. A page
+// built from it then published the false claim that a message replied to something
+// that is not in the timeline, and drew the reply as a thread start.
+func TestAParentVisitedAfterItsChildStillFindsIt(t *testing.T) {
+	s := open(t)
+	ida := person(t, s, "Ada Byron", "ada@loomworks.example")
+	idb := person(t, s, "Bo Halvorsen", "bo@fjordline.example")
+	plus1000 := 600
+	// The quoted root: no Date header of its own, so no zone, and its ts is the clock
+	// its quoter's client wrote read as UTC — 16:17, which is after the reply below it.
+	root := put(t, s, msg{
+		ext: "mail:<ledger-2026-08@billing.example>", ts: "2026-08-30T16:17:00Z",
+		person: ida, container: "T7", subject: "Your invoice",
+		messageID: "<ledger-2026-08@billing.example>",
+		from:      "Ada Byron <ada@loomworks.example>",
+		to:        "Bo Halvorsen <bo@fjordline.example>",
+		html:      "<p>Invoice attached</p>",
+	})
+	put(t, s, msg{
+		ext: "mail:<re-checking-this@fjordline.example>", ts: "2026-08-30T06:31:00Z",
+		tz: "+1000", offset: &plus1000,
+		person: idb, container: "T7", subject: "Your invoice",
+		messageID: "<re-checking-this@fjordline.example>",
+		inReplyTo: "<ledger-2026-08@billing.example>",
+		from:      "Bo Halvorsen <bo@fjordline.example>",
+		to:        "Ada Byron <ada@loomworks.example>",
+	})
+	if _, err := s.ResolveParents(); err != nil {
+		t.Fatalf("ResolveParents: %v", err)
+	}
+	_ = root
+
+	// Selected from the reply: the closure brings the quoted root in with it, whatever
+	// order the two arrive in.
+	sp := generate(t, s, Options{ExtIDs: []string{"mail:<re-checking-this@fjordline.example>"}})
+	if len(sp.Messages) != 2 {
+		t.Fatalf("messages = %d, want the chain's 2", len(sp.Messages))
+	}
+	var wantParent, parent string
+	for _, m := range sp.Messages {
+		if m.ExtID == "mail:<ledger-2026-08@billing.example>" {
+			wantParent = m.ID
+		}
+		if m.ExtID == "mail:<re-checking-this@fjordline.example>" {
+			parent = m.Parent
+		}
+	}
+	if wantParent == "" {
+		t.Fatalf("the quoted root is not in the spec: %+v", sp.Messages)
+	}
+	if parent != wantParent {
+		t.Errorf("reply's parent = %q, want the quoted root's id %q", parent, wantParent)
+	}
+	// And no note claiming the chain is incomplete.
+	for _, n := range sp.SourceNotes {
+		for _, item := range n.Items {
+			if strings.Contains(item, "not in this timeline") {
+				t.Errorf("page claims an incomplete chain: %s / %s", n.Title, item)
+			}
+		}
+	}
+}

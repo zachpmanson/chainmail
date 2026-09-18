@@ -2,6 +2,7 @@ package corpus
 
 import (
 	"errors"
+	"slices"
 	"testing"
 	"time"
 )
@@ -148,5 +149,163 @@ func TestShowCarriesAnEntrysAttachments(t *testing.T) {
 	}
 	if len(chain) != 1 || len(chain[0].Attachments) != 2 {
 		t.Fatalf("chain: %d entries, %d attachments on the first", len(chain), len(chain[0].Attachments))
+	}
+}
+
+// putAt puts one message at a stated moment, with the headers a reply carries, and
+// reports its row id.
+//
+// The clock is the parameter and not a constant because the cases below are about the
+// clock disagreeing with the conversation: an entry recovered from someone's
+// quotation carries the wall clock the quoter's client wrote for it, read as UTC (see
+// unnest.Attribution.Sent), so it can sort after the replies that came before it.
+func putAt(t *testing.T, s *Store, ext, messageID, inReplyTo string, ts time.Time) int64 {
+	t.Helper()
+	res, err := s.Put(Entry{
+		Source: SourceMail, ExtID: ext, Kind: "message",
+		TS: ts, BodyText: ext, ParentRef: inReplyTo,
+	}, &Mail{MessageID: messageID, InReplyTo: inReplyTo}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return res.ID
+}
+
+// extIDs is a chain read as the list a client draws.
+func extIDs(chain []Shown) []string {
+	out := make([]string, 0, len(chain))
+	for _, e := range chain {
+		out = append(out, e.ExtID)
+	}
+	return out
+}
+
+// parentsFirst fails if any entry is drawn before a parent that is also in the set.
+func parentsFirst(t *testing.T, chain []Shown) {
+	t.Helper()
+	at := map[string]int{}
+	for i, e := range chain {
+		at[e.ExtID] = i
+	}
+	for i, e := range chain {
+		if e.Parent == "" {
+			continue
+		}
+		j, in := at[e.Parent]
+		if !in {
+			continue
+		}
+		if j >= i {
+			t.Errorf("%s is drawn at %d, before its parent %s at %d", e.ExtID, i, e.Parent, j)
+		}
+	}
+}
+
+// A chain whose root is a message recovered from a quotation is drawn in the
+// conversation's order, not the clock's.
+//
+// The recovered root has no Date header of its own, so its ts is the wall clock the
+// quoter's client wrote for it, read as UTC — later than the replies that came before
+// it. `order by e.ts` therefore drew a reply above the message it answers. Every other
+// reader places this edge already (chronological.ts on the page, tree.ts in the pane,
+// tzinfer treating "a quoted message was sent before the message quoting it" as a hard
+// constraint); the chain read was the one that believed the clock.
+func TestAChainIsOrderedByTheReplyGraphWhereTheClockDisagrees(t *testing.T) {
+	s := open(t)
+	// 16:17 UTC is the quoter's wall clock read as UTC, and the only entry here with no
+	// zone at all. The three below it are real mailbox messages, in the order they were
+	// sent: a reply, a second reply to the same message, and an answer to the first.
+	at := func(h, m int) time.Time { return time.Date(2026, 8, 30, h, m, 0, 0, time.UTC) }
+	putAt(t, s, "mail:<ledger-2026-08@billing.example>", "<ledger-2026-08@billing.example>", "", at(16, 17))
+	putAt(t, s, "mail:<re-checking-this@mailbox.example>", "<re-checking-this@mailbox.example>", "<ledger-2026-08@billing.example>", at(6, 31))
+	putAt(t, s, "mail:<and-one-more-thing@mailbox.example>", "<and-one-more-thing@mailbox.example>", "<ledger-2026-08@billing.example>", at(6, 45))
+	putAt(t, s, "mail:<thanks@mailbox.example>", "<thanks@mailbox.example>", "<re-checking-this@mailbox.example>", at(7, 0))
+	if _, err := s.ResolveParents(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Named from the middle, which is how search reports a hit.
+	chain, err := s.Chain("mail:<re-checking-this@mailbox.example>")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"mail:<ledger-2026-08@billing.example>",
+		"mail:<re-checking-this@mailbox.example>",
+		// The two replies to the recovered root are not ancestor and descendant, so the
+		// clock still decides between them: 6:31 before 6:45.
+		"mail:<and-one-more-thing@mailbox.example>",
+		"mail:<thanks@mailbox.example>",
+	}
+	if got := extIDs(chain); !slices.Equal(got, want) {
+		t.Errorf("chain order:\n got %v\nwant %v (the root first, then time order)", got, want)
+	}
+	parentsFirst(t, chain)
+}
+
+// An entry whose parent is not in the set is placed where it belongs rather than
+// dropped or drawn last: a chain's head is usually a message whose own parent we
+// never received.
+func TestAnEntryWhoseParentIsNotInTheSetIsPlacedByItsOwnClock(t *testing.T) {
+	s := open(t)
+	at := func(h, m int) time.Time { return time.Date(2026, 8, 30, h, m, 0, 0, time.UTC) }
+	// Nothing in the corpus holds this id: the chain starts here, and the row carries a
+	// ParentRef that resolves to nothing.
+	putAt(t, s, "mail:<first@mailbox.example>", "<first@mailbox.example>", "<never-received@elsewhere.example>", at(7, 0))
+	putAt(t, s, "mail:<later@mailbox.example>", "<later@mailbox.example>", "<first@mailbox.example>", at(7, 30))
+	putAt(t, s, "mail:<earlier@mailbox.example>", "<earlier@mailbox.example>", "<first@mailbox.example>", at(6, 0))
+	if _, err := s.ResolveParents(); err != nil {
+		t.Fatal(err)
+	}
+
+	chain, err := s.Chain("mail:<first@mailbox.example>")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"mail:<first@mailbox.example>",
+		"mail:<earlier@mailbox.example>",
+		"mail:<later@mailbox.example>",
+	}
+	if got := extIDs(chain); !slices.Equal(got, want) {
+		t.Errorf("chain order:\n got %v\nwant %v", got, want)
+	}
+	// The head is drawn first even though nothing resolved its parent: a missing parent
+	// is not a reason to move an entry, and it is not an orphan to the chain either.
+	parentsFirst(t, chain)
+}
+
+// A parent cycle still returns every row.
+//
+// The schema does not forbid one — parent_id is a foreign key to the same table and
+// two rows naming each other satisfy it — and nothing an ingest does should produce
+// one. But a read that answered with an empty list, or with one of the two, would be a
+// worse failure than an order that means nothing: the rows are what the reader asked
+// for, and Kahn's algorithm has to be given a way out.
+func TestAParentCycleStillReturnsEveryRow(t *testing.T) {
+	s := open(t)
+	at := func(h, m int) time.Time { return time.Date(2026, 8, 30, h, m, 0, 0, time.UTC) }
+	first := putAt(t, s, "mail:<one@loop.example>", "<one@loop.example>", "", at(6, 0))
+	second := putAt(t, s, "mail:<two@loop.example>", "<two@loop.example>", "", at(7, 0))
+	for _, e := range []struct{ id, parent int64 }{{first, second}, {second, first}} {
+		if _, err := s.db.Exec(`update entries set parent_id = ? where id = ?`, e.parent, e.id); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	chain, err := s.Chain("mail:<one@loop.example>")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Both rows, and the earlier clock first: neither is eligible, so the earliest is
+	// taken out of order and the other follows it.
+	want := []string{"mail:<one@loop.example>", "mail:<two@loop.example>"}
+	if got := extIDs(chain); !slices.Equal(got, want) {
+		t.Errorf("chain order:\n got %v\nwant %v (every row, earliest first)", got, want)
+	}
+	// And nothing was dropped on the way in: the walk itself has to terminate inside the
+	// cycle, which is what `union` at each step of the CTE buys.
+	if len(chain) != 2 {
+		t.Errorf("chain returned %d rows, want both", len(chain))
 	}
 }

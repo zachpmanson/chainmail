@@ -119,7 +119,6 @@ function formatOffset(mins: number): string {
  *  part of. */
 const anchor = (i: number) => `entry-${i}`;
 
-
 /** The sender's name and the clock of a message, in the words its own bubble
  *  prints — "Lena Whitfield" and "Mon 2 Mar 2026 09:15".
  *

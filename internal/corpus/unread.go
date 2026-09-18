@@ -87,9 +87,14 @@ type ChainEntry struct {
 	Labels  []string
 }
 
-// ChainEntries returns the chain rooted at rootExtID, oldest first: every entry
-// reachable by walking parent_id down from the root, in the same direction
-// chainMeta summarises and SearchChains groups by.
+// ChainEntries returns every entry reachable by walking parent_id down from
+// rootExtID, in ts order — which is not the conversation order for a chain whose root
+// was recovered from a quotation, because such an entry's ts is the wall clock its
+// quoter's client wrote, read as UTC (see Store.Chain, which orders by the reply graph
+// for exactly this reason). Nothing here reads the order: both callers count what has a
+// mailbox copy and then write one label list per entry, so a reply sitting above its
+// parent changes nothing about what is marked. The walk is capped rather than
+// cycle-aware for the same reason — it has to terminate, not to be right about order.
 //
 // The walk is the graph, not the container, for the reason SearchChains gives:
 // a message recovered from a quote and an original forwarded across sources
