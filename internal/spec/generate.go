@@ -128,6 +128,7 @@ func Generate(store *corpus.Store, opts Options) (Spec, error) {
 		ids:       newIDAllocator(),
 		idOf:      map[int64]string{},
 		subjOf:    map[int64]string{},
+		slot:      map[int64]int{},
 		rowByID:   map[int64]*entryRow{},
 		cast:      newCast(),
 		part:      part,
@@ -156,6 +157,11 @@ func Generate(store *corpus.Store, opts Options) (Spec, error) {
 	for _, r := range rows {
 		b.add(r)
 	}
+	// Parents and subjects, once every entry has an id: a row visited late (a message
+	// recovered from a quotation carries its quoter's wall clock as ts) can be another
+	// row's parent, and the edges must not depend on which came first here (see
+	// linkParents).
+	b.linkParents(rows)
 	// A quoter's in-place change to a quoted message (a DERIVED copy) is drawn
 	// as an edit inside the message that quoted it, never left floating as its
 	// own node. The relation was decided at ingest; this only surfaces it.
@@ -196,6 +202,7 @@ type builder struct {
 	idOf     map[int64]string    // corpus id -> spec id, for parent edges
 	rowByID  map[int64]*entryRow // every selected entry, for sighting lookups
 	subjOf   map[int64]string    // corpus id -> subject, to spot a new chain
+	slot     map[int64]int       // corpus id -> where its entry landed, to link parents
 	messages []Entry
 
 	// cast is the participants panel; part and addrs are the corpus's own
@@ -284,17 +291,6 @@ func (b *builder) add(r *entryRow) {
 		e.Kind = "note"
 	}
 
-	if p, ok := b.idOf[r.ParentID]; ok {
-		e.Parent = p
-	} else if r.ParentID != 0 || r.ParentRef != "" {
-		b.orphans++
-	}
-	// A subject names a chain where it starts one: at an entry with no parent
-	// here, or where the subject changed from the parent's.
-	if e.Parent == "" || b.subjOf[r.ParentID] != r.Subject {
-		e.Subject = r.Subject
-	}
-
 	for _, a := range r.Atts {
 		att := AttachmentOf(a.Name, a.Mime, a.Size, a.BlobSHA, a.Skip)
 		if r.Direct {
@@ -324,9 +320,46 @@ func (b *builder) add(r *entryRow) {
 	e.ID = b.ids.take(entryID(e))
 	b.idOf[r.ID] = e.ID
 	b.subjOf[r.ID] = r.Subject
+	// Where this entry landed, so linkParents can come back to it: the parent edge is
+	// resolved after every row has an id (see linkParents for why that cannot be done
+	// here).
+	b.slot[r.ID] = len(b.messages)
 	b.messages = append(b.messages, e)
 
 	b.meet(r, e.Sender, e.Org, from, to, cc)
+}
+
+// linkParents resolves each entry's parent to the parent's spec id, and decides which
+// entries state their own subject, once every entry in the spec has an id.
+//
+// A pass of its own, rather than work inside the build, because a parent can be
+// visited after its child: ts is not an instant for an entry recovered from a
+// quotation, so the visitor order is not the conversation order. What a parent edge
+// needs is not order but presence — a parent's spec id is known as soon as the parent
+// has been built, wherever it sits in the spec. Resolving it while it was still
+// unknown read such an entry as an orphan and gave it a subject of its own: a page for
+// a whole chain then published "1 of 3 entries reply to a message that is not in this
+// timeline", and drew the reply as a thread start.
+//
+// The subject rule rides along because it is a question about the parent — a subject
+// names a chain where it starts one, at an entry with no parent here or one whose
+// subject differs from its parent's — and it has to ask it after the edge is known.
+func (b *builder) linkParents(rows []*entryRow) {
+	for _, r := range rows {
+		i, ok := b.slot[r.ID]
+		if !ok {
+			continue
+		}
+		e := &b.messages[i]
+		if p, ok := b.idOf[r.ParentID]; ok {
+			e.Parent = p
+		} else if r.ParentID != 0 || r.ParentRef != "" {
+			b.orphans++
+		}
+		if e.Parent == "" || b.subjOf[r.ParentID] != r.Subject {
+			e.Subject = r.Subject
+		}
+	}
 }
 
 // meet records everyone this entry involves, in the order the page reads: its
