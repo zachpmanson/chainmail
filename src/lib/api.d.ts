@@ -95,6 +95,8 @@ export interface paths {
          *
          *     Whether the rest of the audience is on the reply is the one thing the caller decides: `all` narrows the reply to the person who wrote and cannot widen it past the message's own headers, so both settings share the one property that matters here — the recipients are not the caller's to name.
          *
+         *     A reply is one message in two renderings: the plain text, and the same words as HTML with the answered message quoted inside a `blockquote`, composed together so the reader's words, the subject and the heading cannot differ between them. The quote is the one part of a reply this server did not write — the HTML part carries the answered message's own markup where it had any, and its text where it did not, so answering an HTML mail sends the mail rather than a transcript of it. That markup passes the same allowlist every body in the reading pane passes, so a reply can relay to its recipients nothing the page would refuse to render. An `html` field of false sends the words alone, in text.
+         *
          *     Two steps, and the first sends nothing: without `confirm` the reply is prepared and the answer is the plan — the recipients the mailbox will use, the subject, and the whole body including the quote of the message being answered, which this server composes. That is a preview of the message rather than of a draft. With `confirm` the same prepare runs and is executed, and the answer carries the id of the message that went out.
          *
          *     An entry with no mailbox copy answers 400, unlike /v1/read and /v1/mail where such an entry is skipped and counted: those act on the part of a set that can be acted on, and a send cannot be half-performed — there is no mailbox message to thread against.
@@ -267,10 +269,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * The chain around an entry, in time order, as data.
+         * The chain around an entry, in conversation order, as data.
          * @description Kept even though selection makes it unnecessary for building a page, because reading a chain is a different act from rendering one: a client browsing a candidate wants its entries as data, cheaply, without paying for spec assembly or committing to a page.
          *
          *     Reachability is followed in BOTH directions, so ANY member's ext id returns the whole conversation — search reports the entry that matched, not the root. The parameter is named rootExtId because that is what search hands you.
+         *
+         *     The order is the conversation's, not the clock's: an entry recovered from someone's quotation carries the wall clock its quoter's client wrote, read as UTC, which can fall after the replies that came before it, so an entry is never placed before a parent that is in the response and the clock only breaks ties between entries the reply graph leaves unrelated.
          */
         get: operations["getChain"];
         put?: never;
@@ -764,11 +768,11 @@ export interface components {
             /** @description The quoter's modified text of the quote, as stored (plain text, not HTML). */
             body?: string;
         };
-        /** @description Every entry reachable from the named one, in time order. */
+        /** @description Every entry reachable from the named one, in conversation order. */
         ChainResponse: {
             /** @description The id that was asked for, echoed back. Note this is whatever the caller passed, which need not be the chain's root — see the path parameter. */
             rootExtId: string;
-            /** @description The whole chain in time order, never empty: an id that resolves to nothing is a 404. */
+            /** @description The whole chain in conversation order, never empty: an id that resolves to nothing is a 404. */
             entries: components["schemas"]["CorpusEntry"][];
         };
         /** @description One place an entry was found. A message quoted in five forwards has five, which is the evidence that it mattered. */
@@ -2182,7 +2186,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The chain in time order. */
+            /** @description The chain in conversation order: never before a parent that is in it, and chronological wherever the reply graph leaves a choice. */
             200: {
                 headers: {
                     [name: string]: unknown;

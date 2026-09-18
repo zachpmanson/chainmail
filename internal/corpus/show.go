@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 )
 
@@ -197,12 +198,40 @@ func (s *Store) OriginalHTML(extID string) (string, error) {
 	return part.String, nil
 }
 
-// Chain returns every entry reachable from the one named, in time order.
+// chainRow is one entry of a chain's reachable set, with just enough of it to be
+// placed: who it answers, and the clock and id that order two entries the reply graph
+// leaves unrelated.
+type chainRow struct {
+	id     int64
+	extID  string
+	parent int64  // 0 when the entry has no parent row
+	ts     string // the stored timestamp text, as `order by e.ts` compared it
+}
+
+// Chain returns every entry reachable from the one named, in conversation order:
+// an entry never before a parent that is also in the set, and in time order
+// wherever the reply graph leaves a choice.
 //
 // Reachability is followed in BOTH directions — ancestors and descendants — so
 // naming any message in a conversation returns the conversation. Naming only a
 // root would be useless in practice, because search reports the entry that
 // matched, not the root.
+//
+// Conversation order used to be `order by e.ts`, which is the same thing on every
+// chain whose timestamps are instants and wrong on the ones where they are not. A
+// message recovered from someone's quotation has no Date header of its own: its ts
+// is the wall clock the quoter's client wrote for it, read as UTC (see
+// unnest.Attribution.Sent), so it can be hours after the replies that came before
+// it — and sorting on it drew a reply above the message it answers. The zone behind
+// that clock is ambiguous by construction (tzinfer's job is to report that, not to
+// choose), so nothing may lean on it to place an edge: the edge decides, and the
+// clock only breaks ties. The page build (chronological.ts) and the tree view
+// (tree.ts) keep the same promise on the client, which is why this end of it is
+// theirs to trust.
+//
+// A chain is not ordered by the store's own ids either: an id says when we heard of
+// a message, not when it was sent, and a recovered entry is inserted when its quoter
+// is ingested.
 func (s *Store) Chain(extID string) ([]Shown, error) {
 	var id int64
 	if err := s.db.QueryRow(`select id from entries where ext_id = ?`, extID).Scan(&id); err != nil {
@@ -211,6 +240,17 @@ func (s *Store) Chain(extID string) ([]Shown, error) {
 		}
 		return nil, err
 	}
+	// The reachable set, unordered: the SQL sort that used to be here cannot express
+	// conversation order (a parent's clock may be the later of the two), so it is
+	// done in Go where the graph is visible. The CTE carries each row's parent id
+	// out for that reason alone.
+	//
+	// `down` is seeded with the ancestors as well as with the undescended roots, which
+	// is the same set on a tree — every ancestor is under the root it was reached from
+	// — and the only way a parent cycle comes back whole: a cycle has no root for
+	// `root` to find, so without the seed the whole component would be dropped and the
+	// query would answer a chain that exists with an empty list. `union` rather than
+	// `union all` at every step is what terminates the walk inside a cycle.
 	rows, err := s.db.Query(`
 		with recursive up(id) as (
 		  select ? union
@@ -222,25 +262,27 @@ func (s *Store) Chain(extID string) ([]Shown, error) {
 		    select e.id from entries e join up on e.id = up.id where e.parent_id is not null)
 		),
 		down(id) as (
-		  select id from root union
+		  select id from root union select id from up union
 		  select e.id from entries e join down on e.parent_id = down.id
 		)
-		select e.ext_id from entries e join down on e.id = down.id order by e.ts`, id)
+		select e.id, e.ext_id, coalesce(e.parent_id, 0), e.ts
+		  from entries e join down on e.id = down.id`, id)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var ids []string
+	var set []chainRow
 	for rows.Next() {
-		var x string
-		if err := rows.Scan(&x); err != nil {
+		var r chainRow
+		if err := rows.Scan(&r.id, &r.extID, &r.parent, &r.ts); err != nil {
 			return nil, err
 		}
-		ids = append(ids, x)
+		set = append(set, r)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	ids := chainOrder(set)
 	out := make([]Shown, 0, len(ids))
 	for _, x := range ids {
 		sh, err := s.Show(x)
@@ -250,4 +292,71 @@ func (s *Store) Chain(extID string) ([]Shown, error) {
 		out = append(out, sh)
 	}
 	return out, nil
+}
+
+// chainOrder places a chain's reachable set: parents first, and time order between
+// everything the graph does not relate, which is the order the reader meets the
+// conversation in.
+//
+// Kahn's algorithm, with the eligible entries scanned in (ts, id) order: take the
+// earliest entry whose parent is either already placed or not in the set at all.
+// Parents come before children by construction, and the clock only ever decides
+// between entries that are not ancestor and descendant — which is exactly as much
+// as a clock with a recovered entry in it can be trusted with.
+//
+// A parent cycle is not forbidden by the schema. Its members are then never
+// eligible, and a pass with nothing eligible takes the earliest entry outright
+// rather than stopping: every reachable row is returned, the same as the plain sort
+// returned every row, and a cycle costs the chain only the order within itself. The
+// cost of the scan-the-whole-set loop is n² comparisons on a chain of n entries,
+// which a thread is small enough to pay.
+func chainOrder(set []chainRow) []string {
+	byID := make(map[int64]int, len(set))
+	for i, r := range set {
+		byID[r.id] = i
+	}
+	ordered := make([]int, len(set))
+	for i := range set {
+		ordered[i] = i
+	}
+	sort.Slice(ordered, func(a, b int) bool {
+		x, y := set[ordered[a]], set[ordered[b]]
+		if x.ts != y.ts {
+			return x.ts < y.ts
+		}
+		return x.id < y.id
+	})
+	placed := make(map[int64]bool, len(set))
+	out := make([]string, 0, len(set))
+	for len(out) < len(set) {
+		take := -1
+		first := -1
+		for _, i := range ordered {
+			r := set[i]
+			if placed[r.id] {
+				continue
+			}
+			if first < 0 {
+				first = i
+			}
+			// Eligible unless a parent is still waiting to be placed. A parent that is
+			// not in the set cannot block anything — the set is closed both ways, so
+			// this is a guard rather than a case.
+			if _, in := byID[r.parent]; r.parent != 0 && in && !placed[r.parent] {
+				continue
+			}
+			take = i
+			break
+		}
+		if take < 0 {
+			// Nothing is eligible, so what is left is a cycle: the earliest of its
+			// members is taken out of order, and the rest follow as their own parents
+			// are placed. `first` is always set here — the loop runs only while
+			// something is unplaced.
+			take = first
+		}
+		placed[set[take].id] = true
+		out = append(out, set[take].extID)
+	}
+	return out
 }
