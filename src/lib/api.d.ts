@@ -940,7 +940,7 @@ export interface components {
             /** @description How often to sweep the mailbox: a duration word between 1m and 24h in whole minutes or hours, or "off" for never. Anything else is refused with the reason — a cadence drives a walk of the whole mailbox, so it is not stored and quietly defaulted. An empty string clears the choice, leaving the default cadence in force. */
             slurpEvery?: string;
         };
-        /** @description The connection snapshot the operator's probe wrote. checkedAt is omitted until some probe has run; services is always the full known set, so a missing snapshot reads as unchecked rather than empty. */
+        /** @description The connection snapshot the operator's probe wrote. checkedAt is omitted until some probe has run; services is always the full known set, so a missing snapshot reads as unchecked rather than empty. sweep is what this process knows about the ingest itself. */
         StatusResponse: {
             /**
              * Format: date-time
@@ -952,8 +952,29 @@ export interface components {
              * @description UTC RFC3339 stamp of the next sweep: the last ingest this server made plus the cadence in force, computed per request rather than stored. Absent when nothing will sweep at all — no -slurp grant on this host, or a cadence of "off".
              */
             nextSlurpAt?: string;
+            sweep: components["schemas"]["SweepStatus"];
             /** @description Every backend, in the screen's order. */
             services: components["schemas"]["ServiceStatus"][];
+        };
+        /** @description The ingest as a reader can see it: one run at a time, and how the last one ended. Not persisted — a restart forgets the last outcome, because the corpus itself shows what a finished run left and the fact worth carrying across a restart is whether one is running now. */
+        SweepStatus: {
+            /** @description True while a walk of the mailbox is in flight, whether it was pressed or started by the cadence. The latch that answers POST /v1/slurp with 409 is this flag. */
+            running: boolean;
+            /**
+             * Format: date-time
+             * @description UTC RFC3339 stamp of when the running ingest began. Written with running, so it is present exactly when that is true.
+             */
+            startedAt?: string;
+            /**
+             * Format: date-time
+             * @description UTC RFC3339 stamp of when the last ingest this process saw returned. Absent until one has.
+             */
+            finishedAt?: string;
+            /**
+             * @description How that ingest ended, read off its own phase lines: complete (every phase finished its work), incomplete (a phase stopped at a bound, so the corpus is short of what the walk was asked for — re-run to continue from the cursor), or failed (a phase broke, or the walk returned an error). Absent before the first run this process has seen; a phase skipped for want of a prerequisite is not a fault and does not appear here.
+             * @enum {string}
+             */
+            outcome?: "complete" | "incomplete" | "failed";
         };
         /** @description One backend's connection, as the last probe reported it. */
         ServiceStatus: {

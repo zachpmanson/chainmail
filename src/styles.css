@@ -322,6 +322,23 @@
   .navrefresh .spinner::before { content:"\21BB"; }
   .navrefresh.busy .spinner { animation:spin .8s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
+  /* The ingest the page did not start (see SweepIndicator). A quiet pill rather
+     than a second button: it is a fact about the machine, not a press, and the
+     nav's right-hand group is otherwise all controls. The spinner is the same ↻
+     the refresh button turns, which is the point — one glyph meaning "work is
+     happening here", whether a person asked for it or the cadence did.
+
+     `.warn` is the ending: an ingest that stopped early or broke, held until the
+     next run ends complete. It takes the accent colour because a corpus that is
+     missing mail is a fact a reader has to act on, and small print in --muted is
+     where facts go to be ignored. */
+  .sweepind { flex:none; display:inline-flex; align-items:center; gap:.3rem;
+    padding:.15rem .5rem; border:1px solid var(--line); border-radius:999px;
+    color:var(--muted); font-size:.75rem; line-height:1.4; white-space:nowrap; }
+  .sweepind.warn { color:var(--accent); border-color:var(--accent); }
+  .sweepind .spinner { display:inline-block; width:.85rem; height:.85rem;
+    font-size:.85rem; line-height:1; animation:spin .8s linear infinite; }
+  .sweepind .spinner::before { content:"\21BB"; }
   .navsearch svg { flex:none; opacity:.8; }
   /* The app's own pages are workspaces, not documents: an inbox is a list and a
      reading pane, and both want the width the window has. Anything not named
