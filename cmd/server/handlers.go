@@ -105,6 +105,13 @@ type server struct {
 	// the scheduler: they write the same tables from the same mailbox, and an
 	// overlapping pair would be two walks of one query. See slurpOnce.
 	sweeping atomic.Bool
+	// sweep is what a reader can see ABOUT that ingest: whether one is running
+	// now, when it started, and how the last one ended. The latch above answers
+	// "may I start one"; this answers "is something happening, and did it
+	// finish" — the question a page otherwise cannot ask, because a scheduled
+	// sweep runs with no press behind it and a corpus mid-rebuild reads as a
+	// threading bug rather than as work in progress. Served on GET /v1/status.
+	sweep sweepState
 
 	// mediaEnabled enables POST /v1/media/pull: fetch the bytes behind one
 	// message's attachments, so the page can show a file instead of sending the
@@ -2338,7 +2345,7 @@ func (s *server) status(w http.ResponseWriter, r *http.Request) {
 	} else {
 		snap = status.Parse(blob)
 	}
-	send(w, http.StatusOK, toStatusResponse(snap, s.nextSlurpAt()))
+	send(w, http.StatusOK, toStatusResponse(snap, s.nextSlurpAt(), s.sweepStatus()))
 }
 
 // labels is the folder list the home page's button opens. It is the mailbox's

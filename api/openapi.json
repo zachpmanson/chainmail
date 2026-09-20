@@ -1966,9 +1966,10 @@
       },
       "StatusResponse": {
         "type": "object",
-        "description": "The connection snapshot the operator's probe wrote. checkedAt is omitted until some probe has run; services is always the full known set, so a missing snapshot reads as unchecked rather than empty.",
+        "description": "The connection snapshot the operator's probe wrote. checkedAt is omitted until some probe has run; services is always the full known set, so a missing snapshot reads as unchecked rather than empty. sweep is what this process knows about the ingest itself.",
         "required": [
-          "services"
+          "services",
+          "sweep"
         ],
         "additionalProperties": false,
         "properties": {
@@ -1982,12 +1983,48 @@
             "description": "UTC RFC3339 stamp of the next sweep: the last ingest this server made plus the cadence in force, computed per request rather than stored. Absent when nothing will sweep at all — no -slurp grant on this host, or a cadence of \"off\".",
             "format": "date-time"
           },
+          "sweep": {
+            "$ref": "#/components/schemas/SweepStatus"
+          },
           "services": {
             "type": "array",
             "description": "Every backend, in the screen's order.",
             "items": {
               "$ref": "#/components/schemas/ServiceStatus"
             }
+          }
+        }
+      },
+      "SweepStatus": {
+        "type": "object",
+        "description": "The ingest as a reader can see it: one run at a time, and how the last one ended. Not persisted — a restart forgets the last outcome, because the corpus itself shows what a finished run left and the fact worth carrying across a restart is whether one is running now.",
+        "required": [
+          "running"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "running": {
+            "type": "boolean",
+            "description": "True while a walk of the mailbox is in flight, whether it was pressed or started by the cadence. The latch that answers POST /v1/slurp with 409 is this flag."
+          },
+          "startedAt": {
+            "type": "string",
+            "description": "UTC RFC3339 stamp of when the running ingest began. Written with running, so it is present exactly when that is true.",
+            "format": "date-time"
+          },
+          "finishedAt": {
+            "type": "string",
+            "description": "UTC RFC3339 stamp of when the last ingest this process saw returned. Absent until one has.",
+            "format": "date-time"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "incomplete",
+              "failed"
+            ],
+            "description": "How that ingest ended, read off its own phase lines: complete (every phase finished its work), incomplete (a phase stopped at a bound, so the corpus is short of what the walk was asked for — re-run to continue from the cursor), or failed (a phase broke, or the walk returned an error). Absent before the first run this process has seen; a phase skipped for want of a prerequisite is not a fault and does not appear here."
           }
         }
       },

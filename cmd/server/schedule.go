@@ -7,6 +7,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/zachpmanson/chainmail/internal/corpus"
@@ -207,6 +208,10 @@ func (s *server) nextSlurpAt() string {
 // stamp is written first for the reason recordSlurp gives — a failure is still
 // an attempt — and the fold cache is reduced on the way out, since the ingest
 // changed exactly the bodies it is evidence about (see warmFolds).
+//
+// It also brackets the run for the status route (beginSweep/endSweep), so a
+// reader can see the walk that is happening without standing at the button that
+// started it — the scheduled one has no button at all.
 func (s *server) slurpOnce(ctx context.Context, run func(context.Context, string) ([]byte, error)) ([]byte, error) {
 	if run == nil {
 		return nil, errors.New("this server has no ingest to run")
@@ -215,10 +220,12 @@ func (s *server) slurpOnce(ctx context.Context, run func(context.Context, string
 		return nil, errSweepRunning
 	}
 	defer s.sweeping.Store(false)
+	s.beginSweep(time.Now())
 	s.recordSlurp(time.Now())
 	runCtx, cancel := context.WithTimeout(ctx, s.slurpTimeout)
 	defer cancel()
 	out, err := run(runCtx, s.corpusPath)
+	s.endSweep(out, err)
 	if err != nil {
 		return out, err
 	}
@@ -232,6 +239,101 @@ func (s *server) slurpOnce(ctx context.Context, run func(context.Context, string
 // rather than a sentence at the call site because both callers report it
 // differently: the handler as a 409, the loop as nothing at all.
 var errSweepRunning = errors.New("a sweep is already running")
+
+// The three ways a run can end, as the wire spells them. `skipped` is not one of
+// them: a phase that could not run for want of a prerequisite is a fact about
+// this host's setup rather than about the ingest, and it has never meant the
+// run's work is unfinished (see summarise in cmd/corpus).
+const (
+	sweepComplete   = "complete"
+	sweepIncomplete = "incomplete"
+	sweepFailed     = "failed"
+)
+
+// sweepState is the ingest as a reader can see it: one run at a time, and how
+// the last one ended.
+//
+// Nothing here is persisted, and a restart forgets the last outcome. That is the
+// right trade: the fact worth keeping is "is something happening now", and the
+// corpus itself shows what a finished run left behind. What this is for is the
+// window where both questions are live — a scheduled sweep walking the mailbox
+// with no press behind it, which is minutes of a corpus that looks half-built
+// (mailbox parents are linked per batch, see mailingest) with nothing on the page
+// to say why.
+type sweepState struct {
+	mu       sync.Mutex
+	running  bool
+	started  time.Time
+	finished time.Time
+	outcome  string
+}
+
+func (s *server) beginSweep(now time.Time) {
+	s.sweep.mu.Lock()
+	defer s.sweep.mu.Unlock()
+	s.sweep.running = true
+	s.sweep.started = now
+}
+
+func (s *server) endSweep(out []byte, err error) {
+	s.sweep.mu.Lock()
+	defer s.sweep.mu.Unlock()
+	s.sweep.running = false
+	s.sweep.finished = time.Now()
+	s.sweep.outcome = sweepOutcome(out, err)
+}
+
+// sweepOutcome is how a run ended, read off the transcript the run itself wrote.
+//
+// It reads the summary `corpus slurp` prints — one line per phase, `name outcome
+// note` — rather than looking for the words anywhere in the text, because a
+// phase's note is free-form (an error message says "failed") while the outcome
+// column is a closed set. A run that returned an error failed, whatever the
+// transcript says; where the transcript itself is worse than the error path, the
+// worse one wins, since that is the one a reader has to act on.
+func sweepOutcome(out []byte, err error) string {
+	if err != nil {
+		return sweepFailed
+	}
+	worst := sweepComplete
+	for _, line := range strings.Split(string(out), "\n") {
+		f := strings.Fields(line)
+		if len(f) < 2 {
+			continue
+		}
+		switch f[1] {
+		case "FAILED":
+			return sweepFailed
+		case "INCOMPLETE":
+			worst = sweepIncomplete
+		}
+	}
+	return worst
+}
+
+// sweepStatus is that state as the status route serves it: UTC RFC3339 stamps,
+// as the rest of the wire uses, and no outcome before a run this process has
+// seen. Running with no startedAt cannot happen — beginSweep writes both — but a
+// reader that sees one field should read the pair rather than either alone.
+type sweepStatus struct {
+	Running    bool   `json:"running"`
+	StartedAt  string `json:"startedAt,omitempty"`
+	FinishedAt string `json:"finishedAt,omitempty"`
+	Outcome    string `json:"outcome,omitempty"`
+}
+
+func (s *server) sweepStatus() sweepStatus {
+	s.sweep.mu.Lock()
+	defer s.sweep.mu.Unlock()
+	out := sweepStatus{Running: s.sweep.running, Outcome: s.sweep.outcome}
+	if !s.sweep.started.IsZero() {
+		out.StartedAt = s.sweep.started.UTC().Format(time.RFC3339)
+	}
+	if !s.sweep.finished.IsZero() {
+		out.FinishedAt = s.sweep.finished.UTC().Format(time.RFC3339)
+	}
+	return out
+}
 
 // sweepLoop is the schedule: it reads the clock every sweepTick and runs the
 // ingest when the cadence says it is due.

@@ -722,9 +722,14 @@ func toCorpusAttachment(a corpus.ShownAttachment) spec.Attachment {
 // 404ing. NextSlurpAt is the next sweep, computed live from the cadence in force
 // and the last ingest this server made (never stored), so it stays right however
 // long ago the last probe ran — and it is absent when nothing will sweep at all.
+// Sweep is the other half of that stamp: whether an ingest is walking the mailbox
+// right now and how the last one ended, so a reader can tell work in progress
+// from a broken corpus (see sweepState). It is always present, `running: false`
+// included, because the client's indicator asks about it unconditionally.
 type statusResponse struct {
 	CheckedAt   string          `json:"checkedAt,omitempty"`
 	NextSlurpAt string          `json:"nextSlurpAt,omitempty"`
+	Sweep       sweepStatus     `json:"sweep"`
 	Services    []serviceStatus `json:"services"`
 }
 
@@ -735,9 +740,10 @@ type serviceStatus struct {
 	Detail string `json:"detail,omitempty"`
 }
 
-func toStatusResponse(s status.Snapshot, nextSlurpAt string) statusResponse {
+func toStatusResponse(s status.Snapshot, nextSlurpAt string, sweep sweepStatus) statusResponse {
 	out := statusResponse{
 		NextSlurpAt: nextSlurpAt,
+		Sweep:       sweep,
 		Services:    make([]serviceStatus, 0, len(s.Services)),
 	}
 	if s.CheckedAt != "" {

@@ -27,6 +27,7 @@ import { ToastHost } from "./components/Toasts";
 import { NavReading } from "./components/NavReading";
 import { NavRefresh } from "./components/NavRefresh";
 import { NavSearch } from "./components/NavSearch";
+import { SweepIndicator } from "./components/SweepIndicator";
 import type { SearchMode } from "./lib/api";
 
 /**
@@ -227,6 +228,10 @@ function RootLayout() {
               (see .navsearch and .navopts in styles.css). */}
           <span className="navright">
             <DeployStamp />
+            {/* The ingest nobody pressed: the cadence sweeps on its own, and
+                between the press and the schedule there is no other place in
+                the app that says work is happening (see SweepIndicator). */}
+            <SweepIndicator />
             <NavRefresh />
             <NavSearch />
           </span>
