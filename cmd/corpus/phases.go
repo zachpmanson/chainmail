@@ -442,6 +442,16 @@ func runIngestMail(path string, o mailOpts) (mailingest.Result, error) {
 	return runWithMailbox(path, o, c)
 }
 
+// labelLister is the optional half of a mailbox an ingest uses to refresh the
+// stored folder list: the mailbox's own labels, which the library transport has
+// already read to resolve label ids, so recording them costs no extra round
+// trip. A transport that does not implement it (the legacy docket subprocess)
+// simply leaves the stored list alone, and the folder route keeps answering the
+// corpus-derived list it did before.
+type labelLister interface {
+	LabelNames() []string
+}
+
 // runWithMailbox walks one query, or reads the ids it is given, against any
 // Mailbox — subprocess docket or in-process library — and says how far it got.
 func runWithMailbox(path string, o mailOpts, c mailingest.Mailbox) (mailingest.Result, error) {
@@ -451,6 +461,17 @@ func runWithMailbox(path string, o mailOpts, c mailingest.Mailbox) (mailingest.R
 		return r, err
 	}
 	defer s.Close()
+
+	// The folder list is the mailbox's, not the corpus's (see Store.Labels): a
+	// folder with nothing filed under it can only be learned from the mailbox,
+	// and the ingest is where the mailbox is already open. Recorded before the
+	// walk so a walk that stops short still refreshes it — the labels are read
+	// regardless of how much mail this run reached.
+	if ll, ok := c.(labelLister); ok {
+		if err := s.PutMailboxLabels(ll.LabelNames()); err != nil {
+			return r, fmt.Errorf("storing the mailbox's label list: %w", err)
+		}
+	}
 
 	if len(o.ids) > 0 {
 		r, err = mailingest.IngestIDs(s, c, o.ids)

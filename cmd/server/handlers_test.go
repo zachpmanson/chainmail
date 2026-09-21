@@ -1345,6 +1345,36 @@ func TestLabelsListsTheFoldersWithTheirCounts(t *testing.T) {
 	}
 }
 
+// A folder the mailbox defines but no ingested message carries is served by
+// the route all the same: the ingest records the mailbox's own label list, and
+// the route folds it into the corpus counts at zero. This is the refresh bug —
+// before the fold, POST /v1/slurp refetched a list the corpus could not extend.
+func TestLabelsServesMailboxFoldersWithNoMail(t *testing.T) {
+	srv := testServer(t)
+	if err := srv.store.PutMailboxLabels([]string{"INBOX", "Archive"}); err != nil {
+		t.Fatalf("PutMailboxLabels: %v", err)
+	}
+
+	res := srv.do(t, "GET", "/v1/labels", nil)
+	if res.status != 200 {
+		t.Fatalf("status = %d, want 200: %s", res.status, res.body)
+	}
+	var got labelsResponse
+	if err := json.Unmarshal(res.body, &got); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	var lines []string
+	for _, l := range got.Labels {
+		lines = append(lines, fmt.Sprintf("%s=%d", l.Name, l.Messages))
+	}
+	// INBOX keeps its corpus count and Archive arrives empty, after every
+	// counted folder because the list is busiest-first.
+	want := "INBOX=3,CATEGORY_PROMOTIONS=1,IMPORTANT=1,SENT=1,Archive=0"
+	if strings.Join(lines, ",") != want {
+		t.Errorf("labels = %v, want %s", lines, want)
+	}
+}
+
 // A setting is read back the way every other answer is: from a body, into a
 // fresh struct. Decoding into the struct the last read filled would leave an
 // omitted key holding its old value — the server would have cleared the folder

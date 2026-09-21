@@ -2342,9 +2342,11 @@ func (s *server) status(w http.ResponseWriter, r *http.Request) {
 }
 
 // labels is the folder list the home page's button opens. It is the mailbox's
-// own labels with the counts they carry, kept as one plain read: the labels are
-// what Zach filed his mail under, and nothing here decides what a folder should
-// be on his behalf.
+// own labels with the corpus's counts, kept as one plain read: the names come
+// from the list the ingest stored, the numbers from what has been ingested, and
+// nothing here decides what a folder should be on his behalf. A folder the
+// mailbox defines with no mail in it yet is served at zero, which is the answer
+// refresh could not give while the list was built from stored messages alone.
 func (s *server) labels(w http.ResponseWriter, r *http.Request) {
 	ls, err := s.store.Labels()
 	if err != nil {
