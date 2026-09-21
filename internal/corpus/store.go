@@ -507,6 +507,104 @@ func (s *Store) linkParents(overwrite bool) (int64, error) {
 	return changed, nil
 }
 
+// RepairDanglingQuoteParents links a message back to the quoted trail it carries
+// when the parent its own header named was never received.
+//
+// A host with an In-Reply-To/References keeps that one parent slot for the
+// header: the quoted pass links the blocks recovered out of its body to one
+// another and leaves the host alone, because a reading of its text must not take
+// the slot a header is going to fill (mailingest.ExtractQuoted). That is right
+// until the header names a message the corpus never got. Nothing else then
+// places the host — ResolveParents matches parent_ref against
+// mail_detail.message_id, and a message that was never ingested has no row, while
+// ReassertParents has no edge to keep — so the host stands as a chain root of one
+// and the trail recovered out of its own body sits beside it as a second,
+// disconnected chain.
+//
+// The evidence to join them is already stored. The quoted sightings name the host
+// each block was found inside, and the nesting edges place the blocks among
+// themselves, so the host's parent is the outermost block its body named: the
+// newest, the one no other block in that host's recovered set answers. That is
+// the same edge the quoted pass would have written had the header not claimed the
+// slot.
+//
+// Narrow on purpose. Only a host with NO parent whose header names a message the
+// corpus does not hold, and only where that host actually hosts quoted blocks. A
+// header that resolves is untouched, which is why this runs after ResolveParents
+// and ReassertParents: the header has by then had its say. Store.SetParent fills
+// only a NULL parent and refuses self-edges and cycles, so this cannot clobber a
+// real edge or ring the graph, and re-running it is a no-op. Returns how many
+// edges it drew.
+func (s *Store) RepairDanglingQuoteParents() (int64, error) {
+	type link struct{ host, parent int64 }
+
+	// Read everything before writing anything, for linkParents' reason: the same
+	// connection cannot walk a cursor and write through it at once, and a pass
+	// that stopped halfway would leave no record of where it did.
+	rows, err := s.db.Query(`
+		select e.id,
+		  (select g.entry_id
+		     from sightings g
+		     join entries ge on ge.id = g.entry_id
+		    where g.seen_in = e.id and g.kind = 'quoted'
+		      and not exists (
+		        select 1
+		          from sightings g2
+		          join entries e2 on e2.id = g2.entry_id
+		         where g2.seen_in = e.id and g2.kind = 'quoted'
+		           and e2.parent_id = g.entry_id)
+		    order by ge.ts desc, ge.id desc
+		    limit 1)
+		from entries e
+		where e.source = 'mail'
+		  and e.parent_id is null
+		  and e.parent_ref is not null and e.parent_ref <> ''
+		  and not exists (
+		    select 1 from mail_detail d where d.message_id = e.parent_ref)
+		  and exists (
+		    select 1 from sightings g
+		     where g.seen_in = e.id and g.kind = 'quoted')
+		order by e.id`)
+	if err != nil {
+		return 0, fmt.Errorf("reading dangling quote hosts: %w", err)
+	}
+	var links []link
+	for rows.Next() {
+		var l link
+		if err := rows.Scan(&l.host, &l.parent); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		if l.parent != 0 {
+			links = append(links, l)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return 0, err
+	}
+	rows.Close()
+
+	var drawn int64
+	for _, l := range links {
+		if err := s.SetParent(l.host, l.parent); err != nil {
+			return drawn, fmt.Errorf("linking quoted trail of %d: %w", l.host, err)
+		}
+		// SetParent reports nothing, so the edge is read back: a self-edge or one
+		// that would close a cycle is refused and left a root, which is not an
+		// edge this pass drew.
+		var parent int64
+		if err := s.db.QueryRow(
+			`select coalesce(parent_id, 0) from entries where id = ?`, l.host).Scan(&parent); err != nil {
+			return drawn, err
+		}
+		if parent == l.parent {
+			drawn++
+		}
+	}
+	return drawn, nil
+}
+
 // Stats is a summary of what is in the corpus, and of what is missing.
 type Stats struct {
 	Entries    int64

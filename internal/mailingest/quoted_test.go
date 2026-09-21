@@ -328,3 +328,83 @@ func TestAReplyKeepsTheParentItsHeaderNames(t *testing.T) {
 		t.Errorf("quoted block parent = %d, want none", quotedParent.Int64)
 	}
 }
+
+// singleBox serves one fixed message, standing in for a mailbox that holds
+// nothing else.
+type singleBox struct{ msg Message }
+
+func (b singleBox) Search(string, int, string) ([]Envelope, Page, error) {
+	return []Envelope{b.msg.Envelope}, Page{}, nil
+}
+
+func (b singleBox) Read(string) (Message, error) { return b.msg, nil }
+
+// A forward whose own In-Reply-To names a message the corpus never received must
+// not lose the trail its body quotes. Unlike the reply above, where the header
+// resolves and wins its slot, nothing here can place the host: the trail it
+// carries is stored and sighted but disconnected, and the host is a chain of one
+// beside it. The ingest's repair pass joins the two.
+func TestIngestLinksAForwardOntoTheTrailItsHeaderCannotPlace(t *testing.T) {
+	s := openTest(t)
+	body := "passing this on\n\n" +
+		"On Wed, 19 Aug 2026 at 10:00, Bea <bea@x.fed> wrote:\n" +
+		"> second\n" +
+		">\n" +
+		"> On Wed, 19 Aug 2026 at 09:00, Cyd <cyd@x.fed> wrote:\n" +
+		">> first\n"
+	m := Message{
+		Envelope: Envelope{
+			ID: "fwd", MessageID: "<fwd@x>", ThreadID: "t",
+			InReplyTo: "<never-received@elsewhere.example>",
+			From:      "Ana <ana@x.fed>", Subject: "Fwd: x",
+			Date:       time.Date(2026, 8, 19, 11, 0, 0, 0, time.UTC).Format(time.RFC1123Z),
+			References: []string{"<never-received@elsewhere.example>"},
+		},
+		Body: body,
+	}
+	r, err := Ingest(s, singleBox{m}, "q", Bound{})
+	if err != nil {
+		t.Fatalf("Ingest: %v", err)
+	}
+	if r.QuotedParents != 1 {
+		t.Fatalf("QuotedParents = %d, want 1 (the forward onto its trail)", r.QuotedParents)
+	}
+
+	// One chain of three, reachable from any of its members.
+	exts := []string{"mail:<fwd@x>"}
+	rows, err := s.DB().Query(`select ext_id from entries where quoted = 1`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var ext string
+		if err := rows.Scan(&ext); err != nil {
+			rows.Close()
+			t.Fatal(err)
+		}
+		exts = append(exts, ext)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if len(exts) != 3 {
+		t.Fatalf("entries = %d, want the forward and the two it quotes", len(exts))
+	}
+	for _, from := range exts {
+		chain, err := s.Chain(from)
+		if err != nil {
+			t.Fatalf("chain from %s: %v", from, err)
+		}
+		if len(chain) != 3 {
+			t.Errorf("chain from %s: got %d entries, want 3", from, len(chain))
+		}
+	}
+
+	// Re-running heals nothing: the pass is re-runnable, not cumulative.
+	if again, err := s.RepairDanglingQuoteParents(); err != nil {
+		t.Fatal(err)
+	} else if again != 0 {
+		t.Errorf("second run drew %d edges, want none", again)
+	}
+}
