@@ -134,6 +134,18 @@ func (c Client) UnreadMessageIDs() ([]string, error) {
 	return nil, fmt.Errorf("unread mail did not finish after %d pages: refusing to reconcile against a partial set", maxPages)
 }
 
+// LabelNames is every label the mailbox defines — the folders a reader sees in
+// Gmail itself, including ones with no mail filed under them yet.
+//
+// The list is the LabelCache loaded at construction, so it costs no round trip
+// at the call site: whatever the ingest already read to resolve label ids is
+// exactly the list needed here. Names, not ids, because the corpus stores what a
+// reader calls a folder. Ordering is the cache's own and is not stable, so a
+// caller that stores the list sorts it.
+func (c Client) LabelNames() []string {
+	return c.labels.AllNames()
+}
+
 // Labels the mailbox itself defines, spelled here rather than imported from the
 // corpus: this package is a transport and the corpus is a store, and a label
 // name is the mailbox's vocabulary, not either of theirs. These are the system

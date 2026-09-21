@@ -440,4 +440,30 @@ var migrations = []string{
 	`
 	alter table people add column prefer_original integer not null default 0;
 	`,
+
+	// 16: mailbox_labels — the folder list the mailbox itself defines, not the
+	// labels mail happened to arrive under.
+	//
+	// mail_detail.labels can only name a label some stored message carries, so a
+	// folder created a minute ago with nothing filed under it is invisible, and
+	// pressing refresh cannot help: the ingest re-reads a corpus, and the corpus
+	// never learned about it. This table is where the ingest records the mailbox's
+	// own list (Gmail's Users.Labels.List) so the folder list can be the mailbox's
+	// rather than a count of what was ingested.
+	//
+	// A table rather than a settings row: a label name is arbitrary text and may
+	// contain a comma, so there is no delimiter that would not need escaping. One
+	// row per label is what the thing is, and the counts beside it stay the
+	// corpus's own — see Store.Labels.
+	//
+	// An empty table means the ingest has never learned the list, which is the
+	// same answer as a host with no mailbox: the folder list falls back to the
+	// corpus-derived one rather than serving an empty list. Nothing here is
+	// deleted on a failed read either, so a temporary mailbox outage does not
+	// blank the folder list.
+	`
+	create table mailbox_labels (
+	  name text primary key
+	);
+	`,
 }
