@@ -967,9 +967,12 @@
   .mini.spy .nd.hov { opacity:1; }
   .mini.spy .nd.hov circle { r:5.4; stroke:var(--accent); stroke-width:2.2; }
   .mini.spy .nd.hov rect { stroke:var(--accent); stroke-width:2.2; }
-  /* reciprocal: hovering a row marks the message it points at. A ring rather
-     than a border colour, so it is unmistakable against both bubble states
-     (solid card and dashed quote) without shifting layout. */
+  /* Hovering a row, or the "in reply to" link on a message, marks the message it
+     names. A ring rather than a border colour, so it is unmistakable against both
+     bubble states (solid card and dashed quote) without shifting layout. It is the
+     loud mark of the pair, and both its drivers have stopped on a named message to
+     ask about it — the quiet one below answers a pointer that is only passing
+     (see `.rhov`, which is about reply LINES and not about this link). */
   .msg.mhov .bub, .sys.mhov { border-color:var(--accent);
     box-shadow:0 0 0 2.5px var(--accent), 0 1px 8px -2px var(--accent); }
   /* The same idea at a lower volume, for the reading pane's reply lines.
