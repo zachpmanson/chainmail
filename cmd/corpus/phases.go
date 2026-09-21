@@ -284,6 +284,17 @@ func runRepair(path string) error {
 		fmt.Printf("repair-graph: redrew %d parent %s from the headers their messages carry\n",
 			int(n), plural(int(n), "edge", "edges"))
 	}
+
+	// And then the hosts no header could place: a parent named but never received
+	// leaves the trail the host's own body quotes as a second, disconnected chain.
+	// Last of all, because it is the fallback for the slot a resolving header owns —
+	// run after the two passes above, a header that resolves has already taken it.
+	if n, err := s.RepairDanglingQuoteParents(); err != nil {
+		return fmt.Errorf("linking the quoted trails of hosts their headers cannot place: %w", err)
+	} else if n > 0 {
+		fmt.Printf("repair-graph: linked %d quoted %s onto the forwards that carry them\n",
+			int(n), plural(int(n), "trail", "trails"))
+	}
 	return nil
 }
 
@@ -449,8 +460,8 @@ func runWithMailbox(path string, o mailOpts, c mailingest.Mailbox) (mailingest.R
 	if err != nil {
 		return r, err
 	}
-	fmt.Printf("saw %d over %d page(s), created %d, changed %d, skipped %d draft(s), resolved %d parent edges, redrew %d from headers\n",
-		r.Seen, r.Pages, r.Created, r.Changed, r.Drafts, r.Resolved, r.Reasserted)
+	fmt.Printf("saw %d over %d page(s), created %d, changed %d, skipped %d draft(s), resolved %d parent edges, redrew %d from headers, linked %d quoted trail(s)\n",
+		r.Seen, r.Pages, r.Created, r.Changed, r.Drafts, r.Resolved, r.Reasserted, r.QuotedParents)
 	switch r.Stop {
 	case mailingest.StopExhausted:
 		fmt.Println("complete: docket had no further page")
