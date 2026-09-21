@@ -190,15 +190,19 @@ export function AnswerPress({
       aria-label={label}
       onClick={() => onPress(extId)}
     >
-      {/* The reply arrow, twice: the one glyph in the app's icon vocabulary that
-          means this — the same bent arrow the reply-tree minimap draws on its
-          nodes (see Minimap), doubled for the audience the press carries. */}
+      {/* The reply arrow, twice: the mark the line under a bubble already wears
+          (↩, see ReplyLink), drawn as a stroke glyph. Two heads, and the tail
+          starts at the INNER head's point — from there it runs out past both heads
+          and curves down clear of them. The first drawing of this ran the tail from
+          the outer head, so it crossed the inner head's lower arm on its way out
+          and the pair read as one arrow with a scratch through it; a reply-all is
+          two arrows, and nothing in it should cross anything. */}
       <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true">
-        <path d="M6.4 4.4 2.9 7.9l3.5 3.5" fill="none" stroke="currentColor"
+        <path d="M5.2 4.6 1.8 8l3.4 3.4" fill="none" stroke="currentColor"
           strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M10.6 4.4 7.1 7.9l3.5 3.5" fill="none" stroke="currentColor"
+        <path d="M9 4.6 5.6 8l3.4 3.4" fill="none" stroke="currentColor"
           strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M2.9 7.9h6.6a3 3 0 0 1 3 3v1.4" fill="none" stroke="currentColor"
+        <path d="M5.6 8h5.6a2.8 2.8 0 0 1 2.8 2.8v1" fill="none" stroke="currentColor"
           strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     </button>

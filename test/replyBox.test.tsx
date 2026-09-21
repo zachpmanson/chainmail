@@ -817,3 +817,31 @@ describe("answering an older message from its own header", () => {
     expect(bubbleOf("Cy Devlin").querySelector(".replyall")).toBeNull();
   });
 });
+
+describe("the press's own drawing", () => {
+  it("draws a glyph and keeps its words in the label", async () => {
+    handler = server(() => json(200, chainBody(exchange)));
+    await mountApp();
+    await openThread();
+    await waitFor(() => expect(bubbleOf("Bo Halvorsen")).toBeTruthy());
+
+    // The receipt's controls are icon buttons (see the stylesheet's shared rule), so
+    // the press is a drawn reply-all whose words are its label and its title. What is
+    // pinned here is that much and no more: the shape is a drawing, and a test that
+    // fixed its coordinates would make the next drawing of it a test rewrite rather
+    // than a change of one path.
+    const press = bubbleOf("Cy Devlin").querySelector(".replyall")!;
+    expect(press.textContent).toBe("");
+    expect(press.getAttribute("title")).toContain("Reply all");
+    expect(press.getAttribute("aria-label")).toContain("Reply all");
+    // The message the box already answers wears the other label, which is state
+    // rather than a second name for the press.
+    const pressed = bubbleOf("Bo Halvorsen").querySelector(".replyall")!;
+    expect(pressed.getAttribute("title")).toContain("the box below is answering");
+    const paths = [...press.querySelectorAll("svg path")];
+    // Two heads and one tail, and nothing filled: the app's icons are strokes.
+    expect(paths).toHaveLength(3);
+    expect(paths.every((p) => p.getAttribute("fill") === "none")).toBe(true);
+    expect(press.querySelector("svg")!.getAttribute("width")).toBe("18");
+  });
+});
