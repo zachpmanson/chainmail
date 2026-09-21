@@ -426,6 +426,78 @@ export function attach(doc: Document = document): () => void {
     on(stream, "mouseleave", clear);
   }
 
+  /* ---------- pointing at a reply link marks the message it answers ----------
+   *
+   * "↩ in reply to Ada Okoye, Mon 2 Mar 2026 19:15" is the one thing in a
+   * message's header that is about another message, and it makes two claims at
+   * once: which bubble this one answers, and that it is the bubble the reader
+   * thinks it is. Checking the second by following the link costs the reader the
+   * message they were reading, to look at one that usually sits somewhere above,
+   * already scrolled past — so the link answers it where the pointer already is,
+   * by lighting the message it names with the same ring the minimap's rows use
+   * (see `.mhov` in styles.css). The link and a row ask the same question about
+   * the same message, and one mark for both is what stops the two of them from
+   * disagreeing about the answer.
+   *
+   * The loud ring rather than the quiet colour the pane lights a path of reply
+   * LINES with (see `.rhov` below): those lines answer a pointer travelling
+   * through the transcript, and this pointer has stopped — on a named message, to
+   * ask about it. Marking nothing is the honest answer when the target is not on
+   * this page, which a built page can be: it carries a reply whose parent is not
+   * among its rows (see ReplyLink). A link that cannot be followed lights
+   * nothing, exactly as a minimap row does.
+   *
+   * Wired here rather than in the component because a built page is static markup
+   * with this module layered over it and no React at runtime: an `onMouseEnter`
+   * would light the ring in the dev app and nowhere else.
+   *
+   * Delegated from the document rather than bound to each link, which is the
+   * opposite of how the other pointer targets above are wired. Those are elements
+   * the page draws once and `attach` wires once; a reply link is redrawn whenever
+   * the reading pane's tree switch moves it into or out of a `.replies` box, and
+   * that switch is React state this module is never re-attached for — a listener
+   * bound to the old node would be a hover that works until the reader presses
+   * "reply tree". One listener over the document survives the redraw, and it is
+   * also what lets a page attaching once cover the links of a pane that redraws
+   * under it.
+   *
+   * The messages that were lit are remembered so that a detach can take their
+   * rings off: a pane re-attaching while the pointer rests on a link retires the
+   * listener that was going to clear the ring, and a mark left with no pointer to
+   * hold it is the one thing a hover may never leave behind.
+   */
+  const ringed = new Set<HTMLElement>();
+  const ring = (el: HTMLElement | null, lit: boolean) => {
+    if (!el) return;
+    el.classList.toggle("mhov", lit);
+    if (lit) ringed.add(el);
+    else ringed.delete(el);
+  };
+  /** The reply link an event is about, or nothing when it is about something else.
+   *  `closest` because the arrow and the label are spans inside the anchor, and the
+   *  pointer reports the innermost element it is on (`matches` would say every
+   *  movement inside a link is a fresh arrival). */
+  const linkAt = (el: EventTarget | null): HTMLAnchorElement | null =>
+    el instanceof Element ? el.closest<HTMLAnchorElement>("a.par[href^='#']") : null;
+  /** The message a link names, by the plain id in its href (see ReplyLink) rather
+   *  than by resolving the URL: the link is an in-page jump and is read as one. */
+  const named = (link: HTMLAnchorElement) =>
+    doc.getElementById(link.getAttribute("href")!.slice(1));
+  for (const type of ["mouseover", "mouseout"] as const) {
+    on(doc, type, (ev) => {
+      const link = linkAt(ev.target);
+      if (!link) return;
+      // Crossing from the arrow to the label is still the same link: only a pointer
+      // that came from outside it has arrived, and only one that left has gone.
+      if (linkAt((ev as MouseEvent).relatedTarget) === link) return;
+      ring(named(link), type === "mouseover");
+    });
+  }
+  cleanups.push(() => {
+    for (const el of ringed) el.classList.remove("mhov");
+    ringed.clear();
+  });
+
   /* ---------- hovering a chain row in the sources panel ---------- */
   for (const row of doc.querySelectorAll<HTMLElement>("[data-chain]")) {
     const root = row.dataset.chain!;

@@ -392,3 +392,113 @@ describe("pointing at a reply line", () => {
   });
 });
 
+/**
+ * The "in reply to" link, and the message it names.
+ *
+ * The link is a claim about a message, and the link is what a reader points at
+ * to check it — so what is asserted is that the pointer on the link rings the
+ * named bubble and nothing else, that a name this page does not hold rings
+ * nothing at all, and that a ring cannot outlive the pointer that made it.
+ */
+const replyLinkPage = () => {
+  document.body.innerHTML = `
+    <div class="ibread"><div class="stream">
+      <div class="msg" id="entry-0"><div class="bub">root</div></div>
+      <div class="msg" id="entry-1"><div class="bub">answer</div>
+        <a class="par" href="#entry-0"><span class="arw">&#8617;</span>
+          <span class="parlbl">in reply to Ada Okoye, Mon 2 Mar 2026 19:15</span></a>
+      </div>
+      <div class="msg" id="entry-2"><div class="bub">an answer to something this page
+        does not hold</div>
+        <a class="par" href="#entry-98"><span class="arw">&#8617;</span></a>
+      </div>
+    </div></div>`;
+  return { detach: attach(document) };
+};
+
+/** The pointer arriving on an element from elsewhere, and later leaving it: jsdom
+ *  moves no pointer, so the events a browser would send are sent here. `mouseover`
+ *  and `mouseout` with a `relatedTarget` rather than `mouseenter`/`mouseleave`,
+ *  because that is the pair the behaviour listens for — see the delegation note in
+ *  `attach`. */
+const arrive = (el: Element, from: Element = document.body) =>
+  el.dispatchEvent(new MouseEvent("mouseover", { bubbles: true, relatedTarget: from }));
+const depart = (el: Element, to: Element = document.body) =>
+  el.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: to }));
+
+describe("pointing at the in-reply-to link", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  it("rings the message the link names, and takes the ring off on the way out", () => {
+    const { detach } = replyLinkPage();
+    const link = document.querySelector<HTMLElement>('a.par[href="#entry-0"]')!;
+    const named = document.getElementById("entry-0")!;
+    expect(named.classList.contains("mhov")).toBe(false);
+
+    arrive(link);
+    expect(named.classList.contains("mhov")).toBe(true);
+    // The link's own message is not what it is claiming to answer, and no other
+    // bubble is brought into it: one pointer, one message.
+    expect(document.getElementById("entry-1")!.classList.contains("mhov")).toBe(false);
+    expect(document.getElementById("entry-2")!.classList.contains("mhov")).toBe(false);
+
+    depart(link);
+    expect(named.classList.contains("mhov")).toBe(false);
+    detach();
+  });
+
+  it("stays lit while the pointer moves between the arrow and the label", () => {
+    const { detach } = replyLinkPage();
+    const link = document.querySelector<HTMLElement>('a.par[href="#entry-0"]')!;
+    const arw = link.querySelector(".arw")!;
+    const lbl = link.querySelector(".parlbl")!;
+    const named = document.getElementById("entry-0")!;
+    // The pointer reports the innermost element it is on, so crossing from the
+    // arrow to the label is a mouseout and a mouseover — and both are about the
+    // same link, which is what must not read as leaving it.
+    arrive(arw);
+    expect(named.classList.contains("mhov")).toBe(true);
+    depart(arw, lbl);
+    expect(named.classList.contains("mhov")).toBe(true);
+    arrive(lbl, arw);
+    expect(named.classList.contains("mhov")).toBe(true);
+    depart(lbl);
+    expect(named.classList.contains("mhov")).toBe(false);
+    detach();
+  });
+
+  it("keeps working when the pane redraws the link under it", () => {
+    // Switching the reply tree re-renders the bubbles, so the anchor a reader is
+    // about to point at is not the node that was there when behaviour attached.
+    // The listener is on the document for exactly that reason.
+    const { detach } = replyLinkPage();
+    const before = document.querySelector<HTMLElement>('a.par[href="#entry-0"]')!;
+    const after = before.cloneNode(true) as HTMLElement;
+    before.replaceWith(after);
+    arrive(after);
+    expect(document.getElementById("entry-0")!.classList.contains("mhov")).toBe(true);
+    detach();
+  });
+
+  it("marks nothing for a link whose message is not on this page", () => {
+    const { detach } = replyLinkPage();
+    // A built page can carry a reply whose parent is not among its rows, and the
+    // link is still drawn: pointing at it is not a reason to throw.
+    arrive(document.querySelector<HTMLElement>('a.par[href="#entry-98"]')!);
+    expect(document.querySelectorAll(".mhov").length).toBe(0);
+    detach();
+  });
+
+  it("takes the ring off when the page detaches under the pointer", () => {
+    // The reading pane re-attaches behaviour whenever its entries change, and the
+    // pointer may be resting on a link when it does. The ring is taken off by the
+    // detach, because the listener that would have cleared it is gone with it.
+    const { detach } = replyLinkPage();
+    arrive(document.querySelector<HTMLElement>('a.par[href="#entry-0"]')!);
+    expect(document.getElementById("entry-0")!.classList.contains("mhov")).toBe(true);
+    detach();
+    expect(document.querySelectorAll(".mhov").length).toBe(0);
+  });
+});
