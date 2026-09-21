@@ -15,16 +15,24 @@ import { refusal, staleAfterMail, SAID_MS } from "./MailVerbs";
  * reader's words.
  *
  * **It answers everyone the message was addressed to, and there is still no
- * recipient field — that is the feature rather than a scoping shortcut.** The box
- * answers the newest message in this thread the mailbox holds: the server takes the
- * recipients from that message's own headers — its sender, and its original To and
- * Cc, minus the addresses of the reader's own mailbox — and there is nothing on
- * this screen that can name a different one. So a reply reaches the audience the
- * answered message already had, and no address that correspondence did not carry.
+ * recipient field — that is the feature rather than a scoping shortcut.** The server
+ * takes the recipients from the answered message's own headers — its sender, and its
+ * original To and Cc, minus the addresses of the reader's own mailbox — and there is
+ * nothing on this screen that can name an address. So a reply reaches the audience
+ * the answered message already had, and no address that correspondence did not carry.
  * That is what keeps a surface behind a loopback bind with no authentication from
  * being an outbound channel to anywhere: mail can only be answered, never
  * addressed — a host that leaves this on is one where a reader can reply to their
  * own correspondence, not one where something else can send mail as them.
+ *
+ * **Which message it answers is the reader's, and it is the whole of that choice.**
+ * By itself the box answers the newest message in this thread the mailbox holds —
+ * the last thing said that can be answered — and the one way to name another is the
+ * press in a message's own receipt (see AnswerPress): a message on this page, one the
+ * corpus holds a mailbox copy of. So the reader chooses among the messages they are
+ * reading and nothing else, which is the difference between a choice and a recipient
+ * field: an address that no message here carried is not reachable from this screen
+ * either way.
  *
  * **The quote is the server's, not this component's.** What the reader types is
  * their words alone; the message being answered is quoted and attributed by the
@@ -127,20 +135,90 @@ function names(names: string[], title: (name: string) => string) {
   ));
 }
 
+/**
+ * The press that points the box below at the message above it: "reply all", in
+ * the receipt of a bubble's header, beside the control that copies the message and
+ * the one that switches to the sender's own rendering.
+ *
+ * **It is what makes the box's target a choice, and it is the whole of that
+ * choice.** Before it, the box answered the newest message the mailbox held and
+ * there was nothing on the screen that could name a different one; now a reader
+ * who wants to answer the message that asked them something — rather than the
+ * latest line in the thread, which often answers nothing — can say so from the
+ * message itself. What it does to the audience is the rest of its name: the box's
+ * reply-all tick goes on, because a press that says "reply all" and leaves a
+ * reply to the sender alone would be a button lying about what it had done.
+ *
+ * **It still cannot name anyone.** The message is a message on this page, one the
+ * corpus holds, and who the answer goes to is still read from that message's own
+ * headers by the mailbox — so the surface behind a loopback bind with no
+ * authentication remains one that answers the reader's own correspondence rather
+ * than one that sends mail to an address somebody typed. What a reader gains here
+ * is an older message, not a new recipient.
+ *
+ * Drawn only where the caller has both things: a mailbox copy of the message to
+ * thread an answer onto (see gmailIdOf), and a box to point at it. A message
+ * recovered from somebody's quote has no mailbox copy, and a built page has no
+ * box — in both the press is left off rather than offered and refused.
+ *
+ * Pressed is which message the box is answering now, which is state of the pane
+ * rather than of this message: the newest answerable message wears it until a
+ * reader presses something else, so the one piece of the box's state a reader
+ * cannot see from here — which message, out of a thread of thirty — is legible in
+ * the thread itself.
+ */
+export function AnswerPress({
+  extId,
+  pressed,
+  onPress,
+}: {
+  /** The message this press names, as the box takes it. */
+  extId: string;
+  /** Whether the box is already answering this message. */
+  pressed: boolean;
+  onPress: (extId: string) => void;
+}) {
+  const label = pressed
+    ? "This is the message the box below is answering"
+    : "Reply all to this message, in the box at the bottom of the thread";
+  return (
+    <button
+      type="button"
+      className="replyall"
+      aria-pressed={pressed}
+      title={label}
+      aria-label={label}
+      onClick={() => onPress(extId)}
+    >
+      {/* The reply arrow, twice: the one glyph in the app's icon vocabulary that
+          means this — the same bent arrow the reply-tree minimap draws on its
+          nodes (see Minimap), doubled for the audience the press carries. */}
+      <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true">
+        <path d="M6.4 4.4 2.9 7.9l3.5 3.5" fill="none" stroke="currentColor"
+          strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M10.6 4.4 7.1 7.9l3.5 3.5" fill="none" stroke="currentColor"
+          strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M2.9 7.9h6.6a3 3 0 0 1 3 3v1.4" fill="none" stroke="currentColor"
+          strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </button>
+  );
+}
+
 export function ReplyBox({
   thread,
   answer,
   words,
+  all,
+  onAll,
+  newest,
+  aimed,
 }: {
   /** The thread being read, which is what is re-read once the answer is in it. */
   thread: { rootExtId: string };
-  /** The message being answered: the newest entry of this thread the mailbox
-   *  holds. One entry rather than the thread, because a reply is to a message —
-   *  and a message the mailbox does not hold (a line recovered from somebody
-   *  else's quote, a Slack post) cannot be answered, because there is nothing to
-   *  thread an answer onto. The caller picks it and the server refuses anything
-   *  that cannot be answered, so the two rules are kept in one place each rather
-   *  than agreed twice. */
+  /** The message being answered: by default the newest entry of this thread the
+   *  mailbox holds, and the message a press on a header's answer control names
+   *  when the reader wants an older one. See AnswerPress below. */
   answer: CorpusEntry;
   /** How that message's own bubble names it — the name and clock its head wears
    *  (see ThreadMessages' stamp words). Passed in rather than written again here:
@@ -148,18 +226,26 @@ export function ReplyBox({
    *  looking at the same message in the same pane must not be told a different
    *  clock by the reply box than by the bubble above it. */
   words: { who: string; whoTitle?: string; when: string };
+  /** Whether the answer goes to everyone the answered message was addressed to or
+   *  to its sender alone. Held by the pane rather than here, because a header's
+   *  answer control is a press about the audience as well as about the message:
+   *  "reply all" is what it says, so it is what it must turn on. */
+  all: boolean;
+  onAll: (all: boolean) => void;
+  /** Whether the message being answered is the newest one the pane could answer.
+   *  The line above the field says which message this is, and "the newest here" is
+   *  only true of one of them. */
+  newest: boolean;
+  /** How many times a header's answer control has been pressed, across the life
+   *  of this box — a count rather than a flag, because pressing the control on the
+   *  message already answered is still a press and must still bring the box up. */
+  aimed: number;
 }) {
   const queryClient = useQueryClient();
   // What the reader has written, in their own words: plain text, and no quote of
   // the message being answered — that is added on the way out, so the reader is
   // never editing around text they did not write.
   const [own, setOwn] = useState("");
-  // Whether the answer is to everyone the message was addressed to or to its
-  // sender alone. On by default, because that is what a reply in a conversation
-  // usually is and what this box has always sent — the tick is there to take
-  // people off the reply when one of them asked you something, not to ask the
-  // reader to opt into the conversation they are already in.
-  const [all, setAll] = useState(true);
   // Whether the reply carries the HTML part beside the plain text. On by default,
   // for the same reason and with the same shape as the tick above: it is what this
   // box has always sent, so the tick takes the second rendering off a reply rather
@@ -172,6 +258,32 @@ export function ReplyBox({
   const [plan, setPlan] = useState<SendResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // The box's own element, which the aim below brings to the reader. A ref rather
+  // than a document query, because this is one box among any the shell has drawn.
+  const host = useRef<HTMLDivElement | null>(null);
+
+  // A plan is a claim about the message the box was answering when it was made:
+  // its recipients, its subject, and a quote of that message in the body the
+  // reader was shown. Retarget the box and the claim is about a message it no
+  // longer names — and the second press would recompose the body for the new
+  // target while the reader checked the old one (see ship). So the plan goes, and
+  // the reader's words stay: the words are theirs, and a preview is a step they
+  // take again rather than something to be carried across.
+  useEffect(() => {
+    setPlan(null);
+  }, [answer.extId]);
+
+  // A press on a message's own answer control is an intent to write, and the box
+  // sits at the bottom of a thread the message may be screens away from — so the
+  // box comes up to the reader instead of the reader hunting for it. The field
+  // takes the cursor where it is already drawn; while a plan is up there is no
+  // field to put one in, and the reader is being shown the message they were about
+  // to send rather than being asked to write another.
+  useEffect(() => {
+    if (!aimed) return;
+    host.current?.scrollIntoView?.({ block: "center" });
+    host.current?.querySelector<HTMLTextAreaElement>("textarea")?.focus();
+  }, [aimed]);
 
   // What the last send here has to say is drawn in the shell's corner (see
   // Toasts), and what this keeps is the id of its own notification, for the
@@ -270,7 +382,7 @@ export function ReplyBox({
   }
 
   return (
-    <div className="replybox">
+    <div className="replybox" ref={host}>
       <p className="replyto">
         Replying to <span title={words.whoTitle ?? words.who}>{words.who || "the sender"}</span>
         {words.when ? `, ${words.when}` : ""}
@@ -283,7 +395,12 @@ export function ReplyBox({
         ) : (
           ", and nobody else on it"
         )}{" "}
-        — the newest message here the mailbox holds.
+        {/* Which message this is, which the reader needs to see because the box no
+            longer always answers the one they would guess: a press on an older
+            message's own control moves it, and the sentence is where that shows. */}
+        {newest
+          ? "— the newest message here the mailbox holds."
+          : "— the message you pressed reply all on, not the newest one here."}
       </p>
       {error ? (
         <p className="selfail" role="alert">
@@ -355,7 +472,7 @@ export function ReplyBox({
                   type="checkbox"
                   checked={all}
                   disabled={busy}
-                  onChange={(e) => setAll(e.target.checked)}
+                  onChange={(e) => onAll(e.target.checked)}
                 />
                 reply all
               </label>
