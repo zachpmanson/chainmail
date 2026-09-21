@@ -527,24 +527,28 @@
   .msg.o3 .org { --orgc:var(--o3); } .msg.o4 .org { --orgc:var(--o4); }
   .msg.o5 .org { --orgc:var(--o5); }
   .tm { font-size:.71rem; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
-  /* The receipt's two controls are one shape, so they read as one line of them:
-     the clip that copies the message whole, and the swap to the sender's own
-     rendering (see .origbtn further down for where each of them is drawn).
+  /* The receipt's three controls are one shape, so they read as one line of them:
+     the press that answers the message (see .replyall), the clip that copies it
+     whole, and the swap to the sender's own rendering (see .origbtn further down
+     for where each of them is drawn).
 
-     Both are icon buttons and the same box as every other one in the app — the pane
-     strip's five and the nav's pair: an 18px glyph in .25rem .3rem of padding inside
-     a transparent 1px border, which is 29.6×28. The style switch used to be a word,
-     and a word is the wrong shape for a control whose own state changes: "Toggle
-     Styles" and "loading…" are two different widths in the one place the reader is
-     looking when they press it, and beside the copy control's glyph it made the
-     line ragged. The state is the glyph now — `</>` for the sender's own markup,
-     the spinner while it is being fetched — and the pressed colour below is what
-     says which of the two renderings is on. */
-  .copyjson, .origbtn { flex:none; display:inline-flex; align-items:center; justify-content:center;
+     All three are icon buttons and the same box as every other one in the app — the
+     pane strip's five and the nav's pair: an 18px glyph in .25rem .3rem of padding
+     inside a transparent 1px border, which is 29.6×28. The style switch used to be a
+     word, and a word is the wrong shape for a control whose own state changes:
+     "Toggle Styles" and "loading…" are two different widths in the one place the
+     reader is looking when they press it, and beside the copy control's glyph it
+     made the line ragged. The state is the glyph now — `</>` for the sender's own
+     markup, the spinner while it is being fetched — and the pressed colour below
+     is what says which of the two renderings is on. The answer press is the same
+     rule: its word is "reply all", and eight characters beside two glyphs would be
+     the ragged line all over again, so the glyph carries it and the word is the
+     title, the label, and — pressed — the colour. */
+  .copyjson, .origbtn, .replyall { flex:none; display:inline-flex; align-items:center; justify-content:center;
     padding:.25rem .3rem; border:1px solid transparent; border-radius:6px;
     background:transparent; color:var(--muted); font:inherit; cursor:pointer; }
-  .copyjson:hover, .origbtn:hover { color:var(--accent); border-color:var(--line); background:var(--card); }
-  .copyjson svg, .origbtn svg { display:block; width:18px; height:18px; }
+  .copyjson:hover, .origbtn:hover, .replyall:hover { color:var(--accent); border-color:var(--line); background:var(--card); }
+  .copyjson svg, .origbtn svg, .replyall svg { display:block; width:18px; height:18px; }
   /* While the sender's part is being fetched: the same ↻ and the same 0.8s turn as
      the nav's refresh and the attachment chips (see .navrefresh .spinner), in the
      button's own 18px box. The turn is the whole of it — the word that used to sit
@@ -606,6 +610,13 @@
      message is read. */
   .hdetend { margin-left:auto; display:inline-flex; align-items:center; gap:.35rem; }
   .origbtn[aria-pressed="true"] { color:var(--accent); background:var(--mine);
+    border-color:var(--accent); }
+  /* Which message this box's press is about. The pane's reply box answers the newest
+     answerable message by default and an older one when a reader asks for it, so the
+     pressed press is the one place in the thread that says which — and it is a
+     pressed button rather than a mark on the bubble, because it is a control whose
+     state the reader set (see AnswerPress). */
+  .replyall[aria-pressed="true"] { color:var(--accent); background:var(--mine);
     border-color:var(--accent); }
   .origwhy { font-size:.66rem; color:var(--muted); font-style:italic; }
   /* The shadow host: layout only, and deliberately no colour. A rule in THIS

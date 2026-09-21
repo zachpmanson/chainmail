@@ -22,7 +22,7 @@ import { Edits } from "./Edits";
 import { Message, type StampData } from "./Message";
 import { ParticipantsPanel, castOfEntries } from "./Participants";
 import { ReplyLink, type ReplyTarget } from "./ReplyLink";
-import { ReplyBox } from "./ReplyBox";
+import { ReplyBox, AnswerPress } from "./ReplyBox";
 import { Source } from "./Source";
 
 /**
@@ -289,6 +289,21 @@ export function ThreadMessages({
   // back to the start away from where they were reading.
   const [landed, setLanded] = useState<string | null>(null);
   const landedFor = useRef<string | null>(null);
+  // Which message the reply box is answering, where the reader has named one from
+  // a message's own header (see AnswerPress): the entry's ext id, or null while the
+  // box is on its own default — the newest message here the mailbox holds. Kept as
+  // the id rather than as the entry, because the entries are re-read after a send
+  // and the message the reader chose is not a different one for having been read
+  // again; an id that no longer resolves falls back to the default by itself.
+  const [answering, setAnswering] = useState<string | null>(null);
+  // Whether that answer goes to everyone the answered message was addressed to.
+  // Held here rather than in the box because a header's press decides it as well
+  // as the message (see ReplyBox): a press that says "reply all" turns the tick on.
+  const [all, setAll] = useState(true);
+  // How many presses on those headers the pane has seen, which is what the box
+  // watches to bring itself up to the reader. A count, not a flag: pressing the
+  // control on the message the box already answers is still a press.
+  const [aimed, setAimed] = useState(0);
   // The corpus's people, by person id, as their addresses: read once for the whole
   // pane (see lib/who), because the participants panel and the reply box both join
   // against it. Here, among the hooks, rather than beside the titles it feeds — a
@@ -308,6 +323,17 @@ export function ThreadMessages({
     const detach = attach(document);
     return detach;
   }, [entries]);
+  // Another thread is another conversation, and the message the reader aimed the
+  // box at is not in it. The box goes back to its own default — the new thread's
+  // newest answerable message — and to the reply-all audience it starts with, since
+  // both were choices about a trail the reader has left. Done in an effect rather
+  // than by remounting the box: the reader's words and the two ticks are the box's
+  // own state, and the words they were typing are still theirs when they come back
+  // to a thread (see ReplyBox).
+  useEffect(() => {
+    setAnswering(null);
+    setAll(true);
+  }, [thread.rootExtId]);
   const target = newest(shown);
   useEffect(() => {
     if (!target || landedFor.current === thread.rootExtId) return;
@@ -429,8 +455,9 @@ export function ThreadMessages({
     return resolved;
   };
 
-  // The message a reply would answer: the newest entry of this thread that the
-  // mailbox holds, which is the last thing said in it that can be answered.
+  // The message a reply would answer when the reader has named none: the newest
+  // entry of this thread that the mailbox holds, which is the last thing said in it
+  // that can be answered. See `answer` below for the one case that overrides it.
   //
   // Newest rather than last drawn, because drawing the tree reorders bubbles without
   // reordering the conversation — a reply under an older message is still the
@@ -447,7 +474,28 @@ export function ThreadMessages({
   // Asked of the DRAWN entries, like every other link on this page: a hoisted
   // copy occupies no row (see the hoist above), so a box that offered to answer
   // one would be naming a message with no bubble to read it against.
-  const answer = newest(shown.filter((e) => gmailIdOf(e) !== undefined));
+  const newestAnswer = newest(shown.filter((e) => gmailIdOf(e) !== undefined));
+
+  // The one exception to the rule above, and the whole of it: a reader who pressed
+  // the answer control on an older message's header (see AnswerPress) has named the
+  // message the box answers, and this is where that is read back. The answerable
+  // test is asked again rather than trusted, because the entries are re-read after
+  // every write — a message that has lost its mailbox copy since (a twin sweep, a
+  // re-slurp) stops being an answer, and the box falls back to the newest one
+  // rather than offering a press the server must refuse.
+  const chosen = shown.find(
+    (e) => e.extId === answering && gmailIdOf(e) !== undefined,
+  );
+  const answer = chosen ?? newestAnswer;
+
+  /** Answer this message rather than the newest one: the box below is aimed at it,
+   *  the reply-all tick goes on because that is what the press says, and the press is
+   *  counted so the box can come up to the reader it was pressed for. */
+  const aim = (extId: string) => {
+    setAnswering(extId);
+    setAll(true);
+    setAimed((n) => n + 1);
+  };
 
   // The order the bubbles are drawn in and the replies that hang off each one:
   // the transcript's own order, or the reply tree when the pane's switch is on
@@ -516,6 +564,21 @@ export function ThreadMessages({
           // rows and the pane through the entries it was handed — the same mark,
           // the same words, one component (see ReplyLink).
           reply={<ReplyLink parent={replyOf(e)} />}
+          // The press that points the reply box at THIS message, drawn in the same
+          // receipt as the copy and the sender's-own-markup controls — a reader who
+          // has opened a message to see what it is is where the answer to "and what
+          // do I say to it" belongs. Only where there is something to answer: a
+          // message the mailbox does not hold cannot be threaded onto, and a press
+          // there could only be refused by the server (see AnswerPress).
+          answer={
+            gmailIdOf(e) !== undefined ? (
+              <AnswerPress
+                extId={e.extId}
+                pressed={answer?.extId === e.extId}
+                onPress={aim}
+              />
+            ) : undefined
+          }
           // A quoter's edit to a message this one quoted, drawn inside this bubble
           // exactly as a page build draws it — the same relation, the same diff,
           // the same component (see Edits and lib/edits). The derived copy it was
@@ -639,7 +702,15 @@ export function ThreadMessages({
           trail of recovered quotes and Slack posts has no message to thread a
           reply onto, and a composer there could only offer a press that fails. */}
       {answer ? (
-        <ReplyBox thread={thread} answer={answer} words={wordsOf(answer)} />
+        <ReplyBox
+          thread={thread}
+          answer={answer}
+          words={wordsOf(answer)}
+          all={all}
+          onAll={setAll}
+          newest={answer.extId === newestAnswer?.extId}
+          aimed={aimed}
+        />
       ) : null}
     </div>
   );

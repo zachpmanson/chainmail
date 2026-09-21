@@ -638,3 +638,182 @@ describe("the people a reply-all reaches", () => {
     expect(audience(mine, ME)).toEqual(["Bo Halvorsen"]);
   });
 });
+
+/**
+ * Answering an older message: the press in a header, and the box it moves.
+ *
+ * The box answers the newest answerable message in a thread by itself, which is
+ * right until it is not — the message a reader wants to answer is often the one
+ * that asked them something, and the newest line of a thread is frequently a
+ * reply that asked nothing. What is asserted here is the whole of that choice:
+ * which message is named, that the audience is the one the press names (reply
+ * all, so the tick goes on), that the press can only name a message the mailbox
+ * holds, and that a preview prepared for one message cannot be sent against
+ * another.
+ */
+
+const FIRST = "mail:<loom-cutover-0@example.fed>";
+
+/** Two messages the mailbox holds, which is the case the choice exists for: an
+ *  older one from Cy asking, and Bo's answer after it — the box answering Bo by
+ *  itself, and Cy being the one a reader has to be able to name. */
+const exchange = [
+  entry({
+    extId: FIRST,
+    ts: "2026-03-02T09:15:00Z",
+    author: "Cy Devlin",
+    subject: "Loom cutover schedule?",
+    body: "Can the fitters come on the 14th?",
+    html: "<p>Can the fitters come on the 14th?</p>",
+    permalink: mailbox("g-0"),
+    participants: [
+      { personId: 6, name: "Cy Devlin", role: "from" },
+      { personId: 1, name: "Bo Halvorsen", role: "to" },
+      { personId: ME, name: "Marit Solheim", role: "cc" },
+    ],
+  }),
+  entry({ extId: ROOT, participants: onLoom }),
+];
+
+/** The bubble a message is drawn as, by the sender its head names. */
+const bubbleOf = (author: string) =>
+  [...pane().querySelectorAll<HTMLElement>(".msg")].find(
+    (m) => m.querySelector(".nm")!.textContent === author,
+  )!;
+
+/** The press that aims the box at that message, as the pane draws it — in the
+ *  receipt, beside the controls that copy the message and switch its rendering. */
+const aimAt = (author: string) => {
+  const btn = bubbleOf(author).querySelector<HTMLButtonElement>(".hdetend .replyall")!;
+  fireEvent.click(btn);
+  return btn;
+};
+
+const toLine = () => box()!.querySelector(".replyto")!.textContent!;
+
+describe("answering an older message from its own header", () => {
+  it("names the newest answerable message until a reader asks for another", async () => {
+    handler = server(() => json(200, chainBody(exchange)));
+    await mountApp();
+    await openThread();
+
+    // The default, said in words: the newest message the mailbox holds, which is
+    // Bo's answer and not Cy's question above it.
+    expect(toLine()).toContain("Bo Halvorsen");
+    expect(toLine()).toContain("the newest message here the mailbox holds");
+    // And the press on that message reads as the state it is: the box is answering
+    // it, so the one press in the thread that says which is the pressed one.
+    expect(bubbleOf("Bo Halvorsen").querySelector(".replyall")!.getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    expect(bubbleOf("Cy Devlin").querySelector(".replyall")!.getAttribute("aria-pressed")).toBe(
+      "false",
+    );
+
+    aimAt("Cy Devlin");
+    await waitFor(() => expect(toLine()).toContain("Cy Devlin"));
+    // The line still says which message this is, because it is no longer the one a
+    // reader would guess: the box answers what the reader named, and says so.
+    expect(toLine()).toContain("not the newest one here");
+    expect(toLine()).toContain("Mon, 2 Mar 2026");
+    expect(bubbleOf("Cy Devlin").querySelector(".replyall")!.getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    expect(bubbleOf("Bo Halvorsen").querySelector(".replyall")!.getAttribute("aria-pressed")).toBe(
+      "false",
+    );
+
+    // And the message the box will answer is the one the server is asked about,
+    // which is the only claim that matters: everything else here is words.
+    fireEvent.change(field(), { target: { value: "Yes — the 14th." } });
+    press("preview");
+    await waitFor(() => expect(sends()).toHaveLength(1));
+    expect(sent(0)).toEqual({
+      entry: FIRST,
+      body: "Yes — the 14th.",
+      all: true,
+      html: true,
+      confirm: false,
+    });
+  });
+
+  it("turns the reply-all tick on, because that is what the press says", async () => {
+    handler = server(() => json(200, chainBody(exchange)));
+    await mountApp();
+    await openThread();
+
+    // A reader who had taken everyone else off the reply, and then asks to answer
+    // an older message *and* says reply all: the audience is the press's own word,
+    // so it is what the press sets rather than a tick left where it was.
+    fireEvent.click(within(box()!).getByRole("checkbox", { name: /reply all/ }));
+    expect(toLine()).toContain("nobody else");
+
+    aimAt("Cy Devlin");
+    const tick = within(box()!).getByRole("checkbox", { name: /reply all/ }) as HTMLInputElement;
+    await waitFor(() => expect(tick.checked).toBe(true));
+    // The names come back with the tick, and they are the answered message's own
+    // people: Bo was addressed by Cy's question and is on that reply.
+    expect(toLine()).toContain("cc Bo Halvorsen");
+  });
+
+  it("brings the box up to the reader who pressed it", async () => {
+    handler = server(() => json(200, chainBody(exchange)));
+    await mountApp();
+    await openThread();
+
+    // The box is at the bottom of the thread and the message pressed may be
+    // screens above it, so the press is what brings the box into view — and the
+    // field takes the cursor, because the press was an intent to write. jsdom
+    // scrolls nothing, so what is asserted is that the box asked.
+    const scrolled: string[] = [];
+    const scrolledBefore = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function (this: Element) {
+      scrolled.push(this.className);
+    };
+    try {
+      aimAt("Cy Devlin");
+      await waitFor(() => expect(scrolled).toContain("replybox"));
+      expect(document.activeElement).toBe(field());
+    } finally {
+      Element.prototype.scrollIntoView = scrolledBefore;
+    }
+  });
+
+  it("drops a preview prepared for the message it no longer answers", async () => {
+    handler = server(
+      () => json(200, chainBody(exchange)),
+      () => json(200, replyPlan(false)),
+    );
+    await mountApp();
+    await openThread();
+    fireEvent.change(field(), { target: { value: "The 14th works." } });
+    press("preview");
+    await waitFor(() => expect(box()!.querySelector(".replyplan")).toBeTruthy());
+
+    // A plan is a claim about the message the box was answering when it was made:
+    // recipients, subject and a quote of that message in the body the reader was
+    // shown. Retarget the box and the claim is about a message it no longer names
+    // — and the second press recomposes the body for the new target, so the one
+    // thing that must not survive the move is the screen the reader checked.
+    aimAt("Cy Devlin");
+    await waitFor(() => expect(box()!.querySelector(".replyplan")).toBeNull());
+    expect(box()!.querySelector(".replytext")).toBeNull();
+    // The words are still the reader's, and they stay where the reader can send
+    // them again — the press changed which message they answer, not what they say.
+    expect(field().value).toBe("The 14th works.");
+    expect(toLine()).toContain("Cy Devlin");
+  });
+
+  it("draws no press on a message the mailbox does not hold", async () => {
+    handler = server(() => json(200, chainBody(threaded)));
+    await mountApp();
+    await openThread();
+    await waitFor(() => expect(bubbleOf("Bo Halvorsen")).toBeTruthy());
+
+    // The thread above carries a line recovered from somebody's quote, which is the
+    // entry nothing can be threaded onto: there is no mailbox copy to reply to, so
+    // there is no press — rather than a press the server would refuse by name.
+    expect(bubbleOf("Bo Halvorsen").querySelector(".replyall")).toBeTruthy();
+    expect(bubbleOf("Cy Devlin").querySelector(".replyall")).toBeNull();
+  });
+});

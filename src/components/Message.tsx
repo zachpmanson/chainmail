@@ -151,6 +151,14 @@ export interface MessageProps {
   source?: ReactNode;
   /** a quoter's inline edit to text this message quoted */
   edits?: ReactNode;
+  /** The press that makes the reading pane's reply box answer THIS message,
+   *  where the caller has a box to point at it — the pane does, and a built page
+   *  does not. Not to be read as `reply` above: that node is the line naming the
+   *  message this one answers, and this one is the control that answers this
+   *  message. Drawn with the receipt's other controls, at the right end of the
+   *  to/cc line, where a reader who has opened a message to see what it is looks
+   *  for what to do with it. */
+  answer?: ReactNode;
   /** what the clip button puts on the clipboard as JSON; absent leaves the
    *  button off, since a button that copies nothing is a lie. The button rides
    *  in the header's expanded section, with the rest of the receipt. */
@@ -842,8 +850,9 @@ export function Message(p: MessageProps) {
                 "—"
               )}
             </span>
-            {p.original !== undefined || p.copyJson !== undefined ? (
+            {p.answer !== undefined || p.original !== undefined || p.copyJson !== undefined ? (
               <span className="hdetend">
+                {p.answer}
                 {p.original !== undefined ? (
                   <OriginalControl on={original.on} state={original.state} ask={original.ask} />
                 ) : null}

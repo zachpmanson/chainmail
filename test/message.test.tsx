@@ -75,13 +75,13 @@ describe("a bubble drawn from its props alone", () => {
     // The box is the stylesheet's, not the component's: jsdom computes no cascade, so
     // what is asserted here is the shape the rule states — the 18px glyph and the
     // padding the pane strip's five icon buttons and the nav's pair are built from.
-    // The receipt's two controls share the one rule, so the pair cannot drift apart.
+    // The receipt's controls share the one rule, so they cannot drift apart.
     const css = readFileSync("src/styles.css", "utf8");
-    const rule = /\.copyjson, \.origbtn \{([^}]*)\}/.exec(css)?.[1] ?? "";
+    const rule = /\.copyjson, \.origbtn, \.replyall \{([^}]*)\}/.exec(css)?.[1] ?? "";
     expect(rule).toContain("padding:.25rem .3rem");
     expect(rule).toContain("border-radius:6px");
     expect(rule).toContain("border:1px solid transparent");
-    const glyph = /\.copyjson svg, \.origbtn svg \{([^}]*)\}/.exec(css)?.[1] ?? "";
+    const glyph = /\.copyjson svg, \.origbtn svg, \.replyall svg \{([^}]*)\}/.exec(css)?.[1] ?? "";
     expect(glyph).toContain("width:18px");
     expect(glyph).toContain("height:18px");
 
@@ -100,6 +100,42 @@ describe("a bubble drawn from its props alone", () => {
     expect(btn.className).toBe("copyjson");
     expect(btn.querySelector("svg rect")).toBeNull();
     expect(btn.querySelector("svg path")).not.toBeNull();
+  });
+
+  it("draws the answer press in the receipt with the other controls, where it is given one", () => {
+    // The press is the pane's, so its words and its state are the caller's — what
+    // this component owes is where it goes: the receipt's right end, on the same
+    // line as the copy control and the sender's-own-markup switch, which is the
+    // line a reader who has opened a message to see what it is reads. Pressed is
+    // passed through as the button's own state, because which message the pane's
+    // reply box is answering is the one thing here that is about the pane rather
+    // than about this message.
+    const { container } = draw({
+      answer: (
+        <button type="button" className="replyall" aria-pressed={false}>
+          answer
+        </button>
+      ),
+      copyJson: { hello: "world" },
+    });
+    const end = container.querySelector(".hdet .hdetend")!;
+    expect([...end.children].map((el) => el.className)).toEqual(["replyall", "copyjson"]);
+    expect(end.textContent).toBe("answer");
+
+    // And a caller with no box to point at draws no press: a built page has no
+    // reply box, so a button that would aim nothing is left off rather than drawn
+    // dead — the same rule the other furniture here follows.
+    expect(draw().container.querySelector(".replyall")).toBeNull();
+    // The line itself is still the receipt's, and only drawn where it has something
+    // to hold: the press alone is enough to draw it.
+    const only = draw({
+      answer: (
+        <button type="button" className="replyall">
+          answer
+        </button>
+      ),
+    }).container;
+    expect(only.querySelector(".hdetend")).not.toBeNull();
   });
 
   it("states the message's own subject in the receipt, where it had one", () => {
