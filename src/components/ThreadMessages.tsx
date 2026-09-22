@@ -705,6 +705,10 @@ export function ThreadMessages({
         <ReplyBox
           thread={thread}
           answer={answer}
+          // The answered message's own element id, off the map the bubbles and
+          // the reply links are named from — so the box's header rings the same
+          // bubble the link under it does, and neither can name a second one.
+          answers={anchor(indexOf.get(answer.extId) ?? 0)}
           words={wordsOf(answer)}
           all={all}
           onAll={setAll}
