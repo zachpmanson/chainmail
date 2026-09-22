@@ -315,13 +315,31 @@
 
      The box is the app's glyph size, 18px — the same as the svg glyphs in every
      other icon button in the app (see .ibicon svg) — and it is what the button's
-     own size is made of. The character is set at that size too, so its ink comes
-     out looking like a drawn glyph of the same box rather than smaller than one. */
-  .navrefresh .spinner { display:inline-block; width:1.125rem; height:1.125rem;
-    font-size:1.125rem; line-height:1.125rem; vertical-align:middle; }
-  .navrefresh .spinner::before { content:"\21BB"; }
-  .navrefresh.busy .spinner { animation:spin .8s linear infinite; }
+     own size is made of.
+
+     `line-height:normal`, not the glyph's own 1em, and that is the whole of the
+     wobble fix. A transform turns about the box centre, and the glyph's ink is
+     NOT centred in its em box: measured in a real browser (DejaVu Sans, 18px),
+     the ink's bounding box centre sits 1.75px above the 18px box centre, so the
+     ink orbits a point 1.75px off and the glyph visibly wobbles. The font's own
+     line box (`normal`, ~21px against the 18px box) puts the baseline low enough
+     that the ink centre lands on the box centre — measured residual 0.25px,
+     against 1.75px with `line-height:1em`. A forced box is NOT the cause: the
+     chip's shrink-to-fit spinner wobbles by the same 0.097em, only smaller. Do
+     not put a `line-height` back on `.spinner`. */
+  .spinner { display:inline-block; line-height:normal; vertical-align:middle; }
+  .spinner::before { content:"\21BB"; }
+  /* One size for the two icon buttons' glyphs; the chip keeps the .ameta size it
+     inherits and its own em box (see .att.busy .spinner). */
+  .navrefresh .spinner, .origbtn.busy .spinner { width:1.125rem; height:1.125rem;
+    font-size:1.125rem; }
+  /* One turn, declared once: the nav's icon only turns while the button is
+     working; the other two spinners exist only while their thing is. */
+  .navrefresh.busy .spinner, .origbtn.busy .spinner, .att.busy .spinner {
+    animation:spin .8s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    .navrefresh.busy .spinner, .origbtn.busy .spinner, .att.busy .spinner { animation:none; } }
   .navsearch svg { flex:none; opacity:.8; }
   /* The app's own pages are workspaces, not documents: an inbox is a list and a
      reading pane, and both want the width the window has. Anything not named
@@ -550,16 +568,11 @@
   .copyjson:hover, .origbtn:hover, .replyall:hover { color:var(--accent); border-color:var(--line); background:var(--card); }
   .copyjson svg, .origbtn svg, .replyall svg { display:block; width:18px; height:18px; }
   /* While the sender's part is being fetched: the same ↻ and the same 0.8s turn as
-     the nav's refresh and the attachment chips (see .navrefresh .spinner), in the
-     button's own 18px box. The turn is the whole of it — the word that used to sit
-     here changed the button's width mid-fetch, which moved the receipt's line under
-     the hand of the one reader who was watching it. */
+     the nav's refresh and the attachment chips (see .spinner), in the button's own
+     18px box. The turn is the whole of it — the word that used to sit here changed
+     the button's width mid-fetch, which moved the receipt's line under the hand of
+     the one reader who was watching it. */
   .origbtn.busy { cursor:progress; }
-  .origbtn.busy .spinner { display:inline-block; width:1.125rem; height:1.125rem;
-    font-size:1.125rem; line-height:1.125rem; vertical-align:middle;
-    animation:spin .8s linear infinite; }
-  .origbtn.busy .spinner::before { content:"\21BB"; }
-  @media (prefers-reduced-motion: reduce) { .origbtn.busy .spinner { animation:none; } }
   .tz { font-size:.9em; opacity:.75; }
   /* an inferred zone must not read as a stated one */
   .tz.tzi { opacity:.55; border-bottom:1px dotted currentColor; cursor:help; }
@@ -719,10 +732,12 @@
      that is out asking for something should not read as idle. */
   .att.busy { border-color:var(--accent); cursor:progress; }
   .att.busy .ameta { color:var(--fg); }
-  .att.busy .spinner { display:inline-block;
-    vertical-align:.02em; animation:spin .8s linear infinite; }
-  .att.busy .spinner::before { content:"\21BB"; }
-  @media (prefers-reduced-motion: reduce) { .att.busy .spinner { animation:none; } }
+  /* The chip's spinner is the .spinner base (see .navrefresh .spinner) at the
+     .ameta size it inherits, in an em box of its own: the base's `line-height:
+     normal` only centres the ink when the box is the 1em the two buttons force,
+     and a chip-sized spinner inheriting the chip's 1.45 line box would keep the
+     same 0.097em wobble. */
+  .att.busy .spinner { height:1em; vertical-align:.02em; }
   /* A chip with a thumbnail centres on the picture instead of the text baseline,
      which is what the other chips align to. Left as its own rule rather than
      changing .att, so a chip without a picture keeps sitting on the baseline of
