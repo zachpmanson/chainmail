@@ -993,6 +993,54 @@ func TestFindTwinWillNotConvergeAnAnnotatedBlock(t *testing.T) {
 	}
 }
 
+// Two questions from one person, as a client renders them: the greeting and the
+// sign-off are shared, and common words inside the two questions land next to
+// each other in both. Neither message answers the other.
+const (
+	loaAsked = `Hi Sam,
+
+Do you happen to have the LOA for Kanimbla itself?
+
+Thanks,
+Kim`
+	loaAskedOther = `Hi Sam,
+
+Do you have an LOA for site 0440272051LC004? Could you also confirm if this
+is a new site the customer recently moved into?
+
+Since this turned out to be a tariff site, I need to request the half-hourly
+data required for the pricing schedule.
+
+Thanks,
+Kim`
+)
+
+// The refusal above has a counterpart, and it is the one that costs: two
+// different messages from one person must not read as a modified copy of each
+// other. Nothing else stands in the way here — the gates that keep them from
+// being twins are not consulted by FindDerived, so the positional measure is the
+// only thing between a coincidence and a derived claim. That claim is not
+// harmless: it takes the deeper block's parent slot and blocks the nesting edge
+// that would have held the two together, which is a trail arriving in pieces.
+func TestTwoQuestionsFromOnePersonAreNotAModifiedCopy(t *testing.T) {
+	s := open(t)
+	kim := person(t, s, "kim.alvarez@wattle.fed", "Kim Alvarez")
+	sam := person(t, s, "sam.rivers@quarry.fed", "Sam Rivers")
+	sent := twinAt(t, "2026-05-20 01:38:14")
+
+	mailbox(t, s, kim, "loa@wattle.fed", loaAsked, sent)
+	h := host(t, s, sam, "reply@quarry.fed", sent.Add(3*time.Hour))
+	recovered(t, s, kim, "loa-other", loaAskedOther, sent.Add(10*time.Hour), h)
+
+	d, ok, err := FindDerived(s, kim, sent.Add(10*time.Hour), loaAskedOther, "", "thread-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Fatalf("the second question was filed as a modified copy of entry %d", d.Base)
+	}
+}
+
 // A machine-generated report is far too long to align, and there is nothing to
 // place: its requote holds no word the mailbox copy lacks, so wherever those
 // words sit nothing is lost by dropping it. Declining on length alone would leave

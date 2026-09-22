@@ -83,6 +83,26 @@ func TestDivergencesHoldsBackWhereBothTextsDiverge(t *testing.T) {
 	}
 }
 
+// The other way base-adjacency is satisfied without anybody having typed
+// anything: two different messages from one person. A greeting and a sign-off
+// are shared, and common words inside the two questions land next to each other
+// in both, so the second question reads as words inserted into the first. Both
+// texts are here passing through each other, and neither is the other's base.
+func TestDivergencesHoldsBackWhereTwoMessagesPassThroughEachOther(t *testing.T) {
+	base := Tokens("hi sam do you happen to have the loa for kanimbla itself thanks kim")
+	later := Tokens("hi sam do you have an loa for site 0440272051lc004 could you also " +
+		"confirm if this is a new site the customer recently moved into since this turned " +
+		"out to be a tariff site i need to request the half hourly data required for the " +
+		"pricing schedule thanks kim")
+	d := Divergences(base, later)
+	if d.Inside != 0 {
+		t.Fatalf("divergence = %+v, want no run read as an insertion", d)
+	}
+	if d.Astride == 0 {
+		t.Fatalf("divergence = %+v, want the run counted astride", d)
+	}
+}
+
 // Align has to give the anchors, not just how many: a length cannot say where a
 // gap between two matches falls.
 func TestAlignReportsAnchorsInOrder(t *testing.T) {

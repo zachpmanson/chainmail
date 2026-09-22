@@ -268,6 +268,103 @@ func TestAnAnswerInsideAQuotedMessageIsADerivedCopy(t *testing.T) {
 	}
 }
 
+// The same two blocks, one quoted inside the other, in somebody else's forward.
+// The nesting is the reply graph: the forward answers the first block, the first
+// block answers the second, the second answers the third. Filing the deeper block
+// as a modified copy of the shallower one breaks that: the copy's parent slot is
+// taken by the base, the edge above it can no longer be drawn, and the trail the
+// forward carries arrives in two pieces.
+func TestTwoMessagesFromOnePersonQuotedTogetherStayOneTrail(t *testing.T) {
+	s := openTest(t)
+	body := "passing this on\n\n" +
+		"On Wed, 20 May 2026 at 21:38, Kim Alvarez <kim.alvarez@wattle.fed> wrote:\n" +
+		"> Hi Sam,\n" +
+		">\n" +
+		"> Do you happen to have the LOA for Kanimbla itself?\n" +
+		">\n" +
+		"> Thanks,\n" +
+		"> Kim\n" +
+		">\n" +
+		"> On Wed, 20 May 2026 at 11:38, Kim Alvarez <kim.alvarez@wattle.fed> wrote:\n" +
+		">> Hi Sam,\n" +
+		">>\n" +
+		">> Do you have an LOA for site 0440272051LC004? Could you also confirm if this\n" +
+		">> is a new site the customer recently moved into?\n" +
+		">>\n" +
+		">> Since this turned out to be a tariff site, I need to request the half-hourly\n" +
+		">> data required for the pricing schedule.\n" +
+		">>\n" +
+		">> Thanks,\n" +
+		">> Kim\n" +
+		">>\n" +
+		">> On Wed, 20 May 2026 at 09:04, Ana Whitlock <ana.whitlock@moana.fed> wrote:\n" +
+		">>> the Kanimbla meter is on the last invoice, I will send it over\n"
+	host, err := Put(s, Message{
+		Envelope: Envelope{
+			ID: "fwd", MessageID: "<fwd@x>", ThreadID: "t",
+			From: "Ana Whitlock <ana.whitlock@moana.fed>", Subject: "Fwd: the Kanimbla meter",
+			Date: time.Date(2026, 5, 20, 22, 10, 0, 0, time.UTC).Format(time.RFC1123Z),
+		},
+		Body: body,
+	})
+	if err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+
+	// The three blocks, found by the words only one of them holds.
+	block := func(fragment string) (int64, string) {
+		t.Helper()
+		var id int64
+		var ext string
+		if err := s.DB().QueryRow(
+			`select id, ext_id from entries where quoted = 1 and body_text like ?`,
+			"%"+fragment+"%").Scan(&id, &ext); err != nil {
+			t.Fatalf("no quoted block holding %q: %v", fragment, err)
+		}
+		return id, ext
+	}
+	first, firstExt := block("Kanimbla itself")
+	second, secondExt := block("0440272051LC004")
+	third, thirdExt := block("on the last invoice")
+
+	for _, e := range []struct {
+		child, parent int64
+		what          string
+	}{
+		{host.ID, first, "the forward answers the block it quotes"},
+		{first, second, "the first question answers the second"},
+		{second, third, "the second question answers the third"},
+	} {
+		var parent sql.NullInt64
+		if err := s.DB().QueryRow(
+			`select parent_id from entries where id = ?`, e.child).Scan(&parent); err != nil {
+			t.Fatal(err)
+		}
+		if !parent.Valid || parent.Int64 != e.parent {
+			t.Errorf("%s: parent = %v, want %d", e.what, parent, e.parent)
+		}
+	}
+	var derived int
+	if err := s.DB().QueryRow(`select count(*) from entries where derived = 1`).Scan(&derived); err != nil {
+		t.Fatal(err)
+	}
+	if derived != 0 {
+		t.Errorf("%d blocks were filed as modified copies, want none", derived)
+	}
+
+	// One trail of four, walkable from any of them.
+	for _, from := range []string{"mail:<fwd@x>", firstExt, secondExt, thirdExt} {
+		chain, err := s.Chain(from)
+		if err != nil {
+			t.Fatalf("chain from %s: %v", from, err)
+		}
+		if len(chain) != 4 {
+			t.Errorf("chain from %s: got %d entries, want the forward and the three it quotes",
+				from, len(chain))
+		}
+	}
+}
+
 // A reply quotes what it answers AND names it in In-Reply-To. The header is a
 // statement about the graph and the nesting is a reading of the text, so the
 // host keeps the parent its header names: the edge that says "the host replied
