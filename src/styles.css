@@ -1299,6 +1299,29 @@
   font-size:.74rem; color:var(--muted); cursor:pointer; }
 .replytick input { margin:0; accent-color:var(--accent); cursor:pointer; }
 .replytick:has(input:disabled) { opacity:.55; cursor:default; }
+/* The plan's audience, as the reader arranges it: one chip per address the mailbox
+   resolved. A chip is a tick and a name — untick to take that person off the reply,
+   tick to put them back — and, while it is on, the press that sends it in the other
+   list. The chips read as part of the sentence above rather than as a second list of
+   it: the to/cc clause prints exactly the ticked ones, so what the line says is what
+   the chips hold. An address that is off stays on screen, struck through — a control
+   that disappeared when unticked could not be unticked, and the reader would have to
+   run the preview again to change their mind — and the one address left in to cannot
+   be unticked at all, because the mailbox refuses a reply with nobody on it. */
+.recipchip { display:inline-flex; align-items:center; gap:.25rem; margin:0 .15rem;
+  padding:.05rem .3rem .05rem .25rem; border:1px solid var(--line); border-radius:10px;
+  background:var(--bg); font-size:.72rem; }
+.recipkeep { display:inline-flex; align-items:center; gap:.3rem; cursor:pointer; min-width:0; }
+.recipkeep input { margin:0; accent-color:var(--accent); cursor:pointer; flex:none; }
+.recipname { overflow-wrap:anywhere; }
+.recipmove { flex:none; padding:0 .2rem; font:inherit; font-size:.66rem; color:var(--muted);
+  background:none; border:none; border-radius:4px; cursor:pointer; }
+.recipmove:hover { color:var(--accent); background:var(--card); }
+.recipchip.off { color:var(--muted); border-style:dashed; }
+.recipchip.off .recipname { text-decoration:line-through; }
+.recipkeep:has(input:disabled) { opacity:.55; cursor:default; }
+.recipmove:disabled { opacity:.55; cursor:default; }
+.recipmove:disabled:hover { color:var(--muted); background:none; }
 
 /* --- what a write leaves to say --- */
 /* The bottom-right corner, over every page. These are accounts of work that is

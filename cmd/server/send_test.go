@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -142,6 +143,111 @@ func TestThePreviewSendsNothingAndAnswersTheMailboxsOwnPlan(t *testing.T) {
 	}
 	if entries := chainExtIDs(t, h, extAda1); contains(entries, "mail:<sent-4@loomworks.example>") {
 		t.Errorf("a preview filed a message: %v", entries)
+	}
+}
+
+// The audience goes back to the client as addresses, not only as the headers they
+// will be written into: the two say the same thing — the strings are these
+// rendered — and it is the addresses a client offers a reader to narrow the reply
+// with and names back on the send (see SendRequest's to/cc). What is checked here
+// is that they are the answered message's own, with the names it gave them, in its
+// order, and that they are the whole of the set a send may choose from.
+func TestThePlanCarriesTheAudienceItMaySendToAsAddresses(t *testing.T) {
+	h, _ := sendServer(t)
+
+	res := h.do(t, "POST", "/v1/send",
+		[]byte(`{"entry":"`+extAda3+`","body":"The 14th works."}`))
+	if res.status != 200 {
+		t.Fatalf("status %d: %s", res.status, res.body)
+	}
+	loadAPI(t).assert(t, "SendResponse", res.body)
+
+	got := decode[sendResponse](t, res)
+	wantTo := []recipient{{Name: "Bo Halvorsen", Address: "bo@fjordline.example"}}
+	if !slices.Equal(got.ToRecipients, wantTo) {
+		t.Errorf("toRecipients = %+v, want %+v", got.ToRecipients, wantTo)
+	}
+	wantCc := []recipient{{Name: "Cy Okafor", Address: "cy@loomworks.example"}}
+	if !slices.Equal(got.CcRecipients, wantCc) {
+		t.Errorf("ccRecipients = %+v, want %+v", got.CcRecipients, wantCc)
+	}
+	// The header and the addresses agree, which is what makes a chip and the line
+	// above it the same claim rather than two.
+	if got.To != "Bo Halvorsen <bo@fjordline.example>" {
+		t.Errorf("to = %q, want it rendered from the address above", got.To)
+	}
+}
+
+// A caller may take an address off the reply, and may move one between To and Cc:
+// the chosen set is what the mailbox is asked for and what the plan it answers with
+// carries, so the chips a reader arranged are the message that leaves. And it may
+// not add anyone — an address the answered message did not carry is refused where
+// the message's own audience is known (see docket's mail.WithRecipients, which the
+// mailbox enforces), so the fake here reproduces the half a handler can get wrong:
+// it selects from the assembled audience and cannot invent a member of it.
+func TestAChosenAudienceNarrowsTheReplyToTheMessagesOwnAddresses(t *testing.T) {
+	h, fake := sendServer(t)
+
+	// Cy was on the message and is moved from cc into to; Carl was not on it at all.
+	res := h.do(t, "POST", "/v1/send",
+		[]byte(`{"entry":"`+extAda3+`","body":"The 14th works.",`+
+			`"to":["bo@fjordline.example","cy@loomworks.example"],`+
+			`"cc":["carl@example.net"]}`))
+	if res.status != 200 {
+		t.Fatalf("status %d: %s", res.status, res.body)
+	}
+	loadAPI(t).assert(t, "SendResponse", res.body)
+
+	got := decode[sendResponse](t, res)
+	if got.To != "Bo Halvorsen <bo@fjordline.example>, Cy Okafor <cy@loomworks.example>" {
+		t.Errorf("to = %q, want the two the caller chose", got.To)
+	}
+	if got.Cc != "" {
+		t.Errorf("cc = %q, want nobody: carl was not on the message, whatever was asked for", got.Cc)
+	}
+	// The handler handed the choice down rather than deciding it, which is the only
+	// way the mailbox can be the thing that refuses a widened set.
+	if len(fake.replies) != 1 {
+		t.Fatalf("the mailbox saw %+v, want one call", fake.replies)
+	}
+	if !slices.Equal(fake.replies[0].to, []string{"bo@fjordline.example", "cy@loomworks.example"}) {
+		t.Errorf("the mailbox was asked for to %v", fake.replies[0].to)
+	}
+	if !slices.Equal(fake.replies[0].cc, []string{"carl@example.net"}) {
+		t.Errorf("the mailbox was asked for cc %v", fake.replies[0].cc)
+	}
+}
+
+// The empty list a caller can send and an absent one are different facts: absent
+// leaves the list as the mailbox assembled it, while an empty cc takes everybody
+// off it. That is the one thing a client cannot say any other way, and it is what
+// makes "nobody else on this reply" reachable without dropping the whole audience.
+func TestAChosenAudienceCanEmptyTheCcAndTheSendCarriesIt(t *testing.T) {
+	h, fake := sendServer(t)
+
+	res := h.do(t, "POST", "/v1/send",
+		[]byte(`{"entry":"`+extAda3+`","body":"The 14th works.","confirm":true,`+
+			`"to":["bo@fjordline.example"],"cc":[]}`))
+	if res.status != 200 {
+		t.Fatalf("status %d: %s", res.status, res.body)
+	}
+	loadAPI(t).assert(t, "SendResponse", res.body)
+
+	got := decode[sendResponse](t, res)
+	if !got.Sent {
+		t.Error("a confirmed send did not send")
+	}
+	if got.Cc != "" || strings.Contains(string(res.body), `"cc"`) {
+		t.Errorf("a reply with cc emptied still carries a cc: %s", res.body)
+	}
+	if len(fake.replies) != 1 {
+		t.Fatalf("the mailbox saw %+v, want one send", fake.replies)
+	}
+	if fake.replies[0].cc == nil || len(fake.replies[0].cc) != 0 {
+		t.Errorf("the mailbox was asked for cc %v, want an empty list rather than none", fake.replies[0].cc)
+	}
+	if !slices.Equal(fake.replies[0].to, []string{"bo@fjordline.example"}) {
+		t.Errorf("the mailbox was asked for to %v", fake.replies[0].to)
 	}
 }
 

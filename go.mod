@@ -3,7 +3,7 @@ module github.com/zachpmanson/chainmail
 go 1.26.4
 
 require (
-	github.com/zachpmanson/docket/gmail v0.0.0-20260917221645-ad1a35bd2bdd
+	github.com/zachpmanson/docket/gmail v0.0.0-20260922111146-033bb89eaa8d
 	golang.org/x/net v0.57.0
 	google.golang.org/api v0.293.0
 	modernc.org/sqlite v1.57.0
