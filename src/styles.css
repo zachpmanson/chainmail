@@ -1249,6 +1249,24 @@
   line-height:1.45; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
   color:var(--fg); background:var(--bg); border:1px solid var(--line);
   border-radius:6px; }
+/* The same preview when the reply goes out with its HTML part: the rendering the
+   recipient's client gets rather than the lines that will be typed. The frame
+   matches .replytext above so the two forms are one panel changing shape, but the
+   text is read the way the app reads a body — the blockquote a quote, the
+   paragraphs prose — because the whole point of the tick is which of the two the
+   correspondent sees. The bytes inside it are the server's and are not touched
+   here; these rules shape the frame and the composed elements' own margins, as
+   .bd's do for a body. */
+.replyhtml { margin:.4rem 0 0; padding:.5rem .6rem; max-height:22rem;
+  overflow:auto; overflow-wrap:anywhere; font-size:.84rem; line-height:1.5;
+  color:var(--fg); background:var(--bg); border:1px solid var(--line);
+  border-radius:6px; }
+.replyhtml p { margin:.4rem 0; }
+.replyhtml p:first-of-type { margin-top:0; }
+.replyhtml blockquote { margin:.4rem 0 0; padding-left:.6rem;
+  border-left:2px solid var(--line); color:var(--muted); }
+.replyhtml img { max-width:100%; height:auto; }
+.replyhtml table { min-width:0; max-width:100%; }
 /* The box's own buttons sit at the right end rather than the left. The box is
    the last thing in the reading pane and its action is the last thing in the
    box, so the eye that has finished reading the plan lands on the press that

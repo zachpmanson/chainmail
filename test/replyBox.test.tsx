@@ -133,10 +133,21 @@ const threaded = [
   }),
 ];
 
+/** The HTML part the server composes beside the text, as the plan carries it back:
+ *  the reader's words as paragraphs, and the answered message in the blockquote a
+ *  client folds. The same message as `body`, marked up — which is the thing the
+ *  preview has to draw when that is the form going out. */
+const HTML_PART =
+  "<p>The 14th works.</p>\n" +
+  "<p>On Wed 11 Mar 2026 17:40 AEST, Bo Halvorsen &lt;bo@fjordline.example&gt; wrote:</p>\n" +
+  '<blockquote class="gmail_quote">\n<p>Roof access is fine from the 14th.</p>\n</blockquote>\n';
+
 /** What the server answers a send with: the recipient and subject its own headers
- *  give, and the whole body with the quote in it. The same three fields for the
- *  preview and the send, which is what lets a client show one and send the other. */
-const replyPlan = (sent: boolean) => ({
+ *  give, and the whole body with the quote in it. The same fields for the preview
+ *  and the send, which is what lets a client show one and send the other — and the
+ *  HTML part only when the reply is going out with it, so its presence is the
+ *  response's own answer to which rendering travels. */
+const replyPlan = (sent: boolean, html = true) => ({
   entry: ROOT,
   to: "Bo Halvorsen <bo@fjordline.example>",
   cc: "Cy Okafor <cy@loomworks.example>, carl@example.net",
@@ -145,6 +156,7 @@ const replyPlan = (sent: boolean) => ({
     "The 14th works.\n\n" +
     "On Wed 11 Mar 2026 17:40 AEST, Bo Halvorsen <bo@fjordline.example> wrote:\n" +
     "> Roof access is fine from the 14th.\n",
+  ...(html ? { html: HTML_PART } : {}),
   sent,
   ...(sent ? { gmailId: "g-9" } : {}),
 });
@@ -236,6 +248,10 @@ async function mountApp() {
 
 const pane = () => document.querySelector(".ibread") as HTMLElement;
 const box = () => pane().querySelector(".replybox") as HTMLElement | null;
+/** The plan's body, whichever form the reply will go out in: the HTML rendering
+ *  when the tick is on and the text `<pre>` when it is off. What a test waiting
+ *  for "the plan is up" waits for without asserting which form it drew. */
+const planBody = () => box()!.querySelector(".replytext, .replyhtml");
 const field = () => screen.getByLabelText("Your reply") as HTMLTextAreaElement;
 const press = (name: string) => fireEvent.click(within(box()!).getByRole("button", { name }));
 
@@ -396,11 +412,18 @@ describe("answering a message from the pane", () => {
     // And which forms it goes in, since that is the other thing the reader can
     // change and the other thing the two-step is there to let them check.
     expect(shown.querySelector(".replynote")!.textContent).toContain("text and HTML");
-    // The body, quote and all, as the exact lines that will be sent.
-    const text = shown.querySelector(".replytext")!.textContent!;
-    expect(text).toContain("The 14th works.");
-    expect(text).toContain("> Roof access is fine from the 14th.");
-    expect(text).toContain("wrote:");
+    // The body is drawn in the form that is going out, not the other one. With the
+    // html tick on the reply travels with its HTML part, so what the reader checks
+    // is that rendering — the words as paragraphs and the message being answered
+    // inside the blockquote a client folds — rather than the plain-text lines their
+    // correspondent will not receive. The text `<pre>` is the drawing for the
+    // tick-off case, in the test below.
+    const rendered = shown.querySelector(".replyhtml")!;
+    expect(shown.querySelector(".replytext")).toBeNull();
+    expect(rendered.innerHTML).toContain("<p>The 14th works.</p>");
+    expect(rendered.innerHTML).toContain('<blockquote class="gmail_quote">');
+    expect(rendered.innerHTML).toContain("<p>Roof access is fine from the 14th.</p>");
+    expect(rendered.textContent).toContain("wrote:");
     // The field is gone while the plan is up: a reply being sent is not a reply
     // being edited, and the text under the reader's cursor would be the one thing
     // they cannot check.
@@ -452,7 +475,7 @@ describe("answering a message from the pane", () => {
   it("sends the words alone when the html tick is cleared", async () => {
     handler = server(
       () => json(200, chainBody(threaded)),
-      () => json(200, replyPlan(false)),
+      () => json(200, replyPlan(false, false)),
     );
     await mountApp();
     await openThread();
@@ -488,6 +511,10 @@ describe("answering a message from the pane", () => {
     // quote are untouched, so the reader's check of them still stands.
     const note = box()!.querySelector(".replynote")!.textContent!;
     expect(note).toContain("plain text alone");
+    // And what is drawn agrees with the sentence: no HTML half came back, so the
+    // text part is the whole message and it is drawn as the lines that will be
+    // sent — the quote marks the server added, which is the thing being checked.
+    expect(box()!.querySelector(".replyhtml")).toBeNull();
     expect(box()!.querySelector(".replytext")!.textContent).toContain(
       "> Roof access is fine from the 14th.",
     );
@@ -541,13 +568,13 @@ describe("answering a message from the pane", () => {
       expect(document.querySelector(".toast")!.textContent).toContain("Answered Bo Halvorsen"),
     );
     expect(box()!.querySelector(".pullnote")).toBeNull();
-    expect(box()!.querySelector(".replytext")).toBeNull();
+    expect(planBody()).toBeNull();
     expect(field().value).toBe("");
   });
 
   it("says it once, and says the last one", async () => {
     await write("The 14th works.");
-    await waitFor(() => expect(box()!.querySelector(".replytext")).toBeTruthy());
+    await waitFor(() => expect(planBody()).toBeTruthy());
     press("send this reply");
     await waitFor(() => expect(document.querySelectorAll(".toast")).toHaveLength(1));
 
@@ -556,7 +583,7 @@ describe("answering a message from the pane", () => {
     // be recalled, so two accounts of two of them is a reader counting.
     fireEvent.change(field(), { target: { value: "And the fitters?" } });
     press("preview");
-    await waitFor(() => expect(box()!.querySelector(".replytext")).toBeTruthy());
+    await waitFor(() => expect(planBody()).toBeTruthy());
     press("send this reply");
 
     await waitFor(() => expect(sends()).toHaveLength(4));
@@ -797,7 +824,7 @@ describe("answering an older message from its own header", () => {
     // thing that must not survive the move is the screen the reader checked.
     aimAt("Cy Devlin");
     await waitFor(() => expect(box()!.querySelector(".replyplan")).toBeNull());
-    expect(box()!.querySelector(".replytext")).toBeNull();
+    expect(planBody()).toBeNull();
     // The words are still the reader's, and they stay where the reader can send
     // them again — the press changed which message they answer, not what they say.
     expect(field().value).toBe("The 14th works.");

@@ -276,6 +276,14 @@ func TestTheReplyGoesOutInBothForms(t *testing.T) {
 			t.Errorf("the HTML part is missing %q:\n%s", want, body.HTML)
 		}
 	}
+	// And the plan answers the HTML half back, because by default that is the form
+	// the reply goes out in and the pane draws its preview from it: a reader shown
+	// the text part while the HTML part travels would be checking a rendering their
+	// correspondent never receives — the quote a `blockquote` on the way out and
+	// `> ` lines on screen.
+	if got := decode[sendResponse](t, res); got.HTML != body.HTML {
+		t.Errorf("the plan does not carry the HTML part that was handed to the mailbox")
+	}
 	// And the response is the plan of the text part: it is the form the pane shows,
 	// and the contract carries one body rather than a pair of them.
 	if got := decode[sendResponse](t, res); got.Body != body.Text {
@@ -313,6 +321,15 @@ func TestTheReplyGoesOutAsTextAloneWhenAsked(t *testing.T) {
 		if !strings.Contains(body.Text, want) {
 			t.Errorf("the text part is missing %q:\n%s", want, body.Text)
 		}
+	}
+	// And the plan says so, by not carrying an HTML half at all: the field's own
+	// presence is the answer to which rendering travels, so a preview draws the text
+	// part and no client has to agree about a flag it sent.
+	if got := decode[sendResponse](t, res); got.HTML != "" {
+		t.Errorf("a text-alone plan carries an HTML part:\n%s", got.HTML)
+	}
+	if strings.Contains(string(res.body), `"html"`) {
+		t.Errorf("a text-alone plan carries an html field: %s", res.body)
 	}
 	if got := decode[sendResponse](t, res); got.Body != body.Text {
 		t.Errorf("the plan's body is not the text part that was sent")

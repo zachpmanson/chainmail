@@ -3431,7 +3431,7 @@
       },
       "SendResponse": {
         "type": "object",
-        "description": "The reply as the mailbox has it, and whether this call sent it. The same four fields are answered by a preview and by a send, so what went out can be checked against the plan a reader was shown rather than trusted.",
+        "description": "The reply as the mailbox has it, and whether this call sent it. The same fields are answered by a preview and by a send, so what went out can be checked against the plan a reader was shown rather than trusted.",
         "required": [
           "entry",
           "to",
@@ -3461,7 +3461,11 @@
           },
           "body": {
             "type": "string",
-            "description": "The whole message text: the reader's words, then the message being answered, quoted one level in under an attribution line that names it the way its own bubble does."
+            "description": "The whole message text: the reader's words, then the message being answered, quoted one level in under an attribution line that names it the way its own bubble does. This is the text part; `html` carries the same message marked up when the reply is going out with it."
+          },
+          "html": {
+            "type": "string",
+            "description": "The HTML part of the reply, composed by the server from the same reading of the words as `body` and handed to the mailbox beside it: the reader's words as paragraphs, and the message being answered inside a `blockquote` a client folds. Absent when the reply goes as text alone (`html: false` on the request) rather than an empty string — its presence is the answer to which of the two renderings travels, so a preview can draw the form that is going out rather than the one that is not."
           },
           "sent": {
             "type": "boolean",

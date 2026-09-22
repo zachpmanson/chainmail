@@ -436,13 +436,35 @@ export function ReplyBox({
                 , cc <strong>{plan.cc}</strong>
               </>
             ) : null}
-            , as <strong>{plan.subject}</strong>, in <strong>{html ? "text and HTML" : "plain text alone"}</strong>. Your words come first and the message you
+            , as <strong>{plan.subject}</strong>, in <strong>{plan.html ? "text and HTML" : "plain text alone"}</strong>. Your words come first and the message you
             are answering is quoted under them.
           </p>
-          {/* The body as it will be sent, whitespace and all: a quote is line by
-              line, and a reply that reflowed on its way out would not be this
-              text. */}
-          <pre className="replytext">{plan.body}</pre>
+          {/* The body as it will be sent, in the form it will be sent in. The html
+              tick decides whether the reply carries its HTML part, and the server
+              hands that part back on the plan — so what is drawn is the rendering
+              that is going out rather than the other one: the reader's words as
+              paragraphs and the message being answered inside the blockquote a
+              client folds. With the tick off there is no HTML half and the text
+              part is the whole message, so it is drawn as the lines that will be
+              sent, whitespace and all: a quote is line by line, and a reply that
+              reflowed on its way out would not be this text.
+
+              Either way the bytes are the server's and are rendered as they are:
+              the HTML was composed by spec.ComposeReply, from the same reading of
+              the reader's words as the text beside it, and a second pass here —
+              sanitising or restyling it — would be a second answer to what is
+              being sent. It goes in this stylesheet rather than a shadow root for
+              the reason the two are not the same thing: mountOriginal holds a
+              sender's own document, with their own stylesheet and their own class
+              names to contain (see lib/original). Here there is neither — this is
+              the app's own markup, composed by the same package that composes
+              every body the pane already draws this way — so the blockquote and
+              the paragraphs are meant to read as the app reads mail. */}
+          {plan.html ? (
+            <div className="replyhtml" dangerouslySetInnerHTML={{ __html: plan.html }} />
+          ) : (
+            <pre className="replytext">{plan.body}</pre>
+          )}
           <div className="opmact replyacts">
             <button
               type="button"
