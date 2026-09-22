@@ -426,18 +426,19 @@ export function attach(doc: Document = document): () => void {
     on(stream, "mouseleave", clear);
   }
 
-  /* ---------- pointing at a reply link marks the message it answers ----------
+  /* ---------- pointing at a claim about a message marks that message ----------
    *
-   * "↩ in reply to Ada Okoye, Mon 2 Mar 2026 19:15" is the one thing in a
-   * message's header that is about another message, and it makes two claims at
-   * once: which bubble this one answers, and that it is the bubble the reader
-   * thinks it is. Checking the second by following the link costs the reader the
-   * message they were reading, to look at one that usually sits somewhere above,
-   * already scrolled past — so the link answers it where the pointer already is,
-   * by lighting the message it names with the same ring the minimap's rows use
-   * (see `.mhov` in styles.css). The link and a row ask the same question about
-   * the same message, and one mark for both is what stops the two of them from
-   * disagreeing about the answer.
+   * Two things on this page name another message and can be checked where the
+   * pointer already is: "↩ in reply to Ada Okoye, Mon 2 Mar 2026 19:15" under a
+   * bubble's header, and the reply box's own "Replying to Ada Okoye, …" line at
+   * the foot of the thread. Each makes two claims at once: which message this one
+   * answers, and that it is the message the reader thinks it is. Checking the
+   * second by following the link costs the reader the message they were reading,
+   * to look at one that usually sits somewhere above, already scrolled past — so
+   * both answer it where the pointer already is, by lighting the message they
+   * name with the same ring the minimap's rows use (see `.mhov` in styles.css).
+   * The two and a minimap row ask the same question about the same message, and
+   * one mark for all of them is what stops them from disagreeing about the answer.
    *
    * The loud ring rather than the quiet colour the pane lights a path of reply
    * LINES with (see `.rhov` below): those lines answer a pointer travelling
@@ -453,13 +454,13 @@ export function attach(doc: Document = document): () => void {
    *
    * Delegated from the document rather than bound to each link, which is the
    * opposite of how the other pointer targets above are wired. Those are elements
-   * the page draws once and `attach` wires once; a reply link is redrawn whenever
-   * the reading pane's tree switch moves it into or out of a `.replies` box, and
-   * that switch is React state this module is never re-attached for — a listener
-   * bound to the old node would be a hover that works until the reader presses
-   * "reply tree". One listener over the document survives the redraw, and it is
-   * also what lets a page attaching once cover the links of a pane that redraws
-   * under it.
+   * the page draws once and `attach` wires once; these are redrawn whenever the
+   * reading pane's tree switch moves a reply link into or out of a `.replies` box,
+   * or whenever the box is aimed at a different message, and that is React state
+   * this module is never re-attached for — a listener bound to the old node would
+   * be a hover that works until the reader presses "reply tree". One listener over
+   * the document survives the redraw, and it is also what lets a page attaching
+   * once cover the links of a pane that redraws under it.
    *
    * The messages that were lit are remembered so that a detach can take their
    * rings off: a pane re-attaching while the pointer rests on a link retires the
@@ -473,24 +474,34 @@ export function attach(doc: Document = document): () => void {
     if (lit) ringed.add(el);
     else ringed.delete(el);
   };
-  /** The reply link an event is about, or nothing when it is about something else.
-   *  `closest` because the arrow and the label are spans inside the anchor, and the
-   *  pointer reports the innermost element it is on (`matches` would say every
-   *  movement inside a link is a fresh arrival). */
-  const linkAt = (el: EventTarget | null): HTMLAnchorElement | null =>
-    el instanceof Element ? el.closest<HTMLAnchorElement>("a.par[href^='#']") : null;
-  /** The message a link names, by the plain id in its href (see ReplyLink) rather
-   *  than by resolving the URL: the link is an in-page jump and is read as one. */
-  const named = (link: HTMLAnchorElement) =>
-    doc.getElementById(link.getAttribute("href")!.slice(1));
+  /** The element a hover is about, and the message id it names, or nothing when
+   *  the event is about something else. Two elements make such a claim and both
+   *  state it the same way — a plain element id, not a resolved node: the reply
+   *  link in its href (see ReplyLink), the box's header in its `data-answers`
+   *  (see ReplyBox). Reading the id and resolving it here, rather than letting
+   *  each element carry the node it means, is what keeps the two in step with the
+   *  bubble ids: a link that jumps to a message and a header that rings it must
+   *  name the same element, and the pane's anchor map is the one answer.
+   *  `closest` because the pointer reports the innermost element it is on, and the
+   *  arrow, the label and the names inside the header are all inside the element
+   *  that makes the claim. */
+  const claimAt = (el: EventTarget | null): { el: Element; id: string } | null => {
+    if (!(el instanceof Element)) return null;
+    const link = el.closest<HTMLAnchorElement>("a.par[href^='#']");
+    if (link) return { el: link, id: link.getAttribute("href")!.slice(1) };
+    const header = el.closest<HTMLElement>("[data-answers]");
+    const id = header?.getAttribute("data-answers");
+    return header && id ? { el: header, id } : null;
+  };
   for (const type of ["mouseover", "mouseout"] as const) {
     on(doc, type, (ev) => {
-      const link = linkAt(ev.target);
-      if (!link) return;
-      // Crossing from the arrow to the label is still the same link: only a pointer
-      // that came from outside it has arrived, and only one that left has gone.
-      if (linkAt((ev as MouseEvent).relatedTarget) === link) return;
-      ring(named(link), type === "mouseover");
+      const claim = claimAt(ev.target);
+      if (!claim) return;
+      // Crossing from the arrow to the label, or from a name in the header to the
+      // words beside it, is still the same claim: only a pointer that came from
+      // outside it has arrived, and only one that left has gone.
+      if (claimAt((ev as MouseEvent).relatedTarget)?.el === claim.el) return;
+      ring(doc.getElementById(claim.id), type === "mouseover");
     });
   }
   cleanups.push(() => {

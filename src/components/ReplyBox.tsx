@@ -212,6 +212,7 @@ export function AnswerPress({
 export function ReplyBox({
   thread,
   answer,
+  answers,
   words,
   all,
   onAll,
@@ -224,6 +225,13 @@ export function ReplyBox({
    *  mailbox holds, and the message a press on a header's answer control names
    *  when the reader wants an older one. See AnswerPress below. */
   answer: CorpusEntry;
+  /** Where that message's own bubble is on the page — the element id the pane's
+   *  anchor map gives it (see ThreadMessages' anchor), so the header below can
+   *  name the same element the reply link under that bubble names. Passed in
+   *  rather than recomputed here: a second id map inside this box would be a
+   *  second answer to "which element is this message", and the reply link, the
+   *  bubble's own id and this header must all give the same one. */
+  answers: string;
   /** How that message's own bubble names it — the name and clock its head wears
    *  (see ThreadMessages' stamp words). Passed in rather than written again here:
    *  the box says "replying to Lena Whitfield, Mon 2 Mar 2026 09:15", and a reader
@@ -387,7 +395,14 @@ export function ReplyBox({
 
   return (
     <div className="replybox" ref={host}>
-      <p className="replyto">
+      {/* The header says which message this box answers, and it is pointed at to
+          check that claim — so it carries the answered message's element id in
+          `data-answers`, which the document's delegated listener rings the named
+          bubble for (see behaviour.ts). An attribute rather than an anchor: the
+          box sits at the bottom of the thread to be typed in, and a link would
+          scroll the reader away from it. The whole line makes the claim, so the
+          attribute is on the paragraph rather than on any name inside it. */}
+      <p className="replyto" data-answers={answers}>
         Replying to <span title={words.whoTitle ?? words.who}>{words.who || "the sender"}</span>
         {words.when ? `, ${words.when}` : ""}
         {all && others.length ? (
