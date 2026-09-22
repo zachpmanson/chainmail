@@ -244,6 +244,42 @@ func TestOriginalCarriesTheBodyCanvasAsAHostRule(t *testing.T) {
 	}
 }
 
+func TestOriginalGivesABareTableItsBorderRules(t *testing.T) {
+	// HTML leaves a table naked and browsers draw it as a grid of nothing, which
+	// is the gap the app's canvas fills: a bare <table> in the sender's markup
+	// comes back with the canvas's collapsed borders and cell padding, and the
+	// rules are plain table / th / td rather than :host-qualified because that is
+	// what the shadow tree holds.
+	got := originalBody(t, `<body><table><tr><td>a</td><th>b</th></tr></table></body>`)
+	for _, want := range []string{
+		"table{border-collapse:collapse}",
+		"table,th,td{border:1px solid black}",
+		"th,td{padding:.2rem .5rem}",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the canvas is missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestOriginalLetsASenderTableRuleOverrideTheCanvas(t *testing.T) {
+	// The canvas is emitted first at the same specificity as the sender's own
+	// stylesheet, so a sender who states their own table rules keeps their own
+	// look: the last declaration holds.
+	got := originalBody(t, `<html><head><style>table { border: 0 }</style></head><body><table><tr><td>a</td></tr></table></body></html>`)
+	canvas := strings.Index(got, "table,th,td{border:1px solid black}")
+	sender := strings.Index(got, "table { border: 0 }")
+	if canvas < 0 {
+		t.Fatalf("the canvas's table rules are not in the fragment: %q", got)
+	}
+	if sender < 0 {
+		t.Fatalf("the sender's own table rule is missing: %q", got)
+	}
+	if canvas > sender {
+		t.Errorf("the canvas's table rules must come before the sender's, so the sender's override them: %q", got)
+	}
+}
+
 func TestOriginalRefusesACanvasThatIsNotAColour(t *testing.T) {
 	// A presentational attribute is not a place to accept arbitrary CSS: a
 	// semicolon in a bgcolor could add a declaration this pass never saw.
