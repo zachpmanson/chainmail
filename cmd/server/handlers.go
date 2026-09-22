@@ -1475,7 +1475,7 @@ func (s *server) sendReply(w http.ResponseWriter, r *http.Request) {
 
 	out := sendResponse{
 		Entry: target.ExtID, To: plan.To, Cc: plan.Cc, Subject: plan.Subject, Body: plan.Body,
-		Sent: plan.GmailID != "",
+		HTML: body.HTML, Sent: plan.GmailID != "",
 	}
 	if out.Sent {
 		out.GmailID = plan.GmailID
@@ -1577,7 +1577,13 @@ type sendResponse struct {
 	Cc      string `json:"cc,omitempty"`
 	Subject string `json:"subject"`
 	Body    string `json:"body"`
-	Sent    bool   `json:"sent"`
+	// HTML is the HTML part of the reply, composed by spec.ComposeReply and handed
+	// to the mailbox beside the text — so a preview can draw the form that is going
+	// out rather than the form that is not. Absent when the reply goes as text alone
+	// (`html: false`), rather than an empty string: presence IS the answer to which
+	// of the two renderings travels, and there is no third state to spell.
+	HTML string `json:"html,omitempty"`
+	Sent bool   `json:"sent"`
 	// GmailID is the id of the message that went out, and is absent from a preview:
 	// nothing has an id until it exists.
 	GmailID string `json:"gmailId,omitempty"`

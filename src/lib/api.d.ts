@@ -1568,7 +1568,7 @@ export interface components {
             /** @description False (or absent) prepares the reply and sends nothing, answering with the plan; true sends it. A client that forgets the field therefore previews rather than sends. */
             confirm?: boolean;
         };
-        /** @description The reply as the mailbox has it, and whether this call sent it. The same four fields are answered by a preview and by a send, so what went out can be checked against the plan a reader was shown rather than trusted. */
+        /** @description The reply as the mailbox has it, and whether this call sent it. The same fields are answered by a preview and by a send, so what went out can be checked against the plan a reader was shown rather than trusted. */
         SendResponse: {
             /** @description The message this reply answers, echoed back so a client does not have to infer it from the request it sent. */
             entry: string;
@@ -1587,8 +1587,10 @@ export interface components {
              * @example Re: Solar install quote: dates
              */
             subject: string;
-            /** @description The whole message text: the reader's words, then the message being answered, quoted one level in under an attribution line that names it the way its own bubble does. */
+            /** @description The whole message text: the reader's words, then the message being answered, quoted one level in under an attribution line that names it the way its own bubble does. This is the text part; `html` carries the same message marked up when the reply is going out with it. */
             body: string;
+            /** @description The HTML part of the reply, composed by the server from the same reading of the words as `body` and handed to the mailbox beside it: the reader's words as paragraphs, and the message being answered inside a `blockquote` a client folds. Absent when the reply goes as text alone (`html: false` on the request) rather than an empty string — its presence is the answer to which of the two renderings travels, so a preview can draw the form that is going out rather than the one that is not. */
+            html?: string;
             /** @description Whether this call sent it. False means this was the preview and nothing was written to the mailbox. */
             sent: boolean;
             /** @description The id of the message that went out, which is what the corpus filings and any later read name it by. Absent from a preview: nothing has an id until it exists. */
