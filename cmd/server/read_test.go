@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"net/mail"
 	"slices"
 	"strings"
 	"testing"
@@ -57,6 +58,11 @@ type fakeReply struct {
 	body gmailclient.ReplyBody
 	all  bool
 	send bool
+	// to and cc are the audience the caller chose, when it chose one: nil is the
+	// request that left the list as the mailbox assembled it, which is the older
+	// client's shape and a different fact from a chosen list that happens to equal
+	// the assembled one.
+	to, cc []string
 }
 
 func (f *fakeMailbox) SetUnread(id string, unread bool) ([]string, error) {
@@ -79,19 +85,96 @@ func (f *fakeMailbox) SetUnread(id string, unread bool) ([]string, error) {
 // The audience follows what it was asked for: the rest of the message's addresses
 // are only on the reply when all is set, which is what makes a request that forgot
 // the flag — or quietly dropped it — visible here rather than in the answer's cc.
-func (f *fakeMailbox) Reply(id string, body gmailclient.ReplyBody, all, send bool) (gmailclient.ReplyPlan, error) {
-	f.replies = append(f.replies, fakeReply{id: id, body: body, all: all, send: send})
+// A chosen to/cc is then applied within that audience, the way docket applies one
+// (it can select and re-split, never add): a name outside the assembled set is
+// dropped rather than invented, so a handler that forwarded a widened list would
+// show up in the answer.
+func (f *fakeMailbox) Reply(id string, body gmailclient.ReplyBody, opts gmailclient.ReplyOptions) (gmailclient.ReplyPlan, error) {
+	f.replies = append(f.replies, fakeReply{id: id, body: body, all: opts.All, send: opts.Send, to: opts.To, cc: opts.Cc})
 	if err := f.fail[id]; err != nil {
 		return gmailclient.ReplyPlan{}, err
 	}
-	plan := gmailclient.ReplyPlan{To: f.to[id], Subject: f.subject[id], Body: body.Text}
-	if all {
-		plan.Cc = f.cc[id]
+	plan := gmailclient.ReplyPlan{
+		To: f.to[id], Subject: f.subject[id], Body: body.Text,
+		ToRecipients: parseRecipients(f.to[id]),
 	}
-	if send {
+	if opts.All {
+		plan.Cc = f.cc[id]
+		plan.CcRecipients = parseRecipients(f.cc[id])
+	}
+	if opts.To != nil || opts.Cc != nil {
+		to, cc := opts.To, opts.Cc
+		if to == nil {
+			to = addressesOf(plan.ToRecipients)
+		}
+		if cc == nil {
+			cc = addressesOf(plan.CcRecipients)
+		}
+		pool := append(append([]gmailclient.Recipient{}, plan.ToRecipients...), plan.CcRecipients...)
+		plan.ToRecipients = selectRecipients(pool, to)
+		plan.CcRecipients = selectRecipients(pool, cc)
+		plan.To, plan.Cc = renderRecipients(plan.ToRecipients), renderRecipients(plan.CcRecipients)
+	}
+	if opts.Send {
 		plan.GmailID = f.sentID
 	}
 	return plan, nil
+}
+
+// parseRecipients is a header's address list as the plan's recipients, keeping
+// the display names: what the fake answers with is the mailbox's own reading of
+// its headers, the way docket's is.
+func parseRecipients(header string) []gmailclient.Recipient {
+	if strings.TrimSpace(header) == "" {
+		return nil
+	}
+	list, err := mail.ParseAddressList(header)
+	if err != nil {
+		return nil
+	}
+	out := make([]gmailclient.Recipient, 0, len(list))
+	for _, a := range list {
+		out = append(out, gmailclient.Recipient{Name: a.Name, Address: a.Address})
+	}
+	return out
+}
+
+// selectRecipients picks the named addresses out of the pool, in the order they
+// were named: an address not in the pool is not on the reply, which is the limit
+// being checked.
+func selectRecipients(pool []gmailclient.Recipient, names []string) []gmailclient.Recipient {
+	out := make([]gmailclient.Recipient, 0, len(names))
+	for _, name := range names {
+		for _, r := range pool {
+			if strings.EqualFold(r.Address, strings.TrimSpace(name)) {
+				out = append(out, r)
+				break
+			}
+		}
+	}
+	return out
+}
+
+func addressesOf(list []gmailclient.Recipient) []string {
+	out := make([]string, 0, len(list))
+	for _, r := range list {
+		out = append(out, r.Address)
+	}
+	return out
+}
+
+// renderRecipients is a list as a header carries it — the same shape the real
+// plan renders, so a test's expected string is the one a reader would see.
+func renderRecipients(list []gmailclient.Recipient) string {
+	parts := make([]string, 0, len(list))
+	for _, r := range list {
+		if r.Name == "" {
+			parts = append(parts, r.Address)
+			continue
+		}
+		parts = append(parts, r.Name+" <"+r.Address+">")
+	}
+	return strings.Join(parts, ", ")
 }
 
 // Read is what the handler files a sent message by: the same read the ingest does,

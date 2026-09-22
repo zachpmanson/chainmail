@@ -88,12 +88,14 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Answer one message the corpus holds — everyone it was addressed to — and file the answer into the corpus.
+         * Answer one message the corpus holds, within the audience it carried, and file the answer into the corpus.
          * @description The third write this surface makes to the mailbox, and the only one that creates something. One message is answered, threaded onto the message it replies to by the reply headers the mailbox builds, and the answer is filed into the corpus in the same request so the thread the reader is looking at shows it rather than waiting for the next ingest. If that filing fails the reply has still been sent: the failure is logged and the call still answers 200, because the mailbox is the source of truth and the corpus catches up.
          *
-         *     Reply-all, and there is deliberately no recipient in the request. The message answered is named by its corpus ext id, and who the reply goes to and what it is called come from that message's own headers: its sender (Reply-To when it has one, else From) in `to`, and the rest of its audience — the original To and Cc, each address once — in `cc`, minus every address the mailbox doing the replying owns. That last part is the mailbox's answer, not the caller's: mail is usually addressed to a send-as alias rather than to the account's own name, so it is the alias set that decides, and a reply to everyone is never a reply that cc's its own reader. A surface that can only answer mail the corpus already holds has no arbitrary recipient — no address to type, no address that the answered message did not already carry, no way for a page behind a loopback bind with no authentication to become an outbound channel — which is what makes this a reading tool that can reply rather than a mail-sending endpoint.
+         *     Reply-all, and no address enters the request from the caller's keyboard. The message answered is named by its corpus ext id, and who the reply goes to and what it is called come from that message's own headers: its sender (Reply-To when it has one, else From) in `to`, and the rest of its audience — the original To and Cc, each address once — in `cc`, minus every address the mailbox doing the replying owns. That last part is the mailbox's answer, not the caller's: mail is usually addressed to a send-as alias rather than to the account's own name, so it is the alias set that decides, and a reply to everyone is never a reply that cc's its own reader. A surface that can only answer mail the corpus already holds has no arbitrary recipient — no address to type that the answered message did not already carry, no way for a page behind a loopback bind with no authentication to become an outbound channel — which is what makes this a reading tool that can reply rather than a mail-sending endpoint.
          *
-         *     Whether the rest of the audience is on the reply is the one thing the caller decides: `all` narrows the reply to the person who wrote and cannot widen it past the message's own headers, so both settings share the one property that matters here — the recipients are not the caller's to name.
+         *     The request's own `to` and `cc` then choose WITHIN that audience, and each names addresses the plan itself carries (see the response's `toRecipients`/`ccRecipients`): a reply can be narrowed to fewer of the people the message reached, and one of them moved between To and Cc, while an address the answered message did not carry — and an address belonging to this mailbox — is refused rather than quietly dropped.
+         *
+         *     So what the caller decides about the audience is which part of it this reply carries: `all` chooses the audience it starts from — everyone the message was addressed to, or the person who wrote — and `to`/`cc` take people off it or move them between the two lists. Neither can widen it past the message's own headers, so both settings share the one property that matters here: no recipient on a reply is one the answered message did not carry.
          *
          *     A reply is one message in two renderings: the plain text, and the same words as HTML with the answered message quoted inside a `blockquote`, composed together so the reader's words, the subject and the heading cannot differ between them. The quote is the one part of a reply this server did not write — the HTML part carries the answered message's own markup where it had any, and its text where it did not, so answering an HTML mail sends the mail rather than a transcript of it. That markup passes the same allowlist every body in the reading pane passes, so a reply can relay to its recipients nothing the page would refuse to render. An `html` field of false sends the words alone, in text.
          *
@@ -1543,7 +1545,7 @@ export interface components {
                 skipped: number;
             }[];
         };
-        /** @description A reply: which message is being answered, what the reader has to say, whether the conversation's other participants are on it, whether the HTML part goes with the text, and whether this call is the preview or the send. There is no recipient field — the recipients are the ones the answered message's own headers carried, and the addresses belonging to this mailbox are left off them. */
+        /** @description A reply: which message is being answered, what the reader has to say, which part of the answered message's own audience it carries, whether the HTML part goes with the text, and whether this call is the preview or the send. There is no field a caller can name a new recipient in: `to` and `cc` pick from the addresses the answered message's own headers carried, and the addresses belonging to this mailbox are left off them. */
         SendRequest: {
             /**
              * @description The corpus ext id of the message being answered, as a thread read carries it in `entries[].extId`. One entry rather than a chain: a reply is to a message, and which thread it belongs to is the mailbox's answer by way of the reply headers. An entry with no mailbox copy — a message recovered from somebody's quote, a Slack post — is refused, because there is nothing to thread against.
@@ -1556,10 +1558,24 @@ export interface components {
              */
             body: string;
             /**
-             * @description Whether the reply answers the message's whole audience — its sender in `to`, the rest of it in `cc` — or its sender alone. Absent means everyone, which is what this endpoint has always answered, so an older client keeps the behaviour it had. It is not a recipient list and cannot become one: the addresses are the answered message's own either way, so no value of this field reaches an address the message did not carry. Answering a dozen people when one asked you something is a different act from answering the person who asked, which is why it is the caller's to say.
+             * @description Whether the reply answers the message's whole audience — its sender in `to`, the rest of it in `cc` — or its sender alone. Absent means everyone, which is what this endpoint has always answered, so an older client keeps the behaviour it had. It is the audience the reply starts from, not a recipient list: the addresses are the answered message's own either way, so no value of this field reaches an address the message did not carry, and `to`/`cc` below can only take people off the set it chose. Answering a dozen people when one asked you something is a different act from answering the person who asked, which is why it is the caller's to say.
              * @example true
              */
             all?: boolean;
+            /**
+             * @description The addresses this reply is to carry in To, each one the plan's own (see the response's `toRecipients`). Absent leaves To as the mailbox assembled it, so a caller changing one list need not restate the other. An empty To is refused — a message with nobody on it is not a narrower version of this one — and an address the answered message did not carry is refused too, which is what keeps this a choice about the message's audience rather than a recipient field. One address appears once, in one list.
+             * @example [
+             *       "ada@loomworks.example"
+             *     ]
+             */
+            to?: string[];
+            /**
+             * @description The addresses this reply is to carry in Cc, chosen from the plan's own the way `to` is. Absent leaves Cc as the mailbox assembled it; an empty array drops everyone the reply-all audience had put there, which is the one thing a caller can say about Cc that an absent field cannot.
+             * @example [
+             *       "bo@fjordline.example"
+             *     ]
+             */
+            cc?: string[];
             /**
              * @description Whether the reply carries the HTML part beside the plain text: the same words marked up, with the message being answered in a `blockquote` a client folds. Absent means it does, which is what this endpoint has always sent, so an older client sends the message it had. The text part is unchanged either way — the HTML is a second rendering of it, never the source — so turning this off does not change what the reply says, only what it looks like.
              * @example true
@@ -1573,15 +1589,19 @@ export interface components {
             /** @description The message this reply answers, echoed back so a client does not have to infer it from the request it sent. */
             entry: string;
             /**
-             * @description The sender of the message being answered: its Reply-To when it has one and its From otherwise, as that message's own header states it, names included — not a name the corpus resolved. Nothing here lets a caller choose it.
+             * @description The sender of the message being answered: its Reply-To when it has one and its From otherwise, as that message's own header states it, names included — not a name the corpus resolved. A caller can leave it off the reply by naming a different audience in the request's `to`, but nothing here lets a caller name an address the message did not carry.
              * @example Ada Okoye <ada@loomworks.example>
              */
             to: string;
             /**
-             * @description Everyone else the answered message was addressed to: its original To and then its Cc, in order, each address once, with the addresses belonging to this mailbox left out. Absent when the message went to the reader alone, rather than an empty string.
+             * @description Everyone else the answered message was addressed to: its original To and then its Cc, in order, each address once, with the addresses belonging to this mailbox left out. This is the list the mailbox assembled, so a reply the request narrowed to fewer people answers with fewer addresses here. Absent when the message went to the reader alone, rather than an empty string.
              * @example Bo Halvorsen <bo@loomworks.example>, carl@example.net
              */
             cc?: string;
+            /** @description `to` as addresses rather than as the header they will be written into, each with the display name the answered message gave it, in the order it carried them. This is the set a client offers a reader to narrow the reply with: what it shows is the whole of what the request's `to` may name, so the chips on a preview and the header that goes out cannot disagree. */
+            toRecipients?: components["schemas"]["Recipient"][];
+            /** @description `cc` as addresses, the same way and for the same reason as `toRecipients`. */
+            ccRecipients?: components["schemas"]["Recipient"][];
             /**
              * @description The subject the mailbox will use: the answered message's own, with one `Re:` in front when it did not already carry one.
              * @example Re: Solar install quote: dates
@@ -1595,6 +1615,19 @@ export interface components {
             sent: boolean;
             /** @description The id of the message that went out, which is what the corpus filings and any later read name it by. Absent from a preview: nothing has an id until it exists. */
             gmailId?: string;
+        };
+        /** @description One address a reply carries: the bare address, and the display name the message being answered gave it. The address is what a message is sent to and what the request's `to`/`cc` name it by; the name is what a reader is shown. A plan's recipients are the whole of the audience it may use, which is what keeps a reply to the people the answered message already reached. */
+        Recipient: {
+            /**
+             * @description The display name the answered message carried the address with, absent when it carried none.
+             * @example Ada Okoye
+             */
+            name?: string;
+            /**
+             * @description The address itself, which is what the reply is sent to.
+             * @example ada@loomworks.example
+             */
+            address: string;
         };
         /** @description One chain's read state: which conversation, and the state every mailbox message in it should be left in. */
         MarkReadRequest: {

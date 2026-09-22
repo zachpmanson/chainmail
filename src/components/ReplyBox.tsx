@@ -14,16 +14,18 @@ import { refusal, staleAfterMail, SAID_MS } from "./MailVerbs";
  * message, one field, plain text, and the message being answered quoted under the
  * reader's words.
  *
- * **It answers everyone the message was addressed to, and there is still no
- * recipient field — that is the feature rather than a scoping shortcut.** The server
- * takes the recipients from the answered message's own headers — its sender, and its
- * original To and Cc, minus the addresses of the reader's own mailbox — and there is
- * nothing on this screen that can name an address. So a reply reaches the audience
- * the answered message already had, and no address that correspondence did not carry.
- * That is what keeps a surface behind a loopback bind with no authentication from
- * being an outbound channel to anywhere: mail can only be answered, never
- * addressed — a host that leaves this on is one where a reader can reply to their
- * own correspondence, not one where something else can send mail as them.
+ * **It answers everyone the message was addressed to, and the only addresses it can
+ * name are the ones that message carried — that is the feature rather than a scoping
+ * shortcut.** The server takes the recipients from the answered message's own headers
+ * — its sender, and its original To and Cc, minus the addresses of the reader's own
+ * mailbox — and hands them back with the plan. Nothing on this screen can type an
+ * address: the plan's own recipients are the whole of the set a send may name, so a
+ * reader can take somebody off the reply, put them back, or move them between To and
+ * Cc, and cannot reach anyone the answered message did not already reach. That is
+ * what keeps a surface behind a loopback bind with no authentication from being an
+ * outbound channel to anywhere: mail is answered by the people it was addressed to
+ * and by nobody else — a host that leaves this on is one where a reader can reply to
+ * their own correspondence, not one where something else can send mail as them.
  *
  * **Which message it answers is the reader's, and it is the whole of that choice.**
  * By itself the box answers the newest message in this thread the mailbox holds —
@@ -53,12 +55,13 @@ import { refusal, staleAfterMail, SAID_MS } from "./MailVerbs";
  * a quote of a long message is the bulk of what will be sent, and a reader who is
  * going to send a signature, a footer or half of the previous message along with
  * their sentence should be able to see that before it leaves — which is also why
- * the plan names the cc: the reader is not choosing the audience, they are checking
- * it. What the box does not offer is offered nowhere: no attachments, no drafts, no
- * send-later. The cc itself is not a field either: who else is on the reply is the
- * answered message's own audience, minus the reader's addresses, and there is
- * nothing here that can add anyone to it — the reply-all tick can only take people
- * off it (see gmailclient.Reply).
+ * the plan names the cc: who else is on the answer is the one part of it a reader
+ * can still change at that point, and the whole reason the plan is a control rather
+ * than a receipt. What the box does not offer is offered nowhere: no attachments, no
+ * drafts, no send-later. The cc is not a field either: who the reply may reach is the
+ * answered message's own audience, minus the reader's addresses, and the chips can
+ * only take people off it or move them between the two lists — nothing here can add
+ * anyone to it (see gmailclient.Reply).
  *
  * **The line above the field names that audience, by name.** "everyone the message
  * was addressed to" was the box asking the reader to trust that it knew; the names
@@ -66,9 +69,10 @@ import { refusal, staleAfterMail, SAID_MS } from "./MailVerbs";
  * so a reader can see that the reply is going to the same six colleagues the thread
  * has, and see the one they meant to leave off before they press anything. It is the
  * same audience the mailbox will use and not a second opinion about it: the names
- * come from the same headers, read by the corpus instead of by docket, and the
- * preview still prints the addresses the mailbox itself resolved — that, and not
- * this line, is the last word before a send.
+ * come from the same headers, read by the corpus instead of by docket, and the preview
+ * prints the addresses the mailbox itself resolved — that, and not this line, is the
+ * last word before a send, and it is also where the reader arranges who the reply
+ * carries (see the chips on the plan below).
  *
  * **The two ticks are both subtractions, and both are on.** The reply is one message
  * in two renderings — the words as text, and the same words as HTML with the quote
@@ -77,6 +81,17 @@ import { refusal, staleAfterMail, SAID_MS } from "./MailVerbs";
  * the form and not about the message: the words, the quote and the audience are the
  * same either way, so a reader who sends plain text has sent exactly what the
  * preview showed them, minus markup they never wrote.
+ *
+ * **And the plan's own chips are the third subtraction, one address at a time.** The
+ * plan carries the addresses the mailbox resolved (see SendResponse's
+ * toRecipients/ccRecipients) rather than only the headers it will render them into,
+ * so the preview's "to …" and "cc …" are a control: each address is a chip the
+ * reader can untick to take that person off the reply, or press to send in the other
+ * list. It is the same kind of move as the reply-all tick, made finer — the audience
+ * is still the answered message's own, and an address it did not carry has no chip
+ * and no spelling that reaches it. What the second press sends is the audience the
+ * chips show, named address by address in the request (see SendRequest's to/cc), so
+ * the message that leaves is the one the reader arranged.
  *
  * A refusal says what it was: a host started without -send-mail cannot answer mail
  * at all, and the second step says so in words rather than being a button that
@@ -133,6 +148,99 @@ function names(names: string[], title: (name: string) => string) {
       <span title={title(name)}>{name}</span>
     </Fragment>
   ));
+}
+
+/** One address on a reply, as the mailbox resolved it: the address itself, and the
+ *  display name the answered message gave it. Structurally the contract's own
+ *  Recipient (see api.d.ts), named here so the chips below read as what they are. */
+type Recipient = { name?: string; address: string };
+
+/** One address and where the reader has put it: which list it is in, and whether it
+ *  is on the reply at all. The set of these is the plan's own audience — every
+ *  address the answered message carried, minus the reader's own — so arranging them
+ *  moves the audience about inside itself rather than building a new one. */
+type Chosen = { r: Recipient; list: "to" | "cc"; on: boolean };
+
+/** An address as the header will carry it: `Ada Okoye <ada@loomworks.example>`, or
+ *  the bare address when the message gave the person no name. The chips print this
+ *  rather than a name on its own because this is the last screen before a message
+ *  that cannot be recalled, and the address is what it is sent to. */
+function addressWords(r: Recipient): string {
+  return r.name ? `${r.name} <${r.address}>` : r.address;
+}
+
+/** A plan's audience as the reader's to arrange: every address the mailbox
+ *  resolved, each in the list it came in and all of them on the reply — which is
+ *  what the preview shows before a chip is touched. The set is the plan's own, so
+ *  arranging it can only move the audience about inside itself (see Chosen). */
+function chosen(plan: SendResponse): Chosen[] {
+  return [
+    ...(plan.toRecipients ?? []).map((r) => ({ r, list: "to" as const, on: true })),
+    ...(plan.ccRecipients ?? []).map((r) => ({ r, list: "cc" as const, on: true })),
+  ];
+}
+
+/** One address as the preview's control: a tick that takes it off the reply or puts
+ *  it back, and — while it is on — the press that sends it in the other list.
+ *
+ *  Both are narrowings of the audience the answered message carried, never
+ *  additions to it: the address is already one the mailbox resolved and is one of
+ *  the two the reader is choosing between. `stuck` is the one address that cannot be
+ *  taken out of To — the last one there — because a reply with nobody on it is not a
+ *  narrower version of this one and the mailbox refuses it; disabling the control is
+ *  how the reader is told that rather than being offered a press that fails. */
+function RecipientChip({
+  who,
+  stuck,
+  onToggle,
+  onMove,
+}: {
+  who: Chosen;
+  /** Whether this is the only address left in to. */
+  stuck: boolean;
+  onToggle: () => void;
+  onMove: () => void;
+}) {
+  const other = who.list === "to" ? "cc" : "to";
+  return (
+    <span className={`recipchip${who.on ? "" : " off"}`}>
+      <label
+        className="recipkeep"
+        title={
+          stuck
+            ? "This is the only address left in to, and a reply needs somebody there."
+            : who.on
+              ? `Take ${who.r.address} off this reply — they were on the message, and will not get it.`
+              : `Put ${who.r.address} back on this reply.`
+        }
+      >
+        <input
+          type="checkbox"
+          checked={who.on}
+          disabled={stuck}
+          onChange={onToggle}
+          aria-label={`${who.on ? "send to" : "leave off"} ${addressWords(who.r)}`}
+        />
+        <span className="recipname">{addressWords(who.r)}</span>
+      </label>
+      {who.on ? (
+        <button
+          type="button"
+          className="recipmove"
+          disabled={stuck}
+          onClick={onMove}
+          title={
+            stuck
+              ? "This is the only address left in to, and a reply needs somebody there."
+              : `Send this one in ${other} instead of ${who.list}.`
+          }
+          aria-label={`send ${addressWords(who.r)} in ${other} instead`}
+        >
+          {other}
+        </button>
+      ) : null}
+    </span>
+  );
 }
 
 /**
@@ -268,6 +376,11 @@ export function ReplyBox({
   const [html, setHtml] = useState(true);
   // The plan the preview came back with, while the reader is looking at it.
   const [plan, setPlan] = useState<SendResponse | null>(null);
+  // That plan's audience as the reader arranges it: every address the mailbox
+  // resolved, which is the whole of the set a send may name. Held beside the plan
+  // rather than derived from it because it is the one part of the plan the reader
+  // edits — and set with it, so the two are never a plan and a stale set of chips.
+  const [who, setWho] = useState<Chosen[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // The box's own element, which the aim below brings to the reader. A ref rather
@@ -283,6 +396,7 @@ export function ReplyBox({
   // take again rather than something to be carried across.
   useEffect(() => {
     setPlan(null);
+    setWho(null);
   }, [answer.extId]);
 
   // A press on a message's own answer control is an intent to write, and the box
@@ -318,6 +432,43 @@ export function ReplyBox({
 
   const send = $api.useMutation("post", "/v1/send");
 
+  // The chips the plan is drawn from: the audience the mailbox resolved, in the two
+  // lists it put them in, which is the whole of the set a send may name. A plan that
+  // carried only the rendered headers — none does any more, but a fixture or an
+  // older server might — has nothing to arrange, and the preview falls back to
+  // printing what it has rather than inventing an audience to draw (see below).
+  const picks = who && who.length ? who : null;
+  const onTo = picks ? picks.filter((w) => w.on && w.list === "to") : [];
+  const onCc = picks ? picks.filter((w) => w.on && w.list === "cc") : [];
+  const left = picks ? picks.filter((w) => !w.on) : [];
+
+  // One address as a chip. Unticking it is a subtraction from the answered
+  // message's audience and the press beside it moves the address between the two
+  // lists — neither is an address the message did not carry, which the mailbox would
+  // refuse (see RecipientChip).
+  const chip = (w: Chosen) => (
+    <RecipientChip
+      key={w.r.address}
+      who={w}
+      stuck={w.on && w.list === "to" && onTo.length === 1}
+      onToggle={() =>
+        setWho((list) => (list ?? []).map((x) => (x === w ? { ...x, on: !x.on } : x)))
+      }
+      onMove={() =>
+        setWho((list) =>
+          (list ?? []).map((x) => (x === w ? { ...x, list: x.list === "to" ? "cc" : "to" } : x)),
+        )
+      }
+    />
+  );
+
+  // The plan and its audience go together: a plan is not a thing to arrange once the
+  // reader is editing again, and a message that has gone has no audience left here.
+  const unplan = () => {
+    setPlan(null);
+    setWho(null);
+  };
+
   // Who the reply would reach besides the sender, named above the field. The
   // settings read is what knows which of the people on the message is the reader;
   // it is a read of the local store, and the pane's neighbours already keep it
@@ -350,6 +501,9 @@ export function ReplyBox({
         body: { entry: answer.extId, body: own, all, html, confirm: false },
       });
       setPlan(res);
+      // The audience comes with the plan, because the plan is where it is known:
+      // every address the mailbox resolved, in the lists it put them in.
+      setWho(chosen(res));
     } catch (e) {
       // Said on the pane rather than only in the console, for the reason the
       // verbs' refusals are: a button that answers with nothing reads as broken,
@@ -361,7 +515,9 @@ export function ReplyBox({
 
   // The second press: the send. The body is the one the reader was just shown —
   // `plan.body` is the mailbox's own answer about what a reply says, and it is
-  // deliberately not recomposed here, so what goes out is what was read.
+  // deliberately not recomposed here, so what goes out is what was read. The
+  // audience is likewise the one the chips show, named address by address, so the
+  // recipients are the chip set rather than a second reading of it.
   //
   // Once it has gone, the thread is re-read: the server files the sent message
   // into the corpus in the same request, so the answer appears in this trail as
@@ -376,9 +532,25 @@ export function ReplyBox({
     setBusy(true);
     try {
       await send.mutateAsync({
-        body: { entry: answer.extId, body: own, all, html, confirm: true },
+        body: {
+          entry: answer.extId,
+          body: own,
+          all,
+          html,
+          confirm: true,
+          // The audience the reader arranged, as the addresses the mailbox
+          // resolved — the same set, spelled the same way, so what goes out is
+          // what was previewed. Absent when the plan carried no recipient
+          // addresses, which leaves the audience as the mailbox assembled it.
+          ...(picks
+            ? {
+                to: onTo.map((w) => w.r.address),
+                cc: onCc.map((w) => w.r.address),
+              }
+            : {}),
+        },
       });
-      setPlan(null);
+      unplan();
       setOwn("");
       // Said in the corner rather than here, and in the same words: an answer that
       // has gone out is over, and what the reader is looking at now is the trail
@@ -430,12 +602,27 @@ export function ReplyBox({
         <div className="replyplan">
           <p className="replynote">
             <strong>Nothing has been sent yet.</strong> This is the whole message as
-            it will go: to <strong>{plan.to}</strong>
-            {plan.cc ? (
+            it will go:{" "}
+            {/* Who it goes to is the chips themselves rather than a sentence beside
+                a control that restates it: unticking an address takes it out of
+                this line and into the one below it, so the sentence a reader checks
+                against the message that leaves is the reader's own arrangement. */}
+            {picks ? (
               <>
-                , cc <strong>{plan.cc}</strong>
+                to {onTo.length ? onTo.map(chip) : "—"}
+                {onCc.length ? <>, cc {onCc.map(chip)}</> : null}
+                {left.length ? <>, leaving off {left.map(chip)}</> : null}
               </>
-            ) : null}
+            ) : (
+              <>
+                to <strong>{plan.to}</strong>
+                {plan.cc ? (
+                  <>
+                    , cc <strong>{plan.cc}</strong>
+                  </>
+                ) : null}
+              </>
+            )}
             , as <strong>{plan.subject}</strong>, in <strong>{plan.html ? "text and HTML" : "plain text alone"}</strong>. Your words come first and the message you
             are answering is quoted under them.
           </p>
@@ -470,7 +657,7 @@ export function ReplyBox({
               type="button"
               className="opbtn"
               disabled={busy}
-              onClick={() => setPlan(null)}
+              onClick={unplan}
             >
               keep editing
             </button>
