@@ -63,9 +63,10 @@ type Recipient struct {
 //
 // ToRecipients and CcRecipients are those same two lists as addresses rather than
 // as the header they will be written into, each with the name the message gave
-// it. They are what a client offers a reader to narrow the audience with, and
-// they are the whole set a send may name (see ReplyOptions.To/Cc): the audience
-// is the message's own, and nothing on this surface can widen it.
+// it. They are what a client offers a reader to arrange the audience with, and
+// they are the set the request's `to`/`cc` start from: a caller that names
+// nothing sends these, and one that names an address the message did not carry
+// sends that too (see ReplyOptions.To/Cc).
 //
 // Cc is empty either when the caller asked for the sender alone or when there was
 // nobody else on the message to begin with, and the server leaves it out of the
@@ -84,22 +85,32 @@ type ReplyPlan struct {
 }
 
 // ReplyOptions is how a reply is asked for: the audience it starts from, whether
-// this call sends or only plans, and which of the plan's own recipients it is to
-// carry.
+// this call sends or only plans, and the audience it is to carry.
 type ReplyOptions struct {
 	// All answers the message's whole audience — the sender in To, the rest of it
 	// in Cc — rather than the sender alone. It decides the set the reply starts
-	// from and can only ever narrow it.
+	// from when the caller names no list below.
 	All bool
 	// Send false is a plan and nothing else; true sends it.
 	Send bool
-	// To and Cc are the addresses the reply is to carry, chosen from the plan's
-	// own recipients. A nil slice leaves that list as the plan assembled it, so a
+	// To and Cc are the addresses the reply is to carry, in the list each is to
+	// be carried in. A nil slice leaves that list as the plan assembled it, so a
 	// caller changing one list need not restate the other. A non-nil Cc may be
 	// empty, which drops everyone on it; an empty To is refused, because a message
-	// with nobody on it is not a narrowing of one. Neither can name an address the
-	// answered message did not carry — that is what keeps this a rearrangement and
-	// not a recipient field.
+	// with nobody on it is not a reply.
+	//
+	// **An entry may name an address the answered message did not carry, and that
+	// is the point of these fields rather than a hole in a check.** The reply box
+	// offers an address field — a reader types an address, or picks a person out of
+	// the corpus, and the chip becomes a recipient — so a surface that could only
+	// carry the addresses the message already had could not send what the reader
+	// wrote. This is where that becomes sendable: docket accepts an address outside
+	// the plan's own recipients (see mail.SendPlan.WithRecipients), and this package
+	// passes the caller's lists through rather than filtering them.
+	//
+	// What that widens is stated where the decision is made (see Reply), and what
+	// these fields still refuse is the shape of the list: an address that is not one,
+	// and a repeated address — in one list or in both.
 	To []string
 	Cc []string
 }
@@ -114,12 +125,15 @@ type ReplyOptions struct {
 // is the only place the answer to "which of these addresses is the reader" exists —
 // mail is usually addressed to an alias rather than to the account's own name).
 //
-// opts.To and opts.Cc may then narrow that audience, but only to a subset of it:
-// docket refuses an address the message did not carry, so a caller can take people
-// off the reply and move them between To and Cc, and can never add anyone. That is
-// deliberate, because a server bound to loopback with no authentication must not be
-// an outbound channel to anywhere, and there is no address on this surface that the
-// reader's own correspondence did not carry first.
+// opts.To and opts.Cc name the audience the reply is to carry, and they are the
+// reader's arrangement of it rather than a subset of the message's own: an address
+// neither the message nor this mailbox's profile has ever seen is accepted, because
+// the surface in front of this is one a person types addresses into. That is a
+// deliberate widening, and the reason it is not a hole is that what bounds a send
+// was never this check: it is that the server is bound to loopback with no
+// authentication, and that answering mail at all needs the host to have been started
+// with -send-mail. A reply can now reach an address the reader typed; it still cannot
+// reach one nobody at this host named.
 //
 // opts.Send=false is a plan and nothing else: the same reads a send begins with,
 // answered instead of executed. That is what makes the two-step in the UI a
@@ -136,9 +150,11 @@ func (c Client) Reply(id string, body ReplyBody, opts ReplyOptions) (ReplyPlan, 
 		// the one failure that can say so.
 		return ReplyPlan{}, fmt.Errorf("%w: %v", ErrUnsent, err)
 	}
-	// A chosen audience is applied to the plan the mailbox assembled, never in
-	// place of it: docket's WithRecipients refuses an address the message did not
-	// carry, so the set a caller names here cannot widen who the reply reaches.
+	// The caller's audience is applied to the plan the mailbox assembled: the plan's
+	// own recipients keep the names the message gave them, and an address the caller
+	// names that the message did not carry is carried as the caller wrote it. What
+	// is refused here is a repeated address and an empty To, not an address the
+	// message never had (see ReplyOptions.To/Cc).
 	if opts.To != nil || opts.Cc != nil {
 		to, cc := opts.To, opts.Cc
 		if to == nil {
