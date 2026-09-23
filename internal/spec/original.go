@@ -101,8 +101,19 @@ func OriginalBody(raw string) (string, bool) {
 // what mail is designed for and the app around it is a dark theme. It also
 // states the app's defaults for the one structure mail leans on hardest and HTML
 // leaves naked — a table, which browsers otherwise draw as a grid of nothing:
-// collapsed borders, a hairline rule around every cell, and the padding that
-// keeps a word off that rule.
+// collapsed borders and the padding that keeps a word off the next one.
+//
+// What is deliberately NOT here is an outline. A border around every cell is a
+// hairline the sender did not ask for, and this whole mode exists to show the
+// mail as it was written — so a bare <table> comes back with no border at all
+// rather than with the app's. The line is between normalising and painting:
+// border-collapse and the cell padding stand in for defaults a browser would
+// otherwise apply silently (separated borders, no padding), so either choice is
+// the app's, and collapsed-and-padded is the ordinary reading of a plain table
+// in a mail. A border is not in that position — an outlined table is a design
+// decision, and the mail did not make it. The transcript's own table styling is
+// a separate policy and is untouched: a reader there is looking at the page's
+// design, not at the sender's.
 //
 // The selectors are plain (table / th / td), not :host-qualified, because that is
 // what the fragment contains: the shadow tree has no html or body, and these
@@ -116,12 +127,11 @@ func OriginalBody(raw string) (string, bool) {
 // so a canvas out there is a canvas the mail has no way to correct. First
 // because equal specificity means the last declaration holds: anything the mail
 // does say about its own canvas (a `body {}` rule rewritten to `:host`, a
-// `bgcolor`) or its own table (`table { border: 0 }`) comes after this and wins,
-// which is the whole point of preferring the sender's own design over a
-// better-looking default.
+// `bgcolor`) or its own table (`table { border-collapse: separate }`) comes
+// after this and wins, which is the whole point of preferring the sender's own
+// design over a better-looking default.
 const appCanvas = "<style>:host{background:#fff;color:#000;color-scheme:light}" +
 	"table{border-collapse:collapse}" +
-	"table,th,td{border:1px solid black}" +
 	"th,td{padding:.2rem .5rem}</style>"
 
 // hostCanvas turns the <body> element's own presentation into a :host rule.
