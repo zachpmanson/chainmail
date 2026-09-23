@@ -6,12 +6,13 @@ import { ApiError, $api } from "../lib/api";
  * Ask the mailbox for what has arrived, and the corpus again for what is on this
  * page — the nav's one control that says "now".
  *
- * Nothing in the app refetches on its own: the corpus changes when a person
- * ingests, and the query client holds every answer for five minutes (see
- * lib/queryClient) — the right default for reading, and the wrong one the moment
- * a reader knows something has changed. So the one control that says "now" is
- * theirs — and since mail arrives at the mailbox and not in the corpus, saying
- * "now" means fetching before it means reading.
+ * The corpus is re-read on its own now (see AutoRefresh): a tick while the tab is
+ * visible and a read when the window comes back, which is enough to keep the page
+ * from going stale under a reader who is not touching it. What that cadence
+ * deliberately does not do is fetch the mailbox — mail arrives at the mailbox and
+ * not in the corpus, and the ingest behind it is built to run hourly — so saying
+ * "now" about what has ARRIVED is still the reader's to say: the one control that
+ * says it is the press, and a press means fetching before it means reading.
  *
  * So the press is the page's own refresh in two halves, and now both of them:
  * `POST /v1/slurp` first, which is the ingest the hourly sweep runs (mail, twins,

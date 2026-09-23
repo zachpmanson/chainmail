@@ -26,6 +26,7 @@ import { DeployStamp } from "./components/DeployStamp";
 import { ToastHost } from "./components/Toasts";
 import { NavReading } from "./components/NavReading";
 import { NavRefresh } from "./components/NavRefresh";
+import { AutoRefresh } from "./components/AutoRefresh";
 import { NavSearch } from "./components/NavSearch";
 import type { SearchMode } from "./lib/api";
 
@@ -227,6 +228,11 @@ function RootLayout() {
               (see .navsearch and .navopts in styles.css). */}
           <span className="navright">
             <DeployStamp />
+            {/* The cadence travels with the press it shares its read half with:
+                the corpus is re-asked on its own (see AutoRefresh), and the
+                button beside it is what adds the mailbox fetch. It draws
+                nothing, and is mounted by the shell so every page has it. */}
+            <AutoRefresh />
             <NavRefresh />
             <NavSearch />
           </span>
