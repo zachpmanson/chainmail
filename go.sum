@@ -63,6 +63,8 @@ github.com/zachpmanson/docket/gmail v0.0.0-20260917221645-ad1a35bd2bdd h1:V6Fg6X
 github.com/zachpmanson/docket/gmail v0.0.0-20260917221645-ad1a35bd2bdd/go.mod h1:+8GYJATXSYNZKunN/I6mFs/SFMI7nkQtNRpBmDk+Hcg=
 github.com/zachpmanson/docket/gmail v0.0.0-20260922111146-033bb89eaa8d h1:lOYlaMN0SoG7XWlUT/lZ9Y5dzHujYjkz8Ta4GGMija8=
 github.com/zachpmanson/docket/gmail v0.0.0-20260922111146-033bb89eaa8d/go.mod h1:+8GYJATXSYNZKunN/I6mFs/SFMI7nkQtNRpBmDk+Hcg=
+github.com/zachpmanson/docket/gmail v0.0.0-20260923093746-e88473af7d71 h1:jRVj2V+BNk0CaQz4rOcq5xgdVciNtq2fzV/6iVPpktk=
+github.com/zachpmanson/docket/gmail v0.0.0-20260923093746-e88473af7d71/go.mod h1:+8GYJATXSYNZKunN/I6mFs/SFMI7nkQtNRpBmDk+Hcg=
 go.opentelemetry.io/auto/sdk v1.2.1 h1:jXsnJ4Lmnqd11kwkBV2LgLoFMZKizbCi5fNZ/ipaZ64=
 go.opentelemetry.io/auto/sdk v1.2.1/go.mod h1:KRTj+aOaElaLi+wW1kO/DZRXwkF4C5xPbEe3ZiIhN7Y=
 go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0 h1:OyrsyzuttWTSur2qN/Lm0m2a8yqyIjUVBZcxFPuXq2o=

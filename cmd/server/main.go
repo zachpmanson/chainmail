@@ -89,18 +89,25 @@ func run(args []string) error {
 			"mail that is already there. That is why it is gated apart from the other "+
 			"two: a label can be put back by the same button and an archived thread is "+
 			"still in All Mail, while a message that has gone out cannot be recalled. A "+
-			"host that does not grant it answers 403. Reply-all: there is no recipient "+
-			"in the request, and a reply answers the message being answered — its sender "+
+			"host that does not grant it answers 403. Reply-all: a reply answers the "+
+			"message being answered — its sender "+
 			"in To and the rest of its own audience in Cc, minus the addresses of this "+
 			"mailbox — and when that leaves nobody (a note to yourself) the sender comes "+
 			"back on, because a reply needs somewhere to go — "+
 			"in both plain text and HTML so a client that renders markup does "+
 			"not read the quote as part of the answer — the HTML part quoting the "+
 			"answered message's own markup where it had any, through the reading "+
-			"pane's allowlist, and its text where it did not. What the reader decides "+
+			"pane's allowlist, and its text where it did not. The request's `to` and `cc` "+
+			"name the audience the reply carries, and an address the message did not carry "+
+			"is accepted: the reply box has an address field a reader types into, and "+
+			"this is the switch that lets that address be sent to. There is no further "+
+			"check on who it is — an address that looks like an address is written to — so "+
+			"a host that must not send mail to arbitrary addresses is a host that should "+
+			"not grant this. What the reader decides "+
 			"about the "+
-			"reply is whether the rest of that audience is on it — which can only "+
-			"narrow the reply — and whether the HTML part goes with the text, for a "+
+			"reply is who it carries — the audience can be narrowed, rearranged, or "+
+			"widened by hand, and the plan shows all of it before the send — and whether "+
+			"the HTML part goes with the text, for a "+
 			"correspondent or a list that wants the words alone. The credential is the "+
 			"mail grant this unit already reads.")
 	// The deploy stamp's revision, passed in by the unit that starts this binary.

@@ -29,10 +29,12 @@ import (
 // back of what went out), and the assertion is made on the raw message Gmail would
 // have received.
 //
-// That is also where the hard limit is enforced rather than merely stated: an
-// address the answered message did not carry has to be REFUSED by the mailbox, not
-// dropped by the caller, or the page behind a loopback bind with no authentication
-// could be turned into an outbound sender by a client that asked nicely.
+// That is also where the audience itself is checked: an address the reader typed
+// is the one thing this surface could not reach before, so the test below asserts
+// it arrives in the headers and in the bytes — the difference between a client
+// that drew a chip and a message that goes where the chip said. What is refused is
+// the shape of a list rather than its membership (an entry that is not an address,
+// an address named twice), and it is still refused before anything is handed over.
 
 // fakeGmail is the mailbox those endpoints describe: one message to answer, one
 // address that is this account's, and every message handed to the send endpoint,
@@ -194,46 +196,91 @@ func TestAChosenAudienceIsWhatTheMailboxIsHanded(t *testing.T) {
 	}
 }
 
-// The hard limit, through this package rather than only in docket's own tests: an
-// address the answered message did not carry is refused, and refused BEFORE
-// anything is handed over — a reply that failed is one that sent nothing.
-func TestAnAddressTheMessageDidNotCarryIsRefusedAndNothingIsSent(t *testing.T) {
+// What the reader typed, through this package rather than only in docket's own
+// tests: an address the answered message never carried is now one the reply goes
+// to, in the header and in the bytes. This is the widening the reply box's address
+// field needs, and it is asserted here because the client assembling the message
+// is the last thing between a chip on a screen and a send.
+func TestAnAddressTheReaderTypedReachesTheMessage(t *testing.T) {
+	f, svc := replyFixture(t)
+	c := replyClient(svc)
+
+	plan, err := c.Reply("m1", ReplyBody{Text: "noted"}, ReplyOptions{
+		All:  true,
+		Send: true,
+		// One address typed by hand, and one a client knows a person's name for.
+		To: []string{"dana@example.com", "stranger@example.com"},
+		Cc: []string{"Ada Okoye <ada@example.org>"},
+	})
+	if err != nil {
+		t.Fatalf("sending the reply: %v", err)
+	}
+	if plan.To != "Dana Okafor <dana@example.com>, stranger@example.com" {
+		t.Errorf("plan.To = %q, want the sender and the typed address", plan.To)
+	}
+	if plan.Cc != "Ada Okoye <ada@example.org>" {
+		t.Errorf("plan.Cc = %q, want the named address", plan.Cc)
+	}
+
+	sent := f.sentMessage(t)
+	if got := sent.Header.Get("To"); got != "Dana Okafor <dana@example.com>, stranger@example.com" {
+		t.Errorf("the message's To = %q", got)
+	}
+	if got := sent.Header.Get("Cc"); got != "Ada Okoye <ada@example.org>" {
+		t.Errorf("the message's Cc = %q", got)
+	}
+	// The address the message did not carry is the message's to reach — and the
+	// one it did still keeps the name the answered message gave it.
+	if len(plan.ToRecipients) != 2 ||
+		plan.ToRecipients[0] != (Recipient{Name: "Dana Okafor", Address: "dana@example.com"}) ||
+		plan.ToRecipients[1] != (Recipient{Address: "stranger@example.com"}) {
+		t.Errorf("ToRecipients = %+v", plan.ToRecipients)
+	}
+	if len(plan.CcRecipients) != 1 ||
+		plan.CcRecipients[0] != (Recipient{Name: "Ada Okoye", Address: "ada@example.org"}) {
+		t.Errorf("CcRecipients = %+v", plan.CcRecipients)
+	}
+	// Threading survives the rebuild: widening the audience makes a reply to more
+	// people, not a new thread.
+	if got := sent.Header.Get("In-Reply-To"); got != "<m1@example.com>" {
+		t.Errorf("In-Reply-To = %q, want the answered message's own id", got)
+	}
+}
+
+// What is still refused, through this package rather than only in docket's own
+// tests: an audience that is not a list of addresses. A malformed entry and one
+// address named twice are both refused BEFORE anything is handed over — a reply
+// that failed is one that sent nothing.
+func TestAnAudienceThatIsNotAddressesIsRefusedAndNothingIsSent(t *testing.T) {
 	f, svc := replyFixture(t)
 	c := replyClient(svc)
 
 	_, err := c.Reply("m1", ReplyBody{Text: "noted"}, ReplyOptions{
-		All:  true,
-		Send: true,
-		To:   []string{"dana@example.com", "stranger@example.com"},
+		All: true, Send: true, To: []string{"not an address"},
 	})
 	if err == nil {
-		t.Fatal("an address the message did not carry was accepted")
-	}
-	if !strings.Contains(err.Error(), "carried") {
-		t.Errorf("the refusal does not say why: %v", err)
+		t.Fatal("a string that is not an address was accepted")
 	}
 	if !strings.Contains(err.Error(), ErrUnsent.Error()) {
 		t.Errorf("the refusal does not say nothing was sent: %v", err)
 	}
-	if len(f.sent) != 0 {
-		t.Errorf("a refused reply was handed to the mailbox anyway: %s", f.sent[0])
-	}
-	// And the mailbox's own address cannot be put back on: it was resolved off the
-	// message when the plan was assembled, so it is outside the set a send may name
-	// — which is what keeps a reply from cc'ing its own reader.
+	// One address in both lists is one recipient said twice — the caller chooses a
+	// list for an address, and being in two of them is not a choice.
 	if _, err := c.Reply("m1", ReplyBody{Text: "noted"}, ReplyOptions{
-		All: true, Send: true, To: []string{"reader@example.com"},
+		All: true, Send: true,
+		To: []string{"stranger@example.com"},
+		Cc: []string{"Stranger@example.com"},
 	}); err == nil {
-		t.Error("an address belonging to the mailbox was accepted")
+		t.Error("an address named in both lists was accepted")
 	}
 	if len(f.sent) != 0 {
 		t.Errorf("a refused reply was handed to the mailbox anyway: %s", f.sent[0])
 	}
 }
 
-// The plan a preview answers with is the set the send may name, and it is the same
-// set the message ends up carrying: a client that showed the reader one audience
-// and sent another would be the one thing the two-step exists to rule out.
+// The plan a preview answers with is the set a send starts from, and naming
+// nobody sends exactly it: a client that showed the reader one audience and sent
+// another would be the one thing the two-step exists to rule out.
 func TestThePreviewNamesTheSameAudienceTheSendUses(t *testing.T) {
 	f, svc := replyFixture(t)
 	c := replyClient(svc)
@@ -246,8 +293,8 @@ func TestThePreviewNamesTheSameAudienceTheSendUses(t *testing.T) {
 		t.Fatalf("a preview sent something: %s", f.sent[0])
 	}
 	// The plan's recipients are the answered message's own audience, minus this
-	// mailbox, as addresses — which is what the chips a reader narrows are drawn
-	// from and the whole of what a request may name.
+	// mailbox, as addresses — which is what the address field a reader edits is
+	// seeded with, and what a request that names no `to`/`cc` sends.
 	wantTo := []Recipient{{Name: "Dana Okafor", Address: "dana@example.com"}}
 	if len(preview.ToRecipients) != 1 || preview.ToRecipients[0] != wantTo[0] {
 		t.Errorf("ToRecipients = %+v, want %+v", preview.ToRecipients, wantTo)

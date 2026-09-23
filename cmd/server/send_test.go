@@ -147,11 +147,12 @@ func TestThePreviewSendsNothingAndAnswersTheMailboxsOwnPlan(t *testing.T) {
 }
 
 // The audience goes back to the client as addresses, not only as the headers they
-// will be written into: the two say the same thing — the strings are these
-// rendered — and it is the addresses a client offers a reader to narrow the reply
-// with and names back on the send (see SendRequest's to/cc). What is checked here
-// is that they are the answered message's own, with the names it gave them, in its
-// order, and that they are the whole of the set a send may choose from.
+// will be rendered into: the two say the same thing — the strings are these rendered
+// — and it is the addresses a client draws the reply's fields from and names back on
+// the send (see SendRequest's to/cc). What is checked here is that they are the
+// answered message's own, with the names it gave them, in its order: the set the
+// fields start from, which is not the same thing as the set they may hold (a caller
+// may name an address the message never carried — see checkAddresses).
 func TestThePlanCarriesTheAudienceItMaySendToAsAddresses(t *testing.T) {
 	h, _ := sendServer(t)
 
@@ -178,17 +179,20 @@ func TestThePlanCarriesTheAudienceItMaySendToAsAddresses(t *testing.T) {
 	}
 }
 
-// A caller may take an address off the reply, and may move one between To and Cc:
-// the chosen set is what the mailbox is asked for and what the plan it answers with
-// carries, so the chips a reader arranged are the message that leaves. And it may
-// not add anyone — an address the answered message did not carry is refused where
-// the message's own audience is known (see docket's mail.WithRecipients, which the
-// mailbox enforces), so the fake here reproduces the half a handler can get wrong:
-// it selects from the assembled audience and cannot invent a member of it.
-func TestAChosenAudienceNarrowsTheReplyToTheMessagesOwnAddresses(t *testing.T) {
+// A caller names the audience the reply carries, and what it names is what the
+// mailbox is asked for: the plan it answers with is the reply that would go out, so
+// the lists a reader arranged are the message that leaves. **An address the answered
+// message did not carry is one of them** — that is the widening, and it is the one
+// thing this endpoint no longer does: while the chosen set was a rearrangement of the
+// message's own audience, no recipient on a reply was one the message had not already
+// reached. What the handler has to get right is that it hands the choice down rather
+// than deciding it (see docket's mail.WithRecipients, which the mailbox enforces).
+func TestAChosenAudienceIsWhatTheMailboxIsAskedFor(t *testing.T) {
 	h, fake := sendServer(t)
 
-	// Cy was on the message and is moved from cc into to; Carl was not on it at all.
+	// Cy was on the message and is moved from cc into to; carl@example.net was not on
+	// it at all, and is named anyway — a stranger's address typable into the field and
+	// accepted is the whole point of the field.
 	res := h.do(t, "POST", "/v1/send",
 		[]byte(`{"entry":"`+extAda3+`","body":"The 14th works.",`+
 			`"to":["bo@fjordline.example","cy@loomworks.example"],`+
@@ -202,11 +206,11 @@ func TestAChosenAudienceNarrowsTheReplyToTheMessagesOwnAddresses(t *testing.T) {
 	if got.To != "Bo Halvorsen <bo@fjordline.example>, Cy Okafor <cy@loomworks.example>" {
 		t.Errorf("to = %q, want the two the caller chose", got.To)
 	}
-	if got.Cc != "" {
-		t.Errorf("cc = %q, want nobody: carl was not on the message, whatever was asked for", got.Cc)
+	// The address the message never carried keeps the name it came with — none — and
+	// is rendered as the address, with no display name invented for it.
+	if got.Cc != "carl@example.net" {
+		t.Errorf("cc = %q, want the address the caller typed", got.Cc)
 	}
-	// The handler handed the choice down rather than deciding it, which is the only
-	// way the mailbox can be the thing that refuses a widened set.
 	if len(fake.replies) != 1 {
 		t.Fatalf("the mailbox saw %+v, want one call", fake.replies)
 	}
@@ -284,12 +288,13 @@ func TestSendingAnswersTheMessageAndFilesTheAnswerIntoTheCorpus(t *testing.T) {
 	}
 }
 
-// The one thing the caller decides about a reply's audience is whether the rest of
-// it is on the reply, and the two settings are told apart by the mailbox: what it is
-// asked for is what it answers, so the plan and the send are the same message either
-// way. The flag narrows to the person who wrote — there is no setting that reaches an
-// address the answered message did not carry.
-func TestTheReplyAllTickCanOnlyNarrowTheReplyToItsSender(t *testing.T) {
+// The one thing the reply-all tick decides about a reply's *starting* audience is
+// whether the rest of it is on the reply, and the two settings are told apart by the
+// mailbox: what it is asked for is what it answers, so the plan and the send are the
+// same message either way. The flag narrows to the person who wrote; the addresses a
+// caller names in To and Cc are the other half of the question, and the tick neither
+// adds nor removes one of them (see checkAddresses and SendRequest's to/cc).
+func TestTheReplyAllTickNarrowsTheReplyToItsSender(t *testing.T) {
 	h, fake := sendServer(t)
 
 	res := h.do(t, "POST", "/v1/send",
@@ -505,6 +510,14 @@ func TestSendRefusesWhatItCannotAnswer(t *testing.T) {
 		{name: "no body", body: `{"entry":"` + extAda3 + `"}`, want: 400, mentions: "something to say"},
 		{name: "blank body", body: `{"entry":"` + extAda3 + `","body":"\n  \n"}`, want: 400, mentions: "something to say"},
 		{name: "unknown entry", body: `{"entry":"` + extNone + `","body":"hello"}`, want: 404, mentions: "no entry"},
+		// The audience the caller names, refused for shape before the mailbox is opened:
+		// an entry that is not an address, and one address named twice — in one list or
+		// in both. Neither is a statement about who may be reached, which is why an
+		// address the message never carried is not among these.
+		{name: "a to that is not an address", body: `{"entry":"` + extAda3 + `","body":"hi","to":["the fitters"]}`, want: 400, mentions: `to: "the fitters" is not an address`},
+		{name: "a cc that is not an address", body: `{"entry":"` + extAda3 + `","body":"hi","cc":["ada@loomworks.example","ada@"]}`, want: 400, mentions: `cc: "ada@" is not an address`},
+		{name: "an address twice in one list", body: `{"entry":"` + extAda3 + `","body":"hi","cc":["ada@loomworks.example","Ada@Loomworks.example"]}`, want: 400, mentions: "already on this reply, in cc"},
+		{name: "an address in both lists", body: `{"entry":"` + extAda3 + `","body":"hi","to":["ada@loomworks.example"],"cc":["ada@loomworks.example"]}`, want: 400, mentions: "already on this reply, in to"},
 		// The field that decides whether a real mailbox is written is the one a
 		// typo must not silently skip.
 		{name: "misspelled field", body: `{"entry":"` + extAda3 + `","body":"hi","confrim":true}`, want: 400, mentions: "request body"},

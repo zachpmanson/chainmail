@@ -1299,29 +1299,57 @@
   font-size:.74rem; color:var(--muted); cursor:pointer; }
 .replytick input { margin:0; accent-color:var(--accent); cursor:pointer; }
 .replytick:has(input:disabled) { opacity:.55; cursor:default; }
-/* The plan's audience, as the reader arranges it: one chip per address the mailbox
-   resolved. A chip is a tick and a name — untick to take that person off the reply,
-   tick to put them back — and, while it is on, the press that sends it in the other
-   list. The chips read as part of the sentence above rather than as a second list of
-   it: the to/cc clause prints exactly the ticked ones, so what the line says is what
-   the chips hold. An address that is off stays on screen, struck through — a control
-   that disappeared when unticked could not be unticked, and the reader would have to
-   run the preview again to change their mind — and the one address left in to cannot
-   be unticked at all, because the mailbox refuses a reply with nobody on it. */
-.recipchip { display:inline-flex; align-items:center; gap:.25rem; margin:0 .15rem;
-  padding:.05rem .3rem .05rem .25rem; border:1px solid var(--line); border-radius:10px;
-  background:var(--bg); font-size:.72rem; }
-.recipkeep { display:inline-flex; align-items:center; gap:.3rem; cursor:pointer; min-width:0; }
-.recipkeep input { margin:0; accent-color:var(--accent); cursor:pointer; flex:none; }
-.recipname { overflow-wrap:anywhere; }
-.recipmove { flex:none; padding:0 .2rem; font:inherit; font-size:.66rem; color:var(--muted);
+/* The plan's audience, as the reader arranges it: one address field per list, each a
+   bordered run of chips with an input at the end of it. A chip is an address and the
+   two presses that act on it — the one that sends it in the other list, and the one
+   that takes it off the reply — and the field is where the reader names somebody new.
+   The fields read as part of the sentence above rather than as a table under it: "to"
+   and "cc" are words in that line, and each field is what stands where a list of
+   addresses would stand if the line were prose.
+
+   The field is one box because it is one answer to one question — who is on this list
+   — and a chip that sat outside it would be a second thing to look at. Its input is
+   chrome-less and takes the rest of the row, so the caret lands where the next address
+   would go, and the suggestions hang under the whole box rather than under the input:
+   a list as long as a person's name would otherwise start halfway across the line. */
+.addrfield { position:relative; display:inline-flex; flex-wrap:wrap; align-items:center;
+  gap:.2rem; margin:0 .15rem; padding:.1rem .3rem; max-width:100%; vertical-align:middle;
+  border:1px solid var(--line); border-radius:6px; background:var(--bg); }
+.addrfield:focus-within { border-color:var(--accent); }
+.addrchip { display:inline-flex; align-items:center; gap:.2rem; max-width:100%;
+  padding:.05rem .2rem .05rem .35rem; border:1px solid var(--line); border-radius:10px;
+  background:var(--card); font-size:.72rem; }
+.addrname { overflow-wrap:anywhere; }
+.addrmove { flex:none; padding:0 .2rem; font:inherit; font-size:.66rem; color:var(--muted);
   background:none; border:none; border-radius:4px; cursor:pointer; }
-.recipmove:hover { color:var(--accent); background:var(--card); }
-.recipchip.off { color:var(--muted); border-style:dashed; }
-.recipchip.off .recipname { text-decoration:line-through; }
-.recipkeep:has(input:disabled) { opacity:.55; cursor:default; }
-.recipmove:disabled { opacity:.55; cursor:default; }
-.recipmove:disabled:hover { color:var(--muted); background:none; }
+.addrmove:hover { color:var(--accent); background:var(--bg); }
+.addrx { flex:none; display:inline-flex; align-items:center; padding:.1rem; color:var(--muted);
+  background:none; border:none; border-radius:4px; cursor:pointer; }
+.addrx:hover { color:var(--accent); background:var(--bg); }
+.addrx svg { display:block; }
+.addrmove:disabled, .addrx:disabled { opacity:.55; cursor:default; }
+.addrmove:disabled:hover, .addrx:disabled:hover { color:var(--muted); background:none; }
+.addrinput { flex:1 1 7rem; min-width:7rem; font:inherit; font-size:.72rem; padding:.1rem 0;
+  color:var(--fg); background:none; border:none; outline:none; }
+.addrinput::placeholder { color:var(--muted); }
+/* The suggestions, under the field. Over the prose rather than in it: the line would
+   reflow under the reader's eyes as they typed, and the box is already the thing they
+   are looking at. */
+.addrlist { position:absolute; top:100%; left:0; z-index:20; display:flex;
+  flex-direction:column; min-width:100%; max-width:24rem; max-height:14rem; overflow:auto;
+  margin-top:.25rem; padding:.15rem; border:1px solid var(--line); border-radius:6px;
+  background:var(--card); box-shadow:0 6px 18px rgba(0,0,0,.18); }
+.addropt { display:flex; align-items:baseline; gap:.4rem; padding:.2rem .35rem;
+  font-size:.72rem; border-radius:4px; cursor:pointer; }
+.addropt.on { background:var(--mine); }
+.addroptaddr { font-size:.68rem; color:var(--muted); overflow-wrap:anywhere; }
+.addropt.none { color:var(--muted); cursor:default; }
+/* A refusal is a sentence about the address the reader just tried to add, and it sits
+   in the field rather than in the popup: the popup is where the answers are, and this
+   is the answer to what they did — the same red the other refusals on the page wear
+   (see .selfail). It goes away with the next keystroke, because it is about that one
+   address rather than a standing fact about the field. */
+.addrrefuse { flex-basis:100%; padding:.1rem .2rem; font-size:.68rem; color:crimson; }
 
 /* --- what a write leaves to say --- */
 /* The bottom-right corner, over every page. These are accounts of work that is

@@ -77,25 +77,40 @@ and fixes every stored label that disagrees with it.
 **Timeline** is one chronological column. **Columns** gives one lane per reply chain.
 The **reply tree** panel lights the ancestry of the entry you're reading.
 
-**Replying is reply-all, and off by default.** A thread in the reading pane ends with a
-reply box: one field, the reader's own words, and the message being answered quoted under
-them by the server. Pressing *preview* sends nothing — the server composes the reply and
-returns it as a plan, and the reader sees the whole message, recipients and quote and all,
-before anything leaves. Pressing *send* sends that. There is deliberately no recipient
-field: the box answers the newest message in the thread Gmail holds, and the recipients are
-that message's own — its sender in `To`, and its original `To` and `Cc` in `Cc` — minus
-every address the mailbox itself owns, so a loopback server behind a tunnel with no
-authentication can answer the reader's correspondence and cannot send mail to an address
-that correspondence did not already carry. (Which addresses are the reader's own is the
-mailbox's answer, not a setting here: docket reads the account's profile and its send-as
-aliases, because mail is usually addressed to an alias rather than to the account's name.)
-When that leaves nobody at all — a note to yourself, or two of your own addresses in one
-thread — the reply answers **you**: the sender comes back on, because a reply to your own
-message is what such a thread is for, and it is the only address this server can name
-without inventing one.
-The one thing the reader decides about that audience is a **reply all** tick under the
-field, on by default: clearing it answers the sender alone. It cannot do the opposite —
-there is no value of it that puts an address on the reply that the message did not carry.
+**Replying is reply-all, and off by default, and who it reaches is the reader's to
+say.** A thread in the reading pane ends with a reply box: one field, the reader's own
+words, and the message being answered quoted under them by the server. Pressing *preview*
+sends nothing — the server composes the reply and returns it as a plan, and the reader sees
+the whole message, recipients and quote and all, before anything leaves. Pressing *send*
+sends that. The plan's audience starts from the message being answered — the newest message
+in the thread Gmail holds, its sender in `To`, its original `To` and `Cc` in `Cc` — and is
+edited in the two **address fields** the preview draws, one for each list. Every address is
+a chip that can be taken off the reply or moved to the other list, and either field takes an
+address typed into it: what is offered is the corpus's own people plus the audience of the
+message being answered, and a reader may equally type an address no corpus has ever seen.
+So a reply reaches whoever the reader names it for. The two things a field refuses are the
+reader's own address and an address that is already on the reply, in either list.
+
+The one thing the reply-all tick decides about the *starting* audience is whether the
+message's other people come with it: it is on by default, and clearing it answers the sender
+alone. Adding anybody back is the fields' business, not the tick's.
+
+**What bounds a send is the grant, not the audience.** `POST /v1/send` is answered only on
+the server's loopback bind, with no authentication — a request is whoever can reach the port
+— and only when the server was started with `-send-mail` (`enableSendMail` in the nix
+module); without it the box says so and nothing is written. A host that leaves that grant on
+is a host where whoever can reach the port can name any address they can type and send mail
+as the reader to it. A host that must not send to arbitrary addresses is a host that should
+not grant it. The addresses in a request are checked for shape — each one has to parse as an
+address, and the same address may not be named twice — and for nothing else: whether a domain
+exists is the mailbox's answer, not this server's.
+
+The reader's own address is the corpus's answer rather than a setting here: `/v1/settings`
+names the person the reader is and `/v1/people` says which addresses that person has, which
+is how a field knows what to refuse. A message whose audience is only the reader — a note to
+yourself, or two of your own addresses in one thread — comes back with the sender on it,
+because a reply to your own message is what such a thread is for; that stays the mailbox's
+reply to compose, and the field shows it like any other address.
 
 **A reply goes out in both forms, and the reader can send the text alone.** The message is
 one `multipart/alternative`: the plain text it has always been, and the same words as HTML
