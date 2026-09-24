@@ -104,7 +104,11 @@ export function NavRefresh() {
       disabled={busy}
       onClick={() => void refresh()}
     >
-      <span className="spinner" aria-hidden="true" />
+      <svg className="spinner" viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M11.955 4.547A5.25 5.25 0 1 1 8 2.75M11.581 2.75L13.007 5.752L10.225 3.934"
+          fill="none" stroke="currentColor" strokeWidth="1.5"
+          strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
     </button>
   );
 }

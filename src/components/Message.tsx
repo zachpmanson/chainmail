@@ -353,7 +353,11 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
                    says it with `aria-busy`, and the pane has one live region for
                    the things that happen to it (see .pullnote) — a mark that
                    comes and goes on every chip must not be a second one. */
-                <span className="spinner" role="img" aria-label="Downloading…" />
+                <svg className="spinner" viewBox="0 0 16 16" role="img" aria-label="Downloading…">
+                  <path d="M11.955 4.547A5.25 5.25 0 1 1 8 2.75M11.581 2.75L13.007 5.752L10.225 3.934"
+                    fill="none" stroke="currentColor" strokeWidth="1.5"
+                    strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
               ) : (
                 <>
                   {a.kind ?? "file"} · {a.size ?? ""}
@@ -669,7 +673,11 @@ function OriginalControl({ on, state, ask }: { on: boolean; state: Original; ask
         onClick={ask}
       >
         {asking ? (
-          <span className="spinner" aria-hidden="true" />
+          <svg className="spinner" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M11.955 4.547A5.25 5.25 0 1 1 8 2.75M11.581 2.75L13.007 5.752L10.225 3.934"
+              fill="none" stroke="currentColor" strokeWidth="1.5"
+              strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
         ) : (
           /* The sender's own markup, as one glyph: the two carets and the slash
              between them. Nothing marks the pressed state here — that is the colour

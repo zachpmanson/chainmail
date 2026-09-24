@@ -308,31 +308,30 @@
   .navrefresh:hover, .navcancel:hover { color:var(--accent); border-color:var(--line);
     background:var(--card); }
   .navrefresh:disabled { cursor:default; }
-  /* dripfeed-web's spinner, glyph and all (src/index.css there): the same ↻, the
-     same 0.8s linear turn, so the act reads the same in both apps. It spins only
-     while the button is working — as a button's own icon, a still ↻ is what the
-     control *is*, and a turning one is what it is doing.
+  /* dripfeed-web's spinner (src/index.css there): the same ↻, the same 0.8s
+     linear turn, so the act reads the same in both apps. It turns only while its
+     thing is working — as a button's own icon, a still ↻ is what the control
+     *is*, and a turning one is what it is doing.
 
-     The box is the app's glyph size, 18px — the same as the svg glyphs in every
-     other icon button in the app (see .ibicon svg) — and it is what the button's
-     own size is made of.
+     One box, the drawn mark's 1em square, on all three sites: no forced 18px box
+     with a `line-height` picked to line the ink up inside it, which is a font
+     constant and not a fix. The 18px look is kept with `font-size` on the two
+     buttons (the app's glyph size, the same as the svg glyphs in every other icon
+     button — see .ibicon svg); the chip keeps the .ameta size it inherits.
 
-     `line-height:normal`, not the glyph's own 1em, and that is the whole of the
-     wobble fix. A transform turns about the box centre, and the glyph's ink is
-     NOT centred in its em box: measured in a real browser (DejaVu Sans, 18px),
-     the ink's bounding box centre sits 1.75px above the 18px box centre, so the
-     ink orbits a point 1.75px off and the glyph visibly wobbles. The font's own
-     line box (`normal`, ~21px against the 18px box) puts the baseline low enough
-     that the ink centre lands on the box centre — measured residual 0.25px,
-     against 1.75px with `line-height:1em`. A forced box is NOT the cause: the
-     chip's shrink-to-fit spinner wobbles by the same 0.097em, only smaller. Do
-     not put a `line-height` back on `.spinner`. */
-  .spinner { display:inline-block; line-height:normal; vertical-align:middle; }
-  .spinner::before { content:"\21BB"; }
+     The mark is DRAWN, not typeset, and that is the whole of the wobble fix. A
+     transform turns about the box centre, and a character's ink is NOT centred
+     in its em box: measured in a real browser, DejaVu Sans' ↻ ink centre sits
+     0.097em above the box centre, so a typeset ↻ orbits the axis rather than
+     turning on it. That offset is a font constant — swapping `line-height` only
+     re-centres it for the one font it was measured against, and Zach's browser
+     does not set ↻ in DejaVu. The path is drawn to the box centre instead, so
+     rotate() is exact on every font, browser and size. */
+  .spinner { display:inline-block; width:1em; height:1em; line-height:1;
+    vertical-align:middle; flex:none; }
   /* One size for the two icon buttons' glyphs; the chip keeps the .ameta size it
-     inherits and its own em box (see .att.busy .spinner). */
-  .navrefresh .spinner, .origbtn.busy .spinner { width:1.125rem; height:1.125rem;
-    font-size:1.125rem; }
+     inherits from the line it is in. */
+  .navrefresh .spinner, .origbtn.busy .spinner { font-size:1.125rem; }
   /* One turn, declared once: the nav's icon only turns while the button is
      working; the other two spinners exist only while their thing is. */
   .navrefresh.busy .spinner, .origbtn.busy .spinner, .att.busy .spinner {
@@ -733,11 +732,13 @@
   .att.busy { border-color:var(--accent); cursor:progress; }
   .att.busy .ameta { color:var(--fg); }
   /* The chip's spinner is the .spinner base (see .navrefresh .spinner) at the
-     .ameta size it inherits, in an em box of its own: the base's `line-height:
-     normal` only centres the ink when the box is the 1em the two buttons force,
-     and a chip-sized spinner inheriting the chip's 1.45 line box would keep the
-     same 0.097em wobble. */
-  .att.busy .spinner { height:1em; vertical-align:.02em; }
+     .ameta size it inherits, but as wide as the ↻ it replaced: a typeset glyph was
+     as wide as its advance (0.838em in this host's DejaVu Sans), and the chip's
+     own width is its file name plus this box, so the drawn mark is given that
+     width and the chip's geometry stays where it was. The square viewBox centres
+     inside that box (preserveAspectRatio), so the mark is still turned about its
+     own centre. */
+  .att.busy .spinner { width:.838em; }
   /* A chip with a thumbnail centres on the picture instead of the text baseline,
      which is what the other chips align to. Left as its own rule rather than
      changing .att, so a chip without a picture keeps sitting on the baseline of
