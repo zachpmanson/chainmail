@@ -355,7 +355,7 @@ export function ThreadMessages({
   // stylesheet's unknown slot, which is what the page draws for them too.
   const slot = slotsFor(orgOrder(shown.map((e) => e.org)));
   // The hover title for a name, which is what the participants panel and the reply
-  // box's audience line ask by. A sender is answered from their own entry's header,
+  // target link ask by. A sender is answered from their own entry's header,
   // which is evidence about that message; everybody else — a recipient, a cc, a
   // person whose only part in the thread is receiving it — has no address in the
   // read at all (see castOfEntries), so the corpus's identity graph answers instead.
@@ -547,7 +547,7 @@ export function ThreadMessages({
           // function a page build does.
           to={e.to}
           // The receipt's names, by the same map the panel's rows and the reply
-          // box's audience line use: the people on this line are mostly the ones
+          // fields use: the people on this line are mostly the ones
           // who sent nothing, so the thread read has no address for them and the
           // corpus's identity graph is where one comes from.
           toTitle={(name) => titles.get(name) ?? name}
@@ -705,14 +705,10 @@ export function ThreadMessages({
         <ReplyBox
           thread={thread}
           answer={answer}
-          // The answered message's own element id, off the map the bubbles and
-          // the reply links are named from — so the box's header rings the same
-          // bubble the link under it does, and neither can name a second one.
-          answers={anchor(indexOf.get(answer.extId) ?? 0)}
+          answerAnchor={anchor(indexOf.get(answer.extId) ?? 0)}
           words={wordsOf(answer)}
           all={all}
           onAll={setAll}
-          newest={answer.extId === newestAnswer?.extId}
           aimed={aimed}
         />
       ) : null}

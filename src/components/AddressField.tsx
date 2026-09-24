@@ -29,8 +29,7 @@ import { useMemo, useRef, useState } from "react";
  * reads as broken.
  *
  * The markup is phrasing content throughout — spans, an input, buttons — because
- * this control is read as part of a sentence (see ReplyBox's plan, where "to … cc …"
- * is one line of prose with the fields in it).
+ * ReplyBox embeds each field in a labeled recipient row on the compose screen.
  */
 
 /** One address as this page holds it: the address, which is what a message is sent

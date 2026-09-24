@@ -428,17 +428,14 @@ export function attach(doc: Document = document): () => void {
 
   /* ---------- pointing at a claim about a message marks that message ----------
    *
-   * Two things on this page name another message and can be checked where the
+   * Two links on this page name another message and can be checked where the
    * pointer already is: "↩ in reply to Ada Okoye, Mon 2 Mar 2026 19:15" under a
-   * bubble's header, and the reply box's own "Replying to Ada Okoye, …" line at
-   * the foot of the thread. Each makes two claims at once: which message this one
-   * answers, and that it is the message the reader thinks it is. Checking the
-   * second by following the link costs the reader the message they were reading,
-   * to look at one that usually sits somewhere above, already scrolled past — so
-   * both answer it where the pointer already is, by lighting the message they
-   * name with the same ring the minimap's rows use (see `.mhov` in styles.css).
-   * The two and a minimap row ask the same question about the same message, and
-   * one mark for all of them is what stops them from disagreeing about the answer.
+   * bubble's header, and the compact target link on the reply composer. Each says
+   * which message the reader is answering. Following the composer link would take
+   * the reader away from the reply they were composing, so both links light their
+   * target with the same ring the minimap's rows use (see `.mhov` in styles.css).
+   * One mark for all of them is what stops links and the minimap from disagreeing
+   * about the answer.
    *
    * The loud ring rather than the quiet colour the pane lights a path of reply
    * LINES with (see `.rhov` below): those lines answer a pointer travelling
@@ -475,23 +472,14 @@ export function attach(doc: Document = document): () => void {
     else ringed.delete(el);
   };
   /** The element a hover is about, and the message id it names, or nothing when
-   *  the event is about something else. Two elements make such a claim and both
-   *  state it the same way — a plain element id, not a resolved node: the reply
-   *  link in its href (see ReplyLink), the box's header in its `data-answers`
-   *  (see ReplyBox). Reading the id and resolving it here, rather than letting
-   *  each element carry the node it means, is what keeps the two in step with the
-   *  bubble ids: a link that jumps to a message and a header that rings it must
-   *  name the same element, and the pane's anchor map is the one answer.
-   *  `closest` because the pointer reports the innermost element it is on, and the
-   *  arrow, the label and the names inside the header are all inside the element
-   *  that makes the claim. */
+   *  the event is about something else. Reply links name their target in the href;
+   *  resolving it here keeps the link's ring in step with the bubble ids and the
+   *  pane's anchor map. `closest` because the pointer reports the innermost element
+   *  it is on, and the arrow and label are inside the link that makes the claim. */
   const claimAt = (el: EventTarget | null): { el: Element; id: string } | null => {
     if (!(el instanceof Element)) return null;
     const link = el.closest<HTMLAnchorElement>("a.par[href^='#']");
-    if (link) return { el: link, id: link.getAttribute("href")!.slice(1) };
-    const header = el.closest<HTMLElement>("[data-answers]");
-    const id = header?.getAttribute("data-answers");
-    return header && id ? { el: header, id } : null;
+    return link ? { el: link, id: link.getAttribute("href")!.slice(1) } : null;
   };
   for (const type of ["mouseover", "mouseout"] as const) {
     on(doc, type, (ev) => {
