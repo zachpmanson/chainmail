@@ -24,7 +24,7 @@ import { $api, type CorpusEntry } from "./api";
  *   the only source for a name that sent nothing in the thread being read: the
  *   entry's participants carry a person id and a name and no address at all (see
  *   castOfEntries in Participants.tsx), so a recipient, a cc and a name in a reply
- *   box's audience line would otherwise have no address to show.
+ *   compose recipient fields would otherwise have no address to show.
  *
  * The distinction is why both exist rather than one replacing the other: a bubble
  * is a claim about a message and asks the header; a name in a list is a claim about

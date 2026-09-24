@@ -1246,9 +1246,17 @@
    the pane growing. */
 .replybox { margin:.9rem 0 .3rem; padding:.6rem .7rem; border:1px solid var(--line);
   border-radius:8px; background:var(--card); }
-/* Which message is being answered, in the words its own bubble wears — the same
-   name and clock the link above it prints, because both read the same entry. */
-.replyto { margin:0 0 .45rem; font-size:.74rem; color:var(--muted); }
+/* One compose line: the two recipient lists, then the target-message link at the
+   far edge. The fields may wrap their chips internally, but stay side by side. */
+.replyrecipients { display:flex; align-items:center; gap:.45rem; margin:0 0 .55rem; }
+.replyrecipient { display:flex; align-items:center; gap:.3rem; flex:1 1 0; min-width:0;
+  font-size:.74rem; color:var(--muted); }
+.replyrecipient > span, .replytarget { flex:none; }
+.replyrecipient > .addrfield { flex:1; display:inline-flex; min-width:0; }
+.replyrecipient .addrinput { min-width:3rem; }
+.replytarget { display:inline-flex; align-items:center; gap:.25rem; margin-left:auto;
+  white-space:nowrap; text-decoration:none; }
+.replytarget .arw { font-size:.8rem; line-height:1; }
 .replyinput { display:block; width:100%; font:inherit; font-size:.82rem;
   line-height:1.45; padding:.45rem .55rem; color:var(--fg); background:var(--bg);
   border:1px solid var(--line); border-radius:6px; resize:vertical; }
@@ -1299,19 +1307,9 @@
   font-size:.74rem; color:var(--muted); cursor:pointer; }
 .replytick input { margin:0; accent-color:var(--accent); cursor:pointer; }
 .replytick:has(input:disabled) { opacity:.55; cursor:default; }
-/* The plan's audience, as the reader arranges it: one address field per list, each a
-   bordered run of chips with an input at the end of it. A chip is an address and the
-   two presses that act on it — the one that sends it in the other list, and the one
-   that takes it off the reply — and the field is where the reader names somebody new.
-   The fields read as part of the sentence above rather than as a table under it: "to"
-   and "cc" are words in that line, and each field is what stands where a list of
-   addresses would stand if the line were prose.
-
-   The field is one box because it is one answer to one question — who is on this list
-   — and a chip that sat outside it would be a second thing to look at. Its input is
-   chrome-less and takes the rest of the row, so the caret lands where the next address
-   would go, and the suggestions hang under the whole box rather than under the input:
-   a list as long as a person's name would otherwise start halfway across the line. */
+/* Each address field is one bordered run of chips with an input at the end. The
+   suggestions hang under the whole box rather than the input, so the list stays as
+   wide as the recipient row while the reader types. */
 .addrfield { position:relative; display:inline-flex; flex-wrap:wrap; align-items:center;
   gap:.2rem; margin:0 .15rem; padding:.1rem .3rem; max-width:100%; vertical-align:middle;
   border:1px solid var(--line); border-radius:6px; background:var(--bg); }

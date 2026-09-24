@@ -1,8 +1,8 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { $api, type CorpusEntry, type SendResponse } from "../lib/api";
 import { dismissToast, pushToast } from "../lib/toasts";
-import { addressesOf, usePersonAddresses, withAddress } from "../lib/who";
+import { addressesOf, usePersonAddresses } from "../lib/who";
 import { addressKey, AddressField, type Address } from "./AddressField";
 import { refusal, staleAfterMail, SAID_MS } from "./MailVerbs";
 
@@ -11,18 +11,14 @@ import { refusal, staleAfterMail, SAID_MS } from "./MailVerbs";
  *
  * A reader who has just read a thread could already archive it, trash it, file it
  * away and mark it read; what they could not do was answer it. This is that, and
- * it is deliberately the smallest version of it that is still worth having: one
- * message, one field, plain text, and the message being answered quoted under the
- * reader's words.
+ * it is deliberately kept small: one line of To and Cc autocomplete plus a link to
+ * the message being answered, the reply text area below it, and a preview of what sends.
  *
  * **It answers everyone the message was addressed to, and who else it reaches is the
  * reader's to name — that widening is deliberate, and this is where it is stated.** The
- * server takes the answered message's own headers — its sender, and its original To and
- * Cc — and hands them back with the plan as the audience the reply starts from; the two
- * address fields on the preview are where the reader edits that audience, and an address
- * the message did not carry can be typed into them. So a reply can reach somebody this
- * thread has never seen, which the box before this could not do and the mailbox before
- * this refused.
+ * server starts from the answered message's own audience. The two address fields on the
+ * compose screen let the reader edit it before preview, and accept an address the message
+ * did not carry, so a reply can reach somebody this thread has never seen.
  *
  * What still bounds a send is not the audience but the surface. The server answers only
  * on its loopback bind, with no authentication — a request is whoever can reach the port
@@ -40,8 +36,8 @@ import { refusal, staleAfterMail, SAID_MS } from "./MailVerbs";
  * press in a message's own receipt (see AnswerPress): a message on this page, one the
  * corpus holds a mailbox copy of. So the reader chooses among the messages they are
  * reading and nothing else, which is what makes the target a choice rather than a
- * guess — and it is a choice about *whom they are answering*, which is not the same
- * question as who the answer reaches (the fields on the plan are that one).
+ * guess — and it is a choice about *which message they are answering*, separate from
+ * the audience they arrange in the compose fields.
  *
  * **The quote is the server's, not this component's.** What the reader types is
  * their words alone; the message being answered is quoted and attributed by the
@@ -58,27 +54,10 @@ import { refusal, staleAfterMail, SAID_MS } from "./MailVerbs";
  * just read. A reply cannot be recalled, so the last thing before one goes out is
  * a screen with the message on it rather than a button that promised.
  *
- * What the preview shows is deliberately the *whole* object rather than a summary:
- * a quote of a long message is the bulk of what will be sent, and a reader who is
- * going to send a signature, a footer or half of the previous message along with
- * their sentence should be able to see that before it leaves — which is also why
- * the plan names the cc: who else is on the answer is the one part of it a reader
- * can still change at that point, and the whole reason the plan is a control rather
- * than a receipt. What the box does not offer is offered nowhere: no attachments, no
- * drafts, no send-later. Who the reply reaches is a field — the two address fields on
- * the preview, and the component they are (see AddressField) — which is the one thing
- * on this screen a reader can name rather than only arrange.
- *
- * **The line above the field names that audience, by name.** "everyone the message
- * was addressed to" was the box asking the reader to trust that it knew; the names
- * are the corpus's own rows for the people on that message (see `audience` below),
- * so a reader can see that the reply is going to the same six colleagues the thread
- * has, and see the one they meant to leave off before they press anything. It is the
- * same audience the mailbox will use and not a second opinion about it: the names
- * come from the same headers, read by the corpus instead of by docket, and the preview
- * prints the addresses the mailbox itself resolved — that, and not this line, is the
- * last word before a send, and it is also where the reader arranges who the reply
- * carries (see the address fields on the plan below).
+ * The preview shows the whole message, quote and all, so the reader can check exactly
+ * what will go out. Its recipient line is the mailbox's authoritative answer; changes
+ * happen in the compose fields, then the message is previewed again. The box offers no
+ * attachments, drafts or send-later.
  *
  * **The two ticks are both subtractions, and both are on.** The reply is one message
  * in two renderings — the words as text, and the same words as HTML with the quote
@@ -88,20 +67,17 @@ import { refusal, staleAfterMail, SAID_MS } from "./MailVerbs";
  * same either way, so a reader who sends plain text has sent exactly what the
  * preview showed them, minus markup they never wrote.
  *
- * **And the plan's audience is a pair of address fields, which is the third choice on
- * this screen and the only one that can add.** The plan carries the addresses the
- * mailbox resolved (see SendResponse's toRecipients/ccRecipients) rather than only the
- * headers it will render them into, so what the preview draws is the audience itself as
- * a control: one field per list, each holding the addresses in it as chips — take one
- * off the reply, press it to send it in the other list, or type into either field to
- * name one (see AddressField). It is the same kind of move as the reply-all tick, made
- * finer and made wider: the reply no longer reaches only the people the message did.
+ * **The compose screen has a To and a Cc address field.** Each holds the recipients
+ * as chips, lets the reader remove or move an address, and offers autocomplete or direct
+ * typing. A list the reader leaves untouched stays under the mailbox's default, so its
+ * Reply-To and account-alias handling remains authoritative; the preview then displays
+ * the exact resulting audience before anything is sent.
  *
  * **Two addresses are refused however they are typed or picked: the reader's own, and
  * one that is already on the reply.** One recipient is one address in one list, and a
  * reply is not sent to the person writing it — the corpus knows which address that is
- * from the same settings read the cc line above uses, and either refusal is said in
- * words beside the field rather than by silently dropping what was typed. Everything
+ * from the reader setting and identity graph, and either refusal is said in words
+ * beside the field rather than by silently dropping what was typed. Everything
  * else is accepted, including an address the corpus has never seen, which is the whole
  * point of a field that can be typed into. What the second press sends is the audience
  * the fields hold, named address by address in the request (see SendRequest's to/cc),
@@ -123,49 +99,6 @@ import { refusal, staleAfterMail, SAID_MS } from "./MailVerbs";
  * box the moment somebody clicks another thread.
  */
 /**
- * Everyone a reply-all would reach besides the person who wrote the message: the
- * names recorded on it in To or Cc, minus the reader's own person, in the order
- * the message carried them.
- *
- * Read off the entry's participants rather than by taking the header text apart
- * here, because those rows are the corpus's own answer about who is on a message —
- * the same rows the participants panel and the "to" line under the bubble are drawn
- * from — and a split of the display line on commas would be a second, worse reading
- * of it. Minus the reader for the reason the mailbox leaves them out of its cc: a
- * reply is not addressed back to the person writing it, and a line naming the reader
- * as somebody this goes to would be the box asking them to check a list it had got
- * wrong. Names are deduplicated as they are printed: two person rows for one
- * colleague are one name on this line.
- *
- * This is the audience the mailbox will use, not a rival to it — the same headers,
- * read by the corpus instead of by docket, and the preview prints the addresses the
- * mailbox itself resolved. `me` is the reader's person id as /v1/settings gives it;
- * with none named, nothing is subtracted, which is the honest reading of a reader
- * who has not said who they are.
- */
-export function audience(entry: CorpusEntry, me: number | undefined): string[] {
-  const names: string[] = [];
-  for (const p of entry.participants ?? []) {
-    if (p.role === "from" || (me !== undefined && p.personId === me)) continue;
-    if (!names.includes(p.name)) names.push(p.name);
-  }
-  return names;
-}
-
-/** A list as a sentence says it: "Ada", "Ada and Bo", "Ada, Bo and Cy" — and each
- *  name is its own element, because each one carries the addresses behind it as a
- *  hover title. The separators are between the names rather than inside them: a
- *  title on "Ada and Bo" would answer a hover about one person with two. */
-function names(names: string[], title: (name: string) => string) {
-  return names.map((name, i) => (
-    <Fragment key={name}>
-      {i === 0 ? "" : i === names.length - 1 ? " and " : ", "}
-      <span title={title(name)}>{name}</span>
-    </Fragment>
-  ));
-}
-
-/**
  * The press that points the box below at the message above it: "reply all", in
  * the receipt of a bubble's header, beside the control that copies the message and
  * the one that switches to the sender's own rendering.
@@ -183,8 +116,8 @@ function names(names: string[], title: (name: string) => string) {
  * this page, one the corpus holds — a press cannot name a correspondent the reader
  * has not been reading — and the audience of the answer is still assembled from that
  * message's own headers by the mailbox. What a reader gains here is an older message,
- * not a new recipient: who else the reply ends up reaching is decided further down,
- * in the fields on the plan (see ReplyBox).
+ * not a new recipient: who else the reply ends up reaching is decided in the To/Cc
+ * fields on the compose screen (see ReplyBox).
  *
  * Drawn only where the caller has both things: a mailbox copy of the message to
  * thread an answer onto (see gmailIdOf), and a box to point at it. A message
@@ -239,48 +172,13 @@ export function AnswerPress({
   );
 }
 
-export function ReplyBox({
-  thread,
-  answer,
-  answers,
-  words,
-  all,
-  onAll,
-  newest,
-  aimed,
-}: {
-  /** The thread being read, which is what is re-read once the answer is in it. */
+export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aimed }: {
   thread: { rootExtId: string };
-  /** The message being answered: by default the newest entry of this thread the
-   *  mailbox holds, and the message a press on a header's answer control names
-   *  when the reader wants an older one. See AnswerPress below. */
   answer: CorpusEntry;
-  /** Where that message's own bubble is on the page — the element id the pane's
-   *  anchor map gives it (see ThreadMessages' anchor), so the header below can
-   *  name the same element the reply link under that bubble names. Passed in
-   *  rather than recomputed here: a second id map inside this box would be a
-   *  second answer to "which element is this message", and the reply link, the
-   *  bubble's own id and this header must all give the same one. */
-  answers: string;
-  /** How that message's own bubble names it — the name and clock its head wears
-   *  (see ThreadMessages' stamp words). Passed in rather than written again here:
-   *  the box says "replying to Lena Whitfield, Mon 2 Mar 2026 09:15", and a reader
-   *  looking at the same message in the same pane must not be told a different
-   *  clock by the reply box than by the bubble above it. */
+  answerAnchor: string;
   words: { who: string; whoTitle?: string; when: string };
-  /** Whether the answer goes to everyone the answered message was addressed to or
-   *  to its sender alone. Held by the pane rather than here, because a header's
-   *  answer control is a press about the audience as well as about the message:
-   *  "reply all" is what it says, so it is what it must turn on. */
   all: boolean;
   onAll: (all: boolean) => void;
-  /** Whether the message being answered is the newest one the pane could answer.
-   *  The line above the field says which message this is, and "the newest here" is
-   *  only true of one of them. */
-  newest: boolean;
-  /** How many times a header's answer control has been pressed, across the life
-   *  of this box — a count rather than a flag, because pressing the control on the
-   *  message already answered is still a press and must still bring the box up. */
   aimed: number;
 }) {
   const queryClient = useQueryClient();
@@ -298,15 +196,14 @@ export function ReplyBox({
   const [html, setHtml] = useState(true);
   // The plan the preview came back with, while the reader is looking at it.
   const [plan, setPlan] = useState<SendResponse | null>(null);
-  // The plan's audience as the reader arranges it, in the two lists it is carried
-  // in — the address field's value for each. Held beside the plan rather than
-  // derived from it because it is the one part of the plan the reader edits, and set
-  // with it so the two are never a plan and a stale field. **null** is not an empty
-  // list: it is a plan that carried no recipient addresses at all (a fixture or an
-  // older server — see the fallback below), where there is nothing to seed a field
-  // with and the preview prints the headers it was given instead.
-  const [to, setTo] = useState<Address[] | null>(null);
-  const [cc, setCc] = useState<Address[] | null>(null);
+  // Recipients are arranged on the compose screen, before the message preview.
+  // Each list has its own touched bit: leaving one alone lets the mailbox keep its
+  // authoritative default (notably Reply-To), while changing the other does not
+  // accidentally replace it with a guessed address from the corpus.
+  const [to, setTo] = useState<Address[]>([]);
+  const [cc, setCc] = useState<Address[]>([]);
+  const [toTouched, setToTouched] = useState(false);
+  const [ccTouched, setCcTouched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // The box's own element, which the aim below brings to the reader. A ref rather
@@ -322,8 +219,10 @@ export function ReplyBox({
   // take again rather than something to be carried across.
   useEffect(() => {
     setPlan(null);
-    setTo(null);
-    setCc(null);
+    setTo([]);
+    setCc([]);
+    setToTouched(false);
+    setCcTouched(false);
   }, [answer.extId]);
 
   // A press on a message's own answer control is an intent to write, and the box
@@ -359,60 +258,76 @@ export function ReplyBox({
 
   const send = $api.useMutation("post", "/v1/send");
 
-  // The two lists the plan is drawn from, and whether the plan carried any at all.
-  // A plan that carried only the rendered headers has nothing to seed a field with,
-  // and the preview falls back to printing what it has rather than inventing an
-  // audience to draw (see below).
-  const addressed = to !== null && cc !== null;
-
-  // Where an address moves to when its chip's press is taken: the same address, put
-  // in the other list. Neither press can lose an address — the two lists are the
-  // whole of the audience the reply carries — so this is one write of both, and the
-  // address keeps whatever name it had.
+  // Move a chip to the other list. Both become explicit because the reader has
+  // arranged the audience rather than left either list to the mailbox's default.
   const move = (from: "to" | "cc", who: Address) => {
+    setToTouched(true);
+    setCcTouched(true);
     const add = (list: Address[]) =>
       list.some((a) => addressKey(a.address) === addressKey(who.address)) ? list : [...list, who];
-    if (from === "to") setCc(add(cc ?? []));
-    else setTo(add(to ?? []));
+    if (from === "to") setCc(add(cc));
+    else setTo(add(to));
+  };
+  const changeTo = (next: Address[]) => {
+    setToTouched(true);
+    setTo(next);
+  };
+  const changeCc = (next: Address[]) => {
+    setCcTouched(true);
+    setCc(next);
   };
 
-  // The plan and its audience go together: a plan is not a thing to arrange once the
-  // reader is editing again, and a message that has gone has no audience left here.
-  const unplan = () => {
-    setPlan(null);
-    setTo(null);
-    setCc(null);
-  };
+  // Going back from the checked message returns to composition with the arranged
+  // recipients intact. The plan itself is only a preview and is safe to discard.
+  const unplan = () => setPlan(null);
 
-  // Who the reply would reach besides the sender, named above the field. The
-  // settings read is what knows which of the people on the message is the reader;
-  // it is a read of the local store, and the pane's neighbours already keep it
-  // warm.
   const settings = $api.useQuery("get", "/v1/settings", {});
-  const others = audience(answer, settings.data?.mePersonId);
-
-  // The addresses behind those names. The message carries a person id and a name for
-  // each of them and no address (see castOfEntries in Participants.tsx, and lib/who),
-  // because nothing in a thread read records where a recipient's copy was sent — so
-  // the corpus's identity graph is asked, and a name whose person has an address
-  // gets it as a hover title. Every row for a printed name contributes, since the
-  // line prints one name for what may be two rows of the same person.
   const people = usePersonAddresses();
-  const addressOf = (name: string) =>
-    withAddress(
-      name,
-      (answer.participants ?? []).filter((p) => p.name === name).flatMap((p) => people.get(p.personId) ?? []),
-    );
-
-  // Everything the fields may offer, in the order they would rather offer it — the
-  // reader picks from the top of a list, so the likeliest address goes there. Three
-  // sources: the people on the message being answered, whose addresses the corpus
-  // holds under the person ids the message carries; the recipients the plan
-  // resolved, which bring the names the message itself gave; and then everyone else
-  // the corpus knows, so answering somebody who was not on this thread is a pick
-  // rather than a retyping. Folded by address, first source wins, because a person
-  // is one address here and two rows for them would be two chips.
   const roster = $api.useQuery("get", "/v1/people", {});
+
+  // The reader's own addresses, which must not appear in the suggested reply-all
+  // audience. The identity graph is the corpus's answer about mailbox aliases.
+  const mine = useMemo(
+    () => (settings.data?.mePersonId === undefined ? [] : people.get(settings.data.mePersonId) ?? []),
+    [people, settings.data],
+  );
+
+  // Seed the visible fields from the entry and the corpus, but leave them
+  // untouched until the reader edits them. In particular, an untouched To stays
+  // out of the request so Gmail can honour Reply-To rather than this best-known
+  // From address; the preview response then supplies the exact mailbox audience.
+  const defaults = useMemo(() => {
+    const to: Address[] = [];
+    const cc: Address[] = [];
+    const seen = new Set(mine.map(addressKey));
+    const offer = (list: Address[], who: Address) => {
+      const key = addressKey(who.address);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      list.push(who);
+    };
+    const participants = answer.participants ?? [];
+    const senders = participants.filter((p) => p.role === "from");
+    if (answer.fromEmail) offer(to, { name: answer.author ?? undefined, address: answer.fromEmail });
+    for (const p of senders)
+      for (const address of people.get(p.personId) ?? []) offer(to, { name: p.name, address });
+    for (const p of participants) {
+      if (p.role === "from" || p.personId === settings.data?.mePersonId) continue;
+      for (const address of people.get(p.personId) ?? []) offer(cc, { name: p.name, address });
+    }
+    return { to, cc };
+  }, [answer, mine, people, settings.data?.mePersonId]);
+
+  // Load defaults after the people query resolves, and update the suggested Cc
+  // when reply-all changes. Once a list is edited, it belongs to the reader.
+  useEffect(() => {
+    if (!toTouched) setTo(defaults.to);
+    if (!ccTouched) setCc(all ? defaults.cc : []);
+  }, [all, ccTouched, defaults, toTouched]);
+
+  // The autocomplete offers addresses on this message first, then everybody else
+  // the corpus knows. The explicit From header wins over a possibly stale identity
+  // row; the mailbox's Reply-To remains authoritative whenever To is untouched.
   const suggestions = useMemo(() => {
     const out: Address[] = [];
     const seen = new Set<string>();
@@ -422,24 +337,13 @@ export function ReplyBox({
       seen.add(key);
       out.push(who);
     };
+    if (answer.fromEmail) offer({ name: answer.author ?? undefined, address: answer.fromEmail });
     for (const p of answer.participants ?? [])
       for (const address of people.get(p.personId) ?? []) offer({ name: p.name, address });
-    for (const r of [...(plan?.toRecipients ?? []), ...(plan?.ccRecipients ?? [])])
-      offer({ name: r.name, address: r.address });
     for (const p of roster.data?.people ?? [])
       for (const address of addressesOf(p.identities)) offer({ name: p.displayName, address });
     return out;
-  }, [answer, people, plan, roster.data]);
-
-  // The reader's own addresses, which a reply is not sent to. Read the way the cc
-  // line's titles are read: the settings say which person the reader is, and the
-  // corpus's identity graph says what addresses that person has. Nothing else is
-  // guessed at — a second mailbox or a forwarding alias the corpus has never seen
-  // would be a guess, and a wrong one refuses an address for no reason.
-  const mine = useMemo(
-    () => (settings.data?.mePersonId === undefined ? [] : people.get(settings.data.mePersonId) ?? []),
-    [people, settings.data],
-  );
+  }, [answer, people, roster.data]);
 
   // The first press: a read. The server composes the reply and answers with the
   // plan, and nothing is written to the mailbox — so a press that fails here, from
@@ -450,17 +354,21 @@ export function ReplyBox({
     setBusy(true);
     try {
       const res = await send.mutateAsync({
-        body: { entry: answer.extId, body: own, all, html, confirm: false },
+        body: {
+          entry: answer.extId,
+          body: own,
+          all,
+          html,
+          confirm: false,
+          ...(toTouched ? { to: to.map((a) => a.address) } : {}),
+          ...(ccTouched ? { cc: cc.map((a) => a.address) } : {}),
+        },
       });
       setPlan(res);
-      // The audience comes with the plan, because the plan is where it is known:
-      // every address the mailbox resolved, in the lists it put them in. A plan
-      // that carried no addresses at all — a fixture, or a server from before the
-      // plan named them — leaves the fields unseeded, and the preview prints the
-      // headers it was given instead (see below).
-      const lists = res.toRecipients || res.ccRecipients;
-      setTo(lists ? (res.toRecipients ?? []) : null);
-      setCc(lists ? (res.ccRecipients ?? []) : null);
+      // While editing, the mailbox's response replaces any estimates from the
+      // corpus with the exact addresses it will use. The preview itself is read-only.
+      if (res.toRecipients) setTo(res.toRecipients);
+      if (res.ccRecipients) setCc(res.ccRecipients);
     } catch (e) {
       // Said on the pane rather than only in the console, for the reason the
       // verbs' refusals are: a button that answers with nothing reads as broken,
@@ -477,14 +385,11 @@ export function ReplyBox({
   // addressing itself is the fields' (see AddressField) and all this does is hand
   // over what they hold.
   //
-  // Naming the addresses is what the send does even when the reader changed
-  // nothing, because a list that is only ever the message's own audience cannot be
-  // said differently from the one that was read — and the whole point of the fields
-  // is that the reader may say it differently. Each entry is the bare address: a
-  // display name in a header is a formatting question with its own rules, and
-  // naming one here would be a second implementation of how a name is written.
-  // What the reader typed is what goes, and a name the message already carried is
-  // kept by the mailbox (see gmailclient's WithRecipients).
+  // Only edited lists are named in the send. Leaving one alone lets the mailbox
+  // apply its own defaults (including Reply-To and account aliases), exactly as it
+  // did for the preview. An edited list is sent as bare addresses: display names in
+  // headers are a formatting question with their own rules, and a name the message
+  // already carried is kept by the mailbox (see gmailclient's WithRecipients).
   //
   // Once it has gone, the thread is re-read: the server files the sent message
   // into the corpus in the same request, so the answer appears in this trail as
@@ -505,20 +410,16 @@ export function ReplyBox({
           all,
           html,
           confirm: true,
-          // The audience the reader arranged, as the bare addresses the mailbox
-          // resolved — the same set the fields hold, so what goes out is what was
-          // previewed. Absent when the plan carried no recipient addresses, which
-          // leaves the audience as the mailbox assembled it.
-          ...(addressed
-            ? {
-                to: (to ?? []).map((a) => a.address),
-                cc: (cc ?? []).map((a) => a.address),
-              }
-            : {}),
+          // Only a list the reader edited is named explicitly. The other one
+          // remains the mailbox's default, including Reply-To and account aliases.
+          ...(toTouched ? { to: to.map((a) => a.address) } : {}),
+          ...(ccTouched ? { cc: cc.map((a) => a.address) } : {}),
         },
       });
       unplan();
       setOwn("");
+      setToTouched(false);
+      setCcTouched(false);
       // Said in the corner rather than here, and in the same words: an answer that
       // has gone out is over, and what the reader is looking at now is the trail
       // it was filed into.
@@ -534,32 +435,6 @@ export function ReplyBox({
 
   return (
     <div className="replybox" ref={host}>
-      {/* The header says which message this box answers, and it is pointed at to
-          check that claim — so it carries the answered message's element id in
-          `data-answers`, which the document's delegated listener rings the named
-          bubble for (see behaviour.ts). An attribute rather than an anchor: the
-          box sits at the bottom of the thread to be typed in, and a link would
-          scroll the reader away from it. The whole line makes the claim, so the
-          attribute is on the paragraph rather than on any name inside it. */}
-      <p className="replyto" data-answers={answers}>
-        Replying to <span title={words.whoTitle ?? words.who}>{words.who || "the sender"}</span>
-        {words.when ? `, ${words.when}` : ""}
-        {all && others.length ? (
-          // A fragment rather than a template string, because each name in the list
-          // is an element now: it carries the addresses behind it as a title.
-          <>
-            , cc {names(others, addressOf)}
-          </>
-        ) : (
-          ", and nobody else on it"
-        )}{" "}
-        {/* Which message this is, which the reader needs to see because the box no
-            longer always answers the one they would guess: a press on an older
-            message's own control moves it, and the sentence is where that shows. */}
-        {newest
-          ? "— the newest message here the mailbox holds."
-          : "— the message you pressed reply all on, not the newest one here."}
-      </p>
       {error ? (
         <p className="selfail" role="alert">
           {error}
@@ -570,55 +445,12 @@ export function ReplyBox({
           <p className="replynote">
             <strong>Nothing has been sent yet.</strong> This is the whole message as
             it will go:{" "}
-            {/* Who it goes to is the fields themselves rather than a sentence beside
-                a control that restates it: what a reader checks before a send is
-                the list that is going, and a line that printed the list a second
-                time would be a second answer to it — the reader's arrangement, read
-                off two things that could disagree. Both lists are always drawn,
-                even when one of them is empty, because a reply that had no cc is
-                exactly the reply a reader may want to add one to. */}
-            {addressed ? (
+            to <strong>{plan.to || "(no recipient)"}</strong>
+            {plan.cc ? (
               <>
-                to{" "}
-                <AddressField
-                  label="to"
-                  moveTo="cc"
-                  move={(who) => move("to", who)}
-                  value={to ?? []}
-                  onChange={setTo}
-                  suggestions={suggestions}
-                  taken={cc ?? []}
-                  mine={mine}
-                  disabled={busy}
-                />
-                {(to ?? []).length ? null : (
-                  // The fact rather than the consequence: the line is a claim about the
-                  // message as it will go, and the press at the bottom is what refuses.
-                  <> (nobody in to)</>
-                )}
-                , cc{" "}
-                <AddressField
-                  label="cc"
-                  moveTo="to"
-                  move={(who) => move("cc", who)}
-                  value={cc ?? []}
-                  onChange={setCc}
-                  suggestions={suggestions}
-                  taken={to ?? []}
-                  mine={mine}
-                  disabled={busy}
-                />
+                , cc <strong>{plan.cc}</strong>
               </>
-            ) : (
-              <>
-                to <strong>{plan.to}</strong>
-                {plan.cc ? (
-                  <>
-                    , cc <strong>{plan.cc}</strong>
-                  </>
-                ) : null}
-              </>
-            )}
+            ) : null}
             , as <strong>{plan.subject}</strong>, in <strong>{plan.html ? "text and HTML" : "plain text alone"}</strong>. Your words come first and the message you
             are answering is quoted under them.
           </p>
@@ -674,6 +506,45 @@ export function ReplyBox({
         </div>
       ) : (
         <>
+          <div className="replyrecipients">
+            <div className="replyrecipient">
+              <span>to:</span>
+              <AddressField
+                label="to"
+                moveTo="cc"
+                move={(who) => move("to", who)}
+                value={to}
+                onChange={changeTo}
+                suggestions={suggestions}
+                taken={cc}
+                mine={mine}
+                disabled={busy}
+              />
+            </div>
+            <div className="replyrecipient">
+              <span>cc:</span>
+              <AddressField
+                label="cc"
+                moveTo="to"
+                move={(who) => move("cc", who)}
+                value={cc}
+                onChange={changeCc}
+                suggestions={suggestions}
+                taken={to}
+                mine={mine}
+                disabled={busy}
+              />
+            </div>
+            <a
+              className="opbtn par replytarget"
+              href={`#${answerAnchor}`}
+              aria-label={`Jump to the message being replied to: ${words.who || "the sender"}, ${words.when}`}
+              title={`Jump to the message being replied to: ${words.whoTitle ?? words.who}, ${words.when}`}
+            >
+              <span className="arw" aria-hidden="true">&#8617;</span>
+              <span>{words.who || "message"}</span>
+            </a>
+          </div>
           <textarea
             className="replyinput"
             aria-label="Your reply"
@@ -689,14 +560,14 @@ export function ReplyBox({
                 are about the *starting* audience rather than the whole of it: each one
                 takes something off the reply as the mailbox first assembled it — the
                 audience beyond the sender, and the second rendering of the words —
-                and what either leaves out can be put back in the address fields on
-                the plan, which is also where the audience grows. */}
+                and what either leaves out can be put back in the address fields above,
+                which is also where the audience grows. */}
             <div className="replyopts">
               <label
                 className="replytick"
                 title={
                   "Answer everyone the message was addressed to, not only whoever wrote it. " +
-                  "Who that is comes from the message itself — the fields on the plan are where " +
+                  "Who that is comes from the message itself — the fields above are where " +
                   "the reply's audience is edited."
                 }
               >
@@ -728,7 +599,8 @@ export function ReplyBox({
             <button
               type="button"
               className="opbtn"
-              disabled={busy || own.trim() === ""}
+              disabled={busy || own.trim() === "" || (toTouched && to.length === 0)}
+              title={toTouched && to.length === 0 ? "A reply needs somebody in to — put an address there first." : undefined}
               onClick={() => void review()}
             >
               {busy ? "preparing…" : "preview"}
