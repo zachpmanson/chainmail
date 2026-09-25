@@ -68,7 +68,7 @@ import { refusal, staleAfterMail, SAID_MS } from "./MailVerbs";
  * preview showed them, minus markup they never wrote.
  *
  * **The compose screen has a To and a Cc address field.** Each holds the recipients
- * as chips, lets the reader remove or move an address, and offers autocomplete or direct
+ * as chips, lets the reader remove an address, and offers autocomplete or direct
  * typing. A list the reader leaves untouched stays under the mailbox's default, so its
  * Reply-To and account-alias handling remains authoritative; the preview then displays
  * the exact resulting audience before anything is sent.
@@ -258,16 +258,6 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
 
   const send = $api.useMutation("post", "/v1/send");
 
-  // Move a chip to the other list. Both become explicit because the reader has
-  // arranged the audience rather than left either list to the mailbox's default.
-  const move = (from: "to" | "cc", who: Address) => {
-    setToTouched(true);
-    setCcTouched(true);
-    const add = (list: Address[]) =>
-      list.some((a) => addressKey(a.address) === addressKey(who.address)) ? list : [...list, who];
-    if (from === "to") setCc(add(cc));
-    else setTo(add(to));
-  };
   const changeTo = (next: Address[]) => {
     setToTouched(true);
     setTo(next);
@@ -292,31 +282,36 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
     [people, settings.data],
   );
 
-  // Seed the visible fields from the entry and the corpus, but leave them
-  // untouched until the reader edits them. In particular, an untouched To stays
-  // out of the request so Gmail can honour Reply-To rather than this best-known
-  // From address; the preview response then supplies the exact mailbox audience.
+  // Seed the visible fields from the message's actual headers, not the identity
+  // graph. A person may have several aliases, but a message was addressed to only
+  // the addresses its headers name; expanding a recipient to every known alias
+  // makes the visual default misleading and could send to people the message did
+  // not include. Untouched lists are still omitted from requests, so Gmail remains
+  // authoritative (notably for Reply-To) and its exact audience replaces these
+  // header-backed estimates in the preview.
   const defaults = useMemo(() => {
+    const seen = new Set(mine.map(addressKey));
     const to: Address[] = [];
     const cc: Address[] = [];
-    const seen = new Set(mine.map(addressKey));
+    const sender = answer.fromEmail ? addressKey(answer.fromEmail) : "";
     const offer = (list: Address[], who: Address) => {
       const key = addressKey(who.address);
-      if (!key || seen.has(key)) return;
+      if (!key || seen.has(key) || key === sender) return;
       seen.add(key);
       list.push(who);
     };
-    const participants = answer.participants ?? [];
-    const senders = participants.filter((p) => p.role === "from");
-    if (answer.fromEmail) offer(to, { name: answer.author ?? undefined, address: answer.fromEmail });
-    for (const p of senders)
-      for (const address of people.get(p.personId) ?? []) offer(to, { name: p.name, address });
-    for (const p of participants) {
-      if (p.role === "from" || p.personId === settings.data?.mePersonId) continue;
-      for (const address of people.get(p.personId) ?? []) offer(cc, { name: p.name, address });
+    if (answer.fromEmail) {
+      const key = addressKey(answer.fromEmail);
+      if (!seen.has(key)) {
+        seen.add(key);
+        to.push({ name: answer.author ?? undefined, address: answer.fromEmail });
+      }
+    }
+    for (const who of [...(answer.toRecipients ?? []), ...(answer.ccRecipients ?? [])]) {
+      offer(cc, { name: who.name, address: who.address });
     }
     return { to, cc };
-  }, [answer, mine, people, settings.data?.mePersonId]);
+  }, [answer, mine]);
 
   // Load defaults after the people query resolves, and update the suggested Cc
   // when reply-all changes. Once a list is edited, it belongs to the reader.
@@ -338,6 +333,8 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
       out.push(who);
     };
     if (answer.fromEmail) offer({ name: answer.author ?? undefined, address: answer.fromEmail });
+    for (const who of [...(answer.toRecipients ?? []), ...(answer.ccRecipients ?? [])])
+      offer({ name: who.name, address: who.address });
     for (const p of answer.participants ?? [])
       for (const address of people.get(p.personId) ?? []) offer({ name: p.name, address });
     for (const p of roster.data?.people ?? [])
@@ -511,8 +508,6 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
               <span>to:</span>
               <AddressField
                 label="to"
-                moveTo="cc"
-                move={(who) => move("to", who)}
                 value={to}
                 onChange={changeTo}
                 suggestions={suggestions}
@@ -525,8 +520,6 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
               <span>cc:</span>
               <AddressField
                 label="cc"
-                moveTo="to"
-                move={(who) => move("cc", who)}
                 value={cc}
                 onChange={changeCc}
                 suggestions={suggestions}

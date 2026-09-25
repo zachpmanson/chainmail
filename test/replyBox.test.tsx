@@ -63,6 +63,11 @@ const entry = (over: Record<string, unknown>) => ({
   tzOffsetMinutes: 660,
   org: "Loomworks",
   participants: [{ personId: 1, name: "Bo Halvorsen", role: "from" }],
+  toRecipients: [{ name: "Cy Okafor", address: "cy@loomworks.example" }],
+  ccRecipients: [
+    { name: "Carl Nkemdirim", address: "carl@example.net" },
+    { name: "Marit Solheim", address: "marit@loomworks.example" },
+  ],
   attachments: [],
   permalink: mailbox("g-1"),
   ...over,
@@ -299,12 +304,9 @@ const chipOf = (list: "to" | "cc", address: string) =>
   [...box()!.querySelectorAll<HTMLElement>(`.addrfield[data-list="${list}"] .addrchip`)].find((c) =>
     c.querySelector(".addrname")!.textContent!.includes(address),
   )!;
-/** The press that takes an address off the reply, and the one that sends it in the
- *  other list. Both are named by the address they act on (see AddressField). */
+/** The press that takes a named address off the reply. */
 const chipX = (list: "to" | "cc", address: string) =>
   within(chipOf(list, address)).getByRole("button", { name: /^remove / });
-const chipMove = (list: "to" | "cc", address: string) =>
-  within(chipOf(list, address)).getByRole("button", { name: / instead$/ });
 /** The field for a list: the input an address is typed into. */
 const addressField = (list: "to" | "cc") =>
   screen.getByLabelText(`${list} addresses`) as HTMLInputElement;
@@ -374,6 +376,11 @@ describe("answering a message from the pane", () => {
     await openThread();
 
     await waitFor(() => expect(chips("to")).toEqual(["Bo Halvorsen <bo@fjordline.example>"]));
+    expect(chips("cc")).toEqual([
+      "Cy Okafor <cy@loomworks.example>",
+      "Carl Nkemdirim <carl@example.net>",
+    ]);
+    expect(chips("cc")).not.toContain("Carl Nkemdirim <carl@loomworks.example>");
     expect(screen.getByLabelText("to addresses")).toBeTruthy();
     expect(screen.getByLabelText("cc addresses")).toBeTruthy();
     expect(box()!.querySelector(".replyto")).toBeNull();
@@ -642,7 +649,7 @@ describe("answering a message from the pane", () => {
       all: true,
       html: true,
       confirm: false,
-      cc: ["carl@loomworks.example", "carl.n@loomworks.example"],
+      cc: ["carl@example.net"],
     });
     expect(box()!.querySelectorAll(".addrfield")).toHaveLength(0);
     press("send this reply");
@@ -653,29 +660,31 @@ describe("answering a message from the pane", () => {
       all: true,
       html: true,
       confirm: true,
-      cc: ["carl@loomworks.example", "carl.n@loomworks.example"],
+      cc: ["carl@example.net"],
     });
   });
 
-  it("moves an address between recipient lists before preview", async () => {
+  it("moves an address between recipient lists by removing and re-adding it", async () => {
     await write("The 14th works.", () => json(200, replyPlan(false)), async () => {
       await waitFor(() => expect(chips("cc")).toContain("Cy Okafor <cy@loomworks.example>"));
-      fireEvent.click(chipMove("cc", "cy@loomworks.example"));
+      fireEvent.click(chipX("cc", "cy@loomworks.example"));
+      type("to", "cy");
+      fireEvent.click(screen.getByRole("option", { name: /Cy Okafor/ }));
       expect(chips("to")).toEqual([
         "Bo Halvorsen <bo@fjordline.example>",
         "Cy Okafor <cy@loomworks.example>",
       ]);
-      expect(chips("cc")).toEqual(["Carl Nkemdirim <carl@loomworks.example>", "Carl Nkemdirim <carl.n@loomworks.example>"]);
-      expect(chipMove("to", "cy@loomworks.example").textContent).toBe("cc");
+      expect(chips("cc")).toEqual(["Carl Nkemdirim <carl@example.net>"]);
+      expect(box()!.querySelectorAll(".addrmove")).toHaveLength(0);
     });
 
     await waitFor(() => expect(sends()).toHaveLength(1));
     expect(sent(0).to).toEqual(["bo@fjordline.example", "cy@loomworks.example"]);
-    expect(sent(0).cc).toEqual(["carl@loomworks.example", "carl.n@loomworks.example"]);
+    expect(sent(0).cc).toEqual(["carl@example.net"]);
     press("send this reply");
     await waitFor(() => expect(sends()).toHaveLength(2));
     expect(sent(1).to).toEqual(["bo@fjordline.example", "cy@loomworks.example"]);
-    expect(sent(1).cc).toEqual(["carl@loomworks.example", "carl.n@loomworks.example"]);
+    expect(sent(1).cc).toEqual(["carl@example.net"]);
   });
 
   it("requires a To recipient after the reader explicitly removes them all", async () => {
@@ -694,9 +703,12 @@ describe("answering a message from the pane", () => {
     expect(preview.title).toContain("somebody in to");
     expect(sends()).toHaveLength(0);
 
-    // Moving somebody from Cc back to To makes the preview available again.
+    // Removing the last To address leaves it empty; an address can be added from
+    // Cc by removing it there first, then selecting it in To.
     await waitFor(() => expect(chips("cc")).toContain("Cy Okafor <cy@loomworks.example>"));
-    fireEvent.click(chipMove("cc", "cy@loomworks.example"));
+    fireEvent.click(chipX("cc", "cy@loomworks.example"));
+    type("to", "cy");
+    fireEvent.click(screen.getByRole("option", { name: /Cy Okafor/ }));
     expect(preview.disabled).toBe(false);
     fireEvent.click(preview);
     await waitFor(() => expect(box()!.querySelector(".replyplan")).toBeTruthy());
@@ -724,8 +736,7 @@ describe("answering a message from the pane", () => {
     expect(sent(0).to).toEqual(["bo@fjordline.example", "stranger@example.org"]);
     expect(sent(0).cc).toEqual([
       "cy@loomworks.example",
-      "carl@loomworks.example",
-      "carl.n@loomworks.example",
+      "carl@example.net",
       "dana@loomworks.example",
     ]);
     expect(box()!.querySelectorAll(".addrfield")).toHaveLength(0);
@@ -734,8 +745,7 @@ describe("answering a message from the pane", () => {
     expect(sent(1).to).toEqual(["bo@fjordline.example", "stranger@example.org"]);
     expect(sent(1).cc).toEqual([
       "cy@loomworks.example",
-      "carl@loomworks.example",
-      "carl.n@loomworks.example",
+      "carl@example.net",
       "dana@loomworks.example",
     ]);
   });

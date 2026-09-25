@@ -28,8 +28,7 @@ const MINE = ["marit@loomworks.example"];
 /**
  * The two fields as the reply box arranges them: one answer about who is on the
  * reply, in two lists, each refusing what the other holds. A harness rather than
- * the component alone, because half of what the field does is only true of a pair —
- * the move between them, and the address that may only be named once.
+ * the component alone, because an address may only be named once across the pair.
  */
 function Reply({ start = [] as Address[], other = [] as Address[] }) {
   const [to, setTo] = useState<Address[]>(start);
@@ -46,8 +45,6 @@ function Reply({ start = [] as Address[], other = [] as Address[] }) {
         value={to}
         onChange={setTo}
         taken={cc}
-        moveTo="cc"
-        move={(who) => setCc((list) => [...list, who])}
       />
       <AddressField
         {...shared}
@@ -55,8 +52,6 @@ function Reply({ start = [] as Address[], other = [] as Address[] }) {
         value={cc}
         onChange={setCc}
         taken={to}
-        moveTo="to"
-        move={(who) => setTo((list) => [...list, who])}
       />
     </div>
   );
@@ -161,7 +156,7 @@ describe("the field that builds a list of addresses", () => {
     expect(refusal()).toContain("already on this reply");
 
     // And in the other one, which is the same address twice: one recipient is one
-    // address in one list, and a reader who wants it elsewhere moves it.
+    // address in one list, so it must be removed there before it can be added here.
     type("to", "carl@example.net");
     kind("to", "Enter");
     expect(chips("to")).toEqual(["Ada Okoye <ada@loomworks.example>"]);
@@ -175,18 +170,17 @@ describe("the field that builds a list of addresses", () => {
     expect(chips("to")).toEqual(["Ada Okoye <ada@loomworks.example>"]);
   });
 
-  it("moves an address between the two lists", () => {
+  it("has only a remove control on each chip; an address can be re-added in the other list", () => {
     render(<Reply start={[ADA, CY]} />);
 
-    fireEvent.click(
-      within(chipOf("to", "cy@loomworks.example")).getByRole("button", { name: / instead$/ }),
-    );
+    const cyChip = chipOf("to", "cy@loomworks.example");
+    expect(within(cyChip).getAllByRole("button")).toHaveLength(1);
+    fireEvent.click(within(cyChip).getByRole("button", { name: /^remove / }));
+    type("cc", "cy");
+    fireEvent.click(screen.getByRole("option", { name: /Cy Okafor/ }));
 
     expect(chips("to")).toEqual(["Ada Okoye <ada@loomworks.example>"]);
     expect(chips("cc")).toEqual(["Cy Okafor <cy@loomworks.example>"]);
-    // The press names the list the address would go to, so which way round the
-    // reader has it is legible on the chip rather than remembered.
-    expect(within(chipOf("cc", "cy@loomworks.example")).getByRole("button", { name: / instead$/ }).textContent).toBe("to");
   });
 
   it("picks the row the reader has arrowed to, and the last chip answers backspace", () => {

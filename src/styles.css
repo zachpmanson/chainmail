@@ -1247,15 +1247,15 @@
    the pane growing. */
 .replybox { margin:.9rem 0 .3rem; padding:.6rem .7rem; border:1px solid var(--line);
   border-radius:8px; background:var(--card); }
-/* One compose line: the two recipient lists, then the target-message link at the
-   far edge. The fields may wrap their chips internally, but stay side by side. */
-.replyrecipients { display:flex; align-items:center; gap:.45rem; margin:0 0 .55rem; }
-.replyrecipient { display:flex; align-items:center; gap:.3rem; flex:1 1 0; min-width:0;
+/* To and Cc each get a full line, rather than squeezing two address lists
+   side by side. */
+.replyrecipients { display:flex; flex-direction:column; align-items:stretch; gap:.4rem; margin:0 0 .55rem; }
+.replyrecipient { display:flex; align-items:center; gap:.3rem; min-width:0;
   font-size:.74rem; color:var(--muted); }
 .replyrecipient > span, .replytarget { flex:none; }
-.replyrecipient > .addrfield { flex:1; display:inline-flex; min-width:0; }
+.replyrecipient > .addrfield { flex:1; display:flex; min-width:0; }
 .replyrecipient .addrinput { min-width:3rem; }
-.replytarget { display:inline-flex; align-items:center; gap:.25rem; margin-left:auto;
+.replytarget { display:inline-flex; align-items:center; gap:.25rem; align-self:flex-end; margin-left:auto;
   white-space:nowrap; text-decoration:none; }
 .replytarget .arw { font-size:.8rem; line-height:1; }
 .replyinput { display:block; width:100%; font:inherit; font-size:.82rem;
@@ -1319,15 +1319,12 @@
   padding:.05rem .2rem .05rem .35rem; border:1px solid var(--line); border-radius:10px;
   background:var(--card); font-size:.72rem; }
 .addrname { overflow-wrap:anywhere; }
-.addrmove { flex:none; padding:0 .2rem; font:inherit; font-size:.66rem; color:var(--muted);
-  background:none; border:none; border-radius:4px; cursor:pointer; }
-.addrmove:hover { color:var(--accent); background:var(--bg); }
 .addrx { flex:none; display:inline-flex; align-items:center; padding:.1rem; color:var(--muted);
   background:none; border:none; border-radius:4px; cursor:pointer; }
 .addrx:hover { color:var(--accent); background:var(--bg); }
 .addrx svg { display:block; }
-.addrmove:disabled, .addrx:disabled { opacity:.55; cursor:default; }
-.addrmove:disabled:hover, .addrx:disabled:hover { color:var(--muted); background:none; }
+.addrx:disabled { opacity:.55; cursor:default; }
+.addrx:disabled:hover { color:var(--muted); background:none; }
 .addrinput { flex:1 1 7rem; min-width:7rem; font:inherit; font-size:.72rem; padding:.1rem 0;
   color:var(--fg); background:none; border:none; outline:none; }
 .addrinput::placeholder { color:var(--muted); }

@@ -588,6 +588,39 @@ func TestAChainEntrySaysItHasAnOriginal(t *testing.T) {
 	}
 }
 
+// The compose screen needs the header's exact recipients, not all identities
+// attached to each person. A chain read carries those header addresses through to
+// the pane so an alias in the directory cannot widen the visible default audience.
+func TestAChainCarriesExactHeaderRecipientAddresses(t *testing.T) {
+	srv, api := testServer(t), loadAPI(t)
+	res := srv.do(t, "GET", entryPath("/v1/chains/", extAda1), nil)
+	if res.status != 200 {
+		t.Fatalf("status = %d: %s", res.status, res.body)
+	}
+	api.assert(t, "ChainResponse", res.body)
+	got := decode[struct {
+		Entries []struct {
+			ExtID        string      `json:"extId"`
+			ToRecipients []recipient `json:"toRecipients"`
+			CcRecipients []recipient `json:"ccRecipients"`
+		} `json:"entries"`
+	}](t, res)
+	for _, entry := range got.Entries {
+		if entry.ExtID != extAda1 {
+			continue
+		}
+		if len(entry.ToRecipients) != 1 || entry.ToRecipients[0].Address != "bo@fjordline.example" ||
+			entry.ToRecipients[0].Name != "Bo Halvorsen" {
+			t.Errorf("To recipients = %+v, want the exact header address and name", entry.ToRecipients)
+		}
+		if len(entry.CcRecipients) != 0 {
+			t.Errorf("Cc recipients = %+v, want none", entry.CcRecipients)
+		}
+		return
+	}
+	t.Fatalf("chain did not carry %s", extAda1)
+}
+
 // An entry recovered from someone else's quote has no address of its own to send,
 // and the person who quoted it is not in the trail either: the pane renders one
 // entry, so the host sits outside it and a name for that host can only come from
