@@ -106,6 +106,10 @@ type corpusEntry struct {
 	// "Bo Halvorsen, cc Cy Okafor". Absent where the entry stated no recipients,
 	// which is every entry recovered from someone else's quote.
 	To string `json:"to,omitempty"`
+	// ToRecipients and CcRecipients are the exact addresses on this message's
+	// headers, rather than every alias attached to the people who received it.
+	ToRecipients []recipient `json:"toRecipients,omitempty"`
+	CcRecipients []recipient `json:"ccRecipients,omitempty"`
 	// FromEmail is the address the entry came from, so a client can name the
 	// sender fully on hover. Absent where the entry has no From header of its own.
 	// The same expression a page build uses, so the two cannot name two addresses
@@ -688,6 +692,16 @@ func toCorpusEntry(s corpus.Shown, r spec.Rendered) corpusEntry {
 	for _, p := range s.Participants {
 		e.Participants = append(e.Participants,
 			participant{PersonID: p.PersonID, Name: p.DisplayName, Role: p.Role})
+	}
+	for _, a := range s.ToRecipients {
+		if a.Addr != "" {
+			e.ToRecipients = append(e.ToRecipients, recipient{Name: a.Name, Address: a.Addr})
+		}
+	}
+	for _, a := range s.CcRecipients {
+		if a.Addr != "" {
+			e.CcRecipients = append(e.CcRecipients, recipient{Name: a.Name, Address: a.Addr})
+		}
 	}
 	// The files, drawn the way a page build draws them — same name, same kind, same
 	// size, same rule for what a click does with bytes this host holds (see

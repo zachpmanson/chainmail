@@ -1509,6 +1509,16 @@
             "type": "string",
             "description": "The recipient line a page build prints under the bubble, e.g. `Bo Halvorsen, cc Cy Okafor`. Absent where the entry stated no recipients — every entry recovered from someone else's quote has no headers of its own."
           },
+          "toRecipients": {
+            "type": "array",
+            "description": "The exact email addresses in this message's To header, with the display name each address was sent under. Unlike the people directory, this never expands a recipient to all of their aliases.",
+            "items": { "$ref": "#/components/schemas/HeaderRecipient" }
+          },
+          "ccRecipients": {
+            "type": "array",
+            "description": "The exact email addresses in this message's Cc header, with the display name each address was sent under. Unlike the people directory, this never expands a recipient to all of their aliases.",
+            "items": { "$ref": "#/components/schemas/HeaderRecipient" }
+          },
           "fromEmail": {
             "type": "string",
             "description": "The address the entry was sent from, lowercased, as a page build's own entry carries it. Absent where the entry has no From header of its own, which is every entry recovered from someone else's quote."
@@ -3508,6 +3518,24 @@
           "gmailId": {
             "type": "string",
             "description": "The id of the message that went out, which is what the corpus filings and any later read name it by. Absent from a preview: nothing has an id until it exists."
+          }
+        },
+        "additionalProperties": false
+      },
+      "HeaderRecipient": {
+        "type": "object",
+        "description": "One email address from an original To or Cc header, with the display name it was carried under. This is the message's address, not every alias attached to the same person.",
+        "required": [
+          "address"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The display name the original header carried this address with, absent when it carried none."
+          },
+          "address": {
+            "type": "string",
+            "description": "The exact address named in the original header."
           }
         },
         "additionalProperties": false

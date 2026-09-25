@@ -86,6 +86,35 @@ func TestShowCarriesEverySighting(t *testing.T) {
 	}
 }
 
+// A pane that lets the reader arrange reply recipients needs the exact address
+// from each message header, not the identity graph's broader set of aliases.
+func TestShowCarriesExactHeaderRecipients(t *testing.T) {
+	s := open(t)
+	_, err := s.Put(Entry{
+		Source: SourceMail, ExtID: "mail:<recipient-test@x>", Kind: "message",
+		TS: time.Unix(1_700_000_000, 0), BodyText: "the message",
+	}, &Mail{
+		MessageID: "recipient-test",
+		To:        `Cy Okafor <cy@loomworks.example>, "Nkemdirim, Carl" <carl@example.net>`,
+		Cc:        `Marit Solheim <marit@loomworks.example>`,
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.Show("mail:<recipient-test@x>")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.ToRecipients) != 2 || got.ToRecipients[0].Addr != "cy@loomworks.example" ||
+		got.ToRecipients[1].Addr != "carl@example.net" || got.ToRecipients[1].Name != "Nkemdirim, Carl" {
+		t.Errorf("To recipients = %+v, want the two exact header addresses and names", got.ToRecipients)
+	}
+	if len(got.CcRecipients) != 1 || got.CcRecipients[0].Addr != "marit@loomworks.example" {
+		t.Errorf("Cc recipients = %+v, want the exact header address", got.CcRecipients)
+	}
+}
+
 // An unknown id must be distinguishable from an empty result, so a caller can
 // tell "no such thing" from "nothing to say about it".
 func TestShowReportsAMissingIDAsSuch(t *testing.T) {

@@ -80,21 +80,11 @@ function matches(suggestion: Address, query: string): boolean {
   );
 }
 
-/** One chip: the address, the press that sends it in the other list, and the press
- *  that takes it off. Both presses are named by the address they act on, because
- *  "remove" twelve times over tells a screen reader nothing about which one. */
-function Chip({
-  who,
-  moveTo,
-  move,
-  remove,
-  disabled,
-}: {
+/** One chip: the address and the press that takes it off. The list itself says
+ *  whether it is To or Cc, so a second toggle inside every chip only repeats that
+ *  context and makes the control harder to scan. */
+function Chip({ who, remove, disabled }: {
   who: Address;
-  /** The list this chip's move press sends the address to, or null when the caller
-   *  has nowhere for it to move — a lone field, and not two lists of one reply. */
-  moveTo: string | null;
-  move?: (a: Address) => void;
   remove: () => void;
   disabled: boolean;
 }) {
@@ -102,18 +92,6 @@ function Chip({
   return (
     <span className="addrchip" title={words}>
       <span className="addrname">{words}</span>
-      {moveTo && move ? (
-        <button
-          type="button"
-          className="addrmove"
-          disabled={disabled}
-          onClick={() => move(who)}
-          title={`Send this one in ${moveTo} instead of the list it is in.`}
-          aria-label={`send ${words} in ${moveTo} instead`}
-        >
-          {moveTo}
-        </button>
-      ) : null}
       <button
         type="button"
         className="addrx"
@@ -140,8 +118,6 @@ export function AddressField({
   suggestions,
   taken = [],
   mine = [],
-  moveTo,
-  move,
   disabled = false,
 }: {
   /** The list this field is, in the words the sentence around it uses: "to" or
@@ -159,10 +135,6 @@ export function AddressField({
   taken?: Address[];
   /** The reader's own addresses, which a reply is not sent to. */
   mine?: string[];
-  /** The other list, for the press that moves a chip between them, or absent when
-   *  there is nowhere to move to. */
-  moveTo?: string;
-  move?: (a: Address) => void;
   disabled?: boolean;
 }) {
   const [query, setQuery] = useState("");
@@ -229,19 +201,6 @@ export function AddressField({
     setActive(0);
   }
 
-  /** The press that moves a chip to the other list: the same address, taken out of
-   *  this list and handed to the caller to put in the other one. Out of this list
-   *  first, so that an address already in the other one is refused by the same rule
-   *  that would refuse it here, and this list is left holding it. */
-  function hand(to: Address) {
-    if (elsewhere.has(addressKey(to.address))) {
-      setRefused(`${to.address} is already on the reply, in ${moveTo ?? "the other list"}.`);
-      return;
-    }
-    onChange(value.filter((a) => addressKey(a.address) !== addressKey(to.address)));
-    move?.(to);
-  }
-
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "ArrowDown" && rows.length) {
       e.preventDefault();
@@ -286,8 +245,6 @@ export function AddressField({
         <Chip
           key={addressKey(who.address)}
           who={who}
-          moveTo={move ? (moveTo ?? null) : null}
-          move={hand}
           disabled={disabled}
           remove={() => onChange(value.filter((a) => addressKey(a.address) !== addressKey(who.address)))}
         />

@@ -1684,9 +1684,9 @@ type sendResponse struct {
 	GmailID string `json:"gmailId,omitempty"`
 }
 
-// recipient is one address a reply carries: the bare address, and the display
-// name the message being answered gave it. The address is what the reply is sent
-// to and what a request names it by; the name is what a reader is shown.
+// recipient is one mail address, either from an original header or from a reply
+// plan: the bare address and the display name it was carried under. The address is
+// what a message is sent to; the name is what a reader is shown.
 type recipient struct {
 	Name    string `json:"name,omitempty"`
 	Address string `json:"address"`

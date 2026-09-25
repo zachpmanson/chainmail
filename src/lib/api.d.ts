@@ -734,6 +734,10 @@ export interface components {
             original?: boolean;
             /** @description The recipient line a page build prints under the bubble, e.g. `Bo Halvorsen, cc Cy Okafor`. Absent where the entry stated no recipients — every entry recovered from someone else's quote has no headers of its own. */
             to?: string;
+            /** @description The exact email addresses in this message's To header, with the display name each address was sent under. Unlike the people directory, this never expands a recipient to all of their aliases. */
+            toRecipients?: components["schemas"]["HeaderRecipient"][];
+            /** @description The exact email addresses in this message's Cc header, with the display name each address was sent under. Unlike the people directory, this never expands a recipient to all of their aliases. */
+            ccRecipients?: components["schemas"]["HeaderRecipient"][];
             /** @description The address the entry was sent from, lowercased, as a page build's own entry carries it. Absent where the entry has no From header of its own, which is every entry recovered from someone else's quote. */
             fromEmail?: string;
             /** @description The sender's organisation, resolved by the same resolver a page build uses — the reader's stored rule about the domain their mail came from, else the domain's own name, else whatever their other addresses establish. Absent where nothing established one, which is drawn as the unknown colour rather than as a group of its own. */
@@ -1615,6 +1619,13 @@ export interface components {
             sent: boolean;
             /** @description The id of the message that went out, which is what the corpus filings and any later read name it by. Absent from a preview: nothing has an id until it exists. */
             gmailId?: string;
+        };
+        /** @description One email address from an original To or Cc header, with the display name it was carried under. This is the message's address, not every alias attached to the same person. */
+        HeaderRecipient: {
+            /** @description The display name the original header carried this address with, absent when it carried none. */
+            name?: string;
+            /** @description The exact address named in the original header. */
+            address: string;
         };
         /** @description One address a reply carries: the bare address, and the display name the message being answered gave it. The address is what a message is sent to and what the request's `to`/`cc` name it by; the name is what a reader is shown. A plan's recipients are the whole of the audience it may use, which is what keeps a reply to the people the answered message already reached. */
         Recipient: {
