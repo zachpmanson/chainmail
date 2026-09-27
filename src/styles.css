@@ -503,22 +503,22 @@
   .av.pic { background-size:cover; background-position:center;
     box-shadow:0 0 0 1.5px var(--ring,var(--muted)), 0 0 0 2.5px var(--bg); }
   .col { min-width:0; }
-  /* The header is a disclosure, not a caption. The sender, the org and the clock
-     are its summary — the things a page is scanned by — and the caret closes the
-     line at its right edge, so it opens from where the eye already is. The receipt
-     behind it (to/cc, the message it answers, the ids it was found under, and the
-     copy control) is one click away rather than permanently in the bubble, where it
-     was read once and made every bubble taller thereafter. */
+  /* The header is a disclosure, not a caption. The sender, the org, the clock
+     and the reply the message answers are its summary — the things a page is
+     scanned by — and the caret closes the line at its right edge, so it opens
+     from where the eye already is. The receipt behind it (to/cc, the ids it was
+     found under, and the copy control) is one click away rather than permanently
+     in the bubble, where it was read once and made every bubble taller
+     thereafter. */
   details.hdr { margin:0 0 .14rem; padding:0 .1rem; }
   details.hdr > summary { display:flex; flex-wrap:wrap; align-items:baseline;
     gap:.3rem; cursor:pointer; list-style:none; }
   details.hdr > summary::-webkit-details-marker { display:none; }
-  /* The line's right end, and the caret is the whole of it now: the reply the
-     message answers sits on the receipt's to line (see .hdet), so this box holds
-     the caret alone — kept as a box all the same, because the caret must close the
-     line at the right edge whether or not anything is beside it. The caret takes
-     the accent on hover and when open, so the line reads as a control without
-     recolouring the name sitting beside it.
+  /* The line's right end: the reply it answers, and then the caret. One box so
+     the caret closes the line whether or not there is a reply beside it — two
+     items each claiming the free space would leave the reply stranded
+     mid-line. The caret takes the accent on hover and when open, so the line
+     reads as a control without recolouring the name sitting beside it.
      The caret is drawn as a LEFT triangle, because that is where it stands: at the
      end of the line, shut, it should point back along the line at the message it
      belongs to rather than away from it — a caret at the far right pointing right
@@ -861,14 +861,13 @@
      quiet hand already say it is a detail; the caret and the darker text say which
      line it came from.
 
-     Start, not centre. The receipt's lines are labelled fields — the subject,
-     the recipients, the message answered — and each one begins at the same left
-     edge; centring them against a taller neighbour beside them (the ids, the copy
-     control) staggered those labels by the height of whatever shared their row,
-     which on a wrapped to line put `cc` half a line below `to`. Aligning every
-     item to the top edge lines the labels up with each other, and the tall
-     control beside them hangs from the same line the text does. */
-  .hdet { display:flex; flex-wrap:wrap; align-items:flex-start; gap:.2rem .7rem;
+     Centre, not baseline. The receipt's own line holds the copy control, whose
+     box is taller than the text beside it; under baseline alignment that control
+     pushed the whole receipt down to meet its baseline, which opened up most of
+     the air between it and the subject above. Centring the items keeps the text
+     beside the control rather than hung beneath it, and stops one control from
+     setting the space above an entire row. */
+  .hdet { display:flex; flex-wrap:wrap; align-items:center; gap:.2rem .7rem;
     margin:0 0 .3rem; padding:.22rem .1rem 0; }
   .to { font-size:.66rem; color:var(--muted); }
   /* The message's own subject, and the ids it was found under, sharing the
@@ -1255,12 +1254,20 @@
 /* To and Cc each get a full line, rather than squeezing two address lists
    side by side. */
 .replyrecipients { display:flex; flex-direction:column; align-items:stretch; gap:.4rem; margin:0 0 .55rem; }
-.replyrecipient { display:flex; align-items:center; gap:.3rem; min-width:0;
+/* Top-aligned, not centred: a field grows downward as the reader adds chips, and a
+   label centred against a two-line list sits level with the gap between the lines
+   rather than with the first one — with `to:` on the taller row and `cc:` on a
+   shorter one, the two labels stopped being a column of labels and looked like two
+   unrelated words. */
+.replyrecipient { display:flex; align-items:flex-start; gap:.3rem; min-width:0;
   font-size:.74rem; color:var(--muted); }
 .replyrecipient > span, .replytarget { flex:none; }
 .replyrecipient > .addrfield { flex:1; display:flex; min-width:0; }
 .replyrecipient .addrinput { min-width:3rem; }
-.replytarget { display:inline-flex; align-items:center; gap:.25rem; align-self:flex-end; margin-left:auto;
+/* The link to the message being answered rides at the end of the to line: pushed
+   to the right of the addresses by margin-left:auto, which is what the flexed
+   field leaves, rather than sitting on a line of its own below cc. */
+.replytarget { display:inline-flex; align-items:center; gap:.25rem; margin-left:auto;
   white-space:nowrap; text-decoration:none; }
 .replytarget .arw { font-size:.8rem; line-height:1; }
 .replyinput { display:block; width:100%; font:inherit; font-size:.82rem;

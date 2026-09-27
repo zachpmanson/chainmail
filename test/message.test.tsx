@@ -210,16 +210,18 @@ describe("a bubble drawn from its props alone", () => {
     expect(container.querySelector(".msg")!.className).toContain("isnew");
     expect(container.querySelector(".hdr .newpill")!.textContent).toBe("new");
     expect(container.querySelector(".hdr .copyjson")).not.toBeNull();
-    expect(container.querySelector(".hdr .hdet .par")).not.toBeNull();
+    expect(container.querySelector(".hdr .htail .par")).not.toBeNull();
     expect(container.querySelector(".hdet .src")).not.toBeNull();
     expect(container.querySelector(".bub .edits")).not.toBeNull();
   });
 
   it("opens the receipt from the header, with the copy control behind it", () => {
     // The header is the disclosure and the receipt is what it opens: nothing
-    // that only the pipeline supplies — the to line, the reply the message
-    // answers, the ids, the clip — is left standing in the summary, where it
-    // would be read once and be height on every message thereafter.
+    // that only the pipeline supplies — the to line, the ids, the clip — is left
+    // standing in the summary, where it would be read once and be height on
+    // every message thereafter. The reply is the exception, and deliberately so:
+    // it is the shape of the conversation, and it sits at the right of the line
+    // with the caret, on the part a reader scans.
     const { container } = draw({
       to: "Bo Halvorsen, cc Cy Okafor",
       copyJson: { id: "m1" },
@@ -229,24 +231,19 @@ describe("a bubble drawn from its props alone", () => {
     const hdr = container.querySelector("details.hdr")!;
     const sum = hdr.querySelector("summary")!;
     expect(sum).not.toBeNull();
-    expect(sum.querySelector(".copyjson, .src, .to, .par")).toBeNull();
+    expect(sum.querySelector(".copyjson, .src, .to")).toBeNull();
     const det = hdr.querySelector(".hdet")!;
-    // The to line is what the receipt is opened for, and the message the bubble
-    // answers is on that same row: who it went to and which message it answers
-    // are one question about where this message sits in the conversation.
     expect(det.querySelector(".to")!.textContent).toBe("to Bo Halvorsen, cc Cy Okafor");
-    expect(det.querySelector(".par")!.textContent).toBe("in reply to Bo");
+    expect(det.querySelector(".par")).toBeNull();
     expect(det.querySelector(".src")).not.toBeNull();
     expect(det.querySelector(".copyjson")).not.toBeNull();
-    // the summary is the sender and the clock, and the tail closes the line
+    // the summary is the sender, the clock and the reply, and the tail closes it
     expect(hdr.firstElementChild!.tagName).toBe("SUMMARY");
     expect(sum.querySelector(".nm")!.textContent).toBe("Ada Okoye");
     expect(sum.querySelector(".tm")).not.toBeNull();
-    // always drawn, reply or none: the caret lives inside it, and nothing else
-    // does now that the reply has moved down to the receipt
     const tail = sum.querySelector(".htail")!;
-    expect(tail.textContent).toBe("");
-    expect(tail.querySelector(".par, .tstart")).toBeNull();
+    expect(tail.querySelector(".par")!.textContent).toBe("in reply to Bo");
+    // always drawn, reply or none: the caret lives inside it
     const bare = draw({});
     expect(bare.container.querySelector("details.hdr > summary > .htail")!.textContent).toBe("");
     expect(container.querySelector(".foot")).toBeNull();
