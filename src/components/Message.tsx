@@ -143,8 +143,8 @@ export interface MessageProps {
   /** what changed since a previous render, where there was one */
   mark?: "new" | "revised";
   /** the reply relationship — a node, because only the pipeline knows how a
-   *  message resolves the parent it replies to. Drawn on the receipt's to line,
-   *  inline with the recipients, where the conversation's shape is read. */
+   *  message resolves the parent it replies to. Drawn at the right of the
+   *  header line, beside the caret, where the transcript is scanned. */
   reply?: ReactNode;
   /** where the entry was found — the ids under it, in the header's expanded
    *  section beside the to/cc line */
@@ -800,13 +800,13 @@ export function Message(p: MessageProps) {
     >
       <div className="col">
         {/* The header is the bubble's disclosure, not a caption: the sender, the
-            org and the clock are what a page is scanned by, and the receipt — who
-            it was addressed to, the message it answers, the ids it was found
-            under, and the control that copies it whole — opens beneath rather than
-            sitting inside the bubble, where it is read once and is only height
-            thereafter. A native <details>, like the provenance line and the
-            panels: the export stays readable without scripting, and find-in-page
-            reaches the ids closed or open. */}
+            org, the clock and the reply the message answers are what a page is
+            scanned by, and the receipt — who it was addressed to, the ids it was
+            found under, and the control that copies it whole — opens beneath
+            rather than sitting inside the bubble, where it is read once and is
+            only height thereafter. A native <details>, like the provenance line
+            and the panels: the export stays readable without scripting, and
+            find-in-page reaches the ids closed or open. */}
         <details className="hdr">
           <summary>
             <Avatar name={p.sender ?? ""} orgSlot={p.orgSlot} pic={p.avatarClass} title={who} />
@@ -817,12 +817,10 @@ export function Message(p: MessageProps) {
             <Stamp id={p.id} stamp={p.stamp} />
             {p.mark === "new" ? <span className="newpill">new</span> : null}
             {p.mark === "revised" ? <span className="revpill">revised</span> : null}
-            {/* The line's right end, and drawn even when there is nothing in it:
-                the caret lives inside this box, so an empty tail still closes the
-                line at the right edge. The reply the message answers is not here
-                — it belongs on the receipt's to line (see below) — so this box
-                holds the caret and nothing else. */}
-            <span className="htail" />
+            {/* The line's right end, and always drawn even when the caller has
+                no reply to put in it: the caret lives inside this box, so an
+                empty tail still closes the line at the right edge. */}
+            <span className="htail">{p.reply}</span>
           </summary>
           <div className="hdet">
             {/* The subject, on its own line above the receipt's fields, and only
@@ -865,14 +863,6 @@ export function Message(p: MessageProps) {
                 "—"
               )}
             </span>
-            {/* What the message answers, on the to line's own row rather than at
-                the right end of the header line above it: who the message was
-                addressed to and which message it answers are the same question
-                read twice — where this message sits in the conversation — and a
-                reader asking it looks at the receipt, not at the sender's line.
-                Inline rather than a row of its own, because the to line is
-                usually short and the answer is usually one link. */}
-            {p.reply}
             {p.answer !== undefined || p.original !== undefined || p.copyJson !== undefined ? (
               <span className="hdetend">
                 {p.answer}

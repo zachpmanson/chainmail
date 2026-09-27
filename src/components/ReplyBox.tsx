@@ -71,7 +71,12 @@ import { refusal, staleAfterMail, SAID_MS } from "./MailVerbs";
  * as chips, lets the reader remove an address, and offers autocomplete or direct
  * typing. A list the reader leaves untouched stays under the mailbox's default, so its
  * Reply-To and account-alias handling remains authoritative; the preview then displays
- * the exact resulting audience before anything is sent.
+ * the exact resulting audience before anything is sent. The link to the message being
+ * answered shares the to line, at the end of it: the audience and the message it is an
+ * audience *for* are one thing to check, and a row of its own below the fields made
+ * the reader look away from the list they were arranging. Both labels sit at the top
+ * of their rows rather than centred in them, so that as a list of chips grows the
+ * words `to:` and `cc:` stay level with each other.
  *
  * **Two addresses are refused however they are typed or picked: the reader's own, and
  * one that is already on the reply.** One recipient is one address in one list, and a
@@ -515,6 +520,23 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
                 mine={mine}
                 disabled={busy}
               />
+              {/* The message this reply answers, on the to line and not on a line
+                  of its own below the fields: who the reply goes to and which
+                  message it answers are read together — the reader is checking one
+                  reply's audience — and a link parked under the cc list was a third
+                  row for a question the first row already asks. It keeps the
+                  arrow, the anchor to that message's own bubble, and the name it
+                  wears there; `margin-left:auto` puts it at the end of the row,
+                  after the addresses rather than between the label and them. */}
+              <a
+                className="opbtn par replytarget"
+                href={`#${answerAnchor}`}
+                aria-label={`Jump to the message being replied to: ${words.who || "the sender"}, ${words.when}`}
+                title={`Jump to the message being replied to: ${words.whoTitle ?? words.who}, ${words.when}`}
+              >
+                <span className="arw" aria-hidden="true">&#8617;</span>
+                <span>{words.who || "message"}</span>
+              </a>
             </div>
             <div className="replyrecipient">
               <span>cc:</span>
@@ -528,15 +550,6 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
                 disabled={busy}
               />
             </div>
-            <a
-              className="opbtn par replytarget"
-              href={`#${answerAnchor}`}
-              aria-label={`Jump to the message being replied to: ${words.who || "the sender"}, ${words.when}`}
-              title={`Jump to the message being replied to: ${words.whoTitle ?? words.who}, ${words.when}`}
-            >
-              <span className="arw" aria-hidden="true">&#8617;</span>
-              <span>{words.who || "message"}</span>
-            </a>
           </div>
           <textarea
             className="replyinput"

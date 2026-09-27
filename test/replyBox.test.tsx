@@ -391,7 +391,14 @@ describe("answering a message from the pane", () => {
     const target = within(box()!).getByRole("link", { name: /Jump to the message being replied to: Bo Halvorsen/ });
     expect(target.tagName).toBe("A");
     expect(target.classList.contains("opbtn")).toBe(true);
-    expect(target.parentElement?.lastElementChild).toBe(target);
+    // On the to line, after the addresses it is the audience for — not on a third
+    // row below the cc field, where the reader was looking away from the list they
+    // were arranging to find out which message they were arranging it for.
+    const toRow = row.querySelectorAll(".replyrecipient")[0]!;
+    expect(toRow.querySelector("span")!.textContent).toBe("to:");
+    expect(target.parentElement).toBe(toRow);
+    expect(toRow.lastElementChild).toBe(target);
+    expect(row.lastElementChild).not.toBe(target);
     expect(target.getAttribute("href")).toBe("#entry-0");
 
     // It is a real anchor to the answered bubble, and the shared delegated hover
