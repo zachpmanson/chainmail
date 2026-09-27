@@ -398,7 +398,10 @@ describe("answering a message from the pane", () => {
     // row below the cc field, where the reader was looking away from the list they
     // were arranging to find out which message they were arranging it for.
     const toRow = row.querySelectorAll(".replyrecipient")[0]!;
-    expect(toRow.querySelector("span")!.textContent).toBe("to:");
+    // The label is its own class rather than the row's first span: the row holds
+    // two spans (the label and the field), and the stylesheet gives the label the
+    // field's own line height so the two line up (see .replylabel).
+    expect(toRow.querySelector(".replylabel")!.textContent).toBe("to:");
     expect(target.parentElement).toBe(toRow);
     expect(toRow.lastElementChild).toBe(target);
     expect(row.lastElementChild).not.toBe(target);
