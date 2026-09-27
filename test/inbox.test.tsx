@@ -1001,15 +1001,16 @@ describe("the home page with no query", () => {
     await waitFor(() => expect(pane().querySelectorAll(".msg").length).toBe(2));
 
     // The opener answers nothing, and the line says so rather than being left
-    // out: a head with no reply mark on it reads as a rendering failure.
-    const tails = pane().querySelectorAll(".msg .hdr .htail");
-    expect(tails[0]?.querySelector(".par")).toBeNull();
-    expect(tails[0]?.querySelector(".tstart")?.textContent).toBe("thread start");
+    // out: a head with no reply mark on it reads as a rendering failure. It sits
+    // on the receipt's to line, so the query is the receipt.
+    const lines = pane().querySelectorAll(".msg .hdr .hdet");
+    expect(lines[0]?.querySelector(".par")).toBeNull();
+    expect(lines[0]?.querySelector(".tstart")?.textContent).toBe("thread start");
 
     // The reply names what it answers, in the words that message's own bubble
     // wears — its sender and its clock, in the same form the bubble prints it —
     // and points at the row for it here.
-    const par = tails[1]?.querySelector(".par");
+    const par = lines[1]?.querySelector(".par");
     expect(par?.getAttribute("href")).toBe("#entry-0");
     expect(par?.querySelector(".parlbl")?.textContent).toBe(
       "in reply to Ada Okoye, Mon, 2 Mar 2026 19:15",
