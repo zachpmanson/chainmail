@@ -390,7 +390,10 @@ describe("answering a message from the pane", () => {
     expect(row.compareDocumentPosition(field()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const target = within(box()!).getByRole("link", { name: /Jump to the message being replied to: Bo Halvorsen/ });
     expect(target.tagName).toBe("A");
-    expect(target.classList.contains("opbtn")).toBe(true);
+    // A link, not a press: the name of the message answered, and no button's box
+    // around it — nothing here changes anything, it only takes the reader there.
+    expect(target.classList.contains("opbtn")).toBe(false);
+    expect(target.classList.contains("replytarget")).toBe(true);
     // On the to line, after the addresses it is the audience for — not on a third
     // row below the cc field, where the reader was looking away from the list they
     // were arranging to find out which message they were arranging it for.

@@ -527,9 +527,13 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
                   row for a question the first row already asks. It keeps the
                   arrow, the anchor to that message's own bubble, and the name it
                   wears there; `margin-left:auto` puts it at the end of the row,
-                  after the addresses rather than between the label and them. */}
+                  after the addresses rather than between the label and them.
+
+                  An anchor and nothing else — no button's box, no button's border
+                  — because it is a link to a message rather than a press that
+                  changes anything here. See .replytarget. */}
               <a
-                className="opbtn par replytarget"
+                className="par replytarget"
                 href={`#${answerAnchor}`}
                 aria-label={`Jump to the message being replied to: ${words.who || "the sender"}, ${words.when}`}
                 title={`Jump to the message being replied to: ${words.whoTitle ?? words.who}, ${words.when}`}
