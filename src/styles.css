@@ -1252,8 +1252,18 @@
 .replybox { margin:.9rem 0 .3rem; padding:.6rem .7rem; border:1px solid var(--line);
   border-radius:8px; background:var(--card); }
 /* To and Cc each get a full line, rather than squeezing two address lists
-   side by side. */
-.replyrecipients { display:flex; flex-direction:column; align-items:stretch; gap:.4rem; margin:0 0 .55rem; }
+   side by side.
+
+   `--addrrow` is the height of one line of an address field, and it is the row's
+   own measure rather than any one item's: the field is given it as a min-height
+   and the label and the link are given it as a height, so the three agree by
+   construction instead of by three numbers that happen to match. Measured from
+   the field's own box — .1rem padding and a 1px border each side, around an
+   input at .72rem with the body's 1.45 line-height, or around one chip, which is
+   a shade taller (1.569rem and 1.594rem at a 16px root) — so it clears both by
+   less than a tenth of a rem. Everything here is in rem, so the relationship
+   holds whatever the reader's root size is. */
+.replyrecipients { --addrrow:1.7rem; display:flex; flex-direction:column; align-items:stretch; gap:.4rem; margin:0 0 .55rem; }
 /* Top-aligned, not centred: a field grows downward as the reader adds chips, and a
    label centred against a two-line list sits level with the gap between the lines
    rather than with the first one — with `to:` on the taller row and `cc:` on a
@@ -1262,13 +1272,21 @@
 .replyrecipient { display:flex; align-items:flex-start; gap:.3rem; min-width:0;
   font-size:.74rem; color:var(--muted); }
 .replyrecipient > span, .replytarget { flex:none; }
-.replyrecipient > .addrfield { flex:1; display:flex; min-width:0; }
+/* The label is one line of the field tall, and its word sits in the middle of that
+   height rather than at the top of it: the field's own text is centred in its box,
+   and a label left at its natural height (a .74rem line box) with `flex-start` put
+   `to:` a couple of pixels above the first address it names. A field that WRAPS
+   grows past this height and the label does not follow — it is the first line the
+   label belongs to, which is the line the reader reads it against. */
+.replylabel { display:inline-flex; align-items:center; height:var(--addrrow); }
+.replyrecipient > .addrfield { flex:1; display:flex; min-width:0; min-height:var(--addrrow); }
 .replyrecipient .addrinput { min-width:3rem; }
 /* The link to the message being answered rides at the end of the to line: pushed
    to the right of the addresses by margin-left:auto, which is what the flexed
-   field leaves, rather than sitting on a line of its own below cc. */
+   field leaves, rather than sitting on a line of its own below cc. It is one line
+   of the field tall for the same reason the label is (see .replylabel). */
 .replytarget { display:inline-flex; align-items:center; gap:.25rem; margin-left:auto;
-  white-space:nowrap; text-decoration:none; }
+  height:var(--addrrow); white-space:nowrap; text-decoration:none; }
 .replytarget .arw { font-size:.8rem; line-height:1; }
 .replyinput { display:block; width:100%; font:inherit; font-size:.82rem;
   line-height:1.45; padding:.45rem .55rem; color:var(--fg); background:var(--bg);

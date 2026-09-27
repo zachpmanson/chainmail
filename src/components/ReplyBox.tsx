@@ -75,8 +75,9 @@ import { refusal, staleAfterMail, SAID_MS } from "./MailVerbs";
  * answered shares the to line, at the end of it: the audience and the message it is an
  * audience *for* are one thing to check, and a row of its own below the fields made
  * the reader look away from the list they were arranging. Both labels sit at the top
- * of their rows rather than centred in them, so that as a list of chips grows the
- * words `to:` and `cc:` stay level with each other.
+ * of their rows rather than centred in them — so that as a list of chips grows the
+ * words `to:` and `cc:` stay level with each other, and with the first line of the
+ * field each one names.
  *
  * **Two addresses are refused however they are typed or picked: the reader's own, and
  * one that is already on the reply.** One recipient is one address in one list, and a
@@ -510,7 +511,7 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
         <>
           <div className="replyrecipients">
             <div className="replyrecipient">
-              <span>to:</span>
+              <span className="replylabel">to:</span>
               <AddressField
                 label="to"
                 value={to}
@@ -543,7 +544,7 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
               </a>
             </div>
             <div className="replyrecipient">
-              <span>cc:</span>
+              <span className="replylabel">cc:</span>
               <AddressField
                 label="cc"
                 value={cc}
