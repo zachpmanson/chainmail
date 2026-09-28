@@ -136,12 +136,21 @@ func FindAttribution(lines []Line, i int) (Boundary, bool) {
 	return Boundary{}, false
 }
 
-// FindHeaderBlock requires two or more consecutive recognised header keys.
+// FindHeaderBlock requires two or more consecutive recognised header keys, at
+// least one of which is NOT a recipient list.
 //
 // One key is not enough: 32 messages in this mailbox carry a From: line with no
 // address at all ("From: Alice | Acme"), so requiring an address would reject
 // real blocks — while "Passcode:" and "Meeting ID:" lines are Key: value shaped
 // and would be accepted by anything looser.
+//
+// A block of nothing but To:/Cc: is not enough either. Bold recipient labels are
+// ordinary prose emphasis as often as they are an Outlook header, so a two-line
+// "*To:* ... / *CC:* ..." example in a body used to open a block and turn the
+// sentences beneath it into a phantom quoted message — with no sender, no
+// subject and an invented time. A block that names no sender, date or subject
+// describes no message, so at least one non-recipient key is required. All 1295
+// header blocks across the 867-fixture corpus carry one.
 func FindHeaderBlock(lines []Line, i int) (Boundary, bool) {
 	n := 0
 	// lastField and lastValue are the last key line recognised, which is what
@@ -149,6 +158,8 @@ func FindHeaderBlock(lines []Line, i int) (Boundary, bool) {
 	// recipient list can be cut mid-value, and only its own value says whether
 	// it was. See continuesRecipients.
 	lastField, lastValue := "", ""
+	// recipientsOnly is cleared by the first key that is not a recipient list.
+	recipientsOnly := true
 	folds := 0
 	j := i
 	for ; j < len(lines); j++ {
@@ -158,7 +169,11 @@ func FindHeaderBlock(lines []Line, i int) (Boundary, bool) {
 		}
 		if reHeaderKey.MatchString(t) {
 			n++
-			lastField, lastValue, folds = headerField(t), headerValue(t), 0
+			field := headerField(t)
+			if field != "to" && field != "cc" {
+				recipientsOnly = false
+			}
+			lastField, lastValue, folds = field, headerValue(t), 0
 			continue
 		}
 		// A long recipient list wraps, and the quoted rendering usually loses the
@@ -180,7 +195,7 @@ func FindHeaderBlock(lines []Line, i int) (Boundary, bool) {
 		}
 		break
 	}
-	if n < 2 {
+	if n < 2 || recipientsOnly {
 		return Boundary{}, false
 	}
 	var parts []string
