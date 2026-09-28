@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { $api, type CorpusEntry, type SendResponse } from "../lib/api";
 import { dismissToast, pushToast } from "../lib/toasts";
 import { addressesOf, usePersonAddresses } from "../lib/who";
-import { addressKey, AddressField, type Address } from "./AddressField";
+import { addressKey, addressWords, AddressField, type Address } from "./AddressField";
 import { refusal, staleAfterMail, SAID_MS } from "./MailVerbs";
 
 /**
@@ -67,17 +67,23 @@ import { refusal, staleAfterMail, SAID_MS } from "./MailVerbs";
  * same either way, so a reader who sends plain text has sent exactly what the
  * preview showed them, minus markup they never wrote.
  *
- * **The compose screen has a To and a Cc address field.** Each holds the recipients
- * as chips, lets the reader remove an address, and offers autocomplete or direct
- * typing. A list the reader leaves untouched stays under the mailbox's default, so its
- * Reply-To and account-alias handling remains authoritative; the preview then displays
- * the exact resulting audience before anything is sent. The link to the message being
- * answered shares the to line, at the end of it: the audience and the message it is an
- * audience *for* are one thing to check, and a row of its own below the fields made
- * the reader look away from the list they were arranging. Both labels sit at the top
- * of their rows rather than centred in them — so that as a list of chips grows the
- * words `to:` and `cc:` stay level with each other, and with the first line of the
- * field each one names.
+ * **The compose screen has a To and a Cc address field, and they start closed.**
+ * What a reader sees of the audience first is a read-only line naming who the reply
+ * reaches, printed the way the message header prints its own receipt; the fields
+ * themselves appear only when that line is pressed. A reply's audience is mostly the
+ * one the message already had, and two open fields of chips made the reader arrange
+ * something they mostly meant to leave alone while the answer they were told they
+ * would send sat behind it. Open, each field holds the recipients as chips, lets the
+ * reader remove an address, and offers autocomplete or direct typing. A list the
+ * reader leaves untouched stays under the mailbox's default, so its Reply-To and
+ * account-alias handling remains authoritative; the preview then displays the exact
+ * resulting audience before anything is sent. The link to the message being answered
+ * shares the to line, at the end of it, in both modes: the audience and the message
+ * it is an audience *for* are one thing to check, and a row of its own below the
+ * fields made the reader look away from the list they were arranging. Both labels sit
+ * at the top of their rows rather than centred in them — so that as a list of chips
+ * grows the words `to:` and `cc:` stay level with each other, and with the first line
+ * of the field each one names.
  *
  * **Two addresses are refused however they are typed or picked: the reader's own, and
  * one that is already on the reply.** One recipient is one address in one list, and a
@@ -178,6 +184,32 @@ export function AnswerPress({
   );
 }
 
+/** The names the collapsed recipient line prints, in the order the reply holds
+ *  them: the display name where something knows one, and the address where nothing
+ *  does — which is what the message header's own receipt line does (see Message).
+ *  The address is the hover title, because that is the part a reader checks and
+ *  this line is mostly people the thread has already named. */
+function recipientNames(list: Address[]) {
+  return list.map((a, i) => (
+    <span key={addressKey(a.address)} title={addressWords(a)}>
+      {i === 0 ? null : ", "}
+      {a.name || a.address}
+    </span>
+  ));
+}
+
+/** The same audience as one sentence, for the accessible name of the press that
+ *  opens the editors: the line's own text is spans inside the button, so a screen
+ *  reader has to be told what it says rather than read a run of names with no
+ *  words around them. */
+function recipientWords(to: Address[], cc: Address[]): string {
+  const names = (list: Address[]) => list.map((a) => a.name || a.address).join(", ");
+  const parts: string[] = [];
+  if (to.length) parts.push(`to ${names(to)}`);
+  if (cc.length) parts.push(`cc ${names(cc)}`);
+  return parts.join(", ") || "nobody";
+}
+
 export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aimed }: {
   thread: { rootExtId: string };
   answer: CorpusEntry;
@@ -210,6 +242,12 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
   const [cc, setCc] = useState<Address[]>([]);
   const [toTouched, setToTouched] = useState(false);
   const [ccTouched, setCcTouched] = useState(false);
+  // Whether the recipient autocomplete editors are on screen. They start off:
+  // before this the compose screen opened on two fields of chips a reader mostly
+  // did not want to arrange, and the audience they already had was harder to read
+  // than the one the message header prints. Nothing is edited until the reader
+  // says so, and the summary line is what says who the reply reaches.
+  const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // The box's own element, which the aim below brings to the reader. A ref rather
@@ -229,6 +267,7 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
     setCc([]);
     setToTouched(false);
     setCcTouched(false);
+    setEditing(false);
   }, [answer.extId]);
 
   // A press on a message's own answer control is an intent to write, and the box
@@ -423,6 +462,7 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
       setOwn("");
       setToTouched(false);
       setCcTouched(false);
+      setEditing(false);
       // Said in the corner rather than here, and in the same words: an answer that
       // has gone out is over, and what the reader is looking at now is the trail
       // it was filed into.
@@ -511,16 +551,51 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
         <>
           <div className="replyrecipients">
             <div className="replyrecipient">
-              <span className="replylabel">to:</span>
-              <AddressField
-                label="to"
-                value={to}
-                onChange={changeTo}
-                suggestions={suggestions}
-                taken={cc}
-                mine={mine}
-                disabled={busy}
-              />
+              {editing ? (
+                <>
+                  <span className="replylabel">to:</span>
+                  <AddressField
+                    label="to"
+                    value={to}
+                    onChange={changeTo}
+                    suggestions={suggestions}
+                    taken={cc}
+                    mine={mine}
+                    disabled={busy}
+                  />
+                </>
+              ) : (
+                /* The audience, read-only, until a reader asks to change it: the
+                   names the reply reaches, printed as the message header prints
+                   its own receipt (see .to) rather than as a field they are being
+                   asked to arrange. The whole line is the press that opens the
+                   editors, because the line is a thing a reader points at rather
+                   than anything they read and leave alone. The address behind a
+                   name is in the hover title, which is where a reader checks it. */
+                <button
+                  type="button"
+                  className="replysummary"
+                  aria-expanded={false}
+                  aria-label={`Edit the recipients on this reply — currently ${recipientWords(to, cc)}`}
+                  title="Edit the recipients on this reply"
+                  disabled={busy}
+                  onClick={() => setEditing(true)}
+                >
+                  <span className="replylabel">to:</span>
+                  <span className="replynames">
+                    {to.length ? recipientNames(to) : null}
+                    {cc.length ? (
+                      <>
+                        <span className="replykind">{to.length ? ", cc " : "cc "}</span>
+                        {recipientNames(cc)}
+                      </>
+                    ) : null}
+                    {!to.length && !cc.length ? (
+                      <span className="replynone">add an address</span>
+                    ) : null}
+                  </span>
+                </button>
+              )}
               {/* The message this reply answers, on the to line and not on a line
                   of its own below the fields: who the reply goes to and which
                   message it answers are read together — the reader is checking one
@@ -543,18 +618,20 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
                 <span>{words.who || "message"}</span>
               </a>
             </div>
-            <div className="replyrecipient">
-              <span className="replylabel">cc:</span>
-              <AddressField
-                label="cc"
-                value={cc}
-                onChange={changeCc}
-                suggestions={suggestions}
-                taken={to}
-                mine={mine}
-                disabled={busy}
-              />
-            </div>
+            {editing ? (
+              <div className="replyrecipient">
+                <span className="replylabel">cc:</span>
+                <AddressField
+                  label="cc"
+                  value={cc}
+                  onChange={changeCc}
+                  suggestions={suggestions}
+                  taken={to}
+                  mine={mine}
+                  disabled={busy}
+                />
+              </div>
+            ) : null}
           </div>
           <textarea
             className="replyinput"

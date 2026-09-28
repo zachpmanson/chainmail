@@ -1288,6 +1288,22 @@
 .replytarget { display:inline-flex; align-items:center; gap:.25rem; margin-left:auto;
   height:var(--addrrow); white-space:nowrap; text-decoration:none; }
 .replytarget .arw { font-size:.8rem; line-height:1; }
+/* The collapsed recipient line: who the reply reaches, read-only, and the one
+   press that opens the editors. It is styled as the message header's own
+   receipt line (.to) rather than as a field, because that is what it is before a
+   reader asks to change it — a summary of an audience, not a control they are
+   being asked to arrange. The whole line is the press, so the name under the
+   pointer colours the way every other live line in the pane does. */
+.replysummary { display:flex; align-items:center; gap:.3rem; flex:1; min-width:0;
+  height:var(--addrrow); padding:0; border:0; background:none; text-align:left;
+  font:inherit; font-size:.74rem; color:var(--muted); cursor:pointer; overflow:hidden; }
+.replysummary:disabled { cursor:default; opacity:.55; }
+.replysummary:focus-visible { outline:1px solid var(--accent); outline-offset:2px;
+  border-radius:4px; }
+.replysummary .replynames { min-width:0; overflow:hidden;
+  text-overflow:ellipsis; white-space:nowrap; }
+.replysummary:hover .replynames { color:var(--fg); }
+.replynone { font-style:italic; }
 .replyinput { display:block; width:100%; font:inherit; font-size:.82rem;
   line-height:1.45; padding:.45rem .55rem; color:var(--fg); background:var(--bg);
   border:1px solid var(--line); border-radius:6px; resize:vertical; }
