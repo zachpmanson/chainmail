@@ -2,6 +2,8 @@ package mailingest
 
 import (
 	"database/sql"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -52,6 +54,73 @@ func TestSameOriginalInTwoHostsIsOneEntryTwoSightings(t *testing.T) {
 	if q != 1 {
 		t.Fatalf("quoted entries = %d, want 1 — the same original quoted twice "+
 			"must not become two entries", q)
+	}
+}
+
+// Regression test for a parser false positive: bold To/Cc labels in an email's
+// prose example were read as a partial mail header, and the explanatory text
+// below them was persisted as a quoted message with no sender, no subject and a
+// time invented from the host. All names and addresses here are fabricated;
+// quote depths mirror the four sightings that produced the original report.
+func TestBoldToCcExampleProseDoesNotBecomeAQuotedEmail(t *testing.T) {
+	s := openTest(t)
+	quoteLines := []string{
+		"*For example:*",
+		"",
+		"*To:* billing@example.test",
+		"*CC:* reviewer@example.test",
+		"",
+		"I’ve attached an example screenshot for reference.",
+		"",
+		"Please let me know if you need any further details from me.",
+		"[image: screenshot.png]",
+		"-- ",
+		"Example Sender",
+	}
+	firstHostTS := time.Date(2026, 9, 15, 17, 38, 17, 0, time.UTC)
+	for i, depth := range []int{0, 1, 3, 2} {
+		var body strings.Builder
+		body.WriteString("An anonymised invoice-support message.\n\n")
+		prefix := strings.Repeat(">", depth)
+		for _, line := range quoteLines {
+			if depth > 0 {
+				body.WriteString(prefix)
+				if line != "" {
+					body.WriteByte(' ')
+				}
+			}
+			body.WriteString(line)
+			body.WriteByte('\n')
+		}
+		ts := firstHostTS.Add(time.Duration(i) * time.Minute)
+		_, err := Put(s, Message{
+			Envelope: Envelope{
+				ID:        fmt.Sprintf("anonymous-host-%d", i),
+				MessageID: fmt.Sprintf("<anonymous-host-%d@example.test>", i),
+				ThreadID:  "anonymous-thread",
+				From:      fmt.Sprintf("Host %d <host-%d@example.test>", i, i),
+				Subject:   "An anonymised invoice-support thread",
+				Date:      ts.Format(time.RFC1123Z),
+			},
+			Body: body.String(),
+		})
+		if err != nil {
+			t.Fatalf("Put host %d: %v", i, err)
+		}
+	}
+
+	var extID string
+	err := s.DB().QueryRow(`select ext_id from entries where quoted=1 limit 1`).Scan(&extID)
+	if err == nil {
+		got, showErr := s.Show(extID)
+		if showErr != nil {
+			t.Fatalf("Show(%q): %v", extID, showErr)
+		}
+		t.Fatalf("bold recipient example became a standalone quoted email: ext_id=%q, ts=%s, body=%q, author=%q, subject=%q, participants=%+v, sightings=%+v",
+			got.ExtID, got.TS.Format(time.RFC3339), got.Body, got.Author, got.Subject, got.Participants, got.Sightings)
+	}
+	if err != sql.ErrNoRows {
+		t.Fatalf("querying for recovered entries: %v", err)
 	}
 }
 
