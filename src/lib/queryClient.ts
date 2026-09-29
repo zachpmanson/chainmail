@@ -27,8 +27,13 @@ export function makeQueryClient(): QueryClient {
       queries: {
         retry,
         retryDelay,
-        // The corpus changes only when an operator ingests, which no view here
-        // can observe; refetching on focus would re-pay a search for nothing.
+        // The corpus changes only when something ingests, and no view here can
+        // observe that, so five minutes is the right default for reading. The
+        // shell's own cadence is what overrides it (see AutoRefresh). Focus is
+        // left to that one place rather than to this flag: the cadence's rules —
+        // coalescing focus with visibility, pausing while hidden, one read at a
+        // time — must have a single owner, and a second focus policy here would
+        // race it.
         refetchOnWindowFocus: false,
         staleTime: 5 * 60 * 1000,
       },

@@ -2,6 +2,8 @@ package mailingest
 
 import (
 	"database/sql"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -52,6 +54,73 @@ func TestSameOriginalInTwoHostsIsOneEntryTwoSightings(t *testing.T) {
 	if q != 1 {
 		t.Fatalf("quoted entries = %d, want 1 — the same original quoted twice "+
 			"must not become two entries", q)
+	}
+}
+
+// Regression test for a parser false positive: bold To/Cc labels in an email's
+// prose example were read as a partial mail header, and the explanatory text
+// below them was persisted as a quoted message with no sender, no subject and a
+// time invented from the host. All names and addresses here are fabricated;
+// quote depths mirror the four sightings that produced the original report.
+func TestBoldToCcExampleProseDoesNotBecomeAQuotedEmail(t *testing.T) {
+	s := openTest(t)
+	quoteLines := []string{
+		"*For example:*",
+		"",
+		"*To:* billing@example.test",
+		"*CC:* reviewer@example.test",
+		"",
+		"I’ve attached an example screenshot for reference.",
+		"",
+		"Please let me know if you need any further details from me.",
+		"[image: screenshot.png]",
+		"-- ",
+		"Example Sender",
+	}
+	firstHostTS := time.Date(2026, 9, 15, 17, 38, 17, 0, time.UTC)
+	for i, depth := range []int{0, 1, 3, 2} {
+		var body strings.Builder
+		body.WriteString("An anonymised invoice-support message.\n\n")
+		prefix := strings.Repeat(">", depth)
+		for _, line := range quoteLines {
+			if depth > 0 {
+				body.WriteString(prefix)
+				if line != "" {
+					body.WriteByte(' ')
+				}
+			}
+			body.WriteString(line)
+			body.WriteByte('\n')
+		}
+		ts := firstHostTS.Add(time.Duration(i) * time.Minute)
+		_, err := Put(s, Message{
+			Envelope: Envelope{
+				ID:        fmt.Sprintf("anonymous-host-%d", i),
+				MessageID: fmt.Sprintf("<anonymous-host-%d@example.test>", i),
+				ThreadID:  "anonymous-thread",
+				From:      fmt.Sprintf("Host %d <host-%d@example.test>", i, i),
+				Subject:   "An anonymised invoice-support thread",
+				Date:      ts.Format(time.RFC1123Z),
+			},
+			Body: body.String(),
+		})
+		if err != nil {
+			t.Fatalf("Put host %d: %v", i, err)
+		}
+	}
+
+	var extID string
+	err := s.DB().QueryRow(`select ext_id from entries where quoted=1 limit 1`).Scan(&extID)
+	if err == nil {
+		got, showErr := s.Show(extID)
+		if showErr != nil {
+			t.Fatalf("Show(%q): %v", extID, showErr)
+		}
+		t.Fatalf("bold recipient example became a standalone quoted email: ext_id=%q, ts=%s, body=%q, author=%q, subject=%q, participants=%+v, sightings=%+v",
+			got.ExtID, got.TS.Format(time.RFC3339), got.Body, got.Author, got.Subject, got.Participants, got.Sightings)
+	}
+	if err != sql.ErrNoRows {
+		t.Fatalf("querying for recovered entries: %v", err)
 	}
 }
 
@@ -268,6 +337,103 @@ func TestAnAnswerInsideAQuotedMessageIsADerivedCopy(t *testing.T) {
 	}
 }
 
+// The same two blocks, one quoted inside the other, in somebody else's forward.
+// The nesting is the reply graph: the forward answers the first block, the first
+// block answers the second, the second answers the third. Filing the deeper block
+// as a modified copy of the shallower one breaks that: the copy's parent slot is
+// taken by the base, the edge above it can no longer be drawn, and the trail the
+// forward carries arrives in two pieces.
+func TestTwoMessagesFromOnePersonQuotedTogetherStayOneTrail(t *testing.T) {
+	s := openTest(t)
+	body := "passing this on\n\n" +
+		"On Wed, 20 May 2026 at 21:38, Kim Alvarez <kim.alvarez@wattle.fed> wrote:\n" +
+		"> Hi Sam,\n" +
+		">\n" +
+		"> Do you happen to have the LOA for Kanimbla itself?\n" +
+		">\n" +
+		"> Thanks,\n" +
+		"> Kim\n" +
+		">\n" +
+		"> On Wed, 20 May 2026 at 11:38, Kim Alvarez <kim.alvarez@wattle.fed> wrote:\n" +
+		">> Hi Sam,\n" +
+		">>\n" +
+		">> Do you have an LOA for site 0440272051LC004? Could you also confirm if this\n" +
+		">> is a new site the customer recently moved into?\n" +
+		">>\n" +
+		">> Since this turned out to be a tariff site, I need to request the half-hourly\n" +
+		">> data required for the pricing schedule.\n" +
+		">>\n" +
+		">> Thanks,\n" +
+		">> Kim\n" +
+		">>\n" +
+		">> On Wed, 20 May 2026 at 09:04, Ana Whitlock <ana.whitlock@moana.fed> wrote:\n" +
+		">>> the Kanimbla meter is on the last invoice, I will send it over\n"
+	host, err := Put(s, Message{
+		Envelope: Envelope{
+			ID: "fwd", MessageID: "<fwd@x>", ThreadID: "t",
+			From: "Ana Whitlock <ana.whitlock@moana.fed>", Subject: "Fwd: the Kanimbla meter",
+			Date: time.Date(2026, 5, 20, 22, 10, 0, 0, time.UTC).Format(time.RFC1123Z),
+		},
+		Body: body,
+	})
+	if err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+
+	// The three blocks, found by the words only one of them holds.
+	block := func(fragment string) (int64, string) {
+		t.Helper()
+		var id int64
+		var ext string
+		if err := s.DB().QueryRow(
+			`select id, ext_id from entries where quoted = 1 and body_text like ?`,
+			"%"+fragment+"%").Scan(&id, &ext); err != nil {
+			t.Fatalf("no quoted block holding %q: %v", fragment, err)
+		}
+		return id, ext
+	}
+	first, firstExt := block("Kanimbla itself")
+	second, secondExt := block("0440272051LC004")
+	third, thirdExt := block("on the last invoice")
+
+	for _, e := range []struct {
+		child, parent int64
+		what          string
+	}{
+		{host.ID, first, "the forward answers the block it quotes"},
+		{first, second, "the first question answers the second"},
+		{second, third, "the second question answers the third"},
+	} {
+		var parent sql.NullInt64
+		if err := s.DB().QueryRow(
+			`select parent_id from entries where id = ?`, e.child).Scan(&parent); err != nil {
+			t.Fatal(err)
+		}
+		if !parent.Valid || parent.Int64 != e.parent {
+			t.Errorf("%s: parent = %v, want %d", e.what, parent, e.parent)
+		}
+	}
+	var derived int
+	if err := s.DB().QueryRow(`select count(*) from entries where derived = 1`).Scan(&derived); err != nil {
+		t.Fatal(err)
+	}
+	if derived != 0 {
+		t.Errorf("%d blocks were filed as modified copies, want none", derived)
+	}
+
+	// One trail of four, walkable from any of them.
+	for _, from := range []string{"mail:<fwd@x>", firstExt, secondExt, thirdExt} {
+		chain, err := s.Chain(from)
+		if err != nil {
+			t.Fatalf("chain from %s: %v", from, err)
+		}
+		if len(chain) != 4 {
+			t.Errorf("chain from %s: got %d entries, want the forward and the three it quotes",
+				from, len(chain))
+		}
+	}
+}
+
 // A reply quotes what it answers AND names it in In-Reply-To. The header is a
 // statement about the graph and the nesting is a reading of the text, so the
 // host keeps the parent its header names: the edge that says "the host replied
@@ -326,5 +492,85 @@ func TestAReplyKeepsTheParentItsHeaderNames(t *testing.T) {
 	// here rather than being given the host as a parent on a guess.
 	if quotedParent.Valid {
 		t.Errorf("quoted block parent = %d, want none", quotedParent.Int64)
+	}
+}
+
+// singleBox serves one fixed message, standing in for a mailbox that holds
+// nothing else.
+type singleBox struct{ msg Message }
+
+func (b singleBox) Search(string, int, string) ([]Envelope, Page, error) {
+	return []Envelope{b.msg.Envelope}, Page{}, nil
+}
+
+func (b singleBox) Read(string) (Message, error) { return b.msg, nil }
+
+// A forward whose own In-Reply-To names a message the corpus never received must
+// not lose the trail its body quotes. Unlike the reply above, where the header
+// resolves and wins its slot, nothing here can place the host: the trail it
+// carries is stored and sighted but disconnected, and the host is a chain of one
+// beside it. The ingest's repair pass joins the two.
+func TestIngestLinksAForwardOntoTheTrailItsHeaderCannotPlace(t *testing.T) {
+	s := openTest(t)
+	body := "passing this on\n\n" +
+		"On Wed, 19 Aug 2026 at 10:00, Bea <bea@x.fed> wrote:\n" +
+		"> second\n" +
+		">\n" +
+		"> On Wed, 19 Aug 2026 at 09:00, Cyd <cyd@x.fed> wrote:\n" +
+		">> first\n"
+	m := Message{
+		Envelope: Envelope{
+			ID: "fwd", MessageID: "<fwd@x>", ThreadID: "t",
+			InReplyTo: "<never-received@elsewhere.example>",
+			From:      "Ana <ana@x.fed>", Subject: "Fwd: x",
+			Date:       time.Date(2026, 8, 19, 11, 0, 0, 0, time.UTC).Format(time.RFC1123Z),
+			References: []string{"<never-received@elsewhere.example>"},
+		},
+		Body: body,
+	}
+	r, err := Ingest(s, singleBox{m}, "q", Bound{})
+	if err != nil {
+		t.Fatalf("Ingest: %v", err)
+	}
+	if r.QuotedParents != 1 {
+		t.Fatalf("QuotedParents = %d, want 1 (the forward onto its trail)", r.QuotedParents)
+	}
+
+	// One chain of three, reachable from any of its members.
+	exts := []string{"mail:<fwd@x>"}
+	rows, err := s.DB().Query(`select ext_id from entries where quoted = 1`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var ext string
+		if err := rows.Scan(&ext); err != nil {
+			rows.Close()
+			t.Fatal(err)
+		}
+		exts = append(exts, ext)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if len(exts) != 3 {
+		t.Fatalf("entries = %d, want the forward and the two it quotes", len(exts))
+	}
+	for _, from := range exts {
+		chain, err := s.Chain(from)
+		if err != nil {
+			t.Fatalf("chain from %s: %v", from, err)
+		}
+		if len(chain) != 3 {
+			t.Errorf("chain from %s: got %d entries, want 3", from, len(chain))
+		}
+	}
+
+	// Re-running heals nothing: the pass is re-runnable, not cumulative.
+	if again, err := s.RepairDanglingQuoteParents(); err != nil {
+		t.Fatal(err)
+	} else if again != 0 {
+		t.Errorf("second run drew %d edges, want none", again)
 	}
 }

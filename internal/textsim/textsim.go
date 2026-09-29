@@ -123,10 +123,12 @@ const maxAlignTokens = 2000
 // quoting, and it is the only field that says somebody answered inline. Appended
 // and Before are client chrome — a signature, a legal notice, a tracking blob, an
 // attribution line — which every requote grows and which no reader would miss.
-// Astride is extra words at a point where the quoted rendition also skips words
-// of its own, so the two texts diverge there rather than one containing the
-// other; that is what a wrongly paired footer looks like, and reading it as an
-// annotation is how the measurement inflates.
+// Astride is extra words at a point where the two texts diverge rather than one
+// containing the other: the quoted rendition skips words of its own there, or
+// the matches either side of the run are not part of a passage of the quoted
+// text. A wrongly paired footer and two different messages from one person both
+// read this way, and counting either as an annotation is how the measurement
+// inflates.
 type Divergence struct {
 	Inside        int
 	LongestInside int
@@ -144,10 +146,12 @@ type Divergence struct {
 // answer from a footer: both are "words the other copy lacks". The alignment is
 // the longest common subsequence, so the anchors it finds are in order, and a
 // run of later's tokens counts as inside only where base's own tokens run
-// straight through — anchor to adjacent anchor with nothing of base's skipped.
-// Requiring that adjacency is what keeps a footer's stray matches on common
-// words ("the", "and") from stretching the last anchor into the footer and
-// reporting it as an insertion.
+// straight through — anchor to adjacent anchor with nothing of base's skipped —
+// AND the run interrupts a passage of base. Requiring the adjacency is what
+// keeps a footer's stray matches on common words ("the", "and") from stretching
+// the last anchor into the footer and reporting it as an insertion; requiring
+// the passage is what keeps two different messages from doing the same thing,
+// which adjacency alone cannot refuse.
 func Divergences(base, later []string) Divergence {
 	if len(base) > maxAlignTokens || len(later) > maxAlignTokens {
 		return Divergence{}
@@ -164,7 +168,7 @@ func Divergences(base, later []string) Divergence {
 		if run == 0 {
 			continue
 		}
-		if pairs[k][0]-pairs[k-1][0] > 1 {
+		if pairs[k][0]-pairs[k-1][0] > 1 || !passage(pairs, k) {
 			d.Astride += run
 			continue
 		}
@@ -172,6 +176,31 @@ func Divergences(base, later []string) Divergence {
 		d.LongestInside = max(d.LongestInside, run)
 	}
 	return d
+}
+
+// passage reports whether the run of later's tokens that ends at anchor k of the
+// alignment interrupts a passage of base, rather than joining two of base's
+// words that merely happen to sit next to each other.
+//
+// Adjacency alone is satisfied by coincidence. Two common words are adjacent in
+// one message ("do you", "the site") and turn up adjacent in another, so an
+// unrelated message from the same person — same greeting, same sign-off, a
+// question about a different job — reports a run of its own words as typed into
+// the base. Nothing was typed there: the alignment simply passed through two
+// words in a row, which is what any two texts in one language do.
+//
+// A passage is the test that separates them. The matches continue past the
+// anchors on both sides of the run, so the words either side of it are base's
+// own continuing text and the run is what somebody put between them. Where the
+// alignment arrives at an anchor and leaves it again on the diagonal, the two
+// texts are only passing through each other.
+func passage(pairs [][2]int, k int) bool {
+	if k < 2 || k+1 >= len(pairs) {
+		return false
+	}
+	before, after := pairs[k-1], pairs[k]
+	return pairs[k-2] == [2]int{before[0] - 1, before[1] - 1} &&
+		pairs[k+1] == [2]int{after[0] + 1, after[1] + 1}
 }
 
 // Align is the longest common subsequence of two token runs as the index pairs

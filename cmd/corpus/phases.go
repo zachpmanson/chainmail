@@ -284,6 +284,17 @@ func runRepair(path string) error {
 		fmt.Printf("repair-graph: redrew %d parent %s from the headers their messages carry\n",
 			int(n), plural(int(n), "edge", "edges"))
 	}
+
+	// And then the hosts no header could place: a parent named but never received
+	// leaves the trail the host's own body quotes as a second, disconnected chain.
+	// Last of all, because it is the fallback for the slot a resolving header owns —
+	// run after the two passes above, a header that resolves has already taken it.
+	if n, err := s.RepairDanglingQuoteParents(); err != nil {
+		return fmt.Errorf("linking the quoted trails of hosts their headers cannot place: %w", err)
+	} else if n > 0 {
+		fmt.Printf("repair-graph: linked %d quoted %s onto the forwards that carry them\n",
+			int(n), plural(int(n), "trail", "trails"))
+	}
 	return nil
 }
 
@@ -431,6 +442,16 @@ func runIngestMail(path string, o mailOpts) (mailingest.Result, error) {
 	return runWithMailbox(path, o, c)
 }
 
+// labelLister is the optional half of a mailbox an ingest uses to refresh the
+// stored folder list: the mailbox's own labels, which the library transport has
+// already read to resolve label ids, so recording them costs no extra round
+// trip. A transport that does not implement it (the legacy docket subprocess)
+// simply leaves the stored list alone, and the folder route keeps answering the
+// corpus-derived list it did before.
+type labelLister interface {
+	LabelNames() []string
+}
+
 // runWithMailbox walks one query, or reads the ids it is given, against any
 // Mailbox — subprocess docket or in-process library — and says how far it got.
 func runWithMailbox(path string, o mailOpts, c mailingest.Mailbox) (mailingest.Result, error) {
@@ -441,6 +462,17 @@ func runWithMailbox(path string, o mailOpts, c mailingest.Mailbox) (mailingest.R
 	}
 	defer s.Close()
 
+	// The folder list is the mailbox's, not the corpus's (see Store.Labels): a
+	// folder with nothing filed under it can only be learned from the mailbox,
+	// and the ingest is where the mailbox is already open. Recorded before the
+	// walk so a walk that stops short still refreshes it — the labels are read
+	// regardless of how much mail this run reached.
+	if ll, ok := c.(labelLister); ok {
+		if err := s.PutMailboxLabels(ll.LabelNames()); err != nil {
+			return r, fmt.Errorf("storing the mailbox's label list: %w", err)
+		}
+	}
+
 	if len(o.ids) > 0 {
 		r, err = mailingest.IngestIDs(s, c, o.ids)
 	} else {
@@ -449,8 +481,8 @@ func runWithMailbox(path string, o mailOpts, c mailingest.Mailbox) (mailingest.R
 	if err != nil {
 		return r, err
 	}
-	fmt.Printf("saw %d over %d page(s), created %d, changed %d, skipped %d draft(s), resolved %d parent edges, redrew %d from headers\n",
-		r.Seen, r.Pages, r.Created, r.Changed, r.Drafts, r.Resolved, r.Reasserted)
+	fmt.Printf("saw %d over %d page(s), created %d, changed %d, skipped %d draft(s), resolved %d parent edges, redrew %d from headers, linked %d quoted trail(s)\n",
+		r.Seen, r.Pages, r.Created, r.Changed, r.Drafts, r.Resolved, r.Reasserted, r.QuotedParents)
 	switch r.Stop {
 	case mailingest.StopExhausted:
 		fmt.Println("complete: docket had no further page")

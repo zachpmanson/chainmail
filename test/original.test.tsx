@@ -200,8 +200,10 @@ describe("a message whose own html the corpus holds", () => {
       return b;
     });
     expect(busy.disabled).toBe(true);
+    // The waiting mark is the drawn ↻ (an svg — see .spinner in the stylesheet),
+    // so the control's own `</>` glyph is gone for as long as it is fetching.
     expect(busy.querySelector(".spinner")).not.toBeNull();
-    expect(busy.querySelector("svg")).toBeNull();
+    expect(busy.querySelector("svg:not(.spinner)")).toBeNull();
     expect(busy.getAttribute("aria-label")).toMatch(/^Fetching the sender's own/);
     release(sent);
     await waitFor(() => expect(container.querySelector(".bdo")).not.toBeNull());

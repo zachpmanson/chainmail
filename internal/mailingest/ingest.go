@@ -62,7 +62,11 @@ type Result struct {
 	Drafts     int   // skipped: Gmail labels them DRAFT, so they were never sent
 	Resolved   int64 // parent edges linked after this batch
 	Reasserted int64 // parent edges redrawn from headers a later writer had overruled
-	Truncated  int   // bodies docket still had to cut — should always be zero
+	// QuotedParents: hosts whose own header named a message the corpus never got,
+	// linked onto the outermost block their body quotes. See
+	// Store.RepairDanglingQuoteParents.
+	QuotedParents int64
+	Truncated     int // bodies docket still had to cut — should always be zero
 	// Stop is why the walk ended. Read it, not Seen: a run that saw exactly its
 	// limit looks identical to a run that saw everything.
 	Stop Stop
@@ -222,6 +226,15 @@ walk:
 		return r, err
 	}
 	r.Reasserted = m
+	// And the hosts a header could not place at all: a parent named but never
+	// received leaves the trail its body quotes disconnected, and the quoted
+	// sightings are what join the two. Last, so a header that does resolve still
+	// wins its slot first.
+	qp, err := store.RepairDanglingQuoteParents()
+	if err != nil {
+		return r, err
+	}
+	r.QuotedParents = qp
 	return r, nil
 }
 
@@ -270,6 +283,12 @@ func IngestIDs(store *corpus.Store, c Mailbox, ids []string) (Result, error) {
 		return r, err
 	}
 	r.Reasserted = m
+	// Same tail as the walk's.
+	qp, err := store.RepairDanglingQuoteParents()
+	if err != nil {
+		return r, err
+	}
+	r.QuotedParents = qp
 	return r, nil
 }
 

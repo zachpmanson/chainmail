@@ -151,9 +151,10 @@ func TestCRLFBodiesAreHandled(t *testing.T) {
 	}
 }
 
-// Two consecutive keys are required. One key is not a block: 32 messages here
-// have a From: line with no address, so requiring an address rejects real blocks,
-// while "Passcode: 1234" would be accepted by anything looser.
+// Two consecutive keys are required, and at least one of them must name the
+// message rather than only its recipients. One key is not a block: 32 messages
+// here have a From: line with no address, so requiring an address rejects real
+// blocks, while "Passcode: 1234" would be accepted by anything looser.
 func TestHeaderBlockNeedsTwoKeys(t *testing.T) {
 	if _, ok := FindHeaderBlock(Normalise("From: Alice | Acme\nnot a header\n"), 0); ok {
 		t.Fatal("accepted a single header key")
@@ -167,6 +168,23 @@ func TestHeaderBlockNeedsTwoKeys(t *testing.T) {
 	}
 	if b.End != 3 {
 		t.Fatalf("consumed %d lines, want 3", b.End)
+	}
+}
+
+// A block of only recipient keys describes no message, and bold recipient labels
+// in body prose are exactly this shape. Accepting it opened a boundary mid-body
+// and turned the prose below into a phantom quoted entry.
+func TestHeaderBlockNeedsANonRecipientKey(t *testing.T) {
+	if _, ok := FindHeaderBlock(Normalise("*To:* billing@example.test\n*CC:* reviewer@example.test\n"), 0); ok {
+		t.Fatal("accepted a recipient-only block as a header block")
+	}
+	// The same recipients become a block once a sender, date or subject names
+	// the message they belong to.
+	if _, ok := FindHeaderBlock(Normalise("*To:* billing@example.test\n*Subject:* Invoice 42\n"), 0); !ok {
+		t.Fatal("rejected a To/Subject block")
+	}
+	if _, ok := FindHeaderBlock(Normalise("To: Bob\nCc: Carol\nFrom: Alice\n"), 0); !ok {
+		t.Fatal("rejected a To/Cc/From block")
 	}
 }
 

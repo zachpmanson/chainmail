@@ -1128,8 +1128,8 @@ describe("the site navigation", () => {
 
     await waitFor(() => expect(button.getAttribute("aria-busy")).toBe("true"));
     expect(button).toHaveProperty("disabled", true);
-    // The indicator is dripfeed-web's spinner: a span whose ::before is the ↻ the
-    // stylesheet turns (see .navrefresh .spinner).
+    // The indicator is dripfeed-web's spinner: the drawn ↻ the stylesheet turns
+    // (see .navrefresh .spinner).
     expect(button.querySelector(".spinner")).toBeTruthy();
     expect(searchCalls().length).toBeGreaterThan(before);
 

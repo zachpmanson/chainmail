@@ -308,19 +308,34 @@
   .navrefresh:hover, .navcancel:hover { color:var(--accent); border-color:var(--line);
     background:var(--card); }
   .navrefresh:disabled { cursor:default; }
-  /* dripfeed-web's spinner, glyph and all (src/index.css there): the same ↻, the
-     same 0.8s linear turn, so the act reads the same in both apps. It spins only
-     while the button is working — as a button's own icon, a still ↻ is what the
-     control *is*, and a turning one is what it is doing.
+  /* dripfeed-web's spinner (src/index.css there): the same ↻, the same 0.8s
+     linear turn, so the act reads the same in both apps. It turns only while its
+     thing is working — as a button's own icon, a still ↻ is what the control
+     *is*, and a turning one is what it is doing.
 
-     The box is the app's glyph size, 18px — the same as the svg glyphs in every
-     other icon button in the app (see .ibicon svg) — and it is what the button's
-     own size is made of. The character is set at that size too, so its ink comes
-     out looking like a drawn glyph of the same box rather than smaller than one. */
-  .navrefresh .spinner { display:inline-block; width:1.125rem; height:1.125rem;
-    font-size:1.125rem; line-height:1.125rem; vertical-align:middle; }
-  .navrefresh .spinner::before { content:"\21BB"; }
-  .navrefresh.busy .spinner { animation:spin .8s linear infinite; }
+     One box, the drawn mark's 1em square, on all three sites: no forced 18px box
+     with a `line-height` picked to line the ink up inside it, which is a font
+     constant and not a fix. The 18px look is kept with `font-size` on the two
+     buttons (the app's glyph size, the same as the svg glyphs in every other icon
+     button — see .ibicon svg); the chip keeps the .ameta size it inherits.
+
+     The mark is DRAWN, not typeset, and that is the whole of the wobble fix. A
+     transform turns about the box centre, and a character's ink is NOT centred
+     in its em box: measured in a real browser, DejaVu Sans' ↻ ink centre sits
+     0.097em above the box centre, so a typeset ↻ orbits the axis rather than
+     turning on it. That offset is a font constant — swapping `line-height` only
+     re-centres it for the one font it was measured against, and Zach's browser
+     does not set ↻ in DejaVu. The path is drawn to the box centre instead, so
+     rotate() is exact on every font, browser and size. */
+  .spinner { display:inline-block; width:1em; height:1em; line-height:1;
+    vertical-align:middle; flex:none; }
+  /* One size for the two icon buttons' glyphs; the chip keeps the .ameta size it
+     inherits from the line it is in. */
+  .navrefresh .spinner, .origbtn.busy .spinner { font-size:1.125rem; }
+  /* One turn, declared once: the nav's icon only turns while the button is
+     working; the other two spinners exist only while their thing is. */
+  .navrefresh.busy .spinner, .origbtn.busy .spinner, .att.busy .spinner,
+  .sweepind.working .spinner { animation:spin .8s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
   /* The ingest the page did not start (see SweepIndicator). A quiet pill rather
      than a second button: it is a fact about the machine, not a press, and the
@@ -336,9 +351,11 @@
     padding:.15rem .5rem; border:1px solid var(--line); border-radius:999px;
     color:var(--muted); font-size:.75rem; line-height:1.4; white-space:nowrap; }
   .sweepind.warn { color:var(--accent); border-color:var(--accent); }
-  .sweepind .spinner { display:inline-block; width:.85rem; height:.85rem;
-    font-size:.85rem; line-height:1; animation:spin .8s linear infinite; }
+  .sweepind .spinner { font-size:.85rem; }
   .sweepind .spinner::before { content:"\21BB"; }
+  @media (prefers-reduced-motion: reduce) {
+    .navrefresh.busy .spinner, .origbtn.busy .spinner, .att.busy .spinner,
+    .sweepind.working .spinner { animation:none; } }
   .navsearch svg { flex:none; opacity:.8; }
   /* The app's own pages are workspaces, not documents: an inbox is a list and a
      reading pane, and both want the width the window has. Anything not named
@@ -544,35 +561,34 @@
   .msg.o3 .org { --orgc:var(--o3); } .msg.o4 .org { --orgc:var(--o4); }
   .msg.o5 .org { --orgc:var(--o5); }
   .tm { font-size:.71rem; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
-  /* The receipt's two controls are one shape, so they read as one line of them:
-     the clip that copies the message whole, and the swap to the sender's own
-     rendering (see .origbtn further down for where each of them is drawn).
+  /* The receipt's three controls are one shape, so they read as one line of them:
+     the press that answers the message (see .replyall), the clip that copies it
+     whole, and the swap to the sender's own rendering (see .origbtn further down
+     for where each of them is drawn).
 
-     Both are icon buttons and the same box as every other one in the app — the pane
-     strip's five and the nav's pair: an 18px glyph in .25rem .3rem of padding inside
-     a transparent 1px border, which is 29.6×28. The style switch used to be a word,
-     and a word is the wrong shape for a control whose own state changes: "Toggle
-     Styles" and "loading…" are two different widths in the one place the reader is
-     looking when they press it, and beside the copy control's glyph it made the
-     line ragged. The state is the glyph now — `</>` for the sender's own markup,
-     the spinner while it is being fetched — and the pressed colour below is what
-     says which of the two renderings is on. */
-  .copyjson, .origbtn { flex:none; display:inline-flex; align-items:center; justify-content:center;
+     All three are icon buttons and the same box as every other one in the app — the
+     pane strip's five and the nav's pair: an 18px glyph in .25rem .3rem of padding
+     inside a transparent 1px border, which is 29.6×28. The style switch used to be a
+     word, and a word is the wrong shape for a control whose own state changes:
+     "Toggle Styles" and "loading…" are two different widths in the one place the
+     reader is looking when they press it, and beside the copy control's glyph it
+     made the line ragged. The state is the glyph now — `</>` for the sender's own
+     markup, the spinner while it is being fetched — and the pressed colour below
+     is what says which of the two renderings is on. The answer press is the same
+     rule: its word is "reply all", and eight characters beside two glyphs would be
+     the ragged line all over again, so the glyph carries it and the word is the
+     title, the label, and — pressed — the colour. */
+  .copyjson, .origbtn, .replyall { flex:none; display:inline-flex; align-items:center; justify-content:center;
     padding:.25rem .3rem; border:1px solid transparent; border-radius:6px;
     background:transparent; color:var(--muted); font:inherit; cursor:pointer; }
-  .copyjson:hover, .origbtn:hover { color:var(--accent); border-color:var(--line); background:var(--card); }
-  .copyjson svg, .origbtn svg { display:block; width:18px; height:18px; }
+  .copyjson:hover, .origbtn:hover, .replyall:hover { color:var(--accent); border-color:var(--line); background:var(--card); }
+  .copyjson svg, .origbtn svg, .replyall svg { display:block; width:18px; height:18px; }
   /* While the sender's part is being fetched: the same ↻ and the same 0.8s turn as
-     the nav's refresh and the attachment chips (see .navrefresh .spinner), in the
-     button's own 18px box. The turn is the whole of it — the word that used to sit
-     here changed the button's width mid-fetch, which moved the receipt's line under
-     the hand of the one reader who was watching it. */
+     the nav's refresh and the attachment chips (see .spinner), in the button's own
+     18px box. The turn is the whole of it — the word that used to sit here changed
+     the button's width mid-fetch, which moved the receipt's line under the hand of
+     the one reader who was watching it. */
   .origbtn.busy { cursor:progress; }
-  .origbtn.busy .spinner { display:inline-block; width:1.125rem; height:1.125rem;
-    font-size:1.125rem; line-height:1.125rem; vertical-align:middle;
-    animation:spin .8s linear infinite; }
-  .origbtn.busy .spinner::before { content:"\21BB"; }
-  @media (prefers-reduced-motion: reduce) { .origbtn.busy .spinner { animation:none; } }
   .tz { font-size:.9em; opacity:.75; }
   /* an inferred zone must not read as a stated one */
   .tz.tzi { opacity:.55; border-bottom:1px dotted currentColor; cursor:help; }
@@ -623,6 +639,13 @@
      message is read. */
   .hdetend { margin-left:auto; display:inline-flex; align-items:center; gap:.35rem; }
   .origbtn[aria-pressed="true"] { color:var(--accent); background:var(--mine);
+    border-color:var(--accent); }
+  /* Which message this box's press is about. The pane's reply box answers the newest
+     answerable message by default and an older one when a reader asks for it, so the
+     pressed press is the one place in the thread that says which — and it is a
+     pressed button rather than a mark on the bubble, because it is a control whose
+     state the reader set (see AnswerPress). */
+  .replyall[aria-pressed="true"] { color:var(--accent); background:var(--mine);
     border-color:var(--accent); }
   .origwhy { font-size:.66rem; color:var(--muted); font-style:italic; }
   /* The shadow host: layout only, and deliberately no colour. A rule in THIS
@@ -706,9 +729,13 @@
      to stress a word says something a style attribute does not, and dropping it
      flattens a deliberately emphasised line into prose. */
   .atts { display:flex; flex-wrap:wrap; align-items:center; gap:.3rem; margin:.4rem 0 .1rem; }
-  .clip { font-size:.64rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted);
-    font-weight:700; }
-  .clip::before { content:"\1F4CE  "; }
+  /* The strip's head is a mark alone: the chips to its right ARE the list of
+     files, so the word that used to sit here ("attached") named the row a reader
+     had already recognised by its pictures and its filenames. The glyph keeps its
+     colour and its size and loses the word's tracking, which only ever applied to
+     the word. */
+  .clip { font-size:.72rem; color:var(--muted); }
+  .clip::before { content:"\1F4CE"; }
   .att { display:inline-flex; align-items:baseline; gap:.35rem; text-decoration:none;
     border:1px solid var(--line); border-radius:6px; padding:.1rem .45rem;
     background:var(--quote); color:var(--fg); }
@@ -725,10 +752,14 @@
      that is out asking for something should not read as idle. */
   .att.busy { border-color:var(--accent); cursor:progress; }
   .att.busy .ameta { color:var(--fg); }
-  .att.busy .spinner { display:inline-block;
-    vertical-align:.02em; animation:spin .8s linear infinite; }
-  .att.busy .spinner::before { content:"\21BB"; }
-  @media (prefers-reduced-motion: reduce) { .att.busy .spinner { animation:none; } }
+  /* The chip's spinner is the .spinner base (see .navrefresh .spinner) at the
+     .ameta size it inherits, but as wide as the ↻ it replaced: a typeset glyph was
+     as wide as its advance (0.838em in this host's DejaVu Sans), and the chip's
+     own width is its file name plus this box, so the drawn mark is given that
+     width and the chip's geometry stays where it was. The square viewBox centres
+     inside that box (preserveAspectRatio), so the mark is still turned about its
+     own centre. */
+  .att.busy .spinner { width:.838em; }
   /* A chip with a thumbnail centres on the picture instead of the text baseline,
      which is what the other chips align to. Left as its own rule rather than
      changing .att, so a chip without a picture keeps sitting on the baseline of
@@ -984,9 +1015,12 @@
   .mini.spy .nd.hov { opacity:1; }
   .mini.spy .nd.hov circle { r:5.4; stroke:var(--accent); stroke-width:2.2; }
   .mini.spy .nd.hov rect { stroke:var(--accent); stroke-width:2.2; }
-  /* reciprocal: hovering a row marks the message it points at. A ring rather
-     than a border colour, so it is unmistakable against both bubble states
-     (solid card and dashed quote) without shifting layout. */
+  /* Hovering a row, or the "in reply to" link on a message, marks the message it
+     names. A ring rather than a border colour, so it is unmistakable against both
+     bubble states (solid card and dashed quote) without shifting layout. It is the
+     loud mark of the pair, and both its drivers have stopped on a named message to
+     ask about it — the quiet one below answers a pointer that is only passing
+     (see `.rhov`, which is about reply LINES and not about this link). */
   .msg.mhov .bub, .sys.mhov { border-color:var(--accent);
     box-shadow:0 0 0 2.5px var(--accent), 0 1px 8px -2px var(--accent); }
   /* The same idea at a lower volume, for the reading pane's reply lines.
@@ -1234,9 +1268,43 @@
    the pane growing. */
 .replybox { margin:.9rem 0 .3rem; padding:.6rem .7rem; border:1px solid var(--line);
   border-radius:8px; background:var(--card); }
-/* Which message is being answered, in the words its own bubble wears — the same
-   name and clock the link above it prints, because both read the same entry. */
-.replyto { margin:0 0 .45rem; font-size:.74rem; color:var(--muted); }
+/* To and Cc each get a full line, rather than squeezing two address lists
+   side by side.
+
+   `--addrrow` is the height of one line of an address field, and it is the row's
+   own measure rather than any one item's: the field is given it as a min-height
+   and the label and the link are given it as a height, so the three agree by
+   construction instead of by three numbers that happen to match. Measured from
+   the field's own box — .1rem padding and a 1px border each side, around an
+   input at .72rem with the body's 1.45 line-height, or around one chip, which is
+   a shade taller (1.569rem and 1.594rem at a 16px root) — so it clears both by
+   less than a tenth of a rem. Everything here is in rem, so the relationship
+   holds whatever the reader's root size is. */
+.replyrecipients { --addrrow:1.7rem; display:flex; flex-direction:column; align-items:stretch; gap:.4rem; margin:0 0 .55rem; }
+/* Top-aligned, not centred: a field grows downward as the reader adds chips, and a
+   label centred against a two-line list sits level with the gap between the lines
+   rather than with the first one — with `to:` on the taller row and `cc:` on a
+   shorter one, the two labels stopped being a column of labels and looked like two
+   unrelated words. */
+.replyrecipient { display:flex; align-items:flex-start; gap:.3rem; min-width:0;
+  font-size:.74rem; color:var(--muted); }
+.replyrecipient > span, .replytarget { flex:none; }
+/* The label is one line of the field tall, and its word sits in the middle of that
+   height rather than at the top of it: the field's own text is centred in its box,
+   and a label left at its natural height (a .74rem line box) with `flex-start` put
+   `to:` a couple of pixels above the first address it names. A field that WRAPS
+   grows past this height and the label does not follow — it is the first line the
+   label belongs to, which is the line the reader reads it against. */
+.replylabel { display:inline-flex; align-items:center; height:var(--addrrow); }
+.replyrecipient > .addrfield { flex:1; display:flex; min-width:0; min-height:var(--addrrow); }
+.replyrecipient .addrinput { min-width:3rem; }
+/* The link to the message being answered rides at the end of the to line: pushed
+   to the right of the addresses by margin-left:auto, which is what the flexed
+   field leaves, rather than sitting on a line of its own below cc. It is one line
+   of the field tall for the same reason the label is (see .replylabel). */
+.replytarget { display:inline-flex; align-items:center; gap:.25rem; margin-left:auto;
+  height:var(--addrrow); white-space:nowrap; text-decoration:none; }
+.replytarget .arw { font-size:.8rem; line-height:1; }
 .replyinput { display:block; width:100%; font:inherit; font-size:.82rem;
   line-height:1.45; padding:.45rem .55rem; color:var(--fg); background:var(--bg);
   border:1px solid var(--line); border-radius:6px; resize:vertical; }
@@ -1252,6 +1320,24 @@
   line-height:1.45; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
   color:var(--fg); background:var(--bg); border:1px solid var(--line);
   border-radius:6px; }
+/* The same preview when the reply goes out with its HTML part: the rendering the
+   recipient's client gets rather than the lines that will be typed. The frame
+   matches .replytext above so the two forms are one panel changing shape, but the
+   text is read the way the app reads a body — the blockquote a quote, the
+   paragraphs prose — because the whole point of the tick is which of the two the
+   correspondent sees. The bytes inside it are the server's and are not touched
+   here; these rules shape the frame and the composed elements' own margins, as
+   .bd's do for a body. */
+.replyhtml { margin:.4rem 0 0; padding:.5rem .6rem; max-height:22rem;
+  overflow:auto; overflow-wrap:anywhere; font-size:.84rem; line-height:1.5;
+  color:var(--fg); background:var(--bg); border:1px solid var(--line);
+  border-radius:6px; }
+.replyhtml p { margin:.4rem 0; }
+.replyhtml p:first-of-type { margin-top:0; }
+.replyhtml blockquote { margin:.4rem 0 0; padding-left:.6rem;
+  border-left:2px solid var(--line); color:var(--muted); }
+.replyhtml img { max-width:100%; height:auto; }
+.replyhtml table { min-width:0; max-width:100%; }
 /* The box's own buttons sit at the right end rather than the left. The box is
    the last thing in the reading pane and its action is the last thing in the
    box, so the eye that has finished reading the plan lands on the press that
@@ -1269,6 +1355,44 @@
   font-size:.74rem; color:var(--muted); cursor:pointer; }
 .replytick input { margin:0; accent-color:var(--accent); cursor:pointer; }
 .replytick:has(input:disabled) { opacity:.55; cursor:default; }
+/* Each address field is one bordered run of chips with an input at the end. The
+   suggestions hang under the whole box rather than the input, so the list stays as
+   wide as the recipient row while the reader types. */
+.addrfield { position:relative; display:inline-flex; flex-wrap:wrap; align-items:center;
+  gap:.2rem; margin:0 .15rem; padding:.1rem .3rem; max-width:100%; vertical-align:middle;
+  border:1px solid var(--line); border-radius:6px; background:var(--bg); }
+.addrfield:focus-within { border-color:var(--accent); }
+.addrchip { display:inline-flex; align-items:center; gap:.2rem; max-width:100%;
+  padding:.05rem .2rem .05rem .35rem; border:1px solid var(--line); border-radius:10px;
+  background:var(--card); font-size:.72rem; }
+.addrname { overflow-wrap:anywhere; }
+.addrx { flex:none; display:inline-flex; align-items:center; padding:.1rem; color:var(--muted);
+  background:none; border:none; border-radius:4px; cursor:pointer; }
+.addrx:hover { color:var(--accent); background:var(--bg); }
+.addrx svg { display:block; }
+.addrx:disabled { opacity:.55; cursor:default; }
+.addrx:disabled:hover { color:var(--muted); background:none; }
+.addrinput { flex:1 1 7rem; min-width:7rem; font:inherit; font-size:.72rem; padding:.1rem 0;
+  color:var(--fg); background:none; border:none; outline:none; }
+.addrinput::placeholder { color:var(--muted); }
+/* The suggestions, under the field. Over the prose rather than in it: the line would
+   reflow under the reader's eyes as they typed, and the box is already the thing they
+   are looking at. */
+.addrlist { position:absolute; top:100%; left:0; z-index:20; display:flex;
+  flex-direction:column; min-width:100%; max-width:24rem; max-height:14rem; overflow:auto;
+  margin-top:.25rem; padding:.15rem; border:1px solid var(--line); border-radius:6px;
+  background:var(--card); box-shadow:0 6px 18px rgba(0,0,0,.18); }
+.addropt { display:flex; align-items:baseline; gap:.4rem; padding:.2rem .35rem;
+  font-size:.72rem; border-radius:4px; cursor:pointer; }
+.addropt.on { background:var(--mine); }
+.addroptaddr { font-size:.68rem; color:var(--muted); overflow-wrap:anywhere; }
+.addropt.none { color:var(--muted); cursor:default; }
+/* A refusal is a sentence about the address the reader just tried to add, and it sits
+   in the field rather than in the popup: the popup is where the answers are, and this
+   is the answer to what they did — the same red the other refusals on the page wear
+   (see .selfail). It goes away with the next keystroke, because it is about that one
+   address rather than a standing fact about the field. */
+.addrrefuse { flex-basis:100%; padding:.1rem .2rem; font-size:.68rem; color:crimson; }
 
 /* --- what a write leaves to say --- */
 /* The bottom-right corner, over every page. These are accounts of work that is

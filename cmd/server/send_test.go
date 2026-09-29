@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -145,6 +146,115 @@ func TestThePreviewSendsNothingAndAnswersTheMailboxsOwnPlan(t *testing.T) {
 	}
 }
 
+// The audience goes back to the client as addresses, not only as the headers they
+// will be rendered into: the two say the same thing — the strings are these rendered
+// — and it is the addresses a client draws the reply's fields from and names back on
+// the send (see SendRequest's to/cc). What is checked here is that they are the
+// answered message's own, with the names it gave them, in its order: the set the
+// fields start from, which is not the same thing as the set they may hold (a caller
+// may name an address the message never carried — see checkAddresses).
+func TestThePlanCarriesTheAudienceItMaySendToAsAddresses(t *testing.T) {
+	h, _ := sendServer(t)
+
+	res := h.do(t, "POST", "/v1/send",
+		[]byte(`{"entry":"`+extAda3+`","body":"The 14th works."}`))
+	if res.status != 200 {
+		t.Fatalf("status %d: %s", res.status, res.body)
+	}
+	loadAPI(t).assert(t, "SendResponse", res.body)
+
+	got := decode[sendResponse](t, res)
+	wantTo := []recipient{{Name: "Bo Halvorsen", Address: "bo@fjordline.example"}}
+	if !slices.Equal(got.ToRecipients, wantTo) {
+		t.Errorf("toRecipients = %+v, want %+v", got.ToRecipients, wantTo)
+	}
+	wantCc := []recipient{{Name: "Cy Okafor", Address: "cy@loomworks.example"}}
+	if !slices.Equal(got.CcRecipients, wantCc) {
+		t.Errorf("ccRecipients = %+v, want %+v", got.CcRecipients, wantCc)
+	}
+	// The header and the addresses agree, which is what makes a chip and the line
+	// above it the same claim rather than two.
+	if got.To != "Bo Halvorsen <bo@fjordline.example>" {
+		t.Errorf("to = %q, want it rendered from the address above", got.To)
+	}
+}
+
+// A caller names the audience the reply carries, and what it names is what the
+// mailbox is asked for: the plan it answers with is the reply that would go out, so
+// the lists a reader arranged are the message that leaves. **An address the answered
+// message did not carry is one of them** — that is the widening, and it is the one
+// thing this endpoint no longer does: while the chosen set was a rearrangement of the
+// message's own audience, no recipient on a reply was one the message had not already
+// reached. What the handler has to get right is that it hands the choice down rather
+// than deciding it (see docket's mail.WithRecipients, which the mailbox enforces).
+func TestAChosenAudienceIsWhatTheMailboxIsAskedFor(t *testing.T) {
+	h, fake := sendServer(t)
+
+	// Cy was on the message and is moved from cc into to; carl@example.net was not on
+	// it at all, and is named anyway — a stranger's address typable into the field and
+	// accepted is the whole point of the field.
+	res := h.do(t, "POST", "/v1/send",
+		[]byte(`{"entry":"`+extAda3+`","body":"The 14th works.",`+
+			`"to":["bo@fjordline.example","cy@loomworks.example"],`+
+			`"cc":["carl@example.net"]}`))
+	if res.status != 200 {
+		t.Fatalf("status %d: %s", res.status, res.body)
+	}
+	loadAPI(t).assert(t, "SendResponse", res.body)
+
+	got := decode[sendResponse](t, res)
+	if got.To != "Bo Halvorsen <bo@fjordline.example>, Cy Okafor <cy@loomworks.example>" {
+		t.Errorf("to = %q, want the two the caller chose", got.To)
+	}
+	// The address the message never carried keeps the name it came with — none — and
+	// is rendered as the address, with no display name invented for it.
+	if got.Cc != "carl@example.net" {
+		t.Errorf("cc = %q, want the address the caller typed", got.Cc)
+	}
+	if len(fake.replies) != 1 {
+		t.Fatalf("the mailbox saw %+v, want one call", fake.replies)
+	}
+	if !slices.Equal(fake.replies[0].to, []string{"bo@fjordline.example", "cy@loomworks.example"}) {
+		t.Errorf("the mailbox was asked for to %v", fake.replies[0].to)
+	}
+	if !slices.Equal(fake.replies[0].cc, []string{"carl@example.net"}) {
+		t.Errorf("the mailbox was asked for cc %v", fake.replies[0].cc)
+	}
+}
+
+// The empty list a caller can send and an absent one are different facts: absent
+// leaves the list as the mailbox assembled it, while an empty cc takes everybody
+// off it. That is the one thing a client cannot say any other way, and it is what
+// makes "nobody else on this reply" reachable without dropping the whole audience.
+func TestAChosenAudienceCanEmptyTheCcAndTheSendCarriesIt(t *testing.T) {
+	h, fake := sendServer(t)
+
+	res := h.do(t, "POST", "/v1/send",
+		[]byte(`{"entry":"`+extAda3+`","body":"The 14th works.","confirm":true,`+
+			`"to":["bo@fjordline.example"],"cc":[]}`))
+	if res.status != 200 {
+		t.Fatalf("status %d: %s", res.status, res.body)
+	}
+	loadAPI(t).assert(t, "SendResponse", res.body)
+
+	got := decode[sendResponse](t, res)
+	if !got.Sent {
+		t.Error("a confirmed send did not send")
+	}
+	if got.Cc != "" || strings.Contains(string(res.body), `"cc"`) {
+		t.Errorf("a reply with cc emptied still carries a cc: %s", res.body)
+	}
+	if len(fake.replies) != 1 {
+		t.Fatalf("the mailbox saw %+v, want one send", fake.replies)
+	}
+	if fake.replies[0].cc == nil || len(fake.replies[0].cc) != 0 {
+		t.Errorf("the mailbox was asked for cc %v, want an empty list rather than none", fake.replies[0].cc)
+	}
+	if !slices.Equal(fake.replies[0].to, []string{"bo@fjordline.example"}) {
+		t.Errorf("the mailbox was asked for to %v", fake.replies[0].to)
+	}
+}
+
 // The send, end to end: the message is answered, and the answer is filed into the
 // corpus in the same request so the thread the reader is looking at shows it rather
 // than waiting for the next slurp.
@@ -178,12 +288,13 @@ func TestSendingAnswersTheMessageAndFilesTheAnswerIntoTheCorpus(t *testing.T) {
 	}
 }
 
-// The one thing the caller decides about a reply's audience is whether the rest of
-// it is on the reply, and the two settings are told apart by the mailbox: what it is
-// asked for is what it answers, so the plan and the send are the same message either
-// way. The flag narrows to the person who wrote — there is no setting that reaches an
-// address the answered message did not carry.
-func TestTheReplyAllTickCanOnlyNarrowTheReplyToItsSender(t *testing.T) {
+// The one thing the reply-all tick decides about a reply's *starting* audience is
+// whether the rest of it is on the reply, and the two settings are told apart by the
+// mailbox: what it is asked for is what it answers, so the plan and the send are the
+// same message either way. The flag narrows to the person who wrote; the addresses a
+// caller names in To and Cc are the other half of the question, and the tick neither
+// adds nor removes one of them (see checkAddresses and SendRequest's to/cc).
+func TestTheReplyAllTickNarrowsTheReplyToItsSender(t *testing.T) {
 	h, fake := sendServer(t)
 
 	res := h.do(t, "POST", "/v1/send",
@@ -276,6 +387,14 @@ func TestTheReplyGoesOutInBothForms(t *testing.T) {
 			t.Errorf("the HTML part is missing %q:\n%s", want, body.HTML)
 		}
 	}
+	// And the plan answers the HTML half back, because by default that is the form
+	// the reply goes out in and the pane draws its preview from it: a reader shown
+	// the text part while the HTML part travels would be checking a rendering their
+	// correspondent never receives — the quote a `blockquote` on the way out and
+	// `> ` lines on screen.
+	if got := decode[sendResponse](t, res); got.HTML != body.HTML {
+		t.Errorf("the plan does not carry the HTML part that was handed to the mailbox")
+	}
 	// And the response is the plan of the text part: it is the form the pane shows,
 	// and the contract carries one body rather than a pair of them.
 	if got := decode[sendResponse](t, res); got.Body != body.Text {
@@ -313,6 +432,15 @@ func TestTheReplyGoesOutAsTextAloneWhenAsked(t *testing.T) {
 		if !strings.Contains(body.Text, want) {
 			t.Errorf("the text part is missing %q:\n%s", want, body.Text)
 		}
+	}
+	// And the plan says so, by not carrying an HTML half at all: the field's own
+	// presence is the answer to which rendering travels, so a preview draws the text
+	// part and no client has to agree about a flag it sent.
+	if got := decode[sendResponse](t, res); got.HTML != "" {
+		t.Errorf("a text-alone plan carries an HTML part:\n%s", got.HTML)
+	}
+	if strings.Contains(string(res.body), `"html"`) {
+		t.Errorf("a text-alone plan carries an html field: %s", res.body)
 	}
 	if got := decode[sendResponse](t, res); got.Body != body.Text {
 		t.Errorf("the plan's body is not the text part that was sent")
@@ -382,6 +510,14 @@ func TestSendRefusesWhatItCannotAnswer(t *testing.T) {
 		{name: "no body", body: `{"entry":"` + extAda3 + `"}`, want: 400, mentions: "something to say"},
 		{name: "blank body", body: `{"entry":"` + extAda3 + `","body":"\n  \n"}`, want: 400, mentions: "something to say"},
 		{name: "unknown entry", body: `{"entry":"` + extNone + `","body":"hello"}`, want: 404, mentions: "no entry"},
+		// The audience the caller names, refused for shape before the mailbox is opened:
+		// an entry that is not an address, and one address named twice — in one list or
+		// in both. Neither is a statement about who may be reached, which is why an
+		// address the message never carried is not among these.
+		{name: "a to that is not an address", body: `{"entry":"` + extAda3 + `","body":"hi","to":["the fitters"]}`, want: 400, mentions: `to: "the fitters" is not an address`},
+		{name: "a cc that is not an address", body: `{"entry":"` + extAda3 + `","body":"hi","cc":["ada@loomworks.example","ada@"]}`, want: 400, mentions: `cc: "ada@" is not an address`},
+		{name: "an address twice in one list", body: `{"entry":"` + extAda3 + `","body":"hi","cc":["ada@loomworks.example","Ada@Loomworks.example"]}`, want: 400, mentions: "already on this reply, in cc"},
+		{name: "an address in both lists", body: `{"entry":"` + extAda3 + `","body":"hi","to":["ada@loomworks.example"],"cc":["ada@loomworks.example"]}`, want: 400, mentions: "already on this reply, in to"},
 		// The field that decides whether a real mailbox is written is the one a
 		// typo must not silently skip.
 		{name: "misspelled field", body: `{"entry":"` + extAda3 + `","body":"hi","confrim":true}`, want: 400, mentions: "request body"},

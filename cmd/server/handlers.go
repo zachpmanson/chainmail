@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"net/mail"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1024,8 +1025,20 @@ func (s *server) mediaPull(w http.ResponseWriter, r *http.Request) {
 type mailbox interface {
 	SetUnread(id string, unread bool) ([]string, error)
 	SetLabels(id string, add, remove []string) ([]string, error)
-	Reply(id string, body gmailclient.ReplyBody, all, send bool) (gmailclient.ReplyPlan, error)
+	Reply(id string, body gmailclient.ReplyBody, opts gmailclient.ReplyOptions) (gmailclient.ReplyPlan, error)
 	Read(id string) (mailingest.Message, error)
+}
+
+// recipientsIn is gmailclient's recipients as this server's wire type. The two are
+// the same shape on purpose — one is the contract and the other is the library's
+// view — and the mapping is what keeps a field gmailclient grows from appearing on
+// the wire by accident.
+func recipientsIn(list []gmailclient.Recipient) []recipient {
+	out := make([]recipient, 0, len(list))
+	for _, r := range list {
+		out = append(out, recipient{Name: r.Name, Address: r.Address})
+	}
+	return out
 }
 
 // markRead is the one write this server makes to the mailbox itself: every
@@ -1351,29 +1364,41 @@ type mailActionChain struct {
 // cannot be undone at all. A host without the grant answers 403, naming it.
 //
 // Reply-ALL, and the shape follows from that rather than from a reluctance to
-// build a composer. There is no recipient field anywhere in this request: the
-// message answered is named by its corpus id and everything else — who it goes to
-// and the subject — comes from the mailbox's own headers (see gmailclient.Reply).
-// A surface that can only answer mail the corpus already holds has no arbitrary
-// recipient, which is what makes it a reading tool that can reply rather than a
-// mail-sending endpoint sitting inside a page that binds to loopback with no
-// authentication.
+// build a composer. The message answered is named by its corpus id and the
+// subject, the sender and the rest of the audience come from the mailbox's own
+// headers (see gmailclient.Reply), so the common path needs nothing typed. What
+// the request's `to` and `cc` name is the audience this reply carries, and **a
+// caller may name an address the answered message did not carry** — the reply box
+// has an address field a reader types into, and this is the endpoint behind it.
+//
+// That is a deliberate posture change and it is worth being exact about what it
+// gives up. While `to`/`cc` could only pick from the plan's own recipients, a
+// reply could reach nobody the answered message had not already reached, and that
+// — not the loopback bind — was what made this a reading tool that can reply.
+// Now a caller can name any address at all: `to: ["ada@example.com"]` is enough.
+// What still bounds a send is the two switches in front of it — the loopback bind
+// with no authentication, and the host having been started with `-send-mail` (see
+// sendReply's own 403) — plus the shape of the list, checked below so a typo is a
+// 400 naming the field rather than a mailbox round trip. Nothing else inspects who
+// is being written to: an address that looks like an address is sent to, which is
+// what a surface a person types addresses into has to do.
+//
+// The default is untouched, which is what keeps the common path from widening by
+// accident: a request that names neither list sends the audience the mailbox
+// assembled — the answered message's own, minus the reader's addresses — and a
+// request that names one list leaves the other as the mailbox assembled it.
 //
 // Answering everyone the message was addressed to is the same property rather
 // than a widening of it: the audience is the original message's own To and Cc,
 // minus every address the mailbox doing the replying owns — which the mailbox
 // itself decides, because the mail a reader answers is usually addressed to a
 // send-as alias and that is exactly the address a guessed list would CC them on
-// (docket reads the account's profile and its aliases; see gmailclient.Reply). So
-// the set a reply can reach is not one the caller composes or the reader types:
-// it is the set the answered message already carried, which is what keeps
-// "nowhere but back down a thread that is already in the corpus" true.
+// (docket reads the account's profile and its aliases; see gmailclient.Reply).
 //
-// Whether the rest of that audience is on the reply is the one thing the caller
-// decides (`all`), because it is a choice about the conversation rather than about
-// deliverability: answering a dozen people when one asked you something is a
-// different act from answering the person who asked. Either way the addresses are
-// the answered message's own, so the property above holds for both settings.
+// Which audience the reply starts from is the caller's to say (`all`), because it
+// is a choice about the conversation rather than about deliverability: answering a
+// dozen people when one asked you something is a different act from answering the
+// person who asked.
 //
 // Two steps, and the first one sends nothing: without `confirm` the reply is
 // PREPARED and answered with the plan — the recipients the mailbox will use, the
@@ -1409,6 +1434,15 @@ func (s *server) sendReply(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, errors.New(
 			"a reply needs something to say: the quote of the message being answered is "+
 				"added by this server, and an empty body would send that alone"))
+		return
+	}
+	// The audience the reader typed, checked for shape here for the reason the empty
+	// body is checked here: a mistyped address is the caller's own error (400, naming
+	// the field) rather than the mailbox's (502), and nothing is asked of the mailbox
+	// to say so. What is not checked is whose addresses these are — the audience is no
+	// longer the answered message's own (see this handler's own comment).
+	if err := checkAddresses(req.To, req.Cc); err != nil {
+		fail(w, http.StatusBadRequest, err)
 		return
 	}
 
@@ -1463,7 +1497,9 @@ func (s *server) sendReply(w http.ResponseWriter, r *http.Request) {
 	}
 	plan, err := mb.Reply(target.GmailID, gmailclient.ReplyBody{
 		Text: body.Text, HTML: body.HTML,
-	}, all, req.Confirm)
+	}, gmailclient.ReplyOptions{
+		All: all, Send: req.Confirm, To: req.To, Cc: req.Cc,
+	})
 	if err != nil {
 		// Which half failed is the whole of what a reader can act on, and the two
 		// cases demand the opposite thing: a prepare that failed sent nothing, so
@@ -1482,7 +1518,8 @@ func (s *server) sendReply(w http.ResponseWriter, r *http.Request) {
 
 	out := sendResponse{
 		Entry: target.ExtID, To: plan.To, Cc: plan.Cc, Subject: plan.Subject, Body: plan.Body,
-		Sent: plan.GmailID != "",
+		ToRecipients: recipientsIn(plan.ToRecipients), CcRecipients: recipientsIn(plan.CcRecipients),
+		HTML: body.HTML, Sent: plan.GmailID != "",
 	}
 	if out.Sent {
 		out.GmailID = plan.GmailID
@@ -1529,8 +1566,8 @@ func (s *server) fileSent(mb mailbox, id string) {
 }
 
 // sendRequest is what a caller may say, and it is the whole of the surface: which
-// message is being answered, the reader's own words, and whether this call is the
-// preview or the send.
+// message is being answered, the reader's own words, the audience this reply is to
+// carry, and whether this call is the preview or the send.
 type sendRequest struct {
 	// Entry is the corpus ext id of the message being answered — as a thread read
 	// carries it in entries[].extId. One entry rather than a chain, because a reply
@@ -1549,10 +1586,9 @@ type sendRequest struct {
 	// of its audience in Cc — rather than the sender alone. Absent means everyone,
 	// so the older shape of this request keeps the answer it always had.
 	//
-	// It is not a recipient list and cannot become one: which addresses are on the
-	// reply is still the answered message's own headers, and this only says whether
-	// the ones beyond its sender are on it. There is no value of this field that
-	// reaches an address the message did not carry.
+	// It is not a recipient list: it decides whether the people the message reached
+	// *besides* its sender start out on the reply, and the addresses themselves are
+	// To and Cc below. An address neither of those names is not on the reply.
 	All *bool `json:"all,omitempty"`
 	// HTML says whether the reply carries the HTML part of it, the same message
 	// marked up, beside the plain text (see spec.ComposeReply, which composes the
@@ -1565,6 +1601,57 @@ type sendRequest struct {
 	// correspondent reads plain text can say so, and the text part is byte for byte
 	// the one they would have had anyway.
 	HTML *bool `json:"html,omitempty"`
+	// To and Cc are the audience this reply is to carry, as the caller names it:
+	// each entry is what a header carries ("Ada Okoye <ada@loomworks.example>", or
+	// a bare address). Absent leaves the list as the mailbox assembled it, so a
+	// client that changes one need not restate the other; an empty Cc drops
+	// everyone on it, and an empty To is refused.
+	//
+	// An address the answered message did not carry is accepted — that is what makes
+	// the reply box's address field sendable — so what these fields are is a
+	// recipient list rather than a rearrangement of the message's audience. What is
+	// still refused is the shape of the list: an entry that is not an address (400
+	// here, before the mailbox is asked) and a repeated address, in one list or in
+	// both. The addresses belonging to the reader's own mailbox are not subtracted
+	// from a list a caller names, unlike the audience assembled from the message:
+	// a caller that names one is naming it on purpose, and the surface in front of
+	// this refuses the reader's own address where it knows it.
+	To []string `json:"to,omitempty"`
+	Cc []string `json:"cc,omitempty"`
+}
+
+// checkAddresses is the shape of a request's two address lists, and the whole of
+// what this server has to say about them: every entry parses as an address, and no
+// address is named twice — in one list or across the two. Both are the caller's own
+// mistake rather than the mailbox's, which is why they are refused here with the
+// field named (400) instead of being discovered by the mailbox and reported as a
+// failure to send (502). Neither is a statement about who may be reached: this
+// server holds no list of permitted addresses, and an address the message being
+// answered never carried is written to (see sendReply).
+func checkAddresses(to, cc []string) error {
+	// The field an address was already named in, folded the way two addresses that
+	// are the same address fold: a domain is case-insensitive and a local part is in
+	// practice, and `ada@x` under To and `Ada@X` under Cc is one recipient written
+	// twice.
+	seen := make(map[string]string, len(to)+len(cc))
+	for _, list := range []struct {
+		field     string
+		addresses []string
+	}{{"to", to}, {"cc", cc}} {
+		for _, want := range list.addresses {
+			addr, err := mail.ParseAddress(strings.TrimSpace(want))
+			if err != nil {
+				return fmt.Errorf("%s: %q is not an address: %w", list.field, want, err)
+			}
+			key := strings.ToLower(addr.Address)
+			if where, twice := seen[key]; twice {
+				return fmt.Errorf("%s: %s is already on this reply, in %s — one recipient is one "+
+					"address in one list", list.field, addr.Address, where)
+			}
+			seen[key] = list.field
+		}
+	}
+	return nil
 }
 
 // sendResponse is the contract's SendResponse: the reply as the mailbox has it,
@@ -1584,10 +1671,32 @@ type sendResponse struct {
 	Cc      string `json:"cc,omitempty"`
 	Subject string `json:"subject"`
 	Body    string `json:"body"`
-	Sent    bool   `json:"sent"`
+	// ToRecipients and CcRecipients are To and Cc as addresses rather than as the
+	// header they will be written into — each with the name the answered message
+	// gave it, in order. They are what a client offers a reader to arrange the
+	// audience with, and they are the set a request that names no `to`/`cc` sends:
+	// a request that names one may go beyond them (see sendRequest), and then To
+	// and Cc above are the caller's lists rendered rather than these.
+	ToRecipients []recipient `json:"toRecipients,omitempty"`
+	CcRecipients []recipient `json:"ccRecipients,omitempty"`
+	// HTML is the HTML part of the reply, composed by spec.ComposeReply and handed
+	// to the mailbox beside the text — so a preview can draw the form that is going
+	// out rather than the form that is not. Absent when the reply goes as text alone
+	// (`html: false`), rather than an empty string: presence IS the answer to which
+	// of the two renderings travels, and there is no third state to spell.
+	HTML string `json:"html,omitempty"`
+	Sent bool   `json:"sent"`
 	// GmailID is the id of the message that went out, and is absent from a preview:
 	// nothing has an id until it exists.
 	GmailID string `json:"gmailId,omitempty"`
+}
+
+// recipient is one mail address, either from an original header or from a reply
+// plan: the bare address and the display name it was carried under. The address is
+// what a message is sent to; the name is what a reader is shown.
+type recipient struct {
+	Name    string `json:"name,omitempty"`
+	Address string `json:"address"`
 }
 
 // markReadRequest is what a caller may say: which chain, and the state it wants
@@ -2349,9 +2458,11 @@ func (s *server) status(w http.ResponseWriter, r *http.Request) {
 }
 
 // labels is the folder list the home page's button opens. It is the mailbox's
-// own labels with the counts they carry, kept as one plain read: the labels are
-// what Zach filed his mail under, and nothing here decides what a folder should
-// be on his behalf.
+// own labels with the corpus's counts, kept as one plain read: the names come
+// from the list the ingest stored, the numbers from what has been ingested, and
+// nothing here decides what a folder should be on his behalf. A folder the
+// mailbox defines with no mail in it yet is served at zero, which is the answer
+// refresh could not give while the list was built from stored messages alone.
 func (s *server) labels(w http.ResponseWriter, r *http.Request) {
 	ls, err := s.store.Labels()
 	if err != nil {

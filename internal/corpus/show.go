@@ -61,6 +61,11 @@ type Shown struct {
 	Sightings []Sighting
 	// Participants in role order.
 	Participants []Participant
+	// ToRecipients and CcRecipients are the exact addresses on the original mail
+	// headers. They are kept apart from Participants: a person may answer to several
+	// aliases, while a message named only the address it was sent to.
+	ToRecipients []Address
+	CcRecipients []Address
 	// Attachments are the files this entry carries, in the order its client put
 	// them in. The rows are the corpus's own record of what the source stated —
 	// name, type, size, the place it can be fetched from — plus whatever the media
@@ -115,18 +120,21 @@ func (s *Store) Show(extID string) (Shown, error) {
 	var ts int64
 	var off sql.NullInt64
 	var tz, author, subject, body, container, permalink, parent, parentRef sql.NullString
+	var toHeader, ccHeader sql.NullString
 	err := s.db.QueryRow(`
 		select e.id, e.ext_id, e.source, e.quoted, e.ts, e.tz, e.tz_offset,
 		       p.display_name, e.subject, e.body_text, e.container, e.permalink,
 		       par.ext_id, e.parent_ref, e.body_html is not null and e.body_html != '',
-		       coalesce(e.person_id, 0), coalesce(p.prefer_original, 0)
+		       coalesce(e.person_id, 0), coalesce(p.prefer_original, 0),
+		       coalesce(md.to_addr, ''), coalesce(md.cc_addr, '')
 		from entries e
-		left join people p   on p.id = e.person_id
+		left join people p on p.id = e.person_id
 		left join entries par on par.id = e.parent_id
+		left join mail_detail md on md.entry_id = e.id
 		where e.ext_id = ?`, extID).
 		Scan(&e.ID, &e.ExtID, &e.Source, &e.Quoted, &ts, &tz, &off,
 			&author, &subject, &body, &container, &permalink, &parent, &parentRef,
-			&e.HasOriginal, &e.PersonID, &e.PreferOriginal)
+			&e.HasOriginal, &e.PersonID, &e.PreferOriginal, &toHeader, &ccHeader)
 	if errors.Is(err, sql.ErrNoRows) {
 		return e, fmt.Errorf("%q: %w", extID, ErrNotFound)
 	}
@@ -141,6 +149,8 @@ func (s *Store) Show(extID string) (Shown, error) {
 	e.TZ, e.Author, e.Subject = tz.String, author.String, subject.String
 	e.Body, e.Container, e.Permalink = body.String, container.String, permalink.String
 	e.Parent, e.ParentRef = parent.String, parentRef.String
+	e.ToRecipients = ParseAddresses(toHeader.String)
+	e.CcRecipients = ParseAddresses(ccHeader.String)
 
 	rows, err := s.db.Query(`
 		select s.kind, coalesce(h.ext_id, ''), coalesce(s.detail, '')

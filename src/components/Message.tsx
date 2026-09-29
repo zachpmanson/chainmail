@@ -151,6 +151,14 @@ export interface MessageProps {
   source?: ReactNode;
   /** a quoter's inline edit to text this message quoted */
   edits?: ReactNode;
+  /** The press that makes the reading pane's reply box answer THIS message,
+   *  where the caller has a box to point at it — the pane does, and a built page
+   *  does not. Not to be read as `reply` above: that node is the line naming the
+   *  message this one answers, and this one is the control that answers this
+   *  message. Drawn with the receipt's other controls, at the right end of the
+   *  to/cc line, where a reader who has opened a message to see what it is looks
+   *  for what to do with it. */
+  answer?: ReactNode;
   /** what the clip button puts on the clipboard as JSON; absent leaves the
    *  button off, since a button that copies nothing is a lie. The button rides
    *  in the header's expanded section, with the rest of the receipt. */
@@ -292,7 +300,12 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
   const fetching = pulling != null && pulling === extId;
   return (
     <div className="atts">
-      <span className="clip">attached</span>
+      {/* The mark, and no word beside it: the chips ARE the strip, and "attached"
+          at the head of a list of files was a label on the obvious. The paperclip
+          stays as the one thing that says what the row is before it is read, and
+          it is named for a reader who cannot see it — the filenames below say what
+          is there, never that these are files. */}
+      <span className="clip" role="img" aria-label="attachments" />
       {attachments.map((a, i) => {
         const local = localHref(a, mediaBase ?? "");
         const href = attHref(a, mediaBase);
@@ -345,7 +358,11 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
                    says it with `aria-busy`, and the pane has one live region for
                    the things that happen to it (see .pullnote) — a mark that
                    comes and goes on every chip must not be a second one. */
-                <span className="spinner" role="img" aria-label="Downloading…" />
+                <svg className="spinner" viewBox="0 0 16 16" role="img" aria-label="Downloading…">
+                  <path d="M11.955 4.547A5.25 5.25 0 1 1 8 2.75M11.581 2.75L13.007 5.752L10.225 3.934"
+                    fill="none" stroke="currentColor" strokeWidth="1.5"
+                    strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
               ) : (
                 <>
                   {a.kind ?? "file"} · {a.size ?? ""}
@@ -661,7 +678,11 @@ function OriginalControl({ on, state, ask }: { on: boolean; state: Original; ask
         onClick={ask}
       >
         {asking ? (
-          <span className="spinner" aria-hidden="true" />
+          <svg className="spinner" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M11.955 4.547A5.25 5.25 0 1 1 8 2.75M11.581 2.75L13.007 5.752L10.225 3.934"
+              fill="none" stroke="currentColor" strokeWidth="1.5"
+              strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
         ) : (
           /* The sender's own markup, as one glyph: the two carets and the slash
              between them. Nothing marks the pressed state here — that is the colour
@@ -842,8 +863,9 @@ export function Message(p: MessageProps) {
                 "—"
               )}
             </span>
-            {p.original !== undefined || p.copyJson !== undefined ? (
+            {p.answer !== undefined || p.original !== undefined || p.copyJson !== undefined ? (
               <span className="hdetend">
+                {p.answer}
                 {p.original !== undefined ? (
                   <OriginalControl on={original.on} state={original.state} ask={original.ask} />
                 ) : null}

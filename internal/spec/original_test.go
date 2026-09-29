@@ -244,6 +244,53 @@ func TestOriginalCarriesTheBodyCanvasAsAHostRule(t *testing.T) {
 	}
 }
 
+func TestOriginalGivesABareTableNormalisationButNoOutline(t *testing.T) {
+	// HTML leaves a table naked and a browser draws the cells with defaults of its
+	// own, which is the gap the app's canvas fills: a bare <table> in the sender's
+	// markup comes back with the canvas's collapsed borders and cell padding, and
+	// the rules are plain table / th / td rather than :host-qualified because that
+	// is what the shadow tree holds. What it must NOT come back with is the app's
+	// outline — a border the sender did not write is the app's design, and this
+	// mode shows the mail, not the app.
+	got := originalBody(t, `<body><table><tr><td>a</td><th>b</th></tr></table></body>`)
+	for _, want := range []string{
+		"table{border-collapse:collapse}",
+		"th,td{padding:.2rem .5rem}",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the canvas is missing %q:\n%s", want, got)
+		}
+	}
+	for _, unwanted := range []string{
+		"table,th,td{border",
+		"border:1px solid black",
+	} {
+		if strings.Contains(got, unwanted) {
+			t.Errorf("the canvas paints a table outline %q the sender did not ask for:\n%s", unwanted, got)
+		}
+	}
+}
+
+func TestOriginalLetsASenderTableRuleOverrideTheCanvas(t *testing.T) {
+	// The canvas is emitted first at the same specificity as the sender's own
+	// stylesheet, so a sender who states their own table rules keeps their own
+	// look: the last declaration holds. border-collapse is the property to test
+	// that with now that the canvas draws no outline — the invariant is about
+	// order, not about which property the sender overrides.
+	got := originalBody(t, `<html><head><style>table { border-collapse: separate }</style></head><body><table><tr><td>a</td></tr></table></body></html>`)
+	canvas := strings.Index(got, "table{border-collapse:collapse}")
+	sender := strings.Index(got, "table { border-collapse: separate }")
+	if canvas < 0 {
+		t.Fatalf("the canvas's table rules are not in the fragment: %q", got)
+	}
+	if sender < 0 {
+		t.Fatalf("the sender's own table rule is missing: %q", got)
+	}
+	if canvas > sender {
+		t.Errorf("the canvas's table rules must come before the sender's, so the sender's override them: %q", got)
+	}
+}
+
 func TestOriginalRefusesACanvasThatIsNotAColour(t *testing.T) {
 	// A presentational attribute is not a place to accept arbitrary CSS: a
 	// semicolon in a bgcolor could add a declaration this pass never saw.

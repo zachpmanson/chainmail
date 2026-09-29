@@ -6,7 +6,6 @@ import { RouterProvider } from "@tanstack/react-router";
 import { makeQueryClient } from "../src/lib/queryClient";
 import { clearToasts } from "../src/lib/toasts";
 import { createChainmailRouter } from "../src/router";
-import { audience } from "../src/components/ReplyBox";
 
 /**
  * Answering a message from the reading pane: the box, the two presses, and the
@@ -56,6 +55,7 @@ const entry = (over: Record<string, unknown>) => ({
   quoted: false,
   ts: "2026-03-11T17:40:00+11:00",
   author: "Bo Halvorsen",
+  fromEmail: "bo@fjordline.example",
   subject: "Loom cutover schedule",
   body: "Roof access is fine from the 14th.",
   html: "<p>Roof access is fine from the 14th.</p>",
@@ -63,6 +63,11 @@ const entry = (over: Record<string, unknown>) => ({
   tzOffsetMinutes: 660,
   org: "Loomworks",
   participants: [{ personId: 1, name: "Bo Halvorsen", role: "from" }],
+  toRecipients: [{ name: "Cy Okafor", address: "cy@loomworks.example" }],
+  ccRecipients: [
+    { name: "Carl Nkemdirim", address: "carl@example.net" },
+    { name: "Marit Solheim", address: "marit@loomworks.example" },
+  ],
   attachments: [],
   permalink: mailbox("g-1"),
   ...over,
@@ -96,7 +101,10 @@ const ME = 4;
  *  address and a name that is not an address; Carl is in it twice, because two
  *  person rows for one colleague is a thing this corpus does, and the two rows
  *  answer with two addresses. Bo is deliberately absent, which is the case of a
- *  name the corpus knows nothing more about than the message already said. */
+ *  name the corpus knows nothing more about than the message already said. Marit is
+ *  the reader, which is what makes her the one address a field refuses from the
+ *  corpus rather than by the shape of it, and Dana is somebody no message in this
+ *  thread has ever reached. */
 const PEOPLE = [
   {
     personId: 2,
@@ -119,6 +127,22 @@ const PEOPLE = [
     sent: 0,
     received: 2,
   },
+  {
+    personId: ME,
+    displayName: "Marit Solheim",
+    identities: ["email:marit@loomworks.example"],
+    sent: 2,
+    received: 7,
+  },
+  // Somebody the thread has never seen, which is the case the address fields exist
+  // for: the corpus knows her and the message does not.
+  {
+    personId: 7,
+    displayName: "Dana Whitfield",
+    identities: ["email:dana@loomworks.example"],
+    sent: 0,
+    received: 0,
+  },
 ];
 
 const threaded = [
@@ -133,18 +157,44 @@ const threaded = [
   }),
 ];
 
+/** The HTML part the server composes beside the text, as the plan carries it back:
+ *  the reader's words as paragraphs, and the answered message in the blockquote a
+ *  client folds. The same message as `body`, marked up — which is the thing the
+ *  preview has to draw when that is the form going out. */
+const HTML_PART =
+  "<p>The 14th works.</p>\n" +
+  "<p>On Wed 11 Mar 2026 17:40 AEST, Bo Halvorsen &lt;bo@fjordline.example&gt; wrote:</p>\n" +
+  '<blockquote class="gmail_quote">\n<p>Roof access is fine from the 14th.</p>\n</blockquote>\n';
+
+/** The audience the mailbox resolved, as the plan carries it back: the addresses
+ *  rather than only the headers they will be written into, which is what the
+ *  preview's chips are drawn from and the whole of what a send may name. Bo is the
+ *  sender in to; the rest of the message's audience is in cc, each with the name the
+ *  answered message gave it — or none, where it carried none. The reader is not on
+ *  either list, because the mailbox leaves its own addresses off a reply. */
+const TO_RECIPIENTS = [{ name: "Bo Halvorsen", address: "bo@fjordline.example" }];
+const CC_RECIPIENTS = [
+  { name: "Cy Okafor", address: "cy@loomworks.example" },
+  { address: "carl@example.net" },
+];
+
 /** What the server answers a send with: the recipient and subject its own headers
- *  give, and the whole body with the quote in it. The same three fields for the
- *  preview and the send, which is what lets a client show one and send the other. */
-const replyPlan = (sent: boolean) => ({
+ *  give, and the whole body with the quote in it. The same fields for the preview
+ *  and the send, which is what lets a client show one and send the other — and the
+ *  HTML part only when the reply is going out with it, so its presence is the
+ *  response's own answer to which rendering travels. */
+const replyPlan = (sent: boolean, html = true) => ({
   entry: ROOT,
   to: "Bo Halvorsen <bo@fjordline.example>",
   cc: "Cy Okafor <cy@loomworks.example>, carl@example.net",
+  toRecipients: TO_RECIPIENTS,
+  ccRecipients: CC_RECIPIENTS,
   subject: "Re: Loom cutover schedule",
   body:
     "The 14th works.\n\n" +
     "On Wed 11 Mar 2026 17:40 AEST, Bo Halvorsen <bo@fjordline.example> wrote:\n" +
     "> Roof access is fine from the 14th.\n",
+  ...(html ? { html: HTML_PART } : {}),
   sent,
   ...(sent ? { gmailId: "g-9" } : {}),
 });
@@ -236,6 +286,34 @@ async function mountApp() {
 
 const pane = () => document.querySelector(".ibread") as HTMLElement;
 const box = () => pane().querySelector(".replybox") as HTMLElement | null;
+/** The plan's body, whichever form the reply will go out in: the HTML rendering
+ *  when the tick is on and the text `<pre>` when it is off. What a test waiting
+ *  for "the plan is up" waits for without asserting which form it drew. */
+const planBody = () => box()!.querySelector(".replytext, .replyhtml");
+/** The addresses the plan's fields hold, in the order they are drawn — the audience
+ *  the preview is showing, which is the thing the message that leaves has to agree
+ *  with. `list` names which field, because who is in to and who is in cc is half of
+ *  what the reader arranged. */
+const chips = (list: "to" | "cc") =>
+  [...box()!.querySelectorAll<HTMLElement>(`.addrfield[data-list="${list}"] .addrname`)].map(
+    (c) => c.textContent!,
+  );
+/** One address's chip in one list, by the address it prints: the plan's control is
+ *  one chip per address, so a test names the address and not a position. */
+const chipOf = (list: "to" | "cc", address: string) =>
+  [...box()!.querySelectorAll<HTMLElement>(`.addrfield[data-list="${list}"] .addrchip`)].find((c) =>
+    c.querySelector(".addrname")!.textContent!.includes(address),
+  )!;
+/** The press that takes a named address off the reply. */
+const chipX = (list: "to" | "cc", address: string) =>
+  within(chipOf(list, address)).getByRole("button", { name: /^remove / });
+/** The field for a list: the input an address is typed into. */
+const addressField = (list: "to" | "cc") =>
+  screen.getByLabelText(`${list} addresses`) as HTMLInputElement;
+/** Type into a field, as a reader does — the field's own change, which is what
+ *  opens the suggestions. */
+const type = (list: "to" | "cc", text: string) =>
+  fireEvent.change(addressField(list), { target: { value: text } });
 const field = () => screen.getByLabelText("Your reply") as HTMLTextAreaElement;
 const press = (name: string) => fireEvent.click(within(box()!).getByRole("button", { name }));
 
@@ -258,70 +336,90 @@ async function openThread() {
  *  once: the send is a second call to the same endpoint, and a test that handed
  *  back the object it had already answered with would fail on an empty body
  *  rather than on anything the component did. */
-async function write(text: string, answer: () => Response = () => json(200, replyPlan(false))) {
+async function previewWithAudience(call: Call, response: Response): Promise<Response> {
+  const body = (await response.json()) as Record<string, unknown>;
+  const request = JSON.parse(call.body ?? "{}") as Record<string, unknown>;
+  const setList = (field: "to" | "cc", recipientsField: "toRecipients" | "ccRecipients") => {
+    const requested = request[field];
+    if (!Array.isArray(requested)) return;
+    const previous = (body[recipientsField] as { name?: string; address: string }[] | undefined) ?? [];
+    const known = new Map(previous.map((r) => [r.address.toLowerCase(), r]));
+    const recipients = (requested as string[]).map((address) => known.get(address.toLowerCase()) ?? { address });
+    body[recipientsField] = recipients;
+    body[field] = recipients.map((r) => r.name ? `${r.name} <${r.address}>` : r.address).join(", ");
+  };
+  setList("to", "toRecipients");
+  setList("cc", "ccRecipients");
+  return json(response.status, body);
+}
+
+async function write(
+  text: string,
+  answer: () => Response = () => json(200, replyPlan(false)),
+  beforePreview?: () => void | Promise<void>,
+) {
   handler = server(
     () => json(200, chainBody(threaded)),
-    () => answer(),
+    async (call) => previewWithAudience(call, answer()),
   );
   await mountApp();
   await openThread();
   fireEvent.change(field(), { target: { value: text } });
+  await beforePreview?.();
   press("preview");
 }
 
 describe("answering a message from the pane", () => {
-  it("answers the newest message the mailbox holds, not the newest said", async () => {
+  it("puts recipient autocomplete in the compose screen and omits the Replying to line", async () => {
     handler = server(() => json(200, chainBody(threaded)));
     await mountApp();
     await openThread();
 
-    // The thread's newest entry is a line recovered from a quote, so there is no
-    // mailbox message to thread an answer onto. The box says which message it will
-    // answer rather than leaving the reader to guess, and it is not that one.
-    const to = box()!.querySelector(".replyto")!.textContent!;
-    expect(to).toContain("Bo Halvorsen");
-    expect(to).not.toContain("Cy Devlin");
-    expect(to).toContain("Wed, 11 Mar 2026 17:40");
-    // And the reply reaches the message's whole audience, which the line names: the
-    // sender in its own clause and the rest of the message's people as the cc they
-    // will be. The reader is on that message and is not on that list — a reply is
-    // not addressed back to the person writing it — and a colleague the corpus holds
-    // two rows for is one name.
-    expect(to).toContain("cc Cy Okafor and Carl Nkemdirim");
-    expect(to).not.toContain("Marit Solheim");
-    // The words are the bubble's own, which is the point of the pairing: the head
-    // above says when the message arrived, and this line must not say otherwise.
+    await waitFor(() => expect(chips("to")).toEqual(["Bo Halvorsen <bo@fjordline.example>"]));
+    expect(chips("cc")).toEqual([
+      "Cy Okafor <cy@loomworks.example>",
+      "Carl Nkemdirim <carl@example.net>",
+    ]);
+    expect(chips("cc")).not.toContain("Carl Nkemdirim <carl@loomworks.example>");
+    expect(screen.getByLabelText("to addresses")).toBeTruthy();
+    expect(screen.getByLabelText("cc addresses")).toBeTruthy();
+    expect(box()!.querySelector(".replyto")).toBeNull();
+    expect(box()!.textContent).not.toContain("Replying to");
+    const row = box()!.querySelector(".replyrecipients")!;
+    expect(row.querySelectorAll(".addrfield")).toHaveLength(2);
+    expect(row.compareDocumentPosition(field()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const target = within(box()!).getByRole("link", { name: /Jump to the message being replied to: Bo Halvorsen/ });
+    expect(target.tagName).toBe("A");
+    // A link, not a press: the name of the message answered, and no button's box
+    // around it — nothing here changes anything, it only takes the reader there.
+    expect(target.classList.contains("opbtn")).toBe(false);
+    expect(target.classList.contains("replytarget")).toBe(true);
+    // On the to line, after the addresses it is the audience for — not on a third
+    // row below the cc field, where the reader was looking away from the list they
+    // were arranging to find out which message they were arranging it for.
+    const toRow = row.querySelectorAll(".replyrecipient")[0]!;
+    // The label is its own class rather than the row's first span: the row holds
+    // two spans (the label and the field), and the stylesheet gives the label the
+    // field's own line height so the two line up (see .replylabel).
+    expect(toRow.querySelector(".replylabel")!.textContent).toBe("to:");
+    expect(target.parentElement).toBe(toRow);
+    expect(toRow.lastElementChild).toBe(target);
+    expect(row.lastElementChild).not.toBe(target);
+    expect(target.getAttribute("href")).toBe("#entry-0");
+
+    // It is a real anchor to the answered bubble, and the shared delegated hover
+    // behavior highlights that same target without changing the composer state.
+    const message = document.getElementById("entry-0")!;
+    fireEvent.mouseOver(target);
+    expect(message.classList.contains("mhov")).toBe(true);
+    fireEvent.mouseOut(target);
+    expect(message.classList.contains("mhov")).toBe(false);
+
+    // Suggestions can be picked before asking for the message preview.
+    type("cc", "dana");
+    fireEvent.click(screen.getByRole("option", { name: /Dana Whitfield/ }));
+    expect(chips("cc")).toContain("Dana Whitfield <dana@loomworks.example>");
     expect(sends()).toHaveLength(0);
-  });
-
-  it("says where each name it will cc answers to, without changing the sentence", async () => {
-    handler = server(() => json(200, chainBody(threaded)));
-    await mountApp();
-    await openThread();
-
-    // A name on its own is not a claim a reader can check, and the address of a
-    // person this thread was *sent to* is nowhere in the read: the entry carries a
-    // person id and a name and no address (see castOfEntries), so the corpus's
-    // identity graph is what answers. The line's own words are unchanged — this is
-    // a hover, not a second line of text — which is what the sentence assertions
-    // above are still watching for.
-    const line = () => box()!.querySelector(".replyto") as HTMLElement;
-    await waitFor(() =>
-      expect(within(line()).getByText("Cy Okafor").getAttribute("title")).toBe(
-        "Cy Okafor <cy@loomworks.example>",
-      ),
-    );
-    // Two rows, two addresses, one name: both are listed, because the reader is
-    // hovering a name that stands for both of them.
-    expect(within(line()).getByText("Carl Nkemdirim").getAttribute("title")).toBe(
-      "Carl Nkemdirim <carl@loomworks.example, carl.n@loomworks.example>",
-    );
-    // And a name nothing has an address for is left as a name: the title is the name
-    // itself, which is the fallback every hover in this app takes (see lib/who)
-    // rather than an empty tooltip or an invented address.
-    expect(within(line()).getByText("Bo Halvorsen").getAttribute("title")).toBe("Bo Halvorsen");
-    expect(line().querySelectorAll("[title='']").length).toBe(0);
-    expect(line().textContent).toContain("cc Cy Okafor and Carl Nkemdirim");
   });
 
   it("offers no box at all when nothing in the thread is in the mailbox", async () => {
@@ -386,25 +484,32 @@ describe("answering a message from the pane", () => {
     expect(shown.querySelector(".replynote")!.textContent).toContain(
       "Bo Halvorsen <bo@fjordline.example>",
     );
-    // Everyone else is named too, because a reply-all's plan is only checkable if
-    // the reader can see who else is on it — the one thing the preview exists for.
-    expect(shown.querySelector(".replynote")!.textContent).toContain("cc");
+    // The actual mailbox audience is stated plainly in the preview; autocomplete
+    // stays on the compose screen rather than appearing beside the checked message.
+    expect(shown.querySelectorAll(".addrfield")).toHaveLength(0);
     expect(shown.querySelector(".replynote")!.textContent).toContain(
-      "Cy Okafor <cy@loomworks.example>, carl@example.net",
+      "cc Cy Okafor <cy@loomworks.example>, carl@example.net",
     );
     expect(shown.querySelector(".replynote")!.textContent).toContain("Re: Loom cutover schedule");
     // And which forms it goes in, since that is the other thing the reader can
     // change and the other thing the two-step is there to let them check.
     expect(shown.querySelector(".replynote")!.textContent).toContain("text and HTML");
-    // The body, quote and all, as the exact lines that will be sent.
-    const text = shown.querySelector(".replytext")!.textContent!;
-    expect(text).toContain("The 14th works.");
-    expect(text).toContain("> Roof access is fine from the 14th.");
-    expect(text).toContain("wrote:");
-    // The field is gone while the plan is up: a reply being sent is not a reply
-    // being edited, and the text under the reader's cursor would be the one thing
-    // they cannot check.
+    // The body is drawn in the form that is going out, not the other one. With the
+    // html tick on the reply travels with its HTML part, so what the reader checks
+    // is that rendering — the words as paragraphs and the message being answered
+    // inside the blockquote a client folds — rather than the plain-text lines their
+    // correspondent will not receive. The text `<pre>` is the drawing for the
+    // tick-off case, in the test below.
+    const rendered = shown.querySelector(".replyhtml")!;
+    expect(shown.querySelector(".replytext")).toBeNull();
+    expect(rendered.innerHTML).toContain("<p>The 14th works.</p>");
+    expect(rendered.innerHTML).toContain('<blockquote class="gmail_quote">');
+    expect(rendered.innerHTML).toContain("<p>Roof access is fine from the 14th.</p>");
+    expect(rendered.textContent).toContain("wrote:");
+    // Both the text box and recipient autocomplete are hidden while the message is
+    // being checked; "keep editing" returns to the initial composer.
     expect(screen.queryByLabelText("Your reply")).toBeNull();
+    expect(screen.queryByLabelText("to addresses")).toBeNull();
   });
 
   it("answers the sender alone when the reply-all tick is cleared", async () => {
@@ -413,25 +518,18 @@ describe("answering a message from the pane", () => {
     await openThread();
     await waitFor(() => expect(box()).toBeTruthy());
 
-    // The tick is on by default, and the line above the box says so: who the reply
-    // is going to is stated before the reader presses anything, so the one thing
-    // about the audience they get to decide is also the one thing they are told.
+    // The tick is on by default. Its change updates the untouched Cc list on the
+    // compose screen, where the recipients are now arranged.
     const tick = within(box()!).getByRole("checkbox", { name: /reply all/ }) as HTMLInputElement;
     expect(tick.checked).toBe(true);
-    expect(box()!.querySelector(".replyto")!.textContent).toContain("cc Cy Okafor");
+    expect(chips("cc")).toContain("Cy Okafor <cy@loomworks.example>");
     // It is the left end of the row whose buttons are at the right: the choices
     // under the field, the press past them.
     expect(box()!.querySelector(".replyacts .replyopts .replytick")).toBeTruthy();
 
     fireEvent.click(tick);
     expect(tick.checked).toBe(false);
-    const said = box()!.querySelector(".replyto")!.textContent!;
-    expect(said).toContain("nobody else");
-    // The names go with the tick, because the names were the tick's own claim about
-    // the reply: leaving them up would have the box promise a cc the send no longer
-    // carries, which is the one lie this line exists to prevent.
-    expect(said).not.toContain("Cy Okafor");
-    expect(said).not.toContain("Carl Nkemdirim");
+    expect(chips("cc")).toEqual([]);
 
     fireEvent.change(field(), { target: { value: "The 14th works." } });
     press("preview");
@@ -452,7 +550,7 @@ describe("answering a message from the pane", () => {
   it("sends the words alone when the html tick is cleared", async () => {
     handler = server(
       () => json(200, chainBody(threaded)),
-      () => json(200, replyPlan(false)),
+      () => json(200, replyPlan(false, false)),
     );
     await mountApp();
     await openThread();
@@ -488,6 +586,10 @@ describe("answering a message from the pane", () => {
     // quote are untouched, so the reader's check of them still stands.
     const note = box()!.querySelector(".replynote")!.textContent!;
     expect(note).toContain("plain text alone");
+    // And what is drawn agrees with the sentence: no HTML half came back, so the
+    // text part is the whole message and it is drawn as the lines that will be
+    // sent — the quote marks the server added, which is the thing being checked.
+    expect(box()!.querySelector(".replyhtml")).toBeNull();
     expect(box()!.querySelector(".replytext")!.textContent).toContain(
       "> Roof access is fine from the 14th.",
     );
@@ -503,16 +605,179 @@ describe("answering a message from the pane", () => {
     });
   });
 
-  it("names no cc when the reply has nobody else on it", async () => {
+  it("draws an empty cc field when the reply has nobody else on it, and sends no cc", async () => {
     // A message the reader was the only recipient of answers with no cc at all
-    // (see the contract's SendResponse), and the plan must not invent an empty
-    // recipient list to draw beside the one it does have.
-    await write("The 14th works.", () => json(200, { ...replyPlan(false), cc: undefined }));
+    // (see the contract's SendResponse). The field is still drawn — an empty cc is
+    // exactly the reply a reader may want to add somebody to, and a control that
+    // appeared only once there was already a cc could not be the one that adds the
+    // first — but nothing is invented to sit in it, and the line claims no cc.
+    await write("The 14th works.", () =>
+      json(200, { ...replyPlan(false), cc: undefined, ccRecipients: undefined }),
+    );
 
     await waitFor(() => expect(box()!.querySelector(".replynote")).toBeTruthy());
     const note = box()!.querySelector(".replynote")!.textContent!;
+    expect(box()!.querySelectorAll(".addrfield")).toHaveLength(0);
     expect(note).toContain("Bo Halvorsen <bo@fjordline.example>");
-    expect(note).not.toContain("cc");
+
+    // Neither recipient list was edited, so the mailbox keeps the same defaults
+    // it used for the preview rather than receiving guessed addresses.
+    press("send this reply");
+    await waitFor(() => expect(sends()).toHaveLength(2));
+    expect(sent(1)).not.toHaveProperty("cc");
+  });
+
+  it("prints the mailbox's own headers when the plan carried no recipient addresses", async () => {
+    // The two say the same fact, and a plan that carried only the first has nothing
+    // to seed a field with. It is printed as it came rather than taken apart into
+    // addresses here: splitting a display line on commas would be this pane's
+    // second, worse reading of who a message reached (see the `audience` tests
+    // below), and the fields are only drawn for a plan that named its recipients.
+    await write("The 14th works.", () =>
+      json(200, { ...replyPlan(false), toRecipients: undefined, ccRecipients: undefined }),
+    );
+
+    await waitFor(() => expect(box()!.querySelector(".replynote")).toBeTruthy());
+    expect(box()!.querySelectorAll(".addrfield")).toHaveLength(0);
+    expect(box()!.querySelector(".replynote")!.textContent).toContain(
+      "Cy Okafor <cy@loomworks.example>, carl@example.net",
+    );
+  });
+
+  it("edits recipients before preview and sends the arranged Cc list", async () => {
+    await write("The 14th works.", () => json(200, replyPlan(false)), async () => {
+      await waitFor(() => expect(chips("cc")).toContain("Cy Okafor <cy@loomworks.example>"));
+      fireEvent.click(chipX("cc", "cy@loomworks.example"));
+      type("cc", "cy");
+      fireEvent.click(screen.getByRole("option", { name: /Cy Okafor/ }));
+      expect(chips("cc")).toContain("Cy Okafor <cy@loomworks.example>");
+      fireEvent.click(chipX("cc", "cy@loomworks.example"));
+      expect(chips("cc")).not.toContain("Cy Okafor <cy@loomworks.example>");
+    });
+
+    await waitFor(() => expect(sends()).toHaveLength(1));
+    expect(sent(0)).toEqual({
+      entry: ROOT,
+      body: "The 14th works.",
+      all: true,
+      html: true,
+      confirm: false,
+      cc: ["carl@example.net"],
+    });
+    expect(box()!.querySelectorAll(".addrfield")).toHaveLength(0);
+    press("send this reply");
+    await waitFor(() => expect(sends()).toHaveLength(2));
+    expect(sent(1)).toEqual({
+      entry: ROOT,
+      body: "The 14th works.",
+      all: true,
+      html: true,
+      confirm: true,
+      cc: ["carl@example.net"],
+    });
+  });
+
+  it("moves an address between recipient lists by removing and re-adding it", async () => {
+    await write("The 14th works.", () => json(200, replyPlan(false)), async () => {
+      await waitFor(() => expect(chips("cc")).toContain("Cy Okafor <cy@loomworks.example>"));
+      fireEvent.click(chipX("cc", "cy@loomworks.example"));
+      type("to", "cy");
+      fireEvent.click(screen.getByRole("option", { name: /Cy Okafor/ }));
+      expect(chips("to")).toEqual([
+        "Bo Halvorsen <bo@fjordline.example>",
+        "Cy Okafor <cy@loomworks.example>",
+      ]);
+      expect(chips("cc")).toEqual(["Carl Nkemdirim <carl@example.net>"]);
+      expect(box()!.querySelectorAll(".addrmove")).toHaveLength(0);
+    });
+
+    await waitFor(() => expect(sends()).toHaveLength(1));
+    expect(sent(0).to).toEqual(["bo@fjordline.example", "cy@loomworks.example"]);
+    expect(sent(0).cc).toEqual(["carl@example.net"]);
+    press("send this reply");
+    await waitFor(() => expect(sends()).toHaveLength(2));
+    expect(sent(1).to).toEqual(["bo@fjordline.example", "cy@loomworks.example"]);
+    expect(sent(1).cc).toEqual(["carl@example.net"]);
+  });
+
+  it("requires a To recipient after the reader explicitly removes them all", async () => {
+    handler = server(
+      () => json(200, chainBody(threaded)),
+      (call) => previewWithAudience(call, json(200, replyPlan(false))),
+    );
+    await mountApp();
+    await openThread();
+    await waitFor(() => expect(chips("to")).toContain("Bo Halvorsen <bo@fjordline.example>"));
+    fireEvent.click(chipX("to", "bo@fjordline.example"));
+    fireEvent.change(field(), { target: { value: "The 14th works." } });
+
+    const preview = within(box()!).getByRole("button", { name: "preview" }) as HTMLButtonElement;
+    expect(preview.disabled).toBe(true);
+    expect(preview.title).toContain("somebody in to");
+    expect(sends()).toHaveLength(0);
+
+    // Removing the last To address leaves it empty; an address can be added from
+    // Cc by removing it there first, then selecting it in To.
+    await waitFor(() => expect(chips("cc")).toContain("Cy Okafor <cy@loomworks.example>"));
+    fireEvent.click(chipX("cc", "cy@loomworks.example"));
+    type("to", "cy");
+    fireEvent.click(screen.getByRole("option", { name: /Cy Okafor/ }));
+    expect(preview.disabled).toBe(false);
+    fireEvent.click(preview);
+    await waitFor(() => expect(box()!.querySelector(".replyplan")).toBeTruthy());
+    press("send this reply");
+    await waitFor(() => expect(sends()).toHaveLength(2));
+    expect(sent(1).to).toEqual(["cy@loomworks.example"]);
+  });
+
+  it("lets the reader add a known or typed recipient before preview", async () => {
+    await write("The 14th works.", () => json(200, replyPlan(false)), async () => {
+      await waitFor(() => expect(chips("to")).toContain("Bo Halvorsen <bo@fjordline.example>"));
+      type("cc", "dana");
+      fireEvent.click(screen.getByRole("option", { name: /Dana Whitfield/ }));
+      type("to", "stranger@example.org");
+      fireEvent.keyDown(addressField("to"), { key: "Enter" });
+      expect(chips("to")).toEqual([
+        "Bo Halvorsen <bo@fjordline.example>",
+        "stranger@example.org",
+      ]);
+      expect(chips("cc")).toContain("Dana Whitfield <dana@loomworks.example>");
+      expect(addressField("to").value).toBe("");
+    });
+
+    await waitFor(() => expect(sends()).toHaveLength(1));
+    expect(sent(0).to).toEqual(["bo@fjordline.example", "stranger@example.org"]);
+    expect(sent(0).cc).toEqual([
+      "cy@loomworks.example",
+      "carl@example.net",
+      "dana@loomworks.example",
+    ]);
+    expect(box()!.querySelectorAll(".addrfield")).toHaveLength(0);
+    press("send this reply");
+    await waitFor(() => expect(sends()).toHaveLength(2));
+    expect(sent(1).to).toEqual(["bo@fjordline.example", "stranger@example.org"]);
+    expect(sent(1).cc).toEqual([
+      "cy@loomworks.example",
+      "carl@example.net",
+      "dana@loomworks.example",
+    ]);
+  });
+
+  it("refuses the reader's own address and duplicates while composing", async () => {
+    handler = server(() => json(200, chainBody(threaded)));
+    await mountApp();
+    await openThread();
+    await waitFor(() => expect(chips("cc")).toContain("Cy Okafor <cy@loomworks.example>"));
+
+    type("to", "marit@loomworks.example");
+    fireEvent.keyDown(addressField("to"), { key: "Enter" });
+    expect(box()!.querySelector(".addrrefuse")!.textContent).toContain("your own address");
+
+    type("to", "cy@loomworks.example");
+    fireEvent.keyDown(addressField("to"), { key: "Enter" });
+    expect(box()!.querySelector(".addrrefuse")!.textContent).toContain("already on the reply");
+    expect(chips("to")).toEqual(["Bo Halvorsen <bo@fjordline.example>"]);
+    expect(sends()).toHaveLength(0);
   });
 
   it("sends the body the reader was shown, and re-reads the trail it lands in", async () => {
@@ -541,13 +806,13 @@ describe("answering a message from the pane", () => {
       expect(document.querySelector(".toast")!.textContent).toContain("Answered Bo Halvorsen"),
     );
     expect(box()!.querySelector(".pullnote")).toBeNull();
-    expect(box()!.querySelector(".replytext")).toBeNull();
+    expect(planBody()).toBeNull();
     expect(field().value).toBe("");
   });
 
   it("says it once, and says the last one", async () => {
     await write("The 14th works.");
-    await waitFor(() => expect(box()!.querySelector(".replytext")).toBeTruthy());
+    await waitFor(() => expect(planBody()).toBeTruthy());
     press("send this reply");
     await waitFor(() => expect(document.querySelectorAll(".toast")).toHaveLength(1));
 
@@ -556,7 +821,7 @@ describe("answering a message from the pane", () => {
     // be recalled, so two accounts of two of them is a reader counting.
     fireEvent.change(field(), { target: { value: "And the fitters?" } });
     press("preview");
-    await waitFor(() => expect(box()!.querySelector(".replytext")).toBeTruthy());
+    await waitFor(() => expect(planBody()).toBeTruthy());
     press("send this reply");
 
     await waitFor(() => expect(sends()).toHaveLength(4));
@@ -597,44 +862,209 @@ describe("answering a message from the pane", () => {
 });
 
 /**
- * The audience line's own arithmetic, without a pane around it: which people on a
- * message a reply-all would reach. The component tests above cover the sentence it
- * ends up in; what is checked here is the reading it is built on, where the ways to
- * get it wrong are all silent — a name printed twice, the sender listed as somebody
- * the reply is also cc'ing, the reader listed among the recipients.
+ * Answering an older message: the press in a header, and the box it moves.
+ *
+ * The box answers the newest answerable message in a thread by itself, which is
+ * right until it is not — the message a reader wants to answer is often the one
+ * that asked them something, and the newest line of a thread is frequently a
+ * reply that asked nothing. What is asserted here is the whole of that choice:
+ * which message is named, that the audience is the one the press names (reply
+ * all, so the tick goes on), that the press can only name a message the mailbox
+ * holds, and that a preview prepared for one message cannot be sent against
+ * another.
  */
-describe("the people a reply-all reaches", () => {
-  const e = (participants: unknown[]) =>
-    entry({ participants }) as Parameters<typeof audience>[0];
 
-  it("names the message's people, and neither the sender nor the reader", () => {
-    expect(audience(e(onLoom), ME)).toEqual(["Cy Okafor", "Carl Nkemdirim"]);
-  });
+const FIRST = "mail:<loom-cutover-0@example.fed>";
 
-  it("subtracts nobody when the reader has not said who they are", () => {
-    // The setting is the only place "which of these people is me" is answered, so
-    // a reader who has named nobody gets the message's own audience — which is the
-    // honest reading rather than a guess at an address that might be theirs.
-    expect(audience(e(onLoom), undefined)).toEqual([
-      "Cy Okafor",
-      "Carl Nkemdirim",
-      "Marit Solheim",
-    ]);
-  });
-
-  it("is empty when the message was to nobody but the reader", () => {
-    // A message sent to the mailbox alone, and answered: there is no cc to name,
-    // which the box says in words rather than with an empty list.
-    expect(audience(e([{ personId: 1, name: "Bo Halvorsen", role: "from" }]), ME)).toEqual([]);
-  });
-
-  it("names the recipient of a message the reader wrote themselves", () => {
-    // The reader's own message, answered: the from row is the reader and is skipped
-    // as the sender, and the To row is somebody else and is named.
-    const mine = e([
-      { personId: ME, name: "Marit Solheim", role: "from" },
+/** Two messages the mailbox holds, which is the case the choice exists for: an
+ *  older one from Cy asking, and Bo's answer after it — the box answering Bo by
+ *  itself, and Cy being the one a reader has to be able to name. */
+const exchange = [
+  entry({
+    extId: FIRST,
+    ts: "2026-03-02T09:15:00Z",
+    author: "Cy Devlin",
+    fromEmail: "cy@loomworks.example",
+    subject: "Loom cutover schedule?",
+    body: "Can the fitters come on the 14th?",
+    html: "<p>Can the fitters come on the 14th?</p>",
+    permalink: mailbox("g-0"),
+    participants: [
+      { personId: 6, name: "Cy Devlin", role: "from" },
       { personId: 1, name: "Bo Halvorsen", role: "to" },
-    ]);
-    expect(audience(mine, ME)).toEqual(["Bo Halvorsen"]);
+      { personId: ME, name: "Marit Solheim", role: "cc" },
+    ],
+  }),
+  entry({ extId: ROOT, participants: onLoom }),
+];
+
+/** The bubble a message is drawn as, by the sender its head names. */
+const bubbleOf = (author: string) =>
+  [...pane().querySelectorAll<HTMLElement>(".msg")].find(
+    (m) => m.querySelector(".nm")!.textContent === author,
+  )!;
+
+/** The press that aims the box at that message, as the pane draws it — in the
+ *  receipt, beside the controls that copy the message and switch its rendering. */
+const aimAt = (author: string) => {
+  const btn = bubbleOf(author).querySelector<HTMLButtonElement>(".hdetend .replyall")!;
+  fireEvent.click(btn);
+  return btn;
+};
+
+describe("answering an older message from its own header", () => {
+  it("tracks the target message on its reply control without a Replying to line", async () => {
+    handler = server(() => json(200, chainBody(exchange)));
+    await mountApp();
+    await openThread();
+
+    // The newest answerable message is selected, while the Replying to header is
+    // deliberately absent from the composer.
+    expect(box()!.querySelector(".replyto")).toBeNull();
+    // The press on that message reads as the state it is: the box is answering
+    // it, so the one press in the thread that says which is the pressed one.
+    expect(bubbleOf("Bo Halvorsen").querySelector(".replyall")!.getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    expect(bubbleOf("Cy Devlin").querySelector(".replyall")!.getAttribute("aria-pressed")).toBe(
+      "false",
+    );
+
+    aimAt("Cy Devlin");
+    await waitFor(() =>
+      expect(bubbleOf("Cy Devlin").querySelector(".replyall")!.getAttribute("aria-pressed")).toBe(
+        "true",
+      ),
+    );
+    expect(bubbleOf("Cy Devlin").querySelector(".replyall")!.getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    expect(bubbleOf("Bo Halvorsen").querySelector(".replyall")!.getAttribute("aria-pressed")).toBe(
+      "false",
+    );
+    expect(box()!.querySelector(".replytarget")?.getAttribute("href")).toBe(
+      `#${bubbleOf("Cy Devlin").id}`,
+    );
+
+    // And the message the box will answer is the one the server is asked about,
+    // which is the only claim that matters: everything else here is words.
+    fireEvent.change(field(), { target: { value: "Yes — the 14th." } });
+    press("preview");
+    await waitFor(() => expect(sends()).toHaveLength(1));
+    expect(sent(0)).toEqual({
+      entry: FIRST,
+      body: "Yes — the 14th.",
+      all: true,
+      html: true,
+      confirm: false,
+    });
+  });
+
+  it("turns the reply-all tick on, because that is what the press says", async () => {
+    handler = server(() => json(200, chainBody(exchange)));
+    await mountApp();
+    await openThread();
+
+    // A reader who had taken everyone else off the reply, and then asks to answer
+    // an older message *and* says reply all: the audience is the press's own word,
+    // so it is what the press sets rather than a tick left where it was.
+    fireEvent.click(within(box()!).getByRole("checkbox", { name: /reply all/ }));
+    expect(chips("cc")).toEqual([]);
+
+    aimAt("Cy Devlin");
+    const tick = within(box()!).getByRole("checkbox", { name: /reply all/ }) as HTMLInputElement;
+    await waitFor(() => expect(tick.checked).toBe(true));
+    // The checkbox follows the selected target; no separate Replying to sentence
+    // is needed to show which message will be answered.
+    expect(box()!.querySelector(".replyto")).toBeNull();
+  });
+
+  it("brings the box up to the reader who pressed it", async () => {
+    handler = server(() => json(200, chainBody(exchange)));
+    await mountApp();
+    await openThread();
+
+    // The box is at the bottom of the thread and the message pressed may be
+    // screens above it, so the press is what brings the box into view — and the
+    // field takes the cursor, because the press was an intent to write. jsdom
+    // scrolls nothing, so what is asserted is that the box asked.
+    const scrolled: string[] = [];
+    const scrolledBefore = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function (this: Element) {
+      scrolled.push(this.className);
+    };
+    try {
+      aimAt("Cy Devlin");
+      await waitFor(() => expect(scrolled).toContain("replybox"));
+      expect(document.activeElement).toBe(field());
+    } finally {
+      Element.prototype.scrollIntoView = scrolledBefore;
+    }
+  });
+
+  it("drops a preview prepared for the message it no longer answers", async () => {
+    handler = server(
+      () => json(200, chainBody(exchange)),
+      () => json(200, replyPlan(false)),
+    );
+    await mountApp();
+    await openThread();
+    fireEvent.change(field(), { target: { value: "The 14th works." } });
+    press("preview");
+    await waitFor(() => expect(box()!.querySelector(".replyplan")).toBeTruthy());
+
+    // A plan is a claim about the message the box was answering when it was made:
+    // recipients, subject and a quote of that message in the body the reader was
+    // shown. Retarget the box and the claim is about a message it no longer names
+    // — and the second press recomposes the body for the new target, so the one
+    // thing that must not survive the move is the screen the reader checked.
+    aimAt("Cy Devlin");
+    await waitFor(() => expect(box()!.querySelector(".replyplan")).toBeNull());
+    expect(planBody()).toBeNull();
+    // The words are still the reader's, and they stay where the reader can send
+    // them again — the press changed which message they answer, not what they say.
+    expect(field().value).toBe("The 14th works.");
+    expect(box()!.querySelector(".replyto")).toBeNull();
+  });
+
+  it("draws no press on a message the mailbox does not hold", async () => {
+    handler = server(() => json(200, chainBody(threaded)));
+    await mountApp();
+    await openThread();
+    await waitFor(() => expect(bubbleOf("Bo Halvorsen")).toBeTruthy());
+
+    // The thread above carries a line recovered from somebody's quote, which is the
+    // entry nothing can be threaded onto: there is no mailbox copy to reply to, so
+    // there is no press — rather than a press the server would refuse by name.
+    expect(bubbleOf("Bo Halvorsen").querySelector(".replyall")).toBeTruthy();
+    expect(bubbleOf("Cy Devlin").querySelector(".replyall")).toBeNull();
+  });
+});
+
+describe("the press's own drawing", () => {
+  it("draws a glyph and keeps its words in the label", async () => {
+    handler = server(() => json(200, chainBody(exchange)));
+    await mountApp();
+    await openThread();
+    await waitFor(() => expect(bubbleOf("Bo Halvorsen")).toBeTruthy());
+
+    // The receipt's controls are icon buttons (see the stylesheet's shared rule), so
+    // the press is a drawn reply-all whose words are its label and its title. What is
+    // pinned here is that much and no more: the shape is a drawing, and a test that
+    // fixed its coordinates would make the next drawing of it a test rewrite rather
+    // than a change of one path.
+    const press = bubbleOf("Cy Devlin").querySelector(".replyall")!;
+    expect(press.textContent).toBe("");
+    expect(press.getAttribute("title")).toContain("Reply all");
+    expect(press.getAttribute("aria-label")).toContain("Reply all");
+    // The message the box already answers wears the other label, which is state
+    // rather than a second name for the press.
+    const pressed = bubbleOf("Bo Halvorsen").querySelector(".replyall")!;
+    expect(pressed.getAttribute("title")).toContain("the box below is answering");
+    const paths = [...press.querySelectorAll("svg path")];
+    // Two heads and one tail, and nothing filled: the app's icons are strokes.
+    expect(paths).toHaveLength(3);
+    expect(paths.every((p) => p.getAttribute("fill") === "none")).toBe(true);
+    expect(press.querySelector("svg")!.getAttribute("width")).toBe("18");
   });
 });

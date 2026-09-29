@@ -102,6 +102,98 @@ func TestLabelsListsTheMailboxsOwnFolders(t *testing.T) {
 	}
 }
 
+// A folder that exists in the mailbox with nothing filed under it yet is still
+// a folder: the mailbox's own label list is folded into the corpus counts, at
+// zero. Without it, refresh cannot help — the ingest re-reads a corpus that
+// never learned the mailbox had created it.
+func TestAMailboxFolderWithNoMailStillAppears(t *testing.T) {
+	s := open(t)
+	put(t, s, msg{id: "<a@example.com>", body: "one", labels: []string{"INBOX"}})
+	if err := s.PutMailboxLabels([]string{"INBOX", "Archive", "Receipts"}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.Labels()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]int{"INBOX": 1, "Archive": 0, "Receipts": 0}
+	if len(got) != len(want) {
+		t.Fatalf("labels = %v, want %v", got, want)
+	}
+	for _, l := range got {
+		if want[l.Name] != l.Messages {
+			t.Errorf("%s: %d messages, want %d", l.Name, l.Messages, want[l.Name])
+		}
+	}
+}
+
+// A label the mailbox defines and the corpus has seen on mail is one folder,
+// counted once: the two halves of the list are joined by name, not appended. If
+// they were appended the sidebar would show INBOX twice, once with its count
+// and once empty.
+func TestAMailboxLabelAndACorpusLabelAreOneFolder(t *testing.T) {
+	s := open(t)
+	put(t, s, msg{id: "<a@example.com>", body: "one", labels: []string{"INBOX"}})
+	put(t, s, msg{id: "<b@example.com>", body: "two", labels: []string{"INBOX"}})
+	if err := s.PutMailboxLabels([]string{"INBOX"}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.Labels()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("labels = %v, want one INBOX", got)
+	}
+	if got[0].Name != "INBOX" || got[0].Messages != 2 {
+		t.Errorf("labels = %v, want INBOX with 2 messages", got)
+	}
+}
+
+// A host whose ingest has never recorded the mailbox's list answers exactly
+// what it answered before the table existed: the corpus-derived folders. An
+// empty mailbox list must not read as "no folders".
+func TestAnAbsentMailboxListLeavesTheCorpusFolders(t *testing.T) {
+	s := open(t)
+	put(t, s, msg{id: "<a@example.com>", body: "one", labels: []string{"INBOX", "IMPORTANT"}})
+
+	got, err := s.Labels()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "IMPORTANT,INBOX"
+	var names []string
+	for _, l := range got {
+		names = append(names, l.Name)
+	}
+	if strings.Join(names, ",") != want {
+		t.Errorf("labels = %v, want %s", names, want)
+	}
+}
+
+// Recording the mailbox's list replaces it rather than merging into it: a folder
+// renamed or deleted in Gmail must leave the sidebar, and a list that only ever
+// grew would collect permanent ghosts. Re-recording the same list is a no-op.
+func TestRecordingTheMailboxListReplacesIt(t *testing.T) {
+	s := open(t)
+	if err := s.PutMailboxLabels([]string{"INBOX", "Old name"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.PutMailboxLabels([]string{"INBOX", "New name"}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.MailboxLabels()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(got, ",") != "INBOX,New name" {
+		t.Errorf("mailbox labels = %v, want INBOX,New name", got)
+	}
+}
+
 // Two reads of an unchanged corpus print the same list, tie or no tie: a
 // sidebar that reordered itself between reloads would be a list to re-read
 // rather than to use.

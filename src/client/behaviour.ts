@@ -426,6 +426,77 @@ export function attach(doc: Document = document): () => void {
     on(stream, "mouseleave", clear);
   }
 
+  /* ---------- pointing at a claim about a message marks that message ----------
+   *
+   * Two links on this page name another message and can be checked where the
+   * pointer already is: "↩ in reply to Ada Okoye, Mon 2 Mar 2026 19:15" under a
+   * bubble's header, and the compact target link on the reply composer. Each says
+   * which message the reader is answering. Following the composer link would take
+   * the reader away from the reply they were composing, so both links light their
+   * target with the same ring the minimap's rows use (see `.mhov` in styles.css).
+   * One mark for all of them is what stops links and the minimap from disagreeing
+   * about the answer.
+   *
+   * The loud ring rather than the quiet colour the pane lights a path of reply
+   * LINES with (see `.rhov` below): those lines answer a pointer travelling
+   * through the transcript, and this pointer has stopped — on a named message, to
+   * ask about it. Marking nothing is the honest answer when the target is not on
+   * this page, which a built page can be: it carries a reply whose parent is not
+   * among its rows (see ReplyLink). A link that cannot be followed lights
+   * nothing, exactly as a minimap row does.
+   *
+   * Wired here rather than in the component because a built page is static markup
+   * with this module layered over it and no React at runtime: an `onMouseEnter`
+   * would light the ring in the dev app and nowhere else.
+   *
+   * Delegated from the document rather than bound to each link, which is the
+   * opposite of how the other pointer targets above are wired. Those are elements
+   * the page draws once and `attach` wires once; these are redrawn whenever the
+   * reading pane's tree switch moves a reply link into or out of a `.replies` box,
+   * or whenever the box is aimed at a different message, and that is React state
+   * this module is never re-attached for — a listener bound to the old node would
+   * be a hover that works until the reader presses "reply tree". One listener over
+   * the document survives the redraw, and it is also what lets a page attaching
+   * once cover the links of a pane that redraws under it.
+   *
+   * The messages that were lit are remembered so that a detach can take their
+   * rings off: a pane re-attaching while the pointer rests on a link retires the
+   * listener that was going to clear the ring, and a mark left with no pointer to
+   * hold it is the one thing a hover may never leave behind.
+   */
+  const ringed = new Set<HTMLElement>();
+  const ring = (el: HTMLElement | null, lit: boolean) => {
+    if (!el) return;
+    el.classList.toggle("mhov", lit);
+    if (lit) ringed.add(el);
+    else ringed.delete(el);
+  };
+  /** The element a hover is about, and the message id it names, or nothing when
+   *  the event is about something else. Reply links name their target in the href;
+   *  resolving it here keeps the link's ring in step with the bubble ids and the
+   *  pane's anchor map. `closest` because the pointer reports the innermost element
+   *  it is on, and the arrow and label are inside the link that makes the claim. */
+  const claimAt = (el: EventTarget | null): { el: Element; id: string } | null => {
+    if (!(el instanceof Element)) return null;
+    const link = el.closest<HTMLAnchorElement>("a.par[href^='#']");
+    return link ? { el: link, id: link.getAttribute("href")!.slice(1) } : null;
+  };
+  for (const type of ["mouseover", "mouseout"] as const) {
+    on(doc, type, (ev) => {
+      const claim = claimAt(ev.target);
+      if (!claim) return;
+      // Crossing from the arrow to the label, or from a name in the header to the
+      // words beside it, is still the same claim: only a pointer that came from
+      // outside it has arrived, and only one that left has gone.
+      if (claimAt((ev as MouseEvent).relatedTarget)?.el === claim.el) return;
+      ring(doc.getElementById(claim.id), type === "mouseover");
+    });
+  }
+  cleanups.push(() => {
+    for (const el of ringed) el.classList.remove("mhov");
+    ringed.clear();
+  });
+
   /* ---------- hovering a chain row in the sources panel ---------- */
   for (const row of doc.querySelectorAll<HTMLElement>("[data-chain]")) {
     const root = row.dataset.chain!;
