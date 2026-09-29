@@ -66,6 +66,7 @@ describe("refresh button ingest status", () => {
     const button = await screen.findByRole("button", { name: /refresh; ingesting mail, started/i });
     expect(button.getAttribute("aria-busy")).toBe("true");
     expect(button.getAttribute("title")).toContain("Threads fill in as the walk runs");
+    expect(button.textContent).toContain("ingesting");
   });
 
   it("warns when the last ingest stopped short of its work", async () => {
@@ -77,12 +78,14 @@ describe("refresh button ingest status", () => {
     const button = await screen.findByRole("button", { name: "Refresh; last ingest stopped early" });
     expect(button.getAttribute("class")).toContain("warn");
     expect(button.getAttribute("title")).toContain("stopped early");
+    expect(button.textContent).toContain("ingest incomplete");
   });
 
   it("warns when an ingest failed", async () => {
     await mountApp({ running: false, outcome: "failed" });
     const button = await screen.findByRole("button", { name: "Refresh; last ingest failed" });
     expect(button.getAttribute("class")).toContain("warn");
+    expect(button.textContent).toContain("ingest failed");
   });
 
   it("does not warn after an ingest finished its work", async () => {
