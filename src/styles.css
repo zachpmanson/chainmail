@@ -308,6 +308,7 @@
   .navrefresh:hover, .navcancel:hover { color:var(--accent); border-color:var(--line);
     background:var(--card); }
   .navrefresh.warn { color:var(--accent); }
+  .navrefresh-label { font-size:.72rem; white-space:nowrap; }
   .navrefresh:disabled { cursor:default; }
   /* dripfeed-web's spinner (src/index.css there): the same ↻, the same 0.8s
      linear turn, so the act reads the same in both apps. It turns only while its

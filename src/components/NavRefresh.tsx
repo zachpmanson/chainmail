@@ -66,6 +66,11 @@ export function NavRefresh() {
   const running = Boolean(sweep?.running);
   const warning = !running && (sweep?.outcome === "incomplete" || sweep?.outcome === "failed");
   const indicator = busy || running;
+  const stageLabel = running
+    ? "ingesting"
+    : warning
+      ? sweep?.outcome === "incomplete" ? "ingest incomplete" : "ingest failed"
+      : null;
   const label = running
     ? `Refresh; ingesting mail${sweep?.startedAt ? `, started ${when(sweep.startedAt)}` : ""}`
     : warning
@@ -127,6 +132,7 @@ export function NavRefresh() {
           fill="none" stroke="currentColor" strokeWidth="1.5"
           strokeLinecap="round" strokeLinejoin="round" />
       </svg>
+      {stageLabel && <span className="navrefresh-label">{stageLabel}</span>}
     </button>
   );
 }
