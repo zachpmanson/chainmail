@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError, $api } from "../lib/api";
+import { when } from "../lib/stamp";
 
 /**
  * Ask the mailbox for what has arrived, and the corpus again for what is on this
@@ -55,6 +56,28 @@ import { ApiError, $api } from "../lib/api";
 export function NavRefresh() {
   const qc = useQueryClient();
   const [busy, setBusy] = useState(false);
+  const status = $api.useQuery(
+    "get",
+    "/v1/status",
+    {},
+    { refetchInterval: 10_000 },
+  );
+  const sweep = status.data?.sweep;
+  const running = Boolean(sweep?.running);
+  const warning = !running && (sweep?.outcome === "incomplete" || sweep?.outcome === "failed");
+  const indicator = busy || running;
+  const label = running
+    ? `Refresh; ingesting mail${sweep?.startedAt ? `, started ${when(sweep.startedAt)}` : ""}`
+    : warning
+      ? sweep?.outcome === "incomplete" ? "Refresh; last ingest stopped early" : "Refresh; last ingest failed"
+      : "Refresh";
+  const title = running
+    ? `Ingesting mail${sweep?.startedAt ? `, started ${when(sweep.startedAt)}` : ""}. Threads fill in as the walk runs.`
+    : warning
+      ? sweep?.outcome === "incomplete"
+        ? `The last ingest stopped early${sweep.finishedAt ? ` (${when(sweep.finishedAt)})` : ""}: a phase hit its bound, so the corpus is missing mail it was asked for. Ingesting again continues from where it stopped.`
+        : `The last ingest failed${sweep?.finishedAt ? ` (${when(sweep.finishedAt)})` : ""}: a phase broke, so the corpus is only as far as that phase got. See the journal.`
+      : "Refresh — fetch what has arrived, then ask the corpus again for what is on this page";
 
   // The ingest, through the same endpoint and the same optional grant the page's
   // own refresh button uses. Nothing here names phases or a query: which pipeline
@@ -92,15 +115,10 @@ export function NavRefresh() {
   return (
     <button
       type="button"
-      className={busy ? "navrefresh busy" : "navrefresh"}
-      // The word, for anyone reading the nav without seeing it; the glyph and the
-      // turn are what a person sees, and neither needs a label beside it in a row
-      // that is already small print.
-      aria-label="Refresh"
-      title="Refresh — fetch what has arrived, then ask the corpus again for what is on this page"
-      // The turn is the whole of what says the work is happening, so it is also
-      // said where no eyes are on it.
-      aria-busy={busy}
+      className={`navrefresh${indicator ? " busy" : ""}${warning ? " warn" : ""}`}
+      aria-label={label}
+      title={title}
+      aria-busy={indicator}
       disabled={busy}
       onClick={() => void refresh()}
     >

@@ -6,13 +6,7 @@ import { RouterProvider } from "@tanstack/react-router";
 import { makeQueryClient } from "../src/lib/queryClient";
 import { createChainmailRouter } from "../src/router";
 
-/**
- * The nav's indicator for an ingest nobody pressed. What it has to get right is
- * the two states the page is otherwise silent about: a walk in flight (a corpus
- * mid-rebuild reads as a threading bug — mailbox parents are linked per batch),
- * and a walk that ended short of its work, which is a corpus missing mail with
- * nothing on the page to say so. And that a clean corpus says nothing at all.
- */
+/** The refresh button also reports scheduled ingest state. */
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -29,8 +23,7 @@ type Sweep = {
   outcome?: "complete" | "incomplete" | "failed";
 };
 
-/** The app on the home page, with the sweep's own answer under test and every
- *  other call answered minimally so the nav can render. */
+/** The app on the home page, with ingest status under test. */
 async function mountApp(sweep: Sweep) {
   vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
     const url = new URL(input instanceof Request ? input.url : String(input), location.href);
@@ -67,37 +60,34 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("the sweep indicator", () => {
-  it("says an ingest is running, with when it started", async () => {
+describe("refresh button ingest status", () => {
+  it("reports a running ingest and when it started", async () => {
     await mountApp({ running: true, startedAt: "2026-09-20T10:02:00Z" });
-    const pill = await screen.findByText("ingesting");
-    // The turn is the whole of what says the work is happening, so the label
-    // carries it for anyone reading the nav without seeing the glyph.
-    expect(pill.getAttribute("aria-label")).toContain("Ingesting mail, started");
+    const button = await screen.findByRole("button", { name: /refresh; ingesting mail, started/i });
+    expect(button.getAttribute("aria-busy")).toBe("true");
+    expect(button.getAttribute("title")).toContain("Threads fill in as the walk runs");
   });
 
-  it("holds the word when the last ingest stopped short of its work", async () => {
+  it("warns when the last ingest stopped short of its work", async () => {
     await mountApp({
       running: false,
       finishedAt: "2026-09-20T10:18:00Z",
       outcome: "incomplete",
     });
-    const pill = await screen.findByText("ingest incomplete");
-    expect(pill.getAttribute("title")).toContain("stopped early");
+    const button = await screen.findByRole("button", { name: "Refresh; last ingest stopped early" });
+    expect(button.getAttribute("class")).toContain("warn");
+    expect(button.getAttribute("title")).toContain("stopped early");
   });
 
-  it("says a broken ingest failed rather than that it is unfinished", async () => {
+  it("warns when an ingest failed", async () => {
     await mountApp({ running: false, outcome: "failed" });
-    expect(await screen.findByText("ingest failed")).toBeTruthy();
-    expect(screen.queryByText("ingest incomplete")).toBeNull();
+    const button = await screen.findByRole("button", { name: "Refresh; last ingest failed" });
+    expect(button.getAttribute("class")).toContain("warn");
   });
 
-  it("says nothing about an ingest that finished its work", async () => {
+  it("does not warn after an ingest finished its work", async () => {
     await mountApp({ running: false, outcome: "complete" });
-    // The nav has rendered — the search box is in it — and the indicator is not.
-    expect(await screen.findByLabelText("Refresh")).toBeTruthy();
-    expect(screen.queryByText("ingesting")).toBeNull();
-    expect(screen.queryByText("ingest incomplete")).toBeNull();
+    expect(await screen.findByRole("button", { name: "Refresh" })).toBeTruthy();
   });
 
   it("says nothing when the route cannot be read", async () => {
