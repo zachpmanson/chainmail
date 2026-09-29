@@ -1320,9 +1320,12 @@ describe("the render route /view/<name>", () => {
     await mountApp("/viwe/typo");
 
     expect(await screen.findByText(/No page at/)).toBeTruthy();
-    // The 404 route itself must not touch the API; the shell's auth probe is
-    // a separate concern and answered signed in by the shared handler.
-    const routeCalls = calls.filter((c) => pathOf(c) !== "/auth/status");
+    // The 404 route itself must not touch the API; the shell's own probes — the
+    // auth check and the nav's sweep indicator, which are about the machine
+    // rather than about the page — are separate concerns, answered by the shared
+    // handler.
+    const shellCalls = new Set(["/auth/status", "/v1/status"]);
+    const routeCalls = calls.filter((c) => !shellCalls.has(pathOf(c)));
     expect(routeCalls.length).toBe(0);
   });
 });

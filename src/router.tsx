@@ -28,6 +28,7 @@ import { NavReading } from "./components/NavReading";
 import { NavRefresh } from "./components/NavRefresh";
 import { AutoRefresh } from "./components/AutoRefresh";
 import { NavSearch } from "./components/NavSearch";
+import { SweepIndicator } from "./components/SweepIndicator";
 import type { SearchMode } from "./lib/api";
 
 /**
@@ -233,6 +234,10 @@ function RootLayout() {
                 button beside it is what adds the mailbox fetch. It draws
                 nothing, and is mounted by the shell so every page has it. */}
             <AutoRefresh />
+            {/* The ingest nobody pressed: the cadence sweeps on its own, and
+                between the press and the schedule there is no other place in
+                the app that says work is happening (see SweepIndicator). */}
+            <SweepIndicator />
             <NavRefresh />
             <NavSearch />
           </span>
