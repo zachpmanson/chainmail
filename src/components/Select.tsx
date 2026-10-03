@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { $api, searchQuery, type SearchParams } from "../lib/api";
+import { useCompactMode } from "../lib/compactMode";
 import { useLastDescription } from "../lib/lists";
 import { useEscapeToClear } from "../lib/selection";
 import { ActionBar } from "./ActionBar";
@@ -8,6 +9,7 @@ import { ThreadPane } from "./ThreadPane";
 import { ThreadRow, RankMeta } from "./ThreadRow";
 import { Failure, type PreviewableThread } from "./ThreadPreview";
 import { SplitPane } from "./SplitPane";
+import { CompactListHeader, CompactModeToggle } from "./CompactListControls";
 
 /**
  * Search, then choose, then build. Selection is a stage of its own because
@@ -25,6 +27,7 @@ import { SplitPane } from "./SplitPane";
  */
 export function SelectView() {
   const navigate = useNavigate();
+  const [compact, setCompact] = useCompactMode();
   // The search lives in the URL (q, mode, person, since), validated and typed by
   // the route: leaving for a built page and pressing Back restores the search
   // that was there before, even after a reload.
@@ -138,13 +141,18 @@ export function SelectView() {
             hasChoice={Boolean(opened)}
             list={
               <div className="iblistwrap">
-                <ul className="iblist">
+                <div className="iblist-toolbar">
+                  <CompactModeToggle compact={compact} onChange={setCompact} />
+                </div>
+                {compact ? <CompactListHeader ranked /> : null}
+                <ul className={`iblist${compact ? " compact" : ""}`}>
                   {chains.map((c) => (
                     <ThreadRow
                       key={c.rootExtId}
                       thread={c}
                       checked={chosen.includes(c.rootExtId)}
                       current={reading?.rootExtId === c.rootExtId}
+                      compact={compact}
                       meta={<RankMeta thread={c} />}
                       onToggle={() => toggle(c.rootExtId)}
                       // The row body opens the candidate in the pane, which is

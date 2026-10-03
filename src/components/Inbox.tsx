@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { $api, type ChainHit } from "../lib/api";
+import { useCompactMode } from "../lib/compactMode";
 import { useEscapeToClear } from "../lib/selection";
 import { ActionBar } from "./ActionBar";
 import { useLastDescription } from "../lib/lists";
@@ -8,6 +9,7 @@ import { ThreadPane } from "./ThreadPane";
 import { ThreadRow } from "./ThreadRow";
 import { Failure, type PreviewableThread } from "./ThreadPreview";
 import { SplitPane } from "./SplitPane";
+import { CompactListHeader, CompactModeToggle } from "./CompactListControls";
 
 /**
  * The home page with nothing asked of it: the corpus in the order it arrived,
@@ -154,6 +156,7 @@ function Folders({
 
 export function Inbox() {
   const navigate = useNavigate();
+  const [compact, setCompact] = useCompactMode();
   const [chosen, setChosen] = useState<string[]>([]);
   // Dropping the ticks is one action, wherever it is asked for from: the bar's
   // Deselect all, the write that was just made, and Escape (see the hook).
@@ -360,21 +363,26 @@ export function Inbox() {
         hasChoice={Boolean(opened)}
         list={
           <>
-            <Folders
-              current={label}
-              isDefault={isDefault}
-              onPick={pickFolder}
-              onDefault={makeDefault}
-            />
+            <div className="iblist-toolbar">
+              <Folders
+                current={label}
+                isDefault={isDefault}
+                onPick={pickFolder}
+                onDefault={makeDefault}
+              />
+              <CompactModeToggle compact={compact} onChange={setCompact} />
+            </div>
             <div className="iblistwrap">
+              {compact && rows.length > 0 ? <CompactListHeader /> : null}
               {rows.length > 0 ? (
-                <ul className="iblist">
+                <ul className={`iblist${compact ? " compact" : ""}`}>
                   {rows.map((c) => (
                     <ThreadRow
                       key={c.rootExtId}
                       thread={c}
                       checked={chosen.includes(c.rootExtId)}
                       current={selected?.rootExtId === c.rootExtId}
+                      compact={compact}
                       onToggle={() => toggle(c.rootExtId)}
                       onOpen={() => openChain(c.rootExtId)}
                     />
