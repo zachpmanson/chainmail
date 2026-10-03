@@ -56,18 +56,18 @@ export function ComposeBox({ onClose }: Props) {
   return (
     <div className="compose-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <section className="compose-box" role="dialog" aria-modal="true" aria-labelledby="compose-title">
-        <header className="compose-head"><h2 id="compose-title">{result ? "Message sent" : preview ? "Review email" : "Compose email"}</h2><button type="button" onClick={onClose} aria-label="Close">×</button></header>
-        {result ? <div role="status"><p>Sent to {result.to}.</p><p>{result.filed ? "Filed in the corpus." : "Sent successfully, but could not be filed in the corpus."}</p><button type="button" onClick={onClose}>Done</button></div> : preview ? <>
+        <header className="compose-head"><h2 id="compose-title">{result ? "Message sent" : preview ? "Review email" : "Compose email"}</h2><button className="opbtn" type="button" onClick={onClose} aria-label="Close">×</button></header>
+        {result ? <div role="status"><p>Sent to {result.to}.</p><p>{result.filed ? "Filed in the corpus." : "Sent successfully, but could not be filed in the corpus."}</p><button className="opbtn" type="button" onClick={onClose}>Done</button></div> : preview ? <>
           <dl className="compose-review"><dt>To</dt><dd>{preview.to}</dd><dt>Subject</dt><dd>{preview.subject}</dd><dt>Plain-text message</dt><dd><pre>{preview.body}</pre></dd></dl>
           <p>Review the exact message above. Sending is irreversible.</p>
           {error && <p role="alert">{error}{sendFailed && " Check Gmail before attempting to send again."}</p>}
-          <footer>{sendFailed ? <button type="button" onClick={onClose}>Close</button> : <><button type="button" disabled={busy} onClick={() => { setPreview(null); setError(""); }}>Edit</button><button type="button" disabled={busy} onClick={send}>{busy ? "Sending…" : "Confirm and send"}</button></>}</footer>
+          <footer>{sendFailed ? <button className="opbtn" type="button" onClick={onClose}>Close</button> : <><button className="opbtn" type="button" disabled={busy} onClick={() => { setPreview(null); setError(""); }}>Edit</button><button className="opbtn" type="button" disabled={busy} onClick={send}>{busy ? "Sending…" : "Confirm and send"}</button></>}</footer>
         </> : <form onSubmit={prepare}>
           <label>To <input required type="text" autoComplete="off" value={to} onChange={(e) => setTo(e.target.value)} placeholder="name@example.com" /></label>
           <label>Subject <input required value={subject} onChange={(e) => setSubject(e.target.value)} /></label>
           <label>Message <textarea required rows={10} value={body} onChange={(e) => setBody(e.target.value)} /></label>
           {error && <p role="alert">{error}</p>}
-          <footer><button type="button" onClick={onClose}>Cancel</button><button type="submit" disabled={busy}>{busy ? "Preparing…" : "Review message"}</button></footer>
+          <footer><button className="opbtn" type="button" onClick={onClose}>Cancel</button><button className="opbtn" type="submit" disabled={busy}>{busy ? "Preparing…" : "Review message"}</button></footer>
         </form>}
       </section>
     </div>
