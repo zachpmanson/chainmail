@@ -182,6 +182,7 @@ export function ThreadRow({
   checked,
   current,
   meta,
+  compact = false,
   onToggle,
   onOpen,
 }: {
@@ -193,6 +194,7 @@ export function ThreadRow({
    *  ranking's similarity and match, on a ranked list. Absent on the inbox, which
    *  has no ranking to explain. */
   meta?: ReactNode;
+  compact?: boolean;
   onToggle: () => void;
   onOpen: () => void;
 }) {
@@ -252,7 +254,7 @@ export function ThreadRow({
     // the same claim drawn the other way round, and it left the reader hunting
     // for glyphs in a column where nearly every row carried one.
     <li
-      className={`ibrow${current ? " sel" : ""}${thread.unread > 0 ? " unread" : ""}`}
+      className={`ibrow${current ? " sel" : ""}${thread.unread > 0 ? " unread" : ""}${compact ? " compact" : ""}`}
       // Which thread this row is, as an attribute rather than a ref map: a deep
       // link (`?open=`) is answered by scrolling to the row the pane is reading,
       // and that means finding a row from outside the component that drew it.
@@ -290,9 +292,25 @@ export function ThreadRow({
             : undefined
         }
       >
-        <span className="ibwho">{last?.person || "unknown sender"}</span>
-        <span className="ibwhen">{whenShort(last?.ts ?? thread.last)}</span>
-        <span className="ibsubrow">
+        {compact ? (
+          <>
+            <span className="ibwho" title={last?.person || "unknown sender"}>{last?.person || "unknown sender"}</span>
+            <span className="ibsubrow">
+              <span className="ibsubj" title={`${subject}${last?.snippet ? ` — ${last.snippet}` : ""}`}>{subject}</span>
+              <span className="ibtail">
+                {thread.people > 2 ? <PeopleCount people={thread.people} /> : null}
+                {thread.entries > 1 ? <MailCount entries={thread.entries} /> : null}
+                {thread.attachments > 0 ? <AttachmentCount attachments={thread.attachments} /> : null}
+              </span>
+            </span>
+            {meta ? <span className="ibmeta">{meta}</span> : null}
+            <span className="ibwhen">{whenShort(last?.ts ?? thread.last)}</span>
+          </>
+        ) : (
+          <>
+            <span className="ibwho">{last?.person || "unknown sender"}</span>
+            <span className="ibwhen">{whenShort(last?.ts ?? thread.last)}</span>
+            <span className="ibsubrow">
           {/* The subject is one line in the list, elided rather than wrapped
               (see .ibsubj), so the whole of it is on hover: a truncated subject
               is one the reader can otherwise only guess at. */}
@@ -323,6 +341,8 @@ export function ThreadRow({
         </span>
         <span className="ibsnippet">{last?.snippet ?? ""}</span>
         {meta ? <span className="ibmeta">{meta}</span> : null}
+          </>
+        )}
       </button>
       {/* The tick sits on the first line, beside the time it belongs with,
           because that is the line a reader scans down when they are picking
