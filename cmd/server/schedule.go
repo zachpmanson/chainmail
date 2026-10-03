@@ -381,7 +381,12 @@ func (s *server) sweepIfDue(ctx context.Context) {
 	case errors.Is(err, errSweepRunning):
 		return
 	case err != nil:
-		log.Printf("sweep: %v", err)
+		transcript := strings.TrimSpace(string(out))
+		if transcript == "" {
+			log.Printf("sweep: %v", err)
+		} else {
+			log.Printf("sweep: %v\n%s", err, transcript)
+		}
 	default:
 		// The transcript goes to the journal, as the timer's log got it: what a
 		// phase found is the reason to read this line at all, and "swept" alone

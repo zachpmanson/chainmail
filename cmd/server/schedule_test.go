@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"log"
 	"strconv"
 	"strings"
 	"testing"
@@ -113,6 +116,26 @@ func TestASweepThatFailedStillHoldsTheNextOneOff(t *testing.T) {
 	srv.sweepIfDue(context.Background())
 	if *runs != 1 {
 		t.Errorf("%d sweeps, want one: a failure is an attempt, and the cadence counts from it", *runs)
+	}
+}
+
+// A runner may return both a useful transcript and a failure. Keep both in the
+// journal so the failed phase is diagnosable without reproducing the ingest.
+func TestAFailedSweepLogsItsTranscript(t *testing.T) {
+	srv, _ := sweepable(t, "")
+	swept(t, srv, 11*time.Minute)
+	srv.runSweep = func(context.Context, string) ([]byte, error) {
+		return []byte("slurp\n  twins    FAILED     database is locked\n"), errors.New("exit status 1")
+	}
+
+	var logs bytes.Buffer
+	previous := log.Writer()
+	log.SetOutput(&logs)
+	t.Cleanup(func() { log.SetOutput(previous) })
+
+	srv.sweepIfDue(context.Background())
+	if got := logs.String(); !strings.Contains(got, "exit status 1") || !strings.Contains(got, "twins    FAILED     database is locked") {
+		t.Errorf("failure log = %q, want the command error and failed phase transcript", got)
 	}
 }
 
