@@ -9,7 +9,7 @@ import { ThreadPane } from "./ThreadPane";
 import { ThreadRow } from "./ThreadRow";
 import { Failure, type PreviewableThread } from "./ThreadPreview";
 import { SplitPane } from "./SplitPane";
-import { CompactListHeader, CompactModeToggle } from "./CompactListControls";
+import { CompactListHeader } from "./CompactListControls";
 
 /**
  * The home page with nothing asked of it: the corpus in the order it arrived,
@@ -156,7 +156,7 @@ function Folders({
 
 export function Inbox() {
   const navigate = useNavigate();
-  const [compact, setCompact] = useCompactMode();
+  const [compact] = useCompactMode();
   const [chosen, setChosen] = useState<string[]>([]);
   // Dropping the ticks is one action, wherever it is asked for from: the bar's
   // Deselect all, the write that was just made, and Escape (see the hook).
@@ -363,15 +363,12 @@ export function Inbox() {
         hasChoice={Boolean(opened)}
         list={
           <>
-            <div className="iblist-toolbar">
-              <Folders
-                current={label}
-                isDefault={isDefault}
-                onPick={pickFolder}
-                onDefault={makeDefault}
-              />
-              <CompactModeToggle compact={compact} onChange={setCompact} />
-            </div>
+            <Folders
+              current={label}
+              isDefault={isDefault}
+              onPick={pickFolder}
+              onDefault={makeDefault}
+            />
             <div className="iblistwrap">
               {compact && rows.length > 0 ? <CompactListHeader /> : null}
               {rows.length > 0 ? (

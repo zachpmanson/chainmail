@@ -291,7 +291,6 @@
 /* The inbox: the home page with no query. Same file as the selection stage for
    the same reason — these controls exist only in the browser, and the static
    transcript ships this stylesheet minus none of it. */
-.iblist-toolbar { display:flex; align-items:center; justify-content:space-between; gap:.7rem; }
 .ibcompact-toggle { display:inline-flex; align-items:center; gap:.35rem; padding:.25rem .45rem;
   border:1px solid var(--line); border-radius:6px; background:transparent; color:var(--muted);
   font:inherit; font-size:.78rem; white-space:nowrap; cursor:pointer; }
