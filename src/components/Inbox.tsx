@@ -408,6 +408,7 @@ export function Inbox() {
             label="The selected thread"
             backLabel="← List"
             empty="Nothing open — pick a thread from the list."
+            moveDefault={label}
             onClose={closeChain}
           />
         }
@@ -419,7 +420,11 @@ export function Inbox() {
           object. The same bar the search page shows, because what it acts on is
           the chains that were ticked rather than anything about the list they
           were ticked in. */}
-      <ActionBar chosen={chosen} onDone={clearChosen} />
+      <ActionBar
+        chosen={chosen}
+        moveDefault={label}
+        onDone={clearChosen}
+      />
     </div>
   );
 }

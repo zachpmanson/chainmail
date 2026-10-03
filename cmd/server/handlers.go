@@ -658,6 +658,9 @@ func (s *server) spec(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("spec: %d entries from %d chains in %s", len(sp.Messages), len(req.Chains),
 		time.Since(started).Round(time.Millisecond))
+	// A page that names the reader is evidence about the reader, and the pane
+	// has no other way to hear it (see learnReader).
+	s.learnReader(req.Me)
 	if req.Name != "" {
 		if err := s.saveSpec(req.Name, sp); err != nil {
 			fail(w, http.StatusInternalServerError,
@@ -1934,6 +1937,12 @@ func (s *server) rebuildPage(req refreshRequest) (spec.Spec, refresh.Report, err
 	if err != nil {
 		return spec.Spec{}, refresh.Report{}, err
 	}
+	// The page's reader is the reader, whether this run named them or the spec's
+	// own runParams carried them (see refresh.Run's merge): recording it here is
+	// what lets the reading pane mark the same mail this page does (learnReader).
+	if p := next.RunParams; p != nil {
+		s.learnReader(p.Me)
+	}
 	if req.Name != "" {
 		// The saved page must not drift from what the client just received: the
 		// refresh rewrites the file exactly as POST /v1/spec would, so a reload
@@ -2617,6 +2626,60 @@ func (s *server) setSettings(w http.ResponseWriter, r *http.Request) {
 	// The settings as they now stand, so a caller sees what it stored rather than
 	// what it asked for.
 	s.getSettings(w, r)
+}
+
+// learnReader records who the reader is when a page names their addresses and
+// the corpus has never been told.
+//
+// It exists because the two surfaces learn the reader differently, and that is
+// the defect this fixes. The reading pane marks the reader's own mail from the
+// stored setting and from nothing else (see spec.RenderTrail), while a page
+// carries the addresses it was built with in its own runParams and marks from
+// those (see spec.markedAs and refresh.meFrom). On a corpus nobody has told,
+// that is two answers to one question: the saved page tints the reader's
+// bubbles while the same thread in the pane draws them plain, and the reader
+// reads that as the pane failing rather than as a preference never made.
+//
+// A page naming the reader is evidence about the reader — the addresses are the
+// ones its own outbound messages were sent from — so the corpus takes it, once,
+// and both surfaces answer the same way from then on. It is not a second
+// ownership rule: the rule is still meSet.wrote, and this only supplies the
+// input the pane was missing.
+//
+// Only a corpus that has never been told learns here. An existing setting is
+// the reader's own answer and a page must not overwrite it. The addresses must
+// resolve to exactly one person the corpus holds: two people named as one reader
+// is a claim the setting cannot carry, and an address the corpus has never seen
+// is not the reader at all. A write that fails is logged rather than failing the
+// build — the page is built either way, and the reader's setting is not what the
+// caller asked for.
+func (s *server) learnReader(addresses []string) {
+	if len(addresses) == 0 {
+		return
+	}
+	if _, ok, err := s.store.MePerson(); err != nil {
+		log.Printf("settings: reading the reader a page named: %v", err)
+		return
+	} else if ok {
+		return
+	}
+	people, err := corpus.PeopleForAddresses(s.store, addresses)
+	if err != nil {
+		log.Printf("settings: resolving %v, the reader a page named: %v", addresses, err)
+		return
+	}
+	if len(people) != 1 {
+		return
+	}
+	id := int64(0)
+	for p := range people {
+		id = p
+	}
+	if err := s.store.SetMePerson(id); err != nil {
+		log.Printf("settings: recording person %d as the reader a page named: %v", id, err)
+		return
+	}
+	log.Printf("settings: a page named %v; recorded person %d as the reader", addresses, id)
 }
 
 func (s *server) people(w http.ResponseWriter, r *http.Request) {

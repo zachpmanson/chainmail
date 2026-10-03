@@ -1750,11 +1750,74 @@ func TestTheChainMarksTheReadersOwnEntries(t *testing.T) {
 	}
 }
 
-// A message's files travel with the chain read, drawn as a page build draws them:
-// the same name, the same kind and the same size wording, from one function (see
-// spec.AttachmentOf). This is the read that used to answer nothing at all — the
-// rows were in the corpus, and no query on this path asked for them — so an
-// attachment could be visible in a built page and invisible in the reading pane.
+// A page that names the reader teaches the corpus, so the pane marks the same
+// mail the page does.
+//
+// This is the defect the two surfaces had between them: a page carries the
+// reader's addresses in its own runParams and marks from those, while the pane
+// marks from the stored setting and from nothing else. On a corpus nobody has
+// told, the page tinted the reader's bubbles and the same thread in the pane
+// drew them plain — the reader's report is "my own messages are not coloured in
+// the pane". The build has to leave the setting behind, and it must leave an
+// existing answer alone: the reader's own choice is not a page's to overwrite.
+func TestAPageThatNamesTheReaderTeachesTheCorpus(t *testing.T) {
+	srv, api := testServer(t), loadAPI(t)
+	ada := personOf(t, srv, "ada@loomworks.example")
+
+	// Nobody has said who the reader is, and the fixture's own builds name
+	// ada@loomworks.example (see specBody): before anything is built, the pane
+	// marks nothing and the setting is not even on the wire.
+	before := srv.do(t, "GET", entryPath("/v1/chains/", extAda1), nil)
+	if strings.Contains(string(before.body), `"mine"`) {
+		t.Errorf("a reader who has named nobody has a marked message: %s", before.body)
+	}
+
+	// A page built with the reader's addresses. ada@loomworks.example resolves to
+	// one person the corpus holds, so the corpus records them and the pane — the
+	// chain read — marks the same entries the page does.
+	if res := srv.do(t, "POST", "/v1/spec", specBody(extAda1)); res.status != 200 {
+		t.Fatalf("building the page: status = %d: %s", res.status, res.body)
+	}
+	got := readSettings(t, srv)
+	if got.MePersonID == nil || *got.MePersonID != ada {
+		t.Fatalf("mePersonId = %v after a page named ada@loomworks.example, want %d",
+			got.MePersonID, ada)
+	}
+
+	res := srv.do(t, "GET", entryPath("/v1/chains/", extAda1), nil)
+	if res.status != 200 {
+		t.Fatalf("status = %d: %s", res.status, res.body)
+	}
+	api.assert(t, "ChainResponse", res.body)
+	chain := decode[struct {
+		Entries []struct {
+			ExtID string `json:"extId"`
+			Mine  bool   `json:"mine"`
+		} `json:"entries"`
+	}](t, res)
+	for _, e := range chain.Entries {
+		want := e.ExtID == extAda1 || e.ExtID == extAda3
+		if e.Mine != want {
+			t.Errorf("%s: mine = %v, want %v — the pane must mark what the page marks",
+				e.ExtID, e.Mine, want)
+		}
+	}
+
+	// The reader's own answer is not a page's to overwrite. Bo is a person of his
+	// own, and a later page naming him must leave Ada as the reader.
+	bo := personOf(t, srv, "bo@fjordline.example")
+	if res := srv.do(t, "POST", "/v1/settings",
+		fmt.Appendf(nil, `{"mePersonId":%d}`, bo)); res.status != 200 {
+		t.Fatalf("setting the reader: status = %d: %s", res.status, res.body)
+	}
+	if res := srv.do(t, "POST", "/v1/spec", specBody(extAda1)); res.status != 200 {
+		t.Fatalf("building again: status = %d: %s", res.status, res.body)
+	}
+	if got := readSettings(t, srv); got.MePersonID == nil || *got.MePersonID != bo {
+		t.Errorf("mePersonId = %v after a page named Ada, want the reader's own answer %d",
+			got.MePersonID, bo)
+	}
+}
 func TestChainCarriesAMessagesAttachments(t *testing.T) {
 	srv, api := testServer(t), loadAPI(t)
 	res := srv.do(t, "GET", entryPath("/v1/chains/", extAda1), nil)
