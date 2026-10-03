@@ -1428,3 +1428,18 @@
     .toast { animation:toastin .16s ease-out; }
   }
 }
+
+/* Compose is deliberately a small, focused review surface. */
+.compose-launch { display: flex; justify-content: flex-end; margin: 0 0 .75rem; }
+.compose-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 1rem; background: rgb(0 0 0 / .55); }
+.compose-box { width: min(38rem, 100%); max-height: min(90vh, 50rem); overflow: auto; padding: 1.25rem; border: 1px solid var(--line, #555); border-radius: .6rem; background: var(--bg, #fff); color: var(--fg, #111); box-shadow: 0 1rem 4rem rgb(0 0 0 / .3); }
+.compose-head, .compose-box footer { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+.compose-head h2 { margin: 0 0 1rem; }
+.compose-box form, .compose-box label { display: grid; gap: .5rem; }
+.compose-box form { gap: 1rem; }
+.compose-box input, .compose-box textarea { box-sizing: border-box; width: 100%; font: inherit; padding: .6rem; }
+.compose-box textarea { resize: vertical; }
+.compose-review { display: grid; grid-template-columns: 5rem minmax(0, 1fr); gap: .5rem; overflow-wrap: anywhere; }
+.compose-review dt { font-weight: 700; }
+.compose-review dd { margin: 0; }
+.compose-review pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }

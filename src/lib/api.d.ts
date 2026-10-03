@@ -599,6 +599,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/compose": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Compose a new plain-text email to explicit recipients.
+         * @description Without confirm this prepares and returns the exact recipients, subject and plain-text body and sends nothing. With confirm the same content is sent. Requires the server's -send-mail grant. Preparation failures state that nothing was sent; send failures may be uncertain and require checking Gmail before retrying. A successfully sent message is filed into the corpus when possible; filing outcome is reported separately.
+         */
+        post: operations["composeEmail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1715,6 +1735,27 @@ export interface components {
         PersonResponse: {
             person: components["schemas"]["PersonSummary"];
         };
+        ComposeRequest: {
+            /** @description Explicit comma-separated recipient address(es). */
+            to: string;
+            /** @description Required subject. */
+            subject: string;
+            /** @description Required plain-text message body. */
+            body: string;
+            /** @description Must be true to transmit; omitted or false returns a preview only. */
+            confirm?: boolean;
+        };
+        ComposeResponse: {
+            to: string;
+            subject: string;
+            /** @description Exact plain-text body prepared or sent. */
+            body: string;
+            /** @description False means preview only; true means Gmail accepted the message. */
+            sent: boolean;
+            gmailId?: string;
+            /** @description Whether the sent message was filed into the corpus; present after a successful send. */
+            filed?: boolean;
+        };
     };
     responses: never;
     parameters: never;
@@ -2752,6 +2793,57 @@ export interface operations {
             };
             /** @description An identity or name belongs to another person. The message names them. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    composeEmail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ComposeRequest"];
+            };
+        };
+        responses: {
+            /** @description Preview or send result, including whether the message was sent and filed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComposeResponse"];
+                };
+            };
+            /** @description Missing or invalid explicit recipient, subject, or body. Nothing was sent. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Sending is disabled because the server was started without -send-mail. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Mailbox failure. The error distinguishes a definite non-send from an uncertain send; check Gmail before retrying uncertain outcomes. */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

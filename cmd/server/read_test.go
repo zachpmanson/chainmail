@@ -40,6 +40,10 @@ type fakeMailbox struct {
 	to      map[string]string
 	cc      map[string]string
 	subject map[string]string
+	// composes records explicit outgoing content and whether the request asked
+	// the mailbox to send it.
+	composes   []fakeCompose
+	composeErr error
 	// sentID is the id the mailbox gives a message it has sent, and unanswered is
 	// what a preview carries in its place.
 	sentID string
@@ -47,6 +51,11 @@ type fakeMailbox struct {
 	// went out, which is what the handler files into the corpus.
 	filing  mailingest.Message
 	readErr error
+}
+
+type fakeCompose struct {
+	to, subject, body string
+	send              bool
 }
 
 type fakeReply struct {
@@ -63,6 +72,21 @@ type fakeReply struct {
 	// client's shape and a different fact from a chosen list that happens to equal
 	// the assembled one.
 	to, cc []string
+}
+
+func (f *fakeMailbox) Compose(to, subject, body string, send bool) (gmailclient.ComposePlan, error) {
+	f.composes = append(f.composes, fakeCompose{to: to, subject: subject, body: body, send: send})
+	if f.composeErr != nil {
+		return gmailclient.ComposePlan{}, f.composeErr
+	}
+	if strings.TrimSpace(to) == "" || strings.TrimSpace(subject) == "" || strings.TrimSpace(body) == "" {
+		return gmailclient.ComposePlan{}, gmailclient.ErrUnsent
+	}
+	plan := gmailclient.ComposePlan{To: to, Subject: subject, Body: body}
+	if send {
+		plan.GmailID = "sent-compose-id"
+	}
+	return plan, nil
 }
 
 func (f *fakeMailbox) SetUnread(id string, unread bool) ([]string, error) {

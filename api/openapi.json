@@ -1228,6 +1228,65 @@
           "ops"
         ]
       }
+    },
+    "/v1/compose": {
+      "post": {
+        "summary": "Compose a new plain-text email to explicit recipients.",
+        "description": "Without confirm this prepares and returns the exact recipients, subject and plain-text body and sends nothing. With confirm the same content is sent. Requires the server's -send-mail grant. Preparation failures state that nothing was sent; send failures may be uncertain and require checking Gmail before retrying. A successfully sent message is filed into the corpus when possible; filing outcome is reported separately.",
+        "operationId": "composeEmail",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComposeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Preview or send result, including whether the message was sent and filed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComposeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing or invalid explicit recipient, subject, or body. Nothing was sent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sending is disabled because the server was started without -send-mail.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Mailbox failure. The error distinguishes a definite non-send from an uncertain send; check Gmail before retrying uncertain outcomes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1512,12 +1571,16 @@
           "toRecipients": {
             "type": "array",
             "description": "The exact email addresses in this message's To header, with the display name each address was sent under. Unlike the people directory, this never expands a recipient to all of their aliases.",
-            "items": { "$ref": "#/components/schemas/HeaderRecipient" }
+            "items": {
+              "$ref": "#/components/schemas/HeaderRecipient"
+            }
           },
           "ccRecipients": {
             "type": "array",
             "description": "The exact email addresses in this message's Cc header, with the display name each address was sent under. Unlike the people directory, this never expands a recipient to all of their aliases.",
-            "items": { "$ref": "#/components/schemas/HeaderRecipient" }
+            "items": {
+              "$ref": "#/components/schemas/HeaderRecipient"
+            }
           },
           "fromEmail": {
             "type": "string",
@@ -3736,6 +3799,66 @@
         "properties": {
           "person": {
             "$ref": "#/components/schemas/PersonSummary"
+          }
+        }
+      },
+      "ComposeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "to",
+          "subject",
+          "body"
+        ],
+        "properties": {
+          "to": {
+            "type": "string",
+            "description": "Explicit comma-separated recipient address(es)."
+          },
+          "subject": {
+            "type": "string",
+            "description": "Required subject."
+          },
+          "body": {
+            "type": "string",
+            "description": "Required plain-text message body."
+          },
+          "confirm": {
+            "type": "boolean",
+            "description": "Must be true to transmit; omitted or false returns a preview only."
+          }
+        }
+      },
+      "ComposeResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "to",
+          "subject",
+          "body",
+          "sent"
+        ],
+        "properties": {
+          "to": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string",
+            "description": "Exact plain-text body prepared or sent."
+          },
+          "sent": {
+            "type": "boolean",
+            "description": "False means preview only; true means Gmail accepted the message."
+          },
+          "gmailId": {
+            "type": "string"
+          },
+          "filed": {
+            "type": "boolean",
+            "description": "Whether the sent message was filed into the corpus; present after a successful send."
           }
         }
       }

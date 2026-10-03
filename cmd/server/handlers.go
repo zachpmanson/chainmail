@@ -190,6 +190,7 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("/v1/read", post(s.markRead))
 	mux.HandleFunc("/v1/mail", post(s.mailAction))
 	mux.HandleFunc("/v1/send", post(s.sendReply))
+	mux.HandleFunc("/v1/compose", post(s.compose))
 	mux.HandleFunc("/v1/media/pull", post(s.mediaPull))
 	mux.HandleFunc("/v1/attachments/{sha}", get(s.attachment))
 	// One person at a time, for the ops screen's own editor: a write is the shape
@@ -1031,6 +1032,7 @@ type mailbox interface {
 	SetUnread(id string, unread bool) ([]string, error)
 	SetLabels(id string, add, remove []string) ([]string, error)
 	Reply(id string, body gmailclient.ReplyBody, opts gmailclient.ReplyOptions) (gmailclient.ReplyPlan, error)
+	Compose(to, subject, body string, send bool) (gmailclient.ComposePlan, error)
 	Read(id string) (mailingest.Message, error)
 }
 
@@ -1548,16 +1550,16 @@ func (s *server) sendReply(w http.ResponseWriter, r *http.Request) {
 // one wrong thing this handler could say. The mailbox is the source of truth and
 // the reply is in it, so a corpus that missed it holds a gap the next ingest
 // fills, and the ingest is idempotent by body hash.
-func (s *server) fileSent(mb mailbox, id string) {
+func (s *server) fileSent(mb mailbox, id string) bool {
 	msg, err := mb.Read(id)
 	if err != nil {
 		log.Printf("send: sent %s but could not read it back to file it: %v", id, err)
-		return
+		return false
 	}
 	res, err := mailingest.Put(s.store, msg)
 	if err != nil {
 		log.Printf("send: sent %s but storing it failed: %v", id, err)
-		return
+		return false
 	}
 	// Resolve after the put, not before: the reply carries the In-Reply-To the
 	// mailbox built for it (gmailclient.Reply), and this is what joins the answer to
@@ -1565,9 +1567,75 @@ func (s *server) fileSent(mb mailbox, id string) {
 	// chain of its own.
 	if _, err := s.store.ResolveParents(); err != nil {
 		log.Printf("send: filed %s but joining it to its thread failed: %v", id, err)
-		return
+		return false
 	}
 	log.Printf("send: filed %s (created=%t skipped=%t)", id, res.Created, res.Skipped)
+	return true
+}
+
+// compose accepts only explicit plain-text content. Confirm=false prepares a
+// preview; true sends that exact plan. The caller must separately opt the server
+// into mail writes with -send-mail.
+type composeRequest struct {
+	To string `json:"to"`
+	Subject string `json:"subject"`
+	Body string `json:"body"`
+	Confirm bool `json:"confirm,omitempty"`
+}
+
+type composeResponse struct {
+	To string `json:"to"`
+	Subject string `json:"subject"`
+	Body string `json:"body"`
+	Sent bool `json:"sent"`
+	GmailID string `json:"gmailId,omitempty"`
+	Filed *bool `json:"filed,omitempty"`
+}
+
+func (s *server) compose(w http.ResponseWriter, r *http.Request) {
+	if !s.sendMailEnabled {
+		fail(w, http.StatusForbidden, errors.New(
+			"composing mail is disabled: this server was started without -send-mail, so it will not send anything. A restart with -send-mail enables POST /v1/compose."))
+		return
+	}
+	var req composeRequest
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequestBody))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		fail(w, http.StatusBadRequest, fmt.Errorf("reading the request body: %w", err))
+		return
+	}
+	req.To = strings.TrimSpace(req.To)
+	if req.To == "" || strings.TrimSpace(req.Subject) == "" || strings.TrimSpace(req.Body) == "" {
+		fail(w, http.StatusBadRequest, errors.New("a composed message requires explicit to, subject, and plain-text body fields"))
+		return
+	}
+	if err := checkAddresses([]string{req.To}, nil); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	mb, err := s.openMailbox()
+	if err != nil {
+		fail(w, http.StatusBadGateway, fmt.Errorf("opening the mailbox: %w", err))
+		return
+	}
+	plan, err := mb.Compose(req.To, req.Subject, req.Body, req.Confirm)
+	if err != nil {
+		if errors.Is(err, gmailclient.ErrUnsent) {
+			fail(w, http.StatusBadGateway, fmt.Errorf("the mailbox would not prepare the message, so nothing was sent: %w", err))
+			return
+		}
+		fail(w, http.StatusBadGateway, fmt.Errorf("the mailbox did not answer the send, so whether it went out is unknown — check Gmail before sending again: %w", err))
+		return
+	}
+	out := composeResponse{To: plan.To, Subject: plan.Subject, Body: plan.Body, Sent: plan.GmailID != ""}
+	if out.Sent {
+		out.GmailID = plan.GmailID
+		filed := s.fileSent(mb, plan.GmailID)
+		out.Filed = &filed
+	}
+	log.Printf("compose: to=%s sent=%t filed=%v", plan.To, out.Sent, out.Filed)
+	send(w, http.StatusOK, out)
 }
 
 // sendRequest is what a caller may say, and it is the whole of the surface: which
