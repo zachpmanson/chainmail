@@ -474,11 +474,10 @@
 .ibbuild .ibmovewrap { border:1px solid var(--line); border-radius:6px;
   background:var(--card); padding:.45rem .5rem; }
 .ibbuild .ibmovewrap:hover { color:var(--accent); border-color:var(--accent); }
-/* What the selection amounts to, and the way out of it, held at the far end of
-   the row: `margin-left:auto` is what keeps them there when the verbs do not
-   fill it. Deselecting is not an action on the mail, so its button is quieter
-   than the verbs beside it. */
-.ibright { margin-left:auto; flex:none; display:flex; align-items:center; gap:.7rem; }
+/* The count stays at the far end when the verbs do not fill the row.
+   Deselecting is not an action on the mail, so its button is quieter than the
+   verbs beside it; it leads the row as the way out of selection. */
+.ibright { margin-left:auto; flex:none; display:flex; align-items:center; }
 .ibselcount { font-size:.76rem; color:var(--muted); font-variant-numeric:tabular-nums; }
 .ibbuild .ibclear { background:var(--card); color:var(--muted); }
 .ibbuild .ibclear:hover { color:var(--accent); border-color:var(--accent); }

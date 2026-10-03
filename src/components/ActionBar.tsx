@@ -160,6 +160,9 @@ export function ActionBar({
     <>
       {chosen.length > 0 ? (
         <div className="ibbuild">
+          <button type="button" className="ibclear" onClick={onDone}>
+            Deselect all
+          </button>
           <button type="button" onClick={() => setBraiding(true)}>
             Braid Threads
           </button>
@@ -207,17 +210,12 @@ export function ActionBar({
             busy={busy}
             onMove={(to) => act.mutate({ body: { chains: chosen, action: "move", labels: [to] } })}
           />
-          {/* What the bar is about, and the way out of it, together at the far
-              end: the count is the only thing on the row that says how much is
-              ticked, and deselecting is the one action that is not about the
-              mail. */}
+          {/* The count stays at the far end; the way out is the first control
+              on the left, before any action on the selected mail. */}
           <span className="ibright">
             <span className="ibselcount">
               {chosen.length} selected
             </span>
-            <button type="button" className="ibclear" onClick={onDone}>
-              Deselect all
-            </button>
           </span>
         </div>
       ) : null}

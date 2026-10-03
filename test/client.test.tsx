@@ -2415,7 +2415,11 @@ describe("what the bar does to the mail", () => {
     if (!bar) throw new Error("the bar is not in the site header");
     expect(document.querySelector(".wrap .ibbuild")).toBeNull();
 
-    // How much is ticked, and the way out of it, at the bar's own end.
+    // Deselecting leads the row at the far left; the selection count remains
+    // at the far end.
+    expect((bar as HTMLElement).firstElementChild).toBe(
+      within(bar as HTMLElement).getByRole("button", { name: "Deselect all" }),
+    );
     expect(within(bar as HTMLElement).getByText("2 selected")).toBeTruthy();
     expect((screen.getAllByRole("checkbox")[0] as HTMLInputElement).checked).toBe(true);
 
