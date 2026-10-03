@@ -437,3 +437,55 @@ describe("naming the words a view switch re-flows", () => {
     }
   });
 });
+
+describe("naming the attachments a view switch moves", () => {
+  it("pairs each visible attachment with its message, including a React-recreated chip", async () => {
+    const { el, cleanup } = bodied("entry-attachment", "<p>mail</p>");
+    const strip = document.createElement("div");
+    strip.className = "atts";
+    strip.innerHTML = '<a class="att">first</a><span class="att nolink">second</span>';
+    el.append(strip);
+    const chips = () => [...el.querySelectorAll<HTMLElement>(".att")];
+    let before: string[] = [];
+    let after: string[] = [];
+    const orphaned = chips();
+    stubbing((cb) => {
+      before = chips().map((chip) => chip.style.viewTransitionName);
+      cb();
+      after = chips().map((chip) => chip.style.viewTransitionName);
+    });
+    try {
+      withTransition(document, () => {
+        const fresh = strip.cloneNode(true) as HTMLElement;
+        fresh.querySelectorAll<HTMLElement>(".att").forEach((chip) => {
+          chip.style.viewTransitionName = "";
+        });
+        strip.replaceWith(fresh);
+      });
+      expect(before).toEqual(["entry-attachment-a-0", "entry-attachment-a-1"]);
+      expect(after).toEqual(before);
+      await Promise.resolve();
+      expect(chips().map((chip) => chip.style.viewTransitionName)).toEqual(["", ""]);
+      expect(orphaned.map((chip) => chip.style.viewTransitionName)).toEqual(["", ""]);
+    } finally {
+      unstub();
+      cleanup();
+    }
+  });
+
+  it("does not name an attachment outside the visible page", () => {
+    const { el, cleanup } = bodied("entry-attachment", "<p>mail</p>");
+    const chip = document.createElement("a");
+    chip.className = "att";
+    chip.getBoundingClientRect = () => ({ top: 99999, bottom: 100000 }) as DOMRect;
+    el.append(chip);
+    stubbing((cb) => {});
+    try {
+      withTransition(document, () => {});
+      expect(chip.style.viewTransitionName).toBe("");
+    } finally {
+      unstub();
+      cleanup();
+    }
+  });
+});

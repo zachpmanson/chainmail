@@ -88,6 +88,10 @@ const VERBATIM = new Set(["PRE", "CODE", "TEXTAREA", "SCRIPT", "STYLE", "SVG", "
  *  several screens of a thread and small enough to leave the switch a switch. */
 const WORD_CAP = 400;
 
+/** Attachment chips are larger transition groups than words, but a thread can
+ *  still have many of them. Bound the work just as the word pass is bounded. */
+const ATTACHMENT_CAP = 100;
+
 /**
  * Every word under `root`, in document order, wrapping the ones that are not
  * already wrapped. What was already a word is taken as one rather than descended
@@ -223,6 +227,28 @@ export function withTransition(doc: Document, apply: () => void) {
     }
   };
 
+  // Attachments are the chips on a message, not the thumbnail inside one: that
+  // whole chip is what moves between line wraps and tree indentation. As with
+  // words, pair by the message and its place in that message, and only name chips
+  // visible on the first side so a newly-visible one does not fly in from outside
+  // the reader's view.
+  const chosenAttachments = new Set<string>();
+  const nameAttachments = (first: boolean) => {
+    let count = 0;
+    for (const bubble of doc.querySelectorAll<HTMLElement>(".msg[id]")) {
+      if (!onScreen(bubble)) continue;
+      bubble.querySelectorAll<HTMLElement>(".att").forEach((el, i) => {
+        const key = `${bubble.id}-a-${i}`;
+        const keep = count < ATTACHMENT_CAP && onScreen(el) && (first || chosenAttachments.has(key));
+        el.style.viewTransitionName = keep ? key : "";
+        if (!keep) return;
+        chosenAttachments.add(key);
+        named.add(el);
+        count++;
+      });
+    }
+  };
+
   const clear = () => {
     for (const el of named) el.style.viewTransitionName = "";
     named.clear();
@@ -230,6 +256,7 @@ export function withTransition(doc: Document, apply: () => void) {
 
   nameBubbles();
   nameWords(true);
+  nameAttachments(true);
   d.startViewTransition(() => {
     apply();
     // The bubbles are the change's own output, and the ones `apply` left behind
@@ -239,5 +266,6 @@ export function withTransition(doc: Document, apply: () => void) {
     // of that text.
     nameBubbles();
     nameWords(false);
+    nameAttachments(false);
   }).finished.then(clear, clear);
 }
