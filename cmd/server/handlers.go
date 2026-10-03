@@ -824,6 +824,9 @@ func (s *server) slurp(w http.ResponseWriter, r *http.Request) {
 				"and this page will be built over what that run brings in"))
 		return
 	}
+	// Keep the transcript in the journal too, so a failed button-triggered
+	// ingest remains diagnosable after its HTTP response has gone away.
+	logSweep("manual sweep", out, err)
 	if err != nil {
 		fail(w, http.StatusBadGateway, fmt.Errorf("slurp failed: %w", err))
 		return
@@ -832,9 +835,8 @@ func (s *server) slurp(w http.ResponseWriter, r *http.Request) {
 }
 
 // slurpResponse is the outcome of POST /v1/slurp: the ingest's own text, the
-// per-phase lines the CLI prints. It is returned rather than logged because the
-// page shows it — what was fetched is the reason someone pressed the button,
-// and a phase that found nothing is worth seeing too.
+// per-phase lines the CLI prints. It is returned to the page and logged for
+// diagnosis — a button-triggered run can fail after the response is gone.
 type slurpResponse struct {
 	Report string `json:"report"`
 }

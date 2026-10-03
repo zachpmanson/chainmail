@@ -363,6 +363,20 @@ func (s *server) sweepLoop(ctx context.Context) {
 	}
 }
 
+// logSweep records the output and error from a manual or scheduled ingest.
+func logSweep(source string, out []byte, err error) {
+	transcript := strings.TrimSpace(string(out))
+	if err != nil {
+		if transcript == "" {
+			log.Printf("%s: %v", source, err)
+		} else {
+			log.Printf("%s: %v\n%s", source, err, transcript)
+		}
+		return
+	}
+	log.Printf("%s: %s", source, transcript)
+}
+
 // sweepIfDue runs the ingest if a cadence has elapsed since the last one.
 //
 // A tick that lands while an ingest is already running is dropped rather than
@@ -377,20 +391,11 @@ func (s *server) sweepIfDue(ctx context.Context) {
 		return
 	}
 	out, err := s.slurpOnce(ctx, s.runSweep)
-	switch {
-	case errors.Is(err, errSweepRunning):
+	if errors.Is(err, errSweepRunning) {
 		return
-	case err != nil:
-		transcript := strings.TrimSpace(string(out))
-		if transcript == "" {
-			log.Printf("sweep: %v", err)
-		} else {
-			log.Printf("sweep: %v\n%s", err, transcript)
-		}
-	default:
-		// The transcript goes to the journal, as the timer's log got it: what a
-		// phase found is the reason to read this line at all, and "swept" alone
-		// would be the one thing already known.
-		log.Printf("sweep: %s", strings.TrimSpace(string(out)))
 	}
+	// The transcript goes to the journal, as the timer's log got it: what a
+	// phase found is the reason to read this line at all, and "swept" alone
+	// would be the one thing already known.
+	logSweep("sweep", out, err)
 }

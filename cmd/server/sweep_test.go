@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 )
@@ -66,6 +69,25 @@ func TestStatusShowsAnIngestInFlight(t *testing.T) {
 // A run that stopped at a bound is the one a reader most needs told: the corpus
 // is whole enough to read and short of what the walk was asked for, so the pages
 // built over it are missing mail with nothing on them to say so.
+func TestManualSweepLogsItsFailureTranscript(t *testing.T) {
+	srv, _ := sweepable(t, "")
+	srv.runSlurp = func(context.Context, string) ([]byte, error) {
+		return []byte("slurp\n  mail    FAILED     database disk image is malformed (267)\n"), errors.New("exit status 1")
+	}
+
+	var logs bytes.Buffer
+	previous := log.Writer()
+	log.SetOutput(&logs)
+	t.Cleanup(func() { log.SetOutput(previous) })
+
+	if res := srv.do(t, "POST", "/v1/slurp", nil); res.status != http.StatusBadGateway {
+		t.Fatalf("slurp status = %d, want 502: %s", res.status, res.body)
+	}
+	if got := logs.String(); !strings.Contains(got, "exit status 1") || !strings.Contains(got, "mail    FAILED     database disk image is malformed (267)") {
+		t.Errorf("manual sweep log = %q, want the command error and failed phase transcript", got)
+	}
+}
+
 func TestStatusShowsAnIngestThatStoppedEarly(t *testing.T) {
 	srv, _ := sweepable(t, "")
 	srv.runSlurp = func(context.Context, string) ([]byte, error) {
