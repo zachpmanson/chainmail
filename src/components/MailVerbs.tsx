@@ -149,11 +149,14 @@ export function staleAfterMail(qc: QueryClient): void {
  */
 export function MoveFolder({
   folders,
+  defaultFolder,
   busy,
   onMove,
 }: {
   /** The folders a reader can move to, in the order the dropdown should read. */
   folders: string[];
+  /** A known current folder, shown only when it is also a valid destination. */
+  defaultFolder?: string;
   /** Whether a write is in flight: while it is, the choice is not one to offer. */
   busy: boolean;
   onMove: (folder: string) => void;
@@ -176,7 +179,7 @@ export function MoveFolder({
       <select
         className="ibmove"
         aria-label="Move to a folder"
-        value=""
+        value={defaultFolder && folders.includes(defaultFolder) ? defaultFolder : ""}
         disabled={busy}
         onChange={(e) => {
           const to = e.target.value;

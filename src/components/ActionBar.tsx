@@ -71,10 +71,13 @@ function buildBarSlot(): HTMLElement | null {
 export function ActionBar({
   chosen,
   queries,
+  moveDefault,
   onDone,
 }: {
   /** Root ext ids of the chains to act on, in the order they were ticked. */
   chosen: string[];
+  /** Current folder when the selected rows are known to share one. */
+  moveDefault?: string;
   /**
    * The searches to record on the page, when a search is what found the chains,
    * so a later refresh can propose what the same query would find now. The inbox
@@ -207,6 +210,7 @@ export function ActionBar({
               pick a second time by accident. */}
           <MoveFolder
             folders={moves}
+            defaultFolder={moveDefault}
             busy={busy}
             onMove={(to) => act.mutate({ body: { chains: chosen, action: "move", labels: [to] } })}
           />

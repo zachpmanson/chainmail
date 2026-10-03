@@ -45,6 +45,7 @@ export function ThreadPane({
   label,
   backLabel,
   empty,
+  moveDefault,
   onClose,
 }: {
   /** The thread to read, or null when the page has nothing to show yet. A caller
@@ -55,6 +56,8 @@ export function ThreadPane({
   label: string;
   backLabel: string;
   empty: string;
+  /** Current folder when the pane was opened from a folder-scoped list. */
+  moveDefault?: string;
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -224,6 +227,7 @@ export function ThreadPane({
                 glyph the verbs beside it are drawn as (see MoveFolder). */}
             <MoveFolder
               folders={moves}
+              defaultFolder={moveDefault}
               busy={act.isPending || folders.isPending}
               onMove={(to) =>
                 act.mutate({ body: { chains: [thread.rootExtId], action: "move", labels: [to] } })
