@@ -178,3 +178,262 @@ describe("naming the bubbles a view switch moves", () => {
     expect(named[0]).toBe("entry-0");
   });
 });
+
+
+/**
+ * The other half of a view switch: the text, re-flowed.
+ *
+ * A bubble that moves into the tree is indented, so it is a narrower box and its
+ * lines break somewhere else. A named bubble is morphed as one image, and all the
+ * browser can do with one image of a paragraph is stretch it onto the new box —
+ * the words smear instead of moving to their new lines. So each word is wrapped in
+ * a span of its own and named as well, and the browser has a pair of positions to
+ * move each one between. The rules about which words get a name are the
+ * reference's (box-toggle.html); the promise about a message is that nothing about
+ * it changes except where its words sit.
+ */
+const bodied = (id: string, html: string) => {
+  const el = document.createElement("div");
+  el.className = "msg";
+  el.id = id;
+  const bd = document.createElement("div");
+  bd.className = "bd";
+  bd.innerHTML = html;
+  el.append(bd);
+  document.body.append(el);
+  return { el, bd, cleanup: () => el.remove() };
+};
+
+/** The words a body was wrapped into, in the order the walk found them. */
+const wordsOf = (root: Element | Document) =>
+  [...root.querySelectorAll<HTMLElement>("[data-vtword]")];
+
+/** What each of a bubble's words is currently named. Empty string is a word with
+ *  no name, which is a word the browser will not move on its own. */
+const namesOf = (el: HTMLElement) =>
+  wordsOf(el.querySelector(".bd")!).map((w) => w.style.viewTransitionName);
+
+/** The browser, stubbed: run `body` with the callback the browser would hand it,
+ *  which is what lets a test look before the change, look after it, and step
+ *  between the two passes. */
+const stubbing = (body: (cb: () => void) => void) =>
+  Object.assign(document, {
+    startViewTransition: (cb: () => void) => {
+      body(cb);
+      return { finished: Promise.resolve() };
+    },
+  });
+
+const unstub = () => Object.assign(document, { startViewTransition: undefined });
+
+describe("naming the words a view switch re-flows", () => {
+  it("wraps each word in a span of its own and names it, changing nothing else about the text", async () => {
+    const { el, bd, cleanup } = bodied("entry-0", "<p>one two&nbsp; three</p>");
+    const text = bd.textContent;
+    let before: string[] = [];
+    let after: string[] = [];
+    stubbing((cb) => {
+      before = namesOf(el);
+      cb();
+      after = namesOf(el);
+    });
+    try {
+      withTransition(document, () => {});
+      // one span per word, and the same characters between them: an element
+      // boundary does not change how a run of whitespace is drawn, so the body
+      // still says exactly what it said
+      expect(wordsOf(bd)).toHaveLength(3);
+      expect(bd.textContent).toBe(text);
+      // named before the browser takes its first snapshot, and named again on the
+      // nodes the change left behind — a React-drawn tree makes new bubbles with
+      // fresh, unwrapped bodies, and the second snapshot is taken of those
+      expect(before).toEqual(["entry-0-w-0", "entry-0-w-1", "entry-0-w-2"]);
+      expect(after).toEqual(["entry-0-w-0", "entry-0-w-1", "entry-0-w-2"]);
+      // and the bubble is still named, so the card and the words on it are one
+      // change rather than two
+      expect(el.style.viewTransitionName).toBe("entry-0");
+      // cleared once the transition is over, so a later switch names its own — an
+      // element left named is excluded from the next transition's root snapshot
+      await Promise.resolve();
+      expect(namesOf(el)).toEqual(["", "", ""]);
+      expect(el.style.viewTransitionName).toBe("");
+    } finally {
+      unstub();
+      cleanup();
+    }
+  });
+
+  it("names a word after the bubble it is on, so a re-ordered and re-created body keeps its own names", () => {
+    const a = bodied("entry-0", "<p>alpha beta</p>");
+    const b = bodied("entry-1", "<p>gamma delta</p>");
+    let after: string[] = [];
+    const moved: HTMLElement[] = [];
+    stubbing((cb) => {
+      cb();
+      after = wordsOf(document.body).map((w) => w.style.viewTransitionName);
+    });
+    try {
+      withTransition(document, () => {
+        // What drawing the tree does to the bubbles that move: they change places,
+        // and React draws them as new nodes with new bodies, so the names taken
+        // before the change are on elements that have left the document.
+        const fresh = document.createElement("div");
+        fresh.className = "msg";
+        fresh.id = "entry-1";
+        const body = document.createElement("div");
+        body.className = "bd";
+        body.innerHTML = "<p>gamma delta</p>";
+        fresh.append(body);
+        b.el.replaceWith(fresh);
+        document.body.prepend(fresh);
+        moved.push(fresh);
+      });
+      // A name taken from a place in the document would have paired alpha with
+      // gamma, because the tree reorders the bubbles. Anchored to the bubble, each
+      // word keeps the name its own message gave it.
+      expect(after).toEqual(["entry-1-w-0", "entry-1-w-1", "entry-0-w-0", "entry-0-w-1"]);
+    } finally {
+      unstub();
+      a.cleanup();
+      b.cleanup();
+      moved.forEach((el) => el.remove());
+    }
+  });
+
+  it("names no word that is off the visible page, and takes the name back from one that leaves it", () => {
+    const { el, bd, cleanup } = bodied("entry-0", "<p>one two</p>");
+    // A first switch, only to wrap the body: the spans have to exist before one of
+    // them can be said to be a screen away.
+    stubbing((cb) => cb());
+    withTransition(document, () => {});
+    unstub();
+
+    const two = wordsOf(bd)[1];
+    const far = { top: 99999, bottom: 100000 } as DOMRect;
+    const near = { top: 0, bottom: 0 } as DOMRect;
+    let away = true;
+    two!.getBoundingClientRect = () => (away ? far : near);
+
+    let offscreen: string[] = [];
+    stubbing((cb) => {
+      offscreen = namesOf(el);
+      cb();
+    });
+    try {
+      withTransition(document, () => {});
+      // A named word is drawn above the page, so one that is scrolled out of the
+      // pane would be drawn outside the pane for the length of the switch — worse
+      // than not animating it at all
+      expect(offscreen).toEqual(["entry-0-w-0", ""]);
+    } finally {
+      unstub();
+    }
+
+    // The other rule, from the reference: a word the change takes out of the
+    // visible page loses its name and fades out where it was, rather than flying
+    // to a place the reader cannot see.
+    away = false;
+    let first: string[] = [];
+    let second: string[] = [];
+    stubbing((cb) => {
+      first = namesOf(el);
+      away = true;
+      cb();
+      second = namesOf(el);
+    });
+    try {
+      withTransition(document, () => {});
+      expect(first).toEqual(["entry-0-w-0", "entry-0-w-1"]);
+      expect(second).toEqual(["entry-0-w-0", ""]);
+    } finally {
+      unstub();
+      cleanup();
+    }
+  });
+
+  it("wraps a body written verbatim not at all", () => {
+    const { bd, cleanup } = bodied("entry-0", "<p>a word</p><pre>one  two\nthree</pre>");
+    const text = bd.textContent;
+    stubbing((cb) => cb());
+    try {
+      withTransition(document, () => {});
+      // The paragraph's two words are wrapped. The block's own spacing is markup
+      // drawn as it was written, and a span in the middle of it would be a change
+      // to the rendering rather than to where a word sits.
+      expect(wordsOf(bd).map((w) => w.textContent)).toEqual(["a", "word"]);
+      expect(bd.querySelector("pre")!.textContent).toBe("one  two\nthree");
+      expect(bd.textContent).toBe(text);
+    } finally {
+      unstub();
+      cleanup();
+    }
+  });
+
+  it("wraps a body once, however many times it is switched", async () => {
+    const { el, bd, cleanup } = bodied("entry-0", "<p>one two three</p>");
+    const text = bd.textContent;
+    stubbing((cb) => cb());
+    try {
+      withTransition(document, () => {});
+      withTransition(document, () => {});
+      withTransition(document, () => {});
+      // The wraps are left in place rather than taken out when the transition
+      // ends: they are what makes the next switch cheap, and a span with no rule
+      // on it is the word it contains, in the line it was always in.
+      await Promise.resolve();
+      expect(wordsOf(bd)).toHaveLength(3);
+      expect(bd.textContent).toBe(text);
+      expect(el.style.viewTransitionName).toBe("");
+    } finally {
+      unstub();
+      cleanup();
+    }
+  });
+
+  it("leaves the bodies whole where the reader asked for no motion", () => {
+    const { bd, cleanup } = bodied("entry-0", "<p>one two</p>");
+    const realMatch = window.matchMedia;
+    Object.assign(window, {
+      matchMedia: (q: string) => ({
+        matches: q.includes("prefers-reduced-motion"),
+        media: q,
+        addEventListener() {},
+        removeEventListener() {},
+      }),
+    });
+    stubbing((cb) => cb());
+    try {
+      withTransition(document, () => {});
+      // nothing is wrapped on that path: a reader who wants no motion is not a
+      // reader who wants their message bodies taken apart for an animation that
+      // will not be drawn
+      expect(wordsOf(bd)).toHaveLength(0);
+      expect(bd.querySelector("p")!.textContent).toBe("one two");
+    } finally {
+      Object.assign(window, { matchMedia: realMatch });
+      unstub();
+      cleanup();
+    }
+  });
+
+  it("stops naming words after four hundred of them, and wraps the rest", () => {
+    const many = Array.from({ length: 450 }, (_, i) => `w${i}`).join(" ");
+    const { bd, cleanup } = bodied("entry-0", `<p>${many}</p>`);
+    stubbing((cb) => cb());
+    try {
+      withTransition(document, () => {});
+      const spans = wordsOf(bd);
+      // all of them wrapped, so the next switch finds words rather than text and
+      // pays nothing to read them again
+      expect(spans).toHaveLength(450);
+      // but only the first four hundred named: each name is a snapshot and an
+      // animation of its own, and past that the switch stops being a switch
+      expect(spans.filter((w) => w.style.viewTransitionName !== "")).toHaveLength(400);
+      expect(spans[399]!.style.viewTransitionName).toBe("entry-0-w-399");
+      expect(spans[400]!.style.viewTransitionName).toBe("");
+    } finally {
+      unstub();
+      cleanup();
+    }
+  });
+});
