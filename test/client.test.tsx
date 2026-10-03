@@ -1102,7 +1102,11 @@ describe("the site navigation", () => {
     expect(button.closest(".navright")).toBeTruthy();
     expect(button.closest("header.sitehead")).toBeTruthy();
     click(button);
-    expect(await screen.findByRole("dialog")).toBeTruthy();
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.querySelectorAll("button").length).toBeGreaterThan(0);
+    for (const modalButton of dialog.querySelectorAll("button")) {
+      expect(modalButton.className).toContain("opbtn");
+    }
   });
 
   it("names the site, and that name is the link home", async () => {
