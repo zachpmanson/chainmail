@@ -29,6 +29,7 @@ import { NavReading } from "./components/NavReading";
 import { NavRefresh } from "./components/NavRefresh";
 import { AutoRefresh } from "./components/AutoRefresh";
 import { NavSearch } from "./components/NavSearch";
+import { ComposeBox } from "./components/ComposeBox";
 import type { SearchMode } from "./lib/api";
 
 /**
@@ -122,6 +123,7 @@ function SignInBar() {
 
 /** The full screen is the app shell; this root owns the legacy ways in. */
 function RootLayout() {
+  const [composing, setComposing] = useState(false);
   // ?spec= is read from the router's location, not declared on any route, so
   // it passes through on any path without a route schema having to know it.
   const specParam = useRouterState({
@@ -247,6 +249,7 @@ function RootLayout() {
                 nothing, and is mounted by the shell so every page has it. */}
             <AutoRefresh />
             <NavRefresh />
+            <button type="button" className="navrefresh" onClick={() => setComposing(true)}>Compose</button>
             <NavSearch />
           </span>
         </nav>
@@ -259,6 +262,7 @@ function RootLayout() {
       <SignInBar />
       </> : null}
       <Outlet />
+      {composing ? <ComposeBox onClose={() => setComposing(false)} /> : null}
       {/* What a write leaves to say, over everything and out of the flow of any
           page: an account of work that is over must not take a row from the mail
           being read, and a refusal must not be scrolled away from (see Toasts). */}

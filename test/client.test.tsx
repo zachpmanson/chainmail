@@ -1093,6 +1093,18 @@ describe("the site navigation", () => {
     expect(document.querySelector("footer")).toBeNull();
   });
 
+  it("opens Compose from a button styled and placed with the nav controls", async () => {
+    handler = () => json(200, { signed_in: true });
+    await mountApp("/");
+
+    const button = screen.getByRole("button", { name: "Compose" });
+    expect(button.className).toContain("navrefresh");
+    expect(button.closest(".navright")).toBeTruthy();
+    expect(button.closest("header.sitehead")).toBeTruthy();
+    click(button);
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+  });
+
   it("names the site, and that name is the link home", async () => {
     handler = () => json(200, { signed_in: true });
     // A page away from home, so the brand is not simply where we already are.

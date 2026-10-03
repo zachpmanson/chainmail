@@ -10,7 +10,6 @@ import { ThreadRow } from "./ThreadRow";
 import { Failure, type PreviewableThread } from "./ThreadPreview";
 import { SplitPane } from "./SplitPane";
 import { CompactListHeader } from "./CompactListControls";
-import { ComposeBox } from "./ComposeBox";
 
 /**
  * The home page with nothing asked of it: the corpus in the order it arrived,
@@ -156,7 +155,6 @@ function Folders({
 }
 
 export function Inbox() {
-  const [composing, setComposing] = useState(false);
   const navigate = useNavigate();
   const [compact] = useCompactMode();
   const [chosen, setChosen] = useState<string[]>([]);
@@ -344,8 +342,6 @@ export function Inbox() {
 
   return (
     <div className="wrap ibwrap">
-      <div className="compose-launch"><button type="button" onClick={() => setComposing(true)}>Compose</button></div>
-      {composing ? <ComposeBox onClose={() => setComposing(false)} /> : null}
       {/* A failure with nothing to show is the whole page's; one with rows already
           on screen belongs at the end of the list, where the reader is. */}
       {inbox.isError && !inbox.data ? <Failure error={inbox.error} /> : null}
