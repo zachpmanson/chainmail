@@ -126,7 +126,7 @@
      panel, and the row is the bar's height exactly. A `padding-top` of a couple of
      pixels used to live here, which is what made the nav's row a hair taller
      than the bar that replaces it. */
-  .navright { --navgap:1.1rem; margin-left:auto; display:flex; align-items:center;
+  .navright { --navgap:.85rem; margin-left:auto; display:flex; align-items:center;
     gap:var(--navgap); flex-wrap:nowrap; justify-content:flex-end;
     padding-right:calc(12rem + var(--navgap)); }
   /* Shut: a field showing what the address asks, and the whole of the search. The
@@ -305,6 +305,7 @@
   .navrefresh, .navcancel { flex:none; display:inline-flex; align-items:center;
     justify-content:center; padding:.25rem .3rem; border:1px solid transparent;
     border-radius:6px; background:none; color:var(--muted); font:inherit; cursor:pointer; }
+  .navrefresh { gap:.35rem; }
   .navrefresh:hover, .navcancel:hover { color:var(--accent); border-color:var(--line);
     background:var(--card); }
   .navrefresh.warn { color:var(--accent); }
