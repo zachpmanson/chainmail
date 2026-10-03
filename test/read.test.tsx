@@ -404,10 +404,10 @@ describe("what a thread's read state looks like", () => {
     // Inbox is the current folder, not a move destination. It stays selected as
     // context but is disabled; other folders remain immediate move choices.
     expect([...move.options].map((o) => o.textContent)).toEqual([
-      "Move…",
       "Inbox (current folder)",
       "Work",
     ]);
+    expect(screen.queryByRole("option", { name: "Move…" })).toBeNull();
     expect(move.value).toBe("INBOX");
 
     fireEvent.change(move, { target: { value: "Work" } });
