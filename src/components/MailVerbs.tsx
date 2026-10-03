@@ -141,10 +141,11 @@ export function staleAfterMail(qc: QueryClient): void {
  * what a keyboard and a screen reader expect from a choice of folders. Clicking the
  * glyph is clicking the select.
  *
- * The choice is the action and the control keeps its placeholder, because where the
- * mail has gone is not a state either row can hold: the mail has gone, and the
- * sentence beside it says where. The name is on both the box (the tooltip) and the
- * select (what a screen reader reads), so the icon is never a picture standing where
+ * When the current folder is known it is selected directly, so a placeholder would
+ * only be a spurious extra choice. Without that context, the placeholder keeps the
+ * control legible before a destination is chosen. The name is on both the box (the
+ * tooltip) and the select (what a screen reader reads), so the icon is never a
+ * picture standing where
  * a control should be.
  */
 export function MoveFolder({
@@ -155,7 +156,7 @@ export function MoveFolder({
 }: {
   /** The folders a reader can move to, in the order the dropdown should read. */
   folders: string[];
-  /** A known current folder, shown only when it is also a valid destination. */
+  /** The current folder, selected directly and shown disabled if not a destination. */
   defaultFolder?: string;
   /** Whether a write is in flight: while it is, the choice is not one to offer. */
   busy: boolean;
@@ -186,7 +187,7 @@ export function MoveFolder({
           if (to) onMove(to);
         }}
       >
-        <option value="">Move…</option>
+        {!defaultFolder ? <option value="">Move…</option> : null}
         {defaultFolder && !folders.includes(defaultFolder) ? (
           <option value={defaultFolder} disabled>
             {defaultFolder === "INBOX" ? "Inbox" : defaultFolder} (current folder)
