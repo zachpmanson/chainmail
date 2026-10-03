@@ -188,6 +188,16 @@ export function ThreadPane({
                 numbers beside it and the controls that act on the mailbox stay
                 together at the end of the line, where the read circle is the
                 outermost of them on every thread (see .ibread-read). */}
+            <a
+              className="ibicon"
+              aria-label="Open in new window"
+              title="Open in new window"
+              href={`/?open=${encodeURIComponent(thread.rootExtId)}`}
+              target="_blank"
+              rel="noopener"
+            >
+              <OpenWindowGlyph />
+            </a>
             <button
               type="button"
               className="ibicon ibtree"
@@ -335,6 +345,27 @@ function treeLabel(on: boolean): string {
  *  those — the three levels the tree draws, in the four lines a 14px glyph has
  *  room for. Drawn with the same stroke and the same box as the two verbs beside
  *  it rather than as a filled shape, so the strip stays one kind of thing. */
+function OpenWindowGlyph() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M9 2h5v5" />
+      <path d="M14 2 7 9" />
+      <path d="M12 9v4a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h4" />
+    </svg>
+  );
+}
+
 function TreeGlyph() {
   return (
     <svg

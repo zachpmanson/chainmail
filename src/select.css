@@ -597,6 +597,7 @@
 .ibread-head .ibicon { flex:none; display:inline-flex; align-items:center;
   padding:.25rem .3rem; border:1px solid transparent; border-radius:6px; background:none;
   color:var(--muted); cursor:pointer; }
+.ibread-head a.ibicon { text-decoration:none; }
 .ibread-head .ibicon svg { display:block; }
 .ibread-head .ibicon:hover:not(:disabled) { color:var(--accent); border-color:var(--line);
   background:var(--card); }

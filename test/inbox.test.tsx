@@ -799,6 +799,28 @@ describe("the home page with no query", () => {
     );
   });
 
+  it.each([
+    ["inbox", `/?open=${encodeURIComponent("mail:<loom-cutover-1@example.fed>")}`],
+    ["search", `/?q=cutover&open=${encodeURIComponent("mail:<loom-cutover-1@example.fed>")}`],
+  ])(
+    "offers an accessible new-window link from %s without changing the current route",
+    async (_surface, url) => {
+      handler = buildHandler;
+      const router = await mountApp(url);
+      await waitFor(() => expect(within(pane()).getByText(/Roof access is fine from the 14th/)).toBeTruthy());
+
+      const link = within(pane()).getByRole("link", { name: "Open in new window" }) as HTMLAnchorElement;
+      expect(link.getAttribute("href")).toBe(
+        `/?open=${encodeURIComponent("mail:<loom-cutover-1@example.fed>")}`,
+      );
+      expect(link.target).toBe("_blank");
+      expect(link.rel).toBe("noopener");
+      // It is an ordinary link: rendering it does not replace the inbox or search
+      // address, and the browser opens the stable thread URL in a separate context.
+      expect(router.state.location.href).toBe(url);
+    },
+  );
+
   it("opens the thread the address names, without a click", async () => {
     handler = buildHandler;
     await mountApp(`/?open=${encodeURIComponent("mail:<loom-cutover-1@example.fed>")}`);
