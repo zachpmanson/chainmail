@@ -1,6 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { $api, type PersonSummary, type ServiceStatus, type Stats } from "../lib/api";
 import { when } from "../lib/stamp";
+import { useCompactMode } from "../lib/compactMode";
+import { CompactModeToggle } from "./CompactListControls";
 import { Palette } from "./Palette";
 
 function errText(e: unknown): string {
@@ -191,6 +193,7 @@ function CorpusStats({ s }: { s: Stats }) {
  */
 export function SettingsView() {
   const queryClient = useQueryClient();
+  const [compact, setCompact] = useCompactMode();
   const status = $api.useQuery("get", "/v1/status", {});
   const stats = $api.useQuery("get", "/v1/stats", {});
   const settings = $api.useQuery("get", "/v1/settings", {});
@@ -357,6 +360,11 @@ export function SettingsView() {
             the value is a name that may carry the aliases behind it, and an
             unusually long one must not be what sets the width of the column it is
             read in. */}
+        <dt>Thread list</dt>
+        <dd>
+          <CompactModeToggle compact={compact} onChange={setCompact} />
+        </dd>
+        <dd className="sttail">Show one line per thread.</dd>
         <dt>Your mail comes from</dt>
         <dd>
           <select
