@@ -294,10 +294,26 @@ const planBody = () => box()!.querySelector(".replytext, .replyhtml");
  *  the preview is showing, which is the thing the message that leaves has to agree
  *  with. `list` names which field, because who is in to and who is in cc is half of
  *  what the reader arranged. */
-const chips = (list: "to" | "cc") =>
-  [...box()!.querySelectorAll<HTMLElement>(`.addrfield[data-list="${list}"] .addrname`)].map(
-    (c) => c.textContent!,
-  );
+const chips = (list: "to" | "cc") => {
+  // The editors start collapsed (see ReplyBox), so reading the fields is a reader
+  // pressing the summary first. Helpers reveal rather than assume, because every
+  // test below is about what the fields do once they are open; the test above
+  // asserts the collapsed state itself.
+  revealRecipients();
+  return [
+    ...box()!.querySelectorAll<HTMLElement>(`.addrfield[data-list="${list}"] .addrname`),
+  ].map((c) => c.textContent!);
+};
+/** The collapsed recipient line: the read-only summary and the press that opens
+ *  the editors. Drawn until the reader asks to edit, which is the default the
+ *  first test pins. */
+const recipientSummary = () => box()!.querySelector(".replysummary") as HTMLElement | null;
+/** Open the recipient editors, as a reader does: the one press the collapsed line
+ *  is. A no-op once they are open, so a helper may call it freely. */
+const revealRecipients = () => {
+  const s = recipientSummary();
+  if (s) fireEvent.click(s);
+};
 /** One address's chip in one list, by the address it prints: the plan's control is
  *  one chip per address, so a test names the address and not a position. */
 const chipOf = (list: "to" | "cc", address: string) =>
@@ -308,8 +324,10 @@ const chipOf = (list: "to" | "cc", address: string) =>
 const chipX = (list: "to" | "cc", address: string) =>
   within(chipOf(list, address)).getByRole("button", { name: /^remove / });
 /** The field for a list: the input an address is typed into. */
-const addressField = (list: "to" | "cc") =>
-  screen.getByLabelText(`${list} addresses`) as HTMLInputElement;
+const addressField = (list: "to" | "cc") => {
+  revealRecipients();
+  return screen.getByLabelText(`${list} addresses`) as HTMLInputElement;
+};
 /** Type into a field, as a reader does — the field's own change, which is what
  *  opens the suggestions. */
 const type = (list: "to" | "cc", text: string) =>
@@ -375,7 +393,36 @@ describe("answering a message from the pane", () => {
     await mountApp();
     await openThread();
 
+    // The recipient editors start collapsed: a read-only line naming the audience,
+    // printed the way the message header prints its own receipt, and no field to
+    // arrange. The summary is the whole of what a reader sees of To/Cc until they
+    // ask to change it, so it has to name who the reply reaches.
+    await waitFor(() => expect(recipientSummary()!.textContent).toContain("Bo Halvorsen"));
+    expect(recipientSummary()!.textContent).toContain("to:Bo Halvorsen");
+    expect(recipientSummary()!.textContent).toContain(", cc Cy Okafor");
+    expect(recipientSummary()!.textContent).toContain("Carl Nkemdirim");
+    expect(recipientSummary()!.getAttribute("aria-expanded")).toBe("false");
+    // A real button, so it is reachable and activatable from the keyboard rather
+    // than only by a pointer, and it says in words what pressing it does and what
+    // the line currently holds — the names inside it are spans, so a screen reader
+    // is not left to read a run of names with no words around them.
+    expect(recipientSummary()!.tagName).toBe("BUTTON");
+    const edit = within(box()!).getByRole("button", { name: /Edit the recipients on this reply/ });
+    expect(edit.getAttribute("aria-label")).toContain("to Bo Halvorsen");
+    expect(edit.getAttribute("aria-label")).toContain("cc Cy Okafor");
+    expect(screen.queryByLabelText("to addresses")).toBeNull();
+    expect(screen.queryByLabelText("cc addresses")).toBeNull();
+    expect(box()!.querySelectorAll(".addrfield")).toHaveLength(0);
+    // The anchor to the message being answered stays on the line while collapsed,
+    // and the press that opens the editors is the line itself.
+    expect(
+      within(box()!).getByRole("link", { name: /Jump to the message being replied to: Bo Halvorsen/ }),
+    ).toBeTruthy();
+
     await waitFor(() => expect(chips("to")).toEqual(["Bo Halvorsen <bo@fjordline.example>"]));
+    // Opened, the editors are the fields they always were, and the collapsed line
+    // is gone; the anchor stays where it was, on the to row (asserted below).
+    expect(recipientSummary()).toBeNull();
     expect(chips("cc")).toEqual([
       "Cy Okafor <cy@loomworks.example>",
       "Carl Nkemdirim <carl@example.net>",
