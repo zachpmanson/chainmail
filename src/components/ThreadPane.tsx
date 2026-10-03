@@ -192,9 +192,20 @@ export function ThreadPane({
               className="ibicon"
               aria-label="Open in new window"
               title="Open in new window"
-              href={`/?open=${encodeURIComponent(thread.rootExtId)}`}
+              href={`/?open=${encodeURIComponent(thread.rootExtId)}&popup=1`}
               target="_blank"
               rel="noopener"
+              onClick={(event) => {
+                // This action is specifically a popup, not a second copy of the
+                // full app in a tab. If the browser blocks popups, do not fall
+                // back to navigating this window or opening a tab.
+                event.preventDefault();
+                window.open(
+                  event.currentTarget.href,
+                  "_blank",
+                  "popup=yes,width=900,height=800,resizable=yes,scrollbars=yes,noopener",
+                );
+              }}
             >
               <OpenWindowGlyph />
             </a>

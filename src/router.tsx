@@ -15,6 +15,7 @@ import { normalise } from "./lib/normalise";
 import { $api } from "./lib/api";
 import { SelectView } from "./components/Select";
 import { Inbox } from "./components/Inbox";
+import { ThreadPopup } from "./components/ThreadPopup";
 import { ViewPage } from "./components/ViewPage";
 import { NotFound } from "./components/NotFound";
 import { Rendered } from "./components/Rendered";
@@ -79,6 +80,8 @@ export interface SearchParams {
    *  to that thread rather than to the top of the list. Optional, so `/` is the
    *  inbox with nothing open yet. */
   open?: string;
+  /** Render a focused thread-only page intended for a script-sized popup. */
+  popup?: string;
 }
 
 const isMode = (m: unknown): m is SearchMode =>
@@ -92,6 +95,9 @@ function validateSearchParams(search: Record<string, unknown>): SearchParams {
     since: typeof search.since === "string" ? search.since : undefined,
     label: typeof search.label === "string" ? search.label : undefined,
     open: typeof search.open === "string" ? search.open : undefined,
+    // TanStack's default search parser JSON-decodes numeric values, so the
+    // URL `?popup=1` arrives as the number 1 rather than the string "1".
+    popup: search.popup === 1 ? "1" : typeof search.popup === "string" ? search.popup : undefined,
   };
 }
 
@@ -128,6 +134,12 @@ function RootLayout() {
   // on the search route gets a way back ("← choose chains"), one dropped on a
   // page route just is.
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const popup = useRouterState({
+    select: (s) => {
+      const popup = (s.location.search as Record<string, unknown>).popup;
+      return popup === "1" || popup === 1;
+    },
+  });
 
   // ?spec=<file>: load the static spec once per URL. A blanking spec param
   // (navigation away) clears it, and an in-flight load is cancelled rather
@@ -202,6 +214,7 @@ function RootLayout() {
           said nothing the nav did not. It is also the way home, so there is no
           separate Home link beside it. A built page keeps its own title — that
           one is the page's, not the site's. */}
+      {!popup ? <>
       <header className="sitehead">
         {/* The nav's items travel as one element so that the bar can replace all
             of them at once: the row is the bar's while a selection stands, and
@@ -244,6 +257,7 @@ function RootLayout() {
         <div className="buildslot" />
       </header>
       <SignInBar />
+      </> : null}
       <Outlet />
       {/* What a write leaves to say, over everything and out of the flow of any
           page: an account of work that is over must not take a row from the mail
@@ -271,6 +285,13 @@ const rootRoute = createRootRoute({
  */
 function Home() {
   const urlSearch = useSearch({ from: "/" });
+  if (urlSearch.popup === "1") {
+    return urlSearch.open ? (
+      <ThreadPopup rootExtId={urlSearch.open} />
+    ) : (
+      <main className="thread-popup"><p>No thread was specified.</p></main>
+    );
+  }
   // A question is being asked when the address carries something to ask — a
   // query, a person, or a date. An **empty** one is not a question: the nav's box
   // is opened and cleared in place now, so `?q=` (or a query of spaces) is a box
