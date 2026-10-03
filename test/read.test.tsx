@@ -122,6 +122,7 @@ const server = (
   /** The thread the pane opens, for a test that needs an entry the shared body
    *  above does not have. Absent is the shared one, unchanged. */
   chain?: () => Response,
+  defaultFolder?: string,
 ): Handler => (c) => {
   const p = pathOf(c);
   if (p === "/v1/search") return search();
@@ -136,7 +137,7 @@ const server = (
   if (p === "/v1/labels") {
     return json(200, { labels: [{ name: "INBOX", messages: 5 }, { name: "Work", messages: 2 }] });
   }
-  if (p === "/v1/settings") return json(200, {});
+  if (p === "/v1/settings") return json(200, defaultFolder ? { defaultFolder } : {});
   // The corpus's identity graph, for the hover titles on names. Only the two people
   // this thread was addressed to are in it with an address: they sent nothing, so
   // the thread read carries no address for them (see castOfEntries), and the graph
@@ -394,14 +395,20 @@ describe("what a thread's read state looks like", () => {
     // the reader is looking at it, so the head has to keep the subject and the counts
     // the row had: a move that turned the thread into "(no subject)" would be the one
     // action that took the mail away from the person reading it.
-    handler = server(page([thread({ unread: 0 })]));
+    handler = server(page([thread({ unread: 0 })]), undefined, undefined, undefined, "INBOX");
     await mountApp();
     await openRow();
     await waitFor(() => expect(pane().querySelector(".ibread-subj")?.textContent).toBe("Loom cutover schedule"));
 
     const move = (await screen.findByLabelText("Move to a folder")) as HTMLSelectElement;
-    // The inbox is not offered: a move whose destination is where it is leaving.
-    expect([...move.options].map((o) => o.textContent)).toEqual(["Move…", "Work"]);
+    // Inbox is the current folder, not a move destination. It stays selected as
+    // context but is disabled; other folders remain immediate move choices.
+    expect([...move.options].map((o) => o.textContent)).toEqual([
+      "Move…",
+      "Inbox (current folder)",
+      "Work",
+    ]);
+    expect(move.value).toBe("INBOX");
 
     fireEvent.change(move, { target: { value: "Work" } });
     await waitFor(() => expect(mails()).toHaveLength(1));
@@ -411,12 +418,12 @@ describe("what a thread's read state looks like", () => {
       labels: ["Work"],
     });
 
-    // The head still describes the thread, and the control has not moved off its
-    // placeholder: a folder named in it is a folder the reader could pick twice.
+    // The head still describes the thread, and the default remains the folder
+    // context rather than pretending the destination just chosen is its new state.
     await new Promise((res) => setTimeout(res, 20));
     expect(pane().querySelector(".ibread-subj")?.textContent).toBe("Loom cutover schedule");
     expect(pane().textContent).not.toContain("(no subject)");
-    expect(move.value).toBe("");
+    expect(move.value).toBe("INBOX");
   });
 
   it("offers the other state, and asks the server for it", async () => {
