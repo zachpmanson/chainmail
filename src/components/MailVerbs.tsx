@@ -179,7 +179,7 @@ export function MoveFolder({
       <select
         className="ibmove"
         aria-label="Move to a folder"
-        value={defaultFolder && folders.includes(defaultFolder) ? defaultFolder : ""}
+        value={defaultFolder ?? ""}
         disabled={busy}
         onChange={(e) => {
           const to = e.target.value;
@@ -187,6 +187,11 @@ export function MoveFolder({
         }}
       >
         <option value="">Move…</option>
+        {defaultFolder && !folders.includes(defaultFolder) ? (
+          <option value={defaultFolder} disabled>
+            {defaultFolder === "INBOX" ? "Inbox" : defaultFolder} (current folder)
+          </option>
+        ) : null}
         {folders.map((name) => (
           <option key={name} value={name}>
             {name}
