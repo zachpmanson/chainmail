@@ -729,9 +729,15 @@
    container is all this file provides, and it is the modal's arrangement (see
    .selpv-thread): the pane is a column, its head a row of it, and the mail scrolls
    beneath — so the subject and the controls stay while the thread scrolls, exactly
-   as they do beside a list. */
-.thread-popup { width:min(100%, 58rem); margin:0 auto; height:100vh;
-  display:flex; flex-direction:column;
+   as they do beside a list.
+
+   The window is the reader's width, because the pane's is: this started as a padded
+   page centred on a reading measure (`width:min(100%, 58rem)`), and a pane has no
+   such measure — `.ibread` fills whatever the split gives it, and a window dragged
+   wide is a reader asking for a wide thread, not for a column with margins. The cap
+   only ever showed above 928px, which is why it outlived the padding it was drawn
+   with. */
+.thread-popup { height:100vh; display:flex; flex-direction:column;
   /* The pane keeps the insets it has beside a list, at every width of this window.
      Those are the split's, and the split is what defines the divider width the
      pane's head is painted from (see .ibsplit); a popup has no split, so the width
