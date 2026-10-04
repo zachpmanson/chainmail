@@ -10,6 +10,8 @@ import { ThreadRow } from "./ThreadRow";
 import { Failure, type PreviewableThread } from "./ThreadShared";
 import { SplitPane } from "./SplitPane";
 import { CompactListHeader } from "./CompactListControls";
+import { ComposeBox } from "./ComposeBox";
+import { useCompose } from "./ComposeContext";
 
 /**
  * The home page with nothing asked of it: the corpus in the order it arrived,
@@ -156,6 +158,7 @@ function Folders({
 
 export function Inbox() {
   const navigate = useNavigate();
+  const { composing, closeCompose } = useCompose();
   const [compact] = useCompactMode();
   const [chosen, setChosen] = useState<string[]>([]);
   // Dropping the ticks is one action, wherever it is asked for from: the bar's
@@ -360,7 +363,7 @@ export function Inbox() {
       ) : null}
 
       <SplitPane
-        hasChoice={Boolean(opened)}
+        hasChoice={composing || Boolean(opened)}
         list={
           <>
             <Folders
@@ -407,7 +410,7 @@ export function Inbox() {
             </div>
           </>
         }
-        pane={
+        pane={composing ? <ComposeBox onClose={closeCompose} /> : (
           <ThreadPane
             thread={selected}
             label="The selected thread"
@@ -416,7 +419,7 @@ export function Inbox() {
             moveDefault={label}
             onClose={closeChain}
           />
-        }
+        )}
       />
 
       {/* The bar of things to do with the ticked chains, which appears once

@@ -89,5 +89,5 @@ export function ComposerFlow({
   );
 
   if (variant === "reply") return <div className="replybox" ref={containerRef}>{content}</div>;
-  return <aside className="compose-panel" aria-label="Compose email">{content}</aside>;
+  return <aside className="ibread compose-panel" aria-label="Compose email">{content}</aside>;
 }
