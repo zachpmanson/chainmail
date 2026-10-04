@@ -786,6 +786,59 @@ describe("the home page with no query", () => {
     expect(screen.getByRole("button", { name: "Fence panels" }).getAttribute("aria-current")).toBeNull();
   });
 
+  it("dismisses the compose panel when a mail is picked", async () => {
+    // The pane holds one thing, and a click on a row is a request to read it: a
+    // reader who was writing a message and then picked a mail got the thread they
+    // clicked, not the panel they had left open over it. The panel's own Close is
+    // the other direction, for the reader who wants the mail they had open back.
+    handler = buildHandler;
+    const router = await mountApp("/");
+    await screen.findByText("Loom cutover schedule");
+
+    click(screen.getByRole("button", { name: "Compose" }));
+    expect(await screen.findByRole("complementary", { name: "Compose email" })).toBeTruthy();
+
+    click(screen.getByRole("button", { name: "Loom cutover schedule" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("complementary", { name: "Compose email" })).toBeNull(),
+    );
+    await waitFor(() =>
+      expect(within(pane()).getByText(/Roof access is fine from the 14th/)).toBeTruthy(),
+    );
+    expect(router.state.location.search.open).toBe("mail:<loom-cutover-1@example.fed>");
+  });
+
+  it("takes the pane back from the compose panel when the row it holds is clicked", async () => {
+    // A row the pane is already reading has nothing to open (see ThreadRow's
+    // press), so the click had to be about something else — and with a compose
+    // panel in the pane there was something else: the panel is what the reader
+    // was looking at, and the row is what they asked for. The address is not
+    // pushed again, because the click chose no other thread.
+    handler = buildHandler;
+    const router = await mountApp(`/?open=${encodeURIComponent("mail:<loom-cutover-1@example.fed>")}`);
+    await waitFor(() =>
+      expect(within(pane()).getByText(/Roof access is fine from the 14th/)).toBeTruthy(),
+    );
+    // No row claims to be the pane's while the compose panel is in it: the pane
+    // is showing the panel, and a row marked current under it would be the list
+    // saying a thread is on screen that is not.
+    const row = await screen.findByRole("button", { name: "Loom cutover schedule" });
+    click(screen.getByRole("button", { name: "Compose" }));
+    expect(await screen.findByRole("complementary", { name: "Compose email" })).toBeTruthy();
+    expect(row.getAttribute("aria-current")).toBeNull();
+
+    const before = router.state.location.href;
+    click(row);
+    await waitFor(() =>
+      expect(screen.queryByRole("complementary", { name: "Compose email" })).toBeNull(),
+    );
+    await waitFor(() =>
+      expect(within(pane()).getByText(/Roof access is fine from the 14th/)).toBeTruthy(),
+    );
+    expect(row.getAttribute("aria-current")).toBe("true");
+    expect(router.state.location.href).toBe(before);
+  });
+
   it("writes the open thread into the address, so a reload lands on it", async () => {
     handler = buildHandler;
     const router = await mountApp("/");
