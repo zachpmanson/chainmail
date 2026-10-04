@@ -732,11 +732,26 @@
    as they do beside a list. */
 .thread-popup { width:min(100%, 58rem); margin:0 auto; height:100vh;
   display:flex; flex-direction:column;
-  /* The pane's head is painted from the split's own divider width (see
-     .ibread-head). A popup has no split, so the divider is nothing and the head
-     keeps its own padding at every width. */
-  --divider:0rem; }
+  /* The pane keeps the insets it has beside a list, at every width of this window.
+     Those are the split's, and the split is what defines the divider width the
+     pane's head is painted from (see .ibsplit); a popup has no split, so the width
+     is named here with the split's own sum rather than left undefined — which is
+     what the head's own rule asks for, and what keeps the subject and the Close
+     control inset the way the messages under them are. */
+  --divider:calc(.45rem + .55rem / 2); }
 .thread-popup > .ibread { display:flex; flex:1 1 auto; flex-direction:column; min-height:0; }
+/* The pane's two insets, at every width. The split's block gives them to the pane
+   when both columns fit (≥60rem), and this window is 900px by default — under it.
+   But that block is asking whether the *page* has room for a list beside the pane,
+   and a window has no page around it: the base rules are drawn for the narrow
+   stack, where the pane is flush and `.wrap` carries the gutter for the page it is
+   the whole of. A popup is a reading window with no wrapper above it, so without
+   these two rules the thread's cards run to the window's edges and the head sits
+   nearer the wall than they do. Same numbers, one source: the head keeps its own
+   `.7rem` plus the pane's divider offset, and the stream keeps the page's gutter
+   off both walls. */
+.thread-popup .ibread-head { padding:.5rem calc(.7rem + var(--divider)); }
+.thread-popup .ibreadwrap > .stream { padding-left:1.25rem; padding-right:1.25rem; }
 .thread-popup .ibread-head { flex:none; }
 .thread-popup .ibreadwrap { min-height:0; }
 /* The pane's way back is the way out here: the list "← List" returns to is the
@@ -745,8 +760,9 @@
    popup has no list at any width, so it stays. */
 .thread-popup .ibback { display:inline-block; }
 /* The one thing the popup says without a pane: an address that names no thread
-   still has to say so (see router.tsx). Read like the pane's own empty line. */
-.thread-popup > p { margin:.7rem .8rem 0; font-size:.78rem; color:var(--muted); }
+   still has to say so (see router.tsx). Read like the pane's own empty line, and
+   set in from the walls by the thread's own gutter so the two line up. */
+.thread-popup > p { margin:.6rem 1.25rem 0; font-size:.78rem; color:var(--muted); }
 /* No `scroll-margin-top` any more: the head is not over the thread's scroll (see
    .ibread-head), so a landed message has nothing to be landed below. */
 .ibread .selnote { margin:.7rem .8rem 0; /* The pane is a column, and .selnote is written to fill a row of the search
