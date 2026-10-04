@@ -884,32 +884,54 @@ describe("the home page with no query", () => {
     handler = buildHandler;
     await mountApp(`/?open=${encodeURIComponent("mail:<loom-cutover-1@example.fed>")}&popup=1`);
 
-    expect(await screen.findByRole("heading", { name: "Loom cutover schedule" })).toBeTruthy();
+    // The subject is the pane's own line, not a heading of the popup's: the popup
+    // is the reading pane (see ThreadPane), and the pane names the thread in its
+    // head. It arrives from the chain read, since a popup opened from an address
+    // knows only the id.
+    await waitFor(() =>
+      expect(document.querySelector(".thread-popup .ibread-subj")?.textContent).toBe(
+        "Loom cutover schedule",
+      ),
+    );
     expect(await screen.findByText(/Roof access is fine from the 14th/)).toBeTruthy();
     expect(screen.queryByRole("navigation")).toBeNull();
     expect(screen.queryByRole("link", { name: /Inbox/i })).toBeNull();
   });
 
-  it("keeps the popup's head out of the thread's scroll", async () => {
+  it("reads the popup with the pane the inbox reads beside its list", async () => {
     handler = buildHandler;
     await mountApp(`/?open=${encodeURIComponent("mail:<loom-cutover-1@example.fed>")}&popup=1`);
 
-    // The head is a row of the window and the thread scrolls in a box of its own
-    // beneath it — the reading pane's arrangement (see .ibread-head/.ibreadwrap)
-    // — so a long thread cannot take the subject or Close off the screen. jsdom
-    // lays nothing out, so the claim is the structure: the head is a sibling of
-    // the scroll box, not a line inside it.
-    const header = (await screen.findByRole("heading", { name: "Loom cutover schedule" })).closest(
-      "header",
-    )!;
-    const body = document.querySelector(".thread-popup-body");
-    expect(body).not.toBeNull();
-    expect(header.contains(body!)).toBe(false);
-    expect(header.parentElement).toBe(body!.parentElement);
-    // And the thread is what is in the scroll box, not left behind in the head.
-    expect(body!.querySelector(".stream")).not.toBeNull();
-    expect(await screen.findByText(/Roof access is fine from the 14th/)).toBeTruthy();
-    expect(body!.textContent).toContain("Roof access is fine from the 14th");
+    // The popup is the reading pane itself, not a second reading surface that
+    // drifts from it (see ThreadPane): the same head, controls and bubbles.
+    const popup = document.querySelector(".thread-popup")!;
+    const read = popup.querySelector(":scope > .ibread") as HTMLElement | null;
+    expect(read).not.toBeNull();
+
+    // And the pane keeps its arrangement, so a long thread cannot take the
+    // subject or the way out off the screen: the head is a line of the pane and
+    // the mail scrolls in a box beneath it. jsdom lays nothing out, so the claim
+    // is the structure — the head is a sibling of the scroll box, not a line
+    // inside it.
+    const head = read!.querySelector(".ibread-head") as HTMLElement | null;
+    const scroll = read!.querySelector(".ibreadwrap") as HTMLElement | null;
+    expect(head).not.toBeNull();
+    expect(scroll).not.toBeNull();
+    expect(head!.contains(scroll!)).toBe(false);
+    expect(head!.parentElement).toBe(scroll!.parentElement);
+    expect(await within(head!).findByText("Loom cutover schedule")).toBeTruthy();
+    expect(await within(scroll!).findByText(/Roof access is fine from the 14th/)).toBeTruthy();
+
+    // A window reading a thread offers no second window of itself, and its way
+    // out is the pane's own back control — labelled for where it actually goes.
+    expect(within(head!).queryByRole("link", { name: "Open in new window" })).toBeNull();
+    const close = vi.spyOn(window, "close").mockImplementation(() => {});
+    try {
+      fireEvent.click(within(head!).getByRole("button", { name: "Close" }));
+      expect(close).toHaveBeenCalled();
+    } finally {
+      close.mockRestore();
+    }
   });
 
   it("opens the thread the address names, without a click", async () => {
