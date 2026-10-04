@@ -1308,6 +1308,8 @@
   text-overflow:ellipsis; white-space:nowrap; }
 .replysummary:hover .replynames { color:var(--fg); }
 .replynone { font-style:italic; }
+.replyfield { display:grid; gap:.3rem; margin:0 0 .55rem; font-size:.74rem; color:var(--muted); }
+.replybox form { margin:0; }
 .replyinput { display:block; width:100%; font:inherit; font-size:.82rem;
   line-height:1.45; padding:.45rem .55rem; color:var(--fg); background:var(--bg);
   border:1px solid var(--line); border-radius:6px; resize:vertical; }
