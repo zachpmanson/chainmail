@@ -53,7 +53,7 @@ export function ComposerFlow({
   containerRef,
 }: Props) {
   const content = (
-    <section className={`composer-flow composer-flow--${variant}${variant === "compose" ? " compose-box" : ""}`} role={variant === "compose" ? "dialog" : undefined} aria-modal={variant === "compose" ? true : undefined} aria-labelledby={variant === "compose" ? "composer-title" : undefined}>
+    <section className={`composer-flow composer-flow--${variant}${variant === "compose" ? " compose-box" : ""}`} aria-labelledby={variant === "compose" ? "composer-title" : undefined}>
       {variant === "compose" ? (
         <header className="compose-head">
           <h2 id="composer-title">{title}</h2>
@@ -89,9 +89,5 @@ export function ComposerFlow({
   );
 
   if (variant === "reply") return <div className="replybox" ref={containerRef}>{content}</div>;
-  return (
-    <div className="compose-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose?.(); }}>
-      {content}
-    </div>
-  );
+  return <aside className="compose-panel" aria-label="Compose email">{content}</aside>;
 }
