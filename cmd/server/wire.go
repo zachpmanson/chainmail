@@ -25,13 +25,20 @@ type searchResponse struct {
 	Entries *[]entryHit `json:"entries,omitempty"`
 }
 
-type chainHit struct {
+// chainSummary is what a chain says about itself before any query has an opinion
+// about it: its name, its span, and the counts over every message in it.
+//
+// It is a type of its own because two endpoints answer with it — search, where it
+// is the half of a hit that is a fact about the conversation rather than about the
+// query, and the chain read, where it is the whole of what the read says besides
+// the entries. Embedding it in chainHit is what keeps a list row and an open
+// thread from describing one conversation in two vocabularies.
+type chainSummary struct {
 	RootExtID string   `json:"rootExtId"`
 	Subject   string   `json:"subject,omitempty"`
 	Container string   `json:"container,omitempty"`
 	Sources   []string `json:"sources,omitempty"`
 	Entries   int      `json:"entries"`
-	Matched   int      `json:"matched"`
 	People    int      `json:"people"`
 	// Attachments is how many files the whole chain carries. Emitted always, like
 	// unread: 0 is the answer for a chain with nothing attached, and a client that
@@ -41,11 +48,16 @@ type chainHit struct {
 	// Always emitted, never omitempty: 0 is the answer for a chain that has been
 	// read, and a client that cannot see the key cannot tell that from a server
 	// that does not report read state at all.
-	Unread int        `json:"unread"`
-	First  string     `json:"first"`
-	Last   string     `json:"last"`
-	Score  float64    `json:"score"`
-	Best   []entryHit `json:"best,omitempty"`
+	Unread int    `json:"unread"`
+	First  string `json:"first"`
+	Last   string `json:"last"`
+}
+
+type chainHit struct {
+	chainSummary
+	Matched int        `json:"matched"`
+	Score   float64    `json:"score"`
+	Best    []entryHit `json:"best,omitempty"`
 }
 
 type entryHit struct {
@@ -174,6 +186,10 @@ type participant struct {
 type chainResponse struct {
 	RootExtID string        `json:"rootExtId"`
 	Entries   []corpusEntry `json:"entries"`
+	// Summary is the chain's own account of itself, and the same one a search hit
+	// carries (see chainSummary) — so a thread read in a window of its own wears the
+	// same subject and counts as its row in the list behind it.
+	Summary chainSummary `json:"summary"`
 }
 
 type authStatusResponse struct {
@@ -526,13 +542,28 @@ func toEntryHit(h corpus.EntryHit) entryHit {
 	return e
 }
 
+// toChainSummary serves the chain's own account of itself. The subject is the
+// root's, which is empty when the root carries none — the caller that has the
+// conversation in hand fills it (see the chain handler).
+func toChainSummary(m corpus.ChainMeta) chainSummary {
+	return chainSummary{
+		RootExtID: m.RootExtID, Subject: m.Subject, Container: m.Container,
+		Sources: m.Sources, Entries: m.Entries, People: m.People,
+		Attachments: m.Attachments, Unread: m.Unread,
+		First: stamp(m.First), Last: stamp(m.Last),
+	}
+}
+
 func toChainHit(c corpus.ChainHit) chainHit {
 	out := chainHit{
-		RootExtID: c.RootExtID, Subject: c.Subject, Container: c.Container,
-		Sources: c.Sources, Entries: c.Entries, Matched: c.Matched,
-		People: c.People, Attachments: c.Attachments, Unread: c.Unread,
-		First: stamp(c.First),
-		Last:  stamp(c.Last), Score: c.Score,
+		chainSummary: chainSummary{
+			RootExtID: c.RootExtID, Subject: c.Subject, Container: c.Container,
+			Sources: c.Sources, Entries: c.Entries,
+			People: c.People, Attachments: c.Attachments, Unread: c.Unread,
+			First: stamp(c.First),
+			Last:  stamp(c.Last),
+		},
+		Matched: c.Matched, Score: c.Score,
 	}
 	for _, b := range c.Best {
 		out.Best = append(out.Best, toEntryHit(b))

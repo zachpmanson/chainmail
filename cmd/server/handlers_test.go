@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -747,6 +748,77 @@ func TestChainIsWholeFromAnyMember(t *testing.T) {
 				t.Errorf("from %s: %s arrived with no sender address", from, e.ExtID)
 			}
 		}
+	}
+}
+
+// A thread read on its own and the same thread drawn as a row in a list must not be
+// able to describe it differently. The chain read serves the same summary a search
+// hit carries (see chainSummary), it says the same thing from any member's id — the
+// handle search hands a client, since search reports the message that matched — and
+// it names the chain's own root rather than the id that was asked for.
+func TestChainReadBorrowsTheListSummary(t *testing.T) {
+	srv, api := testServer(t), loadAPI(t)
+	var row chainHit
+	for _, c := range inboxPage(t, srv, "/v1/search") {
+		if c.RootExtID == extAda1 {
+			row = c
+		}
+	}
+	if row.RootExtID == "" {
+		t.Fatal("the inbox does not hold the fixture chain, so there is nothing to agree with")
+	}
+	for _, from := range []string{extAda1, extBo2, extAda3} {
+		res := srv.do(t, "GET", entryPath("/v1/chains/", from), nil)
+		if res.status != 200 {
+			t.Fatalf("%s: status = %d: %s", from, res.status, res.body)
+		}
+		api.assert(t, "ChainResponse", res.body)
+		got := decode[chainResponse](t, res)
+		if !reflect.DeepEqual(got.Summary, row.chainSummary) {
+			t.Errorf("from %s: summary = %+v, want the row's own %+v", from, got.Summary, row.chainSummary)
+		}
+	}
+	// And the summary is the chain's, not an empty one that happens to match another
+	// empty one: the fixture chain is three messages from two people with one file.
+	got := decode[chainResponse](t, srv.do(t, "GET", entryPath("/v1/chains/", extBo2), nil))
+	if got.Summary.Entries != 3 || got.Summary.People != 2 || got.Summary.Attachments != 1 {
+		t.Errorf("summary = %+v, want 3 entries from 2 people with 1 attachment", got.Summary)
+	}
+	if got.Summary.Subject != "Solar install quote" {
+		t.Errorf("subject = %q, want the root's own", got.Summary.Subject)
+	}
+}
+
+// A root that carries no subject is named by the first message that has one, because
+// a thread read on its own has no query to judge a "best" entry by and the
+// conversation's order is what it does have (see the chain handler).
+func TestChainSummaryNamesASubjectlessRootFromItsReplies(t *testing.T) {
+	srv := testServer(t)
+	ada := putPerson(t, srv.store, "Ada Okoye", "ada@loomworks.example")
+	root := "mail:<nameless-1@loomworks.example>"
+	putMail(t, srv.store, mailFixture{
+		ext: root, ts: "2026-05-01T09:00:00+10:00", tz: "AEST", offset: mins(600),
+		person: ada, container: "T3", messageID: "<nameless-1@loomworks.example>",
+		from: "Ada Okoye <ada@loomworks.example>", to: "Bo Halvorsen <bo@fjordline.example>",
+		text: "A message whose sender stated no subject.",
+	})
+	putMail(t, srv.store, mailFixture{
+		ext: "mail:<nameless-2@loomworks.example>", ts: "2026-05-01T11:00:00+10:00",
+		tz: "AEST", offset: mins(600), person: ada, container: "T3",
+		subject: "Roof access", inReplyTo: "<nameless-1@loomworks.example>",
+		messageID: "<nameless-2@loomworks.example>",
+		from:      "Ada Okoye <ada@loomworks.example>", to: "Bo Halvorsen <bo@fjordline.example>",
+		text: "And a reply that states one.",
+	})
+	if _, err := srv.store.ResolveParents(); err != nil {
+		t.Fatalf("ResolveParents: %v", err)
+	}
+	got := decode[chainResponse](t, srv.do(t, "GET", entryPath("/v1/chains/", root), nil))
+	if got.Summary.Subject != "Roof access" {
+		t.Errorf("subject = %q, want the subject stated by the reply", got.Summary.Subject)
+	}
+	if got.Summary.Entries != 2 {
+		t.Errorf("entries = %d, want both messages", got.Summary.Entries)
 	}
 }
 

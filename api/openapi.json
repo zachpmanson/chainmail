@@ -1678,10 +1678,11 @@
       },
       "ChainResponse": {
         "type": "object",
-        "description": "Every entry reachable from the named one, in conversation order.",
+        "description": "Every entry reachable from the named one, in conversation order, with what that conversation is as a whole.",
         "required": [
           "rootExtId",
-          "entries"
+          "entries",
+          "summary"
         ],
         "additionalProperties": false,
         "properties": {
@@ -1695,6 +1696,76 @@
             "items": {
               "$ref": "#/components/schemas/CorpusEntry"
             }
+          },
+          "summary": {
+            "$ref": "#/components/schemas/ChainSummary"
+          }
+        }
+      },
+      "ChainSummary": {
+        "type": "object",
+        "description": "What a chain says about itself before any query has an opinion about it: its name, its span, and the counts over every message in it. Search serves it as the half of a hit that is a fact about the conversation rather than about the query; the chain read serves it beside the entries, so a thread read in a window of its own wears the same subject and counts as its row in a list.",
+        "required": [
+          "rootExtId",
+          "entries",
+          "people",
+          "attachments",
+          "unread",
+          "first",
+          "last"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "rootExtId": {
+            "type": "string",
+            "description": "Ext id of the entry the reply graph terminates at — the chain's own root, which need not be the id that was asked for. The only chain identity worth storing, and what POST /v1/spec takes.",
+            "example": "mail:<c0ffee-1@example.com>"
+          },
+          "subject": {
+            "type": "string",
+            "description": "Subject of the chain: the root's, or by fallback the first entry in conversation order that carries one. Absent only when no entry in it carries one at all."
+          },
+          "container": {
+            "type": "string",
+            "description": "Mail thread id or Slack channel id. Absent when the source stated none."
+          },
+          "sources": {
+            "type": "array",
+            "description": "Every archive this chain has entries from; more than one where a mail trail continued in Slack.",
+            "items": {
+              "type": "string",
+              "description": "",
+              "enum": [
+                "mail",
+                "slack"
+              ]
+            }
+          },
+          "entries": {
+            "type": "integer",
+            "description": "Entries in the whole chain."
+          },
+          "people": {
+            "type": "integer",
+            "description": "Distinct people involved in the whole chain, authors and recipients — the same \"who was involved\" answer the spec's participant list gives. 0 only when no entry carries a person row."
+          },
+          "attachments": {
+            "type": "integer",
+            "description": "Files the whole chain carries, counted over every entry in it. 0 for a chain whose mail arrived with none recorded — what a corpus looks like when its ingest never saw a part id — and 0 for one whose entries have no mailbox copy at all."
+          },
+          "unread": {
+            "type": "integer",
+            "description": "How many of the chain's messages the mailbox still calls unread. 0 for a chain that has been read, one that never was unread, and one with no mailbox copy at all — the same number the sidebar shows beside the UNREAD folder, scoped to a conversation. POST /v1/read is what changes it."
+          },
+          "first": {
+            "type": "string",
+            "description": "Timestamp of the earliest entry, UTC.",
+            "format": "date-time"
+          },
+          "last": {
+            "type": "string",
+            "description": "Timestamp of the latest entry, UTC.",
+            "format": "date-time"
           }
         }
       },

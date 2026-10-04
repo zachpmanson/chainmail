@@ -342,15 +342,38 @@ const EDIT_ENTRIES = [
   },
 ];
 
+/** The chain read's own account of the conversation, as the service answers it
+ *  (see ChainSummary): the same sentence the row that could have opened the thread
+ *  wears. Built from the fixture row wherever there is one, so a test can hold the
+ *  pane and the row to the same numbers — the popup's head draws these, not a count
+ *  of the entries it happens to have been sent. */
+function summaryOf(root: string, entries: unknown[]) {
+  const row = CHAINS.find((c) => c.rootExtId === root);
+  return {
+    rootExtId: root,
+    subject: row?.subject,
+    sources: ["mail"],
+    entries: row?.entries ?? entries.length,
+    people: row?.people ?? 2,
+    attachments: 0,
+    unread: 0,
+    first: row?.first ?? "2026-04-01T08:00:00Z",
+    last: row?.last ?? "2026-04-01T08:00:00Z",
+  };
+}
+
 const chainHandler: Handler = (c) => {
   const root = decodeURIComponent(pathOf(c).slice("/v1/chains/".length));
-  if (root === MULTI_ROOT) return json(200, { rootExtId: root, entries: MULTI_ENTRIES });
-  if (root === EDIT_ROOT) return json(200, { rootExtId: root, entries: EDIT_ENTRIES });
+  if (root === MULTI_ROOT)
+    return json(200, { rootExtId: root, entries: MULTI_ENTRIES, summary: summaryOf(root, MULTI_ENTRIES) });
+  if (root === EDIT_ROOT)
+    return json(200, { rootExtId: root, entries: EDIT_ENTRIES, summary: summaryOf(root, EDIT_ENTRIES) });
   const b = CHAIN_BODIES[root];
   return b
     ? json(200, {
         rootExtId: root,
         entries: [{ extId: root, source: "mail", quoted: false, ts: "2026-04-01T08:00:00Z", ...b }],
+        summary: summaryOf(root, [b]),
       })
     : json(404, { error: `no thread ${root}` });
 };
@@ -884,32 +907,60 @@ describe("the home page with no query", () => {
     handler = buildHandler;
     await mountApp(`/?open=${encodeURIComponent("mail:<loom-cutover-1@example.fed>")}&popup=1`);
 
-    expect(await screen.findByRole("heading", { name: "Loom cutover schedule" })).toBeTruthy();
+    // The subject is the pane's own line, not a heading of the popup's: the popup
+    // is the reading pane (see ThreadPane), and the pane names the thread in its
+    // head. It arrives from the chain read, since a popup opened from an address
+    // knows only the id.
+    await waitFor(() =>
+      expect(document.querySelector(".thread-popup .ibread-subj")?.textContent).toBe(
+        "Loom cutover schedule",
+      ),
+    );
     expect(await screen.findByText(/Roof access is fine from the 14th/)).toBeTruthy();
     expect(screen.queryByRole("navigation")).toBeNull();
     expect(screen.queryByRole("link", { name: /Inbox/i })).toBeNull();
   });
 
-  it("keeps the popup's head out of the thread's scroll", async () => {
+  it("reads the popup with the pane the inbox reads beside its list", async () => {
     handler = buildHandler;
     await mountApp(`/?open=${encodeURIComponent("mail:<loom-cutover-1@example.fed>")}&popup=1`);
 
-    // The head is a row of the window and the thread scrolls in a box of its own
-    // beneath it — the reading pane's arrangement (see .ibread-head/.ibreadwrap)
-    // — so a long thread cannot take the subject or Close off the screen. jsdom
-    // lays nothing out, so the claim is the structure: the head is a sibling of
-    // the scroll box, not a line inside it.
-    const header = (await screen.findByRole("heading", { name: "Loom cutover schedule" })).closest(
-      "header",
-    )!;
-    const body = document.querySelector(".thread-popup-body");
-    expect(body).not.toBeNull();
-    expect(header.contains(body!)).toBe(false);
-    expect(header.parentElement).toBe(body!.parentElement);
-    // And the thread is what is in the scroll box, not left behind in the head.
-    expect(body!.querySelector(".stream")).not.toBeNull();
-    expect(await screen.findByText(/Roof access is fine from the 14th/)).toBeTruthy();
-    expect(body!.textContent).toContain("Roof access is fine from the 14th");
+    // The popup is the reading pane itself, not a second reading surface that
+    // drifts from it (see ThreadPane): the same head, controls and bubbles.
+    const popup = document.querySelector(".thread-popup")!;
+    const read = popup.querySelector(":scope > .ibread") as HTMLElement | null;
+    expect(read).not.toBeNull();
+
+    // And the pane keeps its arrangement, so a long thread cannot take the
+    // subject or the way out off the screen: the head is a line of the pane and
+    // the mail scrolls in a box beneath it. jsdom lays nothing out, so the claim
+    // is the structure — the head is a sibling of the scroll box, not a line
+    // inside it.
+    const head = read!.querySelector(".ibread-head") as HTMLElement | null;
+    const scroll = read!.querySelector(".ibreadwrap") as HTMLElement | null;
+    expect(head).not.toBeNull();
+    expect(scroll).not.toBeNull();
+    expect(head!.contains(scroll!)).toBe(false);
+    expect(head!.parentElement).toBe(scroll!.parentElement);
+    expect(await within(head!).findByText("Loom cutover schedule")).toBeTruthy();
+    expect(await within(scroll!).findByText(/Roof access is fine from the 14th/)).toBeTruthy();
+
+    // And the head wears the chain read's own counts — the same numbers the row that
+    // could have opened this window carries — rather than a count of the one entry
+    // the fixture chain read happens to hold. The fixture row says four.
+    expect(within(head!).getByTitle("4 messages in this thread")).toBeTruthy();
+    expect(within(head!).getByTitle("4 people in this thread — senders and recipients")).toBeTruthy();
+
+    // A window reading a thread offers no second window of itself, and its way
+    // out is the pane's own back control — labelled for where it actually goes.
+    expect(within(head!).queryByRole("link", { name: "Open in new window" })).toBeNull();
+    const close = vi.spyOn(window, "close").mockImplementation(() => {});
+    try {
+      fireEvent.click(within(head!).getByRole("button", { name: "Close" }));
+      expect(close).toHaveBeenCalled();
+    } finally {
+      close.mockRestore();
+    }
   });
 
   it("opens the thread the address names, without a click", async () => {

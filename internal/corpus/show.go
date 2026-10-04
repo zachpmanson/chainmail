@@ -236,7 +236,9 @@ type chainRow struct {
 
 // Chain returns every entry reachable from the one named, in conversation order:
 // an entry never before a parent that is also in the set, and in time order
-// wherever the reply graph leaves a choice.
+// wherever the reply graph leaves a choice. Its summary — what the conversation is
+// as a whole — is a second read, because a caller printing a trail does not want it
+// and the aggregate is not free (see ChainMeta).
 //
 // Reachability is followed in BOTH directions — ancestors and descendants — so
 // naming any message in a conversation returns the conversation. Naming only a
@@ -259,13 +261,66 @@ type chainRow struct {
 // a message, not when it was sent, and a recovered entry is inserted when its quoter
 // is ingested.
 func (s *Store) Chain(extID string) ([]Shown, error) {
+	id, err := s.entryID(extID)
+	if err != nil {
+		return nil, err
+	}
+	_, set, err := s.chainMembers(id)
+	if err != nil {
+		return nil, err
+	}
+	ids := chainOrder(set)
+	out := make([]Shown, 0, len(ids))
+	for _, x := range ids {
+		sh, err := s.Show(x)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, sh)
+	}
+	return out, nil
+}
+
+// ChainMeta summarises the conversation the named entry belongs to, however that
+// entry is named: search reports the message that matched, not the root, so any
+// member's id has to do (see Chain).
+func (s *Store) ChainMeta(extID string) (ChainMeta, error) {
+	id, err := s.entryID(extID)
+	if err != nil {
+		return ChainMeta{}, err
+	}
+	root, _, err := s.chainMembers(id)
+	if err != nil {
+		return ChainMeta{}, err
+	}
+	// The sum walks DOWN from the root (see chainMeta), so it starts at what the
+	// walk above terminated at. A parent cycle has no such entry, and the entry that
+	// was asked for reaches the same members; see chainMeta on the cycle case.
+	seed := id
+	if root.Valid {
+		seed = root.Int64
+	}
+	return s.chainMetaOf(seed)
+}
+
+// entryID resolves an ext id to the store's own id for it.
+func (s *Store) entryID(extID string) (int64, error) {
 	var id int64
 	if err := s.db.QueryRow(`select id from entries where ext_id = ?`, extID).Scan(&id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("%q: %w", extID, ErrNotFound)
+			return 0, fmt.Errorf("%q: %w", extID, ErrNotFound)
 		}
-		return nil, err
+		return 0, err
 	}
+	return id, nil
+}
+
+// chainMembers returns the reachable set of the entry with this id — its ancestors,
+// itself, and everything under any of them — together with the entry the reply graph
+// terminates at above it, where there is one. Both reads of a chain start here: the
+// trail (Chain) takes the set, the summary (ChainMeta) starts its own walk at the
+// root above.
+func (s *Store) chainMembers(id int64) (sql.NullInt64, []chainRow, error) {
 	// The reachable set, unordered: the SQL sort that used to be here cannot express
 	// conversation order (a parent's clock may be the later of the two), so it is
 	// done in Go where the graph is visible. The CTE carries each row's parent id
@@ -291,33 +346,28 @@ func (s *Store) Chain(extID string) ([]Shown, error) {
 		  select id from root union select id from up union
 		  select e.id from entries e join down on e.parent_id = down.id
 		)
-		select e.id, e.ext_id, coalesce(e.parent_id, 0), e.ts
+		select e.id, e.ext_id, coalesce(e.parent_id, 0), e.ts,
+		       (select id from root limit 1)
 		  from entries e join down on e.id = down.id`, id)
 	if err != nil {
-		return nil, err
+		return sql.NullInt64{}, nil, err
 	}
 	defer rows.Close()
 	var set []chainRow
+	// The walk's own answer to where the graph terminates: empty on a parent cycle,
+	// which is the case the callers below have to have an answer for.
+	var root sql.NullInt64
 	for rows.Next() {
 		var r chainRow
-		if err := rows.Scan(&r.id, &r.extID, &r.parent, &r.ts); err != nil {
-			return nil, err
+		if err := rows.Scan(&r.id, &r.extID, &r.parent, &r.ts, &root); err != nil {
+			return sql.NullInt64{}, nil, err
 		}
 		set = append(set, r)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return sql.NullInt64{}, nil, err
 	}
-	ids := chainOrder(set)
-	out := make([]Shown, 0, len(ids))
-	for _, x := range ids {
-		sh, err := s.Show(x)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, sh)
-	}
-	return out, nil
+	return root, set, nil
 }
 
 // chainOrder places a chain's reachable set: parents first, and time order between
