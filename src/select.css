@@ -53,6 +53,11 @@
 .selpv-panel { background:var(--card); border:1px solid var(--line); border-radius:8px;
   width:min(46rem, 94vw); max-height:82vh; display:flex; flex-direction:column;
   box-shadow:0 8px 40px rgba(0,0,0,.35); }
+.selpv-thread .selpv-panel { width:min(58rem, 94vw); height:min(82vh, 56rem); max-height:none;
+  overflow:hidden; }
+.selpv-thread .selpv-panel > .ibread { display:flex; flex:1 1 auto; flex-direction:column; min-height:0; }
+.selpv-thread .ibread-head { flex:none; }
+.selpv-thread .ibreadwrap { min-height:0; }
 .selpv-head { display:flex; align-items:center; gap:.6rem; padding:.5rem .8rem;
   border-bottom:1px solid var(--line); }
 .selpv-head b { font-size:.72rem; font-weight:700; text-transform:uppercase;

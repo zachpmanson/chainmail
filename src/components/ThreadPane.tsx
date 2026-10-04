@@ -7,6 +7,7 @@ import { dismissToast, pushToast } from "../lib/toasts";
 import { readTree, rememberTree } from "../lib/tree";
 import { withTransition } from "../lib/viewTransition";
 import { ThreadMessages } from "./ThreadMessages";
+import type { PreviewableThread } from "./ThreadShared";
 import { AttachmentCount, MailCount, PeopleCount } from "./ThreadRow";
 import {
   MoveFolder,
@@ -18,7 +19,6 @@ import {
   sentence,
   staleAfterMail,
 } from "./MailVerbs";
-import type { PreviewableThread } from "./ThreadPreview";
 
 /**
  * The reading pane: the thread a list has open, read at the right of it.
@@ -47,6 +47,7 @@ export function ThreadPane({
   empty,
   moveDefault,
   onClose,
+  openInWindow = true,
 }: {
   /** The thread to read, or null when the page has nothing to show yet. A caller
    *  holding only a root ext id is enough: the thread is fetched by id, and the
@@ -59,6 +60,8 @@ export function ThreadPane({
   /** Current folder when the pane was opened from a folder-scoped list. */
   moveDefault?: string;
   onClose: () => void;
+  /** Whether to offer a second standalone window from this reader. */
+  openInWindow?: boolean;
 }) {
   const queryClient = useQueryClient();
 
@@ -188,27 +191,29 @@ export function ThreadPane({
                 numbers beside it and the controls that act on the mailbox stay
                 together at the end of the line, where the read circle is the
                 outermost of them on every thread (see .ibread-read). */}
-            <a
-              className="ibicon"
-              aria-label="Open in new window"
-              title="Open in new window"
-              href={`/?open=${encodeURIComponent(thread.rootExtId)}&popup=1`}
-              target="_blank"
-              rel="noopener"
-              onClick={(event) => {
-                // This action is specifically a popup, not a second copy of the
-                // full app in a tab. If the browser blocks popups, do not fall
-                // back to navigating this window or opening a tab.
-                event.preventDefault();
-                window.open(
-                  event.currentTarget.href,
-                  "_blank",
-                  "popup=yes,width=900,height=800,resizable=yes,scrollbars=yes,noopener",
-                );
-              }}
-            >
-              <OpenWindowGlyph />
-            </a>
+            {openInWindow ? (
+              <a
+                className="ibicon"
+                aria-label="Open in new window"
+                title="Open in new window"
+                href={`/?open=${encodeURIComponent(thread.rootExtId)}&popup=1`}
+                target="_blank"
+                rel="noopener"
+                onClick={(event) => {
+                  // This action is specifically a popup, not a second copy of the
+                  // full app in a tab. If the browser blocks popups, do not fall
+                  // back to navigating this window or opening a tab.
+                  event.preventDefault();
+                  window.open(
+                    event.currentTarget.href,
+                    "_blank",
+                    "popup=yes,width=900,height=800,resizable=yes,scrollbars=yes,noopener",
+                  );
+                }}
+              >
+                <OpenWindowGlyph />
+              </a>
+            ) : null}
             <button
               type="button"
               className="ibicon ibtree"

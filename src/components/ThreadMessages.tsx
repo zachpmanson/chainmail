@@ -17,7 +17,7 @@ import { tree as buildTree, type Knot } from "../lib/tree";
 // preview all say where a name's address came from, and one module holds the
 // two ways of saying it.
 import { senderTitle, usePersonAddresses, withAddress } from "../lib/who";
-import { Failure } from "./ThreadPreview";
+import { Failure } from "./ThreadShared";
 import { Edits } from "./Edits";
 import { Message, type StampData } from "./Message";
 import { ParticipantsPanel, castOfEntries } from "./Participants";

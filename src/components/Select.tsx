@@ -7,7 +7,7 @@ import { useEscapeToClear } from "../lib/selection";
 import { ActionBar } from "./ActionBar";
 import { ThreadPane } from "./ThreadPane";
 import { ThreadRow, RankMeta } from "./ThreadRow";
-import { Failure, type PreviewableThread } from "./ThreadPreview";
+import { Failure, type PreviewableThread } from "./ThreadShared";
 import { SplitPane } from "./SplitPane";
 import { CompactListHeader, CompactModeToggle } from "./CompactListControls";
 

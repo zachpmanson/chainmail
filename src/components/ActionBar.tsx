@@ -5,7 +5,7 @@ import { $api } from "../lib/api";
 import { useBuildPage } from "../lib/build";
 import { dropFromLists, putBackLists } from "../lib/lists";
 import { dismissToast, pushToast } from "../lib/toasts";
-import { Failure } from "./ThreadPreview";
+import { Failure } from "./ThreadShared";
 import {
   ArchiveGlyph,
   MoveFolder,
