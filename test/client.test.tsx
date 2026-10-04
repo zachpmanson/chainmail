@@ -1109,6 +1109,20 @@ describe("the site navigation", () => {
     }
   });
 
+  it("uses the shared editable address field for Compose recipients", async () => {
+    handler = () => json(200, { signed_in: true });
+    await mountApp("/");
+    click(screen.getByRole("button", { name: "Compose" }));
+
+    const to = await screen.findByRole("combobox", { name: "to addresses" });
+    fireEvent.change(to, { target: { value: "mira@loomworks.example" } });
+    click(await screen.findByRole("option", { name: "mira@loomworks.example" }));
+
+    expect(screen.getByText("mira@loomworks.example")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "remove mira@loomworks.example" })).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Review message" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it("names the site, and that name is the link home", async () => {
     handler = () => json(200, { signed_in: true });
     // A page away from home, so the brand is not simply where we already are.
