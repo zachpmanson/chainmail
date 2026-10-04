@@ -849,6 +849,9 @@
      (`.7rem` of its strip, plus the divider on the left): the strip keeps the
      subject and the controls where they have always been. */
   .ibreadwrap > .stream { padding-left:1.25rem; padding-right:1.25rem; }
+  /* Compose has no stream to carry the reader's horizontal gutter, so give its
+     card the same inset the reply box gets from its stream. */
+  .compose-panel { padding-left:1.25rem; padding-right:1.25rem; }
   /* The head's own inset, the same on both sides: `.7rem` is the strip's own
      padding (base rule) and the divider is the pane's left edge, which the strip is
      painted from — so the subject and the controls are inset the same distance from
