@@ -140,7 +140,7 @@ func TestTheHTMLReplyIsTheSameMessageMarkedUp(t *testing.T) {
 
 	// A blank line is a paragraph and a single line break inside one is a <br>:
 	// the text's own shape, marked up rather than reflowed.
-	if !strings.Contains(got.HTML, "<p>The 14th works.</p>\n<p>I'll confirm with the fitters.</p>") {
+	if !strings.Contains(got.HTML, "<p>The 14th works.</p>\n<p>I&#39;ll confirm with the fitters.</p>") {
 		t.Errorf("the reader's paragraphs are not the text's own:\n%s", got.HTML)
 	}
 	// The heading names the same instant and the same sender as the text's, escaped
@@ -165,7 +165,8 @@ func TestTheHTMLReplyIsTheSameMessageMarkedUp(t *testing.T) {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
-		if !strings.Contains(words, escapeHTML(line)) {
+		want := strings.ReplaceAll(escapeHTML(line), "'", "&#39;")
+		if !strings.Contains(words, want) {
 			t.Errorf("the HTML does not say %q:\n%s", line, got.HTML)
 		}
 	}
@@ -178,20 +179,31 @@ func plain(html string) string {
 		"<blockquote class=\"gmail_quote\">", "").Replace(html)
 }
 
-// The reader's own words are escaped, always, and so is every word of a message
-// that came as text. A tag somebody typed meant it as characters, and a reply that
-// turned it into markup would send a rendering of their words that they did not
-// write. The one markup in a reply that is not written by this package is the
-// answered message's own, and that reaches the recipient only as what the pane's
-// allowlist lets through (see TestAQuoteNeverRelaysWhatThePageWouldRefuse). This is
-// the text case: a message with no html part is quoted as the text it is.
+// The reader's Markdown is rendered through the shared allowlist. The quoted text
+// remains escaped when the answered message has no HTML part.
+func TestReplyMarkdownRendersAndSanitises(t *testing.T) {
+	draft := "**bold** and *italic*\n\nA [safe link](https://example.com).\n\n<script>alert(1)</script> [bad](javascript:alert(1))"
+	got := ComposeReply(draft, corpus.ReplyTarget{Body: "quoted", TS: at(t)})
+	if got.Text[:len(draft)] != draft {
+		t.Fatalf("plain text draft changed: got %q, want prefix %q", got.Text, draft)
+	}
+	for _, want := range []string{"<strong>bold</strong>", "<em>italic</em>", `<a href="https://example.com">safe link</a>`} {
+		if !strings.Contains(got.HTML, want) {
+			t.Errorf("Markdown rendering missing %q:\\n%s", want, got.HTML)
+		}
+	}
+	if strings.Contains(got.HTML, "<script") || strings.Contains(got.HTML, "javascript:") {
+		t.Errorf("unsafe Markdown content survived:\\n%s", got.HTML)
+	}
+}
+
 func TestTheHTMLOnlyEverAddsMarkupOfItsOwn(t *testing.T) {
-	got := ComposeReply("less <than> & more", corpus.ReplyTarget{
+	got := ComposeReply("less & more", corpus.ReplyTarget{
 		Author: "Bo <script>alert(1)</script> Halvorsen", From: "bo@fjordline.example",
 		Body: "<b>bold</b> and & ampersands\nsecond line",
 		TS:   at(t),
 	})
-	if !strings.Contains(got.HTML, "<p>less &lt;than&gt; &amp; more</p>") {
+	if !strings.Contains(got.HTML, "<p>less &amp; more</p>") {
 		t.Errorf("the reader's own text was not escaped:\n%s", got.HTML)
 	}
 	if !strings.Contains(got.HTML, "&lt;script&gt;") {

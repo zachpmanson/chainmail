@@ -1,8 +1,10 @@
 package spec
 
 import (
+	"bytes"
 	"strings"
 
+	"github.com/yuin/goldmark"
 	"github.com/zachpmanson/chainmail/internal/corpus"
 )
 
@@ -10,8 +12,8 @@ import (
 // shows and the HTML a mail client renders.
 //
 // The reader's own words, the attribution line and the reader's half of the
-// message are composed once and rendered twice, which is the point of the type:
-// they cannot come to say different things. The quote is the exception, and
+// message are composed once into plain text and HTML. Markdown shapes the reader's
+// words in HTML; the plain-text form keeps them unchanged. The quote is the exception, and
 // deliberately so — it is the message being answered, and each form of the reply
 // quotes that message from its own rendering of it: the HTML part carries the
 // sender's own markup (see quoteHTML), the text part its text. Converting one
@@ -69,18 +71,23 @@ type Reply struct {
 // quoted lines beneath: an answer to a message with nothing in it is still an
 // answer to that message, and a heading with no quote under it says exactly that.
 func ComposeReply(own string, t corpus.ReplyTarget) Reply {
-	words := strings.TrimRight(own, " \t\r\n")
 	head := replyHeading(t)
 
 	var text strings.Builder
-	text.WriteString(words)
-	text.WriteString("\n\n")
+	text.WriteString(own)
+	if !strings.HasSuffix(own, "\n\n") {
+		if strings.HasSuffix(own, "\n") {
+			text.WriteByte('\n')
+		} else {
+			text.WriteString("\n\n")
+		}
+	}
 	text.WriteString(head)
 	text.WriteString("\n")
 	text.WriteString(quoteText(t.Body))
 
 	var html strings.Builder
-	html.WriteString(blocks(words))
+	html.WriteString(markdownBlocks(own))
 	html.WriteString("\n<p>")
 	html.WriteString(escapeHTML(head))
 	html.WriteString("</p>\n")
@@ -176,6 +183,21 @@ func quoteText(body string) string {
 		b.WriteString("> " + line + "\n")
 	}
 	return b.String()
+}
+
+// markdownBlocks renders the reader's draft as Markdown for the HTML alternative.
+// The plain-text part remains the submitted text; Markdown only shapes the HTML
+// preview and the HTML part sent beside it. The standard renderer is followed by
+// the same allowlist used for quoted and received HTML, so raw HTML and unsafe
+// links in a draft cannot cross the rendering boundary.
+func markdownBlocks(text string) string {
+	var rendered bytes.Buffer
+	if err := goldmark.Convert([]byte(text), &rendered); err != nil {
+		// Goldmark's in-memory conversion does not ordinarily fail. On the
+		// unlikely write failure, retain a safe, readable rendering.
+		return blocks(text)
+	}
+	return sanitiseBody(rendered.String())
 }
 
 // blocks is text as HTML paragraphs.

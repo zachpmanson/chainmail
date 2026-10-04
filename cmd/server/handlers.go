@@ -1577,19 +1577,19 @@ func (s *server) fileSent(mb mailbox, id string) bool {
 // preview; true sends that exact plan. The caller must separately opt the server
 // into mail writes with -send-mail.
 type composeRequest struct {
-	To string `json:"to"`
+	To      string `json:"to"`
 	Subject string `json:"subject"`
-	Body string `json:"body"`
-	Confirm bool `json:"confirm,omitempty"`
+	Body    string `json:"body"`
+	Confirm bool   `json:"confirm,omitempty"`
 }
 
 type composeResponse struct {
-	To string `json:"to"`
+	To      string `json:"to"`
 	Subject string `json:"subject"`
-	Body string `json:"body"`
-	Sent bool `json:"sent"`
+	Body    string `json:"body"`
+	Sent    bool   `json:"sent"`
 	GmailID string `json:"gmailId,omitempty"`
-	Filed *bool `json:"filed,omitempty"`
+	Filed   *bool  `json:"filed,omitempty"`
 }
 
 func (s *server) compose(w http.ResponseWriter, r *http.Request) {
