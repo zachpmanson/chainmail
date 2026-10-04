@@ -821,6 +821,55 @@ func (s *Store) rootsOf(ids []int64) (map[int64]int64, error) {
 	return out, rows.Err()
 }
 
+// ChainMeta is what a chain is before any query has an opinion about it: its name,
+// its span, and the counts over every message in it.
+//
+// It is the half of a search hit that is a fact about the conversation rather than
+// about the search (compare ChainHit, which is this plus what the query found), and
+// it is served by the chain read as well as by search for that reason: a client
+// reading a thread and a client looking at its row in a list must not be able to
+// disagree about how big the thread is or what it is called.
+//
+// RootID is an entry id, not an ext id, because the counts are gathered by walking
+// down from the root: the caller reaches the root however it likes (see
+// Store.Chain, which returns the root its walk terminated at).
+type ChainMeta struct {
+	RootID    int64
+	RootExtID string
+	// Subject is the root's own, and empty where the root carries none — the caller
+	// that has the chain in hand decides what to call the thread then (see the
+	// chain handler, and ChainHit's own fallback for the search path).
+	Subject     string
+	Container   string
+	Sources     []string
+	Entries     int
+	First       time.Time
+	Last        time.Time
+	People      int
+	Attachments int
+	Unread      int
+}
+
+// chainMetaOf summarises the chain rooted at rootID.
+func (s *Store) chainMetaOf(rootID int64) (ChainMeta, error) {
+	meta, err := s.chainMeta([]int64{rootID})
+	if err != nil {
+		return ChainMeta{}, err
+	}
+	m, ok := meta[rootID]
+	if !ok {
+		// Unreachable while the root exists: the walk is seeded with its own id, so
+		// the root is in its own sum whatever the reply graph looks like.
+		return ChainMeta{}, fmt.Errorf("summarising chain %d: it walked nothing", rootID)
+	}
+	return ChainMeta{
+		RootID: rootID, RootExtID: m.extID, Subject: m.subject,
+		Container: m.container, Sources: m.sources, Entries: m.entries,
+		First: m.first, Last: m.last, People: m.people,
+		Attachments: m.attachments, Unread: m.unread,
+	}, nil
+}
+
 type chainMetaRow struct {
 	extID       string
 	subject     string

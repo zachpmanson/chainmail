@@ -342,15 +342,38 @@ const EDIT_ENTRIES = [
   },
 ];
 
+/** The chain read's own account of the conversation, as the service answers it
+ *  (see ChainSummary): the same sentence the row that could have opened the thread
+ *  wears. Built from the fixture row wherever there is one, so a test can hold the
+ *  pane and the row to the same numbers — the popup's head draws these, not a count
+ *  of the entries it happens to have been sent. */
+function summaryOf(root: string, entries: unknown[]) {
+  const row = CHAINS.find((c) => c.rootExtId === root);
+  return {
+    rootExtId: root,
+    subject: row?.subject,
+    sources: ["mail"],
+    entries: row?.entries ?? entries.length,
+    people: row?.people ?? 2,
+    attachments: 0,
+    unread: 0,
+    first: row?.first ?? "2026-04-01T08:00:00Z",
+    last: row?.last ?? "2026-04-01T08:00:00Z",
+  };
+}
+
 const chainHandler: Handler = (c) => {
   const root = decodeURIComponent(pathOf(c).slice("/v1/chains/".length));
-  if (root === MULTI_ROOT) return json(200, { rootExtId: root, entries: MULTI_ENTRIES });
-  if (root === EDIT_ROOT) return json(200, { rootExtId: root, entries: EDIT_ENTRIES });
+  if (root === MULTI_ROOT)
+    return json(200, { rootExtId: root, entries: MULTI_ENTRIES, summary: summaryOf(root, MULTI_ENTRIES) });
+  if (root === EDIT_ROOT)
+    return json(200, { rootExtId: root, entries: EDIT_ENTRIES, summary: summaryOf(root, EDIT_ENTRIES) });
   const b = CHAIN_BODIES[root];
   return b
     ? json(200, {
         rootExtId: root,
         entries: [{ extId: root, source: "mail", quoted: false, ts: "2026-04-01T08:00:00Z", ...b }],
+        summary: summaryOf(root, [b]),
       })
     : json(404, { error: `no thread ${root}` });
 };
@@ -921,6 +944,12 @@ describe("the home page with no query", () => {
     expect(head!.parentElement).toBe(scroll!.parentElement);
     expect(await within(head!).findByText("Loom cutover schedule")).toBeTruthy();
     expect(await within(scroll!).findByText(/Roof access is fine from the 14th/)).toBeTruthy();
+
+    // And the head wears the chain read's own counts — the same numbers the row that
+    // could have opened this window carries — rather than a count of the one entry
+    // the fixture chain read happens to hold. The fixture row says four.
+    expect(within(head!).getByTitle("4 messages in this thread")).toBeTruthy();
+    expect(within(head!).getByTitle("4 people in this thread — senders and recipients")).toBeTruthy();
 
     // A window reading a thread offers no second window of itself, and its way
     // out is the pane's own back control — labelled for where it actually goes.

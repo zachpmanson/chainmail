@@ -108,6 +108,12 @@ export function ThreadPane({
     onMutate: (v) => ({ was: markInLists(queryClient, v.body.chain, v.body.unread) }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["get", "/v1/search"] });
+      // The thread's own read state is part of what the chain read says about it
+      // (see ChainSummary), which is all a pane in a window of its own has to ask:
+      // the list it would otherwise be reconciled against is not on screen behind
+      // it. Nothing is invalidated that the write did not change — the same
+      // endpoint answers both, and the search list above is what carries the rows.
+      void queryClient.invalidateQueries({ queryKey: ["get", "/v1/chains/{rootExtId}"] });
     },
     onError: (e: unknown, _v, ctx) => {
       // Said in the pane, not only in the console, and the disabled case in words

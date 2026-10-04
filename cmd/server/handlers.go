@@ -2473,6 +2473,16 @@ func (s *server) chain(w http.ResponseWriter, r *http.Request) {
 		failLookup(w, err)
 		return
 	}
+	// The chain's own account of itself, which is the same one a search hit carries
+	// (see chainSummary): a client reading a thread on its own — in a window of its
+	// own, say — must not wear a different subject or different counts from the row
+	// that opened it.
+	meta, err := s.store.ChainMeta(id)
+	if err != nil {
+		failLookup(w, err)
+		return
+	}
+
 	ids := make([]string, 0, len(shown))
 	for _, sh := range shown {
 		ids = append(ids, sh.ExtID)
@@ -2491,6 +2501,22 @@ func (s *server) chain(w http.ResponseWriter, r *http.Request) {
 	out := chainResponse{RootExtID: id, Entries: make([]corpusEntry, 0, len(shown))}
 	for _, sh := range shown {
 		out.Entries = append(out.Entries, toCorpusEntry(sh, rendered[sh.ExtID]))
+	}
+	// The entries come in conversation order, so the fallback below takes the
+	// earliest message that carried a subject.
+	out.Summary = toChainSummary(meta)
+	if out.Summary.Subject == "" {
+		// A root with no subject of its own is named by the first message that has
+		// one, which is what a reader recognises the thread by. The search path makes
+		// the same fallback from the entry the query judged best; a read has no query,
+		// so the conversation's own order decides — and the two agree wherever the
+		// root carries a subject, which is nearly always.
+		for _, sh := range shown {
+			if sh.Subject != "" {
+				out.Summary.Subject = sh.Subject
+				break
+			}
+		}
 	}
 	send(w, http.StatusOK, out)
 }

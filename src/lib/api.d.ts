@@ -801,12 +801,45 @@ export interface components {
             /** @description The quoter's modified text of the quote, as stored (plain text, not HTML). */
             body?: string;
         };
-        /** @description Every entry reachable from the named one, in conversation order. */
+        /** @description Every entry reachable from the named one, in conversation order, with what that conversation is as a whole. */
         ChainResponse: {
             /** @description The id that was asked for, echoed back. Note this is whatever the caller passed, which need not be the chain's root — see the path parameter. */
             rootExtId: string;
             /** @description The whole chain in conversation order, never empty: an id that resolves to nothing is a 404. */
             entries: components["schemas"]["CorpusEntry"][];
+            summary: components["schemas"]["ChainSummary"];
+        };
+        /** @description What a chain says about itself before any query has an opinion about it: its name, its span, and the counts over every message in it. Search serves it as the half of a hit that is a fact about the conversation rather than about the query; the chain read serves it beside the entries, so a thread read in a window of its own wears the same subject and counts as its row in a list. */
+        ChainSummary: {
+            /**
+             * @description Ext id of the entry the reply graph terminates at — the chain's own root, which need not be the id that was asked for. The only chain identity worth storing, and what POST /v1/spec takes.
+             * @example mail:<c0ffee-1@example.com>
+             */
+            rootExtId: string;
+            /** @description Subject of the chain: the root's, or by fallback the first entry in conversation order that carries one. Absent only when no entry in it carries one at all. */
+            subject?: string;
+            /** @description Mail thread id or Slack channel id. Absent when the source stated none. */
+            container?: string;
+            /** @description Every archive this chain has entries from; more than one where a mail trail continued in Slack. */
+            sources?: ("mail" | "slack")[];
+            /** @description Entries in the whole chain. */
+            entries: number;
+            /** @description Distinct people involved in the whole chain, authors and recipients — the same "who was involved" answer the spec's participant list gives. 0 only when no entry carries a person row. */
+            people: number;
+            /** @description Files the whole chain carries, counted over every entry in it. 0 for a chain whose mail arrived with none recorded — what a corpus looks like when its ingest never saw a part id — and 0 for one whose entries have no mailbox copy at all. */
+            attachments: number;
+            /** @description How many of the chain's messages the mailbox still calls unread. 0 for a chain that has been read, one that never was unread, and one with no mailbox copy at all — the same number the sidebar shows beside the UNREAD folder, scoped to a conversation. POST /v1/read is what changes it. */
+            unread: number;
+            /**
+             * Format: date-time
+             * @description Timestamp of the earliest entry, UTC.
+             */
+            first: string;
+            /**
+             * Format: date-time
+             * @description Timestamp of the latest entry, UTC.
+             */
+            last: string;
         };
         /** @description One place an entry was found. A message quoted in five forwards has five, which is the evidence that it mattered. */
         Sighting: {
