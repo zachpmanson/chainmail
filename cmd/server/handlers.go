@@ -1032,7 +1032,7 @@ type mailbox interface {
 	SetUnread(id string, unread bool) ([]string, error)
 	SetLabels(id string, add, remove []string) ([]string, error)
 	Reply(id string, body gmailclient.ReplyBody, opts gmailclient.ReplyOptions) (gmailclient.ReplyPlan, error)
-	Compose(to, subject, body string, send bool) (gmailclient.ComposePlan, error)
+	Compose(to, cc []string, subject, body string, send bool) (gmailclient.ComposePlan, error)
 	Read(id string) (mailingest.Message, error)
 }
 
@@ -1577,14 +1577,16 @@ func (s *server) fileSent(mb mailbox, id string) bool {
 // preview; true sends that exact plan. The caller must separately opt the server
 // into mail writes with -send-mail.
 type composeRequest struct {
-	To      string `json:"to"`
-	Subject string `json:"subject"`
-	Body    string `json:"body"`
-	Confirm bool   `json:"confirm,omitempty"`
+	To      []string `json:"to"`
+	Cc      []string `json:"cc,omitempty"`
+	Subject string   `json:"subject"`
+	Body    string   `json:"body"`
+	Confirm bool     `json:"confirm,omitempty"`
 }
 
 type composeResponse struct {
 	To      string `json:"to"`
+	Cc      string `json:"cc,omitempty"`
 	Subject string `json:"subject"`
 	Body    string `json:"body"`
 	Sent    bool   `json:"sent"`
@@ -1605,12 +1607,11 @@ func (s *server) compose(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, fmt.Errorf("reading the request body: %w", err))
 		return
 	}
-	req.To = strings.TrimSpace(req.To)
-	if req.To == "" || strings.TrimSpace(req.Subject) == "" || strings.TrimSpace(req.Body) == "" {
+	if len(req.To) == 0 || strings.TrimSpace(req.Subject) == "" || strings.TrimSpace(req.Body) == "" {
 		fail(w, http.StatusBadRequest, errors.New("a composed message requires explicit to, subject, and plain-text body fields"))
 		return
 	}
-	if err := checkAddresses([]string{req.To}, nil); err != nil {
+	if err := checkAddresses(req.To, req.Cc); err != nil {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
@@ -1619,7 +1620,7 @@ func (s *server) compose(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadGateway, fmt.Errorf("opening the mailbox: %w", err))
 		return
 	}
-	plan, err := mb.Compose(req.To, req.Subject, req.Body, req.Confirm)
+	plan, err := mb.Compose(req.To, req.Cc, req.Subject, req.Body, req.Confirm)
 	if err != nil {
 		if errors.Is(err, gmailclient.ErrUnsent) {
 			fail(w, http.StatusBadGateway, fmt.Errorf("the mailbox would not prepare the message, so nothing was sent: %w", err))
@@ -1628,7 +1629,7 @@ func (s *server) compose(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadGateway, fmt.Errorf("the mailbox did not answer the send, so whether it went out is unknown — check Gmail before sending again: %w", err))
 		return
 	}
-	out := composeResponse{To: plan.To, Subject: plan.Subject, Body: plan.Body, Sent: plan.GmailID != ""}
+	out := composeResponse{To: plan.To, Cc: plan.Cc, Subject: plan.Subject, Body: plan.Body, Sent: plan.GmailID != ""}
 	if out.Sent {
 		out.GmailID = plan.GmailID
 		filed := s.fileSent(mb, plan.GmailID)

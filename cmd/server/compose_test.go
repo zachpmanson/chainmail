@@ -13,7 +13,7 @@ func TestComposeRequiresSendGrant(t *testing.T) {
 		opened = true
 		return fake, nil
 	}
-	res := h.do(t, "POST", "/v1/compose", []byte(`{"to":"ada@example.test","subject":"Hello","body":"Hi"}`))
+	res := h.do(t, "POST", "/v1/compose", []byte(`{"to":["ada@example.test"],"subject":"Hello","body":"Hi"}`))
 	if res.status != 403 || !strings.Contains(res.errText(t), "-send-mail") {
 		t.Fatalf("status %d: %s", res.status, res.body)
 	}
@@ -24,27 +24,27 @@ func TestComposeRequiresSendGrant(t *testing.T) {
 
 func TestComposePreviewReturnsExactTextWithoutSending(t *testing.T) {
 	h, _ := sendServer(t)
-	res := h.do(t, "POST", "/v1/compose", []byte(`{"to":"ada@example.test","subject":"Hello","body":"Hi\nthere"}`))
+	res := h.do(t, "POST", "/v1/compose", []byte(`{"to":["ada@example.test"],"subject":"Hello","body":"Hi\nthere"}`))
 	if res.status != 200 {
 		t.Fatalf("status %d: %s", res.status, res.body)
 	}
 	got := decode[composeResponse](t, res)
-	if got.To != "ada@example.test" || got.Subject != "Hello" || got.Body != "Hi\nthere" || got.Sent || got.GmailID != "" || got.Filed != nil {
+	if got.To != "ada@example.test" || got.Cc != "" || got.Subject != "Hello" || got.Body != "Hi\nthere" || got.Sent || got.GmailID != "" || got.Filed != nil {
 		t.Fatalf("unexpected preview: %+v", got)
 	}
 }
 
 func TestComposeConfirmedSendAndFilingResult(t *testing.T) {
 	h, fake := sendServer(t)
-	res := h.do(t, "POST", "/v1/compose", []byte(`{"to":"ada@example.test","subject":"Hello","body":"Hi\nthere","confirm":true}`))
+	res := h.do(t, "POST", "/v1/compose", []byte(`{"to":["ada@example.test"],"cc":["bo@example.test"],"subject":"Hello","body":"Hi\nthere","confirm":true}`))
 	if res.status != 200 {
 		t.Fatalf("status %d: %s", res.status, res.body)
 	}
 	got := decode[composeResponse](t, res)
-	if !got.Sent || got.GmailID != "sent-compose-id" || got.Filed == nil || !*got.Filed {
+	if got.Cc != "bo@example.test" || !got.Sent || got.GmailID != "sent-compose-id" || got.Filed == nil || !*got.Filed {
 		t.Fatalf("unexpected sent result: %+v", got)
 	}
-	if len(fake.composes) != 1 || !fake.composes[0].send || fake.composes[0].to != "ada@example.test" || fake.composes[0].subject != "Hello" || fake.composes[0].body != "Hi\nthere" {
+	if len(fake.composes) != 1 || !fake.composes[0].send || strings.Join(fake.composes[0].to, ", ") != "ada@example.test" || strings.Join(fake.composes[0].cc, ", ") != "bo@example.test" || fake.composes[0].subject != "Hello" || fake.composes[0].body != "Hi\nthere" {
 		t.Fatalf("unexpected mailbox compose calls: %+v", fake.composes)
 	}
 }
@@ -52,7 +52,7 @@ func TestComposeConfirmedSendAndFilingResult(t *testing.T) {
 func TestComposeUncertainSendDoesNotClaimSuccess(t *testing.T) {
 	h, fake := sendServer(t)
 	fake.composeErr = errors.New("transport failed")
-	res := h.do(t, "POST", "/v1/compose", []byte(`{"to":"ada@example.test","subject":"Hello","body":"Hi","confirm":true}`))
+	res := h.do(t, "POST", "/v1/compose", []byte(`{"to":["ada@example.test"],"subject":"Hello","body":"Hi","confirm":true}`))
 	if res.status != 502 || !strings.Contains(res.errText(t), "whether it went out is unknown") {
 		t.Fatalf("status %d: %s", res.status, res.body)
 	}
@@ -64,7 +64,7 @@ func TestComposeUncertainSendDoesNotClaimSuccess(t *testing.T) {
 func TestComposeReportsFilingFailureAfterSuccessfulSend(t *testing.T) {
 	h, fake := sendServer(t)
 	fake.readErr = errors.New("read back failed")
-	res := h.do(t, "POST", "/v1/compose", []byte(`{"to":"ada@example.test","subject":"Hello","body":"Hi","confirm":true}`))
+	res := h.do(t, "POST", "/v1/compose", []byte(`{"to":["ada@example.test"],"subject":"Hello","body":"Hi","confirm":true}`))
 	if res.status != 200 {
 		t.Fatalf("status %d: %s", res.status, res.body)
 	}
@@ -83,9 +83,9 @@ func TestComposeRejectsMissingFieldsBeforeOpeningMailbox(t *testing.T) {
 	}
 	for _, body := range []string{
 		`{"subject":"Hello","body":"Hi"}`,
-		`{"to":"ada@example.test","body":"Hi"}`,
-		`{"to":"ada@example.test","subject":"Hello"}`,
-		`{"to":"not an address","subject":"Hello","body":"Hi"}`,
+		`{"to":["ada@example.test"],"body":"Hi"}`,
+		`{"to":["ada@example.test"],"subject":"Hello"}`,
+		`{"to":["not an address"],"subject":"Hello","body":"Hi"}`,
 	} {
 		res := h.do(t, "POST", "/v1/compose", []byte(body))
 		if res.status != 400 {

@@ -54,8 +54,9 @@ type fakeMailbox struct {
 }
 
 type fakeCompose struct {
-	to, subject, body string
-	send              bool
+	to, cc        []string
+	subject, body string
+	send          bool
 }
 
 type fakeReply struct {
@@ -74,15 +75,15 @@ type fakeReply struct {
 	to, cc []string
 }
 
-func (f *fakeMailbox) Compose(to, subject, body string, send bool) (gmailclient.ComposePlan, error) {
-	f.composes = append(f.composes, fakeCompose{to: to, subject: subject, body: body, send: send})
+func (f *fakeMailbox) Compose(to, cc []string, subject, body string, send bool) (gmailclient.ComposePlan, error) {
+	f.composes = append(f.composes, fakeCompose{to: to, cc: cc, subject: subject, body: body, send: send})
 	if f.composeErr != nil {
 		return gmailclient.ComposePlan{}, f.composeErr
 	}
-	if strings.TrimSpace(to) == "" || strings.TrimSpace(subject) == "" || strings.TrimSpace(body) == "" {
+	if len(to) == 0 || strings.TrimSpace(subject) == "" || strings.TrimSpace(body) == "" {
 		return gmailclient.ComposePlan{}, gmailclient.ErrUnsent
 	}
-	plan := gmailclient.ComposePlan{To: to, Subject: subject, Body: body}
+	plan := gmailclient.ComposePlan{To: strings.Join(to, ", "), Cc: strings.Join(cc, ", "), Subject: subject, Body: body}
 	if send {
 		plan.GmailID = "sent-compose-id"
 	}

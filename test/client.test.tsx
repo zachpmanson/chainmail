@@ -1107,17 +1107,21 @@ describe("the site navigation", () => {
     expect(panel.classList.contains("ibread")).toBe(true);
     expect(panel.closest(".ibsplit.has-choice")).toBeTruthy();
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(panel.querySelector(".replysummary")).toBeTruthy();
+    expect(panel.querySelector(".replysummary")).toBeNull();
+    expect(within(panel).getByRole("combobox", { name: "to addresses" })).toBeTruthy();
+    expect(within(panel).getByRole("combobox", { name: "cc addresses" })).toBeTruthy();
     expect(panel.querySelectorAll(".replyacts .opbtn").length).toBeGreaterThan(0);
   });
 
-  it("uses the shared editable address field for Compose recipients", async () => {
+  it("shows editable To and CC autocomplete fields by default in Compose", async () => {
     handler = () => json(200, { signed_in: true });
     await mountApp("/");
     click(screen.getByRole("button", { name: "Compose" }));
-    click(await screen.findByRole("button", { name: /Edit recipients/ }));
 
     const to = await screen.findByRole("combobox", { name: "to addresses" });
+    const cc = screen.getByRole("combobox", { name: "cc addresses" });
+    expect(cc).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Edit recipients/ })).toBeNull();
     fireEvent.change(to, { target: { value: "mira@loomworks.example" } });
     click(await screen.findByRole("option", { name: "mira@loomworks.example" }));
 
