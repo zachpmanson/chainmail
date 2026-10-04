@@ -1,4 +1,6 @@
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
+import { usePersonAddresses } from "../lib/who";
+import { AddressField, addressWords, type Address } from "./AddressField";
 
 type ComposeResult = {
   to: string;
@@ -23,7 +25,17 @@ async function compose(input: { to: string; subject: string; body: string; confi
 }
 
 export function ComposeBox({ onClose }: Props) {
-  const [to, setTo] = useState("");
+  const people = usePersonAddresses();
+  const suggestions = useMemo<Address[]>(() => {
+    const seen = new Set<string>();
+    const out: Address[] = [];
+    for (const addresses of people.values()) for (const address of addresses) {
+      const key = address.toLowerCase();
+      if (!seen.has(key)) { seen.add(key); out.push({ address }); }
+    }
+    return out;
+  }, [people]);
+  const [recipients, setRecipients] = useState<Address[]>([]);
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [preview, setPreview] = useState<ComposeResult | null>(null);
@@ -31,6 +43,7 @@ export function ComposeBox({ onClose }: Props) {
   const [busy, setBusy] = useState(false);
   const [sendFailed, setSendFailed] = useState(false);
   const [error, setError] = useState("");
+  const to = recipients.map(addressWords).join(", ");
 
   async function prepare(event: FormEvent) {
     event.preventDefault();
@@ -41,7 +54,7 @@ export function ComposeBox({ onClose }: Props) {
   }
 
   async function send() {
-    if (!preview || preview.to !== to.trim() || preview.subject !== subject || preview.body !== body) return;
+    if (!preview || preview.to !== to || preview.subject !== subject || preview.body !== body) return;
     setBusy(true); setError("");
     try { setResult(await compose({ to, subject, body, confirm: true })); }
     catch (e) {
@@ -63,11 +76,11 @@ export function ComposeBox({ onClose }: Props) {
           {error && <p role="alert">{error}{sendFailed && " Check Gmail before attempting to send again."}</p>}
           <footer>{sendFailed ? <button className="opbtn" type="button" onClick={onClose}>Close</button> : <><button className="opbtn" type="button" disabled={busy} onClick={() => { setPreview(null); setError(""); }}>Edit</button><button className="opbtn" type="button" disabled={busy} onClick={send}>{busy ? "Sending…" : "Confirm and send"}</button></>}</footer>
         </> : <form onSubmit={prepare}>
-          <label>To <input required type="text" autoComplete="off" value={to} onChange={(e) => setTo(e.target.value)} placeholder="name@example.com" /></label>
-          <label>Subject <input required value={subject} onChange={(e) => setSubject(e.target.value)} /></label>
-          <label>Message <textarea required rows={10} value={body} onChange={(e) => setBody(e.target.value)} /></label>
+          <div className="replyrecipients"><div className="replyrecipient"><span className="replylabel">To</span><AddressField label="to" value={recipients} onChange={setRecipients} suggestions={suggestions} disabled={busy} /></div></div>
+          <label>Subject <input className="replyinput" required value={subject} onChange={(e) => setSubject(e.target.value)} /></label>
+          <label>Message <textarea className="replyinput" required rows={10} value={body} onChange={(e) => setBody(e.target.value)} /></label>
           {error && <p role="alert">{error}</p>}
-          <footer><button className="opbtn" type="button" onClick={onClose}>Cancel</button><button className="opbtn" type="submit" disabled={busy}>{busy ? "Preparing…" : "Review message"}</button></footer>
+          <footer><button className="opbtn" type="button" onClick={onClose}>Cancel</button><button className="opbtn" type="submit" disabled={busy || recipients.length === 0}>{busy ? "Preparing…" : "Review message"}</button></footer>
         </form>}
       </section>
     </div>
