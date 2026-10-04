@@ -29,7 +29,7 @@ import { NavReading } from "./components/NavReading";
 import { NavRefresh } from "./components/NavRefresh";
 import { AutoRefresh } from "./components/AutoRefresh";
 import { NavSearch } from "./components/NavSearch";
-import { ComposeBox } from "./components/ComposeBox";
+import { ComposeProvider } from "./components/ComposeContext";
 import type { SearchMode } from "./lib/api";
 
 /**
@@ -261,8 +261,9 @@ function RootLayout() {
       </header>
       <SignInBar />
       </> : null}
-      <Outlet />
-      {composing ? <ComposeBox onClose={() => setComposing(false)} /> : null}
+      <ComposeProvider composing={composing} closeCompose={() => setComposing(false)}>
+        <Outlet />
+      </ComposeProvider>
       {/* What a write leaves to say, over everything and out of the flow of any
           page: an account of work that is over must not take a row from the mail
           being read, and a refusal must not be scrolled away from (see Toasts). */}

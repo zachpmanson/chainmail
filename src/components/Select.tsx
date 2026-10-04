@@ -10,6 +10,8 @@ import { ThreadRow, RankMeta } from "./ThreadRow";
 import { Failure, type PreviewableThread } from "./ThreadShared";
 import { SplitPane } from "./SplitPane";
 import { CompactListHeader, CompactModeToggle } from "./CompactListControls";
+import { ComposeBox } from "./ComposeBox";
+import { useCompose } from "./ComposeContext";
 
 /**
  * Search, then choose, then build. Selection is a stage of its own because
@@ -27,6 +29,7 @@ import { CompactListHeader, CompactModeToggle } from "./CompactListControls";
  */
 export function SelectView() {
   const navigate = useNavigate();
+  const { composing, closeCompose } = useCompose();
   const [compact, setCompact] = useCompactMode();
   // The search lives in the URL (q, mode, person, since), validated and typed by
   // the route: leaving for a built page and pressing Back restores the search
@@ -138,7 +141,7 @@ export function SelectView() {
               split the inbox uses, because judging a candidate is comparing it
               with the others — which a modal over the list hides. */}
           <SplitPane
-            hasChoice={Boolean(opened)}
+            hasChoice={composing || Boolean(opened)}
             list={
               <div className="iblistwrap">
                 <div className="iblist-toolbar">
@@ -165,7 +168,7 @@ export function SelectView() {
                 </ul>
               </div>
             }
-            pane={
+            pane={composing ? <ComposeBox onClose={closeCompose} /> : (
               <ThreadPane
                 thread={reading}
                 label="The candidate being read"
@@ -173,7 +176,7 @@ export function SelectView() {
                 empty="Nothing open — pick a result from the list."
                 onClose={closeChain}
               />
-            }
+            )}
           />
 
           {/* The bar of things to do with the ticked candidates, at the foot of

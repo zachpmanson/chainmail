@@ -1104,6 +1104,8 @@ describe("the site navigation", () => {
     click(button);
     const panel = await screen.findByRole("complementary", { name: "Compose email" });
     expect(panel.classList.contains("compose-panel")).toBe(true);
+    expect(panel.classList.contains("ibread")).toBe(true);
+    expect(panel.closest(".ibsplit.has-choice")).toBeTruthy();
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(panel.querySelectorAll("button").length).toBeGreaterThan(0);
     for (const panelButton of panel.querySelectorAll("button")) {
