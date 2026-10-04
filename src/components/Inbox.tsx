@@ -210,10 +210,21 @@ export function Inbox() {
   const pickFolder = (name: string) =>
     navigate({ to: "/", search: (prev) => ({ ...prev, label: name }) });
   const makeDefault = (on: boolean) => save.mutate({ body: { defaultFolder: on ? label : "" } });
-  const openChain = (root: string) =>
+  // Picking a mail takes the pane, and the pane holds one thing: the compose
+  // panel is dismissed by the act of choosing a thread to read. Without this a
+  // reader who had the compose panel open and clicked a row saw the panel stay
+  // where it was — the thread they picked had opened underneath it, and they
+  // were left writing to nobody (ComposeBox's own Close is the other direction,
+  // for the reader who wants to go back to the mail they had open).
+  const openChain = (root: string) => {
+    closeCompose();
+    // Already the thread the address names: the compose panel was the only thing
+    // in the way, and there is no new address to push onto the reader's history.
+    if (root === opened) return;
     // Merged onto whatever else the address carries, so opening a thread cannot
     // silently drop a parameter someone put there.
     navigate({ to: "/", search: (prev) => ({ ...prev, open: root }) });
+  };
   const closeChain = () => navigate({ to: "/", search: (prev) => ({ ...prev, open: undefined }) });
 
   // Pages accumulate in one cache entry, keyed on the request: the cursor is
@@ -381,7 +392,14 @@ export function Inbox() {
                       key={c.rootExtId}
                       thread={c}
                       checked={chosen.includes(c.rootExtId)}
-                      current={selected?.rootExtId === c.rootExtId}
+                      // The pane can only be reading one thing, and while the
+                      // compose panel is open it is not reading this row: a row
+                      // marked current under a compose panel would be the list
+                      // claiming a thread is on screen that is not. It is also
+                      // what lets the row's own click take the pane back (see
+                      // ThreadRow's press, which does nothing to the row it is
+                      // already reading).
+                      current={!composing && selected?.rootExtId === c.rootExtId}
                       compact={compact}
                       onToggle={() => toggle(c.rootExtId)}
                       onOpen={() => openChain(c.rootExtId)}

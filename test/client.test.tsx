@@ -452,6 +452,36 @@ describe("reading a candidate beside the results", () => {
     expect(rowOf("Loom cutover schedule").classList.contains("sel")).toBe(true);
   });
 
+  it("dismisses the compose panel when a candidate is picked", async () => {
+    // The same slot on the search page as on the inbox: picking a candidate is a
+    // request to read it, so the panel the reader had open goes rather than
+    // staying over the thread they pressed (see Inbox's openChain).
+    handler = () => json(200, { mode: "lexical", chains: CHAINS });
+    const router = await mountApp("/?q=cutover");
+    await screen.findByText("Warehouse lease renewal", { selector: ".ibsubj" });
+
+    click(screen.getByRole("button", { name: "Compose" }));
+    expect(await screen.findByRole("complementary", { name: "Compose email" })).toBeTruthy();
+    // The rows do not claim to be the pane's while the panel is in it.
+    expect(rowOf("Warehouse lease renewal").classList.contains("sel")).toBe(false);
+
+    click(
+      within(rowOf("Warehouse lease renewal")).getByRole("button", {
+        name: "Warehouse lease renewal",
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("complementary", { name: "Compose email" })).toBeNull(),
+    );
+    await waitFor(() =>
+      expect(pane().querySelector(".ibread-subj")!.textContent).toBe("Warehouse lease renewal"),
+    );
+    expect(rowOf("Warehouse lease renewal").classList.contains("sel")).toBe(true);
+    expect(decodeURIComponent(router.state.location.searchStr)).toContain(
+      `open=${CHAINS[1]!.rootExtId}`,
+    );
+  });
+
   it("reads the address's search back into the nav's box, and leaves it alone", async () => {
     handler = () => json(200, { mode: "lexical", chains: CHAINS });
     const router = await mountApp("/?q=cutover&mode=semantic&person=ada");

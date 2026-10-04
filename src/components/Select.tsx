@@ -76,8 +76,13 @@ export function SelectView() {
   // means nothing was picked, and then the pane reads the first result — the top
   // of a ranked list is what the reader is looking at anyway.
   const opened = useSearch({ from: "/" }).open;
-  const openChain = (root: string) =>
+  // As on the inbox: choosing a candidate is a request to read it, so it takes
+  // the pane back from the compose panel rather than opening a thread behind one.
+  const openChain = (root: string) => {
+    closeCompose();
+    if (root === opened) return;
     navigate({ to: "/", search: (prev) => ({ ...prev, open: root }) });
+  };
   const closeChain = () => navigate({ to: "/", search: (prev) => ({ ...prev, open: undefined }) });
 
   // Nothing is fetched until the address asks something. This page is only ever
@@ -154,7 +159,9 @@ export function SelectView() {
                       key={c.rootExtId}
                       thread={c}
                       checked={chosen.includes(c.rootExtId)}
-                      current={reading?.rootExtId === c.rootExtId}
+                      // Not current while the compose panel is in the pane: the
+                      // row is a claim about what is being read (see the inbox).
+                      current={!composing && reading?.rootExtId === c.rootExtId}
                       compact={compact}
                       meta={<RankMeta thread={c} />}
                       onToggle={() => toggle(c.rootExtId)}
