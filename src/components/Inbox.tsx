@@ -7,7 +7,7 @@ import { ActionBar } from "./ActionBar";
 import { useLastDescription } from "../lib/lists";
 import { ThreadPane } from "./ThreadPane";
 import { ThreadRow } from "./ThreadRow";
-import { Failure, type PreviewableThread } from "./ThreadPreview";
+import { Failure, type PreviewableThread } from "./ThreadShared";
 import { SplitPane } from "./SplitPane";
 import { CompactListHeader } from "./CompactListControls";
 
