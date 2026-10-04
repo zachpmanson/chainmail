@@ -890,6 +890,28 @@ describe("the home page with no query", () => {
     expect(screen.queryByRole("link", { name: /Inbox/i })).toBeNull();
   });
 
+  it("keeps the popup's head out of the thread's scroll", async () => {
+    handler = buildHandler;
+    await mountApp(`/?open=${encodeURIComponent("mail:<loom-cutover-1@example.fed>")}&popup=1`);
+
+    // The head is a row of the window and the thread scrolls in a box of its own
+    // beneath it — the reading pane's arrangement (see .ibread-head/.ibreadwrap)
+    // — so a long thread cannot take the subject or Close off the screen. jsdom
+    // lays nothing out, so the claim is the structure: the head is a sibling of
+    // the scroll box, not a line inside it.
+    const header = (await screen.findByRole("heading", { name: "Loom cutover schedule" })).closest(
+      "header",
+    )!;
+    const body = document.querySelector(".thread-popup-body");
+    expect(body).not.toBeNull();
+    expect(header.contains(body!)).toBe(false);
+    expect(header.parentElement).toBe(body!.parentElement);
+    // And the thread is what is in the scroll box, not left behind in the head.
+    expect(body!.querySelector(".stream")).not.toBeNull();
+    expect(await screen.findByText(/Roof access is fine from the 14th/)).toBeTruthy();
+    expect(body!.textContent).toContain("Roof access is fine from the 14th");
+  });
+
   it("opens the thread the address names, without a click", async () => {
     handler = buildHandler;
     await mountApp(`/?open=${encodeURIComponent("mail:<loom-cutover-1@example.fed>")}`);
