@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, type FormEvent } from "react";
 import { usePersonAddresses } from "../lib/who";
-import { AddressField, addressWords, type Address } from "./AddressField";
+import { addressWords, type Address } from "./AddressField";
+import { ComposerFields } from "./ComposerFields";
 import { ComposerFlow } from "./ComposerFlow";
 
 type ComposeResult = {
@@ -71,9 +72,17 @@ export function ComposeBox({ onClose }: Props) {
   const isPreview = preview !== null && result === null;
   const editor = (
     <form ref={form} onSubmit={prepare}>
-      <div className="replyrecipients"><div className="replyrecipient"><span className="replylabel">To</span><AddressField label="to" value={recipients} onChange={setRecipients} suggestions={suggestions} disabled={busy} /></div></div>
-      <label>Subject <input className="replyinput" required value={subject} onChange={(e) => setSubject(e.target.value)} /></label>
-      <label>Message <textarea className="replyinput" required rows={10} value={body} onChange={(e) => setBody(e.target.value)} /></label>
+      <ComposerFields
+        mode="compose"
+        to={recipients}
+        onToChange={setRecipients}
+        suggestions={suggestions}
+        subject={subject}
+        onSubjectChange={setSubject}
+        body={body}
+        onBodyChange={setBody}
+        busy={busy}
+      />
     </form>
   );
 

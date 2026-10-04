@@ -3,7 +3,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { $api, type CorpusEntry, type SendResponse } from "../lib/api";
 import { dismissToast, pushToast } from "../lib/toasts";
 import { addressesOf, usePersonAddresses } from "../lib/who";
-import { addressKey, addressWords, AddressField, type Address } from "./AddressField";
+import { addressKey, type Address } from "./AddressField";
+import { ComposerFields } from "./ComposerFields";
 import { ComposerFlow } from "./ComposerFlow";
 import { refusal, staleAfterMail, SAID_MS } from "./MailVerbs";
 
@@ -183,32 +184,6 @@ export function AnswerPress({
       </svg>
     </button>
   );
-}
-
-/** The names the collapsed recipient line prints, in the order the reply holds
- *  them: the display name where something knows one, and the address where nothing
- *  does — which is what the message header's own receipt line does (see Message).
- *  The address is the hover title, because that is the part a reader checks and
- *  this line is mostly people the thread has already named. */
-function recipientNames(list: Address[]) {
-  return list.map((a, i) => (
-    <span key={addressKey(a.address)} title={addressWords(a)}>
-      {i === 0 ? null : ", "}
-      {a.name || a.address}
-    </span>
-  ));
-}
-
-/** The same audience as one sentence, for the accessible name of the press that
- *  opens the editors: the line's own text is spans inside the button, so a screen
- *  reader has to be told what it says rather than read a run of names with no
- *  words around them. */
-function recipientWords(to: Address[], cc: Address[]): string {
-  const names = (list: Address[]) => list.map((a) => a.name || a.address).join(", ");
-  const parts: string[] = [];
-  if (to.length) parts.push(`to ${names(to)}`);
-  if (cc.length) parts.push(`cc ${names(cc)}`);
-  return parts.join(", ") || "nobody";
 }
 
 export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aimed }: {
@@ -478,33 +453,23 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
   }
 
   const editor = (
-    <>
-      <div className="replyrecipients">
-        <div className="replyrecipient">
-          {editing ? <>
-            <span className="replylabel">to:</span>
-            <AddressField label="to" value={to} onChange={changeTo} suggestions={suggestions} taken={cc} mine={mine} disabled={busy} />
-          </> : (
-            <button type="button" className="replysummary" aria-expanded={false} aria-label={`Edit the recipients on this reply — currently ${recipientWords(to, cc)}`} title="Edit the recipients on this reply" disabled={busy} onClick={() => setEditing(true)}>
-              <span className="replylabel">to:</span>
-              <span className="replynames">
-                {to.length ? recipientNames(to) : null}
-                {cc.length ? <><span className="replykind">{to.length ? ", cc " : "cc "}</span>{recipientNames(cc)}</> : null}
-                {!to.length && !cc.length ? <span className="replynone">add an address</span> : null}
-              </span>
-            </button>
-          )}
-          <a className="par replytarget" href={`#${answerAnchor}`} aria-label={`Jump to the message being replied to: ${words.who || "the sender"}, ${words.when}`} title={`Jump to the message being replied to: ${words.whoTitle ?? words.who}, ${words.when}`}>
-            <span className="arw" aria-hidden="true">&#8617;</span><span>{words.who || "message"}</span>
-          </a>
-        </div>
-        {editing ? <div className="replyrecipient">
-          <span className="replylabel">cc:</span>
-          <AddressField label="cc" value={cc} onChange={changeCc} suggestions={suggestions} taken={to} mine={mine} disabled={busy} />
-        </div> : null}
-      </div>
-      <textarea className="replyinput" aria-label="Your reply" rows={4} value={own} disabled={busy} onChange={(e) => setOwn(e.target.value)} />
-    </>
+    <ComposerFields
+      mode="reply"
+      to={to}
+      onToChange={changeTo}
+      cc={cc}
+      onCcChange={changeCc}
+      suggestions={suggestions}
+      mine={mine}
+      editingRecipients={editing}
+      onEditRecipients={() => setEditing(true)}
+      target={<a className="par replytarget" href={`#${answerAnchor}`} aria-label={`Jump to the message being replied to: ${words.who || "the sender"}, ${words.when}`} title={`Jump to the message being replied to: ${words.whoTitle ?? words.who}, ${words.when}`}>
+        <span className="arw" aria-hidden="true">&#8617;</span><span>{words.who || "message"}</span>
+      </a>}
+      body={own}
+      onBodyChange={setOwn}
+      busy={busy}
+    />
   );
   const editorActions = <div className="replyopts">
     <label className="replytick" title="Answer everyone the message was addressed to. Edit the reply's audience in the fields above.">
