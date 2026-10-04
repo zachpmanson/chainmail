@@ -9,14 +9,15 @@ import (
 func TestComposeRejectsMissingRequiredFieldsBeforeMailboxAccess(t *testing.T) {
 	client := Client{}
 	for _, tc := range []struct {
-		name, to, subject, body, want string
+		name, subject, body, want string
+		to                        []string
 	}{
 		{name: "recipient", subject: "Hello", body: "Words", want: "to:"},
-		{name: "subject", to: "reader@example.com", body: "Words", want: "subject:"},
-		{name: "plain text body", to: "reader@example.com", subject: "Hello", want: "body:"},
+		{name: "subject", to: []string{"reader@example.com"}, body: "Words", want: "subject:"},
+		{name: "plain text body", to: []string{"reader@example.com"}, subject: "Hello", want: "body:"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := client.Compose(tc.to, tc.subject, tc.body, true)
+			_, err := client.Compose(tc.to, nil, tc.subject, tc.body, true)
 			if !errors.Is(err, ErrUnsent) {
 				t.Fatalf("Compose() error = %v, want ErrUnsent", err)
 			}
@@ -28,7 +29,7 @@ func TestComposeRejectsMissingRequiredFieldsBeforeMailboxAccess(t *testing.T) {
 }
 
 func TestComposeRejectsInvalidRecipientBeforeMailboxAccess(t *testing.T) {
-	_, err := (Client{}).Compose("not-an-address", "Hello", "Words", true)
+	_, err := (Client{}).Compose([]string{"not-an-address"}, nil, "Hello", "Words", true)
 	if !errors.Is(err, ErrUnsent) {
 		t.Fatalf("Compose() error = %v, want ErrUnsent", err)
 	}

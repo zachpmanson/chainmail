@@ -6,6 +6,7 @@ import { ComposerFlow } from "./ComposerFlow";
 
 type ComposeResult = {
   to: string;
+  cc?: string;
   subject: string;
   body: string;
   sent: boolean;
@@ -15,7 +16,7 @@ type ComposeResult = {
 
 type Props = { onClose: () => void };
 
-async function compose(input: { to: string; subject: string; body: string; confirm: boolean }): Promise<ComposeResult> {
+async function compose(input: { to: string[]; cc: string[]; subject: string; body: string; confirm: boolean }): Promise<ComposeResult> {
   const response = await fetch("/v1/compose", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -39,7 +40,7 @@ export function ComposeBox({ onClose }: Props) {
   }, [people]);
   const form = useRef<HTMLFormElement>(null);
   const [recipients, setRecipients] = useState<Address[]>([]);
-  const [editingRecipients, setEditingRecipients] = useState(false);
+  const [cc, setCc] = useState<Address[]>([]);
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [preview, setPreview] = useState<ComposeResult | null>(null);
@@ -47,20 +48,21 @@ export function ComposeBox({ onClose }: Props) {
   const [busy, setBusy] = useState(false);
   const [sendFailed, setSendFailed] = useState(false);
   const [error, setError] = useState("");
-  const to = recipients.map(addressWords).join(", ");
+  const to = recipients.map(addressWords);
+  const ccRecipients = cc.map(addressWords);
 
   async function prepare(event: FormEvent) {
     event.preventDefault();
     setBusy(true); setError("");
-    try { setPreview(await compose({ to, subject, body, confirm: false })); }
+    try { setPreview(await compose({ to, cc: ccRecipients, subject, body, confirm: false })); }
     catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   }
 
   async function send() {
-    if (!preview || preview.to !== to || preview.subject !== subject || preview.body !== body) return;
+    if (!preview || preview.to !== to.join(", ") || preview.cc !== (ccRecipients.length ? ccRecipients.join(", ") : undefined) || preview.subject !== subject || preview.body !== body) return;
     setBusy(true); setError("");
-    try { setResult(await compose({ to, subject, body, confirm: true })); }
+    try { setResult(await compose({ to, cc: ccRecipients, subject, body, confirm: true })); }
     catch (e) {
       // The request may have reached Gmail even if its response did not. Avoid a
       // retry that could duplicate mail; the reader must check Gmail first.
@@ -77,9 +79,10 @@ export function ComposeBox({ onClose }: Props) {
         mode="compose"
         to={recipients}
         onToChange={setRecipients}
+        cc={cc}
+        onCcChange={setCc}
         suggestions={suggestions}
-        editingRecipients={editingRecipients}
-        onEditRecipients={() => setEditingRecipients(true)}
+        editingRecipients={true}
         subject={subject}
         onSubjectChange={setSubject}
         body={body}
@@ -96,8 +99,8 @@ export function ComposeBox({ onClose }: Props) {
       busy={busy}
       error={error ? <>{error}{sendFailed ? " Check Gmail before attempting to send again." : ""}</> : undefined}
       editor={editor}
-      preview={preview ? <dl className="compose-review"><dt>To</dt><dd>{preview.to}</dd><dt>Subject</dt><dd>{preview.subject}</dd><dt>Plain-text message</dt><dd><pre>{preview.body}</pre></dd><p>Review the exact message above. Sending is irreversible.</p></dl> : null}
-      done={result ? <><p>Sent to {result.to}.</p><p>{result.filed ? "Filed in the corpus." : "Sent successfully, but could not be filed in the corpus."}</p></> : null}
+      preview={preview ? <dl className="compose-review"><dt>To</dt><dd>{preview.to}</dd>{preview.cc ? <><dt>Cc</dt><dd>{preview.cc}</dd></> : null}<dt>Subject</dt><dd>{preview.subject}</dd><dt>Plain-text message</dt><dd><pre>{preview.body}</pre></dd><p>Review the exact message above. Sending is irreversible.</p></dl> : null}
+      done={result ? <><p>Sent to {result.to}{result.cc ? `, cc ${result.cc}` : ""}.</p><p>{result.filed ? "Filed in the corpus." : "Sent successfully, but could not be filed in the corpus."}</p></> : null}
       onReview={() => form.current?.requestSubmit()}
       onEdit={() => { if (sendFailed) onClose(); else { setPreview(null); setError(""); } }}
       showConfirm={!sendFailed}
@@ -105,7 +108,7 @@ export function ComposeBox({ onClose }: Props) {
       onConfirm={() => void send()}
       onClose={onClose}
       reviewDisabled={recipients.length === 0}
-      confirmDisabled={sendFailed || !preview || preview.to !== to || preview.subject !== subject || preview.body !== body}
+      confirmDisabled={sendFailed || !preview || preview.to !== to.join(", ") || preview.cc !== (ccRecipients.length ? ccRecipients.join(", ") : undefined) || preview.subject !== subject || preview.body !== body}
       reviewLabel="Review message"
       confirmLabel="Confirm and send"
     />

@@ -1736,8 +1736,10 @@ export interface components {
             person: components["schemas"]["PersonSummary"];
         };
         ComposeRequest: {
-            /** @description Explicit comma-separated recipient address(es). */
-            to: string;
+            /** @description Explicit recipient address(es). */
+            to: string[];
+            /** @description Optional explicit Cc recipient address(es). */
+            cc?: string[];
             /** @description Required subject. */
             subject: string;
             /** @description Required plain-text message body. */
@@ -1747,6 +1749,8 @@ export interface components {
         };
         ComposeResponse: {
             to: string;
+            /** @description Cc recipients, when present. */
+            cc?: string;
             subject: string;
             /** @description Exact plain-text body prepared or sent. */
             body: string;

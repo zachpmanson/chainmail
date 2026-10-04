@@ -3812,8 +3812,14 @@
         ],
         "properties": {
           "to": {
-            "type": "string",
-            "description": "Explicit comma-separated recipient address(es)."
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Explicit recipient address(es)."
+          },
+          "cc": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Optional explicit Cc recipient address(es)."
           },
           "subject": {
             "type": "string",
@@ -3841,6 +3847,10 @@
         "properties": {
           "to": {
             "type": "string"
+          },
+          "cc": {
+            "type": "string",
+            "description": "Cc recipients, when present."
           },
           "subject": {
             "type": "string"
