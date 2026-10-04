@@ -4,6 +4,7 @@ import { $api, type CorpusEntry, type SendResponse } from "../lib/api";
 import { dismissToast, pushToast } from "../lib/toasts";
 import { addressesOf, usePersonAddresses } from "../lib/who";
 import { addressKey, addressWords, AddressField, type Address } from "./AddressField";
+import { ComposerFlow } from "./ComposerFlow";
 import { refusal, staleAfterMail, SAID_MS } from "./MailVerbs";
 
 /**
@@ -476,226 +477,66 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
     staleAfterMail(queryClient);
   }
 
-  return (
-    <div className="replybox" ref={host}>
-      {error ? (
-        <p className="selfail" role="alert">
-          {error}
-        </p>
-      ) : null}
-      {plan ? (
-        <div className="replyplan">
-          <p className="replynote">
-            <strong>Nothing has been sent yet.</strong> This is the whole message as
-            it will go:{" "}
-            to <strong>{plan.to || "(no recipient)"}</strong>
-            {plan.cc ? (
-              <>
-                , cc <strong>{plan.cc}</strong>
-              </>
-            ) : null}
-            , as <strong>{plan.subject}</strong>, in <strong>{plan.html ? "text and HTML" : "plain text alone"}</strong>. Your words come first and the message you
-            are answering is quoted under them.
-          </p>
-          {/* The body as it will be sent, in the form it will be sent in. The html
-              tick decides whether the reply carries its HTML part, and the server
-              hands that part back on the plan — so what is drawn is the rendering
-              that is going out rather than the other one: the reader's words as
-              paragraphs and the message being answered inside the blockquote a
-              client folds. With the tick off there is no HTML half and the text
-              part is the whole message, so it is drawn as the lines that will be
-              sent, whitespace and all: a quote is line by line, and a reply that
-              reflowed on its way out would not be this text.
-
-              Either way the bytes are the server's and are rendered as they are:
-              the HTML was composed by spec.ComposeReply, from the same reading of
-              the reader's words as the text beside it, and a second pass here —
-              sanitising or restyling it — would be a second answer to what is
-              being sent. It goes in this stylesheet rather than a shadow root for
-              the reason the two are not the same thing: mountOriginal holds a
-              sender's own document, with their own stylesheet and their own class
-              names to contain (see lib/original). Here there is neither — this is
-              the app's own markup, composed by the same package that composes
-              every body the pane already draws this way — so the blockquote and
-              the paragraphs are meant to read as the app reads mail. */}
-          {plan.html ? (
-            <div className="replyhtml" dangerouslySetInnerHTML={{ __html: plan.html }} />
-          ) : (
-            <pre className="replytext">{plan.body}</pre>
+  const editor = (
+    <>
+      <div className="replyrecipients">
+        <div className="replyrecipient">
+          {editing ? <>
+            <span className="replylabel">to:</span>
+            <AddressField label="to" value={to} onChange={changeTo} suggestions={suggestions} taken={cc} mine={mine} disabled={busy} />
+          </> : (
+            <button type="button" className="replysummary" aria-expanded={false} aria-label={`Edit the recipients on this reply — currently ${recipientWords(to, cc)}`} title="Edit the recipients on this reply" disabled={busy} onClick={() => setEditing(true)}>
+              <span className="replylabel">to:</span>
+              <span className="replynames">
+                {to.length ? recipientNames(to) : null}
+                {cc.length ? <><span className="replykind">{to.length ? ", cc " : "cc "}</span>{recipientNames(cc)}</> : null}
+                {!to.length && !cc.length ? <span className="replynone">add an address</span> : null}
+              </span>
+            </button>
           )}
-          <div className="opmact replyacts">
-            <button
-              type="button"
-              className="opbtn"
-              disabled={busy}
-              onClick={unplan}
-            >
-              keep editing
-            </button>
-            <button
-              type="button"
-              className="opbtn opbtn-after"
-              disabled={busy || !(to ?? []).length}
-              title={
-                (to ?? []).length
-                  ? "Send the reply, as it reads above."
-                  : "A reply needs somebody in to — put an address there first."
-              }
-              onClick={() => void ship()}
-            >
-              {busy ? "sending…" : "send this reply"}
-            </button>
-          </div>
+          <a className="par replytarget" href={`#${answerAnchor}`} aria-label={`Jump to the message being replied to: ${words.who || "the sender"}, ${words.when}`} title={`Jump to the message being replied to: ${words.whoTitle ?? words.who}, ${words.when}`}>
+            <span className="arw" aria-hidden="true">&#8617;</span><span>{words.who || "message"}</span>
+          </a>
         </div>
-      ) : (
-        <>
-          <div className="replyrecipients">
-            <div className="replyrecipient">
-              {editing ? (
-                <>
-                  <span className="replylabel">to:</span>
-                  <AddressField
-                    label="to"
-                    value={to}
-                    onChange={changeTo}
-                    suggestions={suggestions}
-                    taken={cc}
-                    mine={mine}
-                    disabled={busy}
-                  />
-                </>
-              ) : (
-                /* The audience, read-only, until a reader asks to change it: the
-                   names the reply reaches, printed as the message header prints
-                   its own receipt (see .to) rather than as a field they are being
-                   asked to arrange. The whole line is the press that opens the
-                   editors, because the line is a thing a reader points at rather
-                   than anything they read and leave alone. The address behind a
-                   name is in the hover title, which is where a reader checks it. */
-                <button
-                  type="button"
-                  className="replysummary"
-                  aria-expanded={false}
-                  aria-label={`Edit the recipients on this reply — currently ${recipientWords(to, cc)}`}
-                  title="Edit the recipients on this reply"
-                  disabled={busy}
-                  onClick={() => setEditing(true)}
-                >
-                  <span className="replylabel">to:</span>
-                  <span className="replynames">
-                    {to.length ? recipientNames(to) : null}
-                    {cc.length ? (
-                      <>
-                        <span className="replykind">{to.length ? ", cc " : "cc "}</span>
-                        {recipientNames(cc)}
-                      </>
-                    ) : null}
-                    {!to.length && !cc.length ? (
-                      <span className="replynone">add an address</span>
-                    ) : null}
-                  </span>
-                </button>
-              )}
-              {/* The message this reply answers, on the to line and not on a line
-                  of its own below the fields: who the reply goes to and which
-                  message it answers are read together — the reader is checking one
-                  reply's audience — and a link parked under the cc list was a third
-                  row for a question the first row already asks. It keeps the
-                  arrow, the anchor to that message's own bubble, and the name it
-                  wears there; `margin-left:auto` puts it at the end of the row,
-                  after the addresses rather than between the label and them.
-
-                  An anchor and nothing else — no button's box, no button's border
-                  — because it is a link to a message rather than a press that
-                  changes anything here. See .replytarget. */}
-              <a
-                className="par replytarget"
-                href={`#${answerAnchor}`}
-                aria-label={`Jump to the message being replied to: ${words.who || "the sender"}, ${words.when}`}
-                title={`Jump to the message being replied to: ${words.whoTitle ?? words.who}, ${words.when}`}
-              >
-                <span className="arw" aria-hidden="true">&#8617;</span>
-                <span>{words.who || "message"}</span>
-              </a>
-            </div>
-            {editing ? (
-              <div className="replyrecipient">
-                <span className="replylabel">cc:</span>
-                <AddressField
-                  label="cc"
-                  value={cc}
-                  onChange={changeCc}
-                  suggestions={suggestions}
-                  taken={to}
-                  mine={mine}
-                  disabled={busy}
-                />
-              </div>
-            ) : null}
-          </div>
-          <textarea
-            className="replyinput"
-            aria-label="Your reply"
-            rows={4}
-            value={own}
-            disabled={busy}
-            onChange={(e) => setOwn(e.target.value)}
-          />
-          <div className="opmact replyacts">
-            {/* The two decisions the box has to make, at the left end of the row
-                where a form's choices sit, and the press that acts on them at the
-                right where the sending is. Both are ticks and both are on, and both
-                are about the *starting* audience rather than the whole of it: each one
-                takes something off the reply as the mailbox first assembled it — the
-                audience beyond the sender, and the second rendering of the words —
-                and what either leaves out can be put back in the address fields above,
-                which is also where the audience grows. */}
-            <div className="replyopts">
-              <label
-                className="replytick"
-                title={
-                  "Answer everyone the message was addressed to, not only whoever wrote it. " +
-                  "Who that is comes from the message itself — the fields above are where " +
-                  "the reply's audience is edited."
-                }
-              >
-                <input
-                  type="checkbox"
-                  checked={all}
-                  disabled={busy}
-                  onChange={(e) => onAll(e.target.checked)}
-                />
-                reply all
-              </label>
-              <label
-                className="replytick"
-                title={
-                  "Send the HTML part of the reply — the same words marked up, with the " +
-                  "quoted message in a blockquote a client can fold — beside the plain " +
-                  "text. Unchecked sends the plain text alone, which says the same thing."
-                }
-              >
-                <input
-                  type="checkbox"
-                  checked={html}
-                  disabled={busy}
-                  onChange={(e) => setHtml(e.target.checked)}
-                />
-                send html
-              </label>
-            </div>
-            <button
-              type="button"
-              className="opbtn"
-              disabled={busy || own.trim() === "" || (toTouched && to.length === 0)}
-              title={toTouched && to.length === 0 ? "A reply needs somebody in to — put an address there first." : undefined}
-              onClick={() => void review()}
-            >
-              {busy ? "preparing…" : "preview"}
-            </button>
-          </div>
-        </>
-      )}
-    </div>
+        {editing ? <div className="replyrecipient">
+          <span className="replylabel">cc:</span>
+          <AddressField label="cc" value={cc} onChange={changeCc} suggestions={suggestions} taken={to} mine={mine} disabled={busy} />
+        </div> : null}
+      </div>
+      <textarea className="replyinput" aria-label="Your reply" rows={4} value={own} disabled={busy} onChange={(e) => setOwn(e.target.value)} />
+    </>
   );
+  const editorActions = <div className="replyopts">
+    <label className="replytick" title="Answer everyone the message was addressed to. Edit the reply's audience in the fields above.">
+      <input type="checkbox" checked={all} disabled={busy} onChange={(e) => onAll(e.target.checked)} /> reply all
+    </label>
+    <label className="replytick" title="Send the HTML rendering beside the same plain-text message. Unchecked sends plain text alone.">
+      <input type="checkbox" checked={html} disabled={busy} onChange={(e) => setHtml(e.target.checked)} /> send html
+    </label>
+  </div>;
+  const previewContent = plan ? <div className="replyplan">
+    <p className="replynote"><strong>Nothing has been sent yet.</strong> This is the whole message as it will go: to <strong>{plan.to || "(no recipient)"}</strong>{plan.cc ? <>, cc <strong>{plan.cc}</strong></> : null}, as <strong>{plan.subject}</strong>, in <strong>{plan.html ? "text and HTML" : "plain text alone"}</strong>. Your words come first and the message you are answering is quoted under them.</p>
+    {plan.html ? <div className="replyhtml" dangerouslySetInnerHTML={{ __html: plan.html }} /> : <pre className="replytext">{plan.body}</pre>}
+  </div> : null;
+
+  return <ComposerFlow
+    variant="reply"
+    step={plan ? "preview" : "compose"}
+    title="Reply"
+    busy={busy}
+    error={error}
+    editor={editor}
+    editorActions={editorActions}
+    preview={previewContent}
+    onReview={() => void review()}
+    onEdit={unplan}
+    onConfirm={() => void ship()}
+    confirmDisabled={!(to ?? []).length}
+    reviewDisabled={own.trim() === "" || (toTouched && to.length === 0)}
+    reviewTitle={to.length === 0 ? "Add somebody in to before previewing this reply." : undefined}
+    reviewLabel={busy ? "preparing…" : "preview"}
+    editLabel="keep editing"
+    confirmLabel="send this reply"
+    containerRef={host}
+  />;
 }
