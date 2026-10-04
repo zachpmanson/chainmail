@@ -11,7 +11,6 @@ describe("the compose panel", () => {
       <ComposerFlow
         variant="compose"
         step="compose"
-        title="Compose email"
         busy={false}
         editor={<p>Message editor</p>}
         preview={null}

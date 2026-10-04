@@ -36,9 +36,9 @@ function recipientWords(to: Address[], cc: Address[]) {
   return parts.join(", ") || "nobody";
 }
 
-/** The shared message fields used by new mail and replies. The reply supplies its
- * collapsed recipient summary and message target; new mail shows the same address
- * editor expanded and adds a subject field. */
+/** Shared fields for new mail and replies. Both start with the same collapsed
+ * recipient summary and body editor; new mail adds a subject, while replies add
+ * Cc and the message target. */
 export function ComposerFields({
   mode,
   to,
@@ -51,22 +51,22 @@ export function ComposerFields({
   onSubjectChange,
   cc = [],
   onCcChange,
-  editingRecipients = true,
+  editingRecipients = false,
   onEditRecipients,
   target,
   mine = [],
 }: Props) {
   const hasCc = onCcChange !== undefined;
-  const expanded = mode === "compose" || editingRecipients;
+  const expanded = editingRecipients;
   return (
     <>
       <div className="replyrecipients">
         <div className="replyrecipient">
           {expanded ? <>
-            <span className="replylabel">{mode === "compose" ? "To" : "to:"}</span>
+            <span className="replylabel">to:</span>
             <AddressField label="to" value={to} onChange={onToChange} suggestions={suggestions} taken={cc} mine={mine} disabled={busy} />
           </> : (
-            <button type="button" className="replysummary" aria-expanded={false} aria-label={`Edit the recipients on this reply — currently ${recipientWords(to, cc)}`} title="Edit the recipients on this reply" disabled={busy} onClick={onEditRecipients}>
+            <button type="button" className="replysummary" aria-expanded={false} aria-label={`Edit recipients — currently ${recipientWords(to, cc)}`} title="Edit recipients" disabled={busy} onClick={onEditRecipients}>
               <span className="replylabel">to:</span>
               <span className="replynames">
                 {to.length ? names(to) : null}
@@ -82,11 +82,8 @@ export function ComposerFields({
           <AddressField label="cc" value={cc} onChange={onCcChange} suggestions={suggestions} taken={to} mine={mine} disabled={busy} />
         </div> : null}
       </div>
-      {onSubjectChange ? <label>Subject <input className="replyinput" required value={subject ?? ""} disabled={busy} onChange={(e) => onSubjectChange(e.target.value)} /></label> : null}
-      <label className={mode === "compose" ? "composer-message" : undefined}>
-        {mode === "compose" ? "Message" : null}
-        <textarea className="replyinput" aria-label={mode === "reply" ? "Your reply" : undefined} required={mode === "compose"} rows={mode === "compose" ? 10 : 4} value={body} disabled={busy} onChange={(e) => onBodyChange(e.target.value)} />
-      </label>
+      {onSubjectChange ? <label className="replyfield">Subject <input className="replyinput" required value={subject ?? ""} disabled={busy} onChange={(e) => onSubjectChange(e.target.value)} /></label> : null}
+      <textarea className="replyinput" aria-label={mode === "reply" ? "Your reply" : "Message"} required={mode === "compose"} rows={4} value={body} disabled={busy} onChange={(e) => onBodyChange(e.target.value)} />
     </>
   );
 }

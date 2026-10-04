@@ -3,7 +3,6 @@ import type { ReactNode, Ref } from "react";
 type Props = {
   variant: "compose" | "reply";
   step: "compose" | "preview" | "done";
-  title: string;
   busy: boolean;
   error?: ReactNode;
   editor: ReactNode;
@@ -26,12 +25,10 @@ type Props = {
 };
 
 /** Shared compose → preview → confirm shell for new messages and replies.
- *  Variant-specific fields and preview content are supplied by the caller; the
- *  transitions, actions, and safe-to-send review step stay identical. */
+ *  Variant-specific fields and preview content are supplied by the caller. */
 export function ComposerFlow({
   variant,
   step,
-  title,
   busy,
   error,
   editor,
@@ -53,13 +50,7 @@ export function ComposerFlow({
   containerRef,
 }: Props) {
   const content = (
-    <section className={`composer-flow composer-flow--${variant}${variant === "compose" ? " compose-box" : ""}`} aria-labelledby={variant === "compose" ? "composer-title" : undefined}>
-      {variant === "compose" ? (
-        <header className="compose-head">
-          <h2 id="composer-title">{title}</h2>
-          {onClose ? <button className="opbtn" type="button" onClick={onClose} aria-label="Close">×</button> : null}
-        </header>
-      ) : null}
+    <section className={`composer-flow composer-flow--${variant}`} aria-label={variant === "compose" ? "Compose email" : "Reply"}>
       {step === "done" ? (
         <div role="status">
           {done}
@@ -68,17 +59,17 @@ export function ComposerFlow({
       ) : step === "preview" ? (
         <>
           {preview}
-          {error ? <p role="alert">{error}</p> : null}
-          <footer className={variant === "reply" ? "opmact replyacts" : undefined}>
+          {error ? <p className="selfail" role="alert">{error}</p> : null}
+          <footer className="opmact replyacts">
             <button className="opbtn" type="button" disabled={busy} onClick={onEdit}>{busy ? "Working…" : editLabel}</button>
-            {showConfirm ? <button className={variant === "reply" ? "opbtn opbtn-after" : "opbtn"} type="button" disabled={busy || confirmDisabled} onClick={onConfirm}>{busy ? "Sending…" : confirmLabel}</button> : null}
+            {showConfirm ? <button className="opbtn opbtn-after" type="button" disabled={busy || confirmDisabled} onClick={onConfirm}>{busy ? "Sending…" : confirmLabel}</button> : null}
           </footer>
         </>
       ) : (
         <>
-          {error ? <p className={variant === "reply" ? "selfail" : undefined} role="alert">{error}</p> : null}
+          {error ? <p className="selfail" role="alert">{error}</p> : null}
           {editor}
-          <footer className={variant === "reply" ? "opmact replyacts" : undefined}>
+          <footer className="opmact replyacts">
             {editorActions}
             {onClose ? <button className="opbtn" type="button" disabled={busy} onClick={onClose}>Cancel</button> : null}
             <button className="opbtn" type="button" title={reviewTitle} disabled={busy || reviewDisabled} onClick={onReview}>{busy ? "Preparing…" : reviewLabel}</button>
@@ -89,5 +80,5 @@ export function ComposerFlow({
   );
 
   if (variant === "reply") return <div className="replybox" ref={containerRef}>{content}</div>;
-  return <aside className="ibread compose-panel" aria-label="Compose email">{content}</aside>;
+  return <aside className="ibread compose-panel" aria-label="Compose email"><div className="replybox">{content}</div></aside>;
 }

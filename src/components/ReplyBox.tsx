@@ -487,7 +487,6 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
   return <ComposerFlow
     variant="reply"
     step={plan ? "preview" : "compose"}
-    title="Reply"
     busy={busy}
     error={error}
     editor={editor}

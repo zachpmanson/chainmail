@@ -407,7 +407,7 @@ describe("answering a message from the pane", () => {
     // the line currently holds — the names inside it are spans, so a screen reader
     // is not left to read a run of names with no words around them.
     expect(recipientSummary()!.tagName).toBe("BUTTON");
-    const edit = within(box()!).getByRole("button", { name: /Edit the recipients on this reply/ });
+    const edit = within(box()!).getByRole("button", { name: /Edit recipients/ });
     expect(edit.getAttribute("aria-label")).toContain("to Bo Halvorsen");
     expect(edit.getAttribute("aria-label")).toContain("cc Cy Okafor");
     expect(screen.queryByLabelText("to addresses")).toBeNull();
@@ -419,6 +419,7 @@ describe("answering a message from the pane", () => {
       within(box()!).getByRole("link", { name: /Jump to the message being replied to: Bo Halvorsen/ }),
     ).toBeTruthy();
 
+    fireEvent.click(edit);
     await waitFor(() => expect(chips("to")).toEqual(["Bo Halvorsen <bo@fjordline.example>"]));
     // Opened, the editors are the fields they always were, and the collapsed line
     // is gone; the anchor stays where it was, on the to row (asserted below).

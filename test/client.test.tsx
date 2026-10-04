@@ -1107,16 +1107,15 @@ describe("the site navigation", () => {
     expect(panel.classList.contains("ibread")).toBe(true);
     expect(panel.closest(".ibsplit.has-choice")).toBeTruthy();
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(panel.querySelectorAll("button").length).toBeGreaterThan(0);
-    for (const panelButton of panel.querySelectorAll("button")) {
-      expect(panelButton.className).toContain("opbtn");
-    }
+    expect(panel.querySelector(".replysummary")).toBeTruthy();
+    expect(panel.querySelectorAll(".replyacts .opbtn").length).toBeGreaterThan(0);
   });
 
   it("uses the shared editable address field for Compose recipients", async () => {
     handler = () => json(200, { signed_in: true });
     await mountApp("/");
     click(screen.getByRole("button", { name: "Compose" }));
+    click(await screen.findByRole("button", { name: /Edit recipients/ }));
 
     const to = await screen.findByRole("combobox", { name: "to addresses" });
     fireEvent.change(to, { target: { value: "mira@loomworks.example" } });

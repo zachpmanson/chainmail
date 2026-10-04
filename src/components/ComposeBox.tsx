@@ -39,6 +39,7 @@ export function ComposeBox({ onClose }: Props) {
   }, [people]);
   const form = useRef<HTMLFormElement>(null);
   const [recipients, setRecipients] = useState<Address[]>([]);
+  const [editingRecipients, setEditingRecipients] = useState(false);
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [preview, setPreview] = useState<ComposeResult | null>(null);
@@ -77,6 +78,8 @@ export function ComposeBox({ onClose }: Props) {
         to={recipients}
         onToChange={setRecipients}
         suggestions={suggestions}
+        editingRecipients={editingRecipients}
+        onEditRecipients={() => setEditingRecipients(true)}
         subject={subject}
         onSubjectChange={setSubject}
         body={body}
@@ -90,7 +93,6 @@ export function ComposeBox({ onClose }: Props) {
     <ComposerFlow
       variant="compose"
       step={result ? "done" : isPreview ? "preview" : "compose"}
-      title={result ? "Message sent" : isPreview ? "Review email" : "Compose email"}
       busy={busy}
       error={error ? <>{error}{sendFailed ? " Check Gmail before attempting to send again." : ""}</> : undefined}
       editor={editor}
