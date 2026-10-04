@@ -1102,10 +1102,12 @@ describe("the site navigation", () => {
     expect(button.closest(".navright")).toBeTruthy();
     expect(button.closest("header.sitehead")).toBeTruthy();
     click(button);
-    const dialog = await screen.findByRole("dialog");
-    expect(dialog.querySelectorAll("button").length).toBeGreaterThan(0);
-    for (const modalButton of dialog.querySelectorAll("button")) {
-      expect(modalButton.className).toContain("opbtn");
+    const panel = await screen.findByRole("complementary", { name: "Compose email" });
+    expect(panel.classList.contains("compose-panel")).toBe(true);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(panel.querySelectorAll("button").length).toBeGreaterThan(0);
+    for (const panelButton of panel.querySelectorAll("button")) {
+      expect(panelButton.className).toContain("opbtn");
     }
   });
 
