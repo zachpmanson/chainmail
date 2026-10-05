@@ -200,6 +200,7 @@ func run(args []string) error {
 	// timer is the thing that can be told to change it. Cancelled on the way out,
 	// before the store is closed under it.
 	sweeps, stopSweeps := context.WithCancel(context.Background())
+	srv.lifecycleCtx = sweeps
 	defer stopSweeps()
 	go srv.sweepLoop(sweeps)
 
@@ -214,6 +215,10 @@ func run(args []string) error {
 		}
 		return err
 	case <-stop:
+		// Cancel mailbox work before Shutdown waits on its request handler. The
+		// child slurp process exits promptly, while an ordinary client disconnect
+		// no longer cancels it (see lifecycleCtx).
+		stopSweeps()
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		return h.Shutdown(ctx)

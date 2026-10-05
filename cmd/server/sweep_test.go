@@ -88,6 +88,43 @@ func TestManualSweepLogsItsFailureTranscript(t *testing.T) {
 	}
 }
 
+func TestManualSweepContinuesAfterRequestDisconnect(t *testing.T) {
+	h, _ := sweepable(t, "")
+	lifecycle, stopLifecycle := context.WithCancel(context.Background())
+	defer stopLifecycle()
+	h.lifecycleCtx = lifecycle
+
+	started := make(chan context.Context, 1)
+	release := make(chan struct{})
+	h.runSlurp = func(ctx context.Context, _ string) ([]byte, error) {
+		started <- ctx
+		<-release
+		return []byte("slurp\n  mail     complete   in:anywhere: created 1, changed 0\n"), nil
+	}
+
+	request, cancelRequest := context.WithCancel(context.Background())
+	defer cancelRequest()
+	done := make(chan *response, 1)
+	go func() { done <- h.doWithContext(t, request, "POST", "/v1/slurp", nil) }()
+	runCtx := <-started
+	cancelRequest()
+	select {
+	case <-runCtx.Done():
+		t.Fatal("client disconnect cancelled the ingest")
+	default:
+	}
+	select {
+	case <-done:
+		t.Fatal("the handler returned before the ingest finished")
+	default:
+	}
+
+	close(release)
+	if res := <-done; res.status != http.StatusOK {
+		t.Fatalf("slurp status = %d, want 200: %s", res.status, res.body)
+	}
+}
+
 func TestStatusShowsAnIngestThatStoppedEarly(t *testing.T) {
 	srv, _ := sweepable(t, "")
 	srv.runSlurp = func(context.Context, string) ([]byte, error) {
