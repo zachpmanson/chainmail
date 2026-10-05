@@ -357,13 +357,21 @@
 /* Compact rows trade the preview for a three-column scan line. The checkbox stays
    pinned outside the button grid, so its width is paid only by the time cell. */
 .iblist.compact .ibopen { grid-template-columns:minmax(7rem, 1fr) minmax(0, 2fr) auto;
-  align-items:center; gap:0 .8rem; padding:.42rem .35rem .42rem .8rem; }
+  align-items:center; gap:0 .8rem; padding:.42rem calc(var(--tick) + .7rem) .42rem .8rem; }
 .iblist.compact .ibwho { grid-area:1/1; min-width:0; white-space:nowrap;
   overflow:hidden; text-overflow:ellipsis; }
 .iblist.compact .ibsubrow { grid-area:1/2; min-width:0; margin:0; gap:.45rem; }
-.iblist.compact .ibwhen { grid-area:1/3; margin-right:var(--tick); }
+.iblist.compact .ibwhen { grid-area:1/3; margin-right:0; }
 .iblist.compact .ibmeta { grid-area:2/2; min-width:0; }
 .iblist.compact .ibsnippet { display:none; }
+.ibrow-archive { position:absolute; z-index:1; right:calc(var(--tick) + .4rem); top:50%; transform:translateY(-50%);
+  display:none; align-items:center; gap:.3rem; padding:.25rem .45rem; border:1px solid var(--line);
+  border-radius:5px; background:var(--card); color:var(--text); font:inherit; font-size:.72rem; cursor:pointer; }
+.iblist.compact .ibrow:hover .ibrow-archive, .iblist.compact .ibrow:focus-within .ibrow-archive { display:flex; }
+.iblist.compact .ibrow:hover .ibwhen, .iblist.compact .ibrow:focus-within .ibwhen,
+.iblist.compact .ibrow:hover .ibtail, .iblist.compact .ibrow:focus-within .ibtail { visibility:hidden; }
+.ibrow-archive:hover { border-color:var(--accent); color:var(--accent); }
+.ibrow-archive:disabled { opacity:.55; cursor:default; }
 .ibwho { grid-area:1/1; font-size:.88rem; font-weight:650; overflow-wrap:anywhere; }
 .ibwhen { grid-area:1/2; font-size:.72rem; color:var(--muted); white-space:nowrap;
   justify-self:end; margin-right:var(--tick); font-variant-numeric:tabular-nums; }
@@ -666,7 +674,7 @@
    the last message — a couple of rems left it looking like there was more below,
    and the bottom of a long scroll is the one place a reader wants a page's worth
    of quiet rather than the next thing. */
-.ibread .stream { padding:.5rem 0 10rem; }
+.ibread .stream { padding:1rem 1rem 10rem; }
 /* Replies drawn as a tree under what they answer, when the head's switch is on
    (see lib/tree). A message's replies are wrapped in one container per level, and
    that container's own left border is the line — which is how unroller draws its
@@ -722,7 +730,7 @@
    the thread is what scrolls, so the two are siblings rather than one inside the
    other. The scroll box is what carries the height — `flex:1 1 auto` with
    `min-height:0`, the same pair the list's wrapper uses. */
-.ibreadwrap { flex:1 1 auto; min-height:0; overflow:auto; scrollbar-gutter: stable; }
+.ibreadwrap { flex:1 1 auto; min-height:0; overflow:auto; scrollbar-gutter: auto; }
 
 /* A thread opened by the reading pane's popup action is the reading pane itself
    (see ThreadPane) in a window of its own: no inbox columns and no site nav. The
@@ -757,7 +765,7 @@
    `.7rem` plus the pane's divider offset, and the stream keeps the page's gutter
    off both walls. */
 .thread-popup .ibread-head { padding:.5rem calc(.7rem + var(--divider)); }
-.thread-popup .ibreadwrap > .stream { padding-left:1.25rem; padding-right:1.25rem; }
+.thread-popup .ibreadwrap > .stream { padding-left:1rem; padding-right:1rem; }
 .thread-popup .ibread-head { flex:none; }
 .thread-popup .ibreadwrap { min-height:0; }
 /* The pane's way back is the way out here: the list "← List" returns to is the
@@ -885,7 +893,7 @@
      used to be before it moved in here. The head's own insets are not this number
      (`.7rem` of its strip, plus the divider on the left): the strip keeps the
      subject and the controls where they have always been. */
-  .ibreadwrap > .stream { padding-left:1.25rem; padding-right:1.25rem; }
+  .ibreadwrap > .stream { padding-left:1rem; padding-right:1rem; }
   /* Compose has no stream to carry the reader's horizontal gutter, so give its
      card the same inset the reply box gets from its stream. */
   .compose-panel { padding-left:1.25rem; padding-right:1.25rem; }
