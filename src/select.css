@@ -95,87 +95,82 @@
   background:var(--card); color:var(--muted); cursor:pointer; }
 .selback:hover { color:var(--accent); }
 
-/* The /status screen. Same visual family as the selection stage: it, too, is a
-   browser-only control surface that never ships inside a rendered transcript. */
-.sthead { font-size:.7rem; text-transform:uppercase; letter-spacing:.1em;
-  color:var(--muted); margin:1.1rem 0 .1rem; }
+/* Small notes used on other document-style screens. */
 .stnote { font-size:.74rem; color:var(--muted); margin:.35rem 0 .5rem; }
-/* A setting's control, sitting inside the sentence that states it: the same field
-   furniture as the home page's controls, at the size of the note it lives in, so
-   the line reads as one sentence with one thing in it that can be changed. Sized
-   to the sentence rather than to the field, because the line around it is what
-   names what is being set.
 
-   All three settings are selects now — the cadence, the folder, and the person
-   whose mail is the reader's — so they share this one class. The addresses used
-   to be typed into a text field here, which was a control whose cursor and width
-   lied about what it was: the aliases behind one account are folded into a person
-   by the corpus, and who the reader is among those people is a choice from a list. */
-.stpick { font:inherit; font-size:.76rem; padding:.15rem .3rem; margin:0 .1rem;
-  border:1px solid var(--line); border-radius:6px;
-  background:var(--card); color:var(--fg); cursor:pointer; }
+/* Settings is a document, not a full-width dashboard: one centered column of
+   consistently framed sections, with a single page heading and clear spacing. */
+.wrap.statuswrap.settings-page { width:min(calc(100% - 2rem), 58rem); max-width:58rem;
+  margin:0 auto; padding:1.25rem 0 2.5rem; display:grid; gap:.9rem; align-content:start; }
+.stpage-head { margin:.2rem .15rem .35rem; }
+.stpage-head h1 { margin:.05rem 0 .25rem; font-size:1.45rem; }
+.stpage-head > p:last-child { margin:0; color:var(--muted); font-size:.82rem; }
+.steyebrow { margin:0; color:var(--accent); font-size:.65rem; font-weight:700;
+  letter-spacing:.1em; text-transform:uppercase; }
+.stsection { min-width:0; padding:.95rem 1rem; border:1px solid var(--line);
+  border-radius:10px; background:var(--card); }
+.stsection-head { margin:0 0 .7rem; }
+.stsection-head h2 { margin:0; font-size:.91rem; letter-spacing:-.01em; }
+.stsection-head p { margin:.25rem 0 0; color:var(--muted); font-size:.74rem; line-height:1.45; }
+.stmessage { margin:.65rem 0 0; color:var(--muted); font-size:.76rem; line-height:1.45; }
+.stmessage-error { padding:.5rem .65rem; border-left:3px solid crimson;
+  border-radius:5px; background:var(--bg); color:var(--fg); overflow-wrap:anywhere; }
+.stsection > .stmessage:first-child { margin-top:0; }
+.stpick { max-width:100%; min-width:14rem; padding:.38rem .55rem; font:inherit; font-size:.78rem;
+  border:1px solid var(--line); border-radius:7px; background:var(--bg); color:var(--fg); cursor:pointer; }
 .stpick:disabled { opacity:.6; cursor:default; }
-/* The reader's own person, in particular: capped at 20ch, the same cap the nav's
-   Person control wears (see .navperson). All three settings share `.stpick`, and
-   this is the one whose value is a person — a name that may carry the aliases
-   behind it, standing in the middle of a sentence, where the longest one in the
-   corpus must not be what decides how wide the sentence reads. */
-.stperson { max-width:20ch; }
-.stlist { list-style:none; margin:.5rem 0 0; padding:0; border:1px solid var(--line);
-  border-radius:9px; background:var(--card); overflow:hidden; }
+.stperson { max-width:24rem; }
+.stsetting-list { border-top:1px solid var(--line); }
+.stsetting-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(14rem, .9fr);
+  align-items:center; gap:1rem; padding:.78rem 0; }
+.stsetting-row + .stsetting-row { border-top:1px solid var(--line); }
+.stsetting-copy h3 { margin:0; font-size:.78rem; font-weight:650; }
+.stsetting-copy p { margin:.2rem 0 0; color:var(--muted); font-size:.72rem; line-height:1.4; }
+.stsetting-value { min-width:0; display:flex; flex-direction:column; align-items:flex-start; gap:.25rem; }
+.stsetting-note { margin:0; color:var(--muted); font-size:.7rem; line-height:1.4; overflow-wrap:anywhere; }
+.stbutton { display:inline-flex; align-items:center; justify-content:center; min-height:2rem;
+  padding:.35rem .65rem; border:1px solid var(--line); border-radius:7px;
+  color:var(--fg); font:inherit; font-size:.74rem; font-weight:650; text-decoration:none; cursor:pointer; }
+.stbutton:hover { border-color:var(--accent); color:var(--accent); }
+.stbutton:disabled { opacity:.55; cursor:wait; }
+.stbutton-primary { border-color:var(--accent); background:var(--accent); color:var(--bg); }
+.stbutton-primary:hover { background:transparent; }
+.stbutton-secondary { background:var(--bg); }
+.st-account-list { list-style:none; margin:0 0 .7rem; padding:0; border-top:1px solid var(--line); }
+.st-account-list li { display:flex; align-items:center; justify-content:space-between; gap:.75rem;
+  padding:.55rem 0; border-bottom:1px solid var(--line); font-size:.8rem; overflow-wrap:anywhere; }
+.stlist { list-style:none; margin:.7rem 0 0; padding:0; border-top:1px solid var(--line); }
 .strow + .strow { border-top:1px solid var(--line); }
-.strow { display:flex; gap:.6rem; align-items:baseline; padding:.55rem .7rem; }
-.stempty { color:var(--muted); font-size:.8rem; }
-.stbad { font:inherit; font-size:.66rem; font-weight:700; padding:.1rem .45rem;
+.strow { display:flex; flex-wrap:wrap; gap:.45rem .7rem; align-items:center; padding:.55rem 0; }
+.stempty { color:var(--muted); font-size:.78rem; }
+.stbad { font:inherit; font-size:.64rem; font-weight:700; padding:.13rem .48rem;
   border:1px solid currentColor; border-radius:99px; white-space:nowrap; }
 .st-ok { color:#2e7d32; }
 .st-na { color:#b26b00; }
 .st-down { color:crimson; }
 .st-un { color:var(--muted); }
-.stlabel { font-size:.86rem; font-weight:650; min-width:12rem; }
-.stdetail { font-size:.72rem; color:var(--muted); overflow-wrap:anywhere; }
-.stdl { margin:.5rem 0 0; display:grid; grid-template-columns:max-content 1fr;
-  gap:.45rem 0; }
-.stdl dt { font-size:.76rem; color:var(--muted); text-transform:uppercase;
-  letter-spacing:.06em; padding-right:1rem; }
-.stdl dd { margin:0; font-size:.86rem; font-variant-numeric:tabular-nums; }
+.stlabel { font-size:.8rem; font-weight:650; min-width:8rem; }
+.stdetail { flex:1 1 12rem; color:var(--muted); font-size:.72rem; overflow-wrap:anywhere; }
+.stdl { display:grid; grid-template-columns:repeat(auto-fit,minmax(9rem,1fr)); gap:.5rem;
+  margin:.1rem 0 0; }
+.stdrow { min-width:0; padding:.65rem .7rem; border:1px solid var(--line);
+  border-radius:8px; background:var(--bg); }
+.stdl dt { color:var(--muted); font-size:.63rem; font-weight:700; letter-spacing:.07em;
+  text-transform:uppercase; overflow-wrap:anywhere; }
+.stdl dd { margin:.3rem 0 0; font-size:1rem; font-weight:650; font-variant-numeric:tabular-nums;
+  overflow-wrap:anywhere; }
 
-/* The settings, listed the way the corpus numbers above them are: the name of the
-   thing in the left column, the thing itself in the right. They were sentences —
-   "The mailbox is swept [15 minutes] — next 3:40pm." — which had to be read whole
-   to find the control, and re-read whenever any of the three changed; the same
-   three facts are a name and a value, and this is the shape that says so. The
-   columns come from `.stdl` (the same grid, so the page has one list of names and
-   values rather than two), narrowed here to fit the longest of the three names. */
-/* The settings, three columns: the name of the setting, the control that sets
-   it, and what the setting knows about itself — the schedule the cadence
-   implies, the addresses the reader's mail comes from. The third was a tail on
-   the control, starting wherever that control happened to end, so the three
-   notes read as three unrelated asides down a ragged edge; in a column of their
-   own they are read down as one, which is the reason they are there at all.
+@media (max-width: 640px) {
+  .wrap.statuswrap.settings-page { width:calc(100% - 1rem); padding-top:.75rem; }
+  .stsection { padding:.8rem; }
+  .stsetting-row { grid-template-columns:1fr; gap:.55rem; }
+  .stpick { min-width:min(100%, 14rem); }
+}
 
-   The control column is sized to the widest of the three controls, so the three
-   dropdowns share a left edge and the commentary shares another. A setting with
-   nothing to say leaves its cell empty rather than closing the column up. */
-.stset { grid-template-columns:11rem max-content minmax(0,1fr); gap:.5rem 1.5rem;
-  align-items:baseline; margin:.55rem 0 0; }
-/* Each cell is named to its column rather than left to the grid's own order: a
-   row whose commentary is empty (the folder's) would otherwise hand its cell to
-   the next setting's name. */
-.stset dt { grid-column:1; padding-right:0; }
-.stset dd { grid-column:2; }
-/* What a setting knows about itself — the schedule it implies, the addresses the
-   reader's mail comes from. Muted and in its own column: it is the one part of
-   the row that is not something to press. Named with the parent, because the
-   `.stdl dd` rule above sets the *control's* size and would set the note's too:
-   a note is read at the size of the notes above it, not at the size of the thing
-   it comments on. */
-.stset dd.sttail { grid-column:3; font-size:.72rem; color:var(--muted); }
-
-/* The palette table, at the foot of the status screen: a debugging aid rather
-   than a setting, so it is the one thing there with nothing to press in it. Two
-   colour columns, because a palette is chosen for working in both themes and
-   the failure being looked for is a colour that works in only one of them. */
+/* The palette table is intentionally wider than a phone-sized card, so it scrolls
+   inside its section rather than widening the page. */
+.stpalette-scroll { max-width:100%; overflow-x:auto; }
+.stpalette-scroll .paltab { min-width:36rem; margin:.1rem 0 0; }
 .paltab { border-collapse:collapse; margin:.55rem 0 0; font-size:.76rem; }
 .paltab th { text-align:left; font-size:.64rem; font-weight:700; letter-spacing:.08em;
   text-transform:uppercase; color:var(--muted); padding:0 .9rem .2rem 0;

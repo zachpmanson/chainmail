@@ -23,32 +23,34 @@ export function Palette() {
   useEffect(() => setPalette(readPalette()), []);
 
   return (
-    <table className="paltab">
-      <thead>
-        <tr>
-          <th>colour</th>
-          <th>light</th>
-          <th>dark</th>
-          <th>used for</th>
-        </tr>
-      </thead>
-      <tbody>
-        {PALETTE.map(({ name, what }) => (
-          <tr key={name}>
-            <td>
-              <code>--{name}</code>
-            </td>
-            <td>
-              <Swatch value={palette?.light[name]} />
-            </td>
-            <td>
-              <Swatch value={palette?.dark[name]} />
-            </td>
-            <td className="palwhat">{what}</td>
+    <div className="stpalette-scroll">
+      <table className="paltab">
+        <thead>
+          <tr>
+            <th>colour</th>
+            <th>light</th>
+            <th>dark</th>
+            <th>used for</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {PALETTE.map(({ name, what }) => (
+            <tr key={name}>
+              <td>
+                <code>--{name}</code>
+              </td>
+              <td>
+                <Swatch value={palette?.light[name]} />
+              </td>
+              <td>
+                <Swatch value={palette?.dark[name]} />
+              </td>
+              <td className="palwhat">{what}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
