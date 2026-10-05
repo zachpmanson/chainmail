@@ -1,4 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
+import { ArchiveBoxIcon, FolderIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { ApiError } from "../lib/api";
 
 /**
@@ -38,46 +39,13 @@ export const SAID_MS = 5000;
  * place.
  */
 export function ArchiveGlyph() {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      width="14"
-      height="14"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <rect x="1.9" y="2.6" width="12.2" height="3.4" rx="1" />
-      <path d="M3.2 6v6.3a1 1 0 0 0 1 1h7.6a1 1 0 0 0 1-1V6" />
-      <path d="M6.3 9.1h3.4" />
-    </svg>
-  );
+  return <ArchiveBoxIcon width={14} height={14} aria-hidden="true" />;
 }
 
 /** The bin. Delete is a move to the trash in the mailbox's own words, and this
  *  is the glyph that says so without the word. */
 export function TrashGlyph() {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      width="14"
-      height="14"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M2.6 4.3h10.8" />
-      <path d="M6.4 4.3V3a.9.9 0 0 1 .9-.9h1.4a.9.9 0 0 1 .9.9v1.3" />
-      <path d="M4 4.3l.6 8.3a1 1 0 0 0 1 .9h4.8a1 1 0 0 0 1-.9l.6-8.3" />
-      <path d="M6.6 6.8v4.3M9.4 6.8v4.3" />
-    </svg>
-  );
+  return <TrashIcon width={14} height={14} aria-hidden="true" />;
 }
 
 /**
@@ -164,19 +132,7 @@ export function MoveFolder({
 }) {
   return (
     <span className="ibicon ibmovewrap" title="Move to a folder">
-      <svg
-        viewBox="0 0 16 16"
-        width="14"
-        height="14"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-      >
-        <path d="M1.7 4.1a1.1 1.1 0 0 1 1.1-1.1h3l1.3 1.7h6.1a1.1 1.1 0 0 1 1.1 1.1v6a1.1 1.1 0 0 1-1.1 1.1H2.8a1.1 1.1 0 0 1-1.1-1.1z" />
-      </svg>
+      <FolderIcon width={14} height={14} aria-hidden="true" />
       <select
         className="ibmove"
         aria-label="Move to a folder"

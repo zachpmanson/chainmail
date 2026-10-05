@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
+import { MagnifyingGlassIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { $api, type SearchMode } from "../lib/api";
 import { NavPerson } from "./NavPerson";
 
@@ -238,15 +239,7 @@ export function NavSearch() {
               bin and the trash can. The magnifier inside the field stays the smaller
               12px it was, since it is part of the box rather than a control in the
               nav. */}
-          <svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-            <path
-              d="M3.6 3.6 12.4 12.4M12.4 3.6 3.6 12.4"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-            />
-          </svg>
+          <XMarkIcon width={18} height={18} aria-hidden="true" />
         </button>
       ) : null}
       <form
@@ -282,16 +275,7 @@ export function NavSearch() {
       >
       {/* A magnifier rather than nothing: an empty box at the end of a nav is a
           box with no label, and this is the one glyph that says what it takes. */}
-      <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-        <circle cx="7" cy="7" r="4.6" fill="none" stroke="currentColor" strokeWidth="1.5" />
-        <path
-          d="M10.4 10.4 14.4 14.4"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-        />
-      </svg>
+      <MagnifyingGlassIcon width={12} height={12} aria-hidden="true" />
       <input
         className="navq"
         value={shown.q}

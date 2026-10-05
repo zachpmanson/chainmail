@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ArrowPathIcon } from "@heroicons/react/24/outline";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError, $api } from "../lib/api";
 import { when } from "../lib/stamp";
@@ -127,11 +128,7 @@ export function NavRefresh() {
       disabled={busy}
       onClick={() => void refresh()}
     >
-      <svg className="spinner" viewBox="0 0 16 16" aria-hidden="true">
-        <path d="M11.955 4.547A5.25 5.25 0 1 1 8 2.75M11.581 2.75L13.007 5.752L10.225 3.934"
-          fill="none" stroke="currentColor" strokeWidth="1.5"
-          strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
+      <ArrowPathIcon className="spinner" width={16} height={16} aria-hidden="true" />
       {stageLabel && <span className="navrefresh-label">{stageLabel}</span>}
     </button>
   );

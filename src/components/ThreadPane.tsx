@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { ArrowTopRightOnSquareIcon, QueueListIcon } from "@heroicons/react/24/outline";
 import { useSearch } from "@tanstack/react-router";
 import { flushSync } from "react-dom";
 import { useQueryClient } from "@tanstack/react-query";
@@ -371,41 +372,12 @@ function treeLabel(on: boolean): string {
  *  it rather than as a filled shape, so the strip stays one kind of thing. */
 function OpenWindowGlyph() {
   return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path d="M9 2h5v5" />
-      <path d="M14 2 7 9" />
-      <path d="M12 9v4a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h4" />
-    </svg>
+    <ArrowTopRightOnSquareIcon width={14} height={14} aria-hidden="true" />
   );
 }
 
 function TreeGlyph() {
   return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path d="M2 4h12" />
-      <path d="M6 8h8" />
-      <path d="M10 12h4" />
-    </svg>
+    <QueueListIcon width={14} height={14} aria-hidden="true" />
   );
 }

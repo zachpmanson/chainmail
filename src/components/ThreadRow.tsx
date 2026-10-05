@@ -4,6 +4,7 @@ import { $api, type ChainHit } from "../lib/api";
 import { dropFromLists, markInLists, putBackLists } from "../lib/lists";
 import { newest } from "../lib/newest";
 import { whenShort } from "../lib/stamp";
+import { UserGroupIcon, EnvelopeIcon, PaperClipIcon } from "@heroicons/react/24/outline";
 import { ArchiveGlyph, refusal, sentence, staleAfterMail, VERBS, SAID_MS } from "./MailVerbs";
 import { dismissToast, pushToast } from "../lib/toasts";
 
@@ -103,19 +104,7 @@ export const subjectOf = (thread: { subject?: string }) => thread.subject || "(n
 export function PeopleCount({ people }: { people: number }) {
   return (
     <span className="ibppl" title={`${people} people in this thread — senders and recipients`}>
-      <svg
-        viewBox="0 0 16 16"
-        width="11"
-        height="11"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        aria-hidden="true"
-      >
-        <circle cx="8" cy="4.8" r="2.7" />
-        <path d="M3.2 13.6c0-2.7 2.1-4.4 4.8-4.4s4.8 1.7 4.8 4.4" />
-      </svg>
+      <UserGroupIcon width={11} height={11} aria-hidden="true" />
       {people}
     </span>
   );
@@ -127,20 +116,7 @@ export function PeopleCount({ people }: { people: number }) {
 export function MailCount({ entries }: { entries: number }) {
   return (
     <span className="ibcount" title={`${entries} messages in this thread`}>
-      <svg
-        viewBox="0 0 16 16"
-        width="11"
-        height="11"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-      >
-        <rect x="1.8" y="3.6" width="12.4" height="8.8" rx="1.2" />
-        <path d="M2.2 4.8 8 9.2l5.8-4.4" />
-      </svg>
+      <EnvelopeIcon width={11} height={11} aria-hidden="true" />
       {entries}
     </span>
   );
@@ -157,23 +133,7 @@ export function AttachmentCount({ attachments }: { attachments: number }) {
       className="ibatt"
       title={`${attachments} attachment${attachments === 1 ? "" : "s"} in this thread`}
     >
-      {/* A 24-box rather than the 16 the other two glyphs use: a paperclip is a
-          spiral, and drawn from memory at 16 it comes out looking like a hook. The
-          shape is the one every icon set draws, and it scales down to the same
-          11px the person and the envelope are drawn at. */}
-      <svg
-        viewBox="0 0 24 24"
-        width="11"
-        height="11"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-      >
-        <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-      </svg>
+      <PaperClipIcon width={11} height={11} aria-hidden="true" />
       {attachments}
     </span>
   );

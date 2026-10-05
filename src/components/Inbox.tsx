@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
+import { CheckIcon, ChevronDownIcon } from "@heroicons/react/24/outline";
 import { $api, type ChainHit } from "../lib/api";
 import { useCompactMode } from "../lib/compactMode";
 import { useEscapeToClear } from "../lib/selection";
@@ -160,7 +161,7 @@ function Folders({
             </>
           ) : null}
         </span>
-        <span className="ibfcaret" aria-hidden="true">▾</span>
+        <ChevronDownIcon className="ibfcaret" aria-hidden="true" />
       </button>
 
       {open ? (
@@ -174,7 +175,7 @@ function Folders({
               onClick={() => onDefault(!isDefault)}
             >
               <span className="ibfname">Open {current || "All mail"} by default</span>
-              <span className="ibfmark" aria-hidden="true">{isDefault ? "✓" : ""}</span>
+              <span className="ibfmark" aria-hidden="true">{isDefault ? <CheckIcon /> : null}</span>
             </button>
           ) : null}
           <button
