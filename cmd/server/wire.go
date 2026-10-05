@@ -302,14 +302,9 @@ type settingsResponse struct {
 	// what clearing the setting leaves behind.
 	MePersonID *int64 `json:"mePersonId,omitempty"`
 	// Me is the addresses that are the reader's own: the mailboxes of MePersonID,
-	// resolved by the corpus at this read rather than stored, so a page built
-	// today marks the aliases the corpus knows today. Both fields are served
-	// because they answer different questions — the control that sets this shows
-	// the person, and the sentence under it names the addresses being marked — and
-	// a client deriving the second from the first would be a second reading of the
-	// identity graph. Also served for the address list a corpus was configured
-	// with before this was a person (corpus.SettingMe). Absent when the reader has
-	// named nobody, which is also what clearing the setting leaves behind.
+	// plus connected Gmail profile addresses and any deliberately configured
+	// legacy aliases. The profile addresses are authoritative account metadata;
+	// aliases still require the reader's explicit identity configuration.
 	Me []string `json:"me,omitempty"`
 	// SlurpEvery is how often this server sweeps the mailbox by itself, as a
 	// duration word (`10m`) or `off`. Always served, unlike the two above: the

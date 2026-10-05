@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, type FormEvent } from "react";
+import { useSearch } from "@tanstack/react-router";
 import { usePersonAddresses } from "../lib/who";
 import { addressWords, type Address } from "./AddressField";
 import { ComposerFields } from "./ComposerFields";
@@ -16,7 +17,7 @@ type ComposeResult = {
 
 type Props = { onClose: () => void };
 
-async function compose(input: { to: string[]; cc: string[]; subject: string; body: string; confirm: boolean }): Promise<ComposeResult> {
+async function compose(input: { to: string[]; cc: string[]; subject: string; body: string; confirm: boolean; accountId?: string }): Promise<ComposeResult> {
   const response = await fetch("/v1/compose", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -28,6 +29,7 @@ async function compose(input: { to: string[]; cc: string[]; subject: string; bod
 }
 
 export function ComposeBox({ onClose }: Props) {
+  const accountId = useSearch({ from: "/" }).accountId;
   const people = usePersonAddresses();
   const suggestions = useMemo<Address[]>(() => {
     const seen = new Set<string>();
@@ -54,7 +56,7 @@ export function ComposeBox({ onClose }: Props) {
   async function prepare(event: FormEvent) {
     event.preventDefault();
     setBusy(true); setError("");
-    try { setPreview(await compose({ to, cc: ccRecipients, subject, body, confirm: false })); }
+    try { setPreview(await compose({ to, cc: ccRecipients, subject, body, confirm: false, ...(accountId ? { accountId } : {}) })); }
     catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   }
@@ -62,7 +64,7 @@ export function ComposeBox({ onClose }: Props) {
   async function send() {
     if (!preview || preview.to !== to.join(", ") || preview.cc !== (ccRecipients.length ? ccRecipients.join(", ") : undefined) || preview.subject !== subject || preview.body !== body) return;
     setBusy(true); setError("");
-    try { setResult(await compose({ to, cc: ccRecipients, subject, body, confirm: true })); }
+    try { setResult(await compose({ to, cc: ccRecipients, subject, body, confirm: true, ...(accountId ? { accountId } : {}) })); }
     catch (e) {
       // The request may have reached Gmail even if its response did not. Avoid a
       // retry that could duplicate mail; the reader must check Gmail first.

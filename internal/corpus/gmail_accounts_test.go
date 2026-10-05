@@ -49,6 +49,16 @@ func TestGmailAccountMigrationAndMailboxCopies(t *testing.T) {
 	if !reflect.DeepEqual(copies, want) {
 		t.Fatalf("copies = %+v, want %+v", copies, want)
 	}
+	personalResults, err := s.SearchChains(Query{AccountID: "personal"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(personalResults) != 1 || personalResults[0].RootExtID != "mail:<shared@example.test>" {
+		t.Fatalf("personal account search = %+v, want the shared logical message", personalResults)
+	}
+	if _, err := s.SearchChains(Query{AccountID: "missing"}); err != nil {
+		t.Fatal(err)
+	}
 	if err := s.SetGmailCopyLabels("work", "same-local-id", []string{"INBOX", "UNREAD"}); err != nil {
 		t.Fatal(err)
 	}

@@ -121,6 +121,8 @@ type Query struct {
 	Containers []string
 	// Sources is SourceMail / SourceSlack.
 	Sources []string
+	// AccountID limits Gmail results to copies present in one mailbox.
+	AccountID string
 
 	// HasAttachment: nil to not care, else require/forbid attachments.
 	HasAttachment *bool
@@ -669,6 +671,10 @@ func (q Query) filters() (string, []any) {
 		ph, a := placeholders(q.Sources)
 		preds = append(preds, "e.source in ("+ph+")")
 		args = append(args, a...)
+	}
+	if q.AccountID != "" {
+		preds = append(preds, "exists (select 1 from gmail_copies gc where gc.entry_id=e.id and gc.account_id=?)")
+		args = append(args, q.AccountID)
 	}
 	if len(q.Containers) > 0 {
 		ph, a := placeholders(q.Containers)

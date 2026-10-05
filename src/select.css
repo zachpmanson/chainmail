@@ -551,6 +551,10 @@
    It carries no space of its own: the column it sits in pads its top and leaves a
    gap under it (see .ibcol), so the room above the button and the room below it
    are the column's to give rather than this control's to bring. */
+.ibaccount { display:flex; align-items:center; gap:.45rem; font-size:.74rem; color:var(--muted); }
+.ibaccount span { flex:0 0 auto; }
+.ibaccount select { min-width:0; flex:1 1 auto; padding:.3rem .4rem; font:inherit;
+  border:1px solid var(--line); border-radius:7px; background:var(--card); color:var(--fg); }
 .ibfolders { position:relative; z-index:30; margin:0; }
 .ibfbtn { display:flex; align-items:center; gap:.4rem; width:100%; font:inherit;
   font-size:.8rem; font-weight:650; text-align:left; padding:.35rem .55rem;

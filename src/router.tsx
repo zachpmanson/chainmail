@@ -71,6 +71,8 @@ export interface SearchParams {
   mode?: SearchMode;
   person?: string;
   since?: string;
+  /** Limit the inbox/search to copies in one connected Gmail account. */
+  accountId?: string;
   /** The folder the list is showing: a mailbox label, and a filter rather than
    *  a query — it narrows the same list the inbox shows and leaves the ordering
    *  alone. Optional, so `/` is every folder at once. */
@@ -94,6 +96,7 @@ function validateSearchParams(search: Record<string, unknown>): SearchParams {
     mode: isMode(search.mode) ? search.mode : undefined,
     person: typeof search.person === "string" ? search.person : undefined,
     since: typeof search.since === "string" ? search.since : undefined,
+    accountId: typeof search.accountId === "string" ? search.accountId : undefined,
     label: typeof search.label === "string" ? search.label : undefined,
     open: typeof search.open === "string" ? search.open : undefined,
     // TanStack's default search parser JSON-decodes numeric values, so the

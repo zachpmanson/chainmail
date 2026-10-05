@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useSearch } from "@tanstack/react-router";
 import { flushSync } from "react-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { $api } from "../lib/api";
@@ -64,6 +65,7 @@ export function ThreadPane({
   openInWindow?: boolean;
 }) {
   const queryClient = useQueryClient();
+  const accountId = useSearch({ from: "/" }).accountId;
 
   // The pane's own view switch: replies drawn as a tree under the message they
   // answer, or the transcript's flat order (see lib/tree). Read once, at mount,
@@ -262,7 +264,7 @@ export function ThreadPane({
               defaultFolder={moveDefault}
               busy={act.isPending || folders.isPending}
               onMove={(to) =>
-                act.mutate({ body: { chains: [thread.rootExtId], action: "move", labels: [to] } })
+                act.mutate({ body: { chains: [thread.rootExtId], action: "move", labels: [to], ...(accountId ? { accountId } : {}) } })
               }
             />
             <button
@@ -272,7 +274,7 @@ export function ThreadPane({
               title="Archive"
               disabled={act.isPending}
               onClick={() =>
-                act.mutate({ body: { chains: [thread.rootExtId], action: "archive" } })
+                act.mutate({ body: { chains: [thread.rootExtId], action: "archive", ...(accountId ? { accountId } : {}) } })
               }
             >
               <ArchiveGlyph />
@@ -283,7 +285,7 @@ export function ThreadPane({
               aria-label="Delete"
               title="Delete"
               disabled={act.isPending}
-              onClick={() => act.mutate({ body: { chains: [thread.rootExtId], action: "trash" } })}
+              onClick={() => act.mutate({ body: { chains: [thread.rootExtId], action: "trash", ...(accountId ? { accountId } : {}) } })}
             >
               <TrashGlyph />
             </button>
@@ -321,7 +323,7 @@ export function ThreadPane({
                 }
                 onClick={() =>
                   read.mutate({
-                    body: { chain: thread.rootExtId, unread: thread.unread === 0 },
+                    body: { chain: thread.rootExtId, unread: thread.unread === 0, ...(accountId ? { accountId } : {}) },
                   })
                 }
               >

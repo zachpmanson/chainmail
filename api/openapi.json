@@ -61,6 +61,14 @@
             "example": "2026-03-11T17:40:00Z"
           },
           {
+            "name": "accountId",
+            "in": "query",
+            "description": "Only messages present in this connected Gmail account. Omit to search all accounts.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "label",
             "in": "query",
             "required": false,

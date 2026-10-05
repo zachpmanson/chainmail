@@ -1857,6 +1857,8 @@ export interface operations {
                  * @example 2026-03-11T17:40:00Z
                  */
                 before?: string;
+                /** @description Only messages present in this connected Gmail account. Omit to search all accounts. */
+                accountId?: string;
                 /**
                  * @description Only chains with a message carrying this mailbox label — a folder, in the reading a mail client uses. Repeatable, and the labels are ORed: a message in two folders is in both, so `label=INBOX&label=STARRED` is the answer to either question. It selects messages rather than chains, so a chain is returned when any of its messages carries the label: a reply that went out under SENT does not take the thread out of the inbox its first message landed in. A folder with nothing in it is an empty list, not an error. The label is matched literally, so the % and _ in a name are characters rather than wildcards.
                  * @example INBOX

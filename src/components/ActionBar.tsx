@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useSearch } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { $api } from "../lib/api";
 import { useBuildPage } from "../lib/build";
@@ -119,6 +120,7 @@ export function ActionBar({
   // in the mail app a minute ago is offered here without anything being synced.
   const folders = $api.useQuery("get", "/v1/labels", {});
   const qc = useQueryClient();
+  const accountId = useSearch({ from: "/" }).accountId;
   // The header's slot, or null on a page that has no header.
   const slot = buildBarSlot();
 
@@ -180,7 +182,7 @@ export function ActionBar({
             aria-label="Archive"
             title="Archive"
             disabled={busy}
-            onClick={() => act.mutate({ body: { chains: chosen, action: "archive" } })}
+            onClick={() => act.mutate({ body: { chains: chosen, action: "archive", ...(accountId ? { accountId } : {}) } })}
           >
             <ArchiveGlyph />
           </button>
@@ -190,7 +192,7 @@ export function ActionBar({
             aria-label="Delete"
             title="Delete"
             disabled={busy}
-            onClick={() => act.mutate({ body: { chains: chosen, action: "trash" } })}
+            onClick={() => act.mutate({ body: { chains: chosen, action: "trash", ...(accountId ? { accountId } : {}) } })}
           >
             <TrashGlyph />
           </button>
@@ -212,7 +214,7 @@ export function ActionBar({
             folders={moves}
             defaultFolder={moveDefault}
             busy={busy}
-            onMove={(to) => act.mutate({ body: { chains: chosen, action: "move", labels: [to] } })}
+            onMove={(to) => act.mutate({ body: { chains: chosen, action: "move", labels: [to], ...(accountId ? { accountId } : {}) } })}
           />
           {/* The count stays at the far end; the way out is the first control
               on the left, before any action on the selected mail. */}

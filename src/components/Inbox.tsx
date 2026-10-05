@@ -188,6 +188,8 @@ export function Inbox() {
   // what switches panels.
   const opened = useSearch({ from: "/" }).open;
   const urlLabel = useSearch({ from: "/" }).label;
+  const accountId = useSearch({ from: "/" }).accountId;
+  const auth = $api.useQuery("get", "/auth/status", {});
   const settings = $api.useQuery("get", "/v1/settings", {});
   const save = $api.useMutation("post", "/v1/settings", {
     onSuccess: () => {
@@ -233,7 +235,7 @@ export function Inbox() {
   const inbox = $api.useInfiniteQuery(
     "get",
     "/v1/search",
-    { params: { query: { limit: PAGE, ...(label ? { label } : {}) } } },
+    { params: { query: { limit: PAGE, ...(label ? { label } : {}), ...(accountId ? { accountId } : {}) } } },
     {
       // Held until the settings have settled, so a default folder arrives as the
       // first page rather than as a correction to it. Settled, not successful: a
@@ -377,6 +379,23 @@ export function Inbox() {
         hasChoice={composing || Boolean(opened)}
         list={
           <>
+            <label className="ibaccount">
+              <span>Account</span>
+              <select
+                aria-label="Filter by Gmail account"
+                value={accountId ?? ""}
+                onChange={(event) =>
+                  navigate({ to: "/", search: (prev) => ({ ...prev, accountId: event.target.value || undefined }) })
+                }
+              >
+                <option value="">All accounts</option>
+                {(auth.data?.accounts ?? []).filter((account) => account.signedIn).map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.email || account.displayName}
+                  </option>
+                ))}
+              </select>
+            </label>
             <Folders
               current={label}
               isDefault={isDefault}

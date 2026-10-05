@@ -31,7 +31,9 @@ corpus, without ollama you have lexical search.
    appear once in the unified corpus. Gmail IDs, labels, unread state, and attachment
    fetches stay scoped to their owning account. Mailbox writes infer the account only
    when a selected chain has copies in one account; otherwise pass `accountId` to the
-   API request. `GET /auth/status` lists the stable account IDs and their sign-in state.
+   API request. The inbox account selector filters the unified list to one mailbox;
+   `GET /auth/status` lists the stable account IDs and their sign-in state. Gmail links
+   use an account-neutral URL rather than assuming the browser's `/u/0` slot.
 2. **Slack** — import a workspace with [slackdump](https://github.com/rusq/slackdump):
    `slackdump workspace import slack.env`, then `slackdump archive -o ~/.local/state/chainmail/slack`.
    Token: devtools console on a logged-in Slack tab (`localStorage.localConfig_v2` →

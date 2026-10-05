@@ -556,7 +556,7 @@ func (s *server) search(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
-	q := corpus.Query{Text: text, Limit: limit, Labels: labels}
+	q := corpus.Query{Text: text, Limit: limit, Labels: labels, AccountID: p.Get("accountId")}
 	if since != "" {
 		t, err := time.Parse("2006-01-02", since)
 		if err != nil {
@@ -2845,6 +2845,26 @@ func (s *server) getSettings(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		fail(w, http.StatusInternalServerError, err)
 		return
+	}
+	// Connected account profiles are authoritative addresses for the reader.
+	// Add them to any deliberately configured aliases, preserving configured
+	// order and avoiding case-insensitive duplicates.
+	accounts, err := s.store.GmailAccounts()
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	seenMe := make(map[string]bool, len(me)+len(accounts))
+	for _, address := range me {
+		seenMe[strings.ToLower(address)] = true
+	}
+	for _, account := range accounts {
+		address := strings.TrimSpace(account.Email)
+		key := strings.ToLower(address)
+		if address != "" && !seenMe[key] {
+			me = append(me, address)
+			seenMe[key] = true
+		}
 	}
 	// Omitted rather than served as an empty array, so that "the reader has
 	// never said" is not answered with a list a client would have to interpret.

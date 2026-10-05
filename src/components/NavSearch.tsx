@@ -22,15 +22,16 @@ interface Asked {
   mode: SearchMode;
   person: string;
   since: string;
+  accountId: string;
 }
 
-const NOTHING: Asked = { q: "", mode: "hybrid", person: "", since: "" };
+const NOTHING: Asked = { q: "", mode: "hybrid", person: "", since: "", accountId: "" };
 
 /** Whether these four ask anything. A mode with nothing to ask is not a question,
  *  so a mode alone does not count — the home page's rule in router.tsx is the
  *  same one, and this is its other half. */
 const asks = (a: Asked) =>
-  a.q.trim() !== "" || a.person.trim() !== "" || a.since.trim() !== "";
+  a.q.trim() !== "" || a.person.trim() !== "" || a.since.trim() !== "" || a.accountId !== "";
 
 /** Trimming is what makes "cutover " and "cutover" one question rather than two:
  *  the box keeps what was typed until the address it wrote lands, and the
@@ -40,6 +41,7 @@ const trim = (a: Asked): Asked => ({
   mode: a.mode,
   person: a.person.trim(),
   since: a.since.trim(),
+  accountId: a.accountId,
 });
 
 /** The same four questions, said two ways. */
@@ -47,7 +49,8 @@ const same = (a: Asked, b: Asked) =>
   a.q.trim() === b.q.trim() &&
   a.mode === b.mode &&
   a.person.trim() === b.person.trim() &&
-  a.since.trim() === b.since.trim();
+  a.since.trim() === b.since.trim() &&
+  a.accountId === b.accountId;
 
 /**
  * The corpus search, at the nav's right end: a box that becomes the row it is on
@@ -90,6 +93,7 @@ export function NavSearch() {
         mode: isMode(search.mode) ? search.mode : "hybrid",
         person: typeof search.person === "string" ? search.person : "",
         since: typeof search.since === "string" ? search.since : "",
+        accountId: typeof search.accountId === "string" ? search.accountId : "",
       };
     },
   });
@@ -114,7 +118,7 @@ export function NavSearch() {
   // The draft is dropped when the address it wrote has landed — not where the
   // commit happened, or the fields would show the question being replaced for a
   // frame before showing the one that replaces it.
-  const address = `${asked.q}\u0000${asked.mode}\u0000${asked.person}\u0000${asked.since}`;
+  const address = `${asked.q}\u0000${asked.mode}\u0000${asked.person}\u0000${asked.since}\u0000${asked.accountId}`;
   useEffect(() => {
     setDraft(null);
   }, [address]);
@@ -123,6 +127,7 @@ export function NavSearch() {
   // the panel is open. A corpus of a few hundred people is not a question every
   // page should ask in order to draw a nav.
   const people = $api.useQuery("get", "/v1/people", {}, { enabled: open });
+  const accounts = $api.useQuery("get", "/auth/status", {}, { enabled: open });
 
   const edit = (patch: Partial<Asked>) => setDraft({ ...shown, ...patch });
 
@@ -147,6 +152,7 @@ export function NavSearch() {
         ...(four.mode !== "hybrid" ? { mode: four.mode } : {}),
         ...(four.person ? { person: four.person } : {}),
         ...(four.since ? { since: four.since } : {}),
+        ...(four.accountId ? { accountId: four.accountId } : {}),
         // Giving the question up is not giving up the reading. Emptying the box
         // (or Escape) puts the default view back below, and the pane the reader
         // had open is the same pane on either page — so its thread is carried
@@ -369,6 +375,25 @@ export function NavSearch() {
                 commit({ ...shown, person });
               }}
             />
+          </label>
+          <label className="navopt">
+            <span>Gmail account</span>
+            <select
+              aria-label="Gmail account"
+              value={shown.accountId}
+              onChange={(ev) => {
+                const accountId = ev.target.value;
+                edit({ accountId });
+                commit({ ...shown, accountId });
+              }}
+            >
+              <option value="">All accounts</option>
+              {(accounts.data?.accounts ?? []).filter((account) => account.signedIn).map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.email || account.displayName}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="navopt">
             <span>Since</span>
