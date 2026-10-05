@@ -491,6 +491,21 @@ describe("the home page with no query", () => {
     expect(rowText[1]!.textContent).toContain("Loom cutover schedule");
   });
 
+  it("shows compact-row archive as an accessible icon-only button", async () => {
+    localStorage.setItem("cm-compact", "1");
+    handler = buildHandler;
+    await mountApp("/");
+    await screen.findByText("Fence panels");
+
+    const archive = document.querySelector(".ibrow-archive") as HTMLButtonElement | null;
+    expect(archive).not.toBeNull();
+    expect(archive!.getAttribute("aria-label")).toBe("Archive Fence panels");
+    expect(archive!.title).toBe("Archive");
+    expect(archive!.querySelector("svg")).toBeTruthy();
+    expect(archive!.textContent).toBe("");
+    localStorage.removeItem("cm-compact");
+  });
+
   it("reads a row as sender, subject, snippet, date and count — and nothing else", async () => {
     handler = buildHandler;
     await mountApp("/");
