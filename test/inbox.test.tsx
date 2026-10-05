@@ -555,7 +555,7 @@ describe("the home page with no query", () => {
       expect(req && paramsOf(req).get("accountId")).toBe("work");
     });
 
-    click(screen.getByRole("button", { name: "work@example.test: All mail" }));
+    click(screen.getByRole("button", { name: "All mail (work@example.test)" }));
     const menu = await screen.findByRole("menu", { name: "Folders" });
     const personal = within(menu).getByRole("group", { name: "personal@example.test" });
     expect(within(personal).getByRole("menuitem", { name: "All mail" })).toBeTruthy();
@@ -1565,6 +1565,9 @@ describe("the folder button", () => {
     const latest = calls.filter((call) => pathOf(call) === "/v1/search").at(-1)!;
     expect(paramsOf(latest).get("accountId")).toBe("personal");
     expect(paramsOf(latest).get("label")).toBe("Personal Sent");
+    const selected = screen.getByRole("button", { name: /Personal Sent \(personal@example\.test\)/ });
+    expect(selected.querySelector(".ibfbtn-folder")?.textContent).toBe("Personal Sent");
+    expect(selected.querySelector(".ibfbtn-account")?.textContent).toBe("(personal@example.test)");
   });
 
   it("filters the list when a folder is picked, and keeps the folder in the address", async () => {

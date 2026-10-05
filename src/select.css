@@ -558,8 +558,10 @@
   border:1px solid var(--line); border-radius:7px; background:var(--card);
   color:var(--fg); cursor:pointer; }
 .ibfbtn:hover { border-color:var(--muted); }
-.ibfbtn .ibfname { flex:1 1 auto; min-width:0; overflow:hidden;
+.ibfbtn-label { flex:1 1 auto; min-width:0; overflow:hidden;
   text-overflow:ellipsis; white-space:nowrap; }
+.ibfbtn-folder { font-weight:700; }
+.ibfbtn-account { color:var(--muted); font-weight:400; }
 .ibfcaret { font-size:.7rem; color:var(--muted); }
 /* Opaque, and over the list: a popup that let rows show through would be a list
    of folders on top of a list of mail. */

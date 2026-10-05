@@ -118,7 +118,6 @@ function Folders({
   const accounts = (auth.data?.accounts ?? []).filter((account) => account.signedIn);
   const currentAccount = accounts.find((account) => account.id === currentAccountId);
   const accountName = currentAccount?.email || currentAccount?.displayName || currentAccountId;
-  const here = currentAccountId ? `${accountName}: ${current || "All mail"}` : current || "All mail";
 
   // Closing on a click elsewhere and on Escape: a popup that closed only when
   // its own button was found again is one a reader gets stuck behind.
@@ -152,7 +151,15 @@ function Folders({
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
-        <span className="ibfname">{here}</span>
+        <span className="ibfbtn-label">
+          <span className="ibfbtn-folder">{current || "All mail"}</span>
+          {currentAccountId ? (
+            <>
+              {" "}
+              <span className="ibfbtn-account">({accountName})</span>
+            </>
+          ) : null}
+        </span>
         <span className="ibfcaret" aria-hidden="true">▾</span>
       </button>
 
@@ -166,7 +173,7 @@ function Folders({
               className="ibfrow ibfdefault"
               onClick={() => onDefault(!isDefault)}
             >
-              <span className="ibfname">Open {here} by default</span>
+              <span className="ibfname">Open {current || "All mail"} by default</span>
               <span className="ibfmark" aria-hidden="true">{isDefault ? "✓" : ""}</span>
             </button>
           ) : null}
