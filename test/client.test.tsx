@@ -773,7 +773,9 @@ describe("the status route /settings", () => {
     handler = statusHandler;
     await mountApp("/settings");
 
-    expect(screen.getByRole("heading", { name: "Settings", level: 1 })).toBeTruthy();
+    const heading = screen.getByRole("heading", { name: "Settings", level: 1 });
+    expect(heading.closest("header")?.textContent).toBe("Settings");
+    expect(screen.queryByText("Preferences")).toBeNull();
     for (const name of ["Gmail accounts", "Connected services", "Mailbox", "Reading", "Corpus", "Appearance"]) {
       expect(screen.getByRole("region", { name })).toBeTruthy();
     }
@@ -863,6 +865,23 @@ describe("the settings rows on /settings", () => {
     const meRow = me.closest(".stsetting-row")!;
     expect(meRow.querySelector(".stsetting-copy h3")!.textContent).toBe("Your mail comes from");
     expect(meRow.querySelector(".stsetting-note")!.textContent).toContain("Nobody is selected");
+  });
+
+  it("chooses the thread-list layout from a dropdown", async () => {
+    localStorage.removeItem("cm-compact");
+    handler = statusHandler;
+    await mountApp("/settings");
+
+    const layout = (await screen.findByLabelText("Thread list layout")) as HTMLSelectElement;
+    expect(layout.tagName).toBe("SELECT");
+    expect(Array.from(layout.options).map((option) => option.textContent)).toEqual(["Detailed", "Compact"]);
+    expect(layout.value).toBe("detailed");
+
+    fireEvent.change(layout, { target: { value: "compact" } });
+    await waitFor(() => expect(localStorage.getItem("cm-compact")).toBe("1"));
+    expect(layout.closest(".stsetting-row")!.querySelector(".stsetting-note")!.textContent)
+      .toBe("One line per thread.");
+    localStorage.removeItem("cm-compact");
   });
 
   it("places the home-folder control in the mailbox section", async () => {

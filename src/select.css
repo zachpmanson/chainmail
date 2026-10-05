@@ -103,10 +103,7 @@
 .wrap.statuswrap.settings-page { width:min(calc(100% - 2rem), 58rem); max-width:58rem;
   margin:0 auto; padding:1.25rem 0 2.5rem; display:grid; gap:.9rem; align-content:start; }
 .stpage-head { margin:.2rem .15rem .35rem; }
-.stpage-head h1 { margin:.05rem 0 .25rem; font-size:1.45rem; }
-.stpage-head > p:last-child { margin:0; color:var(--muted); font-size:.82rem; }
-.steyebrow { margin:0; color:var(--accent); font-size:.65rem; font-weight:700;
-  letter-spacing:.1em; text-transform:uppercase; }
+.stpage-head h1 { margin:0; font-size:1.45rem; }
 .stsection { min-width:0; padding:.95rem 1rem; border:1px solid var(--line);
   border-radius:10px; background:var(--card); }
 .stsection-head { margin:0 0 .7rem; }

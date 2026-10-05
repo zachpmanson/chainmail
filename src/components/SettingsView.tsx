@@ -3,7 +3,6 @@ import type { ReactNode } from "react";
 import { $api, type PersonSummary, type ServiceStatus, type Stats } from "../lib/api";
 import { when } from "../lib/stamp";
 import { useCompactMode } from "../lib/compactMode";
-import { CompactModeToggle } from "./CompactListControls";
 import { Palette } from "./Palette";
 
 function errText(e: unknown): string {
@@ -356,9 +355,7 @@ export function SettingsView() {
   return (
     <div className="wrap statuswrap settings-page">
       <header className="stpage-head">
-        <p className="steyebrow">Preferences</p>
         <h1>Settings</h1>
-        <p>Manage connected mailboxes, syncing, and how Chainmail displays your mail.</p>
       </header>
 
       {save.isError ? (
@@ -442,9 +439,17 @@ export function SettingsView() {
           <SettingRow
             title="Thread list"
             description="Choose how much detail each inbox row shows."
-            note="Show one line per thread."
+            note={compact ? "One line per thread." : "Sender, subject, and preview."}
           >
-            <CompactModeToggle compact={compact} onChange={setCompact} />
+            <select
+              className="stpick"
+              aria-label="Thread list layout"
+              value={compact ? "compact" : "detailed"}
+              onChange={(e) => setCompact(e.target.value === "compact")}
+            >
+              <option value="detailed">Detailed</option>
+              <option value="compact">Compact</option>
+            </select>
           </SettingRow>
           <SettingRow
             title="Your mail comes from"
