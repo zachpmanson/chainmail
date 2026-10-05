@@ -769,9 +769,15 @@ describe("a spec named on the URL", () => {
 });
 
 describe("the status route /settings", () => {
-  it("shows each service's state and the corpus coverage", async () => {
+  it("shows a single heading and consistently grouped settings sections", async () => {
     handler = statusHandler;
     await mountApp("/settings");
+
+    expect(screen.getByRole("heading", { name: "Settings", level: 1 })).toBeTruthy();
+    for (const name of ["Gmail accounts", "Connected services", "Mailbox", "Reading", "Corpus", "Appearance"]) {
+      expect(screen.getByRole("region", { name })).toBeTruthy();
+    }
+    expect(document.querySelectorAll(".stsection")).toHaveLength(6);
 
     await waitFor(() => expect(calls.some((c) => pathOf(c) === "/v1/status")).toBe(true));
     expect(calls.some((c) => pathOf(c) === "/v1/stats")).toBe(true);
@@ -811,8 +817,8 @@ describe("the sweep cadence on /settings", () => {
     // The option label, not the word: the page says "10 minutes" and stores "10m".
     expect(control.selectedOptions[0]!.textContent).toBe("10 minutes");
 
-    const line = control.closest("dd")!.nextElementSibling!.textContent ?? "";
-    expect(line).toContain("next");
+    const note = control.closest(".stsetting-row")!.querySelector(".stsetting-note")!.textContent ?? "";
+    expect(note).toContain("Next sweep");
   });
 
   it("writes the cadence that was chosen, and takes the new schedule back", async () => {
@@ -842,49 +848,31 @@ describe("the sweep cadence on /settings", () => {
   });
 });
 
-// The settings are three columns — the name, the control, and what the setting
-// knows about itself — and every row has all three, including the rows with
-// nothing to say. That last part is the one a reader never sees working and a
-// misplaced cell would break: an empty column is also the column that keeps the
-// names in one place.
 describe("the settings rows on /settings", () => {
-  const cellAfter = (el: Element) => el.nextElementSibling as HTMLElement | null;
-
-  it("puts each setting's note in a column of its own, beside the control's cell", async () => {
+  it("keeps each preference's explanation with its control", async () => {
     handler = statusHandler;
     await mountApp("/settings");
 
     const sweep = (await screen.findByLabelText("How often to sweep the mailbox")) as HTMLSelectElement;
-    // The cadence in force, which is also what puts a note in the third column:
-    // before the settings have answered there is nothing to say about the sweep.
     await waitFor(() => expect(sweep.value).toBe("10m"));
-    const control = sweep.closest("dd")!;
-    // Not inside the control's cell: the note is the row's third column, which
-    // is what stops three notes from starting wherever three controls end.
-    expect(control.querySelector(".sttail")).toBeNull();
-    expect(cellAfter(control)!.className).toBe("sttail");
-    expect(cellAfter(control)!.textContent).toContain("next");
+    const sweepRow = sweep.closest(".stsetting-row")!;
+    expect(sweepRow.querySelector(".stsetting-copy h3")!.textContent).toBe("Sync frequency");
+    expect(sweepRow.querySelector(".stsetting-note")!.textContent).toContain("Next sweep");
 
-    // The person's row carries its addresses there too.
-    const me = (await screen.findByLabelText("Which person you are")).closest("dd")!;
-    expect(me.querySelector(".sttail")).toBeNull();
-    const meNote = cellAfter(me)!;
-    expect(meNote.className).toBe("sttail");
-    expect(meNote.textContent).toContain("nothing is marked as yours");
+    const me = (await screen.findByLabelText("Which person you are")) as HTMLSelectElement;
+    const meRow = me.closest(".stsetting-row")!;
+    expect(meRow.querySelector(".stsetting-copy h3")!.textContent).toBe("Your mail comes from");
+    expect(meRow.querySelector(".stsetting-note")!.textContent).toContain("Nobody is selected");
   });
 
-  it("keeps the cell on a setting that has nothing to add", async () => {
+  it("places the home-folder control in the mailbox section", async () => {
     handler = statusHandler;
     await mountApp("/settings");
 
-    const folder = (await screen.findByLabelText(
-      "Which folder the home page opens in",
-    )).closest("dd")!;
-    const note = cellAfter(folder)!;
-    expect(note.className).toBe("sttail");
-    // Empty, and still a cell: the row without one would leave the third column
-    // of the rows below it unaligned.
-    expect(note.textContent).toBe("");
+    const folder = await screen.findByLabelText("Which folder the home page opens in");
+    const row = folder.closest(".stsetting-row")!;
+    expect(row.querySelector(".stsetting-copy h3")!.textContent).toBe("Home folder");
+    expect(row.closest("section")!.getAttribute("aria-labelledby")).toBe("mailbox-heading");
   });
 });
 
@@ -901,12 +889,9 @@ describe("the default folder on /settings", () => {
     // words the home page's own folder button uses for it.
     expect([...control.options].map((o) => o.textContent)).toEqual(["All mail", "INBOX", "Work"]);
 
-    // The row names what the control sets, and the control is that setting: the
-    // page lists them as name and value rather than stating each one in a
-    // sentence, so the label is the name rather than a clause around the field.
-    const row = control.closest("dd")!;
-    expect(row.previousElementSibling!.textContent).toBe("Home folder");
-    expect(row.querySelector(".sttail")).toBeNull();
+    const row = control.closest(".stsetting-row")!;
+    expect(row.querySelector(".stsetting-copy h3")!.textContent).toBe("Home folder");
+    expect(row.closest("section")!.getAttribute("aria-labelledby")).toBe("mailbox-heading");
   });
 
   it("writes the folder that was chosen, and writes none when All mail is", async () => {
@@ -1027,9 +1012,8 @@ describe("who you are on /settings", () => {
     // name is not offered: no mail came from them, so nothing could be marked.
     await waitFor(() => expect(options(control)).toEqual(["Nobody", "Ada Byron", "Bo Halvorsen"]));
     expect(control.value).toBe("");
-    // The note is the row's third column, not a tail inside the control's cell.
-    expect(control.closest("dd")!.nextElementSibling!.textContent).toContain(
-      "nothing is marked as yours",
+    expect(control.closest(".stsetting-row")!.querySelector(".stsetting-note")!.textContent).toContain(
+      "Nobody is selected",
     );
     expect(settingsWrites()).toHaveLength(0);
 
@@ -1045,7 +1029,7 @@ describe("who you are on /settings", () => {
     // shows, and the aliases the corpus resolved them to. It is the row's third
     // column, so the control's own cell only ever holds the control.
     await waitFor(() => expect(control.selectedOptions[0]!.textContent).toBe("Ada Byron"));
-    expect(control.closest("dd")!.nextElementSibling!.textContent).toContain(
+    expect(control.closest(".stsetting-row")!.querySelector(".stsetting-note")!.textContent).toContain(
       "Ada Byron: ada@okoye.example, ada@work.example",
     );
   });
@@ -1072,7 +1056,7 @@ describe("who you are on /settings", () => {
     const control = (await screen.findByLabelText("Which person you are")) as HTMLSelectElement;
     await waitFor(() => expect(control.selectedOptions[0]!.textContent).toBe("old@elsewhere.example"));
     expect(options(control)).toEqual(["Nobody", "Ada Byron", "Bo Halvorsen", "old@elsewhere.example"]);
-    expect(control.closest("dd")!.textContent).toContain("old@elsewhere.example");
+    expect(control.closest(".stsetting-row")!.querySelector(".stsetting-note")!.textContent).toContain("old@elsewhere.example");
 
     // Nobody is a choice, asked for as the zero that is not a person id, and it
     // clears the list rather than leaving it to be read again afterwards.
@@ -1080,8 +1064,8 @@ describe("who you are on /settings", () => {
     await waitFor(() => expect(settingsWrites()).toHaveLength(1));
     expect(stored(settingsWrites()[0]!)).toEqual({ mePersonId: 0 });
     await waitFor(() => expect(control.value).toBe(""));
-    expect(control.closest("dd")!.nextElementSibling!.textContent).toContain(
-      "nothing is marked as yours",
+    expect(control.closest(".stsetting-row")!.querySelector(".stsetting-note")!.textContent).toContain(
+      "Nobody is selected",
     );
   });
 });

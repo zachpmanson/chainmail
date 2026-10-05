@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
+import type { ReactNode } from "react";
 import { $api, type PersonSummary, type ServiceStatus, type Stats } from "../lib/api";
 import { when } from "../lib/stamp";
 import { useCompactMode } from "../lib/compactMode";
@@ -9,6 +10,53 @@ function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
+function SettingsSection({
+  id,
+  title,
+  description,
+  children,
+}: {
+  id: string;
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="stsection" aria-labelledby={id}>
+      <header className="stsection-head">
+        <h2 id={id}>{title}</h2>
+        <p>{description}</p>
+      </header>
+      {children}
+    </section>
+  );
+}
+
+function SettingRow({
+  title,
+  description,
+  note,
+  children,
+}: {
+  title: string;
+  description: string;
+  note?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="stsetting-row">
+      <div className="stsetting-copy">
+        <h3>{title}</h3>
+        <p>{description}</p>
+      </div>
+      <div className="stsetting-value">
+        {children}
+        {note ? <p className="stsetting-note">{note}</p> : null}
+      </div>
+    </div>
+  );
+}
+
 function GmailAccounts() {
   const auth = $api.useQuery("get", "/auth/status", {});
   const disconnect = $api.useMutation("post", "/auth/accounts/{accountId}/disconnect", {
@@ -17,26 +65,27 @@ function GmailAccounts() {
   const connected = (auth.data?.accounts ?? []).filter((account) => account.signedIn);
 
   return (
-    <section aria-labelledby="gmail-accounts-heading">
-      <h2 className="sthead" id="gmail-accounts-heading">Gmail accounts</h2>
+    <SettingsSection
+      id="gmail-accounts-heading"
+      title="Gmail accounts"
+      description="Connect the mailboxes Chainmail syncs. Disconnecting keeps already imported mail."
+    >
       {auth.isError ? (
-        <p className="selfail" role="alert">{errText(auth.error)}</p>
+        <p className="stmessage stmessage-error" role="alert">{errText(auth.error)}</p>
       ) : auth.isPending ? (
-        <p className="stnote">Checking connected accounts…</p>
+        <p className="stmessage">Checking connected accounts…</p>
       ) : (
-        <div className="authbar">
-          {connected.length === 0 ? (
-            <>Not signed in to Google — the hourly slurp is paused.{" "}</>
-          ) : (
-            <>
-              Gmail: {connected.map((account) => {
+        <>
+          {connected.length > 0 ? (
+            <ul className="st-account-list">
+              {connected.map((account) => {
                 const label = account.email || account.displayName;
                 return (
-                  <span className="authaccount" key={account.id}>
-                    {label}
+                  <li key={account.id}>
+                    <span>{label}</span>
                     <button
                       type="button"
-                      className="authdisconnect"
+                      className="stbutton stbutton-secondary"
                       aria-label={`Disconnect ${label}`}
                       disabled={disconnect.isPending}
                       onClick={() => {
@@ -48,20 +97,26 @@ function GmailAccounts() {
                         }
                       }}
                     >
-                      disconnect
+                      Disconnect
                     </button>
-                  </span>
+                  </li>
                 );
-              })}.{" "}
-            </>
+              })}
+            </ul>
+          ) : (
+            <p className="stmessage">No Gmail accounts connected. Mailbox syncing is paused.</p>
           )}
-          <a href="/auth/login">{connected.length === 0 ? "Sign in with Google" : "Connect another account"}</a>.
           {disconnect.isError ? (
-            <span className="autherror" role="alert">Could not disconnect: {errText(disconnect.error)}</span>
+            <p className="stmessage stmessage-error" role="alert">
+              Could not disconnect: {errText(disconnect.error)}
+            </p>
           ) : null}
-        </div>
+          <a className="stbutton stbutton-primary" href="/auth/login">
+            {connected.length === 0 ? "Sign in with Google" : "Connect another account"}
+          </a>
+        </>
       )}
-    </section>
+    </SettingsSection>
   );
 }
 
@@ -238,14 +293,8 @@ function CorpusStats({ s }: { s: Stats }) {
 }
 
 /**
- * The /settings route: which of the backends chainmail reads through are logged
- * in, as the operator's `corpus status` last measured them, plus the corpus
- * coverage /v1/stats already reports and the two settings that decide how it is
- * read: how often the mailbox is swept, which folder the home page opens in, and
- * which person's mail is the reader's own.
- * The settings write; the rest is how the status screen stays on the safe side
- * of the render/model boundary: the server never contacts docket or slackdump,
- * it serves what the CLI wrote.
+ * Account management, service health, mailbox preferences, reading options,
+ * and a compact view of the corpus, grouped into consistently framed sections.
  */
 export function SettingsView() {
   const queryClient = useQueryClient();
@@ -305,189 +354,145 @@ export function SettingsView() {
   const busy = save.isPending || settings.isPending;
 
   return (
-    <div className="wrap statuswrap">
-      <GmailAccounts />
-      <h2 className="sthead">Logged in</h2>
-      <p className="stnote">
-        Run <code>corpus status</code> to re-measure.
-        {status.data?.checkedAt ? <> Last checked {when(status.data.checkedAt)}.</>
-          : " Nothing measured yet."}
-      </p>
-      {status.isError ? (
-        <p className="selfail" role="alert">
-          {errText(status.error)}
-        </p>
-      ) : null}
-      <ul className="stlist">
-        {status.data && status.data.services.length > 0 ? (
-          status.data.services.map((svc) => <OneRow key={svc.id} svc={svc} />)
-        ) : (
-          <li className="strow stempty">Checking services…</li>
-        )}
-      </ul>
+    <div className="wrap statuswrap settings-page">
+      <header className="stpage-head">
+        <p className="steyebrow">Preferences</p>
+        <h1>Settings</h1>
+        <p>Manage connected mailboxes, syncing, and how Chainmail displays your mail.</p>
+      </header>
 
-      {/* The settings: the things about reading this corpus that are the
-          reader's rather than the mail's, each written where it is read. They
-          belong next to the backends they decide the reading of, and they are
-          the only controls on this screen — everything else here reports.
-
-          Three columns: the name of the setting, the control that sets it, and
-          what the setting knows about itself — the schedule the cadence implies,
-          the addresses the reader's mail comes from. The third was inside the
-          second's cell, trailing each control at whatever width the control
-          happened to end at, which read as three unrelated asides down a ragged
-          edge; given a column of its own, the commentary is read down as one and
-          compared, which is why it was written beside the control at all. A
-          setting with nothing to add leaves the cell empty rather than closing
-          the column up — the names and the controls stay in their own columns
-          whatever any one row says. */}
-      <h2 className="sthead">Settings</h2>
-      <dl className="stdl stset">
-        <dt>Sweep the mailbox</dt>
-        <dd>
-          <select
-            className="stpick"
-            aria-label="How often to sweep the mailbox"
-            value={every}
-            disabled={busy || every === ""}
-            onChange={(e) => save.mutate({ body: { slurpEvery: e.target.value } })}
-          >
-            {every === "" ? <option value="">…</option> : null}
-            {cadenceOptions(every).map(([word, label]) => (
-              <option key={word} value={word}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </dd>
-        {status.data?.nextSlurpAt ? (
-          <dd className="sttail">next {when(status.data.nextSlurpAt)}</dd>
-        ) : every === "off" ? (
-          <dd className="sttail">never, unless asked</dd>
-        ) : every === "" ? (
-          // Nothing read yet, so nothing to say about the cadence: the cell is
-          // empty, as the folder's is.
-          <dd className="sttail" />
-        ) : (
-          // A cadence with nothing scheduled is a host whose -slurp grant is
-          // off, which is a state the page cannot fix and should not hide.
-          <dd className="sttail">nothing scheduled</dd>
-        )}
-        {/* The setting the home page writes when a reader says "open this folder by
-            default". It is here as well because this is the page that lists what
-            the server does; a reader who wants the corpus to open somewhere should
-            not have to remember it was a switch in a menu on another screen. */}
-        <dt>Home folder</dt>
-        <dd>
-          <select
-            className="stpick"
-            aria-label="Which folder the home page opens in"
-            value={settings.isPending ? "" : folder}
-            disabled={busy}
-            onChange={(e) => save.mutate({ body: { defaultFolder: e.target.value } })}
-          >
-            {settings.isPending ? <option value="">…</option> : null}
-            {folderOptions(labels, folder).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </dd>
-        {/* The folder control has nothing about itself to add, and its cell is
-            still there: a row that left the cell out would be the one row whose
-            third column starts a column to the left, because a grid places an
-            unplaced item in the next free cell — the next row's name would land
-            where this row's commentary did. */}
-        <dd className="sttail" />
-        {/* Who the reader is. A setting rather than a field on the page being built:
-            the same person decides which messages are marked as the reader's
-            wherever mail is read — the pane, a built page, every thread — and most
-            of those have no build anywhere near them. Nothing in the corpus records
-            which mailbox it was collected from, so this can only be told.
-
-            A person is picked and the addresses come with them, read out of the
-            identity graph on each read rather than stored beside the setting: the
-            note after the control names them, so the reader can see which aliases
-            are being marked — including the ones the corpus learned after they said
-            who they were — rather than having to trust that it folded the right ones
-            together.
-
-            Capped at 20ch, like the nav's Person control and for the same reason:
-            the value is a name that may carry the aliases behind it, and an
-            unusually long one must not be what sets the width of the column it is
-            read in. */}
-        <dt>Thread list</dt>
-        <dd>
-          <CompactModeToggle compact={compact} onChange={setCompact} />
-        </dd>
-        <dd className="sttail">Show one line per thread.</dd>
-        <dt>Your mail comes from</dt>
-        <dd>
-          <select
-            className="stpick stperson"
-            aria-label="Which person you are"
-            value={me.value}
-            disabled={busy || people.isPending}
-            onChange={(e) => saveMe(e.target.value)}
-          >
-            {/* No options until the people are read: a control that listed Nobody
-                while the answer was in flight, and then swapped it for the reader's
-                own name, would be showing a setting that is not in force. It is
-                disabled and blank for that moment, and the note says why. */}
-            {people.isPending
-              ? null
-              : me.options.map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-          </select>
-        </dd>
-        {!meKnown ? (
-          // The control is blank until both answers are in, and this is what says
-          // why: the people are what name the person it would show, and the
-          // settings are what say whether anyone is named at all.
-          <dd className="sttail">reading…</dd>
-        ) : me.value === "" ? (
-          <dd className="sttail">nobody, so nothing is marked as yours.</dd>
-        ) : (
-          <dd className="sttail">{meLine(me)}.</dd>
-        )}
-      </dl>
-      {people.isError ? (
-        <p className="selfail" role="alert">
-          {errText(people.error)}
-        </p>
-      ) : null}
       {save.isError ? (
-        <p className="selfail" role="alert">
-          {errText(save.error)}
-        </p>
+        <p className="stmessage stmessage-error" role="alert">{errText(save.error)}</p>
       ) : null}
 
-      <h2 className="sthead">Corpus</h2>
-      {stats.isError ? (
-        <p className="selfail" role="alert">
-          {errText(stats.error)}
-        </p>
-      ) : stats.data ? (
-        <CorpusStats s={stats.data} />
-      ) : (
-        <p className="stnote">Reading the corpus…</p>
-      )}
+      <GmailAccounts />
 
-      {/* The palette, last and after everything that reports: it says nothing
-          about the corpus or the operator, and nothing on this screen is read
-          through it — it is here because this is the page somebody with the app
-          open goes looking for the colours of the thing in front of them, and
-          because the values it prints are the stylesheet's own rather than a
-          copy of it (see lib/palette). */}
-      <h2 className="sthead">Palette</h2>
-      <p className="stnote">
-        The colours in force, and in the other theme, as the browser resolves them.
-      </p>
-      <Palette />
+      <SettingsSection
+        id="services-heading"
+        title="Connected services"
+        description={`Run corpus status to refresh.${status.data?.checkedAt ? ` Last checked ${when(status.data.checkedAt)}.` : " Nothing measured yet."}`}
+      >
+        {status.isError ? (
+          <p className="stmessage stmessage-error" role="alert">{errText(status.error)}</p>
+        ) : null}
+        <ul className="stlist">
+          {status.isPending ? (
+            <li className="strow stempty">Checking services…</li>
+          ) : status.data?.services.length ? (
+            status.data.services.map((svc) => <OneRow key={svc.id} svc={svc} />)
+          ) : (
+            <li className="strow stempty">No services reported.</li>
+          )}
+        </ul>
+      </SettingsSection>
+
+      <SettingsSection
+        id="mailbox-heading"
+        title="Mailbox"
+        description="Choose how often mail is imported and which folder opens first."
+      >
+        <div className="stsetting-list">
+          <SettingRow
+            title="Sync frequency"
+            description="How often Chainmail checks Gmail for new messages."
+            note={status.data?.nextSlurpAt
+              ? `Next sweep ${when(status.data.nextSlurpAt)}.`
+              : every === "off" ? "No automatic sweeps; refresh when needed."
+                : every === "" ? "Reading the current schedule…" : "No automatic sweep is scheduled on this host."}
+          >
+            <select
+              className="stpick"
+              aria-label="How often to sweep the mailbox"
+              value={every}
+              disabled={busy || every === ""}
+              onChange={(e) => save.mutate({ body: { slurpEvery: e.target.value } })}
+            >
+              {every === "" ? <option value="">…</option> : null}
+              {cadenceOptions(every).map(([word, label]) => (
+                <option key={word} value={word}>{label}</option>
+              ))}
+            </select>
+          </SettingRow>
+          <SettingRow
+            title="Home folder"
+            description="The folder shown when you open the inbox."
+          >
+            <select
+              className="stpick"
+              aria-label="Which folder the home page opens in"
+              value={settings.isPending ? "" : folder}
+              disabled={busy}
+              onChange={(e) => save.mutate({ body: { defaultFolder: e.target.value } })}
+            >
+              {settings.isPending ? <option value="">…</option> : null}
+              {folderOptions(labels, folder).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </SettingRow>
+        </div>
+      </SettingsSection>
+
+      <SettingsSection
+        id="reading-heading"
+        title="Reading"
+        description="Personalize how the inbox and message threads are presented."
+      >
+        <div className="stsetting-list">
+          <SettingRow
+            title="Thread list"
+            description="Choose how much detail each inbox row shows."
+            note="Show one line per thread."
+          >
+            <CompactModeToggle compact={compact} onChange={setCompact} />
+          </SettingRow>
+          <SettingRow
+            title="Your mail comes from"
+            description="Choose the person whose messages should be marked as yours."
+            note={!meKnown
+              ? people.isError ? "Could not read the people in this corpus."
+                : "Reading your identity…"
+              : me.value === "" ? "Nobody is selected, so no messages are marked as yours."
+                : `${meLine(me)}.`}
+          >
+            <select
+              className="stpick stperson"
+              aria-label="Which person you are"
+              value={me.value}
+              disabled={busy || people.isPending}
+              onChange={(e) => saveMe(e.target.value)}
+            >
+              {people.isPending ? null : me.options.map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </SettingRow>
+        </div>
+        {people.isError ? (
+          <p className="stmessage stmessage-error" role="alert">{errText(people.error)}</p>
+        ) : null}
+      </SettingsSection>
+      <SettingsSection
+        id="corpus-heading"
+        title="Corpus"
+        description="A snapshot of the mail and identities currently stored."
+      >
+        {stats.isError ? (
+          <p className="stmessage stmessage-error" role="alert">{errText(stats.error)}</p>
+        ) : stats.data ? (
+          <CorpusStats s={stats.data} />
+        ) : (
+          <p className="stmessage">Reading the corpus…</p>
+        )}
+      </SettingsSection>
+
+      <SettingsSection
+        id="appearance-heading"
+        title="Appearance"
+        description="Inspect the colours used by Chainmail in both themes."
+      >
+        <Palette />
+      </SettingsSection>
     </div>
   );
 }
