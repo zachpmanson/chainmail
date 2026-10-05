@@ -562,7 +562,7 @@
   text-overflow:ellipsis; white-space:nowrap; }
 .ibfbtn-folder { font-weight:700; }
 .ibfbtn-account { color:var(--muted); font-weight:400; }
-.ibfcaret { font-size:.7rem; color:var(--muted); }
+.ibfcaret { flex:0 0 .75rem; width:.75rem; height:.75rem; color:var(--muted); }
 /* Opaque, and over the list: a popup that let rows show through would be a list
    of folders on top of a list of mail. */
 .ibpop { position:absolute; left:0; right:0; top:calc(100% + .25rem); z-index:31;
@@ -575,6 +575,7 @@
 .ibfrow:hover { background:var(--mine); }
 .ibfrow.sel { font-weight:650; }
 .ibfgroup + .ibfgroup { margin-top:.3rem; padding-top:.3rem; border-top:1px solid var(--line); }
+.ibfgroup .ibfrow { padding-left:1rem; }
 .ibfheading { padding:.25rem .45rem .15rem; overflow:hidden; text-overflow:ellipsis;
   color:var(--muted); font-size:.7rem; font-weight:700; white-space:nowrap; }
 .ibfrow .ibfname { flex:1 1 auto; min-width:0; overflow:hidden;
