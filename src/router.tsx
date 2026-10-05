@@ -112,11 +112,16 @@ function validateSearchParams(search: Record<string, unknown>): SearchParams {
 function SignInBar() {
   const auth = $api.useQuery("get", "/auth/status", {});
   if (auth.isPending || auth.isError) return null;
-  if (auth.data?.signed_in) return null;
+  const accounts = auth.data?.accounts ?? [];
+  const connected = accounts.filter((account) => account.signedIn);
   return (
     <div className="authbar">
-      Not signed in to Google — the hourly slurp is paused.{" "}
-      <a href="/auth/login">Sign in with Google</a>.
+      {connected.length === 0 ? (
+        <>Not signed in to Google — the hourly slurp is paused.{" "}</>
+      ) : (
+        <>Gmail: {connected.map((account) => account.email || account.displayName).join(", ")}.{" "}</>
+      )}
+      <a href="/auth/login">{connected.length === 0 ? "Sign in with Google" : "Connect another account"}</a>.
     </div>
   );
 }

@@ -15,6 +15,7 @@ import (
 type Cursor struct {
 	Source    string
 	Container string
+	AccountID string
 	Position  string // source-defined; empty once the walk completed
 	// Frontier is the newest entry timestamp a completed walk covered. Zero
 	// means no walk of this container has ever finished, which is not the same
@@ -55,6 +56,67 @@ func LoadCursor(s *Store, source, container string) (Cursor, error) {
 	}
 	c.UpdatedAt = time.Unix(updated, 0).UTC()
 	return c, nil
+}
+
+// LoadGmailCursor reads progress for one Gmail account and query.
+func LoadGmailCursor(s *Store, accountID, query string) (Cursor, error) {
+	c := Cursor{Source: SourceMail, Container: query, AccountID: accountID}
+	var pos sql.NullString
+	var frontier, succeeded sql.NullInt64
+	var updated int64
+	err := s.db.QueryRow(`select position, frontier, complete, walked, updated_at, succeeded_at
+		from gmail_cursors where account_id=? and query=?`, accountID, query).
+		Scan(&pos, &frontier, &c.Complete, &c.Walked, &updated, &succeeded)
+	switch {
+	case err == sql.ErrNoRows:
+		return c, nil
+	case err != nil:
+		return c, fmt.Errorf("loading Gmail cursor for account %q query %q: %w", accountID, query, err)
+	}
+	c.Exists = true
+	c.Position = pos.String
+	if frontier.Valid {
+		c.Frontier = time.Unix(frontier.Int64, 0).UTC()
+	}
+	if succeeded.Valid {
+		c.SucceededAt = time.Unix(succeeded.Int64, 0).UTC()
+	}
+	c.UpdatedAt = time.Unix(updated, 0).UTC()
+	return c, nil
+}
+
+// SaveGmailProgress records an unfinished mailbox walk for one account.
+func SaveGmailProgress(s *Store, accountID, query, position string, walked int) error {
+	now := time.Now().Unix()
+	_, err := s.db.Exec(`insert into gmail_cursors(account_id, query, position, complete, walked, updated_at)
+		values (?, ?, ?, 0, ?, ?)
+		on conflict(account_id, query) do update set position=excluded.position,
+		 complete=0, walked=excluded.walked, updated_at=excluded.updated_at`,
+		accountID, query, position, walked, now)
+	if err != nil {
+		return fmt.Errorf("saving Gmail cursor for account %q query %q: %w", accountID, query, err)
+	}
+	return nil
+}
+
+// SaveGmailComplete marks an account/query walk complete without regressing its frontier.
+func SaveGmailComplete(s *Store, accountID, query string, frontier time.Time, walked int) error {
+	now := time.Now().Unix()
+	var f interface{}
+	if !frontier.IsZero() {
+		f = frontier.Unix()
+	}
+	_, err := s.db.Exec(`insert into gmail_cursors(account_id, query, position, frontier, complete,
+		walked, updated_at, succeeded_at) values (?, ?, null, ?, 1, ?, ?, ?)
+		on conflict(account_id, query) do update set position=null, complete=1,
+		 walked=excluded.walked, updated_at=excluded.updated_at,
+		 succeeded_at=excluded.succeeded_at,
+		 frontier=max(coalesce(excluded.frontier, 0), coalesce(gmail_cursors.frontier, 0))`,
+		accountID, query, f, walked, now, now)
+	if err != nil {
+		return fmt.Errorf("completing Gmail cursor for account %q query %q: %w", accountID, query, err)
+	}
+	return nil
 }
 
 // SaveProgress records an unfinished walk. Called between pages, so a kill
@@ -112,7 +174,7 @@ func Cursors(s *Store) ([]Cursor, error) {
 	rows, err := s.db.Query(`
 		select source, container, position, frontier, complete, walked,
 		       updated_at, succeeded_at
-		  from cursors order by updated_at desc`)
+		  from cursors where source!='mail' order by updated_at desc`)
 	if err != nil {
 		return nil, fmt.Errorf("listing cursors: %w", err)
 	}
@@ -137,5 +199,35 @@ func Cursors(s *Store) ([]Cursor, error) {
 		c.UpdatedAt = time.Unix(updated, 0).UTC()
 		out = append(out, c)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+
+	mailRows, err := s.db.Query(`select account_id, query, position, frontier, complete, walked,
+		updated_at, succeeded_at from gmail_cursors order by updated_at desc`)
+	if err != nil {
+		return nil, fmt.Errorf("listing Gmail cursors: %w", err)
+	}
+	defer mailRows.Close()
+	for mailRows.Next() {
+		c := Cursor{Source: SourceMail, Exists: true}
+		var pos sql.NullString
+		var frontier, succeeded sql.NullInt64
+		var updated int64
+		if err := mailRows.Scan(&c.AccountID, &c.Container, &pos, &frontier, &c.Complete,
+			&c.Walked, &updated, &succeeded); err != nil {
+			return nil, err
+		}
+		c.Position = pos.String
+		if frontier.Valid {
+			c.Frontier = time.Unix(frontier.Int64, 0).UTC()
+		}
+		if succeeded.Valid {
+			c.SucceededAt = time.Unix(succeeded.Int64, 0).UTC()
+		}
+		c.UpdatedAt = time.Unix(updated, 0).UTC()
+		out = append(out, c)
+	}
+	return out, mailRows.Err()
 }

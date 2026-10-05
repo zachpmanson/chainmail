@@ -116,9 +116,137 @@ func (s *Store) GmailCopies(entryID int64) ([]GmailCopy, error) {
 			return nil, err
 		}
 		if err := json.Unmarshal([]byte(labels), &c.Labels); err != nil {
-			return nil, fmt.Errorf("decoding labels for Gmail copy %q: %w", c.GmailID, err)
+			// The migration carries pre-existing comma-separated labels forward;
+			// subsequent writes use JSON so commas in new label names are safe.
+			c.Labels = splitLabels(labels)
 		}
 		copies = append(copies, c)
 	}
 	return copies, rows.Err()
+}
+
+// SetGmailCopyLabels stores the mailbox's latest label answer for one account
+// copy. For the legacy account it also updates the pre-existing mail_detail
+// mirror used by older readers.
+func (s *Store) SetGmailCopyLabels(accountID, gmailID string, labels []string) error {
+	encoded, err := json.Marshal(labels)
+	if err != nil {
+		return fmt.Errorf("encoding labels for Gmail copy %q: %w", gmailID, err)
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	res, err := tx.Exec(`update gmail_copies set labels=? where account_id=? and gmail_id=?`,
+		string(encoded), accountID, gmailID)
+	if err != nil {
+		return fmt.Errorf("updating labels for Gmail copy %q: %w", gmailID, err)
+	}
+	if n, err := res.RowsAffected(); err == nil && n == 0 {
+		return fmt.Errorf("no Gmail copy %q in account %q", gmailID, accountID)
+	}
+	if accountID == "legacy" {
+		if _, err := tx.Exec(`update mail_detail set labels=? where gmail_id=?`, joinLabels(labels), gmailID); err != nil {
+			return fmt.Errorf("updating legacy labels for Gmail copy %q: %w", gmailID, err)
+		}
+	}
+	return tx.Commit()
+}
+
+// ReconcileGmailUnread updates one account's copy labels from Gmail's complete
+// unread set. The logical entry's unread bit is the union across its copies.
+func (s *Store) ReconcileGmailUnread(accountID string, unreadGmailIDs []string) (UnreadReconcile, error) {
+	want := make(map[string]bool, len(unreadGmailIDs))
+	for _, id := range unreadGmailIDs {
+		if id != "" {
+			want[id] = true
+		}
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return UnreadReconcile{}, err
+	}
+	defer tx.Rollback()
+	rows, err := tx.Query(`select gmail_id, entry_id, labels from gmail_copies where account_id=?`, accountID)
+	if err != nil {
+		return UnreadReconcile{}, err
+	}
+	type copyRow struct {
+		gmailID string
+		entry   int64
+		labels  []string
+	}
+	var copies []copyRow
+	for rows.Next() {
+		var r copyRow
+		var raw string
+		if err := rows.Scan(&r.gmailID, &r.entry, &raw); err != nil {
+			rows.Close()
+			return UnreadReconcile{}, err
+		}
+		if err := json.Unmarshal([]byte(raw), &r.labels); err != nil {
+			r.labels = splitLabels(raw)
+		}
+		copies = append(copies, r)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return UnreadReconcile{}, err
+	}
+	rows.Close()
+	updates := make(map[int64]struct{})
+	res := UnreadReconcile{}
+	for _, c := range copies {
+		res.Checked++
+		should := want[c.gmailID]
+		if Unread(c.labels) != should {
+			if should {
+				res.Marked++
+			} else {
+				res.Cleared++
+			}
+			encoded, _ := json.Marshal(SetUnread(c.labels, should))
+			if _, err := tx.Exec(`update gmail_copies set labels=? where account_id=? and gmail_id=?`,
+				string(encoded), accountID, c.gmailID); err != nil {
+				return res, fmt.Errorf("correcting Gmail copy %q: %w", c.gmailID, err)
+			}
+		}
+		updates[c.entry] = struct{}{}
+	}
+	for entry := range updates {
+		copyRows, err := tx.Query(`select labels from gmail_copies where entry_id=? and account_id=?`, entry, accountID)
+		if err != nil {
+			return res, err
+		}
+		unread := false
+		for copyRows.Next() {
+			var raw string
+			var labels []string
+			if err := copyRows.Scan(&raw); err != nil {
+				copyRows.Close()
+				return res, err
+			}
+			if json.Unmarshal([]byte(raw), &labels) != nil {
+				labels = splitLabels(raw)
+			}
+			unread = unread || Unread(labels)
+		}
+		if err := copyRows.Err(); err != nil {
+			copyRows.Close()
+			return res, err
+		}
+		copyRows.Close()
+		if accountID == "legacy" {
+			var raw string
+			if err := tx.QueryRow(`select coalesce(labels,'') from mail_detail where entry_id=?`, entry).Scan(&raw); err != nil {
+				return res, err
+			}
+			if _, err := tx.Exec(`update mail_detail set labels=? where entry_id=?`,
+				joinLabels(SetUnread(splitLabels(raw), unread)), entry); err != nil {
+				return res, err
+			}
+		}
+	}
+	return res, tx.Commit()
 }

@@ -85,6 +85,7 @@ type ChainEntry struct {
 	ExtID   string
 	GmailID string
 	Labels  []string
+	Copies  []GmailCopy
 }
 
 // ChainEntries returns every entry reachable by walking parent_id down from
@@ -132,7 +133,30 @@ func (s *Store) ChainEntries(rootExtID string) ([]ChainEntry, error) {
 		e.Labels = splitLabels(labels)
 		out = append(out, e)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	for i := range out {
+		copies, err := s.GmailCopies(out[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		out[i].Copies = copies
+		labels := map[string]bool{}
+		for _, label := range out[i].Labels {
+			labels[label] = true
+		}
+		for _, copy := range copies {
+			for _, label := range copy.Labels {
+				if !labels[label] {
+					out[i].Labels = append(out[i].Labels, label)
+					labels[label] = true
+				}
+			}
+		}
+	}
+	return out, nil
 }
 
 // SetLabels rewrites one message's stored mailbox labels — the local half of a
@@ -167,24 +191,48 @@ type MailLabels struct {
 // labels to be wrong about, so it is excluded rather than reported as agreeing.
 func (s *Store) MailLabels() ([]MailLabels, error) {
 	rows, err := s.db.Query(`
-		select entry_id, gmail_id, coalesce(labels, '') from mail_detail
-		 where gmail_id is not null and gmail_id <> ''`)
+		select e.id, coalesce(md.gmail_id,''), coalesce(md.labels,'')
+		from entries e left join mail_detail md on md.entry_id=e.id
+		where e.source=? and (md.gmail_id is not null and md.gmail_id<>'' or
+		      exists (select 1 from gmail_copies gc where gc.entry_id=e.id))`, SourceMail)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
 	var out []MailLabels
 	for rows.Next() {
 		var m MailLabels
 		var labels string
 		if err := rows.Scan(&m.ID, &m.GmailID, &labels); err != nil {
+			rows.Close()
 			return nil, err
 		}
 		m.Labels = splitLabels(labels)
 		out = append(out, m)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+	for i := range out {
+		copies, err := s.GmailCopies(out[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		seen := make(map[string]bool, len(out[i].Labels))
+		for _, label := range out[i].Labels {
+			seen[label] = true
+		}
+		for _, copy := range copies {
+			for _, label := range copy.Labels {
+				if !seen[label] {
+					out[i].Labels = append(out[i].Labels, label)
+					seen[label] = true
+				}
+			}
+		}
+	}
+	return out, nil
 }
 
 // UnreadReconcile is what one pass corrected: how many mailbox copies were
@@ -218,43 +266,5 @@ type UnreadReconcile struct {
 // wholesale. The cost is one page over the unread half of the mailbox, which is
 // why the mail phase's own reads stay known-id-skipped.
 func (s *Store) ReconcileUnread(unreadGmailIDs []string) (UnreadReconcile, error) {
-	want := make(map[string]bool, len(unreadGmailIDs))
-	for _, id := range unreadGmailIDs {
-		if id != "" {
-			want[id] = true
-		}
-	}
-	rows, err := s.MailLabels()
-	if err != nil {
-		return UnreadReconcile{}, err
-	}
-
-	var res UnreadReconcile
-	tx, err := s.db.Begin()
-	if err != nil {
-		return res, err
-	}
-	defer tx.Rollback()
-	stmt, err := tx.Prepare(`update mail_detail set labels = ? where entry_id = ?`)
-	if err != nil {
-		return res, err
-	}
-	defer stmt.Close()
-
-	for _, r := range rows {
-		res.Checked++
-		should := want[r.GmailID]
-		if now := Unread(r.Labels); now == should {
-			continue
-		}
-		if should {
-			res.Marked++
-		} else {
-			res.Cleared++
-		}
-		if _, err := stmt.Exec(joinLabels(SetUnread(r.Labels, should)), r.ID); err != nil {
-			return res, fmt.Errorf("correcting entry %d: %w", r.ID, err)
-		}
-	}
-	return res, tx.Commit()
+	return s.ReconcileGmailUnread("legacy", unreadGmailIDs)
 }

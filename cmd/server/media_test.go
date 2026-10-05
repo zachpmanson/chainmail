@@ -38,7 +38,10 @@ func TestMediaPullAsksForTheEntryItWasGivenAndReturnsTheOutcome(t *testing.T) {
 	h := testServer(t)
 	h.mediaEnabled = true
 	calls := 0
-	h.runMediaPull = func(_ context.Context, entry string) (media.Result, error) {
+	h.runMediaPull = func(_ context.Context, entry, accountID string) (media.Result, error) {
+		if accountID != "legacy" {
+			t.Errorf("accountID = %q, want legacy", accountID)
+		}
 		calls++
 		if entry != extAda1 {
 			t.Errorf("runMediaPull got entry = %q, want the ext id the caller named, %q", entry, extAda1)
@@ -87,7 +90,7 @@ func TestMediaPullWithNothingToFetchIsAnEmptyAnswer(t *testing.T) {
 	// nothing and says so, rather than reporting an error for having no work.
 	h := testServer(t)
 	h.mediaEnabled = true
-	h.runMediaPull = func(_ context.Context, _ string) (media.Result, error) {
+	h.runMediaPull = func(_ context.Context, _, _ string) (media.Result, error) {
 		return media.Result{}, nil
 	}
 	res := h.do(t, "POST", "/v1/media/pull", []byte(`{"entry":"`+extAda1+`"}`))
@@ -106,7 +109,7 @@ func TestMediaPullWithNothingToFetchIsAnEmptyAnswer(t *testing.T) {
 func TestMediaPullRefusals(t *testing.T) {
 	h := testServer(t)
 	h.mediaEnabled = true
-	h.runMediaPull = func(_ context.Context, _ string) (media.Result, error) {
+	h.runMediaPull = func(_ context.Context, _, _ string) (media.Result, error) {
 		t.Error("a refused pull must not reach the mailbox")
 		return media.Result{}, nil
 	}
@@ -131,7 +134,7 @@ func TestMediaPullRefusals(t *testing.T) {
 func TestMediaPullFailureIsBadGatewayWithTheError(t *testing.T) {
 	h := testServer(t)
 	h.mediaEnabled = true
-	h.runMediaPull = func(_ context.Context, _ string) (media.Result, error) {
+	h.runMediaPull = func(_ context.Context, _, _ string) (media.Result, error) {
 		return media.Result{}, errors.New("opening gmail: no token on disk")
 	}
 	res := h.do(t, "POST", "/v1/media/pull", []byte(`{"entry":"`+extAda1+`"}`))
@@ -160,7 +163,7 @@ func TestAPullOutlivesTheReaderWhoAskedForIt(t *testing.T) {
 	entered := make(chan struct{})
 	release := make(chan struct{})
 	var cancelled bool
-	h.runMediaPull = func(ctx context.Context, _ string) (media.Result, error) {
+	h.runMediaPull = func(ctx context.Context, _, _ string) (media.Result, error) {
 		close(entered)
 		<-release
 		// The fetch takes as long as a mailbox takes. What matters is whether
@@ -194,7 +197,7 @@ func TestAPullBringsThePageItWasAskedForUpToDate(t *testing.T) {
 	h.mediaEnabled = true
 	// The pull itself is the test's fixture here: the bytes are already linked
 	// in the corpus, so reporting them is all a completed fetch leaves behind.
-	h.runMediaPull = func(context.Context, string) (media.Result, error) {
+	h.runMediaPull = func(context.Context, string, string) (media.Result, error) {
 		return media.Result{Wanted: 1, Pulled: 1, Bytes: int64(len(shedBytes))}, nil
 	}
 
@@ -233,7 +236,7 @@ func TestAPullBringsThePageItWasAskedForUpToDate(t *testing.T) {
 func TestAPullRefusesAPageNameThatIsNotOne(t *testing.T) {
 	h := testServer(t)
 	h.mediaEnabled = true
-	h.runMediaPull = func(context.Context, string) (media.Result, error) {
+	h.runMediaPull = func(context.Context, string, string) (media.Result, error) {
 		t.Error("a pull ran for a page name that is a path segment")
 		return media.Result{}, nil
 	}

@@ -1,6 +1,7 @@
 package corpus
 
 import (
+	"encoding/json"
 	"sort"
 	"strings"
 )
@@ -35,7 +36,43 @@ type LabelCount struct {
 // learned the list serves the corpus-derived folders, exactly as it did before —
 // an absent list is not an empty one.
 func (s *Store) Labels() ([]LabelCount, error) {
-	counts, err := s.labelCounts()
+	return s.labelsWith(s.labelCounts, s.MailboxLabels)
+}
+
+// LabelsForAccount returns counts and the last mailbox label list for one
+// Gmail account. Mail in other accounts is deliberately excluded.
+func (s *Store) LabelsForAccount(accountID string) ([]LabelCount, error) {
+	if accountID == "" || accountID == "legacy" {
+		return s.Labels()
+	}
+	return s.labelsWith(func() (map[string]int, error) {
+		rows, err := s.db.Query(`select labels from gmail_copies where account_id=?`, accountID)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		counts := map[string]int{}
+		for rows.Next() {
+			var raw string
+			if err := rows.Scan(&raw); err != nil {
+				return nil, err
+			}
+			var labels []string
+			if err := json.Unmarshal([]byte(raw), &labels); err != nil {
+				labels = splitLabels(raw)
+			}
+			for _, label := range labels {
+				if label != "" {
+					counts[label]++
+				}
+			}
+		}
+		return counts, rows.Err()
+	}, func() ([]string, error) { return s.MailboxLabelsForAccount(accountID) })
+}
+
+func (s *Store) labelsWith(countFn func() (map[string]int, error), mailboxFn func() ([]string, error)) ([]LabelCount, error) {
+	counts, err := countFn()
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +82,7 @@ func (s *Store) Labels() ([]LabelCount, error) {
 	// exists in the mailbox with nothing filed under it yet still appears, at
 	// zero. That is the difference between "what folders are there" and "what
 	// mail did we happen to ingest" — this list answers the first.
-	mailbox, err := s.MailboxLabels()
+	mailbox, err := mailboxFn()
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +145,18 @@ func (s *Store) labelCounts() (map[string]int, error) {
 // slice means the ingest has never recorded the list, which callers read the
 // same way as "no mailbox available" rather than as "no folders".
 func (s *Store) MailboxLabels() ([]string, error) {
-	rows, err := s.db.Query(`select name from mailbox_labels order by name`)
+	return s.mailboxLabelsQuery(`select name from mailbox_labels order by name`)
+}
+
+func (s *Store) MailboxLabelsForAccount(accountID string) ([]string, error) {
+	if accountID == "legacy" || accountID == "" {
+		return s.MailboxLabels()
+	}
+	return s.mailboxLabelsQuery(`select name from gmail_account_labels where account_id=? order by name`, accountID)
+}
+
+func (s *Store) mailboxLabelsQuery(query string, args ...any) ([]string, error) {
+	rows, err := s.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -133,6 +181,17 @@ func (s *Store) MailboxLabels() ([]string, error) {
 // transaction so a reader never sees a half-written list, and idempotent so a
 // re-ingest of the same mailbox writes the same rows.
 func (s *Store) PutMailboxLabels(names []string) error {
+	return s.replaceMailboxLabels("", names)
+}
+
+func (s *Store) PutMailboxLabelsForAccount(accountID string, names []string) error {
+	if accountID == "" || accountID == "legacy" {
+		return s.PutMailboxLabels(names)
+	}
+	return s.replaceMailboxLabels(accountID, names)
+}
+
+func (s *Store) replaceMailboxLabels(accountID string, names []string) error {
 	sorted := append([]string(nil), names...)
 	sort.Strings(sorted)
 
@@ -141,8 +200,14 @@ func (s *Store) PutMailboxLabels(names []string) error {
 		return err
 	}
 	defer tx.Rollback()
-	if _, err := tx.Exec(`delete from mailbox_labels`); err != nil {
-		return err
+	if accountID == "" {
+		if _, err := tx.Exec(`delete from mailbox_labels`); err != nil {
+			return err
+		}
+	} else {
+		if _, err := tx.Exec(`delete from gmail_account_labels where account_id=?`, accountID); err != nil {
+			return err
+		}
 	}
 	seen := map[string]bool{}
 	for _, name := range sorted {
@@ -150,7 +215,11 @@ func (s *Store) PutMailboxLabels(names []string) error {
 			continue
 		}
 		seen[name] = true
-		if _, err := tx.Exec(`insert into mailbox_labels (name) values (?)`, name); err != nil {
+		if accountID == "" {
+			if _, err := tx.Exec(`insert into mailbox_labels (name) values (?)`, name); err != nil {
+				return err
+			}
+		} else if _, err := tx.Exec(`insert into gmail_account_labels (account_id, name) values (?, ?)`, accountID, name); err != nil {
 			return err
 		}
 	}

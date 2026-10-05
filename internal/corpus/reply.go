@@ -25,8 +25,10 @@ import (
 // string rather than an error, and says so in its own words (see cmd/server's
 // send, where it is a refusal naming the entry).
 type ReplyTarget struct {
+	ID      int64
 	ExtID   string
 	GmailID string
+	Copies  []GmailCopy
 	// Author is the person the corpus resolved this entry to; From is the header
 	// as it arrived, and is what an attribution names when there is no person, or
 	// when the address is the more honest half of the pair.
@@ -59,13 +61,13 @@ func (s *Store) ReplyTarget(extID string) (ReplyTarget, error) {
 	var off sql.NullInt64
 	var author, from, subject, body, bodyHTML, tz, gmail sql.NullString
 	err := s.db.QueryRow(`
-		select e.ext_id, e.ts, e.tz, e.tz_offset,
+		select e.id, e.ext_id, e.ts, e.tz, e.tz_offset,
 		       p.display_name, md.from_addr, e.subject, e.body_text, e.body_html, md.gmail_id
 		from entries e
 		left join people p on p.id = e.person_id
 		left join mail_detail md on md.entry_id = e.id
 		where e.ext_id = ?`, extID).
-		Scan(&t.ExtID, &ts, &tz, &off, &author, &from, &subject, &body, &bodyHTML, &gmail)
+		Scan(&t.ID, &t.ExtID, &ts, &tz, &off, &author, &from, &subject, &body, &bodyHTML, &gmail)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ReplyTarget{}, fmt.Errorf("%q: %w", extID, ErrNotFound)
 	}
@@ -80,6 +82,10 @@ func (s *Store) ReplyTarget(extID string) (ReplyTarget, error) {
 	t.TZ, t.Author, t.From = tz.String, author.String, from.String
 	t.Subject, t.Body, t.GmailID = subject.String, body.String, gmail.String
 	t.HTML = bodyHTML.String
+	t.Copies, err = s.GmailCopies(t.ID)
+	if err != nil {
+		return ReplyTarget{}, err
+	}
 	return t, nil
 }
 

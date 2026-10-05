@@ -702,14 +702,13 @@ func (q Query) filters() (string, []any) {
 		preds = append(preds, p+")")
 	}
 	for _, l := range q.Labels {
-		// mail_detail.labels is the mailbox's own list, stored as one
-		// comma-joined string, so membership is a substring test against a
-		// delimited copy. instr() rather than like: a label is user text and may
-		// contain % or _, which like would read as wildcards. NULL labels (every
-		// Slack row, and any mail entry with no mailbox copy) match nothing,
-		// which is the honest answer — an entry with no labels is in no folder.
-		preds = append(preds, "instr(',' || md.labels || ',', ',' || ? || ',') > 0")
-		args = append(args, l)
+		// Legacy labels remain in mail_detail; current labels live on account-local
+		// copies as JSON arrays. Search is unified, so a logical entry matches when
+		// any connected copy carries the requested mailbox label.
+		preds = append(preds, `(instr(',' || md.labels || ',', ',' || ? || ',') > 0
+			or exists (select 1 from gmail_copies gc, json_each(case when json_valid(gc.labels) then gc.labels else '[]' end) gl
+				where gc.entry_id=e.id and gl.value=?))`)
+		args = append(args, l, l)
 	}
 	if q.HasAttachment != nil {
 		p := "exists (select 1 from attachments a where a.entry_id = e.id)"
@@ -921,13 +920,15 @@ func (s *Store) chainMeta(roots []int64) (map[int64]chainMetaRow, error) {
 		       count(distinct p.person_id),
 		       count(distinct a.rowid),
 		       count(distinct case when
-		         instr(',' || md.labels || ',', ',' || ? || ',') > 0 then d.id end)
+		         (instr(',' || md.labels || ',', ',' || ? || ',') > 0
+		          or exists (select 1 from gmail_copies gc, json_each(case when json_valid(gc.labels) then gc.labels else '[]' end) gl
+		                     where gc.entry_id=e.id and gl.value=?)) then d.id end)
 		from down d join entries e on e.id = d.id
 		     left join participants p on p.entry_id = e.id
 		     left join mail_detail md on md.entry_id = e.id
 		     left join attachments a on a.entry_id = e.id
 		group by d.root`,
-		append(args, walkDepthCap, UnreadLabel)...)
+		append(args, walkDepthCap, UnreadLabel, UnreadLabel)...)
 	if err != nil {
 		return nil, fmt.Errorf("summarising chains: %w", err)
 	}

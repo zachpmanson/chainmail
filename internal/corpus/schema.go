@@ -501,4 +501,42 @@ var migrations = []string{
 	from mail_detail md
 	where md.gmail_id is not null and md.gmail_id != '';
 	`,
+
+	// 18: mail cursors scoped to a connected Gmail account.
+	//
+	// Gmail page tokens and coverage frontiers are mailbox-local. The original
+	// cursor key (source, query) could let one account's progress certify another
+	// account's coverage, so mail moves to its own table keyed by account and
+	// query. Existing mail cursors belong to the migrated legacy account.
+	`
+	create table gmail_cursors (
+	  account_id   text not null references gmail_accounts(id),
+	  query        text not null,
+	  position     text,
+	  frontier     integer,
+	  complete     integer not null default 0,
+	  walked       integer not null,
+	  updated_at   integer not null,
+	  succeeded_at integer,
+	  primary key (account_id, query)
+	);
+
+	insert into gmail_cursors(account_id, query, position, frontier, complete,
+	                          walked, updated_at, succeeded_at)
+	select 'legacy', container, position, frontier, complete, walked, updated_at, succeeded_at
+	from cursors where source='mail';
+	delete from cursors where source='mail';
+	`,
+
+	// 19: mailbox label lists are account-local, just like the labels on copies.
+	// Preserve the existing list as the legacy account's snapshot.
+	`
+	create table gmail_account_labels (
+	  account_id text not null references gmail_accounts(id),
+	  name       text not null,
+	  primary key (account_id, name)
+	);
+	insert into gmail_account_labels(account_id, name)
+	select 'legacy', name from mailbox_labels;
+	`,
 }

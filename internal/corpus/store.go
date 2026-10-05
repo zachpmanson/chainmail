@@ -184,7 +184,7 @@ func (s *Store) PutForAccount(accountID string, e Entry, m *Mail, atts []Attachm
 		return PutResult{}, err
 	}
 	defer tx.Rollback()
-	res, err := s.put(tx, e, m, nil, atts)
+	res, err := s.put(tx, e, m, nil, atts, accountID)
 	if err != nil {
 		return res, err
 	}
@@ -208,7 +208,7 @@ func (s *Store) PutForAccount(accountID string, e Entry, m *Mail, atts []Attachm
 // exists so a source detail row cannot be committed apart from its entry: a
 // slack_detail row without its entry, or an entry whose detail never landed, is
 // a hole no re-ingest would notice, since the entry already exists.
-func (s *Store) put(tx *sql.Tx, e Entry, m *Mail, sd *Slack, atts []Attachment) (PutResult, error) {
+func (s *Store) put(tx *sql.Tx, e Entry, m *Mail, sd *Slack, atts []Attachment, accountID string) (PutResult, error) {
 	if e.Source == "" || e.ExtID == "" {
 		return PutResult{}, errors.New("entry needs a source and an ext_id")
 	}
@@ -266,18 +266,25 @@ func (s *Store) put(tx *sql.Tx, e Entry, m *Mail, sd *Slack, atts []Attachment) 
 	}
 
 	if m != nil {
+		legacyGmailID := m.GmailID
+		legacyLabels := strings.Join(m.Labels, ",")
+		if accountID != "legacy" {
+			legacyGmailID = ""
+			legacyLabels = ""
+		}
 		if _, err := tx.Exec(`
 			insert into mail_detail (entry_id, gmail_id, message_id, in_reply_to, refs,
 			                         from_addr, to_addr, cc_addr, labels)
 			values (?,?,?,?,?,?,?,?,?)
 			on conflict(entry_id) do update set
-			  gmail_id=excluded.gmail_id, message_id=excluded.message_id,
-			  in_reply_to=excluded.in_reply_to, refs=excluded.refs,
+			  gmail_id=case when ?='legacy' then excluded.gmail_id else mail_detail.gmail_id end,
+			  message_id=excluded.message_id, in_reply_to=excluded.in_reply_to, refs=excluded.refs,
 			  from_addr=excluded.from_addr, to_addr=excluded.to_addr,
-			  cc_addr=excluded.cc_addr, labels=excluded.labels`,
-			res.ID, nullStr(m.GmailID), nullStr(m.MessageID), nullStr(m.InReplyTo),
+			  cc_addr=excluded.cc_addr,
+			  labels=case when ?='legacy' then excluded.labels else mail_detail.labels end`,
+			res.ID, nullStr(legacyGmailID), nullStr(m.MessageID), nullStr(m.InReplyTo),
 			nullStr(strings.Join(m.References, " ")), nullStr(m.From), nullStr(m.To),
-			nullStr(m.Cc), nullStr(strings.Join(m.Labels, ","))); err != nil {
+			nullStr(m.Cc), nullStr(legacyLabels), accountID, accountID); err != nil {
 			return res, fmt.Errorf("mail detail for %s: %w", e.ExtID, err)
 		}
 	}

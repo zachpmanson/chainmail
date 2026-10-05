@@ -319,24 +319,30 @@ func runUnread(path string) error {
 	}
 	defer s.Close()
 
-	gc, err := gmailclient.New()
-	if err != nil {
-		return fmt.Errorf("opening gmail library client: %w", err)
-	}
-	ids, err := gc.UnreadMessageIDs()
+	accounts, err := connectedMailAccounts(path)
 	if err != nil {
 		return err
 	}
-
-	r, err := s.ReconcileUnread(ids)
-	if err != nil {
-		return err
+	for _, accountID := range accounts {
+		tokenPath, err := gmailclient.AccountTokenPath(accountID)
+		if err != nil {
+			return err
+		}
+		gc, err := gmailclient.NewForTokenPath(tokenPath)
+		if err != nil {
+			return fmt.Errorf("opening Gmail account %q: %w", accountID, err)
+		}
+		ids, err := gc.UnreadMessageIDs()
+		if err != nil {
+			return fmt.Errorf("reading unread set for Gmail account %q: %w", accountID, err)
+		}
+		r, err := s.ReconcileGmailUnread(accountID, ids)
+		if err != nil {
+			return fmt.Errorf("reconciling unread labels for Gmail account %q: %w", accountID, err)
+		}
+		fmt.Printf("%s: checked %d mailbox %s against %d unread: marked %d, cleared %d\n",
+			accountID, r.Checked, plural(r.Checked, "message", "messages"), len(ids), r.Marked, r.Cleared)
 	}
-	// The unread total is in the line on purpose: it is the number a reader
-	// compares against the sidebar, and a corpus that agrees with it is the whole
-	// point of the phase.
-	fmt.Printf("checked %d mailbox %s against %d unread in the mailbox: marked %d, cleared %d\n",
-		r.Checked, plural(r.Checked, "message", "messages"), len(ids), r.Marked, r.Cleared)
 	return nil
 }
 
@@ -394,10 +400,11 @@ func validBackend(b string) error {
 }
 
 type mailOpts struct {
-	query string
-	ids   []string
-	bound mailingest.Bound
-	bin   string // docket binary/shim; "" uses "docket" on PATH
+	query     string
+	ids       []string
+	accountID string
+	bound     mailingest.Bound
+	bin       string // docket binary/shim; "" uses "docket" on PATH
 	// backend selects the mail transport: "gmail" (in-process, through the shared
 	// docket library) or "docket" (shell out to bin, legacy). Empty means gmail.
 	backend string
@@ -419,8 +426,15 @@ func runIngestMail(path string, o mailOpts) (mailingest.Result, error) {
 	if err := validBackend(o.backend); err != nil {
 		return r, err
 	}
+	if o.accountID == "" {
+		o.accountID = "legacy"
+	}
 	if o.backend != backendDocket {
-		gc, err := gmailclient.New()
+		path, err := gmailclient.AccountTokenPath(o.accountID)
+		if err != nil {
+			return r, err
+		}
+		gc, err := gmailclient.NewForTokenPath(path)
 		if err != nil {
 			return r, fmt.Errorf("opening gmail library client: %w", err)
 		}
@@ -468,15 +482,15 @@ func runWithMailbox(path string, o mailOpts, c mailingest.Mailbox) (mailingest.R
 	// walk so a walk that stops short still refreshes it — the labels are read
 	// regardless of how much mail this run reached.
 	if ll, ok := c.(labelLister); ok {
-		if err := s.PutMailboxLabels(ll.LabelNames()); err != nil {
+		if err := s.PutMailboxLabelsForAccount(o.accountID, ll.LabelNames()); err != nil {
 			return r, fmt.Errorf("storing the mailbox's label list: %w", err)
 		}
 	}
 
 	if len(o.ids) > 0 {
-		r, err = mailingest.IngestIDs(s, c, o.ids)
+		r, err = mailingest.IngestIDsForAccount(s, c, o.ids, o.accountID)
 	} else {
-		r, err = mailingest.Ingest(s, c, o.query, o.bound)
+		r, err = mailingest.IngestForAccount(s, c, o.query, o.bound, o.accountID)
 	}
 	if err != nil {
 		return r, err

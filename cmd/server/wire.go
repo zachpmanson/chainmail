@@ -193,7 +193,15 @@ type chainResponse struct {
 }
 
 type authStatusResponse struct {
-	SignedIn bool `json:"signed_in"`
+	SignedIn bool                 `json:"signed_in"`
+	Accounts []gmailAccountStatus `json:"accounts"`
+}
+
+type gmailAccountStatus struct {
+	ID          string `json:"id"`
+	Email       string `json:"email,omitempty"`
+	DisplayName string `json:"displayName"`
+	SignedIn    bool   `json:"signedIn"`
 }
 
 type statsResponse struct {
@@ -259,7 +267,8 @@ type personResponse struct {
 // client's own sidebar counts messages — so a client showing this next to a
 // folder name should say nothing more specific than a number.
 type labelsResponse struct {
-	Labels []labelSummary `json:"labels"`
+	AccountID string         `json:"accountId,omitempty"`
+	Labels    []labelSummary `json:"labels"`
 }
 
 // versionResponse is the deploy stamp the header shows: the revision this
