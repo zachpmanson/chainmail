@@ -1036,6 +1036,39 @@
         }
       }
     },
+    "/auth/accounts/{accountId}/disconnect": {
+      "post": {
+        "summary": "Disconnect one Gmail account from this Chainmail installation.",
+        "description": "Removes the local OAuth token so Chainmail stops accessing this mailbox. Imported mail and account provenance remain in the corpus. Disconnecting the legacy account also removes the shared Docket token.",
+        "operationId": "disconnectGmailAccount",
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The local credential was removed or was already absent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["accountId", "disconnected"],
+                  "properties": {
+                    "accountId": { "type": "string" },
+                    "disconnected": { "type": "boolean" }
+                  }
+                }
+              }
+            }
+          },
+          "404": { "description": "No Gmail account has that ID." }
+        }
+      }
+    },
     "/auth/login": {
       "get": {
         "summary": "Start a Google authorization-code login for the work mailbox.",

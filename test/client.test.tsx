@@ -1123,6 +1123,44 @@ describe("the site navigation", () => {
     expect(document.querySelector("footer")).toBeNull();
   });
 
+  it("disconnects one account with confirmation and refreshes the signed-in list", async () => {
+    const initialAccounts = [
+      { id: "legacy", displayName: "Legacy Gmail account", signedIn: true },
+      { id: "personal", email: "zach@example.test", displayName: "Personal", signedIn: true },
+    ];
+    let disconnected = false;
+    handler = (call) => {
+      const path = pathOf(call);
+      if (path === "/auth/status") {
+        return json(200, {
+          signed_in: true,
+          accounts: initialAccounts.map((account) => ({
+            ...account,
+            signedIn: account.id === "legacy" ? !disconnected : true,
+          })),
+        });
+      }
+      if (path === "/auth/accounts/legacy/disconnect" && call.method === "POST") {
+        disconnected = true;
+        return json(200, { accountId: "legacy", disconnected: true });
+      }
+      return json(200, {});
+    };
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    await mountApp("/");
+
+    const button = await screen.findByRole("button", { name: "Disconnect Legacy Gmail account" });
+    fireEvent.click(button);
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("shared Docket token"));
+    await waitFor(() =>
+      expect(calls.some((call) => pathOf(call) === "/auth/accounts/legacy/disconnect")).toBe(true),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Disconnect Legacy Gmail account" })).toBeNull(),
+    );
+    expect(screen.getByRole("button", { name: "Disconnect zach@example.test" })).toBeTruthy();
+  });
+
   it("opens Compose from a button styled and placed with the nav controls", async () => {
     handler = () => json(200, { signed_in: true });
     await mountApp("/");

@@ -10,6 +10,7 @@ package gmailclient
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 	"golang.org/x/oauth2"
 	"google.golang.org/api/gmail/v1"
 
+	"github.com/gofrs/flock"
 	"github.com/zachpmanson/docket/gmail/auth"
 	"github.com/zachpmanson/docket/gmail/mail"
 
@@ -85,6 +87,30 @@ func AccountTokenPath(accountID string) (string, error) {
 		return legacy, nil
 	}
 	return filepath.Join(filepath.Dir(legacy), "accounts", accountID+".json"), nil
+}
+
+// DisconnectAccount removes the local credential for an account. It takes the
+// same lock used when a token refresh is persisted, and treats an absent token
+// as already disconnected. Account metadata and imported copies are retained.
+func DisconnectAccount(accountID string) error {
+	path, err := AccountTokenPath(accountID)
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("checking Gmail token: %w", err)
+	}
+	lock := flock.New(path + ".lock")
+	if err := lock.Lock(); err != nil {
+		return fmt.Errorf("locking Gmail token: %w", err)
+	}
+	defer lock.Unlock()
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("removing Gmail token: %w", err)
+	}
+	return nil
 }
 
 // TokenSourceForPath loads and refreshes the Gmail token at path using the

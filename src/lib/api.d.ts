@@ -489,6 +489,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/accounts/{accountId}/disconnect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Disconnect one Gmail account from this Chainmail installation.
+         * @description Removes the local OAuth token so Chainmail stops accessing this mailbox. Imported mail and account provenance remain in the corpus. Disconnecting the legacy account also removes the shared Docket token.
+         */
+        post: operations["disconnectGmailAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/login": {
         parameters: {
             query?: never;
@@ -2688,6 +2708,38 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["AuthStatusResponse"];
                 };
+            };
+        };
+    };
+    disconnectGmailAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                accountId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The local credential was removed or was already absent. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        accountId: string;
+                        disconnected: boolean;
+                    };
+                };
+            };
+            /** @description No Gmail account has that ID. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
