@@ -12,7 +12,6 @@ import { useEffect, useState } from "react";
 import type { Timeline } from "./lib/spec";
 import { loadSpec } from "./lib/loadSpec";
 import { normalise } from "./lib/normalise";
-import { $api } from "./lib/api";
 import { SelectView } from "./components/Select";
 import { Inbox } from "./components/Inbox";
 import { ThreadPopup } from "./components/ThreadPopup";
@@ -105,59 +104,6 @@ function validateSearchParams(search: Record<string, unknown>): SearchParams {
   };
 }
 
-/**
- * The sign-in banner. A fresh install has no Google token yet; rather than a
- * dead-end "needs auth" the whole app stays usable and this bar offers the
- * step that unlocks the hourly slurp. Signed-in state is the same store the
- * server's own /auth/status reports, so a completed login flips it on its
- * own refetch.
- */
-function SignInBar() {
-  const auth = $api.useQuery("get", "/auth/status", {});
-  const disconnect = $api.useMutation("post", "/auth/accounts/{accountId}/disconnect", {
-    onSuccess: () => auth.refetch(),
-  });
-  if (auth.isPending || auth.isError) return null;
-  const accounts = auth.data?.accounts ?? [];
-  const connected = accounts.filter((account) => account.signedIn);
-  return (
-    <div className="authbar">
-      {connected.length === 0 ? (
-        <>Not signed in to Google — the hourly slurp is paused.{" "}</>
-      ) : (
-        <>
-          Gmail: {connected.map((account) => {
-            const label = account.email || account.displayName;
-            return (
-              <span className="authaccount" key={account.id}>
-                {label}
-                <button
-                  type="button"
-                  className="authdisconnect"
-                  aria-label={`Disconnect ${label}`}
-                  disabled={disconnect.isPending}
-                  onClick={() => {
-                    const warning = account.id === "legacy"
-                      ? " This also removes the shared Docket token."
-                      : "";
-                    if (window.confirm(`Disconnect ${label}? Chainmail will stop syncing from this mailbox, but imported mail stays in the corpus.${warning}`)) {
-                      disconnect.mutate({ params: { path: { accountId: account.id } } });
-                    }
-                  }}
-                >
-                  disconnect
-                </button>
-              </span>
-            );
-          })}.{" "}
-        </>
-      )}
-      <a href="/auth/login">{connected.length === 0 ? "Sign in with Google" : "Connect another account"}</a>.
-      {disconnect.isError ? <span className="autherror" role="alert">Could not disconnect: {String(disconnect.error)}</span> : null}
-    </div>
-  );
-}
-
 /** The full screen is the app shell; this root owns the legacy ways in. */
 function RootLayout() {
   const [composing, setComposing] = useState(false);
@@ -243,9 +189,9 @@ function RootLayout() {
   return (
     <>
       {/* The site nav is the header: the same cross-links that used to sit in
-          the footer, at the top of every page instead — above the sign-in
-          banner and the page's own header, so it is the first thing read and
-          the one place site-level navigation lives.
+          the footer, at the top of every page instead — above the page's own
+          header, so it is the first thing read and the one place site-level
+          navigation lives.
 
           The name lives here rather than in a title block on each page: "which
           site is this" is a fact about the site, not about the page, and a
@@ -296,7 +242,6 @@ function RootLayout() {
             (see .buildslot and .ibbuild). */}
         <div className="buildslot" />
       </header>
-      <SignInBar />
       </> : null}
       <ComposeProvider composing={composing} closeCompose={() => setComposing(false)}>
         <Outlet />
