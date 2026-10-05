@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { CheckIcon, ChevronDownIcon } from "@heroicons/react/24/outline";
 import { $api, type ChainHit } from "../lib/api";
 import { useCompactMode } from "../lib/compactMode";
 import { useEscapeToClear } from "../lib/selection";
@@ -13,6 +12,7 @@ import { SplitPane } from "./SplitPane";
 import { CompactListHeader } from "./CompactListControls";
 import { ComposeBox } from "./ComposeBox";
 import { useCompose } from "./ComposeContext";
+import { FolderPicker } from "./FolderPicker";
 
 /**
  * The home page with nothing asked of it: the corpus in the order it arrived,
@@ -34,183 +34,6 @@ import { useCompose } from "./ComposeContext";
 /** Rows per page. Wide enough that the first screen is a real list, narrow
  * enough that a page is read rather than scrolled past. */
 const PAGE = 50;
-
-/**
- * The folder button, and the popup it opens: the mailbox's own labels, which are
- * what a reader means by a folder. Nothing here decides what a folder should be —
- * the list is what Gmail filed the mail under, with the counts it carries, and
- * the button says which one the list below is showing.
- *
- * A popup rather than a second sidebar column: the list is already the narrow
- * column, and a folder list that is always open would cost the rows width to say
- * something that is read once and then acted on.
- */
-function FolderRows({
-  accountId,
-  currentAccountId,
-  current,
-  onPick,
-}: {
-  accountId?: string;
-  currentAccountId?: string;
-  current: string;
-  onPick: (name: string, accountId?: string) => void;
-}) {
-  const folders = $api.useQuery("get", "/v1/labels", {
-    params: { query: accountId ? { accountId } : {} },
-  });
-  const labels = folders.data?.labels ?? [];
-  const selected = accountId === currentAccountId;
-  const pick = (name: string) => onPick(name, accountId);
-
-  return (
-    <>
-      {folders.isPending ? <p className="ibfnote">Reading folders…</p> : null}
-      {folders.isError ? <p className="ibfnote" role="alert">The folder list could not be read.</p> : null}
-      <button
-        type="button"
-        role="menuitem"
-        className={`ibfrow${selected && !current ? " sel" : ""}`}
-        aria-current={selected && !current ? "true" : undefined}
-        onClick={() => pick("")}
-      >
-        All mail
-      </button>
-      {labels.map((label) => (
-        <button
-          key={label.name}
-          type="button"
-          role="menuitem"
-          aria-current={selected && label.name === current ? "true" : undefined}
-          className={`ibfrow${selected && label.name === current ? " sel" : ""}`}
-          onClick={() => pick(label.name)}
-        >
-          <span className="ibfname">{label.name}</span>
-          <span className="ibfcount">{label.messages}</span>
-        </button>
-      ))}
-      {!folders.isPending && !folders.isError && labels.length === 0 ? (
-        <p className="ibfnote">
-          No message carries a label yet — the mailbox's own labels are what this list is,
-          so it is empty rather than invented.
-        </p>
-      ) : null}
-    </>
-  );
-}
-
-function Folders({
-  current,
-  currentAccountId,
-  isDefault,
-  onPick,
-  onDefault,
-}: {
-  // The folder and mailbox the list is showing. An empty name means all mail.
-  current: string;
-  currentAccountId?: string;
-  isDefault: boolean;
-  onPick: (name: string, accountId?: string) => void;
-  onDefault: (on: boolean) => void;
-}) {
-  const auth = $api.useQuery("get", "/auth/status", {});
-  const [open, setOpen] = useState(false);
-  const box = useRef<HTMLDivElement | null>(null);
-  const accounts = (auth.data?.accounts ?? []).filter((account) => account.signedIn);
-  const currentAccount = accounts.find((account) => account.id === currentAccountId);
-  const accountName = currentAccount?.email || currentAccount?.displayName || currentAccountId;
-
-  // Closing on a click elsewhere and on Escape: a popup that closed only when
-  // its own button was found again is one a reader gets stuck behind.
-  useEffect(() => {
-    if (!open) return;
-    const away = (ev: MouseEvent) => {
-      if (box.current && !box.current.contains(ev.target as Node)) setOpen(false);
-    };
-    const esc = (ev: KeyboardEvent) => {
-      if (ev.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", away);
-    document.addEventListener("keydown", esc);
-    return () => {
-      document.removeEventListener("mousedown", away);
-      document.removeEventListener("keydown", esc);
-    };
-  }, [open]);
-
-  const pick = (name: string, accountId?: string) => {
-    setOpen(false);
-    onPick(name, accountId);
-  };
-
-  return (
-    <div className="ibfolders" ref={box}>
-      <button
-        type="button"
-        className="ibfbtn"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-      >
-        <span className="ibfbtn-label">
-          <span className="ibfbtn-folder">{current || "All mail"}</span>
-          {currentAccountId ? (
-            <>
-              {" "}
-              <span className="ibfbtn-account">({accountName})</span>
-            </>
-          ) : null}
-        </span>
-        <ChevronDownIcon className="ibfcaret" aria-hidden="true" />
-      </button>
-
-      {open ? (
-        <div className="ibpop" role="menu" aria-label="Folders">
-          {!currentAccountId ? (
-            <button
-              type="button"
-              role="menuitemcheckbox"
-              aria-checked={isDefault}
-              className="ibfrow ibfdefault"
-              onClick={() => onDefault(!isDefault)}
-            >
-              <span className="ibfname">Open {current || "All mail"} by default</span>
-              <span className="ibfmark" aria-hidden="true">{isDefault ? <CheckIcon /> : null}</span>
-            </button>
-          ) : null}
-          <button
-            type="button"
-            role="menuitem"
-            className={`ibfrow${!currentAccountId && !current ? " sel" : ""}`}
-            aria-current={!currentAccountId && !current ? "true" : undefined}
-            onClick={() => pick("")}
-          >
-            All accounts · All mail
-          </button>
-          {auth.isPending ? <p className="ibfnote">Reading connected accounts…</p> : null}
-          {auth.isError ? <p className="ibfnote" role="alert">Connected accounts could not be read.</p> : null}
-          {accounts.length === 0 && !auth.isPending && !auth.isError ? (
-            <FolderRows current={current} onPick={pick} />
-          ) : null}
-          {accounts.map((account) => {
-            const name = account.email || account.displayName;
-            return (
-              <div className="ibfgroup" role="group" aria-label={name} key={account.id}>
-                <div className="ibfheading">{name}</div>
-                <FolderRows
-                  accountId={account.id}
-                  currentAccountId={currentAccountId}
-                  current={current}
-                  onPick={pick}
-                />
-              </div>
-            );
-          })}
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 export function Inbox() {
   const navigate = useNavigate();
@@ -438,7 +261,7 @@ export function Inbox() {
         hasChoice={composing || Boolean(opened)}
         list={
           <>
-            <Folders
+            <FolderPicker
               current={label}
               currentAccountId={accountId}
               isDefault={isDefault}
