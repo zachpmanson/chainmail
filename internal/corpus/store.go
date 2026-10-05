@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -168,6 +169,16 @@ type PutResult struct {
 // identical content is a no-op; a differing body is recorded and reported, which
 // is what the renderer surfaces as "revised".
 func (s *Store) Put(e Entry, m *Mail, atts []Attachment) (PutResult, error) {
+	return s.PutForAccount("legacy", e, m, atts)
+}
+
+// PutForAccount inserts or updates a logical entry and, when it is backed by a
+// Gmail message, records the mailbox-local copy in the same transaction. Put
+// remains the compatibility path for existing single-account callers.
+func (s *Store) PutForAccount(accountID string, e Entry, m *Mail, atts []Attachment) (PutResult, error) {
+	if m != nil && m.GmailID != "" && strings.TrimSpace(accountID) == "" {
+		return PutResult{}, errors.New("mail entry needs a Gmail account id")
+	}
 	tx, err := s.db.Begin()
 	if err != nil {
 		return PutResult{}, err
@@ -176,6 +187,18 @@ func (s *Store) Put(e Entry, m *Mail, atts []Attachment) (PutResult, error) {
 	res, err := s.put(tx, e, m, nil, atts)
 	if err != nil {
 		return res, err
+	}
+	if m != nil && m.GmailID != "" {
+		labels, err := json.Marshal(m.Labels)
+		if err != nil {
+			return res, fmt.Errorf("encoding Gmail labels: %w", err)
+		}
+		if _, err := tx.Exec(`insert into gmail_copies(account_id, gmail_id, entry_id, labels)
+			values (?, ?, ?, ?)
+			on conflict(account_id, gmail_id) do update set entry_id=excluded.entry_id, labels=excluded.labels`,
+			accountID, m.GmailID, res.ID, string(labels)); err != nil {
+			return res, fmt.Errorf("recording Gmail copy %q in account %q: %w", m.GmailID, accountID, err)
+		}
 	}
 	return res, tx.Commit()
 }

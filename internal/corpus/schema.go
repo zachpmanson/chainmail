@@ -466,4 +466,39 @@ var migrations = []string{
 	  name text primary key
 	);
 	`,
+
+	// 17: Gmail accounts and account-local copies of logical mail entries.
+	//
+	// Gmail message ids are local to a mailbox, while Chainmail entries are
+	// logical messages shared by the unified corpus. Keeping mailbox copies in a
+	// separate relation lets one logical message belong to several accounts and
+	// keeps labels account-specific. The legacy account preserves the existing
+	// single-token installation during migration; its email is intentionally
+	// unknown until the account is identified during the auth migration.
+	`
+	create table gmail_accounts (
+	  id           text primary key,
+	  email        text unique,
+	  display_name text not null,
+	  created_at   integer not null
+	);
+
+	insert into gmail_accounts(id, email, display_name, created_at)
+	values ('legacy', null, 'Legacy Gmail account', unixepoch());
+
+	create table gmail_copies (
+	  account_id text not null references gmail_accounts(id),
+	  gmail_id   text not null,
+	  entry_id   integer not null references entries(id),
+	  labels     text not null default '',
+	  primary key (account_id, gmail_id),
+	  unique (account_id, entry_id)
+	);
+	create index gmail_copies_entry on gmail_copies(entry_id);
+
+	insert into gmail_copies(account_id, gmail_id, entry_id, labels)
+	select 'legacy', md.gmail_id, md.entry_id, coalesce(md.labels, '')
+	from mail_detail md
+	where md.gmail_id is not null and md.gmail_id != '';
+	`,
 }
