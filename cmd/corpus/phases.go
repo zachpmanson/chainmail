@@ -430,18 +430,16 @@ func runIngestMail(path string, o mailOpts) (mailingest.Result, error) {
 		o.accountID = "legacy"
 	}
 	if o.backend != backendDocket {
-		path, err := gmailclient.AccountTokenPath(o.accountID)
-		if err != nil {
-			return r, err
-		}
-		gc, err := gmailclient.NewForTokenPath(path)
-		if err != nil {
-			return r, fmt.Errorf("opening gmail library client: %w", err)
-		}
 		// The library backend carries threading headers by construction — the
 		// lib's envelope is the same shape the CLI emits, so there is no old
 		// binary to probe and nothing to fail closed on.
-		return runWithMailbox(path, o, *gc)
+		return runGmailIngest(path, o, func(tokenPath string) (mailingest.Mailbox, error) {
+			gc, err := gmailclient.NewForTokenPath(tokenPath)
+			if err != nil {
+				return nil, err
+			}
+			return *gc, nil
+		})
 	}
 	c := mailingest.Client{Bin: o.bin}
 	ok, err := c.SupportsThreadingHeaders()
@@ -454,6 +452,22 @@ func runIngestMail(path string, o mailOpts) (mailingest.Result, error) {
 			"graph; update docket first")
 	}
 	return runWithMailbox(path, o, c)
+}
+
+// runGmailIngest keeps the corpus path and account-token path distinct: the
+// client is opened from the latter, while ingestion always writes to the former.
+// The opener seam lets the path boundary be tested without contacting Gmail.
+func runGmailIngest(corpusPath string, o mailOpts, open func(string) (mailingest.Mailbox, error)) (mailingest.Result, error) {
+	var r mailingest.Result
+	tokenPath, err := gmailclient.AccountTokenPath(o.accountID)
+	if err != nil {
+		return r, err
+	}
+	mailbox, err := open(tokenPath)
+	if err != nil {
+		return r, fmt.Errorf("opening gmail library client: %w", err)
+	}
+	return runWithMailbox(corpusPath, o, mailbox)
 }
 
 // labelLister is the optional half of a mailbox an ingest uses to refresh the
