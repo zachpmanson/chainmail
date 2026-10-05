@@ -357,12 +357,13 @@
 .iblist.compact .ibmeta { grid-area:2/2; min-width:0; }
 .iblist.compact .ibsnippet { display:none; }
 .ibrow-archive { position:absolute; z-index:1; right:calc(var(--tick) + .4rem); top:50%; transform:translateY(-50%);
-  display:none; align-items:center; gap:.3rem; padding:.25rem .45rem; border:1px solid var(--line);
-  border-radius:5px; background:var(--card); color:var(--text); font:inherit; font-size:.72rem; cursor:pointer; }
+  display:none; align-items:center; justify-content:center; width:1.875rem; height:1.75rem; padding:.25rem .3rem;
+  border:1px solid transparent; border-radius:6px; background:var(--card); color:var(--muted); cursor:pointer; }
+.ibrow-archive svg { display:block; width:18px; height:18px; }
 .iblist.compact .ibrow:hover .ibrow-archive, .iblist.compact .ibrow:focus-within .ibrow-archive { display:flex; }
 .iblist.compact .ibrow:hover .ibwhen, .iblist.compact .ibrow:focus-within .ibwhen,
 .iblist.compact .ibrow:hover .ibtail, .iblist.compact .ibrow:focus-within .ibtail { visibility:hidden; }
-.ibrow-archive:hover { border-color:var(--accent); color:var(--accent); }
+.ibrow-archive:hover { border-color:var(--line); color:var(--accent); }
 .ibrow-archive:disabled { opacity:.55; cursor:default; }
 .ibwho { grid-area:1/1; font-size:.88rem; font-weight:650; overflow-wrap:anywhere; }
 .ibwhen { grid-area:1/2; font-size:.72rem; color:var(--muted); white-space:nowrap;

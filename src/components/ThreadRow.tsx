@@ -371,7 +371,7 @@ export function ThreadRow({
           disabled={archive.isPending}
           onClick={() => archive.mutate({ body: { chains: [thread.rootExtId], action: "archive" } })}
         >
-          <ArchiveGlyph /> <span>Archive</span>
+          <ArchiveGlyph />
         </button>
       ) : null}
       {/* The tick sits on the first line, beside the time it belongs with,
