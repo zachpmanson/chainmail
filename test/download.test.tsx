@@ -81,9 +81,9 @@ describe("where an attachment opens", () => {
   it("keeps Gmail while the file is somewhere else", () => {
     // The digest without a serving base is the static export; the base without a
     // digest is a file nobody has pulled. Neither is a local link.
-    expect(attHref(storedShot)).toBe("https://mail.google.com/mail/u/0/#all/18f0");
+    expect(attHref(storedShot)).toBe("https://mail.google.com/mail/#all/18f0");
     expect(attHref({ ...storedShot, blobSha: undefined }, MEDIA_BASE)).toBe(
-      "https://mail.google.com/mail/u/0/#all/18f0",
+      "https://mail.google.com/mail/#all/18f0",
     );
     expect(localHref(storedShot, "")).toBeUndefined();
   });

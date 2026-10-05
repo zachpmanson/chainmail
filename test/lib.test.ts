@@ -257,7 +257,7 @@ describe("the provenance line a chain pane builds", () => {
   it("names a message the mailbox holds by its mailbox id", () => {
     const e = entry({
       extId: "mail:<c0ffee@loomworks.example>",
-      permalink: "https://mail.google.com/mail/u/0/#all/19fee08b9d28e28b",
+      permalink: "https://mail.google.com/mail/#all/19fee08b9d28e28b",
       sightings: [{ kind: "direct" }],
     });
     // The same words the generator writes, because provenance() is what reads it

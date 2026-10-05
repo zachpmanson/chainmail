@@ -3,6 +3,7 @@ package mailingest
 import (
 	"fmt"
 	"net/mail"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -355,7 +356,7 @@ func PutForAccount(store *corpus.Store, accountID string, msg Message) (corpus.P
 		Subject:   cleanSubject(msg.Subject),
 		BodyText:  msg.Body,
 		BodyHTML:  msg.BodyHTML,
-		Permalink: "https://mail.google.com/mail/u/0/#all/" + msg.ID,
+		Permalink: "https://mail.google.com/mail/#all/" + url.PathEscape(msg.ID),
 	}
 
 	m := &corpus.Mail{

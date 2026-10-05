@@ -253,7 +253,7 @@ const MULTI_ENTRIES = [
     tzOffsetMinutes: 600,
     // A message the mailbox holds: the receipt names it by the id the mailbox
     // gave it, which is what its permalink opens.
-    permalink: "https://mail.google.com/mail/u/0/#all/19fee08b9d28e28b",
+    permalink: "https://mail.google.com/mail/#all/19fee08b9d28e28b",
     sightings: [{ kind: "direct" }],
   },
   {
@@ -1149,7 +1149,7 @@ describe("the home page with no query", () => {
     expect(line[0]?.textContent).toBe("msg 19fee08b9d28e28b");
     // It opens the mailbox copy, which is where the id came from.
     expect(line[0]?.querySelector("a")?.getAttribute("href")).toBe(
-      "https://mail.google.com/mail/u/0/#all/19fee08b9d28e28b",
+      "https://mail.google.com/mail/#all/19fee08b9d28e28b",
     );
     // A recovered message has no id of its own, so the receipt names the message
     // it was unspooled from — and links to the row for it on this page rather
@@ -1972,7 +1972,7 @@ describe("downloading a file the pane does not hold yet", () => {
     name: "shed.csv",
     kind: "CSV",
     size: "512 B",
-    link: "https://mail.google.com/mail/u/0/#all/19d263bb5a6b00db",
+    link: "https://mail.google.com/mail/#all/19d263bb5a6b00db",
   };
   /** The same file once a pull has stored it, with the host's own way to show it. */
   const STORED = { ...UNFETCHED, blobSha: SHA, open: "popup" as const, view: "text" as const };

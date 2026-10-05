@@ -2,6 +2,7 @@ import type { View } from "../lib/derive";
 import type { Timeline as Spec } from "../lib/spec";
 import { msgCount } from "../lib/sources";
 import { attHref } from "../lib/attachments";
+import { gmailMessageURL } from "../lib/gmailUrl";
 
 type Thread = NonNullable<Spec["threads"]>[number];
 
@@ -52,7 +53,7 @@ export function SourcesPanel({ v, filter }: { v: View; filter?: ThreadFilter }) 
                 {" "}
                 <a
                   className="srclink"
-                  href={`https://mail.google.com/mail/u/0/#all/${c.gmailId}`}
+                  href={gmailMessageURL(c.gmailId)}
                   target="_blank"
                   rel="noopener"
                   title="Open this thread in Gmail"
@@ -111,7 +112,7 @@ export function SourcesPanel({ v, filter }: { v: View; filter?: ThreadFilter }) 
         return (
           <span key={i}>
             {t.id ? (
-              <a href={`https://mail.google.com/mail/u/0/#all/${t.id}`} target="_blank" rel="noopener">
+              <a href={gmailMessageURL(t.id)} target="_blank" rel="noopener">
                 {label}
               </a>
             ) : (

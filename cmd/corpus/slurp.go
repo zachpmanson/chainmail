@@ -319,29 +319,33 @@ func runSlurp(w io.Writer, o slurpOpts, d slurpDeps) error {
 				}
 			}
 			var total mailingest.Result
-			var failed, incomplete []string
+			var failed, incomplete, accountNotes []string
 			for _, accountID := range accounts {
 				r, err := d.ingestMail(mailOpts{query: query, accountID: accountID, bin: o.bin, backend: o.backend,
 					bound: mailingest.Bound{Max: o.limit, PageSize: o.pageSz}})
 				if err != nil {
 					failed = append(failed, fmt.Sprintf("%s: %v", accountID, err))
+					accountNotes = append(accountNotes, fmt.Sprintf("%s failed: %v", accountID, err))
 					continue
 				}
 				total.Created += r.Created
 				total.Changed += r.Changed
 				if !r.Stop.Covered() {
 					incomplete = append(incomplete, accountID)
+					accountNotes = append(accountNotes, fmt.Sprintf("%s incomplete (%s), created %d, changed %d", accountID, r.Stop, r.Created, r.Changed))
+					continue
 				}
+				accountNotes = append(accountNotes, fmt.Sprintf("%s complete, created %d, changed %d", accountID, r.Created, r.Changed))
 			}
+			accountReport := fmt.Sprintf("%s: %d accounts, created %d, changed %d (%s)",
+				query, len(accounts), total.Created, total.Changed, strings.Join(accountNotes, "; "))
 			if len(failed) > 0 {
-				report(p, outcomeFailed, strings.Join(failed, "; "))
+				report(p, outcomeFailed, accountReport)
 			} else if len(incomplete) > 0 {
-				report(p, outcomeIncomplete, fmt.Sprintf(
-					"%s: incomplete for accounts %s (limit %d); re-run to continue from each cursor",
-					query, strings.Join(incomplete, ", "), o.limit))
+				report(p, outcomeIncomplete, accountReport+fmt.Sprintf(
+					"; re-run to continue from each cursor (limit %d)", o.limit))
 			} else {
-				report(p, outcomeDone, fmt.Sprintf("%s: %d accounts, created %d, changed %d",
-					query, len(accounts), total.Created, total.Changed))
+				report(p, outcomeDone, accountReport)
 			}
 
 		case phaseTwins:

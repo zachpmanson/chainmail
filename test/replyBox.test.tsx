@@ -47,7 +47,7 @@ const QUOTED = "quote:deadbeef";
  *  permalink, which is how every mailbox-backed thing in the pane is conditional
  *  on it (see lib/sources' gmailIdOf). Absent is a message the corpus holds and
  *  the mailbox does not — a line recovered from inside somebody's quote. */
-const mailbox = (id: string) => `https://mail.google.com/mail/u/0/#all/${id}`;
+const mailbox = (id: string) => `https://mail.google.com/mail/#all/${id}`;
 
 const entry = (over: Record<string, unknown>) => ({
   extId: ROOT,

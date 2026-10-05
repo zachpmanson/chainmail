@@ -98,7 +98,7 @@ describe("the source line under a bubble", () => {
       at = rec.indexOf(`msg ${h}`, at + 1);
       // none of these hosts is a row on this page, so no unspooled id is an
       // outbound Gmail link either
-      expect(rec).not.toContain(`href="https://mail.google.com/mail/u/0/#all/${h}"`);
+      expect(rec).not.toContain(`href="https://mail.google.com/mail/#all/${h}"`);
     }
     expect(rec).not.toMatch(/\b\d+ msgs?\b/);
   });
@@ -125,12 +125,12 @@ describe("the source line under a bubble", () => {
     expect(spoolFooter).not.toContain("mail.google.com");
     // the named message's own receipt still opens its mailbox copy
     const realFooter = all.find((f) => f.includes(`msg ${H[0]}`) && !f.includes("unspooled"))!;
-    expect(realFooter).toContain(`href="https://mail.google.com/mail/u/0/#all/${H[0]}"`);
+    expect(realFooter).toContain(`href="https://mail.google.com/mail/#all/${H[0]}"`);
   });
 
   it("links the mailbox's own id on a direct message", () => {
     const rec = receipt([entry({ source: `msg ${H[0]}`, gmailId: H[0] })]);
-    expect(rec).toContain(`href="https://mail.google.com/mail/u/0/#all/${H[0]}"`);
+    expect(rec).toContain(`href="https://mail.google.com/mail/#all/${H[0]}"`);
     expect(rec).not.toContain("<details");
   });
 
