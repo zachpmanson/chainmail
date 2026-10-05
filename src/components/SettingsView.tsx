@@ -9,6 +9,62 @@ function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
+function GmailAccounts() {
+  const auth = $api.useQuery("get", "/auth/status", {});
+  const disconnect = $api.useMutation("post", "/auth/accounts/{accountId}/disconnect", {
+    onSuccess: () => auth.refetch(),
+  });
+  const connected = (auth.data?.accounts ?? []).filter((account) => account.signedIn);
+
+  return (
+    <section aria-labelledby="gmail-accounts-heading">
+      <h2 className="sthead" id="gmail-accounts-heading">Gmail accounts</h2>
+      {auth.isError ? (
+        <p className="selfail" role="alert">{errText(auth.error)}</p>
+      ) : auth.isPending ? (
+        <p className="stnote">Checking connected accounts…</p>
+      ) : (
+        <div className="authbar">
+          {connected.length === 0 ? (
+            <>Not signed in to Google — the hourly slurp is paused.{" "}</>
+          ) : (
+            <>
+              Gmail: {connected.map((account) => {
+                const label = account.email || account.displayName;
+                return (
+                  <span className="authaccount" key={account.id}>
+                    {label}
+                    <button
+                      type="button"
+                      className="authdisconnect"
+                      aria-label={`Disconnect ${label}`}
+                      disabled={disconnect.isPending}
+                      onClick={() => {
+                        const warning = account.id === "legacy"
+                          ? " This also removes the shared Docket token."
+                          : "";
+                        if (window.confirm(`Disconnect ${label}? Chainmail will stop syncing from this mailbox, but imported mail stays in the corpus.${warning}`)) {
+                          disconnect.mutate({ params: { path: { accountId: account.id } } });
+                        }
+                      }}
+                    >
+                      disconnect
+                    </button>
+                  </span>
+                );
+              })}.{" "}
+            </>
+          )}
+          <a href="/auth/login">{connected.length === 0 ? "Sign in with Google" : "Connect another account"}</a>.
+          {disconnect.isError ? (
+            <span className="autherror" role="alert">Could not disconnect: {errText(disconnect.error)}</span>
+          ) : null}
+        </div>
+      )}
+    </section>
+  );
+}
+
 /**
  * The cadences the sweep control offers, as the words the server stores and
  * serves them in (cmd/server/schedule.go). One vocabulary, listed once: a
@@ -250,6 +306,7 @@ export function SettingsView() {
 
   return (
     <div className="wrap statuswrap">
+      <GmailAccounts />
       <h2 className="sthead">Logged in</h2>
       <p className="stnote">
         Run <code>corpus status</code> to re-measure.

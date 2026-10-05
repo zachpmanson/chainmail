@@ -240,9 +240,9 @@ const buildHandler: Handler = (c) => {
   // The nav's Person control reads the same people /settings does, and only while
   // the panel is open — a test that never opens it never asks.
   if (p === "/v1/people") return json(200, PEOPLE);
-  // The shell's sign-in banner probes auth on every route; answer it signed in
-  // so tests exercise the app, not the banner.
-  if (p === "/auth/status") return json(200, { signed_in: true });
+  // The settings page and the open search panel read account status; answer it
+  // signed in so the common app fixture stays out of the auth-empty state.
+  if (p === "/auth/status") return json(200, { signed_in: true, accounts: [] });
   return json(500, { error: `unexpected call to ${c.method} ${p}` });
 };
 
@@ -306,6 +306,7 @@ const statusHandler: Handler = (c) => {
   // The people the corpus holds, for the control that says which of them the
   // reader is — and, on any page, for the nav's search (see PEOPLE).
   if (p === "/v1/people") return json(200, PEOPLE);
+  if (p === "/auth/status") return json(200, { signed_in: true, accounts: [] });
   return json(500, { error: `unexpected call to ${c.method} ${p}` });
 };
 
@@ -760,8 +761,8 @@ describe("a spec named on the URL", () => {
     await mountApp("/?spec=/synthetic.json");
 
     await screen.findByText("Loom cutover");
-    // The spec file is fetched, and only the spec file: the banner's auth
-    // probe is filtered out, since it is a shell concern, not this route's.
+    // The spec file is fetched, and only the spec file: no Gmail-account
+    // status request belongs to this view.
     const specCalls = calls.filter((c) => pathOf(c) === "/synthetic.json");
     expect(specCalls.map((c) => new URL(c.url).pathname)).toEqual(["/synthetic.json"]);
   });
@@ -1121,6 +1122,8 @@ describe("the site navigation", () => {
       expect(within(site as HTMLElement).getByRole("link", { name })).toBeTruthy();
     }
     expect(document.querySelector("footer")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Gmail accounts" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Connect another account" })).toBeNull();
   });
 
   it("disconnects one account with confirmation and refreshes the signed-in list", async () => {
@@ -1144,11 +1147,12 @@ describe("the site navigation", () => {
         disconnected = true;
         return json(200, { accountId: "legacy", disconnected: true });
       }
-      return json(200, {});
+      return statusHandler(call);
     };
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
-    await mountApp("/");
+    await mountApp("/settings");
 
+    expect(await screen.findByRole("region", { name: "Gmail accounts" })).toBeTruthy();
     const button = await screen.findByRole("button", { name: "Disconnect Legacy Gmail account" });
     fireEvent.click(button);
     expect(confirm).toHaveBeenCalledWith(expect.stringContaining("shared Docket token"));
