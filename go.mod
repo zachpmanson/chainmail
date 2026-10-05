@@ -3,9 +3,11 @@ module github.com/zachpmanson/chainmail
 go 1.26.4
 
 require (
+	github.com/gofrs/flock v0.13.0
 	github.com/yuin/goldmark v1.7.13
 	github.com/zachpmanson/docket/gmail v0.0.0-20260923093746-e88473af7d71
 	golang.org/x/net v0.57.0
+	golang.org/x/oauth2 v0.36.0
 	google.golang.org/api v0.293.0
 	modernc.org/sqlite v1.57.0
 )
@@ -20,7 +22,6 @@ require (
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/gofrs/flock v0.13.0 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.20 // indirect
@@ -34,7 +35,6 @@ require (
 	go.opentelemetry.io/otel/metric v1.44.0 // indirect
 	go.opentelemetry.io/otel/trace v1.44.0 // indirect
 	golang.org/x/crypto v0.54.0 // indirect
-	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260807164820-c8921c73eeea // indirect

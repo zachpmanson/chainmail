@@ -114,6 +114,9 @@ function validateSearchParams(search: Record<string, unknown>): SearchParams {
  */
 function SignInBar() {
   const auth = $api.useQuery("get", "/auth/status", {});
+  const disconnect = $api.useMutation("post", "/auth/accounts/{accountId}/disconnect", {
+    onSuccess: () => auth.refetch(),
+  });
   if (auth.isPending || auth.isError) return null;
   const accounts = auth.data?.accounts ?? [];
   const connected = accounts.filter((account) => account.signedIn);
@@ -122,9 +125,35 @@ function SignInBar() {
       {connected.length === 0 ? (
         <>Not signed in to Google — the hourly slurp is paused.{" "}</>
       ) : (
-        <>Gmail: {connected.map((account) => account.email || account.displayName).join(", ")}.{" "}</>
+        <>
+          Gmail: {connected.map((account) => {
+            const label = account.email || account.displayName;
+            return (
+              <span className="authaccount" key={account.id}>
+                {label}
+                <button
+                  type="button"
+                  className="authdisconnect"
+                  aria-label={`Disconnect ${label}`}
+                  disabled={disconnect.isPending}
+                  onClick={() => {
+                    const warning = account.id === "legacy"
+                      ? " This also removes the shared Docket token."
+                      : "";
+                    if (window.confirm(`Disconnect ${label}? Chainmail will stop syncing from this mailbox, but imported mail stays in the corpus.${warning}`)) {
+                      disconnect.mutate({ params: { path: { accountId: account.id } } });
+                    }
+                  }}
+                >
+                  disconnect
+                </button>
+              </span>
+            );
+          })}.{" "}
+        </>
       )}
       <a href="/auth/login">{connected.length === 0 ? "Sign in with Google" : "Connect another account"}</a>.
+      {disconnect.isError ? <span className="autherror" role="alert">Could not disconnect: {String(disconnect.error)}</span> : null}
     </div>
   );
 }

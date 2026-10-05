@@ -243,6 +243,7 @@ func (s *server) routes() http.Handler {
 	}))
 	mux.HandleFunc("/v1/people", get(s.people))
 	mux.HandleFunc("/auth/status", get(s.authStatus))
+	mux.HandleFunc("/auth/accounts/{accountId}/disconnect", post(s.disconnectAccount))
 	mux.HandleFunc("/auth/login", get(s.authLogin))
 	mux.HandleFunc("/", s.authCallbackOr(s.webRoot()))
 	return mux
@@ -339,6 +340,34 @@ func (s *server) authStatus(w http.ResponseWriter, r *http.Request) {
 		response.SignedIn = response.SignedIn || signedIn
 	}
 	send(w, http.StatusOK, response)
+}
+
+// disconnectAccount removes the local OAuth token for one known Gmail account.
+// Mail already ingested into the corpus is retained; only future Gmail access is
+// disabled. The account row stays so existing copies keep their provenance.
+func (s *server) disconnectAccount(w http.ResponseWriter, r *http.Request) {
+	accountID := strings.TrimSpace(r.PathValue("accountId"))
+	accounts, err := s.store.GmailAccounts()
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	found := false
+	for _, account := range accounts {
+		if account.ID == accountID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		fail(w, http.StatusNotFound, fmt.Errorf("no Gmail account %q", accountID))
+		return
+	}
+	if err := gmailclient.DisconnectAccount(accountID); err != nil {
+		fail(w, http.StatusInternalServerError, fmt.Errorf("disconnecting Gmail account %q: %w", accountID, err))
+		return
+	}
+	send(w, http.StatusOK, map[string]any{"accountId": accountID, "disconnected": true})
 }
 
 // loginWindow is how long a pending authorization flow stays usable before

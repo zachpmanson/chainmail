@@ -205,6 +205,7 @@ func TestTheTimelineEntryStaysClosed(t *testing.T) {
 // documented. The catch-all makes the second half checkable: an undocumented
 // path answers 404 rather than 200.
 func TestEveryDocumentedPathIsServed(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	blob, err := os.ReadFile(openapiPath)
 	if err != nil {
 		t.Fatal(err)
@@ -215,8 +216,8 @@ func TestEveryDocumentedPathIsServed(t *testing.T) {
 	if err := json.Unmarshal(blob, &doc); err != nil {
 		t.Fatal(err)
 	}
-	if len(doc.Paths) != 28 {
-		t.Errorf("the contract declares %d paths; the handler table lists 28", len(doc.Paths))
+	if len(doc.Paths) != 29 {
+		t.Errorf("the contract declares %d paths; the handler table lists 29", len(doc.Paths))
 	}
 	srv := testServer(t)
 	// A path parameter that names a row has to name a row that exists, or the
@@ -228,7 +229,7 @@ func TestEveryDocumentedPathIsServed(t *testing.T) {
 			// path answers 200 and an unrouted one 404 for the right reason.
 			concrete := strings.NewReplacer(
 				"{extId}", extAda1, "{rootExtId}", extAda1, "{name}", "demo",
-				"{personId}", strconv.FormatInt(adaID, 10),
+				"{personId}", strconv.FormatInt(adaID, 10), "{accountId}", "legacy",
 				"{sha}", shedSHA).Replace(path)
 			var res *response
 			if verb == "post" {
