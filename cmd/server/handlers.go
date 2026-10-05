@@ -91,10 +91,13 @@ type server struct {
 	// run. Opt-in (`-slurp`), and when off the surface stays read-most and never
 	// touches the mailbox. See defaultSlurp for the boundary the switch crosses.
 	slurpEnabled bool
+	// lifecycleCtx bounds both scheduled and manually requested ingests to the
+	// server process, not the HTTP connection. A reader leaving the page must not
+	// kill a mailbox walk halfway through; a server shutdown still cancels it.
+	lifecycleCtx context.Context
 	// slurpTimeout bounds one ingest. A slurp walks the mail query, then twins,
 	// repair, dedupe (reported, never applied) and embed, so it takes minutes
-	// rather than seconds — and a request that ends must not leave that walk
-	// half-done, which is what the context carries.
+	// rather than seconds; the server-lifetime context cancels it on shutdown.
 	slurpTimeout time.Duration
 	// runSlurp is the mailbox-reaching operation, injected so the handler can be
 	// tested without a mailbox. The real one delegates to the sibling `corpus`
@@ -925,7 +928,11 @@ func (s *server) slurp(w http.ResponseWriter, r *http.Request) {
 				"cannot reach the work mailbox. A restart with -slurp enables POST /v1/slurp."))
 		return
 	}
-	out, err := s.slurpOnce(r.Context(), s.runSlurp)
+	ctx := s.lifecycleCtx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	out, err := s.slurpOnce(ctx, s.runSlurp)
 	if errors.Is(err, errSweepRunning) {
 		// Asked for while the schedule (or another press) was already walking the
 		// mailbox: the answer is that the work is being done, not that it failed.
