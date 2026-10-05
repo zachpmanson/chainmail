@@ -388,6 +388,12 @@ const buildHandler: Handler = withChains((c) => {
   if (p === "/v1/spec" && c.method === "POST") return json(200, SPEC);
   if (p.startsWith("/v1/specs/")) return json(200, SPEC);
   if (p === "/v1/search") return pageOf(CHAINS);
+  if (p === "/v1/labels") {
+    const accountId = paramsOf(c).get("accountId");
+    return json(200, {
+      labels: accountId === "work" ? [{ name: "Work Inbox", messages: 2 }] : [],
+    });
+  }
   // The people the corpus holds, for the nav's Person control: one person with
   // two addresses, because folding a person's aliases into one person is the
   // whole reason that control exists (see the same fixture in client.test.tsx).
@@ -525,7 +531,7 @@ describe("the home page with no query", () => {
     expect(req.get("before") ?? "").toBe("");
   });
 
-  it("filters the inbox to a connected Gmail account and keeps that filter in the URL", async () => {
+  it("filters the inbox by choosing an account from the folder menu", async () => {
     handler = buildHandler;
     const router = await mountApp("/?accountId=work");
     await screen.findByText("Loom cutover schedule");
@@ -533,10 +539,12 @@ describe("the home page with no query", () => {
       const req = calls.find((call) => pathOf(call) === "/v1/search");
       expect(req && paramsOf(req).get("accountId")).toBe("work");
     });
-    const filter = screen.getByRole("combobox", { name: "Filter by Gmail account" }) as HTMLSelectElement;
-    expect(filter.value).toBe("work");
-    expect(within(filter).getByRole("option", { name: "personal@example.test" })).toBeTruthy();
-    fireEvent.change(filter, { target: { value: "personal" } });
+
+    click(screen.getByRole("button", { name: "work@example.test: All mail" }));
+    const menu = await screen.findByRole("menu", { name: "Folders" });
+    const personal = within(menu).getByRole("group", { name: "personal@example.test" });
+    expect(within(personal).getByRole("menuitem", { name: "All mail" })).toBeTruthy();
+    fireEvent.click(within(personal).getByRole("menuitem", { name: "All mail" }));
     await waitFor(() => expect(router.state.location.search.accountId).toBe("personal"));
   });
 
@@ -1495,13 +1503,53 @@ describe("the folder button", () => {
 
     click(button);
     const menu = await screen.findByRole("menu");
-    // The mailbox's labels with the mailbox's counts, and the button's own
-    // "All mail" above them as the way back out.
+    // Labels load when the menu opens, and the mailbox's own counts are what it
+    // shows rather than a client-invented list.
+    await within(menu).findByRole("menuitem", { name: /INBOX/ });
     expect(menu.textContent).toContain("INBOX");
     expect(menu.textContent).toContain("CATEGORY_PROMOTIONS");
     const inboxRow = within(menu).getByRole("menuitem", { name: /INBOX/ });
     expect(inboxRow.textContent).toContain("2");
     expect(within(menu).getByRole("menuitem", { name: "All mail" })).not.toBeNull();
+  });
+
+  it("groups each connected account's own folders in the same menu", async () => {
+    handler = withChains((c) => {
+      const p = pathOf(c);
+      if (p === "/auth/status") return json(200, {
+        accounts: [
+          { id: "work", email: "work@example.test", signedIn: true },
+          { id: "personal", email: "personal@example.test", signedIn: true },
+        ],
+      });
+      if (p === "/v1/labels") {
+        const labels = paramsOf(c).get("accountId") === "work"
+          ? [{ name: "Work Inbox", messages: 2 }]
+          : [{ name: "Personal Sent", messages: 1 }];
+        return json(200, { labels });
+      }
+      if (p === "/v1/settings") return json(200, {});
+      if (p === "/v1/search") return pageOf(CHAINS);
+      return json(500, { error: `unexpected call to ${c.method} ${p}` });
+    });
+    const router = await mountApp("/");
+    await screen.findByText("Loom cutover schedule");
+
+    click(screen.getByRole("button", { name: /All mail/ }));
+    const menu = await screen.findByRole("menu", { name: "Folders" });
+    const work = within(menu).getByRole("group", { name: "work@example.test" });
+    const personal = within(menu).getByRole("group", { name: "personal@example.test" });
+    await within(work).findByRole("menuitem", { name: /Work Inbox/ });
+    await within(personal).findByRole("menuitem", { name: /Personal Sent/ });
+
+    fireEvent.click(within(personal).getByRole("menuitem", { name: /Personal Sent/ }));
+    await waitFor(() => {
+      expect(router.state.location.search.accountId).toBe("personal");
+      expect(router.state.location.search.label).toBe("Personal Sent");
+    });
+    const latest = calls.filter((call) => pathOf(call) === "/v1/search").at(-1)!;
+    expect(paramsOf(latest).get("accountId")).toBe("personal");
+    expect(paramsOf(latest).get("label")).toBe("Personal Sent");
   });
 
   it("filters the list when a folder is picked, and keeps the folder in the address", async () => {
