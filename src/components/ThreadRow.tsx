@@ -1,9 +1,11 @@
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { $api, type ChainHit } from "../lib/api";
-import { markInLists, putBackLists } from "../lib/lists";
+import { dropFromLists, markInLists, putBackLists } from "../lib/lists";
 import { newest } from "../lib/newest";
 import { whenShort } from "../lib/stamp";
+import { ArchiveGlyph, refusal, sentence, staleAfterMail, VERBS, SAID_MS } from "./MailVerbs";
+import { dismissToast, pushToast } from "../lib/toasts";
 
 /**
  * One conversation in a list, drawn the way a mail client draws one: who wrote
@@ -226,6 +228,22 @@ export function ThreadRow({
     },
   });
   const flip = thread.unread === undefined ? null : thread.unread === 0;
+  const archiveToast = useRef<number | null>(null);
+  const sayArchive = (text: string, kind: "note" | "fail") => {
+    if (archiveToast.current !== null) dismissToast(archiveToast.current);
+    archiveToast.current = pushToast(text, kind, kind === "note" ? SAID_MS : null);
+  };
+  const archive = $api.useMutation("post", "/v1/mail", {
+    onMutate: (v) => ({ was: dropFromLists(queryClient, v.body.chains) }),
+    onError: (error: unknown, v, ctx) => {
+      if (ctx) putBackLists(queryClient, ctx.was);
+      sayArchive(refusal(error, "-mail-write", VERBS[v.body.action] ?? "That change"), "fail");
+    },
+    onSuccess: (res) => {
+      sayArchive(sentence(res.action, res.labels, res.changed, res.skipped), "note");
+      staleAfterMail(queryClient);
+    },
+  });
   // One click opens the thread, two clicks mark it the other way, and neither waits
   // for the other: the click says what the row is for and says it the same thing
   // however many times it is made, so the second click of a double click has
@@ -344,6 +362,18 @@ export function ThreadRow({
           </>
         )}
       </button>
+      {compact ? (
+        <button
+          type="button"
+          className="ibrow-archive"
+          aria-label={`Archive ${subject}`}
+          title="Archive"
+          disabled={archive.isPending}
+          onClick={() => archive.mutate({ body: { chains: [thread.rootExtId], action: "archive" } })}
+        >
+          <ArchiveGlyph /> <span>Archive</span>
+        </button>
+      ) : null}
       {/* The tick sits on the first line, beside the time it belongs with,
           because that is the line a reader scans down when they are picking
           threads out of a list. It follows the row body rather than leading it,
