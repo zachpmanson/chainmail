@@ -306,6 +306,7 @@
     justify-content:center; padding:.25rem .3rem; border:1px solid transparent;
     border-radius:6px; background:none; color:var(--muted); font:inherit; cursor:pointer; }
   .navrefresh { gap:.35rem; }
+  .nav-compose svg { display:block; width:18px; height:18px; }
   .navrefresh:hover, .navcancel:hover { color:var(--accent); border-color:var(--line);
     background:var(--card); }
   .navrefresh.warn { color:var(--accent); }
