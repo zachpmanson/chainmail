@@ -1,5 +1,6 @@
 import type { MediaPull } from "./api";
 import type { Entry } from "./spec";
+import { gmailMessageURL } from "./gmailUrl";
 
 export type Attachment = NonNullable<Entry["attachments"]>[number];
 
@@ -40,7 +41,7 @@ export function localHref(a: Attachment, mediaBase: string): string | undefined 
 export function attHref(a: Attachment, mediaBase = ""): string | undefined {
   const local = localHref(a, mediaBase);
   if (local) return local;
-  if (a.gmailId) return `https://mail.google.com/mail/u/0/#all/${a.gmailId}`;
+  if (a.gmailId) return gmailMessageURL(a.gmailId);
   return a.link || undefined;
 }
 

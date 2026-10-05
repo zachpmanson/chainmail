@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useSearch } from "@tanstack/react-router";
 import { ApiError, $api, type CorpusEntry } from "../lib/api";
 import { MEDIA_BASE, pullSummary } from "../lib/attachments";
 import { attach } from "../client/behaviour";
@@ -152,6 +153,7 @@ export function ThreadMessages({
   tree?: boolean;
 }) {
   const queryClient = useQueryClient();
+  const accountId = useSearch({ from: "/" }).accountId;
   const fetched = $api.useQuery("get", "/v1/chains/{rootExtId}", {
     params: { path: { rootExtId: thread.rootExtId } },
   });
@@ -632,7 +634,7 @@ export function ThreadMessages({
           onPull={(extId) => {
             setPulling(extId);
             setPullNote(null);
-            pull.mutate({ body: { entry: extId } });
+            pull.mutate({ body: { entry: extId, ...(accountId ? { accountId } : {}) } });
           }}
           pulling={pulling}
           mediaBase={MEDIA_BASE}

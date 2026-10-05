@@ -169,6 +169,8 @@ export interface SearchParams {
   mode: SearchMode;
   person?: string;
   since?: string;
+  /** Limit matches to copies present in one connected Gmail account. */
+  accountId?: string;
   /** A mailbox label — a folder. It selects chains with a message carrying it
    *  and nothing else: no ranking input, so the answer stays the inbox in time
    *  order. */
@@ -194,6 +196,7 @@ export function searchQuery(p: SearchParams) {
     mode: p.mode,
     ...(p.person ? { person: p.person } : {}),
     ...(p.since ? { since: p.since } : {}),
+    ...(p.accountId ? { accountId: p.accountId } : {}),
     ...(p.label ? { label: p.label } : {}),
     ...(p.before ? { before: p.before } : {}),
     ...(p.limit ? { limit: p.limit } : {}),

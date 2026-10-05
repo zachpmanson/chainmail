@@ -61,6 +61,14 @@
             "example": "2026-03-11T17:40:00Z"
           },
           {
+            "name": "accountId",
+            "in": "query",
+            "description": "Only messages present in this connected Gmail account. Omit to search all accounts.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "label",
             "in": "query",
             "required": false,
@@ -912,7 +920,18 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "query",
+            "required": false,
+            "description": "Return labels and counts for this connected Gmail account. Omit when zero or one account is connected.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
       }
     },
     "/v1/version": {
@@ -1294,12 +1313,46 @@
       "AuthStatusResponse": {
         "type": "object",
         "required": [
-          "signed_in"
+          "signed_in",
+          "accounts"
         ],
         "properties": {
           "signed_in": {
             "type": "boolean",
-            "description": "True when the token the slurps read is present."
+            "description": "True when at least one connected Gmail account has a token."
+          },
+          "accounts": {
+            "type": "array",
+            "description": "Connected Gmail accounts and whether each has a stored token.",
+            "items": {
+              "$ref": "#/components/schemas/GmailAccountStatus"
+            }
+          }
+        }
+      },
+      "GmailAccountStatus": {
+        "type": "object",
+        "required": [
+          "id",
+          "displayName",
+          "signedIn"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable account identifier used by Chainmail."
+          },
+          "email": {
+            "type": "string",
+            "description": "Google profile email, when identified."
+          },
+          "displayName": {
+            "type": "string",
+            "description": "Display name for this connected mailbox."
+          },
+          "signedIn": {
+            "type": "boolean",
+            "description": "Whether this account has a token file."
           }
         }
       },
@@ -2013,6 +2066,10 @@
             "items": {
               "$ref": "#/components/schemas/LabelSummary"
             }
+          },
+          "accountId": {
+            "type": "string",
+            "description": "Account whose labels and message counts are listed."
           }
         }
       },
@@ -3417,6 +3474,10 @@
           "name": {
             "type": "string",
             "description": "The saved page the reader is looking at, when there is one. The server re-derives it after the pull and rewrites it, so a reader who reloads — or who has already navigated away while the bytes were coming down — lands on a page that shows the files. Absent for a caller with no page to update; the bytes are stored either way."
+          },
+          "accountId": {
+            "type": "string",
+            "description": "Account whose Gmail copy is fetched; required when this message has copies in multiple accounts."
           }
         },
         "additionalProperties": false
@@ -3507,6 +3568,10 @@
             "example": [
               "Work"
             ]
+          },
+          "accountId": {
+            "type": "string",
+            "description": "Gmail account whose copies are targeted; required when the selected chains span multiple accounts."
           }
         },
         "additionalProperties": false
@@ -3571,6 +3636,10 @@
               },
               "additionalProperties": false
             }
+          },
+          "accountId": {
+            "type": "string",
+            "description": "Account whose Gmail copies were updated."
           }
         },
         "additionalProperties": false
@@ -3626,6 +3695,10 @@
           "confirm": {
             "type": "boolean",
             "description": "False (or absent) prepares the reply and sends nothing, answering with the plan; true sends it. A client that forgets the field therefore previews rather than sends."
+          },
+          "accountId": {
+            "type": "string",
+            "description": "Account to send from; required when the answered message has copies in multiple accounts."
           }
         },
         "additionalProperties": false
@@ -3689,6 +3762,10 @@
           "gmailId": {
             "type": "string",
             "description": "The id of the message that went out, which is what the corpus filings and any later read name it by. Absent from a preview: nothing has an id until it exists."
+          },
+          "accountId": {
+            "type": "string",
+            "description": "Gmail account used to send the reply."
           }
         },
         "additionalProperties": false
@@ -3747,6 +3824,10 @@
           "unread": {
             "type": "boolean",
             "description": "The state to leave the chain in: true marks it unread, false marks it read. Spelled as the state itself rather than a verb, so a client that reads the value back knows what the chain now is."
+          },
+          "accountId": {
+            "type": "string",
+            "description": "Gmail account whose copy in this chain is targeted; required when the chain has copies in multiple accounts."
           }
         },
         "additionalProperties": false
@@ -3776,6 +3857,10 @@
           "skipped": {
             "type": "integer",
             "description": "Entries of the chain that have no mailbox copy, so there was nothing to mark. Recovered text and Slack posts, normally."
+          },
+          "accountId": {
+            "type": "string",
+            "description": "Account whose Gmail copy was updated."
           }
         },
         "additionalProperties": false
@@ -3884,12 +3969,16 @@
         "properties": {
           "to": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "description": "Explicit recipient address(es)."
           },
           "cc": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "description": "Optional explicit Cc recipient address(es)."
           },
           "subject": {
@@ -3903,6 +3992,10 @@
           "confirm": {
             "type": "boolean",
             "description": "Must be true to transmit; omitted or false returns a preview only."
+          },
+          "accountId": {
+            "type": "string",
+            "description": "Account to send from; required when multiple Gmail accounts are connected."
           }
         }
       },
@@ -3940,6 +4033,10 @@
           "filed": {
             "type": "boolean",
             "description": "Whether the sent message was filed into the corpus; present after a successful send."
+          },
+          "accountId": {
+            "type": "string",
+            "description": "Gmail account used to send the message."
           }
         }
       }

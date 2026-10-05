@@ -39,9 +39,12 @@ export function SelectView() {
   const mode = urlSearch.mode ?? "hybrid";
   const person = urlSearch.person?.trim() ?? "";
   const since = urlSearch.since?.trim() ?? "";
-  // The four that ask something, or null. A mode alone is not a question — the
-  // home page does not send one here (see router.tsx) — so it is not counted.
-  const asked: SearchParams | null = q || person || since ? { q, mode, person, since } : null;
+  const accountId = urlSearch.accountId ?? "";
+  // The filters that ask something, or null. A mode alone is not a question —
+  // the home page does not send one here (see router.tsx) — so it is not counted.
+  const asked: SearchParams | null = q || person || since
+    ? { q, mode, person, since, accountId }
+    : null;
   const [chosen, setChosen] = useState<string[]>([]);
   // The same key answers the same state here as on the inbox: Escape drops the
   // ticks, except while the search box or the folder menu has the focus, where it
@@ -53,7 +56,7 @@ export function SelectView() {
   // the question being asked rather than cleared where the search is committed,
   // because the commit happens in the nav, which knows nothing about this page's
   // selection.
-  const question = [q, mode, person, since].join("\u0000");
+  const question = [q, mode, person, since, accountId].join("\u0000");
   const lastQuestion = useRef(question);
   useEffect(() => {
     if (lastQuestion.current === question) return;

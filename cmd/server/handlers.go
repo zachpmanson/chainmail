@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -145,11 +147,15 @@ type server struct {
 	// recovered text never needs a grant. Injected so the handlers are testable
 	// without a mailbox (see mailbox).
 	openMailbox func() (mailbox, error)
+	// openMailboxForAccount opens the credential belonging to an explicitly
+	// selected account; retained separately so tests and legacy callers can inject
+	// the original single-account opener.
+	openMailboxForAccount func(string) (mailbox, error)
 	// runMediaPull is one message's pull, injected so the handler can be tested
 	// without a mailbox. The real one (defaultMediaPull) is the same
 	// internal/media walk the `corpus media pull` command runs, called in-process
 	// — a pull needs no phase ordering, so it needs no subprocess.
-	runMediaPull func(ctx context.Context, entry string) (media.Result, error)
+	runMediaPull func(ctx context.Context, entry, accountID string) (media.Result, error)
 
 	specSlots chan struct{}
 	// slotWait is how long a caller waits for a slot before being told to retry.
@@ -161,8 +167,9 @@ type server struct {
 	// A process can host only one at a time by construction: starting another
 	// while one is pending replaces it (single admin, 10-minute consent
 	// window, and the callback verifies state before touching it).
-	login        *docketauth.Pending
-	loginExpires time.Time
+	login          *docketauth.Pending
+	loginAccountID string
+	loginExpires   time.Time
 	// loginPort is the port this server bound, used to spell the Google-
 	// accepted pathless redirect URI http://localhost:<port>.
 	loginPort string
@@ -313,14 +320,25 @@ func (s *server) webRoot() http.HandlerFunc {
 // module). Deliberately shallow: a file check, not a live refresh, so the
 // endpoint never reaches the network or blocks on a token exchange.
 func (s *server) authStatus(w http.ResponseWriter, r *http.Request) {
-	path, err := docketauth.TokenPath()
-	signedIn := false
-	if err == nil {
-		if _, err := os.Stat(path); err == nil {
-			signedIn = true
-		}
+	accounts, err := s.store.GmailAccounts()
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
 	}
-	send(w, http.StatusOK, authStatusResponse{SignedIn: signedIn})
+	response := authStatusResponse{Accounts: make([]gmailAccountStatus, 0, len(accounts))}
+	for _, account := range accounts {
+		path, err := gmailclient.AccountTokenPath(account.ID)
+		signedIn := err == nil
+		if signedIn {
+			_, err = os.Stat(path)
+			signedIn = err == nil
+		}
+		response.Accounts = append(response.Accounts, gmailAccountStatus{
+			ID: account.ID, Email: account.Email, DisplayName: account.DisplayName, SignedIn: signedIn,
+		})
+		response.SignedIn = response.SignedIn || signedIn
+	}
+	send(w, http.StatusOK, response)
 }
 
 // loginWindow is how long a pending authorization flow stays usable before
@@ -337,6 +355,51 @@ const loginWindow = 10 * time.Minute
 // registers, so the callback arrives at this server's root with
 // ?code=&state=. See docket-design.md §3.
 func (s *server) authLogin(w http.ResponseWriter, r *http.Request) {
+	accountID := strings.TrimSpace(r.URL.Query().Get("account"))
+	if accountID == "" {
+		accounts, err := s.store.GmailAccounts()
+		if err != nil {
+			fail(w, http.StatusInternalServerError, err)
+			return
+		}
+		connected := false
+		for _, account := range accounts {
+			path, err := gmailclient.AccountTokenPath(account.ID)
+			if err == nil {
+				if _, err := os.Stat(path); err == nil {
+					connected = true
+					break
+				}
+			}
+		}
+		if !connected {
+			accountID = "legacy"
+		} else {
+			var raw [16]byte
+			if _, err := rand.Read(raw[:]); err != nil {
+				fail(w, http.StatusInternalServerError, fmt.Errorf("generating account id: %w", err))
+				return
+			}
+			accountID = hex.EncodeToString(raw[:])
+		}
+	} else {
+		accounts, err := s.store.GmailAccounts()
+		if err != nil {
+			fail(w, http.StatusInternalServerError, err)
+			return
+		}
+		found := false
+		for _, account := range accounts {
+			if account.ID == accountID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			fail(w, http.StatusNotFound, fmt.Errorf("no Gmail account %q", accountID))
+			return
+		}
+	}
 	cfg, err := docketauth.LoadConfig()
 	if err != nil {
 		fail(w, http.StatusInternalServerError,
@@ -351,6 +414,7 @@ func (s *server) authLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.login = pending
+	s.loginAccountID = accountID
 	s.loginExpires = time.Now().Add(loginWindow)
 	w.Header().Set("Location", pending.AuthURL())
 	http.Error(w, "redirecting to Google…", http.StatusFound)
@@ -381,7 +445,9 @@ func (s *server) authCallbackOr(fallback http.HandlerFunc) http.HandlerFunc {
 // already verified by authCallbackOr.
 func (s *server) finishLogin(w http.ResponseWriter, code string, denied string) {
 	pending := s.login
+	accountID := s.loginAccountID
 	s.login = nil
+	s.loginAccountID = ""
 	if denied != "" {
 		http.Error(w, "authorization denied: "+denied, http.StatusBadRequest)
 		return
@@ -392,7 +458,7 @@ func (s *server) finishLogin(w http.ResponseWriter, code string, denied string) 
 			fmt.Errorf("exchanging code: %w", err))
 		return
 	}
-	path, err := docketauth.TokenPath()
+	path, err := gmailclient.AccountTokenPath(accountID)
 	if err != nil {
 		fail(w, http.StatusInternalServerError, err)
 		return
@@ -400,6 +466,17 @@ func (s *server) finishLogin(w http.ResponseWriter, code string, denied string) 
 	if err := docketauth.SaveToken(tok, path); err != nil {
 		fail(w, http.StatusInternalServerError,
 			fmt.Errorf("saving token: %w", err))
+		return
+	}
+	who, err := gmailclient.WhoAmIForTokenPath(context.Background(), path)
+	if err != nil {
+		fail(w, http.StatusBadGateway, fmt.Errorf("identifying Gmail account: %w", err))
+		return
+	}
+	if err := s.store.PutGmailAccount(corpus.GmailAccount{
+		ID: accountID, Email: who.Email, DisplayName: who.Email,
+	}); err != nil {
+		fail(w, http.StatusConflict, fmt.Errorf("saving Gmail account: %w", err))
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -479,7 +556,7 @@ func (s *server) search(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
-	q := corpus.Query{Text: text, Limit: limit, Labels: labels}
+	q := corpus.Query{Text: text, Limit: limit, Labels: labels, AccountID: p.Get("accountId")}
 	if since != "" {
 		t, err := time.Parse("2006-01-02", since)
 		if err != nil {
@@ -959,7 +1036,26 @@ func (s *server) mediaPull(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), mediaTimeout)
 	defer cancel()
 	started := time.Now()
-	res, err := s.runMediaPull(ctx, entry)
+	accountID := "legacy"
+	if shown, err := s.store.Show(entry); err == nil && shown.Source == corpus.SourceMail {
+		target, err := s.store.ReplyTarget(entry)
+		if err != nil {
+			failLookup(w, err)
+			return
+		}
+		accountID, err = accountForEntries([][]corpus.ChainEntry{{{Copies: target.Copies}}}, req.AccountID)
+		if err != nil {
+			fail(w, http.StatusConflict, err)
+			return
+		}
+	} else if req.AccountID != "" {
+		accountID, err = s.connectedAccount(req.AccountID)
+		if err != nil {
+			fail(w, http.StatusConflict, err)
+			return
+		}
+	}
+	res, err := s.runMediaPull(ctx, entry, accountID)
 	if err != nil {
 		fail(w, http.StatusBadGateway, fmt.Errorf("media pull failed: %w", err))
 		return
@@ -1036,6 +1132,74 @@ type mailbox interface {
 	Read(id string) (mailingest.Message, error)
 }
 
+// accountForEntries chooses one mailbox for a chain operation. A request may
+// name it explicitly; omission is accepted only when all copies belong to one
+// account, so the server never silently writes to an arbitrary mailbox.
+func accountForEntries(trails [][]corpus.ChainEntry, requested string) (string, error) {
+	accounts := map[string]bool{}
+	for _, entries := range trails {
+		for _, entry := range entries {
+			for _, copy := range entry.Copies {
+				accounts[copy.AccountID] = true
+			}
+		}
+	}
+	if requested != "" {
+		if !accounts[requested] {
+			return "", fmt.Errorf("Gmail account %q has no copy in the selected chain", requested)
+		}
+		return requested, nil
+	}
+	if len(accounts) > 1 {
+		return "", errors.New("the selected chain has Gmail copies in multiple accounts; specify accountId")
+	}
+	for accountID := range accounts {
+		return accountID, nil
+	}
+	return "legacy", nil
+}
+
+func (s *server) connectedAccount(requested string) (string, error) {
+	accounts, err := s.store.GmailAccounts()
+	if err != nil {
+		return "", err
+	}
+	connected := make([]string, 0, len(accounts))
+	for _, account := range accounts {
+		path, err := gmailclient.AccountTokenPath(account.ID)
+		if err != nil {
+			continue
+		}
+		if _, err := os.Stat(path); err == nil {
+			connected = append(connected, account.ID)
+		}
+	}
+	if requested != "" {
+		for _, accountID := range connected {
+			if accountID == requested {
+				return requested, nil
+			}
+		}
+		return "", fmt.Errorf("Gmail account %q is not connected", requested)
+	}
+	if len(connected) == 0 {
+		return "legacy", nil
+	}
+	if len(connected) > 1 {
+		return "", errors.New("multiple Gmail accounts are connected; specify accountId")
+	}
+	return connected[0], nil
+}
+
+func copyForAccount(entry corpus.ChainEntry, accountID string) (corpus.GmailCopy, bool) {
+	for _, copy := range entry.Copies {
+		if copy.AccountID == accountID {
+			return copy, true
+		}
+	}
+	return corpus.GmailCopy{}, false
+}
+
 // recipientsIn is gmailclient's recipients as this server's wire type. The two are
 // the same shape on purpose — one is the contract and the other is the library's
 // view — and the mapping is what keeps a field gmailclient grows from appearing on
@@ -1103,9 +1267,14 @@ func (s *server) markRead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	accountID, err := accountForEntries([][]corpus.ChainEntry{entries}, req.AccountID)
+	if err != nil {
+		fail(w, http.StatusConflict, err)
+		return
+	}
 	markable := 0
 	for _, e := range entries {
-		if e.GmailID != "" {
+		if _, ok := copyForAccount(e, accountID); ok {
 			markable++
 		}
 	}
@@ -1115,19 +1284,20 @@ func (s *server) markRead(w http.ResponseWriter, r *http.Request) {
 	// such a chain on screen.
 	var mb mailbox
 	if markable > 0 {
-		if mb, err = s.openMailbox(); err != nil {
+		if mb, err = s.mailboxForAccount(accountID); err != nil {
 			fail(w, http.StatusBadGateway, fmt.Errorf("opening the mailbox: %w", err))
 			return
 		}
 	}
 
-	out := markReadResponse{Chain: chain, Unread: req.Unread}
+	out := markReadResponse{Chain: chain, AccountID: accountID, Unread: req.Unread}
 	for _, e := range entries {
-		if e.GmailID == "" {
+		copy, ok := copyForAccount(e, accountID)
+		if !ok {
 			out.Skipped++
 			continue
 		}
-		labels, err := mb.SetUnread(e.GmailID, req.Unread)
+		labels, err := mb.SetUnread(copy.GmailID, req.Unread)
 		if err != nil {
 			// The count already marked is in the error because a chain is more
 			// than one message: the caller has to know whether the chain is half
@@ -1137,7 +1307,7 @@ func (s *server) markRead(w http.ResponseWriter, r *http.Request) {
 				e.ExtID, err, out.Marked, markable))
 			return
 		}
-		if err := s.store.SetLabels(e.ID, labels); err != nil {
+		if err := s.store.SetGmailCopyLabels(accountID, copy.GmailID, labels); err != nil {
 			fail(w, http.StatusInternalServerError, fmt.Errorf(
 				"the mailbox changed %s but storing its labels failed: %w", e.ExtID, err))
 			return
@@ -1236,13 +1406,19 @@ func (s *server) mailAction(w http.ResponseWriter, r *http.Request) {
 		trail = append(trail, entries)
 	}
 
+	accountID, err := accountForEntries(trail, req.AccountID)
+	if err != nil {
+		fail(w, http.StatusConflict, err)
+		return
+	}
+
 	// The mailbox is opened only when there is something in it to change: a set of
 	// chains that are all recovered text is answered without a grant and without a
 	// round trip, which is what keeps this usable on a mailbox-less host.
 	writable := 0
 	for _, entries := range trail {
 		for _, e := range entries {
-			if e.GmailID != "" {
+			if _, ok := copyForAccount(e, accountID); ok {
 				writable++
 			}
 		}
@@ -1250,25 +1426,26 @@ func (s *server) mailAction(w http.ResponseWriter, r *http.Request) {
 	var mb mailbox
 	if writable > 0 {
 		var err error
-		if mb, err = s.openMailbox(); err != nil {
+		if mb, err = s.mailboxForAccount(accountID); err != nil {
 			fail(w, http.StatusBadGateway, fmt.Errorf("opening the mailbox: %w", err))
 			return
 		}
 	}
 
-	out := mailActionResponse{Action: req.Action, Chains: make([]mailActionChain, 0, len(req.Chains))}
+	out := mailActionResponse{Action: req.Action, AccountID: accountID, Chains: make([]mailActionChain, 0, len(req.Chains))}
 	if action.needsLabels {
 		out.Labels = append([]string(nil), req.Labels...)
 	}
 	for i, entries := range trail {
 		row := mailActionChain{RootExtID: req.Chains[i]}
 		for _, e := range entries {
-			if e.GmailID == "" {
+			copy, ok := copyForAccount(e, accountID)
+			if !ok {
 				row.Skipped++
 				out.Skipped++
 				continue
 			}
-			labels, err := mb.SetLabels(e.GmailID, add, remove)
+			labels, err := mb.SetLabels(copy.GmailID, add, remove)
 			if err != nil {
 				// The counts are in the error because a chain is more than one
 				// message, and because this call may be part way through several
@@ -1279,7 +1456,7 @@ func (s *server) mailAction(w http.ResponseWriter, r *http.Request) {
 					e.ExtID, err, out.Changed, writable, i))
 				return
 			}
-			if err := s.store.SetLabels(e.ID, labels); err != nil {
+			if err := s.store.SetGmailCopyLabels(accountID, copy.GmailID, labels); err != nil {
 				fail(w, http.StatusInternalServerError, fmt.Errorf(
 					"the mailbox changed %s but storing its labels failed: %w", e.ExtID, err))
 				return
@@ -1336,9 +1513,10 @@ var mailActions = map[string]mailActionSpec{
 // and — for a move — where. Labels are the mailbox's names, which is also what
 // /v1/labels serves, so a caller never has to know a folder id.
 type mailActionRequest struct {
-	Chains []string `json:"chains"`
-	Action string   `json:"action"`
-	Labels []string `json:"labels,omitempty"`
+	AccountID string   `json:"accountId,omitempty"`
+	Chains    []string `json:"chains"`
+	Action    string   `json:"action"`
+	Labels    []string `json:"labels,omitempty"`
 }
 
 // mailActionResponse is the contract's MailActionResponse: what changed, in
@@ -1346,11 +1524,12 @@ type mailActionRequest struct {
 // copy. Per chain as well as in total because the reader ticked a set: a summary
 // that says 12 changed cannot tell them which of the four threads did not move.
 type mailActionResponse struct {
-	Action  string            `json:"action"`
-	Labels  []string          `json:"labels,omitempty"`
-	Changed int               `json:"changed"`
-	Skipped int               `json:"skipped"`
-	Chains  []mailActionChain `json:"chains"`
+	Action    string            `json:"action"`
+	AccountID string            `json:"accountId,omitempty"`
+	Labels    []string          `json:"labels,omitempty"`
+	Changed   int               `json:"changed"`
+	Skipped   int               `json:"skipped"`
+	Chains    []mailActionChain `json:"chains"`
 }
 
 // mailActionChain is one chain's outcome: the root the caller named, and how
@@ -1458,7 +1637,13 @@ func (s *server) sendReply(w http.ResponseWriter, r *http.Request) {
 		failLookup(w, err)
 		return
 	}
-	if target.GmailID == "" {
+	accountID, err := accountForEntries([][]corpus.ChainEntry{{{Copies: target.Copies}}}, req.AccountID)
+	if err != nil {
+		fail(w, http.StatusConflict, err)
+		return
+	}
+	targetCopy, hasTargetCopy := copyForAccount(corpus.ChainEntry{Copies: target.Copies}, accountID)
+	if !hasTargetCopy {
 		// The opposite of /v1/read and /v1/mail, where an entry with no mailbox copy
 		// is skipped and counted: those act on the part of a set that can be acted
 		// on, and this cannot be half-performed. There is no mailbox message to
@@ -1470,6 +1655,7 @@ func (s *server) sendReply(w http.ResponseWriter, r *http.Request) {
 				"the message the mailbox holds", req.Entry))
 		return
 	}
+	target.GmailID = targetCopy.GmailID
 
 	// The body, quoted and attributed, composed here rather than by the caller: what
 	// the plan previews and what the mailbox is handed are then the same bytes, and
@@ -1497,7 +1683,7 @@ func (s *server) sendReply(w http.ResponseWriter, r *http.Request) {
 		body.HTML = ""
 	}
 
-	mb, err := s.openMailbox()
+	mb, err := s.mailboxForAccount(accountID)
 	if err != nil {
 		fail(w, http.StatusBadGateway, fmt.Errorf("opening the mailbox: %w", err))
 		return
@@ -1524,13 +1710,13 @@ func (s *server) sendReply(w http.ResponseWriter, r *http.Request) {
 	}
 
 	out := sendResponse{
-		Entry: target.ExtID, To: plan.To, Cc: plan.Cc, Subject: plan.Subject, Body: plan.Body,
+		Entry: target.ExtID, AccountID: accountID, To: plan.To, Cc: plan.Cc, Subject: plan.Subject, Body: plan.Body,
 		ToRecipients: recipientsIn(plan.ToRecipients), CcRecipients: recipientsIn(plan.CcRecipients),
 		HTML: body.HTML, Sent: plan.GmailID != "",
 	}
 	if out.Sent {
 		out.GmailID = plan.GmailID
-		s.fileSent(mb, plan.GmailID)
+		s.fileSent(accountID, mb, plan.GmailID)
 	}
 	// Journaled like the other two writes, and for a stronger reason: this one
 	// cannot be taken back, so "what did the server send, and to whom" has to be
@@ -1550,13 +1736,13 @@ func (s *server) sendReply(w http.ResponseWriter, r *http.Request) {
 // one wrong thing this handler could say. The mailbox is the source of truth and
 // the reply is in it, so a corpus that missed it holds a gap the next ingest
 // fills, and the ingest is idempotent by body hash.
-func (s *server) fileSent(mb mailbox, id string) bool {
+func (s *server) fileSent(accountID string, mb mailbox, id string) bool {
 	msg, err := mb.Read(id)
 	if err != nil {
 		log.Printf("send: sent %s but could not read it back to file it: %v", id, err)
 		return false
 	}
-	res, err := mailingest.Put(s.store, msg)
+	res, err := mailingest.PutForAccount(s.store, accountID, msg)
 	if err != nil {
 		log.Printf("send: sent %s but storing it failed: %v", id, err)
 		return false
@@ -1577,21 +1763,23 @@ func (s *server) fileSent(mb mailbox, id string) bool {
 // preview; true sends that exact plan. The caller must separately opt the server
 // into mail writes with -send-mail.
 type composeRequest struct {
-	To      []string `json:"to"`
-	Cc      []string `json:"cc,omitempty"`
-	Subject string   `json:"subject"`
-	Body    string   `json:"body"`
-	Confirm bool     `json:"confirm,omitempty"`
+	AccountID string   `json:"accountId,omitempty"`
+	To        []string `json:"to"`
+	Cc        []string `json:"cc,omitempty"`
+	Subject   string   `json:"subject"`
+	Body      string   `json:"body"`
+	Confirm   bool     `json:"confirm,omitempty"`
 }
 
 type composeResponse struct {
-	To      string `json:"to"`
-	Cc      string `json:"cc,omitempty"`
-	Subject string `json:"subject"`
-	Body    string `json:"body"`
-	Sent    bool   `json:"sent"`
-	GmailID string `json:"gmailId,omitempty"`
-	Filed   *bool  `json:"filed,omitempty"`
+	AccountID string `json:"accountId,omitempty"`
+	To        string `json:"to"`
+	Cc        string `json:"cc,omitempty"`
+	Subject   string `json:"subject"`
+	Body      string `json:"body"`
+	Sent      bool   `json:"sent"`
+	GmailID   string `json:"gmailId,omitempty"`
+	Filed     *bool  `json:"filed,omitempty"`
 }
 
 func (s *server) compose(w http.ResponseWriter, r *http.Request) {
@@ -1615,7 +1803,12 @@ func (s *server) compose(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
-	mb, err := s.openMailbox()
+	accountID, err := s.connectedAccount(req.AccountID)
+	if err != nil {
+		fail(w, http.StatusConflict, err)
+		return
+	}
+	mb, err := s.mailboxForAccount(accountID)
 	if err != nil {
 		fail(w, http.StatusBadGateway, fmt.Errorf("opening the mailbox: %w", err))
 		return
@@ -1629,10 +1822,10 @@ func (s *server) compose(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadGateway, fmt.Errorf("the mailbox did not answer the send, so whether it went out is unknown — check Gmail before sending again: %w", err))
 		return
 	}
-	out := composeResponse{To: plan.To, Cc: plan.Cc, Subject: plan.Subject, Body: plan.Body, Sent: plan.GmailID != ""}
+	out := composeResponse{AccountID: accountID, To: plan.To, Cc: plan.Cc, Subject: plan.Subject, Body: plan.Body, Sent: plan.GmailID != ""}
 	if out.Sent {
 		out.GmailID = plan.GmailID
-		filed := s.fileSent(mb, plan.GmailID)
+		filed := s.fileSent(accountID, mb, plan.GmailID)
 		out.Filed = &filed
 	}
 	log.Printf("compose: to=%s sent=%t filed=%v", plan.To, out.Sent, out.Filed)
@@ -1643,6 +1836,7 @@ func (s *server) compose(w http.ResponseWriter, r *http.Request) {
 // message is being answered, the reader's own words, the audience this reply is to
 // carry, and whether this call is the preview or the send.
 type sendRequest struct {
+	AccountID string `json:"accountId,omitempty"`
 	// Entry is the corpus ext id of the message being answered — as a thread read
 	// carries it in entries[].extId. One entry rather than a chain, because a reply
 	// is to a message: which thread it belongs to is the mailbox's answer, by way of
@@ -1737,8 +1931,9 @@ func checkAddresses(to, cc []string) error {
 // preview and by the send, so a client that showed a reader a plan can be checked
 // against what actually went out rather than trusting that it did.
 type sendResponse struct {
-	Entry string `json:"entry"`
-	To    string `json:"to"`
+	Entry     string `json:"entry"`
+	AccountID string `json:"accountId,omitempty"`
+	To        string `json:"to"`
 	// Cc is everyone else the answered message was addressed to, absent when it
 	// went to the reader alone. Absent rather than empty: a client drawing "cc "
 	// with nothing after it would be describing a recipient list it does not have.
@@ -1777,8 +1972,9 @@ type recipient struct {
 // every mailbox message in it to be left in. No message list and no "mark all":
 // the chain IS the scope, and the store resolves it.
 type markReadRequest struct {
-	Chain  string `json:"chain"`
-	Unread bool   `json:"unread"`
+	AccountID string `json:"accountId,omitempty"`
+	Chain     string `json:"chain"`
+	Unread    bool   `json:"unread"`
 }
 
 // markReadResponse is the contract's MarkReadResponse: what changed, and what
@@ -1786,10 +1982,11 @@ type markReadRequest struct {
 // from an error on purpose — a chain with nothing markable in it is a complete
 // answer about a chain that is partly recovered text, not a failure.
 type markReadResponse struct {
-	Chain   string `json:"chain"`
-	Unread  bool   `json:"unread"`
-	Marked  int    `json:"marked"`
-	Skipped int    `json:"skipped"`
+	Chain     string `json:"chain"`
+	AccountID string `json:"accountId,omitempty"`
+	Unread    bool   `json:"unread"`
+	Marked    int    `json:"marked"`
+	Skipped   int    `json:"skipped"`
 }
 
 // defaultMailbox is the real write path: the docket library's own calls
@@ -1813,13 +2010,32 @@ func defaultMailbox() func() (mailbox, error) {
 	return func() (mailbox, error) { return gmailclient.New() }
 }
 
+func defaultMailboxForAccount(accountID string) (mailbox, error) {
+	path, err := gmailclient.AccountTokenPath(accountID)
+	if err != nil {
+		return nil, err
+	}
+	return gmailclient.NewForTokenPath(path)
+}
+
+func (s *server) mailboxForAccount(accountID string) (mailbox, error) {
+	if s.openMailboxForAccount != nil {
+		return s.openMailboxForAccount(accountID)
+	}
+	if (accountID == "" || accountID == "legacy") && s.openMailbox != nil {
+		return s.openMailbox()
+	}
+	return nil, fmt.Errorf("no mailbox opener for Gmail account %q", accountID)
+}
+
 // mediaPullRequest is what a caller may say: which message, and — when the
 // reader is looking at a saved page — which page to bring up to date once the
 // bytes land. The scope, the size cap and the image-only filter are the CLI's,
 // and a page has no business loosening them.
 type mediaPullRequest struct {
-	Entry string `json:"entry"`
-	Name  string `json:"name,omitempty"`
+	AccountID string `json:"accountId,omitempty"`
+	Entry     string `json:"entry"`
+	Name      string `json:"name,omitempty"`
 }
 
 // mediaResponse is the outcome of POST /v1/media/pull (the contract's
@@ -1890,15 +2106,19 @@ func toMediaResponse(res media.Result) mediaResponse {
 // credential is the one this unit already holds in its own HOME (the same grant
 // the ingest reads), so -media asks for no access the host had not already given
 // this user — what changes is when the fetch runs, not what it may touch.
-func defaultMediaPull(store *corpus.Store, uploads string) func(ctx context.Context, entry string) (media.Result, error) {
-	return func(ctx context.Context, entry string) (media.Result, error) {
+func defaultMediaPull(store *corpus.Store, uploads string) func(ctx context.Context, entry, accountID string) (media.Result, error) {
+	return func(ctx context.Context, entry, accountID string) (media.Result, error) {
 		return media.Pull(ctx, media.Options{
 			Store:   store,
 			Uploads: uploads,
 			Fetcher: media.Deferred(func() (media.Fetcher, error) {
-				return gmailclient.New()
+				path, err := gmailclient.AccountTokenPath(accountID)
+				if err != nil {
+					return nil, err
+				}
+				return gmailclient.NewForTokenPath(path)
 			}),
-		}, corpus.MediaScope{Entry: entry})
+		}, corpus.MediaScope{Entry: entry, AccountID: accountID})
 	}
 }
 
@@ -2570,12 +2790,19 @@ func (s *server) status(w http.ResponseWriter, r *http.Request) {
 // mailbox defines with no mail in it yet is served at zero, which is the answer
 // refresh could not give while the list was built from stored messages alone.
 func (s *server) labels(w http.ResponseWriter, r *http.Request) {
-	ls, err := s.store.Labels()
+	accountID, err := s.connectedAccount(strings.TrimSpace(r.URL.Query().Get("accountId")))
+	if err != nil {
+		fail(w, http.StatusConflict, err)
+		return
+	}
+	ls, err := s.store.LabelsForAccount(accountID)
 	if err != nil {
 		fail(w, http.StatusInternalServerError, err)
 		return
 	}
-	send(w, http.StatusOK, toLabelsResponse(ls))
+	out := toLabelsResponse(ls)
+	out.AccountID = accountID
+	send(w, http.StatusOK, out)
 }
 
 // version is the deploy stamp. It reads two things the process knows about
@@ -2618,6 +2845,26 @@ func (s *server) getSettings(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		fail(w, http.StatusInternalServerError, err)
 		return
+	}
+	// Connected account profiles are authoritative addresses for the reader.
+	// Add them to any deliberately configured aliases, preserving configured
+	// order and avoiding case-insensitive duplicates.
+	accounts, err := s.store.GmailAccounts()
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	seenMe := make(map[string]bool, len(me)+len(accounts))
+	for _, address := range me {
+		seenMe[strings.ToLower(address)] = true
+	}
+	for _, account := range accounts {
+		address := strings.TrimSpace(account.Email)
+		key := strings.ToLower(address)
+		if address != "" && !seenMe[key] {
+			me = append(me, address)
+			seenMe[key] = true
+		}
 	}
 	// Omitted rather than served as an empty array, so that "the reader has
 	// never said" is not answered with a list a client would have to interpret.

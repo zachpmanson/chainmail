@@ -123,7 +123,7 @@ func TestABoundStopsShortAndSaysSo(t *testing.T) {
 	if r.NextPage == "" {
 		t.Fatal("a bounded walk must leave the token that continues it")
 	}
-	cur, err := corpus.LoadCursor(s, corpus.SourceMail, "q")
+	cur, err := corpus.LoadGmailCursor(s, "legacy", "q")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +171,7 @@ func TestAKillMidWalkLeavesAResumableCursor(t *testing.T) {
 	if _, err := Ingest(s, f, "q", Bound{PageSize: 4}); err == nil {
 		t.Fatal("want an error from the aborted walk")
 	}
-	cur, err := corpus.LoadCursor(s, corpus.SourceMail, "q")
+	cur, err := corpus.LoadGmailCursor(s, "legacy", "q")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -228,7 +228,7 @@ func TestAnEmptyQueryIsCompleteWithNoFrontier(t *testing.T) {
 	if r.Seen != 0 || r.Stop != StopExhausted {
 		t.Fatalf("got %d seen, stop %q", r.Seen, r.Stop)
 	}
-	cur, err := corpus.LoadCursor(s, corpus.SourceMail, "q")
+	cur, err := corpus.LoadGmailCursor(s, "legacy", "q")
 	if err != nil {
 		t.Fatal(err)
 	}

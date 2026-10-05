@@ -71,6 +71,8 @@ export interface SearchParams {
   mode?: SearchMode;
   person?: string;
   since?: string;
+  /** Limit the inbox/search to copies in one connected Gmail account. */
+  accountId?: string;
   /** The folder the list is showing: a mailbox label, and a filter rather than
    *  a query — it narrows the same list the inbox shows and leaves the ordering
    *  alone. Optional, so `/` is every folder at once. */
@@ -94,6 +96,7 @@ function validateSearchParams(search: Record<string, unknown>): SearchParams {
     mode: isMode(search.mode) ? search.mode : undefined,
     person: typeof search.person === "string" ? search.person : undefined,
     since: typeof search.since === "string" ? search.since : undefined,
+    accountId: typeof search.accountId === "string" ? search.accountId : undefined,
     label: typeof search.label === "string" ? search.label : undefined,
     open: typeof search.open === "string" ? search.open : undefined,
     // TanStack's default search parser JSON-decodes numeric values, so the
@@ -112,11 +115,16 @@ function validateSearchParams(search: Record<string, unknown>): SearchParams {
 function SignInBar() {
   const auth = $api.useQuery("get", "/auth/status", {});
   if (auth.isPending || auth.isError) return null;
-  if (auth.data?.signed_in) return null;
+  const accounts = auth.data?.accounts ?? [];
+  const connected = accounts.filter((account) => account.signedIn);
   return (
     <div className="authbar">
-      Not signed in to Google — the hourly slurp is paused.{" "}
-      <a href="/auth/login">Sign in with Google</a>.
+      {connected.length === 0 ? (
+        <>Not signed in to Google — the hourly slurp is paused.{" "}</>
+      ) : (
+        <>Gmail: {connected.map((account) => account.email || account.displayName).join(", ")}.{" "}</>
+      )}
+      <a href="/auth/login">{connected.length === 0 ? "Sign in with Google" : "Connect another account"}</a>.
     </div>
   );
 }

@@ -253,7 +253,7 @@ const MULTI_ENTRIES = [
     tzOffsetMinutes: 600,
     // A message the mailbox holds: the receipt names it by the id the mailbox
     // gave it, which is what its permalink opens.
-    permalink: "https://mail.google.com/mail/u/0/#all/19fee08b9d28e28b",
+    permalink: "https://mail.google.com/mail/#all/19fee08b9d28e28b",
     sightings: [{ kind: "direct" }],
   },
   {
@@ -407,9 +407,14 @@ const buildHandler: Handler = withChains((c) => {
   // No default folder unless a test says otherwise: the inbox opens on the
   // whole corpus, which is what every list test below assumes.
   if (p === "/v1/settings") return json(200, {});
-  // The shell's sign-in banner probes auth on every route; answer it signed in
-  // so a test exercises the app, not the banner.
-  if (p === "/auth/status") return json(200, { signed_in: true });
+  // The shell and account filter see two synthetic connected mailboxes.
+  if (p === "/auth/status") return json(200, {
+    signed_in: true,
+    accounts: [
+      { id: "work", email: "work@example.test", displayName: "Work", signedIn: true },
+      { id: "personal", email: "personal@example.test", displayName: "Personal", signedIn: true },
+    ],
+  });
   return json(500, { error: `unexpected call to ${c.method} ${p}` });
 });
 
@@ -518,6 +523,21 @@ describe("the home page with no query", () => {
     expect(req.get("limit")).toBe("50");
     // An empty cursor is the first page: nothing is excluded.
     expect(req.get("before") ?? "").toBe("");
+  });
+
+  it("filters the inbox to a connected Gmail account and keeps that filter in the URL", async () => {
+    handler = buildHandler;
+    const router = await mountApp("/?accountId=work");
+    await screen.findByText("Loom cutover schedule");
+    await waitFor(() => {
+      const req = calls.find((call) => pathOf(call) === "/v1/search");
+      expect(req && paramsOf(req).get("accountId")).toBe("work");
+    });
+    const filter = screen.getByRole("combobox", { name: "Filter by Gmail account" }) as HTMLSelectElement;
+    expect(filter.value).toBe("work");
+    expect(within(filter).getByRole("option", { name: "personal@example.test" })).toBeTruthy();
+    fireEvent.change(filter, { target: { value: "personal" } });
+    await waitFor(() => expect(router.state.location.search.accountId).toBe("personal"));
   });
 
   it("expands the nav's own box into the search, and leaves the list where it is", async () => {
@@ -1149,7 +1169,7 @@ describe("the home page with no query", () => {
     expect(line[0]?.textContent).toBe("msg 19fee08b9d28e28b");
     // It opens the mailbox copy, which is where the id came from.
     expect(line[0]?.querySelector("a")?.getAttribute("href")).toBe(
-      "https://mail.google.com/mail/u/0/#all/19fee08b9d28e28b",
+      "https://mail.google.com/mail/#all/19fee08b9d28e28b",
     );
     // A recovered message has no id of its own, so the receipt names the message
     // it was unspooled from — and links to the row for it on this page rather
@@ -1972,7 +1992,7 @@ describe("downloading a file the pane does not hold yet", () => {
     name: "shed.csv",
     kind: "CSV",
     size: "512 B",
-    link: "https://mail.google.com/mail/u/0/#all/19d263bb5a6b00db",
+    link: "https://mail.google.com/mail/#all/19d263bb5a6b00db",
   };
   /** The same file once a pull has stored it, with the host's own way to show it. */
   const STORED = { ...UNFETCHED, blobSha: SHA, open: "popup" as const, view: "text" as const };

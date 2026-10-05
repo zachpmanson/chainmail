@@ -65,7 +65,7 @@ func (s *Store) PutSlack(e Entry, d Slack, atts []Attachment) (PutResult, error)
 		return PutResult{}, err
 	}
 	defer tx.Rollback()
-	res, err := s.put(tx, e, nil, &d, atts)
+	res, err := s.put(tx, e, nil, &d, atts, "")
 	if err != nil {
 		return res, err
 	}

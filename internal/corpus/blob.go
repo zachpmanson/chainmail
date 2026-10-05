@@ -272,6 +272,9 @@ type MediaWant struct {
 // that has not been pulled — a whole-corpus sweep, which is the one thing a
 // deliberate pull exists to avoid, so callers set at least one field.
 type MediaScope struct {
+	// AccountID selects the mailbox copy for mail. Empty preserves the legacy
+	// account for compatibility with existing single-account callers.
+	AccountID string
 	// Entry is one entry's ext_id: the message whose chips the reader clicked.
 	Entry string
 	// Container is a mail thread id or Slack channel id: every message in it.
@@ -291,12 +294,17 @@ type MediaScope struct {
 func (s *Store) PendingMedia(sc MediaScope) ([]MediaWant, error) {
 	q := `
 		select e.id, e.ext_id, e.source, a.name, coalesce(a.mime,''), coalesce(a.size,0),
-		       coalesce(a.source_ref,''), coalesce(m.gmail_id,''), coalesce(e.container,'')
+		       coalesce(a.source_ref,''), coalesce(gc.gmail_id,''), coalesce(e.container,'')
 		from attachments a
 		join entries e on e.id = a.entry_id
 		left join mail_detail m on m.entry_id = e.id
+		left join gmail_copies gc on gc.entry_id=e.id and gc.account_id=?
 		where a.blob_sha is null and a.media_skip is null`
-	args := []any{}
+	accountID := sc.AccountID
+	if accountID == "" {
+		accountID = "legacy"
+	}
+	args := []any{accountID}
 	if sc.Entry != "" {
 		q += ` and e.ext_id=?`
 		args = append(args, sc.Entry)

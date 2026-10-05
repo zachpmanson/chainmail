@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useSearch } from "@tanstack/react-router";
 import { $api, type CorpusEntry, type SendResponse } from "../lib/api";
 import { dismissToast, pushToast } from "../lib/toasts";
 import { addressesOf, usePersonAddresses } from "../lib/who";
@@ -196,6 +197,7 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
   aimed: number;
 }) {
   const queryClient = useQueryClient();
+  const accountId = useSearch({ from: "/" }).accountId;
   // What the reader has written, in their own words: plain text, and no quote of
   // the message being answered — that is added on the way out, so the reader is
   // never editing around text they did not write.
@@ -378,6 +380,7 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
           all,
           html,
           confirm: false,
+          ...(accountId ? { accountId } : {}),
           ...(toTouched ? { to: to.map((a) => a.address) } : {}),
           ...(ccTouched ? { cc: cc.map((a) => a.address) } : {}),
         },
@@ -428,6 +431,7 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
           all,
           html,
           confirm: true,
+          ...(accountId ? { accountId } : {}),
           // Only a list the reader edited is named explicitly. The other one
           // remains the mailbox's default, including Reply-To and account aliases.
           ...(toTouched ? { to: to.map((a) => a.address) } : {}),

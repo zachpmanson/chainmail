@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/zachpmanson/chainmail/internal/corpus"
+	"github.com/zachpmanson/chainmail/internal/gmailclient"
 	"github.com/zachpmanson/chainmail/internal/mailingest"
 )
 
@@ -31,6 +33,35 @@ import (
 // Out of order is not destructive. Every phase is idempotent and refuses rather
 // than guesses, so the cost of a bad order is work left for the following run —
 // the ordering is about how much one run finishes, not about safety.
+// connectedMailAccounts returns only accounts with stored credentials. If none
+// exist, keep the legacy default in the list so the ingest reports the familiar
+// missing-token error instead of silently claiming mail was skipped.
+func connectedMailAccounts(path string) ([]string, error) {
+	s, err := corpus.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer s.Close()
+	accounts, err := s.GmailAccounts()
+	if err != nil {
+		return nil, err
+	}
+	var connected []string
+	for _, account := range accounts {
+		token, err := gmailclient.AccountTokenPath(account.ID)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := os.Stat(token); err == nil {
+			connected = append(connected, account.ID)
+		}
+	}
+	if len(connected) == 0 {
+		return []string{"legacy"}, nil
+	}
+	return connected, nil
+}
+
 type slurpPhase string
 
 const (
@@ -108,6 +139,7 @@ var errSlackdumpMissing = errors.New("slackdump is not on PATH")
 type slurpDeps struct {
 	refreshSlack func(dir string) error
 	ingestSlack  func(archive string) error
+	mailAccounts func() ([]string, error)
 	ingestMail   func(o mailOpts) (mailingest.Result, error)
 	twins        func(apply bool) error
 	repair       func() error
@@ -128,6 +160,7 @@ func defaultSlurpDeps(path string, o slurpOpts) slurpDeps {
 		dim: o.embedDim}
 	return slurpDeps{
 		refreshSlack: refreshSlackArchive,
+		mailAccounts: func() ([]string, error) { return connectedMailAccounts(path) },
 		ingestSlack:  func(archive string) error { return runIngestSlack(path, archive) },
 		ingestMail:   func(m mailOpts) (mailingest.Result, error) { return runIngestMail(path, m) },
 		twins:        func(apply bool) error { return runTwins(path, apply, false) },
@@ -276,21 +309,43 @@ func runSlurp(w io.Writer, o slurpOpts, d slurpDeps) error {
 			report(p, oc, note)
 
 		case phaseMail:
-			r, err := d.ingestMail(mailOpts{query: query, bin: o.bin, backend: o.backend,
-				bound: mailingest.Bound{Max: o.limit, PageSize: o.pageSz}})
-			switch {
-			case err != nil:
-				// Including a docket that cannot report threading headers, which
-				// fails closed inside the phase: a corpus with no reply graph is
-				// worse than no ingest at all, and slurp does not soften that.
-				report(p, outcomeFailed, err.Error())
-			case r.Stop.Covered():
-				report(p, outcomeDone, fmt.Sprintf("%s: created %d, changed %d",
-					query, r.Created, r.Changed))
-			default:
-				report(p, outcomeIncomplete, fmt.Sprintf(
-					"stopped at the -limit of %d; re-run the same query to continue "+
-						"from the cursor", o.limit))
+			accounts := []string{"legacy"}
+			if o.backend != backendDocket && d.mailAccounts != nil {
+				var err error
+				accounts, err = d.mailAccounts()
+				if err != nil {
+					report(p, outcomeFailed, fmt.Sprintf("listing Gmail accounts: %v", err))
+					continue
+				}
+			}
+			var total mailingest.Result
+			var failed, incomplete, accountNotes []string
+			for _, accountID := range accounts {
+				r, err := d.ingestMail(mailOpts{query: query, accountID: accountID, bin: o.bin, backend: o.backend,
+					bound: mailingest.Bound{Max: o.limit, PageSize: o.pageSz}})
+				if err != nil {
+					failed = append(failed, fmt.Sprintf("%s: %v", accountID, err))
+					accountNotes = append(accountNotes, fmt.Sprintf("%s failed: %v", accountID, err))
+					continue
+				}
+				total.Created += r.Created
+				total.Changed += r.Changed
+				if !r.Stop.Covered() {
+					incomplete = append(incomplete, accountID)
+					accountNotes = append(accountNotes, fmt.Sprintf("%s incomplete (%s), created %d, changed %d", accountID, r.Stop, r.Created, r.Changed))
+					continue
+				}
+				accountNotes = append(accountNotes, fmt.Sprintf("%s complete, created %d, changed %d", accountID, r.Created, r.Changed))
+			}
+			accountReport := fmt.Sprintf("%s: %d accounts, created %d, changed %d (%s)",
+				query, len(accounts), total.Created, total.Changed, strings.Join(accountNotes, "; "))
+			if len(failed) > 0 {
+				report(p, outcomeFailed, accountReport)
+			} else if len(incomplete) > 0 {
+				report(p, outcomeIncomplete, accountReport+fmt.Sprintf(
+					"; re-run to continue from each cursor (limit %d)", o.limit))
+			} else {
+				report(p, outcomeDone, accountReport)
 			}
 
 		case phaseTwins:

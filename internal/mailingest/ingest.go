@@ -3,6 +3,7 @@ package mailingest
 import (
 	"fmt"
 	"net/mail"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -98,12 +99,17 @@ type Mailbox interface {
 // it reaches that walk's frontier, so a top-up reads the new mail and not the
 // archive behind it.
 func Ingest(store *corpus.Store, c Mailbox, query string, b Bound) (Result, error) {
+	return IngestForAccount(store, c, query, b, "legacy")
+}
+
+// IngestForAccount scopes resumable progress and stored mailbox copies to one account.
+func IngestForAccount(store *corpus.Store, c Mailbox, query string, b Bound, accountID string) (Result, error) {
 	var r Result
 	if b.PageSize <= 0 {
 		b.PageSize = defaultPageSize
 	}
 
-	cur, err := corpus.LoadCursor(store, corpus.SourceMail, query)
+	cur, err := corpus.LoadGmailCursor(store, accountID, query)
 	if err != nil {
 		return r, err
 	}
@@ -135,7 +141,7 @@ walk:
 				return r, err
 			}
 			token, r.Resumed = "", false
-			if err := corpus.SaveProgress(store, corpus.SourceMail, query, "", cur.Walked); err != nil {
+			if err := corpus.SaveGmailProgress(store, accountID, query, "", cur.Walked); err != nil {
 				return r, err
 			}
 			envs, page, err = c.Search(query, size, "")
@@ -165,7 +171,7 @@ walk:
 				// history was dropped, which is the material extraction depends on.
 				r.Truncated++
 			}
-			res, err := Put(store, msg)
+			res, err := PutForAccount(store, accountID, msg)
 			if err != nil {
 				return r, err
 			}
@@ -197,16 +203,16 @@ walk:
 			break
 		}
 		// Between pages, not after: this write is what a kill resumes from.
-		if err := corpus.SaveProgress(store, corpus.SourceMail, query, token, cur.Walked+r.Seen); err != nil {
+		if err := corpus.SaveGmailProgress(store, accountID, query, token, cur.Walked+r.Seen); err != nil {
 			return r, err
 		}
 	}
 
 	if r.Stop.Covered() {
-		if err := corpus.SaveComplete(store, corpus.SourceMail, query, newest, 0); err != nil {
+		if err := corpus.SaveGmailComplete(store, accountID, query, newest, 0); err != nil {
 			return r, err
 		}
-	} else if err := corpus.SaveProgress(store, corpus.SourceMail, query, r.NextPage, cur.Walked+r.Seen); err != nil {
+	} else if err := corpus.SaveGmailProgress(store, accountID, query, r.NextPage, cur.Walked+r.Seen); err != nil {
 		return r, err
 	}
 
@@ -241,6 +247,11 @@ walk:
 // IngestIDs ingests specific message ids. Used for targeted top-ups and for
 // checking the header-derived graph against a known trail.
 func IngestIDs(store *corpus.Store, c Mailbox, ids []string) (Result, error) {
+	return IngestIDsForAccount(store, c, ids, "legacy")
+}
+
+// IngestIDsForAccount ingests explicit message IDs from one account.
+func IngestIDsForAccount(store *corpus.Store, c Mailbox, ids []string, accountID string) (Result, error) {
 	// An explicit list is its own bound: there is no page after the last id, so
 	// the walk is complete by construction. No cursor either — a list of ids is
 	// not a container anything could later top up.
@@ -258,7 +269,7 @@ func IngestIDs(store *corpus.Store, c Mailbox, ids []string) (Result, error) {
 		if msg.Truncated {
 			r.Truncated++
 		}
-		res, err := Put(store, msg)
+		res, err := PutForAccount(store, accountID, msg)
 		if err != nil {
 			return r, err
 		}
@@ -307,8 +318,14 @@ func isDraft(labels []string) bool {
 	return false
 }
 
-// Put converts one docket message into an entry and stores it.
+// Put converts one docket message into an entry and stores it in the legacy account.
 func Put(store *corpus.Store, msg Message) (corpus.PutResult, error) {
+	return PutForAccount(store, "legacy", msg)
+}
+
+// PutForAccount converts one docket message into a logical entry and stores
+// the mailbox-local copy under accountID.
+func PutForAccount(store *corpus.Store, accountID string, msg Message) (corpus.PutResult, error) {
 	if isDraft(msg.Labels) {
 		return corpus.PutResult{Skipped: true}, nil
 	}
@@ -339,7 +356,7 @@ func Put(store *corpus.Store, msg Message) (corpus.PutResult, error) {
 		Subject:   cleanSubject(msg.Subject),
 		BodyText:  msg.Body,
 		BodyHTML:  msg.BodyHTML,
-		Permalink: "https://mail.google.com/mail/u/0/#all/" + msg.ID,
+		Permalink: "https://mail.google.com/mail/#all/" + url.PathEscape(msg.ID),
 	}
 
 	m := &corpus.Mail{
@@ -361,7 +378,7 @@ func Put(store *corpus.Store, msg Message) (corpus.PutResult, error) {
 		})
 	}
 
-	res, err := store.Put(e, m, atts)
+	res, err := store.PutForAccount(accountID, e, m, atts)
 	if err != nil {
 		return res, err
 	}

@@ -319,3 +319,27 @@ func TestMailWithNoQueryStopsBeforeAnythingRuns(t *testing.T) {
 		t.Errorf("the Slack phase ran before the mail query was known: %v", r.calls)
 	}
 }
+
+func TestMailReportKeepsPerAccountSuccessBesidePartialFailure(t *testing.T) {
+	d := (&recorder{}).deps()
+	d.mailAccounts = func() ([]string, error) { return []string{"work", "personal"}, nil }
+	d.ingestMail = func(o mailOpts) (mailingest.Result, error) {
+		if o.accountID == "work" {
+			return mailingest.Result{Stop: mailingest.StopExhausted, Created: 2, Changed: 1}, nil
+		}
+		return mailingest.Result{}, errors.New("token revoked")
+	}
+	o := opts(t)
+	o.only = []string{"mail"}
+	var b strings.Builder
+	err := runSlurp(&b, o, d)
+	out := b.String()
+	if err == nil {
+		t.Fatal("partial account failure should fail the phase")
+	}
+	for _, want := range []string{"work complete, created 2, changed 1", "personal failed: token revoked"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("report does not include %q:\n%s", want, out)
+		}
+	}
+}

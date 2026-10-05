@@ -26,7 +26,14 @@ Four external pieces; only the first is required — without Slack you have a ma
 corpus, without ollama you have lexical search.
 
 1. **Gmail** — mail is read in-process via the app's own **Sign in with Google** bar;
-   the next `corpus slurp` reads mail as that account.
+   the next `corpus slurp` reads mail as that account. The bar can connect additional
+   accounts; each has its own token and ingest cursor, while identical messages still
+   appear once in the unified corpus. Gmail IDs, labels, unread state, and attachment
+   fetches stay scoped to their owning account. Mailbox writes infer the account only
+   when a selected chain has copies in one account; otherwise pass `accountId` to the
+   API request. The inbox account selector filters the unified list to one mailbox;
+   `GET /auth/status` lists the stable account IDs and their sign-in state. Gmail links
+   use an account-neutral URL rather than assuming the browser's `/u/0` slot.
 2. **Slack** — import a workspace with [slackdump](https://github.com/rusq/slackdump):
    `slackdump workspace import slack.env`, then `slackdump archive -o ~/.local/state/chainmail/slack`.
    Token: devtools console on a logged-in Slack tab (`localStorage.localConfig_v2` →

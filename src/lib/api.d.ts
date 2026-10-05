@@ -624,8 +624,20 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         AuthStatusResponse: {
-            /** @description True when the token the slurps read is present. */
+            /** @description True when at least one connected Gmail account has a token. */
             signed_in: boolean;
+            /** @description Connected Gmail accounts and whether each has a stored token. */
+            accounts: components["schemas"]["GmailAccountStatus"][];
+        };
+        GmailAccountStatus: {
+            /** @description Stable account identifier used by Chainmail. */
+            id: string;
+            /** @description Google profile email, when identified. */
+            email?: string;
+            /** @description Display name for this connected mailbox. */
+            displayName: string;
+            /** @description Whether this account has a token file. */
+            signedIn: boolean;
         };
         /** @description Ranked candidates. Exactly one of chains or entries is present, decided by the `entries` parameter; neither is present when nothing matched, and an empty array is returned rather than omitted in that case. */
         SearchResponse: {
@@ -949,6 +961,8 @@ export interface components {
         LabelsResponse: {
             /** @description Busiest first, ties broken by name so two reads of an unchanged corpus agree. */
             labels: components["schemas"]["LabelSummary"][];
+            /** @description Account whose labels and message counts are listed. */
+            accountId?: string;
         };
         /** @description The deploy stamp: what is running and since when, for the header. */
         VersionResponse: {
@@ -1558,6 +1572,8 @@ export interface components {
             entry: string;
             /** @description The saved page the reader is looking at, when there is one. The server re-derives it after the pull and rewrites it, so a reader who reloads — or who has already navigated away while the bytes were coming down — lands on a page that shows the files. Absent for a caller with no page to update; the bytes are stored either way. */
             name?: string;
+            /** @description Account whose Gmail copy is fetched; required when this message has copies in multiple accounts. */
+            accountId?: string;
         };
         /** @description What a pull did: the files this message still needed, and how each one ended. A file already in the corpus, and one already declined, are both absent — the first needs nothing, and the second has a recorded reason that asking again would not change. When the caller named a page, the re-derived page and its refresh report ride along, so one call both fetches the bytes and leaves the page that asked for them up to date. */
         MediaPullResponse: {
@@ -1599,6 +1615,8 @@ export interface components {
              *     ]
              */
             labels?: string[];
+            /** @description Gmail account whose copies are targeted; required when the selected chains span multiple accounts. */
+            accountId?: string;
         };
         /** @description What the write did: how many messages changed, how many entries have no mailbox copy, and the same counts per chain — because the reader ticked a set, and a total cannot tell them which thread stayed put. */
         MailActionResponse: {
@@ -1622,6 +1640,8 @@ export interface components {
                 /** @description Its entries with no mailbox copy. */
                 skipped: number;
             }[];
+            /** @description Account whose Gmail copies were updated. */
+            accountId?: string;
         };
         /** @description A reply: which message is being answered, what the reader has to say, the audience the reply carries, whether the HTML part goes with the text, and whether this call is the preview or the send. `to` and `cc` name the audience, and `to`/`cc` are the one place an address enters this request from a keyboard: an address the answered message did not carry is accepted, because the reply box is a surface a reader types into. What bounds a send is not a set of permitted addresses but the switches in front of it — the loopback bind with no authentication, and the host having been started with `-send-mail` — plus the shape of the list, which is checked before the mailbox is asked. A request that names neither list sends the audience the mailbox assembled, minus the addresses belonging to this mailbox. */
         SendRequest: {
@@ -1661,6 +1681,8 @@ export interface components {
             html?: boolean;
             /** @description False (or absent) prepares the reply and sends nothing, answering with the plan; true sends it. A client that forgets the field therefore previews rather than sends. */
             confirm?: boolean;
+            /** @description Account to send from; required when the answered message has copies in multiple accounts. */
+            accountId?: string;
         };
         /** @description The reply as the mailbox has it, and whether this call sent it. The same fields are answered by a preview and by a send, so what went out can be checked against the plan a reader was shown rather than trusted. */
         SendResponse: {
@@ -1693,6 +1715,8 @@ export interface components {
             sent: boolean;
             /** @description The id of the message that went out, which is what the corpus filings and any later read name it by. Absent from a preview: nothing has an id until it exists. */
             gmailId?: string;
+            /** @description Gmail account used to send the reply. */
+            accountId?: string;
         };
         /** @description One email address from an original To or Cc header, with the display name it was carried under. This is the message's address, not every alias attached to the same person. */
         HeaderRecipient: {
@@ -1723,6 +1747,8 @@ export interface components {
             chain: string;
             /** @description The state to leave the chain in: true marks it unread, false marks it read. Spelled as the state itself rather than a verb, so a client that reads the value back knows what the chain now is. */
             unread: boolean;
+            /** @description Gmail account whose copy in this chain is targeted; required when the chain has copies in multiple accounts. */
+            accountId?: string;
         };
         /** @description What the write did: how many messages were marked, and how many entries of the chain have no mailbox copy to mark. The second number is not an error — a message recovered from somebody's quote is part of a chain and has no Gmail id — which is why a chain of nothing else answers 200 with marked 0. */
         MarkReadResponse: {
@@ -1734,6 +1760,8 @@ export interface components {
             marked: number;
             /** @description Entries of the chain that have no mailbox copy, so there was nothing to mark. Recovered text and Slack posts, normally. */
             skipped: number;
+            /** @description Account whose Gmail copy was updated. */
+            accountId?: string;
         };
         /** @description One attachment's outcome within a pull. */
         MediaFile: {
@@ -1779,6 +1807,8 @@ export interface components {
             body: string;
             /** @description Must be true to transmit; omitted or false returns a preview only. */
             confirm?: boolean;
+            /** @description Account to send from; required when multiple Gmail accounts are connected. */
+            accountId?: string;
         };
         ComposeResponse: {
             to: string;
@@ -1792,6 +1822,8 @@ export interface components {
             gmailId?: string;
             /** @description Whether the sent message was filed into the corpus; present after a successful send. */
             filed?: boolean;
+            /** @description Gmail account used to send the message. */
+            accountId?: string;
         };
     };
     responses: never;
@@ -1825,6 +1857,8 @@ export interface operations {
                  * @example 2026-03-11T17:40:00Z
                  */
                 before?: string;
+                /** @description Only messages present in this connected Gmail account. Omit to search all accounts. */
+                accountId?: string;
                 /**
                  * @description Only chains with a message carrying this mailbox label — a folder, in the reading a mail client uses. Repeatable, and the labels are ORed: a message in two folders is in both, so `label=INBOX&label=STARRED` is the answer to either question. It selects messages rather than chains, so a chain is returned when any of its messages carries the label: a reply that went out under SENT does not take the thread out of the inbox its first message landed in. A folder with nothing in it is an empty list, not an error. The label is matched literally, so the % and _ in a name are characters rather than wildcards.
                  * @example INBOX
@@ -2532,7 +2566,10 @@ export interface operations {
     };
     getLabels: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Return labels and counts for this connected Gmail account. Omit when zero or one account is connected. */
+                accountId?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;

@@ -55,6 +55,7 @@ func runMediaPull(path string, args []string) error {
 	entry := fs.String("entry", "", "one message's ext-id, e.g. mail:<...>")
 	container := fs.String("container", "", "a mail thread id or Slack channel id")
 	source := fs.String("source", "", "restrict to one backend: mail or slack")
+	accountID := fs.String("account", "legacy", "Gmail account ID to use for mail attachments")
 	limit := fs.Int("limit", 0, "stop after N attachments; 0 is no bound")
 	maxBytes := fs.Int64("max-bytes", media.DefaultMaxBytes,
 		"refuse a file larger than this many bytes; 0 is no cap")
@@ -96,9 +97,13 @@ func runMediaPull(path string, args []string) error {
 	// logged in, and it must not spend a Gmail call to answer.
 	if !*dry {
 		opts.Fetcher = media.Deferred(func() (media.Fetcher, error) {
-			c, err := gmailclient.New()
+			path, err := gmailclient.AccountTokenPath(*accountID)
 			if err != nil {
-				return nil, fmt.Errorf("opening gmail: %w", err)
+				return nil, err
+			}
+			c, err := gmailclient.NewForTokenPath(path)
+			if err != nil {
+				return nil, fmt.Errorf("opening gmail account %q: %w", *accountID, err)
 			}
 			return c, nil
 		})
@@ -108,6 +113,7 @@ func runMediaPull(path string, args []string) error {
 		Entry:     *entry,
 		Container: *container,
 		Source:    *source,
+		AccountID: *accountID,
 		Limit:     *limit,
 	})
 	if err != nil {

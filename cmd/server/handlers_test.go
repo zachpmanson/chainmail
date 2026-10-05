@@ -1534,6 +1534,22 @@ func TestSettingsRoundTripAndPreserveAnUnsetChoice(t *testing.T) {
 	}
 }
 
+func TestSettingsIncludesConnectedAccountAddressesAsMine(t *testing.T) {
+	srv := testServer(t)
+	for _, account := range []corpus.GmailAccount{
+		{ID: "work", Email: "work@example.test", DisplayName: "Work"},
+		{ID: "personal", Email: "personal@example.test", DisplayName: "Personal"},
+	} {
+		if err := srv.store.PutGmailAccount(account); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := readSettings(t, srv)
+	if !reflect.DeepEqual(got.Me, []string{"personal@example.test", "work@example.test"}) {
+		t.Fatalf("own addresses = %v, want connected profile emails", got.Me)
+	}
+}
+
 // A folder that is not in the label list is stored rather than refused: it may
 // be one the next slurp brings in, and a folder that is not there shows an empty
 // list under its own name instead of the corpus arguing about the mailbox.

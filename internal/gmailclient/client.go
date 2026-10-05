@@ -9,8 +9,13 @@ package gmailclient
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
+	"golang.org/x/oauth2"
 	"google.golang.org/api/gmail/v1"
 
 	"github.com/zachpmanson/docket/gmail/auth"
@@ -37,14 +42,21 @@ type Client struct {
 // to reach this path without -mark-read, and this client is constructed only
 // when it is asked for.
 func New() (*Client, error) {
-	ctx := context.Background()
-	cfg, err := auth.LoadConfig()
+	path, err := auth.TokenPath()
 	if err != nil {
-		return nil, fmt.Errorf("loading docket config: %w", err)
+		return nil, fmt.Errorf("locating docket token: %w", err)
 	}
-	src, err := auth.TokenSource(ctx, cfg)
+	return NewForTokenPath(path)
+}
+
+// NewForTokenPath opens a Gmail client using one account's token file. The
+// caller owns account selection; this package only binds the chosen credential
+// to the existing docket provider configuration and refresh machinery.
+func NewForTokenPath(path string) (*Client, error) {
+	ctx := context.Background()
+	src, err := TokenSourceForPath(ctx, path)
 	if err != nil {
-		return nil, fmt.Errorf("docket auth: %w", err)
+		return nil, err
 	}
 	svc, err := mail.NewService(ctx, src)
 	if err != nil {
@@ -55,6 +67,59 @@ func New() (*Client, error) {
 		return nil, fmt.Errorf("loading labels: %w", err)
 	}
 	return &Client{ctx: ctx, svc: svc, labels: labels}, nil
+}
+
+// AccountTokenPath returns the credential path for a stable account ID. The
+// legacy account continues to use docket's original token file; new accounts
+// live in a private sibling directory so existing docket commands keep their
+// single-account behavior.
+func AccountTokenPath(accountID string) (string, error) {
+	if accountID == "" || strings.ContainsAny(accountID, `/\\`) || accountID == "." || accountID == ".." {
+		return "", fmt.Errorf("invalid Gmail account id %q", accountID)
+	}
+	legacy, err := auth.TokenPath()
+	if err != nil {
+		return "", err
+	}
+	if accountID == "legacy" {
+		return legacy, nil
+	}
+	return filepath.Join(filepath.Dir(legacy), "accounts", accountID+".json"), nil
+}
+
+// TokenSourceForPath loads and refreshes the Gmail token at path using the
+// docket provider settings. Refreshes are persisted with docket's flock guard.
+func TokenSourceForPath(ctx context.Context, path string) (oauth2.TokenSource, error) {
+	cfg, err := auth.LoadConfig()
+	if err != nil {
+		return nil, fmt.Errorf("loading docket config: %w", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("reading Gmail token %q: %w", path, err)
+	}
+	var tok oauth2.Token
+	if err := json.Unmarshal(data, &tok); err != nil {
+		return nil, fmt.Errorf("parsing Gmail token %q: %w", path, err)
+	}
+	if tok.AccessToken == "" {
+		return nil, fmt.Errorf("Gmail token %q has no access token", path)
+	}
+	oauthCfg := &oauth2.Config{
+		ClientID: cfg.Provider.ClientID, ClientSecret: cfg.Provider.ClientSecret,
+		Scopes:   cfg.Provider.Scopes,
+		Endpoint: oauth2.Endpoint{AuthURL: cfg.Provider.AuthURL, TokenURL: cfg.Provider.TokenURL},
+	}
+	return auth.NewPersistingTokenSource(oauthCfg.TokenSource(ctx, &tok), path), nil
+}
+
+// WhoAmIForTokenPath asks Google which account a stored token belongs to.
+func WhoAmIForTokenPath(ctx context.Context, path string) (*auth.WhoAmI, error) {
+	src, err := TokenSourceForPath(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	return auth.WhoAmIFromToken(ctx, src)
 }
 
 // Search runs a Gmail query and returns one page of envelopes plus the paging

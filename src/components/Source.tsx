@@ -1,5 +1,6 @@
 import { Fragment } from "react";
 import { provenance, type SourceId } from "../lib/sources";
+import { gmailMessageURL } from "../lib/gmailUrl";
 
 /**
  * The ids on a provenance line, comma-run, each openable where it can be.
@@ -34,7 +35,7 @@ function SourceIds({ ids, unspooled, anchorByGmail }: {
                 s.text
               ) : (
                 <a
-                  href={`https://mail.google.com/mail/u/0/#all/${s.gmailId}`}
+                  href={gmailMessageURL(s.gmailId)}
                   target="_blank"
                   rel="noopener"
                 >
