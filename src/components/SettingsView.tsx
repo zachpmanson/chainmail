@@ -4,6 +4,7 @@ import { $api, type PersonSummary, type ServiceStatus, type Stats } from "../lib
 import { when } from "../lib/stamp";
 import { useCompactMode } from "../lib/compactMode";
 import { Palette } from "./Palette";
+import { FolderPicker } from "./FolderPicker";
 
 function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -150,25 +151,6 @@ function cadenceOptions(every: string): [string, string][] {
 }
 
 /**
- * The mailboxes the default-folder control offers: every label the mailbox has
- * put on something, plus the choice of none. "All mail" is the words the home
- * page's own folder button uses for it, and the setting is the same one — this
- * is the second place it can be seen and set, not a second setting.
- *
- * The value in force is appended when it is not a label the corpus knows: the
- * server does not validate the folder against the label list (it may be one the
- * next sweep brings in), so a control that only listed the labels could show
- * nothing for the folder it is actually opening in.
- */
-function folderOptions(labels: { name: string }[], folder: string): [string, string][] {
-  const opts: [string, string][] = [
-    ["", "All mail"],
-    ...labels.map((l) => [l.name, l.name] as [string, string]),
-  ];
-  return folder === "" || labels.some((l) => l.name === folder) ? opts : [...opts, [folder, folder]];
-}
-
-/**
  * The addresses a person is, out of the "kind:value" identities the corpus
  * serves. Only `email:` — a Slack uid is not a mailbox a message can be marked
  * as coming from, and a display name borrowed from somebody else's quote is a
@@ -301,10 +283,6 @@ export function SettingsView() {
   const status = $api.useQuery("get", "/v1/status", {});
   const stats = $api.useQuery("get", "/v1/stats", {});
   const settings = $api.useQuery("get", "/v1/settings", {});
-  // The labels the folder control offers. The same list the home page's own
-  // folder button reads, for the same reason: a folder that is not in the corpus
-  // is not a folder the page can open in.
-  const folders = $api.useQuery("get", "/v1/labels", {});
   // The settings on this screen, written the way the home page writes its own:
   // only the field being changed is named, and the rest are left as they stand.
   const save = $api.useMutation("post", "/v1/settings", {
@@ -349,7 +327,6 @@ export function SettingsView() {
   const meKnown = !settings.isPending && !people.isPending;
   const every = settings.data?.slurpEvery ?? "";
   const folder = settings.data?.defaultFolder ?? "";
-  const labels = folders.data?.labels ?? [];
   const busy = save.isPending || settings.isPending;
 
   return (
@@ -414,18 +391,13 @@ export function SettingsView() {
             title="Home folder"
             description="The folder shown when you open the inbox."
           >
-            <select
-              className="stpick"
-              aria-label="Which folder the home page opens in"
-              value={settings.isPending ? "" : folder}
+            <FolderPicker
+              current={folder}
+              mode="default"
+              ariaLabel="Which folder the home page opens in"
               disabled={busy}
-              onChange={(e) => save.mutate({ body: { defaultFolder: e.target.value } })}
-            >
-              {settings.isPending ? <option value="">…</option> : null}
-              {folderOptions(labels, folder).map(([value, label]) => (
-                <option key={value} value={value}>{label}</option>
-              ))}
-            </select>
+              onPick={(name) => save.mutate({ body: { defaultFolder: name } })}
+            />
           </SettingRow>
         </div>
       </SettingsSection>

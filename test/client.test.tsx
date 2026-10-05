@@ -889,6 +889,7 @@ describe("the settings rows on /settings", () => {
     await mountApp("/settings");
 
     const folder = await screen.findByLabelText("Which folder the home page opens in");
+    expect(folder.getAttribute("aria-haspopup")).toBe("menu");
     const row = folder.closest(".stsetting-row")!;
     expect(row.querySelector(".stsetting-copy h3")!.textContent).toBe("Home folder");
     expect(row.closest("section")!.getAttribute("aria-labelledby")).toBe("mailbox-heading");
@@ -896,24 +897,25 @@ describe("the settings rows on /settings", () => {
 });
 
 describe("the default folder on /settings", () => {
-  it("shows the folder the home page opens in, from the labels the corpus has", async () => {
+  it("uses the inbox folder dropdown to show the home folder and available labels", async () => {
     handler = statusHandler;
     await mountApp("/settings");
 
-    const control = (await screen.findByLabelText(
-      "Which folder the home page opens in",
-    )) as HTMLSelectElement;
-    await waitFor(() => expect(control.value).toBe("INBOX"));
-    // The labels the corpus has, and the choice of none at the top — the same
-    // words the home page's own folder button uses for it.
-    expect([...control.options].map((o) => o.textContent)).toEqual(["All mail", "INBOX", "Work"]);
+    const control = await screen.findByLabelText("Which folder the home page opens in");
+    await waitFor(() => expect(control.textContent).toContain("INBOX"));
+    expect(control.getAttribute("aria-haspopup")).toBe("menu");
+    fireEvent.click(control);
+    expect(await screen.findByRole("menuitem", { name: "All accounts · All mail" })).not.toBeNull();
+    expect(await screen.findByRole("menuitem", { name: /^INBOX/ })).not.toBeNull();
+    expect(screen.getByRole("menuitem", { name: /^Work/ })).not.toBeNull();
+    expect(screen.queryByRole("menuitemcheckbox")).toBeNull();
 
     const row = control.closest(".stsetting-row")!;
     expect(row.querySelector(".stsetting-copy h3")!.textContent).toBe("Home folder");
     expect(row.closest("section")!.getAttribute("aria-labelledby")).toBe("mailbox-heading");
   });
 
-  it("writes the folder that was chosen, and writes none when All mail is", async () => {
+  it("writes the chosen folder and clears it when All mail is selected", async () => {
     let stored = "INBOX";
     handler = (c) => {
       const p = pathOf(c);
@@ -927,11 +929,10 @@ describe("the default folder on /settings", () => {
     };
     await mountApp("/settings");
 
-    const control = (await screen.findByLabelText(
-      "Which folder the home page opens in",
-    )) as HTMLSelectElement;
-    await waitFor(() => expect(control.value).toBe("INBOX"));
-    fireEvent.change(control, { target: { value: "Work" } });
+    const control = await screen.findByLabelText("Which folder the home page opens in");
+    await waitFor(() => expect(control.textContent).toContain("INBOX"));
+    fireEvent.click(control);
+    fireEvent.click(await screen.findByRole("menuitem", { name: /^Work/ }));
 
     // Only the folder travels: the cadence beside it is left as it stands rather
     // than sent again from this screen (see setSettings).
@@ -939,20 +940,19 @@ describe("the default folder on /settings", () => {
       const writes = calls.filter((c) => pathOf(c) === "/v1/settings" && c.method === "POST");
       expect(writes.map((c) => JSON.parse(c.body!))).toEqual([{ defaultFolder: "Work" }]);
     });
-    await waitFor(() => expect(control.value).toBe("Work"));
+    await waitFor(() => expect(control.textContent).toContain("Work"));
 
     // All mail is the empty value, not a folder named All mail: no default is a
     // state of the setting, and the server stores it as one.
-    fireEvent.change(control, { target: { value: "" } });
-    await waitFor(() => expect(control.value).toBe(""));
-    expect(calls.filter((c) => c.method === "POST").at(-1)!.body).toBe('{"defaultFolder":""}');
+    fireEvent.click(control);
+    fireEvent.click(await screen.findByRole("menuitem", { name: "All accounts · All mail" }));
+    await waitFor(() => {
+      expect(calls.filter((c) => c.method === "POST").at(-1)!.body).toBe('{"defaultFolder":""}');
+    });
+    await waitFor(() => expect(control.textContent).toContain("All mail"));
   });
 
-  it("shows a folder the corpus has no label for rather than snapping to All mail", async () => {
-    // The server does not validate the folder against the label list — it may be
-    // one the next sweep brings in — so the control has to be able to render the
-    // value it was handed, or it would silently show a setting that is not in
-    // force and write that back on the next change.
+  it("keeps showing a stored folder even when the corpus has no matching label", async () => {
     handler = (c) => {
       const p = pathOf(c);
       if (p === "/v1/settings") return json(200, { slurpEvery: "10m", defaultFolder: "Later" });
@@ -960,11 +960,12 @@ describe("the default folder on /settings", () => {
     };
     await mountApp("/settings");
 
-    const control = (await screen.findByLabelText(
-      "Which folder the home page opens in",
-    )) as HTMLSelectElement;
-    await waitFor(() => expect(control.value).toBe("Later"));
-    expect([...control.options].map((o) => o.textContent)).toEqual(["All mail", "INBOX", "Work", "Later"]);
+    const control = await screen.findByLabelText("Which folder the home page opens in");
+    await waitFor(() => expect(control.textContent).toContain("Later"));
+    fireEvent.click(control);
+    expect(await screen.findByRole("menuitem", { name: /^INBOX/ })).not.toBeNull();
+    expect(screen.getByRole("menuitem", { name: /^Work/ })).not.toBeNull();
+    expect(screen.queryByRole("menuitem", { name: /^Later/ })).toBeNull();
   });
 });
 
