@@ -403,10 +403,12 @@ describe("what a thread's read state looks like", () => {
     const move = (await screen.findByLabelText("Move to a folder")) as HTMLSelectElement;
     // Inbox is the current folder, not a move destination. It stays selected as
     // context but is disabled; other folders remain immediate move choices.
-    expect([...move.options].map((o) => o.textContent)).toEqual([
-      "Inbox (current folder)",
-      "Work",
-    ]);
+    await waitFor(() =>
+      expect([...move.options].map((o) => o.textContent)).toEqual([
+        "Inbox (current folder)",
+        "Work",
+      ]),
+    );
     expect(screen.queryByRole("option", { name: "Move…" })).toBeNull();
     expect(move.value).toBe("INBOX");
 
@@ -424,6 +426,45 @@ describe("what a thread's read state looks like", () => {
     expect(pane().querySelector(".ibread-subj")?.textContent).toBe("Loom cutover schedule");
     expect(pane().textContent).not.toContain("(no subject)");
     expect(move.value).toBe("INBOX");
+  });
+
+  it("loads and writes the folder for the account in the inbox filter", async () => {
+    const labelAccounts: string[] = [];
+    handler = (c) => {
+      const p = pathOf(c);
+      if (p === "/auth/status") {
+        return json(200, {
+          signed_in: true,
+          accounts: [
+            { id: "personal", email: "home@example.test", displayName: "Home", signedIn: true },
+            { id: "work", email: "office@example.test", displayName: "Office", signedIn: true },
+          ],
+        });
+      }
+      if (p === "/v1/labels") {
+        labelAccounts.push(new URL(c.url).searchParams.get("accountId") ?? "");
+        return json(200, { labels: [{ name: "INBOX", messages: 5 }, { name: "Work", messages: 2 }] });
+      }
+      if (p === "/v1/mail")
+        return json(200, { action: "move", labels: ["Work"], changed: 1, skipped: 0, chains: [] });
+      return server(page([thread({ unread: 0 })]))(c);
+    };
+    await mountApp("/?accountId=work");
+    await openRow();
+
+    const move = (await screen.findByLabelText("Move to a folder")) as HTMLSelectElement;
+    await waitFor(() => {
+      expect(labelAccounts).toContain("work");
+      expect([...move.options].map((option) => option.textContent)).toContain("Work");
+    });
+    fireEvent.change(move, { target: { value: "Work" } });
+    await waitFor(() => expect(mails()).toHaveLength(1));
+    expect(JSON.parse(mails()[0]!.body ?? "{}")).toEqual({
+      chains: [ROOT],
+      action: "move",
+      labels: ["Work"],
+      accountId: "work",
+    });
   });
 
   it("offers the other state, and asks the server for it", async () => {

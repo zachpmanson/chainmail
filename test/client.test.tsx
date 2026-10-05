@@ -207,6 +207,7 @@ function openSearch(): HTMLInputElement {
 }
 
 const searchCalls = () => calls.filter((c) => pathOf(c) === "/v1/search");
+const mailCalls = () => calls.filter((c) => c.method === "POST" && pathOf(c) === "/v1/mail");
 
 /** Every press of the nav's ↻ that reached the mailbox: the ingest half of the
  *  gesture, which is what separates it from a plain re-read. */
@@ -2502,7 +2503,9 @@ describe("what the bar does to the mail", () => {
     // The inbox is not offered: a move to the place the mail is leaving is not a
     // move. Everything else the mailbox has is, including folders this page has
     // never seen mail in.
-    expect([...folders.options].map((o) => o.textContent)).toEqual(["Move…", "Archive", "Work"]);
+    await waitFor(() =>
+      expect([...folders.options].map((o) => o.textContent)).toEqual(["Move…", "Archive", "Work"]),
+    );
     // Choosing the folder IS the move: no button to press afterwards, and no
     // title above the control saying which verb it is — the placeholder does.
     expect(screen.queryByRole("button", { name: "Move" })).toBeNull();
@@ -2517,6 +2520,55 @@ describe("what the bar does to the mail", () => {
       labels: ["Work"],
     });
     expect((await screen.findByText("Moved 3 messages to Work.")).closest(".toasts")).not.toBeNull();
+  });
+
+  it("loads folders per account and names the selected mailbox in an all-accounts move", async () => {
+    const labelAccounts: string[] = [];
+    handler = (c) => {
+      const p = pathOf(c);
+      if (p === "/auth/status") {
+        return json(200, {
+          signed_in: true,
+          accounts: [
+            { id: "personal", email: "home@example.test", displayName: "Home", signedIn: true },
+            { id: "work", email: "office@example.test", displayName: "Office", signedIn: true },
+          ],
+        });
+      }
+      if (p === "/v1/labels") {
+        const accountId = new URL(c.url).searchParams.get("accountId") ?? "";
+        labelAccounts.push(accountId);
+        return json(200, {
+          labels: [
+            { name: "INBOX", messages: 5 },
+            { name: accountId === "work" ? "Projects" : "Personal", messages: 2 },
+          ],
+        });
+      }
+      if (p === "/v1/mail")
+        return json(200, { action: "move", labels: ["Projects"], changed: 1, skipped: 0, chains: [] });
+      return buildHandler(c);
+    };
+    await mountApp("/?q=cutover");
+    await ticksTwo();
+    click(screen.getAllByRole("checkbox")[0]!);
+
+    const folders = screen.getByLabelText("Move to a folder") as HTMLSelectElement;
+    await waitFor(() => {
+      expect([...new Set(labelAccounts)].sort()).toEqual(["personal", "work"]);
+      expect(folders.querySelector('optgroup[label="office@example.test"] option')?.textContent).toBe("Projects");
+    });
+    const target = folders.querySelector('optgroup[label="office@example.test"] option')! as HTMLOptionElement;
+    fireEvent.change(folders, { target: { value: target.value } });
+
+    await waitFor(() => expect(mailCalls()).toHaveLength(1));
+    const moved = JSON.parse(mailCalls()[0]!.body!);
+    expect(moved).toMatchObject({
+      action: "move",
+      labels: ["Projects"],
+      accountId: "work",
+    });
+    expect(moved.chains).toHaveLength(1);
   });
 
   it("stands in the nav's row while a selection does, and deselects every tick from there", async () => {

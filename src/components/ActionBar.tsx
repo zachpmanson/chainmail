@@ -115,10 +115,6 @@ export function ActionBar({
   // person's mailboxes, so a page braided today marks the aliases the corpus knows
   // today rather than the ones the reader had written down.
   const settings = $api.useQuery("get", "/v1/settings", {});
-  // The folders a move can name, which are the mailbox's own: the dropdown offers
-  // what /v1/labels serves rather than a list this page keeps, so a folder created
-  // in the mail app a minute ago is offered here without anything being synced.
-  const folders = $api.useQuery("get", "/v1/labels", {});
   const qc = useQueryClient();
   const accountId = useSearch({ from: "/" }).accountId;
   // The header's slot, or null on a page that has no header.
@@ -152,15 +148,6 @@ export function ActionBar({
   if (chosen.length === 0) return null;
 
   const busy = act.isPending;
-  // Folders, without the inbox: a move that named INBOX would be a move whose
-  // destination is the place it is leaving. Sorted by name because a dropdown is
-  // read by looking for a word, unlike the folder list beside the mail, which is
-  // ordered by how much is in each.
-  const moves = (folders.data?.labels ?? [])
-    .map((f) => f.name)
-    .filter((name) => name !== "INBOX")
-    .sort((a, b) => a.localeCompare(b));
-
   const body = (
     <>
       {chosen.length > 0 ? (
@@ -211,10 +198,18 @@ export function ActionBar({
               own, and a folder named in it would be a folder the reader could
               pick a second time by accident. */}
           <MoveFolder
-            folders={moves}
             defaultFolder={moveDefault}
             busy={busy}
-            onMove={(to) => act.mutate({ body: { chains: chosen, action: "move", labels: [to], ...(accountId ? { accountId } : {}) } })}
+            onMove={(to, targetAccountId) =>
+              act.mutate({
+                body: {
+                  chains: chosen,
+                  action: "move",
+                  labels: [to],
+                  ...(targetAccountId ? { accountId: targetAccountId } : {}),
+                },
+              })
+            }
           />
           {/* The count stays at the far end; the way out is the first control
               on the left, before any action on the selected mail. */}

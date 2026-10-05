@@ -1,6 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
+import { useSearch } from "@tanstack/react-router";
 import { ArchiveBoxIcon, FolderIcon, TrashIcon } from "@heroicons/react/24/outline";
-import { ApiError } from "../lib/api";
+import { $api, ApiError } from "../lib/api";
 
 /**
  * The two mailbox verbs — their glyphs, what they leave to say, and what they make
@@ -116,44 +117,118 @@ export function staleAfterMail(qc: QueryClient): void {
  * picture standing where
  * a control should be.
  */
+type MoveAccount = {
+  id: string;
+  email?: string;
+  displayName: string;
+};
+
+function AccountFolderOptions({ account }: { account: MoveAccount }) {
+  const labels = $api.useQuery("get", "/v1/labels", {
+    params: { query: { accountId: account.id } },
+  });
+  const folders = (labels.data?.labels ?? [])
+    .map((label) => label.name)
+    .filter((name) => name !== "INBOX")
+    .sort((a, b) => a.localeCompare(b));
+
+  return (
+    <optgroup label={account.email || account.displayName || account.id}>
+      {labels.isPending ? <option value="" disabled>Loading folders…</option> : null}
+      {labels.isError ? <option value="" disabled>Folders unavailable</option> : null}
+      {!labels.isPending && !labels.isError && folders.length === 0 ? (
+        <option value="" disabled>No folders available</option>
+      ) : null}
+      {folders.map((folder) => (
+        <option key={folder} value={JSON.stringify([account.id, folder])}>
+          {folder}
+        </option>
+      ))}
+    </optgroup>
+  );
+}
+
+/**
+ * The move control: labels and the write that uses them stay scoped to the same
+ * Gmail account. In an account-filtered view that is the selected account; in an
+ * all-accounts view each option carries its account explicitly, so a folder from
+ * one mailbox is never silently offered as a destination in another.
+ */
 export function MoveFolder({
-  folders,
   defaultFolder,
   busy,
   onMove,
 }: {
-  /** The folders a reader can move to, in the order the dropdown should read. */
-  folders: string[];
-  /** The current folder, selected directly and shown disabled if not a destination. */
+  /** Current folder, selected when the view is scoped to one account. */
   defaultFolder?: string;
-  /** Whether a write is in flight: while it is, the choice is not one to offer. */
+  /** Whether a write is in flight. */
   busy: boolean;
-  onMove: (folder: string) => void;
+  onMove: (folder: string, accountId?: string) => void;
 }) {
+  const routeAccountId = useSearch({ from: "/" }).accountId;
+  const auth = $api.useQuery("get", "/auth/status", {});
+  const accounts = (auth.data?.accounts ?? []).filter((account) => account.signedIn);
+  const accountId = routeAccountId || (accounts.length === 1 ? accounts[0]?.id : undefined);
+  const allAccounts = !routeAccountId && accounts.length > 1;
+  const labels = $api.useQuery(
+    "get",
+    "/v1/labels",
+    { params: { query: accountId ? { accountId } : {} } },
+    { enabled: Boolean(routeAccountId) || (!auth.isPending && !auth.isError && accounts.length <= 1) },
+  );
+  const folders = (labels.data?.labels ?? [])
+    .map((label) => label.name)
+    .filter((name) => name !== "INBOX")
+    .sort((a, b) => a.localeCompare(b));
+  const pending = auth.isPending || (!allAccounts && labels.isPending);
+  const unavailable = auth.isError || (!allAccounts && labels.isError);
+
+  const move = (value: string) => {
+    if (!value) return;
+    if (!allAccounts) {
+      onMove(value, accountId);
+      return;
+    }
+    try {
+      const parsed: unknown = JSON.parse(value);
+      if (Array.isArray(parsed) && typeof parsed[0] === "string" && typeof parsed[1] === "string") {
+        onMove(parsed[1], parsed[0]);
+      }
+    } catch {
+      // The placeholder and disabled loading/error options never carry a target.
+    }
+  };
+
   return (
     <span className="ibicon ibmovewrap" title="Move to a folder">
       <FolderIcon width={14} height={14} aria-hidden="true" />
       <select
         className="ibmove"
         aria-label="Move to a folder"
-        value={defaultFolder ?? ""}
-        disabled={busy}
-        onChange={(e) => {
-          const to = e.target.value;
-          if (to) onMove(to);
-        }}
+        value={allAccounts ? "" : defaultFolder ?? ""}
+        disabled={busy || auth.isPending || auth.isError || (!allAccounts && (labels.isPending || labels.isError))}
+        onChange={(event) => move(event.target.value)}
       >
-        {!defaultFolder ? <option value="">Move…</option> : null}
-        {defaultFolder && !folders.includes(defaultFolder) ? (
+        {!allAccounts && defaultFolder && !folders.includes(defaultFolder) ? (
           <option value={defaultFolder} disabled>
             {defaultFolder === "INBOX" ? "Inbox" : defaultFolder} (current folder)
           </option>
         ) : null}
-        {folders.map((name) => (
-          <option key={name} value={name}>
-            {name}
-          </option>
-        ))}
+        {!allAccounts ? (
+          <>
+            {!defaultFolder ? <option value="">{pending ? "Loading folders…" : unavailable ? "Folders unavailable" : "Move…"}</option> : null}
+            {folders.map((folder) => (
+              <option key={folder} value={folder}>{folder}</option>
+            ))}
+          </>
+        ) : (
+          <>
+            <option value="">Move…</option>
+            {accounts.map((account) => (
+              <AccountFolderOptions key={account.id} account={account} />
+            ))}
+          </>
+        )}
       </select>
     </span>
   );

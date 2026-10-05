@@ -127,17 +127,6 @@ export function ThreadPane({
     },
   });
 
-  // The folders a move can name: the mailbox's own list, without the inbox — a move
-  // whose destination is the folder it is leaving — and sorted, because a dropdown
-  // is read by looking for a word. The same list, filtered the same way and in the
-  // same order as the selection bar's move control, so the two cannot offer a reader
-  // different folders.
-  const folders = $api.useQuery("get", "/v1/labels", {});
-  const moves = (folders.data?.labels ?? [])
-    .map((f) => f.name)
-    .filter((name) => name !== "INBOX")
-    .sort((a, b) => a.localeCompare(b));
-
   // The two mailbox verbs, on the one thread this pane has open: the same pair the
   // bar draws for threads a reader has ticked, doing the same thing to a set of
   // one. Nothing is confirmed first — the sentence says what happened and that the
@@ -261,11 +250,17 @@ export function ThreadPane({
             {/* Move, drawn as the selection bar draws it: one dropdown, and the
                 glyph the verbs beside it are drawn as (see MoveFolder). */}
             <MoveFolder
-              folders={moves}
               defaultFolder={moveDefault}
-              busy={act.isPending || folders.isPending}
-              onMove={(to) =>
-                act.mutate({ body: { chains: [thread.rootExtId], action: "move", labels: [to], ...(accountId ? { accountId } : {}) } })
+              busy={act.isPending}
+              onMove={(to, targetAccountId) =>
+                act.mutate({
+                  body: {
+                    chains: [thread.rootExtId],
+                    action: "move",
+                    labels: [to],
+                    ...(targetAccountId ? { accountId: targetAccountId } : {}),
+                  },
+                })
               }
             />
             <button
