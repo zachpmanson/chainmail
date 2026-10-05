@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from "react";
+import { ArrowPathIcon, CheckIcon, ClipboardDocumentIcon, CodeBracketIcon } from "@heroicons/react/24/outline";
 import type { CSSProperties, ReactNode } from "react";
 import { initials } from "../lib/anchors";
 import { receiptNames } from "../lib/who";
@@ -224,17 +225,9 @@ function CopyJson({ data }: { data: unknown }) {
       }}
     >
       {done ? (
-        <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true">
-          <path d="M3.7 8.3 6.8 11.4 12.3 4.8" fill="none" stroke="currentColor"
-            strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
+        <CheckIcon width={18} height={18} aria-hidden="true" />
       ) : (
-        <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true">
-          <rect x="5.5" y="5.5" width="8" height="8" rx="1.2" fill="none"
-            stroke="currentColor" strokeWidth="1.4" />
-          <path d="M3 10.5 V3.5 a.5.5 0 0 1 .5-.5 H10" fill="none"
-            stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-        </svg>
+        <ClipboardDocumentIcon width={18} height={18} aria-hidden="true" />
       )}
     </button>
   );
@@ -358,11 +351,7 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
                    says it with `aria-busy`, and the pane has one live region for
                    the things that happen to it (see .pullnote) — a mark that
                    comes and goes on every chip must not be a second one. */
-                <svg className="spinner" viewBox="0 0 16 16" role="img" aria-label="Downloading…">
-                  <path d="M11.955 4.547A5.25 5.25 0 1 1 8 2.75M11.581 2.75L13.007 5.752L10.225 3.934"
-                    fill="none" stroke="currentColor" strokeWidth="1.5"
-                    strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
+                <ArrowPathIcon className="spinner" width={16} height={16} role="img" aria-label="Downloading…" aria-hidden={undefined} />
               ) : (
                 <>
                   {a.kind ?? "file"} · {a.size ?? ""}
@@ -678,24 +667,13 @@ function OriginalControl({ on, state, ask }: { on: boolean; state: Original; ask
         onClick={ask}
       >
         {asking ? (
-          <svg className="spinner" viewBox="0 0 16 16" aria-hidden="true">
-            <path d="M11.955 4.547A5.25 5.25 0 1 1 8 2.75M11.581 2.75L13.007 5.752L10.225 3.934"
-              fill="none" stroke="currentColor" strokeWidth="1.5"
-              strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+          <ArrowPathIcon className="spinner" width={18} height={18} aria-hidden="true" />
         ) : (
           /* The sender's own markup, as one glyph: the two carets and the slash
              between them. Nothing marks the pressed state here — that is the colour
              and the background the rule gives a pressed button, which is how this
              app states which of a switch's two readings is on. */
-          <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true">
-            <path d="M5.6 4.6 2.6 8 5.6 11.4" fill="none" stroke="currentColor"
-              strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M10.4 4.6 13.4 8 10.4 11.4" fill="none" stroke="currentColor"
-              strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M9.1 3.2 6.9 12.8" fill="none" stroke="currentColor"
-              strokeWidth="1.5" strokeLinecap="round" />
-          </svg>
+          <CodeBracketIcon width={18} height={18} aria-hidden="true" />
         )}
       </button>
       {state.at === "none" ? (

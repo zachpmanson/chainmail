@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { XMarkIcon } from "@heroicons/react/24/outline";
 
 /**
  * The address field: one control that builds a list of addresses — the mechanism a
@@ -100,12 +101,7 @@ function Chip({ who, remove, disabled }: {
         title={`Take ${who.address} off this reply.`}
         aria-label={`remove ${words}`}
       >
-        {/* The multiplication sign, drawn rather than typed: it is a mark on a
-            control, and the label above is what says what it does. */}
-        <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
-          <path d="M2.5 2.5 9.5 9.5M9.5 2.5 2.5 9.5" fill="none" stroke="currentColor"
-            strokeWidth="1.4" strokeLinecap="round" />
-        </svg>
+        <XMarkIcon width={10} height={10} aria-hidden="true" />
       </button>
     </span>
   );

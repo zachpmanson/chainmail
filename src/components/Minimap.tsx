@@ -1,3 +1,4 @@
+import { ArrowDownTrayIcon } from "@heroicons/react/24/outline";
 import { graphLanes, type GraphNode } from "../lib/lanes";
 import type { Row, View } from "../lib/derive";
 
@@ -406,12 +407,7 @@ export function Minimap({ v }: { v: View }) {
           aria-label="Download this reply tree as an SVG file"
           onClick={download}
         >
-          <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true">
-            <path d="M8 2.5 V10 M4.5 7 8 10.5 11.5 7" fill="none"
-              stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M3 12.5 H13" fill="none" stroke="currentColor"
-              strokeWidth="1.4" strokeLinecap="round" />
-          </svg>
+          <ArrowDownTrayIcon width={11} height={11} aria-hidden="true" />
         </button>
       </h3>
       {/* both orientations are in the DOM; CSS shows the live one (body.tree-h
