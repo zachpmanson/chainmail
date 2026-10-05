@@ -1174,6 +1174,11 @@ describe("the site navigation", () => {
 
     const button = screen.getByRole("button", { name: "Compose" });
     expect(button.className).toContain("navrefresh");
+    expect(button.className).toContain("nav-compose");
+    expect(button.getAttribute("aria-label")).toBe("Compose");
+    expect(button.title).toBe("Compose");
+    expect(button.querySelector("svg")).toBeTruthy();
+    expect(button.textContent).toBe("");
     expect(button.closest(".navright")).toBeTruthy();
     expect(button.closest("header.sitehead")).toBeTruthy();
     click(button);

@@ -14,6 +14,7 @@
     "render": "tsx scripts/render.tsx"
   },
   "dependencies": {
+    "@heroicons/react": "^2.2.0",
     "@tanstack/react-query": "^5.101.4",
     "@tanstack/react-router": "^1.170.32",
     "openapi-fetch": "^0.17.0",

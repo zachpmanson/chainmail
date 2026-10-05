@@ -9,6 +9,7 @@ import {
   useSearch,
 } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { PencilSquareIcon } from "@heroicons/react/24/outline";
 import type { Timeline } from "./lib/spec";
 import { loadSpec } from "./lib/loadSpec";
 import { normalise } from "./lib/normalise";
@@ -232,7 +233,15 @@ function RootLayout() {
                 nothing, and is mounted by the shell so every page has it. */}
             <AutoRefresh />
             <NavRefresh />
-            <button type="button" className="navrefresh" onClick={() => setComposing(true)}>Compose</button>
+            <button
+              type="button"
+              className="navrefresh nav-compose"
+              aria-label="Compose"
+              title="Compose"
+              onClick={() => setComposing(true)}
+            >
+              <PencilSquareIcon aria-hidden="true" />
+            </button>
             <NavSearch />
           </span>
         </nav>
