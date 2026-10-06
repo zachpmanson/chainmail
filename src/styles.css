@@ -1261,15 +1261,13 @@
    a shade taller (1.569rem and 1.594rem at a 16px root) — so it clears both by
    less than a tenth of a rem. Everything here is in rem, so the relationship
    holds whatever the reader's root size is. */
-.replyrecipients { --addrrow:1.7rem; display:flex; flex-direction:column; align-items:stretch; gap:.4rem; margin:0 0 .55rem; }
-/* Top-aligned, not centred: a field grows downward as the reader adds chips, and a
-   label centred against a two-line list sits level with the gap between the lines
-   rather than with the first one — with `to:` on the taller row and `cc:` on a
-   shorter one, the two labels stopped being a column of labels and looked like two
-   unrelated words. */
-.replyrecipient { display:flex; align-items:flex-start; gap:.3rem; min-width:0;
+.replyrecipients { --addrrow:1.7rem; display:grid; grid-template-columns:max-content minmax(0,1fr) max-content;
+  align-items:start; column-gap:.3rem; row-gap:.4rem; margin:0 0 .55rem;
   font-size:.74rem; color:var(--muted); }
-.replyrecipient > span, .replytarget { flex:none; }
+.replyrecipient { display:contents; }
+/* `display:contents` lets every row share these tracks: labels line up, and the
+   target link reserves the same trailing column for From, To, and Cc controls. */
+.replyrecipient { min-width:0; }
 /* The label is one line of the field tall, and its word sits in the middle of that
    height rather than at the top of it: the field's own text is centred in its box,
    and a label left at its natural height (a .74rem line box) with `flex-start` put
@@ -1282,12 +1280,11 @@
   border:1px solid var(--line); border-radius:6px; }
 .replyfrom:focus { border-color:var(--accent); }
 .replyfrom:disabled { opacity:.55; cursor:default; }
-.replyrecipient > .addrfield { flex:1; display:flex; min-width:0; min-height:var(--addrrow); }
+.replyrecipient > .addrfield { display:flex; width:100%; min-width:0; min-height:var(--addrrow); }
 .replyrecipient .addrinput { min-width:3rem; }
-/* The link to the message being answered rides at the end of the to line: pushed
-   to the right of the addresses by margin-left:auto, which is what the flexed
-   field leaves, rather than sitting on a line of its own below cc. It is one line
-   of the field tall for the same reason the label is (see .replylabel). */
+/* The link to the message being answered sits in the reserved third column of
+   the To row, rather than shrinking that field or occupying a line below Cc. It
+   is one line of the field tall (see .replylabel). */
 .replytarget { display:inline-flex; align-items:center; gap:.25rem; margin-left:auto;
   height:var(--addrrow); white-space:nowrap; text-decoration:none; }
 .replytarget .arw { font-size:.8rem; line-height:1; }
@@ -1297,7 +1294,7 @@
    reader asks to change it — a summary of an audience, not a control they are
    being asked to arrange. The whole line is the press, so the name under the
    pointer colours the way every other live line in the pane does. */
-.replysummary { display:flex; align-items:center; gap:.3rem; flex:1; min-width:0;
+.replysummary { grid-column:1 / -1; display:flex; align-items:center; gap:.3rem; flex:1; min-width:0;
   height:var(--addrrow); padding:0; border:0; background:none; text-align:left;
   font:inherit; font-size:.74rem; color:var(--muted); cursor:pointer; overflow:hidden; }
 .replysummary:disabled { cursor:default; opacity:.55; }
