@@ -12,6 +12,7 @@ import { buildSync } from "esbuild";
 import { dirname, resolve } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import Ajv from "ajv";
+import { compile } from "@tailwindcss/node";
 import { Timeline } from "../src/components/Timeline";
 import { normalise } from "../src/lib/normalise";
 import { diff, extractSpec, type Mark } from "../src/lib/diff";
@@ -76,6 +77,17 @@ const behaviour = buildSync({
   globalName: "chainmail",
 }).outputFiles[0]!.text;
 const body = renderToStaticMarkup(<Timeline spec={spec} marks={marks} prevLabel={prevLabel} />);
+// Static exports do not pass through Vite, so compile the same utility stylesheet
+// here from the classes the rendered page actually uses. This keeps exports
+// self-contained and avoids depending on a prior `npm run build`.
+const tailwind = await compile(readFileSync(resolve(root, "src/tailwind.css"), "utf8"), {
+  base: root,
+  onDependency: () => {},
+});
+const utilityClasses = [...body.matchAll(/\bclass="([^"]*)"/g)]
+  .flatMap((match) => match[1]!.split(/\s+/))
+  .filter(Boolean);
+const renderedCss = `${css}\n${tailwind.build(utilityClasses)}`;
 const theme = spec.theme ?? "light";
 const title = (spec.title ?? "Timeline").replace(/^#+/, "");
 
@@ -88,7 +100,7 @@ const page = `<!doctype html>
 <head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title}</title>
-<style>${css}</style></head>
+<style>${renderedCss}</style></head>
 <body>${body}
 <script type="application/json" id="chainmail-spec">${embedded}</script>
 <script>${behaviour}</script>

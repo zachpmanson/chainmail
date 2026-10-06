@@ -11,6 +11,9 @@ import { trimBody } from "../lib/trimBody";
 
 const html = (s: string) => ({ __html: s });
 
+const toolbarButtonClasses =
+  "inline-flex items-center rounded-md border border-[var(--line)] bg-[var(--card)] px-[.45rem] py-[.2rem] text-[.66rem] font-bold uppercase tracking-[.08em] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] aria-pressed:border-[var(--accent)] aria-pressed:bg-[var(--mine)] aria-pressed:text-[var(--accent)] disabled:cursor-default disabled:opacity-55";
+
 function replyTarget(row: Row, v: View): ReplyTarget | null {
   const parent = row.entry.parent
     ? v.rows.find((r) => r.id === row.entry.parent)
@@ -195,42 +198,42 @@ export function Timeline({ spec, marks, prevLabel, filter, onShowSpec, onRefresh
   return (
     <>
       {v.avatarCss ? <style dangerouslySetInnerHTML={html(v.avatarCss)} /> : null}
-      <div className="toolbar">
-        <button className="tbtn" id="viewtog" type="button" aria-pressed="false"
+      <div className="fixed top-2 right-[calc(var(--panel)+.6rem)] z-[31] flex gap-[.35rem] max-[1024px]:right-[.6rem] print:hidden">
+        <button className={`tbtn ${toolbarButtonClasses}`} id="viewtog" type="button" aria-pressed="false"
                 aria-label="Thread columns view">columns</button>
         {onShowSpec ? (
-          <button className="tbtn" id="spectog" type="button" onClick={onShowSpec}
+          <button className={`tbtn ${toolbarButtonClasses}`} id="spectog" type="button" onClick={onShowSpec}
                   aria-label="Show the spec as JSON">json</button>
         ) : null}
         {onRefresh ? (
-          <button className="tbtn" id="refreshtog" type="button" onClick={onRefresh}
+          <button className={`tbtn ${toolbarButtonClasses}`} id="refreshtog" type="button" onClick={onRefresh}
                   disabled={refreshing}
                   aria-label="Re-derive this page from the corpus">
             {refreshing ? "refreshing…" : "refresh"}
           </button>
         ) : null}
         {onAdd ? (
-          <button className="tbtn" type="button" onClick={onAdd}
+          <button className={`tbtn ${toolbarButtonClasses}`} type="button" onClick={onAdd}
                   aria-label="Search the corpus for another email to add to this page">
             add email
           </button>
         ) : null}
         {onEval ? (
-          <button className="tbtn" type="button" onClick={onEval}
+          <button className={`tbtn ${toolbarButtonClasses}`} type="button" onClick={onEval}
                   aria-label="Evaluate chains the queries proposed">eval</button>
         ) : null}
-        <button className="tbtn" id="maptog" type="button" aria-pressed="true"
+        <button className={`tbtn ${toolbarButtonClasses}`} id="maptog" type="button" aria-pressed="true"
                 aria-label="Reply tree panel">tree</button>
-        <button className="tbtn" id="plaintog" type="button" aria-pressed="false"
+        <button className={`tbtn ${toolbarButtonClasses}`} id="plaintog" type="button" aria-pressed="false"
                 aria-label="Ignore the sender's own formatting">plain</button>
       </div>
-      <div className="wrap">
-      <header className="top">
-        <h1>
-          {v.hashed ? <span className="hash">#</span> : null}
+      <div className="wrap mx-auto max-w-[76rem] px-5 pt-7 pb-14">
+      <header className="border-b border-[var(--line)] pb-[.7rem] mb-[.25rem]">
+        <h1 className="m-0 mb-[.2rem] text-[1.3rem] tracking-[-.01em]">
+          {v.hashed ? <span className="text-[var(--muted)] font-normal">#</span> : null}
           {v.hashed ? v.title.slice(1) : v.title}
         </h1>
-        <p className="sub" dangerouslySetInnerHTML={html(s.subtitle ?? `${s.messages.length} messages.`)} />
+        <p className="mb-2 text-[var(--muted)] text-[.86rem]" dangerouslySetInnerHTML={html(s.subtitle ?? `${s.messages.length} messages.`)} />
         <Legend />
         <ParticipantsPanel v={v} open />
         {marks ? <DiffPanel v={v} marks={marks} prevLabel={prevLabel ?? "the previous run"} /> : null}
