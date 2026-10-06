@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/zachpmanson/chainmail/internal/corpus"
 )
 
 // mailServer is the read-state fixture with the mail grant on, plus one more
@@ -70,6 +72,67 @@ func TestArchivingAChainTakesEveryMessageOutOfTheInbox(t *testing.T) {
 		if got := chainLabels(t, h, ext); !slices.Equal(got, want) {
 			t.Errorf("%s labels = %v, want %v", ext, got, want)
 		}
+	}
+}
+
+// An account-filtered chain can still have copies in other mailboxes. The
+// request's account is the scope: unrelated copies in the same chain must neither
+// make it ambiguous nor be changed by the archive.
+func TestAccountScopedArchiveIgnoresCopiesInOtherAccounts(t *testing.T) {
+	h, fake := mailServer(t)
+	for _, account := range []corpus.GmailAccount{
+		{ID: "work", Email: "work@example.test", DisplayName: "Work"},
+		{ID: "personal", Email: "personal@example.test", DisplayName: "Personal"},
+	} {
+		if err := h.store.PutGmailAccount(account); err != nil {
+			t.Fatal(err)
+		}
+	}
+	entries, err := h.store.ChainEntries(extOther)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var entryID int64
+	for _, entry := range entries {
+		if entry.ExtID == extOther {
+			entryID = entry.ID
+			break
+		}
+	}
+	if entryID == 0 {
+		t.Fatalf("no entry for %s", extOther)
+	}
+	for _, copy := range []corpus.GmailCopy{
+		{AccountID: "work", GmailID: "work-9", EntryID: entryID, Labels: []string{"INBOX"}},
+		{AccountID: "personal", GmailID: "personal-9", EntryID: entryID, Labels: []string{"INBOX"}},
+	} {
+		if err := h.store.PutGmailCopy(copy); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fake.base["personal-9"] = []string{"INBOX"}
+	opened := ""
+	h.openMailboxForAccount = func(accountID string) (mailbox, error) {
+		opened = accountID
+		return fake, nil
+	}
+
+	res := h.do(t, "POST", "/v1/mail", []byte(`{"chains":["`+extOther+`"],"action":"archive","accountId":"personal"}`))
+	if res.status != 200 {
+		t.Fatalf("status %d: %s", res.status, res.body)
+	}
+	var got mailActionResponse
+	if err := json.Unmarshal(res.body, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.AccountID != "personal" || got.Changed != 1 {
+		t.Errorf("response = %+v, want one personal copy changed", got)
+	}
+	if opened != "personal" {
+		t.Errorf("opened mailbox %q, want personal", opened)
+	}
+	if want := []string{"personal-9:+:-INBOX"}; !slices.Equal(fake.calls, want) {
+		t.Errorf("mailbox saw %v, want only the personal copy", fake.calls)
 	}
 }
 

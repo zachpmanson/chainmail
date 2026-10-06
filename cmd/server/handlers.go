@@ -1172,6 +1172,20 @@ type mailbox interface {
 // name it explicitly; omission is accepted only when all copies belong to one
 // account, so the server never silently writes to an arbitrary mailbox.
 func accountForEntries(trails [][]corpus.ChainEntry, requested string) (string, error) {
+	// An explicit account scopes the action. Other mailbox copies in a chain are
+	// irrelevant to both account selection and the write; they must not turn an
+	// otherwise valid scoped action into an ambiguity.
+	if requested != "" {
+		for _, entries := range trails {
+			for _, entry := range entries {
+				if _, ok := copyForAccount(entry, requested); ok {
+					return requested, nil
+				}
+			}
+		}
+		return "", fmt.Errorf("Gmail account %q has no copy in the selected chain", requested)
+	}
+
 	accounts := map[string]bool{}
 	for _, entries := range trails {
 		for _, entry := range entries {
@@ -1179,12 +1193,6 @@ func accountForEntries(trails [][]corpus.ChainEntry, requested string) (string, 
 				accounts[copy.AccountID] = true
 			}
 		}
-	}
-	if requested != "" {
-		if !accounts[requested] {
-			return "", fmt.Errorf("Gmail account %q has no copy in the selected chain", requested)
-		}
-		return requested, nil
 	}
 	if len(accounts) > 1 {
 		return "", errors.New("the selected chain has Gmail copies in multiple accounts; specify accountId")
