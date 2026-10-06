@@ -138,9 +138,9 @@ export function SelectView() {
   return (
     <div className="wrap selwrap mx-0 w-full max-w-none min-[60rem]:flex min-[60rem]:flex-1 min-[60rem]:flex-col min-[60rem]:min-h-0 min-[60rem]:px-0 min-[60rem]:pt-0 min-[60rem]:pb-0">
       {results.isError ? <Failure error={results.error} /> : null}
-      {results.isFetching ? <p className="selnote">Searching…</p> : null}
+      {results.isFetching ? <p className="selnote mt-2 flex-[1_1_100%] text-[.78rem] text-muted">Searching…</p> : null}
       {asked && !results.isFetching && !results.isError && chains.length === 0 ? (
-        <p className="selnote">No thread matched.</p>
+        <p className="selnote mt-2 flex-[1_1_100%] text-[.78rem] text-muted">No thread matched.</p>
       ) : null}
 
       {chains.length > 0 ? (

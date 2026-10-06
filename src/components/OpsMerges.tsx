@@ -39,7 +39,7 @@ function MergeCard({
         {m.applicable ? (
           <input
             type="checkbox"
-            className="opcheck"
+            className="mr-2 align-middle cursor-pointer"
             checked={selected}
             disabled={busy}
             onChange={(e) => onSelect(e.target.checked)}
@@ -47,7 +47,7 @@ function MergeCard({
           />
         ) : null}
         {ruleLabel(m.rule)}
-        {m.applicable ? <span className="opbad op-apply ml-2 whitespace-nowrap rounded-full border border-current px-[.4rem] py-[.06rem] text-[.62rem] font-bold text-green-800">apply</span> : <span className="opbad op-ro whitespace-nowrap rounded-full border border-current px-[.4rem] py-[.06rem] text-[.62rem] font-bold text-[var(--muted)]">read-only</span>}
+        {m.applicable ? <span className="ml-2 whitespace-nowrap rounded-full border border-current px-[.4rem] py-[.06rem] text-[.62rem] font-bold text-green-800">apply</span> : <span className="whitespace-nowrap rounded-full border border-current px-[.4rem] py-[.06rem] text-[.62rem] font-bold text-muted">read-only</span>}
       </p>
       <p className="my-[.15rem] text-[.84rem] leading-[1.35] [&_code]:text-[.74rem] [&_code]:[overflow-wrap:anywhere]">
         keep&nbsp;<code>{keep}</code>
@@ -55,18 +55,18 @@ function MergeCard({
       <p className="my-[.15rem] text-[.84rem] leading-[1.35] [&_code]:text-[.74rem] [&_code]:[overflow-wrap:anywhere]">
         drop&nbsp;<code>{drop}</code>
       </p>
-      {m.evidence ? <p className="my-[.3rem] mb-2 text-[.74rem] text-[var(--muted)]">{m.evidence}.</p> : null}
+      {m.evidence ? <p className="my-[.3rem] mb-2 text-[.74rem] text-muted">{m.evidence}.</p> : null}
     </article>
   );
 }
 
 function OneTrail(t: OpsMergeRecord) {
   return (
-    <li className="optrail">
-      <span className="opwhen">{when(t.mergedAt)}</span>
-      <code>#{t.keepId}</code> {t.keepName ?? ""} <span className="oparrow">←</span>{" "}
+    <li className="py-[.3rem] text-[.8rem] leading-[1.5]">
+      <span className="text-[.72rem] tabular-nums text-muted">{when(t.mergedAt)}</span>
+      <code>#{t.keepId}</code> {t.keepName ?? ""} <span className="text-muted">←</span>{" "}
       <code>#{t.dropId}</code> {t.dropName ?? ""}
-      {t.reason ? <span className="opwhy">{t.reason}</span> : null}
+      {t.reason ? <span className="block text-[.72rem] text-muted">{t.reason}</span> : null}
     </li>
   );
 }
@@ -164,12 +164,12 @@ export function OpsMerges() {
   return (
     <>
       {plan.isError ? (
-        <p className="selfail" role="alert">
+        <p className="selfail mt-[.7rem] rounded-md border border-line border-l-[3px] border-l-red-700 bg-card px-[.7rem] py-2 text-[.82rem]" role="alert">
           {errText(plan.error)}
         </p>
       ) : null}
       {error ? (
-        <p className="selfail" role="alert">
+        <p className="selfail mt-[.7rem] rounded-md border border-line border-l-[3px] border-l-red-700 bg-card px-[.7rem] py-2 text-[.82rem]" role="alert">
           {error}
         </p>
       ) : null}
@@ -177,8 +177,8 @@ export function OpsMerges() {
 
       <h2 className="mt-[1.1rem] mb-[.1rem] text-[.7rem] uppercase tracking-[.1em] text-[var(--muted)]">Merge plan</h2>
       {applicable.length > 0 ? (
-        <div className="opactions">
-          <label className="opselectall">
+        <div className="mt-2 flex items-center justify-between gap-[.6rem] rounded-[9px] border border-line bg-quote px-[.7rem] py-[.4rem]">
+          <label className="flex items-center gap-[.45rem] text-[.76rem] text-fg cursor-pointer">
             <input
               type="checkbox"
               checked={allPicked}
@@ -213,16 +213,16 @@ export function OpsMerges() {
         </div>
       ) : null}
       {confirming && chosen.length > 0 ? (
-        <div className="opmconfirm">
-          <p className="opmwarn">
+        <div className="mt-2 mb-[.15rem] rounded-md border border-line bg-quote px-[.6rem] py-2 text-[.76rem] leading-[1.5] text-fg">
+          <p className="m-0">
             <strong>This cannot be undone</strong> — a merge is recorded, never
             reversed. {chosen.length === 1 ? "This pair" : `These ${chosen.length} pairs`} will
             be folded into their keepers now:
           </p>
-          <ul className="opmpairs">
+          <ul className="mt-[.4rem] mb-0 list-none pl-[.1rem]">
             {chosen.map((m) => (
-              <li key={m.dropId}>
-                <code>#{m.dropId} {m.dropName}</code> <span className="oparrow">→</span>{" "}
+              <li key={m.dropId} className="py-[.08rem] text-[.76rem] leading-[1.5] [&_code]:text-[.72rem] [&_code]:[overflow-wrap:anywhere]">
+                <code>#{m.dropId} {m.dropName}</code> <span className="text-muted">→</span>{" "}
                 <code>#{m.keepId} {m.keepName}</code>
               </li>
             ))}
@@ -283,12 +283,12 @@ export function OpsMerges() {
               {data.refusals.length === 0 ? (
                 <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">None.</p>
               ) : (
-                <ul className="oprefs">
+                <ul className="mt-[.3rem] mb-0 list-none p-0 [&_li]:py-[.2rem] [&_li]:text-[.78rem] [&_li]:leading-[1.45] [&_li_code]:text-[.72rem]">
                   {data.refusals.map((r) => (
                     <li key={`${r.rule}:${r.subject}`}>
-                      <span className="opwhy">{ruleLabel(r.rule)}</span>{" "}
+                      <span className="text-muted">{ruleLabel(r.rule)}</span>{" "}
                       <code>{r.subject}</code> — {r.reason}{" "}
-                      <span className="opwhy">(people {r.people.map((p) => `#${p}`).join(", ")})</span>
+                      <span className="text-muted">(people {r.people.map((p) => `#${p}`).join(", ")})</span>
                     </li>
                   ))}
                 </ul>
@@ -302,7 +302,7 @@ export function OpsMerges() {
               {data.candidates.length === 0 ? (
                 <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">None.</p>
               ) : (
-                <ul className="oprefs">
+                <ul className="mt-[.3rem] mb-0 list-none p-0 [&_li]:py-[.2rem] [&_li]:text-[.78rem] [&_li]:leading-[1.45] [&_li_code]:text-[.72rem]">
                   {data.candidates.map((c) => (
                     <li key={`${c.aId}:${c.bId}`}>
                       <code>{c.aName}</code> ~ <code>{c.bName}</code> — {c.reason}
@@ -324,10 +324,10 @@ export function OpsMerges() {
               {data.twinsDeclined.length === 0 ? (
                 <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">None — every stored copy collapsed.</p>
               ) : (
-                <ul className="oprefs">
+                <ul className="mt-[.3rem] mb-0 list-none p-0 [&_li]:py-[.2rem] [&_li]:text-[.78rem] [&_li]:leading-[1.45] [&_li_code]:text-[.72rem]">
                   {data.twinsDeclined.map((d) => (
                     <li key={d.reason}>
-                      <span className="opwhy">{d.count}</span> — {d.reason}
+                      <span className="text-muted">{d.count}</span> — {d.reason}
                     </li>
                   ))}
                 </ul>
@@ -344,7 +344,7 @@ export function OpsMerges() {
                   whatever surface it was made.
                 </p>
               ) : (
-                <ul className="optrails">
+                <ul className="mt-[.3rem] mb-0 list-none p-0 [&_li]:py-[.3rem] [&_li]:text-[.8rem] [&_li]:leading-[1.5]">
                   {data.trail.map((t) => (
                     <OneTrail key={`${t.keepId}:${t.dropId}:${t.mergedAt}`} {...t} />
                   ))}

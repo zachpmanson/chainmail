@@ -348,9 +348,9 @@ export function ThreadMessages({
   }, [thread.rootExtId, shown, target]);
 
   if (fetched.isError) return <Failure error={fetched.error} />;
-  if (fetched.isPending) return <p className="selnote">Loading the thread…</p>;
+  if (fetched.isPending) return <p className="selnote mt-2 flex-[1_1_100%] text-[.78rem] text-muted">Loading the thread…</p>;
 
-  if (shown.length === 0) return <p className="selnote">No entries to show.</p>;
+  if (shown.length === 0) return <p className="selnote mt-2 flex-[1_1_100%] text-[.78rem] text-muted">No entries to show.</p>;
 
   // One colour rule, two callers: the same function the page build uses, over the
   // entries this pane was handed. A sender whose org nothing established takes the

@@ -31,7 +31,7 @@ export function OpsView() {
   const open: OpsTab = tabOf(tab);
   return (
     <div className="wrap opswrap">
-      <div className="optabs" role="tablist" aria-label="What this page manages">
+      <div className="mt-2 mb-[.1rem] flex items-stretch gap-[.15rem] border-b border-line" role="tablist" aria-label="What this page manages">
         {OPS_TABS.map((t) => (
           <Button
             key={t}
@@ -41,7 +41,7 @@ export function OpsView() {
             id={`opstab-${t}`}
             aria-selected={t === open}
             aria-controls={`opspanel-${t}`}
-            className={t === open ? "optab optab-on" : "optab"}
+            className="min-h-0 rounded-none border-0 border-b-2 border-transparent px-[.7rem] py-[.45rem] text-[.7rem] font-bold tracking-[.08em] text-muted aria-selected:border-accent aria-selected:text-fg"
             title={`${LABELS[t]} — what the corpus knows about them`}
             onClick={() => void navigate({ to: "/ops", search: { tab: t } })}
           >
@@ -53,7 +53,7 @@ export function OpsView() {
         id={`opspanel-${open}`}
         role="tabpanel"
         aria-labelledby={`opstab-${open}`}
-        className="oppanel"
+        className="mt-[.15rem]"
       >
         {open === "people" ? <OpsPeople /> : open === "orgs" ? <OpsOrgs /> : <OpsMerges />}
       </section>

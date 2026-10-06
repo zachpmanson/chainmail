@@ -18,7 +18,7 @@ export function SpecsView() {
   return (
     <div className="wrap statuswrap">
       {list.isError ? (
-        <p className="selfail" role="alert">
+        <p className="selfail mt-[.7rem] rounded-md border border-line border-l-[3px] border-l-red-700 bg-card px-[.7rem] py-2 text-[.82rem]" role="alert">
           {errText(list.error)}
         </p>
       ) : null}
