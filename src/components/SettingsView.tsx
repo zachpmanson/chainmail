@@ -5,6 +5,7 @@ import { when } from "../lib/stamp";
 import { useCompactMode } from "../lib/compactMode";
 import { Palette } from "./Palette";
 import { FolderPicker } from "./FolderPicker";
+import { Button, SelectInput } from "./controls";
 
 function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -85,8 +86,9 @@ function GmailAccounts() {
                 return (
                   <li key={account.id}>
                     <span>{label}</span>
-                    <button
+                    <Button
                       type="button"
+                      variant="secondary"
                       className="stbutton stbutton-secondary"
                       aria-label={`Disconnect ${label}`}
                       disabled={disconnect.isPending}
@@ -100,7 +102,7 @@ function GmailAccounts() {
                       }}
                     >
                       Disconnect
-                    </button>
+                    </Button>
                   </li>
                 );
               })}
@@ -376,7 +378,7 @@ export function SettingsView() {
               : every === "off" ? "No automatic sweeps; refresh when needed."
                 : every === "" ? "Reading the current schedule…" : "No automatic sweep is scheduled on this host."}
           >
-            <select
+            <SelectInput
               className="stpick"
               aria-label="How often to sweep the mailbox"
               value={every}
@@ -387,7 +389,7 @@ export function SettingsView() {
               {cadenceOptions(every).map(([word, label]) => (
                 <option key={word} value={word}>{label}</option>
               ))}
-            </select>
+            </SelectInput>
           </SettingRow>
           <SettingRow
             title="Home folder"
@@ -420,7 +422,7 @@ export function SettingsView() {
             description="Choose how much detail each inbox row shows."
             note={compact ? "One line per thread." : "Sender, subject, and preview."}
           >
-            <select
+            <SelectInput
               className="stpick"
               aria-label="Thread list layout"
               value={compact ? "compact" : "detailed"}
@@ -428,7 +430,7 @@ export function SettingsView() {
             >
               <option value="detailed">Detailed</option>
               <option value="compact">Compact</option>
-            </select>
+            </SelectInput>
           </SettingRow>
           <SettingRow
             title="Your mail comes from"
@@ -439,7 +441,7 @@ export function SettingsView() {
               : me.value === "" ? "Nobody is selected, so no messages are marked as yours."
                 : `${meLine(me)}.`}
           >
-            <select
+            <SelectInput
               className="stpick stperson"
               aria-label="Which person you are"
               value={me.value}
@@ -449,7 +451,7 @@ export function SettingsView() {
               {people.isPending ? null : me.options.map(([value, label]) => (
                 <option key={value} value={value}>{label}</option>
               ))}
-            </select>
+            </SelectInput>
           </SettingRow>
         </div>
         {people.isError ? (

@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { $api, type PersonSummary } from "../lib/api";
+import { Button, IconButton, TextInput } from "./controls";
 
 function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -47,7 +48,7 @@ function Identity({
   return (
     <span className="opperson-id">
       <code>{id}</code>
-      <button
+      <IconButton
         type="button"
         className="opx"
         disabled={busy}
@@ -56,7 +57,7 @@ function Identity({
         onClick={() => onDetach(id)}
       >
         ×
-      </button>
+      </IconButton>
     </span>
   );
 }
@@ -101,16 +102,16 @@ function PersonRow({
           setName(null);
         }}
       >
-        <input
+        <TextInput
           className="oporginput"
           value={wanted}
           disabled={busy}
           aria-label={`Name for ${p.displayName}`}
           onChange={(e) => setName(e.target.value)}
         />
-        <button type="submit" className="opbtn" disabled={busy || !renamed}>
+        <Button type="submit" variant="secondary" className="opbtn" disabled={busy || !renamed}>
           rename
-        </button>
+        </Button>
       </form>
       <p className="opmside">
         {(p.identities ?? []).length === 0 ? (
@@ -134,7 +135,7 @@ function PersonRow({
           setAdd("");
         }}
       >
-        <input
+        <TextInput
           className="oporginput"
           value={add}
           disabled={busy}
@@ -142,9 +143,9 @@ function PersonRow({
           aria-label={`Identity to add to ${p.displayName}`}
           onChange={(e) => setAdd(e.target.value)}
         />
-        <button type="submit" className="opbtn" disabled={busy || asIdentity(add) === ""}>
+        <Button type="submit" variant="secondary" className="opbtn" disabled={busy || asIdentity(add) === ""}>
           attach
-        </button>
+        </Button>
       </form>
     </article>
   );
@@ -223,7 +224,7 @@ export function OpsPeople() {
       {last ? <p className="opnote">{last}. The list below is the current one.</p> : null}
       <label className="opfilter">
         <span>Find a person</span>
-        <input
+        <TextInput
           className="oporginput"
           value={q}
           placeholder="a name or an address"
