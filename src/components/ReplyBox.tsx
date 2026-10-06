@@ -447,7 +447,7 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
   const editor = (
     <>
     <label className="compose-account">Sending account
-      <select aria-label="Sending account" value={accountId} disabled={busy} onChange={(event) => { setAccountId(event.target.value); setPlan(null); }}>
+      <select className="stpick" aria-label="Sending account" value={accountId} disabled={busy} onChange={(event) => { setAccountId(event.target.value); setPlan(null); }}>
         <option value="">Choose automatically (or select for this message)</option>
         {(accounts.data?.accounts ?? []).filter((account) => account.signedIn).map((account) => <option key={account.id} value={account.id}>{account.displayName}{account.email ? ` (${account.email})` : ""}</option>)}
       </select>
