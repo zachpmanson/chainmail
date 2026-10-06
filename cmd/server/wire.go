@@ -292,11 +292,12 @@ type versionResponse struct {
 }
 
 // settingsResponse is the reader's own choices, which are not facts about the
-// mail. Absent means the choice has not been made — a folder the home page opens
-// in by default, the person whose mail is theirs — so a client cannot mistake
-// "unset" for a default of nothing.
+// mail. The home folder is a pair of folder name and account id, so the same
+// folder in two mailboxes remains two different choices. The reader's own
+// person is omitted when nobody has been chosen.
 type settingsResponse struct {
-	DefaultFolder *string `json:"defaultFolder,omitempty"`
+	DefaultFolder          *string `json:"defaultFolder,omitempty"`
+	DefaultFolderAccountID *string `json:"defaultFolderAccountId,omitempty"`
 	// MePersonID is the person the reader has named as themselves, as the id of a
 	// person on /v1/people. Omitted when they have named nobody — which is also
 	// what clearing the setting leaves behind.
@@ -315,28 +316,33 @@ type settingsResponse struct {
 }
 
 // settingsRequest is the same shape written back, field by field: a field the
-// body names is written, and a field it leaves out is left as it stands.
+// body names is written, and a field it leaves out is left as it stands. The
+// default folder name and account id are stored as one mailbox location.
 //
 // That is the opposite of what the rule was while there was one preference, and
 // it has to be this way once there are two: a reader saving the folder they are
 // in would otherwise clear the person that says which mail is theirs, since
-// both travel in one body. Nothing on the wire changed meaning with it — every
-// caller already names the field it is writing, including the empty string it
-// sends to clear one — but "I did not mention it" and "I want it gone" are now
-// told apart by whether the field is there at all.
+// both travel in one body. A named field is written, and an omitted field is
+// preserved. The folder and account fields are treated as one location; both
+// empty clear it, while an empty folder with an account id selects All mail in
+// that account.
 //
 // DefaultFolder says that with a pointer, since a string has no absent value.
-// MePersonID says it with a pointer too, and its zero is "nobody" rather than
-// "unset": no person is id 0, so clearing the setting needs no second field and
-// no reader has to send a null to say they are nobody.
+// An empty folder name and empty account id clear the default; an empty folder
+// name with an account id means that account's All mail. A legacy folder-only
+// write leaves the folder unscoped. MePersonID says absence with a pointer too,
+// and its zero is "nobody" rather than "unset": no person is id 0, so clearing
+// the setting needs no second field and no reader has to send a null to say they
+// are nobody.
 //
 // The addresses the setting used to be are not written here at all. They were how
 // a reader said who they were; the setting is a person now, and a caller that
 // still sends a list is reading a different contract — refused, rather than
 // resolved into a person the caller did not name.
 type settingsRequest struct {
-	DefaultFolder *string `json:"defaultFolder,omitempty"`
-	MePersonID    *int64  `json:"mePersonId,omitempty"`
+	DefaultFolder          *string `json:"defaultFolder,omitempty"`
+	DefaultFolderAccountID *string `json:"defaultFolderAccountId,omitempty"`
+	MePersonID             *int64  `json:"mePersonId,omitempty"`
 	// SlurpEvery sets the sweep cadence, or clears it back to the default with an
 	// empty string — hence the pointer, like DefaultFolder's: a preference that
 	// can be unset needs a way to say "this field is here, and it is empty".

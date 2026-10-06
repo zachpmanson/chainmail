@@ -36,7 +36,7 @@ function FolderRows({
         All mail
       </button>
       {labels.map((label) => {
-        const selected = selectingDefault ? label.name === current : selectedAccount && label.name === current;
+        const selected = selectedAccount && label.name === current;
         return (
           <button
             key={label.name}
@@ -136,7 +136,7 @@ export function FolderPicker({
 
       {open ? (
         <div className="ibpop" role="menu" aria-label="Folders">
-          {!selectingDefault && !currentAccountId ? (
+          {!selectingDefault ? (
             <button
               type="button"
               role="menuitemcheckbox"
@@ -144,7 +144,9 @@ export function FolderPicker({
               className="ibfrow ibfdefault"
               onClick={() => onDefault?.(!isDefault)}
             >
-              <span className="ibfname">Open {current || "All mail"} by default</span>
+              <span className="ibfname">
+                Open {current || "All mail"}{currentAccountId && accountName ? ` (${accountName})` : ""} by default
+              </span>
               <span className="ibfmark" aria-hidden="true">{isDefault ? <CheckIcon /> : null}</span>
             </button>
           ) : null}

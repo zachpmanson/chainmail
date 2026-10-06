@@ -1627,13 +1627,22 @@ describe("the folder button", () => {
 describe("the default folder", () => {
   const foldersHandler = (initial: string): Handler => {
     let stored = initial;
+    let storedAccountId = "";
     return withChains((c) => {
       const p = pathOf(c);
       if (p === "/v1/settings") {
         if (c.method === "POST") {
-          stored = (JSON.parse(c.body ?? "{}") as { defaultFolder?: string }).defaultFolder ?? "";
+          const body = JSON.parse(c.body ?? "{}") as {
+            defaultFolder?: string;
+            defaultFolderAccountId?: string;
+          };
+          stored = body.defaultFolder ?? "";
+          storedAccountId = body.defaultFolderAccountId ?? "";
         }
-        return json(200, stored ? { defaultFolder: stored } : {});
+        return json(200, {
+          ...(stored ? { defaultFolder: stored } : {}),
+          ...(storedAccountId ? { defaultFolderAccountId: storedAccountId } : {}),
+        });
       }
       if (p === "/v1/labels") return json(200, { labels: [{ name: "INBOX", messages: 1 }] });
       if (p === "/v1/search") {
@@ -1654,6 +1663,41 @@ describe("the default folder", () => {
     expect(screen.getByRole("button", { name: /INBOX/ })).not.toBeNull();
     const asked = calls.filter((c) => pathOf(c) === "/v1/search");
     expect(paramsOf(asked[0]!).get("label")).toBe("INBOX");
+  });
+
+  it("opens a saved folder from its account instead of another same-named folder", async () => {
+    handler = withChains((c) => {
+      const p = pathOf(c);
+      if (p === "/v1/settings") {
+        return json(200, { defaultFolder: "INBOX", defaultFolderAccountId: "work" });
+      }
+      if (p === "/auth/status") return json(200, {
+        signed_in: true,
+        accounts: [
+          { id: "work", email: "work@example.test", signedIn: true },
+          { id: "personal", email: "personal@example.test", signedIn: true },
+        ],
+      });
+      if (p === "/v1/labels") return json(200, { labels: [{ name: "INBOX", messages: 1 }] });
+      if (p === "/v1/search") {
+        const query = paramsOf(c);
+        return query.get("accountId") === "work" && query.get("label") === "INBOX"
+          ? pageOf([CHAINS[0]])
+          : pageOf(CHAINS);
+      }
+      return json(500, { error: `unexpected call to ${c.method} ${p}` });
+    });
+    await mountApp("/");
+    await waitFor(() => expect(document.querySelectorAll(".ibrow")).toHaveLength(1));
+
+    const asked = calls.find((c) => pathOf(c) === "/v1/search")!;
+    expect(paramsOf(asked).get("accountId")).toBe("work");
+    expect(paramsOf(asked).get("label")).toBe("INBOX");
+    click(screen.getByRole("button", { name: /INBOX/ }));
+    const home = await screen.findByRole("menuitemcheckbox", {
+      name: "Open INBOX (work@example.test) by default",
+    });
+    expect(home.getAttribute("aria-checked")).toBe("true");
   });
 
   it("waits for the setting before asking, rather than asking twice", async () => {
@@ -1682,7 +1726,10 @@ describe("the default folder", () => {
     // default, which is All mail — so the list loses its filter as well.
     await waitFor(() => expect(document.querySelectorAll(".ibrow")).toHaveLength(2));
     const posts = calls.filter((c) => c.method === "POST" && pathOf(c) === "/v1/settings");
-    expect(JSON.parse(posts[posts.length - 1]!.body!)).toEqual({ defaultFolder: "" });
+    expect(JSON.parse(posts[posts.length - 1]!.body!)).toEqual({
+      defaultFolder: "",
+      defaultFolderAccountId: "",
+    });
     expect(screen.getByRole("button", { name: /All mail/ })).not.toBeNull();
   });
 
@@ -1706,7 +1753,10 @@ describe("the default folder", () => {
     await waitFor(() => {
       const posts = calls.filter((c) => c.method === "POST" && pathOf(c) === "/v1/settings");
       expect(posts).toHaveLength(1);
-      expect(JSON.parse(posts[0]!.body!)).toEqual({ defaultFolder: "INBOX" });
+      expect(JSON.parse(posts[0]!.body!)).toEqual({
+        defaultFolder: "INBOX",
+        defaultFolderAccountId: "",
+      });
     });
     // And it is now the folder the page opens in: the control agrees.
     expect(

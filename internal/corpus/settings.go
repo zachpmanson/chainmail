@@ -11,9 +11,14 @@ import (
 // The settings the corpus stores. Named here rather than spelled at each call
 // site so a typo is a compile error rather than a silently empty setting.
 const (
-	// SettingDefaultFolder is the mailbox label the home page opens in. Empty
-	// means every folder at once — the same as never having chosen.
+	// SettingDefaultFolder is the mailbox folder name the home page opens in.
+	// It pairs with SettingDefaultFolderAccountID: an empty name and account id
+	// mean no home folder was chosen, while an account id alone means All mail
+	// for that account.
 	SettingDefaultFolder = "default_folder"
+	// SettingDefaultFolderAccountID is the Gmail account that owns the home
+	// folder. Empty means an unscoped, legacy folder choice.
+	SettingDefaultFolderAccountID = "default_folder_account_id"
 	// SettingMePerson is the person the reader says they are, so their own mail
 	// can be marked on a page and in the reading pane. Nothing in the corpus
 	// records which mailbox it was collected from, so this can only be told —
@@ -199,6 +204,34 @@ func SplitAddresses(v string) []string {
 		out = append(out, a)
 	}
 	return out
+}
+
+// SetDefaultFolder records the home folder and its account together. They are
+// one preference: writing one without the other can make a folder name resolve
+// against every account instead of the account the reader chose.
+func (s *Store) SetDefaultFolder(folder, accountID string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for key, value := range map[string]string{
+		SettingDefaultFolder:          folder,
+		SettingDefaultFolderAccountID: accountID,
+	} {
+		if value == "" {
+			if _, err := tx.Exec(`delete from settings where key = ?`, key); err != nil {
+				return err
+			}
+			continue
+		}
+		if _, err := tx.Exec(`
+			insert into settings (key, value) values (?, ?)
+			on conflict(key) do update set value = excluded.value`, key, value); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // PutSetting records a setting, replacing whatever was there. An empty value
