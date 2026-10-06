@@ -1,3 +1,4 @@
+import { FormField } from "./FormField";
 import { Button, IconButton, TextInput } from "./controls";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -307,8 +308,7 @@ function BraidDialog({
           </Button>
         </div>
         <div className="my-[.7rem] mx-[.8rem] mb-[.2rem] flex flex-wrap items-end gap-[.6rem]">
-          <label className="flex flex-[1_1_18rem] flex-col gap-[.18rem]">
-            <span className="text-[.66rem] font-bold uppercase tracking-[.09em] text-[var(--muted)]">Page title</span>
+          <FormField className="flex flex-[1_1_18rem] flex-col gap-[.18rem]" label="Page title" labelClassName="text-[.66rem] font-bold uppercase tracking-[.09em] text-[var(--muted)]">
             <TextInput
               className="w-full px-[.45rem] py-[.32rem] text-[.86rem]"
               autoFocus
@@ -316,7 +316,7 @@ function BraidDialog({
               onChange={(e) => onTitle(e.target.value)}
               placeholder="optional"
             />
-          </label>
+          </FormField>
           <Button type="button" variant="subtle" density="compact" className="px-[.7rem] py-[.32rem] text-[.78rem]" disabled={busy} onClick={onBraid}>
             {busy ? "Braiding…" : "Braid"}
           </Button>

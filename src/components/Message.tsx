@@ -1,8 +1,9 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { ArrowPathIcon, CheckIcon, ClipboardDocumentIcon, CodeBracketIcon } from "@heroicons/react/24/outline";
 import type { CSSProperties, ReactNode } from "react";
-import { initials } from "../lib/anchors";
 import { receiptNames } from "../lib/who";
+import { Avatar } from "./Avatar";
+import { StatusBadge } from "./StatusBadge";
 import {
   attHref,
   isSkipped,
@@ -171,22 +172,6 @@ export interface MessageProps {
    *  export, on a message that arrived as plain text — and no control is drawn,
    *  because a control that cannot answer is worse than no control. */
   original?: { extId: string; load: (extId: string) => Promise<string> };
-}
-
-/** The sender's face: their avatar image where the page has one, their initials
- *  otherwise. Decoration — the name beside it is what names them. */
-function Avatar({ name, orgSlot, pic, title }: {
-  name: string;
-  orgSlot: string;
-  /** this sender's avatar image class, absent when they have no picture */
-  pic?: string;
-  title?: string;
-}) {
-  return (
-    <div className={`av ${orgSlot}${pic ? ` pic ${pic}` : ""} grid size-[1em] flex-[0_0_1em] place-items-center self-center overflow-hidden rounded-full text-[.83rem] leading-none text-white`} title={title}>
-      {pic ? null : <span className="ini text-[.62em] font-bold leading-none tracking-[.01em]">{initials(name)}</span>}
-    </div>
-  );
 }
 
 /**
@@ -796,8 +781,8 @@ export function Message(p: MessageProps) {
             </span>
             <span className="org text-[.68rem] font-[650] uppercase tracking-[.07em]">{p.org}</span>
             <Stamp id={p.id} stamp={p.stamp} />
-            {p.mark === "new" ? <span className="newpill rounded-[4px] bg-org-1 px-[.3rem] py-[.05rem] text-[.6rem] font-extrabold uppercase tracking-[.09em] text-white">new</span> : null}
-            {p.mark === "revised" ? <span className="revpill rounded-[4px] border border-muted bg-dash px-[.28rem] py-[.02rem] text-[.6rem] font-extrabold uppercase tracking-[.09em] text-fg">revised</span> : null}
+            {p.mark === "new" ? <StatusBadge className="newpill" tone="new">new</StatusBadge> : null}
+            {p.mark === "revised" ? <StatusBadge className="revpill" tone="revised">revised</StatusBadge> : null}
             {/* The line's right end, and always drawn even when the caller has
                 no reply to put in it: the caret lives inside this box, so an
                 empty tail still closes the line at the right edge. */}

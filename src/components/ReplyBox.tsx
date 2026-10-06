@@ -9,6 +9,7 @@ import { addressKey, type Address } from "./AddressField";
 import { ComposerFields } from "./ComposerFields";
 import { ComposerFlow } from "./ComposerFlow";
 import { refusal, staleAfterMail, SAID_MS } from "./MailVerbs";
+import { CheckboxRow } from "./Checkbox";
 import { IconButton, SelectInput } from "./controls";
 
 /**
@@ -481,12 +482,28 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
     </>
   );
   const editorActions = <div className="replyopts mr-auto flex items-center gap-4">
-    <label className="replytick flex cursor-pointer items-center gap-[.4rem] text-[.74rem] text-muted" title="Answer everyone the message was addressed to. Edit the reply's audience in the fields above.">
-      <input className="m-0 cursor-pointer accent-accent" type="checkbox" checked={all} disabled={busy} onChange={(e) => onAll(e.target.checked)} /> reply all
-    </label>
-    <label className="replytick flex cursor-pointer items-center gap-[.4rem] text-[.74rem] text-muted" title="Send the HTML rendering beside the same plain-text message. Unchecked sends plain text alone.">
-      <input className="m-0 cursor-pointer accent-accent" type="checkbox" checked={html} disabled={busy} onChange={(e) => setHtml(e.target.checked)} /> send html
-    </label>
+    <CheckboxRow
+      className="replytick flex cursor-pointer items-center gap-[.4rem] text-[.74rem] text-muted"
+      title="Answer everyone the message was addressed to. Edit the reply's audience in the fields above."
+      checked={all}
+      disabled={busy}
+      accent="accent"
+      inputClassName="m-0 cursor-pointer"
+      onChange={(e) => onAll(e.target.checked)}
+    >
+      reply all
+    </CheckboxRow>
+    <CheckboxRow
+      className="replytick flex cursor-pointer items-center gap-[.4rem] text-[.74rem] text-muted"
+      title="Send the HTML rendering beside the same plain-text message. Unchecked sends plain text alone."
+      checked={html}
+      disabled={busy}
+      accent="accent"
+      inputClassName="m-0 cursor-pointer"
+      onChange={(e) => setHtml(e.target.checked)}
+    >
+      send html
+    </CheckboxRow>
   </div>;
   const previewContent = plan ? <div className="replyplan text-[.76rem] leading-[1.5]">
     <p className="replynote m-0 mb-[.45rem]"><strong>Nothing has been sent yet.</strong> This is the whole message as it will go from <strong>{accounts.data?.accounts?.find((account) => account.id === plan.accountId)?.displayName ?? plan.accountId}</strong>: to <strong>{plan.to || "(no recipient)"}</strong>{plan.cc ? <>, cc <strong>{plan.cc}</strong></> : null}, as <strong>{plan.subject}</strong>, in <strong>{plan.html ? "text and HTML" : "plain text alone"}</strong>. Your words come first and the message you are answering is quoted under them.</p>

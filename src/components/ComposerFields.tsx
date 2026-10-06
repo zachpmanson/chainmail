@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { FormField } from "./FormField";
 import { Button, TextArea, TextInput } from "./controls";
 import { AddressField, addressKey, addressWords, type Address } from "./AddressField";
 
@@ -86,7 +87,11 @@ export function ComposerFields({
           <AddressField label="cc" value={cc} onChange={onCcChange} suggestions={suggestions} taken={to} mine={mine} disabled={busy} />
         </div> : null}
       </div>
-      {onSubjectChange ? <label className="replyfield grid gap-[.3rem] mb-[.55rem] text-[.74rem] text-muted">Subject <TextInput className="replyinput block w-full rounded-md border border-line bg-bg px-[.55rem] py-[.45rem] text-[.82rem] leading-[1.45] text-fg resize-y disabled:opacity-[.55]" required value={subject ?? ""} disabled={busy} onChange={(e) => onSubjectChange(e.target.value)} /></label> : null}
+      {onSubjectChange ? (
+        <FormField className="replyfield grid gap-[.3rem] mb-[.55rem] text-[.74rem] text-muted" label="Subject">
+          <TextInput className="replyinput block w-full rounded-md border border-line bg-bg px-[.55rem] py-[.45rem] text-[.82rem] leading-[1.45] text-fg resize-y disabled:opacity-[.55]" required value={subject ?? ""} disabled={busy} onChange={(e) => onSubjectChange(e.target.value)} />
+        </FormField>
+      ) : null}
       <TextArea className="replyinput block w-full rounded-md border border-line bg-bg px-[.55rem] py-[.45rem] text-[.82rem] leading-[1.45] text-fg resize-y disabled:opacity-[.55]" aria-label={mode === "reply" ? "Your reply" : "Message"} required={mode === "compose"} rows={4} value={body} disabled={busy} onChange={(e) => onBodyChange(e.target.value)} />
     </>
   );
