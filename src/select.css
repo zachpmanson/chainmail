@@ -19,10 +19,6 @@
    the page stays visible while a candidate chain is read as data. Its button is
    the one that opens it — the refresh dialog's proposal cards, which have no pane
    beside them to open a chain into. */
-.selpvbtn { font:inherit; font-size:.72rem; font-weight:650; margin-right:.5rem;
-  padding:.3rem .6rem; border:1px solid var(--line); border-radius:6px;
-  background:var(--card); color:var(--muted); cursor:pointer; white-space:nowrap; }
-.selpvbtn:hover { color:var(--accent); border-color:var(--accent); }
 .selpv { position:fixed; inset:0; z-index:55; background:rgba(0,0,0,.45);
   display:flex; align-items:center; justify-content:center; }
 .selpv-panel { background:var(--card); border:1px solid var(--line); border-radius:8px;
@@ -33,31 +29,6 @@
 .selpv-thread .selpv-panel > .ibread { display:flex; flex:1 1 auto; flex-direction:column; min-height:0; }
 .selpv-thread .ibread-head { flex:none; }
 .selpv-thread .ibreadwrap { min-height:0; }
-.selpv-head { display:flex; align-items:center; gap:.6rem; padding:.5rem .8rem;
-  border-bottom:1px solid var(--line); }
-.selpv-head b { font-size:.72rem; font-weight:700; text-transform:uppercase;
-  letter-spacing:.09em; color:var(--muted); }
-.selpv-head .note { font-size:.74rem; color:var(--muted); margin-right:auto;
-  min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.selpv-list { overflow:auto; padding:.5rem .8rem .8rem; display:flex;
-  flex-direction:column; gap:.5rem; }
-.selpv .selfail { margin:.5rem .8rem .8rem; }
-.selpv .selnote { margin:.5rem .8rem; }
-.selen { padding:.55rem .65rem; border:1px solid var(--line); border-radius:6px;
-  background:var(--bg); }
-.selenh { display:flex; align-items:baseline; gap:.5rem; }
-.selena { font-size:.82rem; font-weight:700; }
-.selenun { font-size:.78rem; color:var(--muted); }
-.selenq { font-size:.6rem; font-weight:700; text-transform:uppercase;
-  letter-spacing:.06em; color:var(--muted); border:1px solid var(--line);
-  border-radius:999px; padding:0 .35rem .05rem; }
-.selendate { margin-left:auto; font-size:.68rem; color:var(--muted);
-  font-variant-numeric:tabular-nums; }
-.selensubj { font-size:.78rem; font-weight:650; margin-top:.25rem; overflow-wrap:anywhere;
-  font-family:var(--serif); }
-.selenbody { font-size:.78rem; line-height:1.5; margin:.3rem 0 0; color:var(--fg);
-  white-space:pre-wrap; overflow-wrap:anywhere; max-height:11rem; overflow:auto; }
-.selenempty { font-size:.74rem; color:var(--muted); margin:.3rem 0 0; font-style:italic; }
 
 
 
@@ -244,15 +215,11 @@
    ticked some rows, so what can be done with them is what the top of the page
    has to say, and the nav comes back when the selection clears. One row, so the
    verbs read left to right and the way out of the selection sits at the far end. */
-.ibbuild { display:flex; align-items:center; flex-wrap:nowrap; gap:.55rem;
-  margin:0; height:var(--navh); min-width:0; overflow-x:auto; overflow-y:hidden; }
 /* The two mailbox verbs are glyphs, and the row they are on is why: it also holds
    a braid, a folder dropdown, the count and the way out, and spelling Archive and
    Delete along it is what wrapped the bar on a laptop. The word is still the
    button's name — the tooltip, and what a screen reader reads — but the row draws
    the box and the bin, which is what every mail client draws too. */
-.ibbuild .ibicon { display:inline-flex; align-items:center; padding:.45rem .5rem;
-  flex:none; }
 /* The glyph is the whole of what an icon button says, and the size is set here
    rather than in each set of `width`/`height` attributes — both glyphs in
    MailVerbs are drawn at 14, and the read circle with them. One place to change,
@@ -261,7 +228,6 @@
    the box and the bin read as annotations on the line instead of the two things a
    reader presses. 18px is the largest that still clears the bar's own padding
    inside the row's height — the buttons come to 31.5px in a 34.4px row. */
-.ibicon svg { display:block; width:18px; height:18px; }
 /* The move control, in both places it stands: the selection bar's row and the pane's
    own head. It is one control drawn as one thing — the icon button the verbs beside
    it are (see .ibicon and MoveFolder) — with the platform's own <select> laid over
@@ -279,17 +245,11 @@
 .ibmovewrap:has(> .ibmove:focus-visible) { outline:1px solid var(--accent); outline-offset:2px; }
 /* In the bar the move control is a span rather than a button — a <select> cannot
    live inside one — so the box is named here, in the bar's own terms. */
-.ibbuild .ibmovewrap { border:1px solid var(--line); border-radius:6px;
-  background:var(--card); padding:.45rem .5rem; }
-.ibbuild .ibmovewrap:hover { color:var(--accent); border-color:var(--accent); }
 /* The count stays at the far end when the verbs do not fill the row.
    Deselecting is not an action on the mail, so its button is quieter than the
    verbs beside it; it leads the row as the way out of selection. */
-.ibright { margin-left:auto; flex:none; display:flex; align-items:center; }
-.ibselcount { font-size:.76rem; color:var(--muted); font-variant-numeric:tabular-nums; }
 /* A refusal is a paragraph under the row rather than an item in it, and the same
    for the sentence an action leaves behind when nothing is ticked any more. */
-.ibbuild .selfail { flex:1 1 100%; margin:.2rem 0 0; }
 
 /* Two panels: the list, and the chain it is showing. One column until there is
    room for both — at that width the choice of a row is what changes panels, so
@@ -588,11 +548,6 @@
 /* The row that is not a folder: stuck to the top of the popup, because the
    folder list beneath it scrolls and a control about the next visit must not
    scroll away with the folders. Opaque, so the rows pass under it. */
-.ibfdefault { position:sticky; top:-.25rem; z-index:1; margin:0 0 .25rem;
-  padding:.3rem .45rem .35rem; border-bottom:1px solid var(--line);
-  border-radius:6px 6px 0 0; background:var(--card); color:var(--muted); }
-.ibfdefault .ibfname { font-weight:600; }
-.ibfmark { flex:0 0 .8rem; text-align:right; color:var(--accent); font-weight:700; }
 
 /* The ops tabs: the page manages three kinds of row — people, the organisations
    their mail is drawn under, and the merges proposed between them — and they are

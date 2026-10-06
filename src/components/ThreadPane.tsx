@@ -157,7 +157,7 @@ export function ThreadPane({
     <aside className="ibread flex min-w-0 flex-col min-[60rem]:h-full min-[60rem]:min-h-0" aria-label={label}>
       {thread ? (
         <>
-          <div className="ibread-head flex flex-none items-center gap-2 border-b border-line bg-card px-[.7rem] py-2 min-[60rem]:px-[calc(.7rem+var(--divider))] [&_.ibicon_svg]:block [&_.ibicon_svg]:size-[18px]">
+          <div className="ibread-head flex flex-none items-center gap-2 border-b border-line bg-card px-[.7rem] py-2 min-[60rem]:px-[calc(.7rem+var(--divider))]">
             <Button type="button" density="compact" className={`min-h-0 px-[.5rem] py-[.2rem] text-[.78rem] ${backLabel === "Close" ? "" : "min-[60rem]:hidden"} ibback`} onClick={onClose}>
               {backLabel}
             </Button>
@@ -192,7 +192,7 @@ export function ThreadPane({
                 outermost of them on every thread (see .ibread-read). */}
             {openInWindow ? (
               <a
-                className="ibicon inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent p-[.25rem_.3rem] text-muted no-underline hover:border-line hover:bg-card hover:text-accent"
+                className="ibicon inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent p-[.25rem_.3rem] text-muted no-underline hover:border-line hover:bg-card hover:text-accent [&_svg]:block [&_svg]:size-[18px]"
                 aria-label="Open in new window"
                 title="Open in new window"
                 href={`/?open=${encodeURIComponent(thread.rootExtId)}&popup=1`}
@@ -215,7 +215,7 @@ export function ThreadPane({
             ) : null}
             <Button
               type="button"
-              className="ibicon ibtree inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent p-[.25rem_.3rem] text-muted hover:border-line hover:bg-card hover:text-accent aria-pressed:border-line aria-pressed:text-accent"
+              className="ibicon ibtree inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent p-[.25rem_.3rem] text-muted hover:border-line hover:bg-card hover:text-accent aria-pressed:border-line aria-pressed:text-accent [&_svg]:block [&_svg]:size-[18px]"
               aria-pressed={tree}
               aria-label={treeLabel(tree)}
               title={treeLabel(tree)}
@@ -266,7 +266,7 @@ export function ThreadPane({
             />
             <IconButton
               type="button"
-              className="ibicon"
+              className="ibicon inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent p-[.25rem_.3rem] text-muted hover:border-line hover:bg-card hover:text-accent [&_svg]:block [&_svg]:size-[18px]"
               aria-label="Archive"
               title="Archive"
               disabled={act.isPending}
@@ -278,7 +278,7 @@ export function ThreadPane({
             </IconButton>
             <IconButton
               type="button"
-              className="ibicon"
+              className="ibicon inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent p-[.25rem_.3rem] text-muted hover:border-line hover:bg-card hover:text-accent [&_svg]:block [&_svg]:size-[18px]"
               aria-label="Delete"
               title="Delete"
               disabled={act.isPending}
@@ -309,7 +309,7 @@ export function ThreadPane({
             {thread.unread !== undefined ? (
               <Button
                 type="button"
-                className={`ibicon ibread-read text-muted hover:border-line hover:text-accent [&_svg]:block [&_svg]:size-[18px] [&_circle]:fill-none [&_circle]:stroke-current [&_circle]:stroke-[1.6]${thread.unread > 0 ? " unread [&_circle]:fill-current [&_circle]:stroke-0" : ""}`}
+                className={`ibicon ibread-read inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent p-[.25rem_.3rem] text-muted hover:border-line hover:bg-card hover:text-accent [&_svg]:block [&_svg]:size-[18px] [&_circle]:fill-none [&_circle]:stroke-current [&_circle]:stroke-[1.6]${thread.unread > 0 ? " unread [&_circle]:fill-current [&_circle]:stroke-0" : ""}`}
                 disabled={read.isPending}
                 aria-label={thread.unread > 0 ? "Mark read" : "Mark unread"}
                 aria-pressed={thread.unread > 0}

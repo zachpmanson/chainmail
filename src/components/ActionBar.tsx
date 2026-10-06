@@ -152,8 +152,8 @@ export function ActionBar({
   const body = (
     <>
       {chosen.length > 0 ? (
-        <div className="ibbuild">
-          <Button type="button" density="compact" className="ibclear px-[.7rem] py-[.32rem] text-[.78rem] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={onDone}>
+        <div className="ibbuild flex min-w-0 items-center gap-[.55rem] h-[var(--navh)] overflow-x-auto overflow-y-hidden [&_.ibmovewrap]:rounded-md [&_.ibmovewrap]:border-line [&_.ibmovewrap]:bg-card [&_.ibmovewrap]:px-[.5rem] [&_.ibmovewrap]:py-[.45rem] [&_.ibmovewrap:hover]:border-accent [&_.ibmovewrap:hover]:text-accent [&_.selfail]:mt-[.2rem] [&_.selfail]:flex-[1_1_100%]">
+          <Button type="button" density="compact" className="ibclear shrink-0 px-[.7rem] py-[.32rem] text-[.78rem] text-muted hover:border-accent hover:text-accent" onClick={onDone}>
             Deselect all
           </Button>
           <Button type="button" variant="subtle" density="compact" className="px-[.7rem] py-[.32rem] text-[.78rem]" onClick={() => setBraiding(true)}>
@@ -166,7 +166,7 @@ export function ActionBar({
               reader reads — but the row draws the box and the bin. */}
           <IconButton
             type="button"
-            className="ibicon"
+            className="ibicon shrink-0 inline-flex items-center rounded-md border border-transparent bg-transparent p-[.45rem_.5rem] text-muted hover:border-line hover:bg-card hover:text-accent [&_svg]:block [&_svg]:size-[18px]"
             aria-label="Archive"
             title="Archive"
             disabled={busy}
@@ -176,7 +176,7 @@ export function ActionBar({
           </IconButton>
           <IconButton
             type="button"
-            className="ibicon"
+            className="ibicon shrink-0 inline-flex items-center rounded-md border border-transparent bg-transparent p-[.45rem_.5rem] text-muted hover:border-line hover:bg-card hover:text-accent [&_svg]:block [&_svg]:size-[18px]"
             aria-label="Delete"
             title="Delete"
             disabled={busy}
@@ -214,8 +214,8 @@ export function ActionBar({
           />
           {/* The count stays at the far end; the way out is the first control
               on the left, before any action on the selected mail. */}
-          <span className="ibright">
-            <span className="ibselcount">
+          <span className="ibright ml-auto flex shrink-0 items-center">
+            <span className="ibselcount text-[.76rem] tabular-nums text-muted">
               {chosen.length} selected
             </span>
           </span>
@@ -290,16 +290,16 @@ function BraidDialog({
 
   return (
     <div
-      className="selpv"
+      className="selpv [&_.selfail]:mx-[.8rem] [&_.selfail]:mt-2 [&_.selfail]:mb-3 [&_.selnote]:mx-[.8rem] [&_.selnote]:my-2"
       role="dialog"
       aria-modal="true"
       aria-label="Braid threads"
       onClick={onClose}
     >
       <div className="selpv-panel" onClick={(e) => e.stopPropagation()}>
-        <div className="selpv-head">
-          <b>braid threads</b>
-          <span className="note">
+        <div className="selpv-head flex items-center gap-[.6rem] border-b border-line px-[.8rem] py-2">
+          <b className="text-[.72rem] font-bold uppercase tracking-[.09em] text-muted">braid threads</b>
+          <span className="note ml-auto min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[.74rem] text-muted">
             {count} thread{count === 1 ? "" : "s"} ticked
           </span>
           <Button type="button" density="compact" className="bg-[var(--bg)] px-[.55rem] py-[.28rem] text-[.72rem] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={onClose}>
