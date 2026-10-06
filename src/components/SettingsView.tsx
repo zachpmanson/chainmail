@@ -36,11 +36,13 @@ function SettingRow({
   title,
   description,
   note,
+  valueClassName,
   children,
 }: {
   title: string;
   description: string;
   note?: ReactNode;
+  valueClassName?: string;
   children: ReactNode;
 }) {
   return (
@@ -49,7 +51,7 @@ function SettingRow({
         <h3>{title}</h3>
         <p>{description}</p>
       </div>
-      <div className="stsetting-value">
+      <div className={`stsetting-value${valueClassName ? ` ${valueClassName}` : ""}`}>
         {children}
         {note ? <p className="stsetting-note">{note}</p> : null}
       </div>
@@ -390,6 +392,7 @@ export function SettingsView() {
           <SettingRow
             title="Home folder"
             description="The folder shown when you open the inbox."
+            valueClassName="stsetting-value-fill"
           >
             <FolderPicker
               current={folder}
