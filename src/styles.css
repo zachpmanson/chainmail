@@ -511,7 +511,6 @@
   .msg.o1 .bub { --orgc:var(--o1); } .msg.o2 .bub { --orgc:var(--o2); }
   .msg.o3 .bub { --orgc:var(--o3); } .msg.o4 .bub { --orgc:var(--o4); }
   .msg.o5 .bub { --orgc:var(--o5); }
-  .ment { margin:0 0 .3rem; display:flex; flex-wrap:wrap; gap:.25rem; }
   /* The reader's second reading of one message: the sender's own html, swapped in
      for this pipeline's stripped one. The control is drawn in the receipt — the
      place a reader inspects a message (the ids it was found under, the address it
@@ -546,8 +545,6 @@
      mounted in: it becomes the containing block for a `position:fixed`
      descendant, and it clips a fixed-width layout's overflow at the bubble. */
   .bdo { contain:layout paint; }
-  .at { font-size:.74rem; font-weight:650; color:var(--o3); background:var(--mine);
-    border-radius:5px; padding:.02rem .35rem; }
   .bub p { margin:.2rem 0; }
   .bub p:first-of-type { margin-top:0; }
   .bub ul { margin:.25rem 0; padding-left:1rem; }
@@ -577,13 +574,11 @@
      page. These rules hold it inside the bubble: an image scales down instead of
      pushing the column out, and a table that cannot shrink any further scrolls
      in its own strip rather than widening the whole timeline. */
-  .bd { overflow-x:auto; }
   /* A message that was sent with nothing in it. The page's own voice — muted and
      italic, the same register as the receipt's notes — because the words are ours
      rather than the sender's: the answer to "why is this empty" is the corpus
      speaking, and a bold or coloured line would be read as something the message
      said. */
-  .bd .nobody { margin:0; font-size:.8rem; color:var(--muted); font-style:italic; }
   .bd img { max-width:100%; height:auto; }
   .bd table { min-width:0; max-width:100%; }
   .bd td, .bd th { vertical-align:top; }
@@ -592,12 +587,6 @@
      relation came from the ingest's graded overlap, and these classes only
      shape a visible diff — strike for the removed words, a soft highlight for
      the inserted ones. */
-  .edits { margin:.35rem 0 0; }
-  .edit { background:var(--dash); border-left:2px solid var(--line);
-    border-radius:6px; padding:.3rem .55rem; }
-  .edit .ehdr { font-size:.72rem; color:var(--muted); } .edit .ehdr a { color:var(--accent); }
-  .edit .ets { margin-left:.35rem; }
-  .edit .ebd { font-size:.92rem; overflow-x:auto; }
   .edit .edel { color:var(--muted); text-decoration:line-through; }
   .edit .eins { background:color-mix(in srgb, var(--mine) 55%, transparent);
     border-radius:3px; padding:0 .12rem; }
@@ -618,13 +607,11 @@
   /* b/i/u/strong/em are left alone on purpose: an element the sender reached for
      to stress a word says something a style attribute does not, and dropping it
      flattens a deliberately emphasised line into prose. */
-  .atts { display:flex; flex-wrap:wrap; align-items:center; gap:.3rem; margin:.4rem 0 .1rem; }
   /* The strip's head is a mark alone: the chips to its right ARE the list of
      files, so the word that used to sit here ("attached") named the row a reader
      had already recognised by its pictures and its filenames. The glyph keeps its
      colour and its size and loses the word's tracking, which only ever applied to
      the word. */
-  .clip { font-size:.72rem; color:var(--muted); }
   .clip::before { content:"\1F4CE"; }
   /* A chip whose file the reader has asked for and the mailbox has not answered
      yet. The press IS the download (see Attachments), so the chip is the only
@@ -635,7 +622,6 @@
      can be missed on a row of framed names — and under reduced motion, where the
      turn is stilled, the border and the colour are all that is left — and a chip
      that is out asking for something should not read as idle. */
-  .att.busy .ameta { color:var(--fg); }
   /* The chip's spinner is the .spinner base (see .navrefresh .spinner) at the
      .ameta size it inherits, but as wide as the ↻ it replaced: a typeset glyph was
      as wide as its advance (0.838em in this host's DejaVu Sans), and the chip's
@@ -652,8 +638,6 @@
      the popover needs and shown here at chip height. Cropped from the top left
      rather than letterboxed: a screenshot is unreadable at this size either way,
      and its top-left corner is the part that says which screenshot it is. */
-  .athumb { display:block; height:2.1rem; width:auto; max-width:9rem; object-fit:cover;
-    object-position:top left; border-radius:3px; border:1px solid var(--line); }
   /* A thumbnail drawn from bytes this host holds, rather than from one embedded in
      a built page. Those bytes are a file being fetched rather than a picture that
      is already in the markup, so there is no width to declare until they arrive —
@@ -662,7 +646,6 @@
      the box is stated here instead of measured: three rems by the chip's height,
      which is about what a screenshot's own ratio wants at that height, cropped the
      same way. Nothing shifts when the picture lands. */
-  .athumb.ablob { width:3rem; }
   .att.haspop::after { content:"\2922"; font-size:.7rem; color:var(--muted); }
   .att.haspop:hover::after, .att.haspop:focus-visible::after { color:var(--accent); }
   /* Enlarged picture. Above the spec viewer's siblings but below it: the spec

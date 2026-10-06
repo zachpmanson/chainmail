@@ -292,13 +292,13 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
   // one press puts every chip on the line into the same state.
   const fetching = pulling != null && pulling === extId;
   return (
-    <div className="atts">
+    <div className="atts my-[.4rem] mb-[.1rem] flex flex-wrap items-center gap-[.3rem]">
       {/* The mark, and no word beside it: the chips ARE the strip, and "attached"
           at the head of a list of files was a label on the obvious. The paperclip
           stays as the one thing that says what the row is before it is read, and
           it is named for a reader who cannot see it — the filenames below say what
           is there, never that these are files. */}
-      <span className="clip" role="img" aria-label="attachments" />
+      <span className="clip text-[.72rem] text-muted" role="img" aria-label="attachments" />
       {attachments.map((a, i) => {
         const local = localHref(a, mediaBase ?? "");
         const href = attHref(a, mediaBase);
@@ -319,7 +319,7 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
         const shot = thumbnail(a, mediaBase ?? "");
         const thumb = shot ? (
           <img
-            className={shot.blob ? "athumb ablob" : "athumb"}
+            className={`athumb block h-[2.1rem] w-auto max-w-36 rounded-[3px] border border-line object-cover object-left${shot.blob ? " ablob w-12" : ""}`}
             src={shot.src}
             {...(shot.w !== undefined ? { width: shot.w } : {})}
             {...(shot.h !== undefined ? { height: shot.h } : {})}
@@ -337,7 +337,7 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
           <>
             {thumb}
             <span className="afn">{a.name}</span>
-            <span className="ameta">
+            <span className={`ameta${fetching && fetchable ? " text-fg" : ""}`}>
               {fetching && fetchable ? (
                 /* The same ↻ and the same 0.8s turn the nav's refresh wears (see
                    .navrefresh .spinner): one glyph for "this is being worked on",
@@ -414,9 +414,9 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
           <a
             key={i}
             className={[
-              "att inline-flex items-baseline gap-[.35rem] rounded-md border border-[var(--line)] bg-[var(--quote)] px-[.45rem] py-[.1rem] text-[var(--fg)] no-underline hover:border-[var(--accent)]",
+              "att inline-flex items-baseline gap-[.35rem] rounded-md border border-line bg-quote px-[.45rem] py-[.1rem] text-fg no-underline hover:border-accent",
               opens && "haspop items-center",
-              fetching && fetchable && "busy border-[var(--accent)] cursor-progress",
+              fetching && fetchable && "busy border-accent cursor-progress",
             ].filter(Boolean).join(" ")}
             href={href}
             {...(tip ? { title: tip } : {})}
@@ -470,7 +470,7 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
           // is the only thing here that says what the file actually is. It gets
           // no popover, though: the only way to offer one would be a control
           // that does nothing at all without scripting.
-          <span key={i} className="att inline-flex items-baseline gap-[.35rem] rounded-md border border-[var(--line)] bg-[var(--quote)] px-[.45rem] py-[.1rem] text-[var(--fg)] no-underline hover:border-[var(--accent)] nolink opacity-60" {...(note ? { title: note } : {})}>
+          <span key={i} className="att nolink inline-flex items-baseline gap-[.35rem] rounded-md border border-line bg-quote px-[.45rem] py-[.1rem] text-fg no-underline opacity-60 hover:border-accent" {...(note ? { title: note } : {})}>
             {label}
           </span>
         );
@@ -715,7 +715,7 @@ function Body({ body, state }: { body: string; state: Original }) {
     /* The shadow host. Empty as far as React is concerned — the mail is written
        into its shadow root, where a rule of this page's cannot reach it and its
        own rules cannot leave. */
-    return <div key="sent" className="bd bdo" ref={host} />;
+    return <div key="sent" className="bd bdo overflow-x-auto" ref={host} />;
   }
   /* A message that carried no words at all — a mail that was only its file, a
      calendar reply that was only its invitation — says so in the page's own
@@ -724,12 +724,12 @@ function Body({ body, state }: { body: string; state: Original }) {
      the message: it is what the sender sent. */
   if (!hasBody(body)) {
     return (
-      <div key="read" className="bd">
-        <p className="nobody">No body</p>
+      <div key="read" className="bd overflow-x-auto">
+        <p className="nobody m-0 text-[.8rem] italic text-muted">No body</p>
       </div>
     );
   }
-  return <div key="read" className="bd" dangerouslySetInnerHTML={html(trimBody(body))} />;
+  return <div key="read" className="bd overflow-x-auto" dangerouslySetInnerHTML={html(trimBody(body))} />;
 }
 
 /** What became of this message's fetch, while its sender's switch is on.
@@ -856,15 +856,15 @@ export function Message(p: MessageProps) {
           </div>
         </details>
         <div className={[
-          "bub relative overflow-hidden rounded-[10px] border border-[var(--line)] bg-[var(--card)] px-[.7rem] py-[.45rem]",
-          p.quoted && "border-dashed border-[color-mix(in_srgb,var(--muted)_55%,transparent)] bg-[var(--dash)]",
-          p.me && "border-[var(--o3)] bg-[var(--mine)]",
-          p.mark === "new" && "border-l-[3px] border-l-[var(--o1)]",
+          "bub relative overflow-hidden rounded-[10px] border border-line bg-card px-[.7rem] py-[.45rem]",
+          p.quoted && "border-dashed border-[color-mix(in_srgb,var(--muted)_55%,transparent)] bg-dash",
+          p.me && "border-org-3 bg-mine",
+          p.mark === "new" && "border-l-[3px] border-l-org-1",
         ].filter(Boolean).join(" ")}>
           {p.mentions?.length ? (
-            <div className="ment">
+            <div className="ment mb-[.3rem] flex flex-wrap gap-1">
               {p.mentions.map((m) => (
-                <span className="at" key={m}>
+                <span className="at rounded-[5px] bg-mine px-[.35rem] py-[.02rem] text-[.74rem] font-semibold text-org-3" key={m}>
                   @{m}
                 </span>
               ))}

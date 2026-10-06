@@ -38,7 +38,7 @@ const page = (messages: Entry[], mediaBase?: string, onPull?: (extId: string) =>
 
 /** Just the attachment strip, so a panel above cannot satisfy an assertion. */
 const strip = (html: string) => {
-  const m = /<div class="atts">.*?<\/div>(?=<\/div><\/div><\/div>)/s.exec(html);
+  const m = /<div class="[^"]*\batts\b[^"]*">.*?<\/div>(?=<\/div><\/div><\/div>)/s.exec(html);
   if (!m) throw new Error("no attachment strip in the rendered page");
   return m[0];
 };
@@ -253,7 +253,8 @@ describe("opening a file over the page", () => {
     // takes the file or sees it at the size it was sent at.
     const s = strip(page([entry({ attachments: [storedSmall] })], MEDIA_BASE));
     expect(s).toMatch(/class="[^"]*\batt\b[^"]*\bhaspop\b[^"]*"/);
-    expect(s).toContain(`<img class="athumb ablob" src="${MEDIA_BASE}/${BARE}"`);
+    expect(s).toMatch(/<img class="[^"]*\bathumb\b[^"]*\bablob\b/);
+    expect(s).toContain(`src="${MEDIA_BASE}/${BARE}"`);
     // Asked for as the chip nears the viewport rather than with the page: a deep
     // thread can hold a dozen pictures and none of them is what the reader came
     // for. The box it lands in is stated by the stylesheet, so nothing reflows

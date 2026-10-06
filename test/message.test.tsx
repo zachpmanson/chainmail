@@ -181,6 +181,10 @@ describe("a bubble drawn from its props alone", () => {
     expect([...container.querySelector(".msg")!.classList]).toEqual(
       expect.arrayContaining(["msg", "o2", "me", "q", "chstart", "mb-2"]),
     );
+    const bubble = container.querySelector(".bub")!;
+    expect([...bubble.classList]).toEqual(
+      expect.arrayContaining(["relative", "overflow-hidden", "border-line", "bg-card", "border-dashed", "bg-dash", "border-org-3", "bg-mine"]),
+    );
   });
 
   it("trims the edges of the body it is handed", () => {
@@ -188,7 +192,9 @@ describe("a bubble drawn from its props alone", () => {
     // the caller should not have to know that: the bubble is where a body's
     // edges become presentable.
     const { container } = draw({ body: "<p> </p><p>Good morning.</p>" });
-    expect(container.querySelector(".bd")!.innerHTML).toBe("<p>Good morning.</p>");
+    const body = container.querySelector(".bd")!;
+    expect(body.innerHTML).toBe("<p>Good morning.</p>");
+    expect(body.classList.contains("overflow-x-auto")).toBe(true);
   });
 
   it("stays quiet where the caller has no spec furniture to give it", () => {
