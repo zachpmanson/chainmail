@@ -3,3 +3,24 @@
    browser defaults and inherited typography are part of the reading experience. */
 @import "tailwindcss/theme" theme(reference);
 @import "tailwindcss/utilities";
+
+/* Runtime theme colors live in the legacy-compatible CSS variables defined in
+   styles.css. Tailwind utilities resolve against them, so auto/light/dark theme
+   switching remains a single source of truth. */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-card: var(--card);
+  --color-accent: var(--accent);
+  --color-mine: var(--mine);
+  --color-quote: var(--quote);
+  --color-dash: var(--dash);
+  --color-strong: var(--strong);
+  --color-org-1: var(--o1);
+  --color-org-2: var(--o2);
+  --color-org-3: var(--o3);
+  --color-org-4: var(--o4);
+  --color-org-5: var(--o5);
+}

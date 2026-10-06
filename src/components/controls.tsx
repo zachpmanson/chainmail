@@ -11,16 +11,16 @@ const buttonBase =
 
 const buttonVariants = {
   primary:
-    "border-[var(--accent)] bg-[var(--accent)] text-[var(--bg)] hover:brightness-110",
+    "border-accent bg-accent text-bg hover:brightness-110",
   secondary:
-    "border-[var(--line)] bg-[var(--card)] text-[var(--fg)] hover:border-[var(--accent)] hover:text-[var(--accent)]",
+    "border-line bg-card text-fg hover:border-accent hover:text-accent",
   quiet:
-    "border-transparent bg-transparent text-[var(--muted)] hover:border-[var(--line)] hover:bg-[var(--card)] hover:text-[var(--accent)]",
+    "border-transparent bg-transparent text-muted hover:border-line hover:bg-card hover:text-accent",
   danger:
-    "border-red-700 bg-[var(--card)] text-red-700 hover:bg-[var(--card)]",
+    "border-red-700 bg-card text-red-700 hover:bg-card",
   subtle:
-    "border-[var(--line)] bg-[var(--mine)] text-[var(--fg)] hover:border-[var(--accent)] hover:text-[var(--accent)]",
-  menu: "border-0 bg-transparent text-[var(--fg)] hover:bg-[var(--mine)]",
+    "border-line bg-mine text-fg hover:border-accent hover:text-accent",
+  menu: "border-0 bg-transparent text-fg hover:bg-mine",
 } as const;
 
 export type ButtonVariant = keyof typeof buttonVariants;
@@ -80,7 +80,7 @@ export function IconButton({
 }
 
 const fieldBase =
-  "min-h-8 min-w-0 rounded-md border border-[var(--line)] bg-[var(--card)] px-2 py-1 text-sm text-[var(--fg)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60";
+  "min-h-8 min-w-0 rounded-md border border-line bg-card px-2 py-1 text-sm text-fg placeholder:text-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent disabled:cursor-not-allowed disabled:opacity-60";
 
 export function TextInput({
   className = "",
