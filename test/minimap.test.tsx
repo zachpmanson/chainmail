@@ -26,11 +26,11 @@ function graph() {
 describe("minimap export button", () => {
   it("sits in the panel header and names its action", () => {
     const html = renderToStaticMarkup(<Minimap v={view()} />);
-    const btn = html.match(/<button[^>]*class="xsvg"[^>]*>/)?.[0];
+    const btn = html.match(/<button[^>]*class="[^"]*xsvg[^"]*"[^>]*>/)?.[0];
     expect(btn).toBeTruthy();
     expect(btn).toContain('aria-label="Download this reply tree as an SVG file"');
     // it lives inside the tree panel, not anywhere else on the page
-    expect(html.indexOf('id="mini"')).toBeLessThan(html.indexOf('class="xsvg"'));
+    expect(html.indexOf('id="mini"')).toBeLessThan(html.indexOf(btn!));
   });
 });
 
