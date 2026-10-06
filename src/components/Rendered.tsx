@@ -348,7 +348,7 @@ function ProposalsModal({ proposals, open, refreshing, onClose, onAccept }: {
                     page uses, so a proposal can be judged on its entries before
                     it is accepted. Kept out of the toggle label, so ticking it
                     and previewing it never fight over one hit area. */}
-                <Button type="button" className="selpvbtn" aria-haspopup="dialog"
+                <Button type="button" className="mr-2 whitespace-nowrap px-[.6rem] py-[.3rem] text-[.72rem] font-semibold text-muted hover:border-accent hover:text-accent" aria-haspopup="dialog"
                         onClick={() => setPreview(p)}>
                   Preview
                 </Button>
