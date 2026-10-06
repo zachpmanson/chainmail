@@ -1,4 +1,5 @@
 import type {
+  AnchorHTMLAttributes,
   ButtonHTMLAttributes,
   InputHTMLAttributes,
   SelectHTMLAttributes,
@@ -16,24 +17,50 @@ const buttonVariants = {
   quiet:
     "border-transparent bg-transparent text-[var(--muted)] hover:border-[var(--line)] hover:bg-[var(--card)] hover:text-[var(--accent)]",
   danger:
-    "border-red-700 bg-transparent text-red-700 hover:bg-red-700 hover:text-white",
+    "border-red-700 bg-[var(--card)] text-red-700 hover:bg-[var(--card)]",
+  subtle:
+    "border-[var(--line)] bg-[var(--mine)] text-[var(--fg)] hover:border-[var(--accent)] hover:text-[var(--accent)]",
+  menu: "border-0 bg-transparent text-[var(--fg)] hover:bg-[var(--mine)]",
 } as const;
 
 export type ButtonVariant = keyof typeof buttonVariants;
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
+  density?: "normal" | "compact";
 }
 
 /** Shared button foundation; `className` remains available for layout and legacy hooks. */
 export function Button({
   variant = "secondary",
+  density = "normal",
   className = "",
   ...props
 }: ButtonProps) {
+  const sizing = density === "compact" ? "min-h-0 px-3 py-1 text-xs" : "";
   return (
     <button
-      className={`${buttonBase} ${buttonVariants[variant]} ${className}`.trim()}
+      className={`${buttonBase} ${buttonVariants[variant]} ${sizing} ${className}`.trim()}
+      {...props}
+    />
+  );
+}
+
+export interface ControlLinkProps extends AnchorHTMLAttributes<HTMLAnchorElement> {
+  variant?: ButtonVariant;
+  density?: "normal" | "compact";
+}
+
+export function ControlLink({
+  variant = "secondary",
+  density = "normal",
+  className = "",
+  ...props
+}: ControlLinkProps) {
+  const sizing = density === "compact" ? "min-h-0 px-3 py-1 text-xs" : "";
+  return (
+    <a
+      className={`${buttonBase} ${buttonVariants[variant]} ${sizing} ${className}`.trim()}
       {...props}
     />
   );

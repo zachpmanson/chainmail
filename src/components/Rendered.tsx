@@ -136,7 +136,7 @@ export function Rendered({ spec, onBack, onRefresh, onAdd, onAccept, onPull, pul
   return (
     <>
       {onBack ? (
-        <Button type="button" className="selback" onClick={onBack}>
+        <Button type="button" density="compact" className="fixed bottom-[.6rem] left-[.6rem] z-[32] px-[.6rem] py-[.3rem] text-[.76rem] text-[var(--muted)] hover:text-[var(--accent)]" onClick={onBack}>
           ← choose chains
         </Button>
       ) : null}

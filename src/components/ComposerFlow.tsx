@@ -55,25 +55,25 @@ export function ComposerFlow({
       {step === "done" ? (
         <div role="status">
           {done}
-          {onClose ? <Button className="opbtn" type="button" onClick={onClose}>{doneLabel}</Button> : null}
+          {onClose ? <Button variant="subtle" density="compact" className="opbtn" type="button" onClick={onClose}>{doneLabel}</Button> : null}
         </div>
       ) : step === "preview" ? (
         <>
           {preview}
           {error ? <p className="selfail" role="alert">{error}</p> : null}
-          <footer className="opmact replyacts">
-            <Button className="opbtn" type="button" disabled={busy} onClick={onEdit}>{busy ? "Working…" : editLabel}</Button>
-            {showConfirm ? <Button className="opbtn opbtn-after" variant="danger" type="button" disabled={busy || confirmDisabled} onClick={onConfirm}>{busy ? "Sending…" : confirmLabel}</Button> : null}
+          <footer className="opmact replyacts mt-[.55rem] flex items-center justify-end gap-2">
+            <Button variant="subtle" density="compact" className="opbtn" type="button" disabled={busy} onClick={onEdit}>{busy ? "Working…" : editLabel}</Button>
+            {showConfirm ? <Button variant="danger" density="compact" className="opbtn opbtn-after" type="button" disabled={busy || confirmDisabled} onClick={onConfirm}>{busy ? "Sending…" : confirmLabel}</Button> : null}
           </footer>
         </>
       ) : (
         <>
           {error ? <p className="selfail" role="alert">{error}</p> : null}
           {editor}
-          <footer className="opmact replyacts">
+          <footer className="opmact replyacts mt-[.55rem] flex items-center justify-end gap-2">
             {editorActions}
-            {onClose ? <Button className="opbtn" type="button" disabled={busy} onClick={onClose}>Cancel</Button> : null}
-            <Button className="opbtn" type="button" title={reviewTitle} disabled={busy || reviewDisabled} onClick={onReview}>{busy ? "Preparing…" : reviewLabel}</Button>
+            {onClose ? <Button variant="subtle" density="compact" className="opbtn" type="button" disabled={busy} onClick={onClose}>Cancel</Button> : null}
+            <Button variant="subtle" density="compact" className="opbtn" type="button" title={reviewTitle} disabled={busy || reviewDisabled} onClick={onReview}>{busy ? "Preparing…" : reviewLabel}</Button>
           </footer>
         </>
       )}

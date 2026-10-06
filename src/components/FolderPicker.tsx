@@ -25,12 +25,13 @@ function FolderRows({
 
   return (
     <>
-      {folders.isPending ? <p className="ibfnote">Reading folders…</p> : null}
-      {folders.isError ? <p className="ibfnote" role="alert">The folder list could not be read.</p> : null}
+      {folders.isPending ? <p className="mx-[.45rem] my-[.35rem] text-[.72rem] leading-snug text-[var(--muted)]">Reading folders…</p> : null}
+      {folders.isError ? <p className="mx-[.45rem] my-[.35rem] text-[.72rem] leading-snug text-[var(--muted)]" role="alert">The folder list could not be read.</p> : null}
       <Button
         type="button"
         role="menuitem"
-        className={`ibfrow${selectedAccount && !current ? " sel" : ""}`}
+        variant="menu"
+        className={`w-full justify-start gap-2 rounded-md px-[.45rem] py-[.3rem] text-left text-[.78rem] font-normal aria-[current=true]:font-semibold ${accountId ? "pl-4" : ""}`}
         aria-current={selectedAccount && !current ? "true" : undefined}
         onClick={() => pick("")}
       >
@@ -44,16 +45,17 @@ function FolderRows({
             type="button"
             role="menuitem"
             aria-current={selected ? "true" : undefined}
-            className={`ibfrow${selected ? " sel" : ""}`}
+            variant="menu"
+            className={`w-full justify-start gap-2 rounded-md px-[.45rem] py-[.3rem] text-left text-[.78rem] font-normal aria-[current=true]:font-semibold ${accountId ? "pl-4" : ""}`}
             onClick={() => pick(label.name)}
           >
-            <span className="ibfname">{label.name}</span>
-            <span className="ibfcount">{label.messages}</span>
+            <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">{label.name}</span>
+            <span className="text-[.7rem] tabular-nums text-[var(--muted)]">{label.messages}</span>
           </Button>
         );
       })}
       {!folders.isPending && !folders.isError && labels.length === 0 ? (
-        <p className="ibfnote">
+        <p className="mx-[.45rem] my-[.35rem] text-[.72rem] leading-snug text-[var(--muted)]">
           No message carries a label yet — the mailbox's own labels are what this list is,
           so it is empty rather than invented.
         </p>
@@ -113,39 +115,41 @@ export function FolderPicker({
   };
 
   return (
-    <div className="ibfolders" ref={box}>
+    <div className="relative z-30 m-0" ref={box}>
       <Button
         type="button"
-        className="ibfbtn"
+        variant="secondary"
+        className="w-full justify-start gap-[.4rem] px-[.55rem] py-[.35rem] text-left text-xs font-semibold hover:border-[var(--muted)]"
         aria-label={ariaLabel}
         aria-haspopup="menu"
         disabled={disabled}
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
-        <span className="ibfbtn-label">
-          <span className="ibfbtn-folder">{current || "All mail"}</span>
+        <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+          <span className="ibfbtn-folder font-bold">{current || "All mail"}</span>
           {currentAccountId ? (
             <>
               {" "}
-              <span className="ibfbtn-account">({accountName})</span>
+              <span className="ibfbtn-account font-normal text-[var(--muted)]">({accountName})</span>
             </>
           ) : null}
         </span>
-        <ChevronDownIcon className="ibfcaret" aria-hidden="true" />
+        <ChevronDownIcon className="h-3 w-3 shrink-0 text-[var(--muted)]" aria-hidden="true" />
       </Button>
 
       {open ? (
-        <div className="ibpop" role="menu" aria-label="Folders">
+        <div className="absolute left-0 right-0 top-[calc(100%+.25rem)] z-[31] max-h-[22rem] overflow-y-auto rounded-lg border border-[var(--line)] bg-[var(--card)] p-1 shadow-[0_8px_24px_rgba(0,0,0,.22)]" role="menu" aria-label="Folders">
           {!selectingDefault ? (
             <Button
               type="button"
               role="menuitemcheckbox"
               aria-checked={isDefault}
-              className="ibfrow ibfdefault"
+              variant="menu"
+              className="w-full justify-start gap-2 rounded-md px-[.45rem] py-[.3rem] text-left text-[.78rem] font-normal"
               onClick={() => onDefault?.(!isDefault)}
             >
-              <span className="ibfname">
+              <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
                 Open {current || "All mail"}{currentAccountId && accountName ? ` (${accountName})` : ""} by default
               </span>
               <span className="ibfmark" aria-hidden="true">{isDefault ? <CheckIcon /> : null}</span>
@@ -154,22 +158,23 @@ export function FolderPicker({
           <Button
             type="button"
             role="menuitem"
-            className={`ibfrow${!currentAccountId && !current ? " sel" : ""}`}
+            variant="menu"
+            className="w-full justify-start gap-2 rounded-md px-[.45rem] py-[.3rem] text-left text-[.78rem] font-normal aria-[current=true]:font-semibold"
             aria-current={!currentAccountId && !current ? "true" : undefined}
             onClick={() => pick("")}
           >
             All accounts · All mail
           </Button>
-          {auth.isPending ? <p className="ibfnote">Reading connected accounts…</p> : null}
-          {auth.isError ? <p className="ibfnote" role="alert">Connected accounts could not be read.</p> : null}
+          {auth.isPending ? <p className="mx-[.45rem] my-[.35rem] text-[.72rem] leading-snug text-[var(--muted)]">Reading connected accounts…</p> : null}
+          {auth.isError ? <p className="mx-[.45rem] my-[.35rem] text-[.72rem] leading-snug text-[var(--muted)]" role="alert">Connected accounts could not be read.</p> : null}
           {accounts.length === 0 && !auth.isPending && !auth.isError ? (
             <FolderRows current={current} selectingDefault={selectingDefault} onPick={pick} />
           ) : null}
-          {accounts.map((account) => {
+          {accounts.map((account, index) => {
             const name = account.email || account.displayName;
             return (
-              <div className="ibfgroup" role="group" aria-label={name} key={account.id}>
-                <div className="ibfheading">{name}</div>
+              <div className={index ? "mt-[.3rem] border-t border-[var(--line)] pt-[.3rem]" : ""} role="group" aria-label={name} key={account.id}>
+                <div className="overflow-hidden text-ellipsis whitespace-nowrap px-[.45rem] pt-[.25rem] pb-[.15rem] text-[.7rem] font-bold text-[var(--muted)]">{name}</div>
                 <FolderRows
                   accountId={account.id}
                   currentAccountId={currentAccountId}
