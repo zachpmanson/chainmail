@@ -31,6 +31,7 @@ interface Call {
 let calls: Call[];
 type Handler = (call: Call) => Promise<Response> | Response;
 let handler: Handler;
+let authStatus: Record<string, unknown>;
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), {
@@ -233,7 +234,7 @@ const server = (
   if (p === "/v1/stats") return json(200, {});
   if (p === "/v1/settings") return json(200, settings);
   if (p === "/v1/people") return json(200, { people: PEOPLE });
-  if (p === "/auth/status") return json(200, { signed_in: true });
+  if (p === "/auth/status") return json(200, authStatus);
   return json(500, { error: `unexpected call to ${c.method} ${p}` });
 };
 
@@ -243,6 +244,7 @@ const sent = (i: number) => JSON.parse(sends()[i]!.body!) as Record<string, unkn
 
 beforeEach(() => {
   calls = [];
+  authStatus = { signed_in: true };
   // The notifications are one store shared by every writer in the app, so a test
   // starts with none standing — a send's own account is asserted below, and it
   // must be that send's rather than a neighbour's.
@@ -389,6 +391,10 @@ async function write(
 
 describe("answering a message from the pane", () => {
   it("puts recipient autocomplete in the compose screen and omits the Replying to line", async () => {
+    authStatus = {
+      signed_in: true,
+      accounts: [{ id: "legacy", email: "me@example.test", displayName: "Legacy", signedIn: true }],
+    };
     handler = server(() => json(200, chainBody(threaded)));
     await mountApp();
     await openThread();
@@ -412,6 +418,7 @@ describe("answering a message from the pane", () => {
     expect(edit.getAttribute("aria-label")).toContain("cc Cy Okafor");
     expect(screen.queryByLabelText("to addresses")).toBeNull();
     expect(screen.queryByLabelText("cc addresses")).toBeNull();
+    expect(screen.queryByLabelText("From")).toBeNull();
     expect(box()!.querySelectorAll(".addrfield")).toHaveLength(0);
     // The anchor to the message being answered stays on the line while collapsed,
     // and the press that opens the editors is the line itself.
@@ -431,9 +438,16 @@ describe("answering a message from the pane", () => {
     expect(chips("cc")).not.toContain("Carl Nkemdirim <carl@loomworks.example>");
     expect(screen.getByLabelText("to addresses")).toBeTruthy();
     expect(screen.getByLabelText("cc addresses")).toBeTruthy();
+    const from = screen.getByLabelText("From") as HTMLSelectElement;
+    expect(from.value).toBe("legacy");
+    expect(Array.from(from.options).map((option) => option.textContent)).toEqual(["Legacy (me@example.test)"]);
     expect(box()!.querySelector(".replyto")).toBeNull();
     expect(box()!.textContent).not.toContain("Replying to");
     const row = box()!.querySelector(".replyrecipients")!;
+    const recipientRows = row.querySelectorAll(".replyrecipient");
+    expect(recipientRows).toHaveLength(3);
+    expect(recipientRows[0]!.classList.contains("compose-account")).toBe(true);
+    expect(from.closest(".replyrecipients")).toBe(row);
     expect(row.querySelectorAll(".addrfield")).toHaveLength(2);
     expect(row.compareDocumentPosition(field()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const target = within(box()!).getByRole("link", { name: /Jump to the message being replied to: Bo Halvorsen/ });
@@ -445,7 +459,7 @@ describe("answering a message from the pane", () => {
     // On the to line, after the addresses it is the audience for — not on a third
     // row below the cc field, where the reader was looking away from the list they
     // were arranging to find out which message they were arranging it for.
-    const toRow = row.querySelectorAll(".replyrecipient")[0]!;
+    const toRow = recipientRows[1]!;
     // The label is its own class rather than the row's first span: the row holds
     // two spans (the label and the field), and the stylesheet gives the label the
     // field's own line height so the two line up (see .replylabel).
@@ -468,6 +482,26 @@ describe("answering a message from the pane", () => {
     fireEvent.click(screen.getByRole("option", { name: /Dana Whitfield/ }));
     expect(chips("cc")).toContain("Dana Whitfield <dana@loomworks.example>");
     expect(sends()).toHaveLength(0);
+  });
+
+  it("sends from the sole connected account selected by default", async () => {
+    authStatus = {
+      signed_in: true,
+      accounts: [{ id: "legacy", email: "me@example.test", displayName: "Legacy", signedIn: true }],
+    };
+    handler = server(
+      () => json(200, chainBody(threaded)),
+      () => json(200, replyPlan(false)),
+    );
+    await mountApp();
+    await openThread();
+    revealRecipients();
+    expect((screen.getByLabelText("From") as HTMLSelectElement).value).toBe("legacy");
+
+    fireEvent.change(field(), { target: { value: "The 14th works." } });
+    press("preview");
+    await waitFor(() => expect(sends()).toHaveLength(1));
+    expect(sent(0).accountId).toBe("legacy");
   });
 
   it("offers no box at all when nothing in the thread is in the mailbox", async () => {

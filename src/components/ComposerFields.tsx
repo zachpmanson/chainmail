@@ -16,6 +16,7 @@ type Props = {
   editingRecipients?: boolean;
   onEditRecipients?: () => void;
   target?: ReactNode;
+  from?: ReactNode;
   mine?: string[];
 };
 
@@ -54,6 +55,7 @@ export function ComposerFields({
   editingRecipients = false,
   onEditRecipients,
   target,
+  from,
   mine = [],
 }: Props) {
   const hasCc = onCcChange !== undefined;
@@ -61,6 +63,7 @@ export function ComposerFields({
   return (
     <>
       <div className="replyrecipients">
+        {expanded ? from : null}
         <div className="replyrecipient">
           {expanded ? <>
             <span className="replylabel">to:</span>
