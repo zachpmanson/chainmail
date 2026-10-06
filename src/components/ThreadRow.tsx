@@ -66,15 +66,15 @@ export function RankMeta({ thread }: { thread: ChainHit }) {
   const sim = threadSimilarity(thread);
   return (
     <>
-      <span className="ibrank" title="matching entries of the whole thread">
+      <span className="ibrank font-semibold text-fg" title="matching entries of the whole thread">
         {thread.matched} of {thread.entries} matched
       </span>
       {sim > 0 ? (
-        <span className="ibsim" title="best cosine similarity of the thread">
+        <span className="ibsim font-semibold text-strong" title="best cosine similarity of the thread">
           sim {sim.toFixed(2)}
         </span>
       ) : null}
-      <span className="ibspan" title="the thread's first and last message">
+      <span className="ibspan ml-auto tabular-nums" title="the thread's first and last message">
         {spanOf(thread)}
       </span>
     </>
@@ -104,7 +104,7 @@ export const subjectOf = (thread: { subject?: string }) => thread.subject || "(n
  */
 export function PeopleCount({ people }: { people: number }) {
   return (
-    <span className="ibppl" title={`${people} people in this thread — senders and recipients`}>
+    <span className="ibppl inline-flex items-center gap-[.2rem] text-[.68rem] tabular-nums text-muted" title={`${people} people in this thread — senders and recipients`}>
       <UserGroupIcon width={11} height={11} aria-hidden="true" />
       {people}
     </span>
@@ -116,7 +116,7 @@ export function PeopleCount({ people }: { people: number }) {
  *  because there it is the head's own answer rather than a row's flourish. */
 export function MailCount({ entries }: { entries: number }) {
   return (
-    <span className="ibcount" title={`${entries} messages in this thread`}>
+    <span className="ibcount inline-flex items-center gap-[.2rem] text-[.68rem] tabular-nums text-muted" title={`${entries} messages in this thread`}>
       <EnvelopeIcon width={11} height={11} aria-hidden="true" />
       {entries}
     </span>
@@ -131,7 +131,7 @@ export function MailCount({ entries }: { entries: number }) {
 export function AttachmentCount({ attachments }: { attachments: number }) {
   return (
     <span
-      className="ibatt"
+      className="ibatt inline-flex items-center gap-[.2rem] text-[.68rem] tabular-nums text-muted"
       title={`${attachments} attachment${attachments === 1 ? "" : "s"} in this thread`}
     >
       <PaperClipIcon width={11} height={11} aria-hidden="true" />
@@ -233,7 +233,14 @@ export function ThreadRow({
     // the same claim drawn the other way round, and it left the reader hunting
     // for glyphs in a column where nearly every row carried one.
     <li
-      className={`ibrow${current ? " sel" : ""}${thread.unread > 0 ? " unread" : ""}${compact ? " compact" : ""}`}
+      className={[
+        "ibrow group relative [--tick:1.5rem] hover:bg-[color-mix(in_srgb,var(--muted)_22%,var(--card))]",
+        (thread.unread === undefined || thread.unread <= 0) && "bg-[color-mix(in_srgb,var(--muted)_12%,var(--card))]",
+        current && "[box-shadow:inset_2px_0_0_var(--accent)]",
+        compact && "compact",
+        current && "sel",
+        thread.unread > 0 && "unread",
+      ].filter(Boolean).join(" ")}
       // Which thread this row is, as an attribute rather than a ref map: a deep
       // link (`?open=`) is answered by scrolling to the row the pane is reading,
       // and that means finding a row from outside the component that drew it.
@@ -241,9 +248,12 @@ export function ThreadRow({
     >
       {/* aria-current, not a second class: the row the pane is showing is the
           current row, and a screen reader should hear it as one. */}
-      <Button
+      <button
         type="button"
-        className="ibopen"
+        className={[
+          "ibopen grid w-full grid-cols-[minmax(0,1fr)_auto] cursor-pointer appearance-none gap-x-3 gap-y-[.12rem] border-0 bg-transparent p-[.55rem_.35rem_.6rem_.8rem] text-left font-[inherit] text-inherit shadow-none",
+          compact && "grid-cols-[minmax(7rem,1fr)_minmax(0,2fr)_auto] items-center gap-y-0 py-[.42rem] pl-[.8rem] pr-[calc(var(--tick)+.7rem)]",
+        ].filter(Boolean).join(" ")}
         onClick={press}
         // Two clicks on the row mark it the other way: the list is where a reader
         // triages, and reaching the pane's own button means walking through the
@@ -273,27 +283,27 @@ export function ThreadRow({
       >
         {compact ? (
           <>
-            <span className="ibwho" title={last?.person || "unknown sender"}>{last?.person || "unknown sender"}</span>
-            <span className="ibsubrow">
-              <span className="ibsubj" title={`${subject}${last?.snippet ? ` — ${last.snippet}` : ""}`}>{subject}</span>
-              <span className="ibtail">
+            <span className={`ibwho [grid-area:1/1] min-w-0 wrap-anywhere whitespace-nowrap overflow-hidden text-ellipsis text-[.88rem] ${thread.unread > 0 ? "[font-weight:750]" : "font-normal"}`} title={last?.person || "unknown sender"}>{last?.person || "unknown sender"}</span>
+            <span className="ibsubrow [grid-area:1/2] mt-0 min-w-0 gap-[.45rem]">
+              <span className={`ibsubj min-w-0 flex-1 whitespace-nowrap overflow-hidden text-ellipsis text-[.84rem] ${thread.unread > 0 ? "font-semibold" : "font-normal"}`} title={`${subject}${last?.snippet ? ` — ${last.snippet}` : ""}`}>{subject}</span>
+              <span className="ibtail ml-auto flex shrink-0 items-center gap-2 group-hover:invisible">
                 {thread.people > 2 ? <PeopleCount people={thread.people} /> : null}
                 {thread.entries > 1 ? <MailCount entries={thread.entries} /> : null}
                 {thread.attachments > 0 ? <AttachmentCount attachments={thread.attachments} /> : null}
               </span>
             </span>
-            {meta ? <span className="ibmeta">{meta}</span> : null}
-            <span className="ibwhen">{whenShort(last?.ts ?? thread.last)}</span>
+            {meta ? <span className="ibmeta [grid-area:2/2] flex min-w-0 flex-wrap gap-[.6rem] text-[.7rem] text-muted [&_.ibspan]:ml-auto [&_.ibspan]:tabular-nums [&_.ibrank]:font-semibold [&_.ibrank]:text-fg [&_.ibsim]:font-semibold [&_.ibsim]:text-strong">{meta}</span> : null}
+            <span className="ibwhen [grid-area:1/3] mr-0 justify-self-end whitespace-nowrap text-[.72rem] tabular-nums text-muted group-hover:invisible">{whenShort(last?.ts ?? thread.last)}</span>
           </>
         ) : (
           <>
-            <span className="ibwho">{last?.person || "unknown sender"}</span>
-            <span className="ibwhen">{whenShort(last?.ts ?? thread.last)}</span>
-            <span className="ibsubrow">
+            <span className={`ibwho [grid-area:1/1] min-w-0 wrap-anywhere text-[.88rem] ${thread.unread > 0 ? "[font-weight:750]" : "font-normal"}`}>{last?.person || "unknown sender"}</span>
+            <span className="ibwhen [grid-area:1/2] mr-[var(--tick)] justify-self-end whitespace-nowrap text-[.72rem] tabular-nums text-muted">{whenShort(last?.ts ?? thread.last)}</span>
+            <span className="ibsubrow [grid-area:2/1/2/3] mt-[.2rem] gap-[.6rem]">
           {/* The subject is one line in the list, elided rather than wrapped
               (see .ibsubj), so the whole of it is on hover: a truncated subject
               is one the reader can otherwise only guess at. */}
-          <span className="ibsubj" title={subject}>
+          <span className={`ibsubj min-w-0 flex-1 whitespace-nowrap overflow-hidden text-ellipsis text-[.84rem] ${thread.unread > 0 ? "font-semibold" : "font-normal"}`} title={subject}>
             {subject}
           </span>
           {/* The tail of the line: how many people are in the thread, and how many
@@ -312,21 +322,22 @@ export function ThreadRow({
               the thread is a single message. And the paperclip is drawn only when
               the thread carries something: an empty clip says nothing on a page of
               mail where most threads have no files. */}
-          <span className="ibtail">
+          <span className="ibtail ml-auto flex shrink-0 items-center gap-2">
             {thread.people > 2 ? <PeopleCount people={thread.people} /> : null}
             {thread.entries > 1 ? <MailCount entries={thread.entries} /> : null}
             {thread.attachments > 0 ? <AttachmentCount attachments={thread.attachments} /> : null}
           </span>
         </span>
-        <span className="ibsnippet">{last?.snippet ?? ""}</span>
-        {meta ? <span className="ibmeta">{meta}</span> : null}
+        <span className="ibsnippet [grid-area:3/1/3/3] min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[.78rem] font-light text-muted">{last?.snippet ?? ""}</span>
+        {meta ? <span className="ibmeta [grid-area:4/1/4/3] flex flex-wrap gap-[.6rem] text-[.7rem] text-muted [&_.ibspan]:ml-auto [&_.ibspan]:tabular-nums [&_.ibrank]:font-semibold [&_.ibrank]:text-fg [&_.ibsim]:font-semibold [&_.ibsim]:text-strong">{meta}</span> : null}
           </>
         )}
-      </Button>
+      </button>
       {compact ? (
         <Button
           type="button"
-          className="ibrow-archive"
+          density="compact"
+          className="ibrow-archive absolute right-[calc(var(--tick)+.4rem)] top-1/2 z-[1] hidden h-7 w-[1.875rem] -translate-y-1/2 items-center justify-center rounded-md border border-transparent bg-card p-1 text-muted group-hover:inline-flex hover:border-line hover:text-accent"
           aria-label={`Archive ${subject}`}
           title="Archive"
           disabled={archive.isPending}
@@ -339,12 +350,13 @@ export function ThreadRow({
           because that is the line a reader scans down when they are picking
           threads out of a list. It follows the row body rather than leading it,
           so the thread and the selection never share one hit area. */}
-      <label className="ibchk" title="include this thread in a page">
+      <label className="ibchk absolute top-0 right-0 flex w-[var(--tick)] cursor-pointer justify-end pt-[.6rem] pr-[.35rem] pb-[.35rem]" title="include this thread in a page">
         <input
           type="checkbox"
           checked={checked}
           onChange={onToggle}
           aria-label={`Select ${subject}`}
+          className="m-0 cursor-pointer"
         />
       </label>
     </li>

@@ -40,13 +40,13 @@ export const SAID_MS = 5000;
  * place.
  */
 export function ArchiveGlyph() {
-  return <ArchiveBoxIcon width={14} height={14} aria-hidden="true" />;
+  return <ArchiveBoxIcon className="block size-[18px]" aria-hidden="true" />;
 }
 
 /** The bin. Delete is a move to the trash in the mailbox's own words, and this
  *  is the glyph that says so without the word. */
 export function TrashGlyph() {
-  return <TrashIcon width={14} height={14} aria-hidden="true" />;
+  return <TrashIcon className="block size-[18px]" aria-hidden="true" />;
 }
 
 /**
@@ -200,10 +200,10 @@ export function MoveFolder({
   };
 
   return (
-    <span className="ibicon ibmovewrap" title="Move to a folder">
+    <span className="ibicon ibmovewrap relative inline-flex items-center justify-center rounded-md border border-transparent bg-transparent p-[.25rem_.3rem] text-muted hover:border-line hover:bg-card hover:text-accent" title="Move to a folder">
       <FolderIcon width={14} height={14} aria-hidden="true" />
       <select
-        className="ibmove"
+        className="ibmove absolute inset-0 h-full w-full cursor-pointer appearance-none border-0 p-0 opacity-0 focus-visible:outline-none"
         aria-label="Move to a folder"
         value={allAccounts ? "" : defaultFolder ?? ""}
         disabled={busy || auth.isPending || auth.isError || (!allAccounts && (labels.isPending || labels.isError))}

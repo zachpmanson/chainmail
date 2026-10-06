@@ -154,14 +154,14 @@ export function ThreadPane({
   });
 
   return (
-    <aside className="ibread" aria-label={label}>
+    <aside className="ibread flex min-w-0 flex-col min-[60rem]:h-full min-[60rem]:min-h-0" aria-label={label}>
       {thread ? (
         <>
-          <div className="ibread-head">
-            <Button type="button" density="compact" className="px-[.5rem] py-[.2rem] text-[.78rem] min-[60rem]:hidden ibback" onClick={onClose}>
+          <div className="ibread-head flex flex-none items-center gap-2 border-b border-line bg-card px-[.7rem] py-2 min-[60rem]:px-[calc(.7rem+var(--divider))] [&_.ibicon_svg]:block [&_.ibicon_svg]:size-[18px]">
+            <Button type="button" density="compact" className={`min-h-0 px-[.5rem] py-[.2rem] text-[.78rem] ${backLabel === "Close" ? "" : "min-[60rem]:hidden"} ibback`} onClick={onClose}>
               {backLabel}
             </Button>
-            <span className="ibread-subj">{thread.subject || "(no subject)"}</span>
+            <span className="ibread-subj min-w-0 break-words text-[.86rem] font-semibold">{thread.subject || "(no subject)"}</span>
             {/* How much mail is in the thread, how many people, and how many files
                 — worn the way the row that opened it wears them: the same glyphs,
                 the same numbers, the same classes. The head used to say "4
@@ -171,7 +171,7 @@ export function ThreadPane({
                 (see ThreadRow), the head draws the paperclip at zero too: this is
                 the thread the reader has open, and "nothing attached" is an answer
                 about it. */}
-            <span className="ibread-counts">
+            <span className="ibread-counts ml-auto flex items-center gap-2">
               {thread.people !== undefined ? <PeopleCount people={thread.people} /> : null}
               {thread.entries !== undefined ? <MailCount entries={thread.entries} /> : null}
               {thread.attachments !== undefined ? (
@@ -192,7 +192,7 @@ export function ThreadPane({
                 outermost of them on every thread (see .ibread-read). */}
             {openInWindow ? (
               <a
-                className="ibicon"
+                className="ibicon inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent p-[.25rem_.3rem] text-muted no-underline hover:border-line hover:bg-card hover:text-accent"
                 aria-label="Open in new window"
                 title="Open in new window"
                 href={`/?open=${encodeURIComponent(thread.rootExtId)}&popup=1`}
@@ -215,7 +215,7 @@ export function ThreadPane({
             ) : null}
             <Button
               type="button"
-              className="ibicon ibtree"
+              className="ibicon ibtree inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent p-[.25rem_.3rem] text-muted hover:border-line hover:bg-card hover:text-accent aria-pressed:border-line aria-pressed:text-accent"
               aria-pressed={tree}
               aria-label={treeLabel(tree)}
               title={treeLabel(tree)}
@@ -309,7 +309,7 @@ export function ThreadPane({
             {thread.unread !== undefined ? (
               <Button
                 type="button"
-                className={`ibicon ibread-read${thread.unread > 0 ? " unread" : ""}`}
+                className={`ibicon ibread-read text-muted hover:border-line hover:text-accent [&_svg]:block [&_svg]:size-[18px] [&_circle]:fill-none [&_circle]:stroke-current [&_circle]:stroke-[1.6]${thread.unread > 0 ? " unread [&_circle]:fill-current [&_circle]:stroke-0" : ""}`}
                 disabled={read.isPending}
                 aria-label={thread.unread > 0 ? "Mark read" : "Mark unread"}
                 aria-pressed={thread.unread > 0}
@@ -340,12 +340,12 @@ export function ThreadPane({
               corpus read that carries each body already rendered — in the pane's
               own scroll box, so the head above is a line of the pane rather than
               the first thing in the thread (see .ibreadwrap). */}
-          <div className="ibreadwrap">
+          <div className="ibreadwrap min-h-0 min-w-0 flex-1 overflow-auto [&_.stream]:p-4 [&_.stream]:pb-40 [&_.stream_.replies]:mt-[-.5rem] [&_.stream_.replies]:mb-0 [&_.stream_.replies]:ml-[.3rem] [&_.stream_.replies]:border-l-2 [&_.stream_.replies]:border-line [&_.stream_.replies]:pt-2 [&_.stream_.replies]:pl-4 [&_.stream_.pan.people]:mt-0 [&_.stream_.pan.people]:mb-[1.1rem] [&_.selnote]:mt-[.7rem] [&_.selnote]:mx-[.8rem]">
             <ThreadMessages thread={thread} tree={tree} />
           </div>
         </>
       ) : (
-        <p className="selnote">{empty}</p>
+        <p className="selnote mx-[.8rem] mt-[.7rem]">{empty}</p>
       )}
     </aside>
   );
