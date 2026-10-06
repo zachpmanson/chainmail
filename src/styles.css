@@ -1294,7 +1294,7 @@
    reader asks to change it — a summary of an audience, not a control they are
    being asked to arrange. The whole line is the press, so the name under the
    pointer colours the way every other live line in the pane does. */
-.replysummary { grid-column:1 / -1; display:flex; align-items:center; gap:.3rem; flex:1; min-width:0;
+.replysummary { grid-column:1 / 3; display:flex; align-items:center; gap:.3rem; flex:1; min-width:0;
   height:var(--addrrow); padding:0; border:0; background:none; text-align:left;
   font:inherit; font-size:.74rem; color:var(--muted); cursor:pointer; overflow:hidden; }
 .replysummary:disabled { cursor:default; opacity:.55; }
