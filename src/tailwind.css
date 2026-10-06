@@ -1,0 +1,5 @@
+/* Tailwind utilities are used by the React app. Preflight is intentionally not
+   enabled: the transcript stylesheet also renders untrusted sender HTML, whose
+   browser defaults and inherited typography are part of the reading experience. */
+@import "tailwindcss/theme" theme(reference);
+@import "tailwindcss/utilities";

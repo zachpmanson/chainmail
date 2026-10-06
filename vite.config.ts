@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 
@@ -9,7 +10,7 @@ import { fileURLToPath } from "node:url";
 // The production build (vite build) emits into cmd/server/dist/, which the Go
 // server embeds with `//go:embed all:dist` — one binary, both API and UI.
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   publicDir: "fixtures",
   build: {
     // Where the Go package expects the embedded client. The embed directive is

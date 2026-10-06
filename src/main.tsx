@@ -6,6 +6,7 @@ import { router } from "./router";
 import { makeQueryClient } from "./lib/queryClient";
 import "./styles.css";
 import "./select.css";
+import "./tailwind.css";
 
 const root = document.getElementById("root");
 // The router resolves the current URL and builds its initial match tree
