@@ -31,7 +31,9 @@ describe("a bubble drawn from its props alone", () => {
   it("takes the sender, the colour slot and the clock from the caller", () => {
     const { container } = draw();
     const msg = container.querySelector(".msg")!;
-    expect(msg.className).toBe("msg o2");
+    expect(msg.classList.contains("msg")).toBe(true);
+    expect(msg.classList.contains("o2")).toBe(true);
+    expect(msg.classList.contains("mb-2")).toBe(true);
     expect(msg.id).toBe("m1");
     expect(msg.querySelector(".nm")!.textContent).toBe("Ada Okoye");
     expect(msg.querySelector(".org")!.textContent).toBe("Loomworks");
@@ -176,7 +178,9 @@ describe("a bubble drawn from its props alone", () => {
 
   it("carries the flags it is given as the classes the stylesheet reads", () => {
     const { container } = draw({ me: true, quoted: true, chainStart: true });
-    expect(container.querySelector(".msg")!.className).toBe("msg o2 me q chstart");
+    expect([...container.querySelector(".msg")!.classList]).toEqual(
+      expect.arrayContaining(["msg", "o2", "me", "q", "chstart", "mb-2"]),
+    );
   });
 
   it("trims the edges of the body it is handed", () => {

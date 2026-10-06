@@ -413,8 +413,11 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
         return href ? (
           <a
             key={i}
-            className={["att", opens && "haspop", fetching && fetchable && "busy"]
-              .filter(Boolean).join(" ")}
+            className={[
+              "att inline-flex items-baseline gap-[.35rem] rounded-md border border-[var(--line)] bg-[var(--quote)] px-[.45rem] py-[.1rem] text-[var(--fg)] no-underline hover:border-[var(--accent)]",
+              opens && "haspop items-center",
+              fetching && fetchable && "busy border-[var(--accent)] cursor-progress",
+            ].filter(Boolean).join(" ")}
             href={href}
             {...(tip ? { title: tip } : {})}
             {...(beside ? { target: "_blank", rel: "noopener" } : {})}
@@ -467,7 +470,7 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
           // is the only thing here that says what the file actually is. It gets
           // no popover, though: the only way to offer one would be a control
           // that does nothing at all without scripting.
-          <span key={i} className="att nolink" {...(note ? { title: note } : {})}>
+          <span key={i} className="att inline-flex items-baseline gap-[.35rem] rounded-md border border-[var(--line)] bg-[var(--quote)] px-[.45rem] py-[.1rem] text-[var(--fg)] no-underline hover:border-[var(--accent)] nolink opacity-60" {...(note ? { title: note } : {})}>
             {label}
           </span>
         );
@@ -751,7 +754,7 @@ export function Message(p: MessageProps) {
   // The org slot rides on the bubble so a bubble can carry its sender's colour,
   // and `me`/`quoted`/`isnew` are the same colour-and-state modifiers the
   // stylesheet already reads off this element.
-  const cls = ["msg", p.orgSlot, p.me && "me", p.quoted && "q",
+  const cls = ["msg", p.orgSlot, "mb-2", p.me && "me", p.quoted && "q",
     p.chainStart && "chstart", p.mark === "new" && "isnew", p.landed && "landed"]
     .filter(Boolean)
     .join(" ");
@@ -852,7 +855,12 @@ export function Message(p: MessageProps) {
             ) : null}
           </div>
         </details>
-        <div className="bub">
+        <div className={[
+          "bub relative overflow-hidden rounded-[10px] border border-[var(--line)] bg-[var(--card)] px-[.7rem] py-[.45rem]",
+          p.quoted && "border-dashed border-[color-mix(in_srgb,var(--muted)_55%,transparent)] bg-[var(--dash)]",
+          p.me && "border-[var(--o3)] bg-[var(--mine)]",
+          p.mark === "new" && "border-l-[3px] border-l-[var(--o1)]",
+        ].filter(Boolean).join(" ")}>
           {p.mentions?.length ? (
             <div className="ment">
               {p.mentions.map((m) => (

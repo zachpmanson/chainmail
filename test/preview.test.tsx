@@ -50,7 +50,7 @@ const strip = (html: string) => {
 describe("which attachments get a preview", () => {
   it("shows a thumbnail on an image that deserves one", () => {
     const s = strip(page([entry({ attachments: [shot] })]));
-    expect(s).toContain('class="att haspop"');
+    expect(s).toMatch(/class="att [^"]*haspop/);
     expect(s).toContain('class="athumb"');
     expect(s).toContain('width="640"');
     expect(s).toContain('height="427"');
