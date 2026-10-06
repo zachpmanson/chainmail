@@ -1277,7 +1277,7 @@
    grows past this height and the label does not follow — it is the first line the
    label belongs to, which is the line the reader reads it against. */
 .replylabel { display:inline-flex; align-items:center; height:var(--addrrow); }
-.compose-account { --addrrow:1.7rem; }
+.compose-account { --addrrow:1.7rem; margin-bottom:.55rem; }
 .replyfrom { flex:1 1 auto; min-width:0; height:var(--addrrow); padding:0 .3rem;
   font:inherit; font-size:.72rem; color:var(--fg); background:var(--bg);
   border:1px solid var(--line); border-radius:6px; }
