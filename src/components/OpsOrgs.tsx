@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { $api, type OrgRule } from "../lib/api";
+import { Button, TextInput } from "./controls";
 
 function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -75,7 +76,7 @@ function RuleRow({ d, busy, onPick }: { d: OrgRule; busy: boolean; onPick: (draf
         ) : null}
       </p>
       <p className="opmside">
-        <input
+        <TextInput
           className="oporginput"
           value={value}
           disabled={busy}
@@ -83,8 +84,9 @@ function RuleRow({ d, busy, onPick }: { d: OrgRule; busy: boolean; onPick: (draf
           aria-label={`Organisation for ${d.domain}`}
           onChange={(e) => setDraft(e.target.value)}
         />
-        <button
+        <Button
           type="button"
+          variant="secondary"
           className="opbtn"
           disabled={busy || !edited}
           onClick={() => {
@@ -93,10 +95,11 @@ function RuleRow({ d, busy, onPick }: { d: OrgRule; busy: boolean; onPick: (draf
           }}
         >
           {value.trim() === "" ? "save — nobody's" : "save"}
-        </button>
+        </Button>
         {d.stored ? (
-          <button
+          <Button
             type="button"
+            variant="secondary"
             className="opbtn"
             disabled={busy}
             onClick={() => {
@@ -105,7 +108,7 @@ function RuleRow({ d, busy, onPick }: { d: OrgRule; busy: boolean; onPick: (draf
             }}
           >
             clear
-          </button>
+          </Button>
         ) : null}
       </p>
     </article>
@@ -209,12 +212,12 @@ export function OpsOrgs() {
             draft={draft}
           />
           <div className="opmact">
-            <button type="button" className="opbtn opbtn-after" disabled={busy || preview.isPending} onClick={apply}>
+            <Button type="button" variant="danger" className="opbtn opbtn-after" disabled={busy || preview.isPending} onClick={apply}>
               {draft.org === null ? "drop the rule" : "save this grouping"}
-            </button>
-            <button type="button" className="opbtn" disabled={busy} onClick={() => setDraft(null)}>
+            </Button>
+            <Button type="button" variant="secondary" className="opbtn" disabled={busy} onClick={() => setDraft(null)}>
               cancel
-            </button>
+            </Button>
           </div>
         </div>
       ) : null}
@@ -244,7 +247,7 @@ export function OpsOrgs() {
           void pick({ domain, org: newOrg.trim() });
         }}
       >
-        <input
+        <TextInput
           className="oporginput"
           value={newDomain}
           disabled={busy}
@@ -252,7 +255,7 @@ export function OpsOrgs() {
           aria-label="Domain to rule on"
           onChange={(e) => setNewDomain(e.target.value)}
         />
-        <input
+        <TextInput
           className="oporginput"
           value={newOrg}
           disabled={busy}
@@ -260,9 +263,9 @@ export function OpsOrgs() {
           aria-label="Organisation for that domain"
           onChange={(e) => setNewOrg(e.target.value)}
         />
-        <button type="submit" className="opbtn" disabled={busy || newDomain.trim() === ""}>
+        <Button type="submit" variant="secondary" className="opbtn" disabled={busy || newDomain.trim() === ""}>
           rule on this domain
-        </button>
+        </Button>
       </form>
     </>
   );

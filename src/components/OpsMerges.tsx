@@ -2,6 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { $api, type OpsMerge, type OpsMergeRecord } from "../lib/api";
 import { when } from "../lib/stamp";
+import { Button } from "./controls";
 
 function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -195,8 +196,9 @@ export function OpsMerges() {
             />
             select all {applicable.length} applicable
           </label>
-          <button
+          <Button
             type="button"
+            variant="primary"
             className="opbtn opbtn-batch"
             disabled={selected.size === 0 || busy}
             onClick={() => {
@@ -207,7 +209,7 @@ export function OpsMerges() {
             {busy
               ? `merging ${progress ?? ""}`
               : `merge ${selected.size} selected`}
-          </button>
+          </Button>
         </div>
       ) : null}
       {confirming && chosen.length > 0 ? (
@@ -226,8 +228,9 @@ export function OpsMerges() {
             ))}
           </ul>
           <div className="opmact">
-            <button
+            <Button
               type="button"
+              variant="danger"
               className="opbtn opbtn-after"
               disabled={busy}
               onClick={mergeChosen}
@@ -237,15 +240,16 @@ export function OpsMerges() {
                 : chosen.length === 1
                   ? "merge this pair"
                   : `merge these ${chosen.length} pairs`}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="secondary"
               className="opbtn"
               disabled={busy}
               onClick={() => setConfirming(false)}
             >
               cancel
-            </button>
+            </Button>
           </div>
         </div>
       ) : null}

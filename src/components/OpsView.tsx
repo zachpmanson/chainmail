@@ -3,6 +3,7 @@ import { OpsMerges } from "./OpsMerges";
 import { OpsOrgs } from "./OpsOrgs";
 import { OpsPeople } from "./OpsPeople";
 import { OPS_TABS, tabOf, type OpsTab } from "../lib/opsTabs";
+import { Button } from "./controls";
 
 /** The tab as the address writes it, labelled for the screen. */
 const LABELS: Record<OpsTab, string> = {
@@ -32,8 +33,9 @@ export function OpsView() {
     <div className="wrap opswrap">
       <div className="optabs" role="tablist" aria-label="What this page manages">
         {OPS_TABS.map((t) => (
-          <button
+          <Button
             key={t}
+            variant="quiet"
             type="button"
             role="tab"
             id={`opstab-${t}`}
@@ -44,7 +46,7 @@ export function OpsView() {
             onClick={() => void navigate({ to: "/ops", search: { tab: t } })}
           >
             {LABELS[t]}
-          </button>
+          </Button>
         ))}
       </div>
       <section
