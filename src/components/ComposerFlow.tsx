@@ -1,4 +1,5 @@
 import type { ReactNode, Ref } from "react";
+import { Button } from "./controls";
 
 type Props = {
   variant: "compose" | "reply";
@@ -54,15 +55,15 @@ export function ComposerFlow({
       {step === "done" ? (
         <div role="status">
           {done}
-          {onClose ? <button className="opbtn" type="button" onClick={onClose}>{doneLabel}</button> : null}
+          {onClose ? <Button className="opbtn" type="button" onClick={onClose}>{doneLabel}</Button> : null}
         </div>
       ) : step === "preview" ? (
         <>
           {preview}
           {error ? <p className="selfail" role="alert">{error}</p> : null}
           <footer className="opmact replyacts">
-            <button className="opbtn" type="button" disabled={busy} onClick={onEdit}>{busy ? "Working…" : editLabel}</button>
-            {showConfirm ? <button className="opbtn opbtn-after" type="button" disabled={busy || confirmDisabled} onClick={onConfirm}>{busy ? "Sending…" : confirmLabel}</button> : null}
+            <Button className="opbtn" type="button" disabled={busy} onClick={onEdit}>{busy ? "Working…" : editLabel}</Button>
+            {showConfirm ? <Button className="opbtn opbtn-after" variant="danger" type="button" disabled={busy || confirmDisabled} onClick={onConfirm}>{busy ? "Sending…" : confirmLabel}</Button> : null}
           </footer>
         </>
       ) : (
@@ -71,8 +72,8 @@ export function ComposerFlow({
           {editor}
           <footer className="opmact replyacts">
             {editorActions}
-            {onClose ? <button className="opbtn" type="button" disabled={busy} onClick={onClose}>Cancel</button> : null}
-            <button className="opbtn" type="button" title={reviewTitle} disabled={busy || reviewDisabled} onClick={onReview}>{busy ? "Preparing…" : reviewLabel}</button>
+            {onClose ? <Button className="opbtn" type="button" disabled={busy} onClick={onClose}>Cancel</Button> : null}
+            <Button className="opbtn" type="button" title={reviewTitle} disabled={busy || reviewDisabled} onClick={onReview}>{busy ? "Preparing…" : reviewLabel}</Button>
           </footer>
         </>
       )}

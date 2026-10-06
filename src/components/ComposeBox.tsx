@@ -5,6 +5,7 @@ import { usePersonAddresses } from "../lib/who";
 import { addressWords, type Address } from "./AddressField";
 import { ComposerFields } from "./ComposerFields";
 import { ComposerFlow } from "./ComposerFlow";
+import { SelectInput } from "./controls";
 
 type ComposeResult = {
   accountId: string;
@@ -86,10 +87,10 @@ export function ComposeBox({ onClose }: Props) {
         from={(
           <div className="replyrecipient compose-account">
             <span className="replylabel">from:</span>
-            <select className="replyfrom" aria-label="From" value={accountId} disabled={busy} onChange={(event) => { setAccountId(event.target.value); setPreview(null); }}>
+            <SelectInput className="replyfrom" aria-label="From" value={accountId} disabled={busy} onChange={(event) => { setAccountId(event.target.value); setPreview(null); }}>
               <option value="">Choose account</option>
               {(accounts.data?.accounts ?? []).filter((account) => account.signedIn).map((account) => <option key={account.id} value={account.id}>{account.displayName}{account.email ? ` (${account.email})` : ""}</option>)}
-            </select>
+            </SelectInput>
           </div>
         )}
         to={recipients}

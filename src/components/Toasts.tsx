@@ -1,4 +1,5 @@
 import { dismissToast, useToasts } from "../lib/toasts";
+import { IconButton } from "./controls";
 
 /**
  * Where a write says what it did: the bottom right of the window, over
@@ -28,7 +29,7 @@ export function ToastHost() {
               is not "do the thing again". The note has its clock, and this is
               the same affordance either way rather than one shape with a
               deadline and another without. */}
-          <button
+          <IconButton
             type="button"
             className="toastx"
             onClick={() => dismissToast(t.id)}
@@ -36,7 +37,7 @@ export function ToastHost() {
             title="Dismiss"
           >
             ×
-          </button>
+          </IconButton>
         </div>
       ))}
     </div>

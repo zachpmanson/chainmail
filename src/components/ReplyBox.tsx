@@ -9,6 +9,7 @@ import { addressKey, type Address } from "./AddressField";
 import { ComposerFields } from "./ComposerFields";
 import { ComposerFlow } from "./ComposerFlow";
 import { refusal, staleAfterMail, SAID_MS } from "./MailVerbs";
+import { IconButton, SelectInput } from "./controls";
 
 /**
  * The reply box: the one thing this pane can say back.
@@ -161,7 +162,7 @@ export function AnswerPress({
     ? "This is the message the box below is answering"
     : "Reply all to this message, in the box at the bottom of the thread";
   return (
-    <button
+    <IconButton
       type="button"
       className="replyall"
       aria-pressed={pressed}
@@ -170,7 +171,7 @@ export function AnswerPress({
       onClick={() => onPress(extId)}
     >
       <ArrowUturnLeftIcon width={18} height={18} aria-hidden="true" />
-    </button>
+    </IconButton>
   );
 }
 
@@ -456,10 +457,10 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
       from={(
         <div className="replyrecipient compose-account">
           <span className="replylabel">from:</span>
-          <select className="replyfrom" aria-label="From" value={displayedAccountId} disabled={busy} onChange={(event) => { setAccountId(event.target.value); setPlan(null); }}>
+          <SelectInput className="replyfrom" aria-label="From" value={displayedAccountId} disabled={busy} onChange={(event) => { setAccountId(event.target.value); setPlan(null); }}>
             {!displayedAccountId ? <option value="">Choose account</option> : null}
             {connectedAccounts.map((account) => <option key={account.id} value={account.id}>{account.displayName}{account.email ? ` (${account.email})` : ""}</option>)}
-          </select>
+          </SelectInput>
         </div>
       )}
       to={to}

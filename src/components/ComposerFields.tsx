@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Button, TextArea, TextInput } from "./controls";
 import { AddressField, addressKey, addressWords, type Address } from "./AddressField";
 
 type Props = {
@@ -69,14 +70,14 @@ export function ComposerFields({
             <span className="replylabel">to:</span>
             <AddressField label="to" value={to} onChange={onToChange} suggestions={suggestions} taken={cc} mine={mine} disabled={busy} />
           </> : (
-            <button type="button" className="replysummary" aria-expanded={false} aria-label={`Edit recipients — currently ${recipientWords(to, cc)}`} title="Edit recipients" disabled={busy} onClick={onEditRecipients}>
+            <Button variant="quiet" type="button" className="replysummary" aria-expanded={false} aria-label={`Edit recipients — currently ${recipientWords(to, cc)}`} title="Edit recipients" disabled={busy} onClick={onEditRecipients}>
               <span className="replylabel">to:</span>
               <span className="replynames">
                 {to.length ? names(to) : null}
                 {cc.length ? <><span className="replykind">{to.length ? ", cc " : "cc "}</span>{names(cc)}</> : null}
                 {!to.length && !cc.length ? <span className="replynone">add an address</span> : null}
               </span>
-            </button>
+            </Button>
           )}
           {target}
         </div>
@@ -85,8 +86,8 @@ export function ComposerFields({
           <AddressField label="cc" value={cc} onChange={onCcChange} suggestions={suggestions} taken={to} mine={mine} disabled={busy} />
         </div> : null}
       </div>
-      {onSubjectChange ? <label className="replyfield">Subject <input className="replyinput" required value={subject ?? ""} disabled={busy} onChange={(e) => onSubjectChange(e.target.value)} /></label> : null}
-      <textarea className="replyinput" aria-label={mode === "reply" ? "Your reply" : "Message"} required={mode === "compose"} rows={4} value={body} disabled={busy} onChange={(e) => onBodyChange(e.target.value)} />
+      {onSubjectChange ? <label className="replyfield">Subject <TextInput className="replyinput" required value={subject ?? ""} disabled={busy} onChange={(e) => onSubjectChange(e.target.value)} /></label> : null}
+      <TextArea className="replyinput" aria-label={mode === "reply" ? "Your reply" : "Message"} required={mode === "compose"} rows={4} value={body} disabled={busy} onChange={(e) => onBodyChange(e.target.value)} />
     </>
   );
 }
