@@ -237,7 +237,7 @@ export function AddressField({
   }
 
   return (
-    <span className={`addrfield relative inline-flex min-h-[var(--addrrow)] max-w-full flex-wrap items-center gap-[.2rem] align-middle rounded-md border border-line bg-bg px-[.3rem] py-[.1rem] mx-[.15rem] focus-within:border-accent${showing ? " open" : ""}`} data-list={label}>
+    <span className={`addrfield relative inline-flex w-full min-w-0 min-h-[var(--addrrow)] max-w-full flex-wrap items-center gap-[.2rem] align-middle rounded-md border border-line bg-bg px-[.3rem] py-[.1rem] mx-[.15rem] focus-within:border-accent${showing ? " open" : ""}`} data-list={label}>
       {value.map((who) => (
         <Chip
           key={addressKey(who.address)}
@@ -252,7 +252,7 @@ export function AddressField({
           reader is on — which for a sighted reader is the highlight. */}
       <input
         ref={input}
-        className="addrinput min-w-28 flex-[1_1_7rem] border-0 bg-transparent px-0 py-[.1rem] text-[.72rem] text-fg outline-none placeholder:text-muted"
+        className="addrinput min-w-12 flex-[1_1_7rem] border-0 bg-transparent px-0 py-[.1rem] text-[.72rem] text-fg outline-none placeholder:text-muted"
         type="text"
         role="combobox"
         aria-label={`${label} addresses`}

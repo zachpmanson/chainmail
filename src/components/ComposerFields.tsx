@@ -63,9 +63,9 @@ export function ComposerFields({
   const expanded = editingRecipients;
   return (
     <>
-      <div className="replyrecipients">
+      <div className="replyrecipients [--addrrow:1.7rem] grid grid-cols-[max-content_minmax(0,1fr)_max-content] items-start gap-x-[.3rem] gap-y-[.4rem] mb-[.55rem] text-[.74rem] text-muted">
         {expanded ? from : null}
-        <div className="replyrecipient">
+        <div className="replyrecipient contents min-w-0">
           {expanded ? <>
             <span className="replylabel inline-flex h-[var(--addrrow)] items-center">to:</span>
             <AddressField label="to" value={to} onChange={onToChange} suggestions={suggestions} taken={cc} mine={mine} disabled={busy} />
@@ -81,7 +81,7 @@ export function ComposerFields({
           )}
           {target}
         </div>
-        {expanded && hasCc ? <div className="replyrecipient">
+        {expanded && hasCc ? <div className="replyrecipient contents min-w-0">
           <span className="replylabel inline-flex h-[var(--addrrow)] items-center">cc:</span>
           <AddressField label="cc" value={cc} onChange={onCcChange} suggestions={suggestions} taken={to} mine={mine} disabled={busy} />
         </div> : null}

@@ -1053,32 +1053,8 @@
    width it is given rather than a measure of its own — the bubbles above it are
    the thing being read, and a field that narrowed them would be the wrong end of
    the pane growing. */
-/* To and Cc each get a full line, rather than squeezing two address lists
-   side by side.
-
-   `--addrrow` is the height of one line of an address field, and it is the row's
-   own measure rather than any one item's: the field is given it as a min-height
-   and the label and the link are given it as a height, so the three agree by
-   construction instead of by three numbers that happen to match. Measured from
-   the field's own box — .1rem padding and a 1px border each side, around an
-   input at .72rem with the body's 1.45 line-height, or around one chip, which is
-   a shade taller (1.569rem and 1.594rem at a 16px root) — so it clears both by
-   less than a tenth of a rem. Everything here is in rem, so the relationship
-   holds whatever the reader's root size is. */
-.replyrecipients { --addrrow:1.7rem; display:grid; grid-template-columns:max-content minmax(0,1fr) max-content;
-  align-items:start; column-gap:.3rem; row-gap:.4rem; margin:0 0 .55rem;
-  font-size:.74rem; color:var(--muted); }
-.replyrecipient { display:contents; }
-/* `display:contents` lets every row share these tracks: labels line up, and the
-   target link reserves the same trailing column for From, To, and Cc controls. */
-.replyrecipient { min-width:0; }
-.replyrecipient > .addrfield { display:flex; width:100%; min-width:0; min-height:var(--addrrow); }
-.replyrecipient .addrinput { min-width:3rem; }
-/* The link to the message being answered sits in the reserved third column of
-   the To row, rather than shrinking that field or occupying a line below Cc. It
-   is one line of the field tall (see .replylabel). */
-.replytarget { display:inline-flex; align-items:center; gap:.25rem; margin-left:auto;
-  height:var(--addrrow); white-space:nowrap; text-decoration:none; }
+/* Recipient rows are display:contents so labels line up, fields take the middle
+   track, and the message target reserves the trailing track. */
 .replytarget .arw { font-size:.8rem; line-height:1; }
 /* The collapsed recipient line: who the reply reaches, read-only, and the one
    press that opens the editors. It is styled as the message header's own
@@ -1100,7 +1076,6 @@
    pre-wrapped so that the quote is read as the lines that will be sent — the
    quote marks the server added are the thing being checked, and a proportional
    rendering of them is a drawing of the message rather than the message. */
-.replyplan { font-size:.76rem; line-height:1.5; }
 .replynote { margin:0 0 .45rem; }
 .replytext { margin:.4rem 0 0; padding:.5rem .6rem; max-height:22rem;
   overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font-size:.76rem;

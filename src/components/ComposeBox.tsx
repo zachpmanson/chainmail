@@ -85,7 +85,7 @@ export function ComposeBox({ onClose }: Props) {
       <ComposerFields
         mode="compose"
         from={(
-          <div className="replyrecipient compose-account">
+          <div className="replyrecipient contents min-w-0 compose-account">
             <span className="replylabel inline-flex h-[var(--addrrow)] items-center">from:</span>
             <SelectInput className="replyfrom h-[var(--addrrow)] min-w-0 flex-1 rounded-md border border-line bg-bg px-[.3rem] text-[.72rem] text-fg focus:border-accent disabled:cursor-default disabled:opacity-[.55]" aria-label="From" value={accountId} disabled={busy} onChange={(event) => { setAccountId(event.target.value); setPreview(null); }}>
               <option value="">Choose account</option>

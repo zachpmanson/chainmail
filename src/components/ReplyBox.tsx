@@ -455,7 +455,7 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
     <ComposerFields
       mode="reply"
       from={(
-        <div className="replyrecipient compose-account">
+        <div className="replyrecipient contents min-w-0 compose-account">
           <span className="replylabel inline-flex h-[var(--addrrow)] items-center">from:</span>
           <SelectInput className="replyfrom h-[var(--addrrow)] min-w-0 flex-1 rounded-md border border-line bg-bg px-[.3rem] text-[.72rem] text-fg focus:border-accent disabled:cursor-default disabled:opacity-[.55]" aria-label="From" value={displayedAccountId} disabled={busy} onChange={(event) => { setAccountId(event.target.value); setPlan(null); }}>
             {!displayedAccountId ? <option value="">Choose account</option> : null}
@@ -471,7 +471,7 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
       mine={mine}
       editingRecipients={editing}
       onEditRecipients={() => setEditing(true)}
-      target={<a className="par replytarget" href={`#${answerAnchor}`} aria-label={`Jump to the message being replied to: ${words.who || "the sender"}, ${words.when}`} title={`Jump to the message being replied to: ${words.whoTitle ?? words.who}, ${words.when}`}>
+      target={<a className="par replytarget inline-flex h-[var(--addrrow)] items-center gap-[.25rem] ml-auto whitespace-nowrap no-underline" href={`#${answerAnchor}`} aria-label={`Jump to the message being replied to: ${words.who || "the sender"}, ${words.when}`} title={`Jump to the message being replied to: ${words.whoTitle ?? words.who}, ${words.when}`}>
         <span className="arw" aria-hidden="true">&#8617;</span><span>{words.who || "message"}</span>
       </a>}
       body={own}
@@ -488,7 +488,7 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
       <input type="checkbox" checked={html} disabled={busy} onChange={(e) => setHtml(e.target.checked)} /> send html
     </label>
   </div>;
-  const previewContent = plan ? <div className="replyplan">
+  const previewContent = plan ? <div className="replyplan text-[.76rem] leading-[1.5]">
     <p className="replynote"><strong>Nothing has been sent yet.</strong> This is the whole message as it will go from <strong>{accounts.data?.accounts?.find((account) => account.id === plan.accountId)?.displayName ?? plan.accountId}</strong>: to <strong>{plan.to || "(no recipient)"}</strong>{plan.cc ? <>, cc <strong>{plan.cc}</strong></> : null}, as <strong>{plan.subject}</strong>, in <strong>{plan.html ? "text and HTML" : "plain text alone"}</strong>. Your words come first and the message you are answering is quoted under them.</p>
     {plan.html ? <div className="replyhtml" dangerouslySetInnerHTML={{ __html: plan.html }} /> : <pre className="replytext">{plan.body}</pre>}
   </div> : null;
