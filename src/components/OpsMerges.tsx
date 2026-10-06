@@ -35,7 +35,7 @@ function MergeCard({
   const drop = `#${m.dropId} ${m.dropName}` + (m.dropIdentities?.length ? ` · ${m.dropIdentities.join(", ")}` : "");
   return (
     <article className="opmerge">
-      <p className="opmrule">
+      <p className="opmrule mt-0 mb-[.4rem] text-[.68rem] font-bold uppercase tracking-[.05em] text-[var(--muted)]">
         {m.applicable ? (
           <input
             type="checkbox"
@@ -47,15 +47,15 @@ function MergeCard({
           />
         ) : null}
         {ruleLabel(m.rule)}
-        {m.applicable ? <span className="opbad op-apply">apply</span> : <span className="opbad op-ro">read-only</span>}
+        {m.applicable ? <span className="opbad op-apply ml-2 whitespace-nowrap rounded-full border border-current px-[.4rem] py-[.06rem] text-[.62rem] font-bold text-green-800">apply</span> : <span className="opbad op-ro whitespace-nowrap rounded-full border border-current px-[.4rem] py-[.06rem] text-[.62rem] font-bold text-[var(--muted)]">read-only</span>}
       </p>
-      <p className="opmside">
+      <p className="my-[.15rem] text-[.84rem] leading-[1.35] [&_code]:text-[.74rem] [&_code]:[overflow-wrap:anywhere]">
         keep&nbsp;<code>{keep}</code>
       </p>
-      <p className="opmside">
+      <p className="my-[.15rem] text-[.84rem] leading-[1.35] [&_code]:text-[.74rem] [&_code]:[overflow-wrap:anywhere]">
         drop&nbsp;<code>{drop}</code>
       </p>
-      {m.evidence ? <p className="opmevidence">{m.evidence}.</p> : null}
+      {m.evidence ? <p className="my-[.3rem] mb-2 text-[.74rem] text-[var(--muted)]">{m.evidence}.</p> : null}
     </article>
   );
 }
@@ -173,9 +173,9 @@ export function OpsMerges() {
           {error}
         </p>
       ) : null}
-      {last ? <p className="opnote">{last} — the plan below is the current one.</p> : null}
+      {last ? <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">{last} — the plan below is the current one.</p> : null}
 
-      <h2 className="ophead">Merge plan</h2>
+      <h2 className="mt-[1.1rem] mb-[.1rem] text-[.7rem] uppercase tracking-[.1em] text-[var(--muted)]">Merge plan</h2>
       {applicable.length > 0 ? (
         <div className="opactions">
           <label className="opselectall">
@@ -199,7 +199,7 @@ export function OpsMerges() {
           <Button
             type="button"
             variant="primary"
-            className="opbtn opbtn-batch"
+            density="compact" className="opbtn opbtn-batch"
             disabled={selected.size === 0 || busy}
             onClick={() => {
               setError(null);
@@ -227,11 +227,11 @@ export function OpsMerges() {
               </li>
             ))}
           </ul>
-          <div className="opmact">
+          <div className="opmact mt-[.55rem] flex items-center gap-2">
             <Button
               type="button"
               variant="danger"
-              className="opbtn opbtn-after"
+              density="compact" className="opbtn opbtn-after"
               disabled={busy}
               onClick={mergeChosen}
             >
@@ -244,7 +244,7 @@ export function OpsMerges() {
             <Button
               type="button"
               variant="secondary"
-              className="opbtn"
+              density="compact" className="opbtn"
               disabled={busy}
               onClick={() => setConfirming(false)}
             >
@@ -254,16 +254,16 @@ export function OpsMerges() {
         </div>
       ) : null}
       {!data ? (
-        <p className="opnote">{plan.isPending ? "Reading the plan…" : "No plan."}</p>
+        <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">{plan.isPending ? "Reading the plan…" : "No plan."}</p>
       ) : merges.length === 0 ? (
-        <p className="opnote">
+        <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">
           Nothing to merge — every name-only person the pass found has been
           folded, and no other tier is applicable here.
         </p>
       ) : (
-        <ol className="oplist">
+        <ol className="mt-2 list-none p-0">
           {merges.map((m) => (
-            <li key={m.dropId} className="oprow">
+            <li key={m.dropId} className="oprow not-first:mt-[.45rem] rounded-[9px] border border-[var(--line)] bg-[var(--card)] px-[.7rem] py-[.55rem]">
               <MergeCard
                 m={m}
                 selected={selected.has(m.dropId)}
@@ -281,7 +281,7 @@ export function OpsMerges() {
             <summary>{data.refusals.length} refusal{(data.refusals.length === 1 ? "" : "s")} — shown, never applied</summary>
             <div className="pbody">
               {data.refusals.length === 0 ? (
-                <p className="opnote">None.</p>
+                <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">None.</p>
               ) : (
                 <ul className="oprefs">
                   {data.refusals.map((r) => (
@@ -300,7 +300,7 @@ export function OpsMerges() {
             <summary>{data.candidates.length} candidate{(data.candidates.length === 1 ? "" : "s")} for a human glance</summary>
             <div className="pbody">
               {data.candidates.length === 0 ? (
-                <p className="opnote">None.</p>
+                <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">None.</p>
               ) : (
                 <ul className="oprefs">
                   {data.candidates.map((c) => (
@@ -322,7 +322,7 @@ export function OpsMerges() {
             </summary>
             <div className="pbody">
               {data.twinsDeclined.length === 0 ? (
-                <p className="opnote">None — every stored copy collapsed.</p>
+                <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">None — every stored copy collapsed.</p>
               ) : (
                 <ul className="oprefs">
                   {data.twinsDeclined.map((d) => (
@@ -339,7 +339,7 @@ export function OpsMerges() {
             <summary>{data.trail.length === 1 ? "1 merge" : `${data.trail.length} merges`} recorded — the person_merges trail</summary>
             <div className="pbody">
               {data.trail.length === 0 ? (
-                <p className="opnote">
+                <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">
                   None yet. The trail is the audit record of every merge, by
                   whatever surface it was made.
                 </p>

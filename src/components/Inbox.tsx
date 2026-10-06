@@ -313,7 +313,7 @@ export function Inbox() {
               {inbox.isFetchNextPageError ? (
                 <>
                   <Failure error={inbox.error} />
-                  <Button type="button" className="ibmore" onClick={() => inbox.fetchNextPage()}>
+                  <Button type="button" className="mx-auto mt-[.7rem] block rounded-full px-[.9rem] py-[.35rem] text-[.78rem] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={() => inbox.fetchNextPage()}>
                     Try again
                   </Button>
                 </>

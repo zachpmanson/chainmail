@@ -61,11 +61,11 @@ function RuleRow({ d, busy, onPick }: { d: OrgRule; busy: boolean; onPick: (draf
   }`;
   return (
     <article className="opmerge">
-      <p className="opmrule">
+      <p className="opmrule mt-0 mb-[.4rem] text-[.68rem] font-bold uppercase tracking-[.05em] text-[var(--muted)]">
         <code>{d.domain}</code>
-        {d.stored ? <span className="opbad op-apply">yours</span> : <span className="opbad op-ro">guessed</span>}
+        {d.stored ? <span className="opbad op-apply ml-2 whitespace-nowrap rounded-full border border-current px-[.4rem] py-[.06rem] text-[.62rem] font-bold text-green-800">yours</span> : <span className="opbad op-ro whitespace-nowrap rounded-full border border-current px-[.4rem] py-[.06rem] text-[.62rem] font-bold text-[var(--muted)]">guessed</span>}
       </p>
-      <p className="opmside">
+      <p className="my-[.15rem] text-[.84rem] leading-[1.35] [&_code]:text-[.74rem] [&_code]:[overflow-wrap:anywhere]">
         {mail} — drawn as{" "}
         {d.org ? <code>{d.org}</code> : <span className="opwhy">no organisation</span>}
         {d.stored && d.guess ? (
@@ -75,9 +75,9 @@ function RuleRow({ d, busy, onPick }: { d: OrgRule; busy: boolean; onPick: (draf
           <span className="opwhy"> — cleared, it is read as {d.guess}</span>
         ) : null}
       </p>
-      <p className="opmside">
+      <p className="my-[.15rem] text-[.84rem] leading-[1.35] [&_code]:text-[.74rem] [&_code]:[overflow-wrap:anywhere]">
         <TextInput
-          className="oporginput"
+          className="min-w-0 flex-[0_1_12rem] mr-[.45rem] px-[.4rem] py-[.2rem] text-xs"
           value={value}
           disabled={busy}
           placeholder="no rule"
@@ -86,8 +86,8 @@ function RuleRow({ d, busy, onPick }: { d: OrgRule; busy: boolean; onPick: (draf
         />
         <Button
           type="button"
-          variant="secondary"
-          className="opbtn"
+          variant="subtle"
+          density="compact" className="opbtn"
           disabled={busy || !edited}
           onClick={() => {
             setDraft(null);
@@ -99,8 +99,8 @@ function RuleRow({ d, busy, onPick }: { d: OrgRule; busy: boolean; onPick: (draf
         {d.stored ? (
           <Button
             type="button"
-            variant="secondary"
-            className="opbtn"
+            variant="subtle"
+            density="compact" className="opbtn"
             disabled={busy}
             onClick={() => {
               setDraft(null);
@@ -192,7 +192,7 @@ export function OpsOrgs() {
 
   return (
     <>
-      <p className="opnote">
+      <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">
         A bubble is coloured by its sender's organisation. The corpus reads one
         from the mail domain; where that reads wrong, write the name here — two
         domains with one name are one organisation, and a domain you leave empty
@@ -203,7 +203,7 @@ export function OpsOrgs() {
           {error}
         </p>
       ) : null}
-      {last ? <p className="opnote">{last}. The list below is the current one.</p> : null}
+      {last ? <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">{last}. The list below is the current one.</p> : null}
 
       {draft ? (
         <div className="opmconfirm">
@@ -211,11 +211,11 @@ export function OpsOrgs() {
             shift={preview.data ?? { messages: 0, people: 0, ambiguous: 0 }}
             draft={draft}
           />
-          <div className="opmact">
-            <Button type="button" variant="danger" className="opbtn opbtn-after" disabled={busy || preview.isPending} onClick={apply}>
+          <div className="opmact mt-[.55rem] flex items-center gap-2">
+            <Button type="button" variant="danger" density="compact" className="opbtn opbtn-after" disabled={busy || preview.isPending} onClick={apply}>
               {draft.org === null ? "drop the rule" : "save this grouping"}
             </Button>
-            <Button type="button" variant="secondary" className="opbtn" disabled={busy} onClick={() => setDraft(null)}>
+            <Button type="button" variant="subtle" density="compact" className="opbtn" disabled={busy} onClick={() => setDraft(null)}>
               cancel
             </Button>
           </div>
@@ -223,23 +223,23 @@ export function OpsOrgs() {
       ) : null}
 
       {!data ? (
-        <p className="opnote">{orgs.isPending ? "Reading the domains…" : "No domains."}</p>
+        <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">{orgs.isPending ? "Reading the domains…" : "No domains."}</p>
       ) : data.domains.length === 0 ? (
-        <p className="opnote">
+        <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">
           No mail has arrived with a domain of its own, so there is nothing to
           colour yet — but a rule written below will apply when it does.
         </p>
       ) : (
-        <ol className="oplist">
+        <ol className="mt-2 list-none p-0">
           {data.domains.map((d) => (
-            <li key={d.domain} className="oprow">
+            <li key={d.domain} className="oprow not-first:mt-[.45rem] rounded-[9px] border border-[var(--line)] bg-[var(--card)] px-[.7rem] py-[.55rem]">
               <RuleRow d={d} busy={busy} onPick={pick} />
             </li>
           ))}
         </ol>
       )}
       <form
-        className="oporgadd"
+        className="oporgadd mt-[.6rem] flex flex-wrap items-center gap-[.35rem] border-t border-[var(--line)] pt-[.6rem]"
         onSubmit={(e) => {
           e.preventDefault();
           const domain = newDomain.trim().toLowerCase();
@@ -248,7 +248,7 @@ export function OpsOrgs() {
         }}
       >
         <TextInput
-          className="oporginput"
+          className="min-w-0 flex-[0_1_12rem] mr-0 px-[.4rem] py-[.2rem] text-xs"
           value={newDomain}
           disabled={busy}
           placeholder="a domain with no mail yet, e.g. termina.io"
@@ -256,14 +256,14 @@ export function OpsOrgs() {
           onChange={(e) => setNewDomain(e.target.value)}
         />
         <TextInput
-          className="oporginput"
+          className="min-w-0 flex-[0_1_12rem] mr-0 px-[.4rem] py-[.2rem] text-xs"
           value={newOrg}
           disabled={busy}
           placeholder="the organisation, empty for none"
           aria-label="Organisation for that domain"
           onChange={(e) => setNewOrg(e.target.value)}
         />
-        <Button type="submit" variant="secondary" className="opbtn" disabled={busy || newDomain.trim() === ""}>
+        <Button type="submit" variant="subtle" density="compact" className="opbtn" disabled={busy || newDomain.trim() === ""}>
           rule on this domain
         </Button>
       </form>

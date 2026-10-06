@@ -94,7 +94,7 @@ function PersonRow({
         <span className="opwhy">{mail}</span>
       </p>
       <form
-        className="opwhoedit"
+        className="opwhoedit my-[.2rem] mb-[.1rem] flex flex-wrap items-center gap-[.35rem]"
         onSubmit={(e) => {
           e.preventDefault();
           if (!renamed) return;
@@ -103,17 +103,17 @@ function PersonRow({
         }}
       >
         <TextInput
-          className="oporginput"
+          className="min-w-0 flex-[0_1_16rem] mr-0 px-[.4rem] py-[.2rem] text-xs"
           value={wanted}
           disabled={busy}
           aria-label={`Name for ${p.displayName}`}
           onChange={(e) => setName(e.target.value)}
         />
-        <Button type="submit" variant="secondary" className="opbtn" disabled={busy || !renamed}>
+        <Button type="submit" variant="subtle" density="compact" className="opbtn" disabled={busy || !renamed}>
           rename
         </Button>
       </form>
-      <p className="opmside">
+      <p className="my-[.15rem] text-[.84rem] leading-[1.35] [&_code]:text-[.74rem] [&_code]:[overflow-wrap:anywhere]">
         {(p.identities ?? []).length === 0 ? (
           <span className="opwhy">
             No identity at all — this one is only ever the name in someone else's
@@ -126,7 +126,7 @@ function PersonRow({
         )}
       </p>
       <form
-        className="oporgadd"
+        className="oporgadd mt-[.6rem] flex flex-wrap items-center gap-[.35rem] border-t border-[var(--line)] pt-[.6rem]"
         onSubmit={(e) => {
           e.preventDefault();
           const id = asIdentity(add);
@@ -136,14 +136,14 @@ function PersonRow({
         }}
       >
         <TextInput
-          className="oporginput"
+          className="min-w-0 flex-[0_1_12rem] mr-0 px-[.4rem] py-[.2rem] text-xs"
           value={add}
           disabled={busy}
           placeholder="an address that is theirs, e.g. ada@loomworks.example"
           aria-label={`Identity to add to ${p.displayName}`}
           onChange={(e) => setAdd(e.target.value)}
         />
-        <Button type="submit" variant="secondary" className="opbtn" disabled={busy || asIdentity(add) === ""}>
+        <Button type="submit" variant="subtle" density="compact" className="opbtn" disabled={busy || asIdentity(add) === ""}>
           attach
         </Button>
       </form>
@@ -209,7 +209,7 @@ export function OpsPeople() {
 
   return (
     <>
-      <p className="opnote">
+      <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">
         Everyone the corpus knows, and every address that resolves to them. The
         mail client reads its senders from here, so correcting a name or an
         address here corrects it wherever that person appears — in the list, in a
@@ -221,11 +221,11 @@ export function OpsPeople() {
           {error}
         </p>
       ) : null}
-      {last ? <p className="opnote">{last}. The list below is the current one.</p> : null}
-      <label className="opfilter">
+      {last ? <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">{last}. The list below is the current one.</p> : null}
+      <label className="opfilter my-[.5rem] mb-[.2rem] flex items-center gap-[.4rem] text-[.78rem]">
         <span>Find a person</span>
         <TextInput
-          className="oporginput"
+          className="min-w-0 flex-[0_1_18rem] mr-0 px-[.4rem] py-[.2rem] text-xs"
           value={q}
           placeholder="a name or an address"
           aria-label="Find a person"
@@ -233,18 +233,18 @@ export function OpsPeople() {
         />
       </label>
       {!people.data ? (
-        <p className="opnote">{people.isPending ? "Reading the people…" : "No people."}</p>
+        <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">{people.isPending ? "Reading the people…" : "No people."}</p>
       ) : shown.hits.length === 0 ? (
-        <p className="opnote">
+        <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">
           Nobody matches {q.trim() === "" ? "—" : <code>{q.trim()}</code>}. A person
           the corpus has never seen cannot be added here: a row exists because the
           mail named them, and a hand-made row would be one no message could ever
           reach.
         </p>
       ) : (
-        <ol className="oplist">
+        <ol className="mt-2 list-none p-0">
           {shown.capped.map((p) => (
-            <li key={p.personId} className="oprow">
+            <li key={p.personId} className="oprow not-first:mt-[.45rem] rounded-[9px] border border-[var(--line)] bg-[var(--card)] px-[.7rem] py-[.55rem]">
               <PersonRow
                 p={p}
                 busy={busy}
@@ -255,7 +255,7 @@ export function OpsPeople() {
         </ol>
       )}
       {shown.more > 0 ? (
-        <p className="opnote">
+        <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">
           {shown.more} more {shown.more === 1 ? "person" : "people"} match
           {q.trim() === "" ? "" : " that"} — keep typing to narrow it down.
         </p>

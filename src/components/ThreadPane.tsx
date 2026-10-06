@@ -158,7 +158,7 @@ export function ThreadPane({
       {thread ? (
         <>
           <div className="ibread-head">
-            <Button type="button" className="ibback" onClick={onClose}>
+            <Button type="button" density="compact" className="px-[.5rem] py-[.2rem] text-[.78rem] min-[60rem]:hidden ibback" onClick={onClose}>
               {backLabel}
             </Button>
             <span className="ibread-subj">{thread.subject || "(no subject)"}</span>

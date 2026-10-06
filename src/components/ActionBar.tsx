@@ -153,10 +153,10 @@ export function ActionBar({
     <>
       {chosen.length > 0 ? (
         <div className="ibbuild">
-          <Button type="button" className="ibclear" onClick={onDone}>
+          <Button type="button" density="compact" className="ibclear px-[.7rem] py-[.32rem] text-[.78rem] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={onDone}>
             Deselect all
           </Button>
-          <Button type="button" onClick={() => setBraiding(true)}>
+          <Button type="button" variant="subtle" density="compact" className="px-[.7rem] py-[.32rem] text-[.78rem]" onClick={() => setBraiding(true)}>
             Braid Threads
           </Button>
           {/* The two mailbox verbs are glyphs. The bar also holds a braid, a
@@ -302,21 +302,22 @@ function BraidDialog({
           <span className="note">
             {count} thread{count === 1 ? "" : "s"} ticked
           </span>
-          <Button type="button" className="selpv-close" onClick={onClose}>
+          <Button type="button" density="compact" className="bg-[var(--bg)] px-[.55rem] py-[.28rem] text-[.72rem] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={onClose}>
             Close
           </Button>
         </div>
-        <div className="selform braidform">
-          <label className="self">
-            <span>Page title</span>
+        <div className="my-[.7rem] mx-[.8rem] mb-[.2rem] flex flex-wrap items-end gap-[.6rem]">
+          <label className="flex flex-[1_1_18rem] flex-col gap-[.18rem]">
+            <span className="text-[.66rem] font-bold uppercase tracking-[.09em] text-[var(--muted)]">Page title</span>
             <TextInput
+              className="w-full px-[.45rem] py-[.32rem] text-[.86rem]"
               autoFocus
               value={title}
               onChange={(e) => onTitle(e.target.value)}
               placeholder="optional"
             />
           </label>
-          <Button type="button" disabled={busy} onClick={onBraid}>
+          <Button type="button" variant="subtle" density="compact" className="px-[.7rem] py-[.32rem] text-[.78rem]" disabled={busy} onClick={onBraid}>
             {busy ? "Braiding…" : "Braid"}
           </Button>
         </div>
