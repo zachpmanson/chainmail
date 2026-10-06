@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { $api, type OrgRule } from "../lib/api";
+import { StatusBadge } from "./StatusBadge";
 import { Button, TextInput } from "./controls";
 
 function errText(e: unknown): string {
@@ -63,7 +64,7 @@ function RuleRow({ d, busy, onPick }: { d: OrgRule; busy: boolean; onPick: (draf
     <article className="opmerge">
       <p className="opmrule mt-0 mb-[.4rem] text-[.68rem] font-bold uppercase tracking-[.05em] text-[var(--muted)]">
         <code>{d.domain}</code>
-        {d.stored ? <span className="opbad op-apply ml-2 whitespace-nowrap rounded-full border border-current px-[.4rem] py-[.06rem] text-[.62rem] font-bold text-green-800">yours</span> : <span className="opbad op-ro whitespace-nowrap rounded-full border border-current px-[.4rem] py-[.06rem] text-[.62rem] font-bold text-[var(--muted)]">guessed</span>}
+        {d.stored ? <StatusBadge tone="success" className="opbad op-apply ml-2">yours</StatusBadge> : <StatusBadge tone="neutral" className="opbad op-ro">guessed</StatusBadge>}
       </p>
       <p className="my-[.15rem] text-[.84rem] leading-[1.35] [&_code]:text-[.74rem] [&_code]:[overflow-wrap:anywhere]">
         {mail} — drawn as{" "}

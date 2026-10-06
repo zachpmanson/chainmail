@@ -3,6 +3,7 @@ import type { Timeline as Spec } from "../lib/spec";
 import { msgCount } from "../lib/sources";
 import { attHref } from "../lib/attachments";
 import { gmailMessageURL } from "../lib/gmailUrl";
+import { Checkbox } from "./Checkbox";
 
 type Thread = NonNullable<Spec["threads"]>[number];
 
@@ -41,9 +42,9 @@ export function SourcesPanel({ v, filter }: { v: View; filter?: ThreadFilter }) 
       title: `Chains (${filter.chains.length})`,
       items: filter.chains.map((c) => (
         <label className="chk flex cursor-pointer items-start gap-[.4rem] hover:text-accent" key={c.root} data-chain={c.root}>
-          <input
-            type="checkbox"
-            className="mt-[.15rem] flex-none accent-accent"
+          <Checkbox
+            accent="accent"
+            className="mt-[.15rem] flex-none"
             checked={!filter.excluded.has(c.root)}
             onChange={() => filter.onToggle(c.root)}
           />

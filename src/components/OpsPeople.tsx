@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { $api, type PersonSummary } from "../lib/api";
+import { FormField } from "./FormField";
 import { Button, IconButton, TextInput } from "./controls";
 
 function errText(e: unknown): string {
@@ -222,8 +223,7 @@ export function OpsPeople() {
         </p>
       ) : null}
       {last ? <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">{last}. The list below is the current one.</p> : null}
-      <label className="opfilter my-[.5rem] mb-[.2rem] flex items-center gap-[.4rem] text-[.78rem]">
-        <span>Find a person</span>
+      <FormField className="opfilter my-[.5rem] mb-[.2rem] flex items-center gap-[.4rem] text-[.78rem]" label="Find a person">
         <TextInput
           className="min-w-0 flex-[0_1_18rem] mr-0 px-[.4rem] py-[.2rem] text-xs"
           value={q}
@@ -231,7 +231,7 @@ export function OpsPeople() {
           aria-label="Find a person"
           onChange={(e) => setQ(e.target.value)}
         />
-      </label>
+      </FormField>
       {!people.data ? (
         <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">{people.isPending ? "Reading the people…" : "No people."}</p>
       ) : shown.hits.length === 0 ? (

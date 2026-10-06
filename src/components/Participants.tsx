@@ -1,5 +1,5 @@
 import type { CorpusEntry } from "../lib/api";
-import { initials } from "../lib/derive";
+import { Avatar } from "./Avatar";
 import type { Timeline as Spec } from "../lib/spec";
 import { msgCount } from "../lib/sources";
 
@@ -93,22 +93,6 @@ export function castOfEntries(entries: CorpusEntry[]): Person[] {
  *  being copied is the weakest. */
 const RANK: Record<string, number> = { from: 3, to: 2, cc: 1 };
 
-function Face({ p, v }: { p: Person; v: ParticipantsView }) {
-  // The org comes from the participant's own row, not from a message they sent.
-  // Five of the fifteen people on the reference trail send nothing, so looking a
-  // colour up through the transcript left them on the unknown grey while the
-  // heading directly above them named their org and their colleagues in the same
-  // group were coloured.
-  const slot = v.orgSlot(p.org);
-  // reuses the per-avatar CSS rule rather than inlining the image again
-  const pic = v.rows.find((r) => r.entry.sender === p.name)?.avatarClass;
-  return (
-    <div className={`av ${slot}${pic ? ` pic ${pic}` : ""} grid size-[1em] flex-[0_0_1em] place-items-center self-center overflow-hidden rounded-full text-[.78rem] leading-none text-white`}>
-      {pic ? null : <span className="ini text-[.62em] font-bold leading-none tracking-[.01em]">{initials(p.name)}</span>}
-    </div>
-  );
-}
-
 /**
  * Who is in the trail, with addresses.
  *
@@ -187,7 +171,12 @@ export function ParticipantsPanel({
                   <div className="p1 min-w-0 py-[.2rem]" key={i}>
                     <div className="pd min-w-0 leading-[1.3]">
                       <div className="pn flex items-center gap-[.35rem] text-[.78rem] font-semibold">
-                        <Face p={p} v={v} />
+                        <Avatar
+                          name={p.name}
+                          orgSlot={v.orgSlot(p.org)}
+                          pic={v.rows.find((r) => r.entry.sender === p.name)?.avatarClass}
+                          size="participant"
+                        />
                         <span className="min-w-0 [overflow-wrap:anywhere]" title={v.whoTitle(p.name)}>{p.name}</span>
                       </div>
                       {p.email ? (

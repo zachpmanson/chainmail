@@ -1,3 +1,4 @@
+import { Checkbox } from "./Checkbox";
 import { Button } from "./controls";
 import { useRef, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -351,8 +352,7 @@ export function ThreadRow({
           threads out of a list. It follows the row body rather than leading it,
           so the thread and the selection never share one hit area. */}
       <label className="ibchk absolute top-0 right-0 flex w-[var(--tick)] cursor-pointer justify-end pt-[.6rem] pr-[.35rem] pb-[.35rem]" title="include this thread in a page">
-        <input
-          type="checkbox"
+        <Checkbox
           checked={checked}
           onChange={onToggle}
           aria-label={`Select ${subject}`}

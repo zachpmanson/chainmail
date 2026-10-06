@@ -1,3 +1,6 @@
+import { Checkbox } from "./Checkbox";
+import { DialogShell } from "./DialogShell";
+import { FormField } from "./FormField";
 import { Button, TextInput } from "./controls";
 import { useEffect, useMemo, useState } from "react";
 import { Timeline } from "./Timeline";
@@ -223,15 +226,13 @@ function AddEmailsModal({ onClose, onAdd }: {
   const chains = results.data?.chains ?? [];
   return (
     <>
-      <div className="proposals" role="dialog" aria-modal="true" aria-label="Add another email" onClick={onClose}>
-      <div className="proposals-panel flex max-h-[70vh] max-w-[44rem] flex-col rounded-lg border border-line bg-card shadow-[0_8px_40px_rgba(0,0,0,.35)]" onClick={(e) => e.stopPropagation()}>
+      <DialogShell label="Add another email" onBackdropClick={onClose}>
         <div className="proposals-head flex items-center gap-[.6rem] border-b border-line p-[.5rem_.8rem]">
           <b className="text-[.72rem] font-bold uppercase tracking-[.09em] text-muted">add email</b>
           <span className="note ml-auto text-[.7rem] text-muted">search the corpus for a thread to add to this page</span>
         </div>
         <form className="addform flex items-center gap-[.5rem] border-b border-line p-[.45rem_.8rem]" onSubmit={submit}>
-          <label className="flex min-w-0 flex-1 items-center gap-[.4rem] text-[.7rem] text-muted">
-            <span>Query</span>
+          <FormField className="flex min-w-0 flex-1 items-center gap-[.4rem] text-[.7rem] text-muted" label="Query">
             <TextInput
               autoFocus
               value={q}
@@ -240,7 +241,7 @@ function AddEmailsModal({ onClose, onAdd }: {
               placeholder="words, a name, an id"
               aria-label="Search query"
             />
-          </label>
+          </FormField>
           <Button className="!min-h-0 !rounded-[5px] !border-line !bg-bg !px-[.7rem] !py-[.3rem] !text-[.72rem] !font-semibold !text-fg !cursor-pointer hover:!border-accent hover:!text-accent disabled:!cursor-default disabled:!opacity-[.45]" type="submit" disabled={!q.trim()}>
             Search
           </Button>
@@ -285,8 +286,7 @@ function AddEmailsModal({ onClose, onAdd }: {
             close
           </Button>
         </div>
-        </div>
-      </div>
+      </DialogShell>
       {preview ? <ThreadPreview thread={preview} onClose={() => setPreview(null)} /> : null}
     </>
   );
@@ -323,8 +323,7 @@ function ProposalsModal({ proposals, open, refreshing, onClose, onAccept }: {
 
   return (
     <>
-      <div className="proposals" role="dialog" aria-modal="true" aria-label="Proposed chains">
-        <div className="proposals-panel flex max-h-[70vh] max-w-[44rem] flex-col rounded-lg border border-line bg-card shadow-[0_8px_40px_rgba(0,0,0,.35)]">
+      <DialogShell label="Proposed chains">
         <div className="proposals-head flex items-center gap-[.6rem] border-b border-line p-[.5rem_.8rem]">
           <b className="text-[.72rem] font-bold uppercase tracking-[.09em] text-muted">proposed</b>
           <span className="note ml-auto text-[.7rem] text-muted">found by a query, not yet on the page — accept the ones that belong</span>
@@ -336,7 +335,7 @@ function ProposalsModal({ proposals, open, refreshing, onClose, onAccept }: {
               <li key={p.subject ?? p.container ?? p.rootExtId} className="propcard flex flex-row items-center gap-[.6rem] rounded-[5px] border border-line bg-bg p-[.5rem_.6rem]">
                 <div className="propcard-body flex min-w-0 flex-1 flex-col gap-[.3rem]">
                   <label className="proptoggle flex min-w-0 flex-1 cursor-pointer items-start gap-[.5rem]">
-                    <input className="mt-[.18rem] accent-org-1" type="checkbox" checked={on} onChange={() => toggle(p.rootExtId)} />
+                    <Checkbox className="mt-[.18rem]" accent="org" checked={on} onChange={() => toggle(p.rootExtId)} />
                     <span className="propsubj max-w-full break-words whitespace-normal font-[var(--serif)] font-semibold">{p.subject ?? <em className="not-italic text-muted">no subject</em>}</span>
                   </label>
                   <span className="propmeta mt-[.15rem] text-[.7rem] text-muted">
@@ -367,9 +366,8 @@ function ProposalsModal({ proposals, open, refreshing, onClose, onAccept }: {
             accept all {proposals.length}
           </Button>
           <Button className="tbtn" type="button" onClick={onClose} disabled={refreshing}>close</Button>
-          </div>
         </div>
-      </div>
+      </DialogShell>
       {preview ? <ThreadPreview thread={preview} onClose={() => setPreview(null)} /> : null}
     </>
   );

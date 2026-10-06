@@ -2,6 +2,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { $api, type OpsMerge, type OpsMergeRecord } from "../lib/api";
 import { when } from "../lib/stamp";
+import { Checkbox } from "./Checkbox";
+import { StatusBadge } from "./StatusBadge";
 import { Button } from "./controls";
 
 function errText(e: unknown): string {
@@ -37,8 +39,7 @@ function MergeCard({
     <article className="opmerge">
       <p className="opmrule mt-0 mb-[.4rem] text-[.68rem] font-bold uppercase tracking-[.05em] text-[var(--muted)]">
         {m.applicable ? (
-          <input
-            type="checkbox"
+          <Checkbox
             className="mr-2 align-middle cursor-pointer"
             checked={selected}
             disabled={busy}
@@ -47,7 +48,7 @@ function MergeCard({
           />
         ) : null}
         {ruleLabel(m.rule)}
-        {m.applicable ? <span className="ml-2 whitespace-nowrap rounded-full border border-current px-[.4rem] py-[.06rem] text-[.62rem] font-bold text-green-800">apply</span> : <span className="whitespace-nowrap rounded-full border border-current px-[.4rem] py-[.06rem] text-[.62rem] font-bold text-muted">read-only</span>}
+        {m.applicable ? <StatusBadge className="ml-2" tone="success">apply</StatusBadge> : <StatusBadge tone="neutral">read-only</StatusBadge>}
       </p>
       <p className="my-[.15rem] text-[.84rem] leading-[1.35] [&_code]:text-[.74rem] [&_code]:[overflow-wrap:anywhere]">
         keep&nbsp;<code>{keep}</code>
@@ -179,8 +180,7 @@ export function OpsMerges() {
       {applicable.length > 0 ? (
         <div className="mt-2 flex items-center justify-between gap-[.6rem] rounded-[9px] border border-line bg-quote px-[.7rem] py-[.4rem]">
           <label className="flex items-center gap-[.45rem] text-[.76rem] text-fg cursor-pointer">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={allPicked}
               disabled={busy}
               ref={(el) => {
