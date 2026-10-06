@@ -82,7 +82,7 @@ export function ComposeBox({ onClose }: Props) {
   const editor = (
     <form ref={form} onSubmit={prepare}>
       <label className="compose-account">Sending account
-        <select aria-label="Sending account" value={accountId} disabled={busy} onChange={(event) => { setAccountId(event.target.value); setPreview(null); }}>
+        <select className="stpick" aria-label="Sending account" value={accountId} disabled={busy} onChange={(event) => { setAccountId(event.target.value); setPreview(null); }}>
           <option value="">Choose account</option>
           {(accounts.data?.accounts ?? []).filter((account) => account.signedIn).map((account) => <option key={account.id} value={account.id}>{account.displayName}{account.email ? ` (${account.email})` : ""}</option>)}
         </select>
