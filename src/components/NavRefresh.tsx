@@ -122,7 +122,7 @@ export function NavRefresh() {
   return (
     <IconButton
       type="button"
-      className={`navrefresh${indicator ? " busy" : ""}${warning ? " warn" : ""}`}
+      className={`navrefresh gap-[.35rem] disabled:cursor-default${indicator ? " busy" : ""}${warning ? " warn" : ""}`}
       aria-label={label}
       title={title}
       aria-busy={indicator}
@@ -130,7 +130,7 @@ export function NavRefresh() {
       onClick={() => void refresh()}
     >
       <ArrowPathIcon className="spinner" width={16} height={16} aria-hidden="true" />
-      {stageLabel && <span className="navrefresh-label">{stageLabel}</span>}
+      {stageLabel && <span className="navrefresh-label whitespace-nowrap text-[.72rem]">{stageLabel}</span>}
     </IconButton>
   );
 }

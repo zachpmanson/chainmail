@@ -67,11 +67,11 @@ export function ComposerFields({
         {expanded ? from : null}
         <div className="replyrecipient">
           {expanded ? <>
-            <span className="replylabel">to:</span>
+            <span className="replylabel inline-flex h-[var(--addrrow)] items-center">to:</span>
             <AddressField label="to" value={to} onChange={onToChange} suggestions={suggestions} taken={cc} mine={mine} disabled={busy} />
           </> : (
             <Button variant="quiet" type="button" className="replysummary" aria-expanded={false} aria-label={`Edit recipients — currently ${recipientWords(to, cc)}`} title="Edit recipients" disabled={busy} onClick={onEditRecipients}>
-              <span className="replylabel">to:</span>
+              <span className="replylabel inline-flex h-[var(--addrrow)] items-center">to:</span>
               <span className="replynames">
                 {to.length ? names(to) : null}
                 {cc.length ? <><span className="replykind">{to.length ? ", cc " : "cc "}</span>{names(cc)}</> : null}
@@ -82,12 +82,12 @@ export function ComposerFields({
           {target}
         </div>
         {expanded && hasCc ? <div className="replyrecipient">
-          <span className="replylabel">cc:</span>
+          <span className="replylabel inline-flex h-[var(--addrrow)] items-center">cc:</span>
           <AddressField label="cc" value={cc} onChange={onCcChange} suggestions={suggestions} taken={to} mine={mine} disabled={busy} />
         </div> : null}
       </div>
-      {onSubjectChange ? <label className="replyfield">Subject <TextInput className="replyinput" required value={subject ?? ""} disabled={busy} onChange={(e) => onSubjectChange(e.target.value)} /></label> : null}
-      <TextArea className="replyinput" aria-label={mode === "reply" ? "Your reply" : "Message"} required={mode === "compose"} rows={4} value={body} disabled={busy} onChange={(e) => onBodyChange(e.target.value)} />
+      {onSubjectChange ? <label className="replyfield grid gap-[.3rem] mb-[.55rem] text-[.74rem] text-muted">Subject <TextInput className="replyinput block w-full rounded-md border border-line bg-bg px-[.55rem] py-[.45rem] text-[.82rem] leading-[1.45] text-fg resize-y disabled:opacity-[.55]" required value={subject ?? ""} disabled={busy} onChange={(e) => onSubjectChange(e.target.value)} /></label> : null}
+      <TextArea className="replyinput block w-full rounded-md border border-line bg-bg px-[.55rem] py-[.45rem] text-[.82rem] leading-[1.45] text-fg resize-y disabled:opacity-[.55]" aria-label={mode === "reply" ? "Your reply" : "Message"} required={mode === "compose"} rows={4} value={body} disabled={busy} onChange={(e) => onBodyChange(e.target.value)} />
     </>
   );
 }

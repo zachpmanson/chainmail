@@ -240,11 +240,11 @@ export function NavSearch() {
               bin and the trash can. The magnifier inside the field stays the smaller
               12px it was, since it is part of the box rather than a control in the
               nav. */}
-          <XMarkIcon width={18} height={18} aria-hidden="true" />
+          <XMarkIcon className="block size-[18px]" width={18} height={18} aria-hidden="true" />
         </IconButton>
       ) : null}
       <form
-        className={open ? "navsearch open" : "navsearch"}
+        className={`navsearch absolute top-0 right-0 flex h-[var(--navh)] w-48 items-center gap-[.4rem] overflow-hidden rounded-md border border-line bg-card px-2 py-[.26rem]${open ? " open" : ""}`}
         role="search"
         onSubmit={(ev) => {
           ev.preventDefault();
@@ -276,9 +276,9 @@ export function NavSearch() {
       >
       {/* A magnifier rather than nothing: an empty box at the end of a nav is a
           box with no label, and this is the one glyph that says what it takes. */}
-      <MagnifyingGlassIcon width={12} height={12} aria-hidden="true" />
+      <MagnifyingGlassIcon className="flex-none opacity-80" width={12} height={12} aria-hidden="true" />
       <TextInput
-        className="navq"
+        className="navq min-h-0 min-w-24 flex-1 border-0 bg-transparent px-0 py-[.12rem] text-[.84rem] text-fg placeholder:text-muted focus:ring-0"
         value={shown.q}
         onChange={(ev) => {
           edit({ q: ev.target.value });
@@ -307,13 +307,14 @@ export function NavSearch() {
         spellCheck={false}
       />
       {open ? (
-        <span className="navopts">
+        <span className="navopts flex min-w-0 flex-[0_1_auto] flex-nowrap items-center gap-[.55rem] overflow-x-auto overflow-y-hidden">
           {/* The options exist while the panel is open and not otherwise: shut,
               the box is the whole interface, and every control beside it is one
               more thing between the reader and the field. */}
-          <label className="navopt">
-            <span>Mode</span>
+          <label className="navopt flex flex-none items-center gap-[.3rem]">
+            <span className="text-[.6rem] font-bold uppercase tracking-[.08em] text-muted">Mode</span>
             <SelectInput
+              className="min-h-0 rounded-[5px] border border-line bg-bg px-[.35rem] py-[.16rem] text-[.78rem] text-fg"
               value={shown.mode}
               onChange={(ev) => {
                 const mode = ev.target.value as SearchMode;
@@ -331,8 +332,8 @@ export function NavSearch() {
               ))}
             </SelectInput>
           </label>
-          <label className="navopt">
-            <span>Person</span>
+          <label className="navopt flex flex-none items-center gap-[.3rem]">
+            <span className="text-[.6rem] font-bold uppercase tracking-[.08em] text-muted">Person</span>
             {/* A field with the corpus's people under it, rather than a list of
                 everyone in a dropdown: the people number in the hundreds, and
                 what is being looked for is a person whose name the reader
@@ -361,9 +362,10 @@ export function NavSearch() {
               }}
             />
           </label>
-          <label className="navopt">
-            <span>Gmail account</span>
+          <label className="navopt flex flex-none items-center gap-[.3rem]">
+            <span className="text-[.6rem] font-bold uppercase tracking-[.08em] text-muted">Gmail account</span>
             <SelectInput
+              className="min-h-0 rounded-[5px] border border-line bg-bg px-[.35rem] py-[.16rem] text-[.78rem] text-fg"
               aria-label="Gmail account"
               value={shown.accountId}
               onChange={(ev) => {
@@ -380,8 +382,8 @@ export function NavSearch() {
               ))}
             </SelectInput>
           </label>
-          <label className="navopt">
-            <span>Since</span>
+          <label className="navopt flex flex-none items-center gap-[.3rem]">
+            <span className="text-[.6rem] font-bold uppercase tracking-[.08em] text-muted">Since</span>
             {/* A date, in the browser's own picker: `since` is a date on the wire
                 (`format: date` in api/openapi.json), so the control that writes
                 one should offer dates rather than take a string and let the
@@ -391,7 +393,7 @@ export function NavSearch() {
                 either: the field draws its own format, and a `YYYY-MM-DD` beside
                 it would be a second answer to the same question. */}
             <TextInput
-              className="navsince"
+              className="navsince w-[8.6rem] min-h-0 rounded-[5px] border border-line bg-bg px-[.35rem] py-[.16rem] text-[.78rem] text-fg"
               type="date"
               value={shown.since}
               onChange={(ev) => {
@@ -408,7 +410,7 @@ export function NavSearch() {
           </label>
           {/* The way in for anyone not pressing Enter, and what makes Enter work
               at all: a form submits on Enter by way of its submit button. */}
-          <Button type="submit" variant="primary" disabled={!asks(shown)}>
+          <Button type="submit" variant="subtle" className="min-h-0 rounded-md border-line bg-mine px-[.6rem] py-[.22rem] text-[.76rem] font-semibold text-fg disabled:cursor-default disabled:opacity-[.45]" disabled={!asks(shown)}>
             Search
           </Button>
         </span>

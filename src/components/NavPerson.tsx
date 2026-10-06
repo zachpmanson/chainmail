@@ -149,7 +149,7 @@ export function NavPerson({
     <>
       <input
         ref={field}
-        className="navperson"
+        className="navperson min-h-0 max-w-[20ch] rounded-[5px] border border-line bg-bg px-[.35rem] py-[.16rem] text-[.78rem] text-fg"
         value={value}
         // A combobox, which is what this is: a text field with a list of
         // suggestions under it. The list is named by the field's own label, so
@@ -209,7 +209,7 @@ export function NavPerson({
         ? createPortal(
             <ul
               id={listId}
-              className="navpeople"
+              className="navpeople fixed z-[60] m-0 max-h-60 list-none overflow-y-auto overflow-x-hidden rounded-[7px] border border-line bg-card p-[.2rem] shadow-[0_8px_24px_rgba(0,0,0,.22)]"
               role="listbox"
               aria-label="Who the search is narrowed to"
               style={{ left: at.left, top: at.top, width: at.width }}
@@ -220,18 +220,18 @@ export function NavPerson({
                   id={`${listId}-${i}`}
                   role="option"
                   aria-selected={i === active}
-                  className={i === active ? "on" : undefined}
+                  className={`flex flex-col gap-[.05rem] rounded-[5px] p-[.28rem_.45rem] cursor-pointer${i === active ? " on bg-mine" : ""}`}
                   onMouseDown={(ev) => ev.preventDefault()}
                   onMouseEnter={() => setActive(i)}
                   onClick={() => pick(row.value)}
                 >
-                  <span className="who">{row.name}</span>
+                  <span className="who text-[.78rem] [overflow-wrap:anywhere]">{row.name}</span>
                   {/* The alias the pick writes, where it differs from the name:
                       the reader sees which of a person's addresses this search
                       will be narrowed to, rather than finding out from the
                       address bar afterwards. */}
                   {row.address && row.address !== row.name ? (
-                    <span className="adr">{row.address}</span>
+                    <span className="adr text-[.66rem] text-muted [overflow-wrap:anywhere]">{row.address}</span>
                   ) : null}
                 </li>
               ))}

@@ -25,7 +25,7 @@ export function NavReading() {
   const reading = useIsFetching();
   if (reading === 0) return null;
   return (
-    <span className="reading" role="status">
+    <span className="reading ml-[1.1rem] whitespace-nowrap text-[.74rem] text-muted" role="status">
       Reading the corpus…
     </span>
   );

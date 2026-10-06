@@ -456,8 +456,8 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
       mode="reply"
       from={(
         <div className="replyrecipient compose-account">
-          <span className="replylabel">from:</span>
-          <SelectInput className="replyfrom" aria-label="From" value={displayedAccountId} disabled={busy} onChange={(event) => { setAccountId(event.target.value); setPlan(null); }}>
+          <span className="replylabel inline-flex h-[var(--addrrow)] items-center">from:</span>
+          <SelectInput className="replyfrom h-[var(--addrrow)] min-w-0 flex-1 rounded-md border border-line bg-bg px-[.3rem] text-[.72rem] text-fg focus:border-accent disabled:cursor-default disabled:opacity-[.55]" aria-label="From" value={displayedAccountId} disabled={busy} onChange={(event) => { setAccountId(event.target.value); setPlan(null); }}>
             {!displayedAccountId ? <option value="">Choose account</option> : null}
             {connectedAccounts.map((account) => <option key={account.id} value={account.id}>{account.displayName}{account.email ? ` (${account.email})` : ""}</option>)}
           </SelectInput>

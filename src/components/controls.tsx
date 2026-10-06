@@ -7,7 +7,7 @@ import type {
 } from "react";
 
 const buttonBase =
-  "inline-flex min-h-8 items-center justify-center gap-2 rounded-md border px-3 py-1.5 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-8 items-center justify-center gap-2 rounded-md border px-3 py-1.5 font-[inherit] text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50";
 
 const buttonVariants = {
   primary:
@@ -80,7 +80,7 @@ export function IconButton({
 }
 
 const fieldBase =
-  "min-h-8 min-w-0 rounded-md border border-line bg-card px-2 py-1 text-sm text-fg placeholder:text-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent disabled:cursor-not-allowed disabled:opacity-60";
+  "min-h-8 min-w-0 rounded-md border border-line bg-card px-2 py-1 font-[inherit] text-sm text-fg placeholder:text-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent disabled:cursor-not-allowed disabled:opacity-60";
 
 export function TextInput({
   className = "",
