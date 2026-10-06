@@ -5,6 +5,7 @@ import { usePersonAddresses } from "../lib/who";
 import { addressWords, type Address } from "./AddressField";
 import { ComposerFields } from "./ComposerFields";
 import { ComposerFlow } from "./ComposerFlow";
+import { SelectInput } from "./controls";
 
 type ComposeResult = {
   accountId: string;
@@ -84,12 +85,12 @@ export function ComposeBox({ onClose }: Props) {
       <ComposerFields
         mode="compose"
         from={(
-          <div className="replyrecipient compose-account">
-            <span className="replylabel">from:</span>
-            <select className="replyfrom" aria-label="From" value={accountId} disabled={busy} onChange={(event) => { setAccountId(event.target.value); setPreview(null); }}>
+          <div className="replyrecipient contents min-w-0 compose-account">
+            <span className="replylabel inline-flex h-[var(--addrrow)] items-center">from:</span>
+            <SelectInput className="replyfrom h-[var(--addrrow)] min-w-0 flex-1 rounded-md border border-line bg-bg px-[.3rem] text-[.72rem] text-fg focus:border-accent disabled:cursor-default disabled:opacity-[.55]" aria-label="From" value={accountId} disabled={busy} onChange={(event) => { setAccountId(event.target.value); setPreview(null); }}>
               <option value="">Choose account</option>
               {(accounts.data?.accounts ?? []).filter((account) => account.signedIn).map((account) => <option key={account.id} value={account.id}>{account.displayName}{account.email ? ` (${account.email})` : ""}</option>)}
-            </select>
+            </SelectInput>
           </div>
         )}
         to={recipients}
@@ -114,7 +115,7 @@ export function ComposeBox({ onClose }: Props) {
       busy={busy}
       error={error ? <>{error}{sendFailed ? " Check Gmail before attempting to send again." : ""}</> : undefined}
       editor={editor}
-      preview={preview ? <dl className="compose-review"><dt>Sending account</dt><dd>{accounts.data?.accounts?.find((account) => account.id === preview.accountId)?.displayName ?? preview.accountId}</dd><dt>To</dt><dd>{preview.to}</dd>{preview.cc ? <><dt>Cc</dt><dd>{preview.cc}</dd></> : null}<dt>Subject</dt><dd>{preview.subject}</dd><dt>Plain-text message</dt><dd><pre>{preview.body}</pre></dd><p>Review the exact message above. Sending is irreversible.</p></dl> : null}
+      preview={preview ? <dl className="compose-review grid grid-cols-[5rem_minmax(0,1fr)] gap-2 [overflow-wrap:anywhere]"><dt className="font-bold">Sending account</dt><dd className="m-0">{accounts.data?.accounts?.find((account) => account.id === preview.accountId)?.displayName ?? preview.accountId}</dd><dt className="font-bold">To</dt><dd className="m-0">{preview.to}</dd>{preview.cc ? <><dt className="font-bold">Cc</dt><dd className="m-0">{preview.cc}</dd></> : null}<dt className="font-bold">Subject</dt><dd className="m-0">{preview.subject}</dd><dt className="font-bold">Plain-text message</dt><dd className="m-0"><pre className="m-0 whitespace-pre-wrap [overflow-wrap:anywhere] [font:inherit]">{preview.body}</pre></dd><p className="col-span-full">Review the exact message above. Sending is irreversible.</p></dl> : null}
       done={result ? <><p>Sent to {result.to}{result.cc ? `, cc ${result.cc}` : ""}.</p><p>{result.filed ? "Filed in the corpus." : "Sent successfully, but could not be filed in the corpus."}</p></> : null}
       onReview={() => form.current?.requestSubmit()}
       onEdit={() => { if (sendFailed) onClose(); else { setPreview(null); setError(""); } }}

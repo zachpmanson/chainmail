@@ -42,7 +42,7 @@ export function DeployStamp() {
 
   return (
     <a
-      className="deploy"
+      className="deploy flex items-baseline gap-[.35rem] whitespace-nowrap text-[.74rem] text-muted no-underline hover:text-accent"
       href={`https://github.com/zachpmanson/chainmail/commit/${rev}`}
       title={`deployed ${when(startedAt)}`}
       target="_blank"
@@ -50,7 +50,7 @@ export function DeployStamp() {
     >
       {/* A hash is read character by character only when something looks wrong,
           so it is monospaced and quiet: a fainter face beside the links. */}
-      <span>{on}</span> @ <code>{rev.slice(0, 7)}</code>
+      <span>{on}</span> @ <code className="font-mono text-[.72rem]">{rev.slice(0, 7)}</code>
     </a>
   );
 }

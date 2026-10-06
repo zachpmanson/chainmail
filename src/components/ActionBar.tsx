@@ -1,3 +1,4 @@
+import { Button, IconButton, TextInput } from "./controls";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSearch } from "@tanstack/react-router";
@@ -151,38 +152,38 @@ export function ActionBar({
   const body = (
     <>
       {chosen.length > 0 ? (
-        <div className="ibbuild">
-          <button type="button" className="ibclear" onClick={onDone}>
+        <div className="ibbuild flex min-w-0 items-center gap-[.55rem] h-[var(--navh)] overflow-x-auto overflow-y-hidden [&_.ibmovewrap]:rounded-md [&_.ibmovewrap]:border-line [&_.ibmovewrap]:bg-card [&_.ibmovewrap]:px-[.5rem] [&_.ibmovewrap]:py-[.45rem] [&_.ibmovewrap:hover]:border-accent [&_.ibmovewrap:hover]:text-accent [&_.selfail]:mt-[.2rem] [&_.selfail]:flex-[1_1_100%]">
+          <Button type="button" density="compact" className="ibclear shrink-0 px-[.7rem] py-[.32rem] text-[.78rem] text-muted hover:border-accent hover:text-accent" onClick={onDone}>
             Deselect all
-          </button>
-          <button type="button" onClick={() => setBraiding(true)}>
+          </Button>
+          <Button type="button" variant="subtle" density="compact" className="px-[.7rem] py-[.32rem] text-[.78rem]" onClick={() => setBraiding(true)}>
             Braid Threads
-          </button>
+          </Button>
           {/* The two mailbox verbs are glyphs. The bar also holds a braid, a
               folder dropdown, the count and the way out, and spelling Archive
               and Delete along that row is what wrapped it on a laptop. The word
               is still on the button — it is the tooltip, and what a screen
               reader reads — but the row draws the box and the bin. */}
-          <button
+          <IconButton
             type="button"
-            className="ibicon"
+            className="ibicon shrink-0 inline-flex items-center rounded-md border border-transparent bg-transparent p-[.45rem_.5rem] text-muted hover:border-line hover:bg-card hover:text-accent [&_svg]:block [&_svg]:size-[18px]"
             aria-label="Archive"
             title="Archive"
             disabled={busy}
             onClick={() => act.mutate({ body: { chains: chosen, action: "archive", ...(accountId ? { accountId } : {}) } })}
           >
             <ArchiveGlyph />
-          </button>
-          <button
+          </IconButton>
+          <IconButton
             type="button"
-            className="ibicon"
+            className="ibicon shrink-0 inline-flex items-center rounded-md border border-transparent bg-transparent p-[.45rem_.5rem] text-muted hover:border-line hover:bg-card hover:text-accent [&_svg]:block [&_svg]:size-[18px]"
             aria-label="Delete"
             title="Delete"
             disabled={busy}
             onClick={() => act.mutate({ body: { chains: chosen, action: "trash", ...(accountId ? { accountId } : {}) } })}
           >
             <TrashGlyph />
-          </button>
+          </IconButton>
           {/* One control for the move, and one decision in it. It used to be a
               labelled field with a Move button beside it, which is the reader
               being asked to say the same thing twice: they know the folder when
@@ -213,8 +214,8 @@ export function ActionBar({
           />
           {/* The count stays at the far end; the way out is the first control
               on the left, before any action on the selected mail. */}
-          <span className="ibright">
-            <span className="ibselcount">
+          <span className="ibright ml-auto flex shrink-0 items-center">
+            <span className="ibselcount text-[.76rem] tabular-nums text-muted">
               {chosen.length} selected
             </span>
           </span>
@@ -289,43 +290,44 @@ function BraidDialog({
 
   return (
     <div
-      className="selpv"
+      className="selpv fixed inset-0 z-[55] flex items-center justify-center bg-black/45 [&_.selfail]:mx-[.8rem] [&_.selfail]:mt-2 [&_.selfail]:mb-3"
       role="dialog"
       aria-modal="true"
       aria-label="Braid threads"
       onClick={onClose}
     >
-      <div className="selpv-panel" onClick={(e) => e.stopPropagation()}>
-        <div className="selpv-head">
-          <b>braid threads</b>
-          <span className="note">
+      <div className="selpv-panel flex max-h-[82vh] max-w-[min(46rem,94vw)] flex-col rounded-lg border border-line bg-card shadow-[0_8px_40px_rgba(0,0,0,.35)]" onClick={(e) => e.stopPropagation()}>
+        <div className="selpv-head flex items-center gap-[.6rem] border-b border-line px-[.8rem] py-2">
+          <b className="text-[.72rem] font-bold uppercase tracking-[.09em] text-muted">braid threads</b>
+          <span className="note ml-auto min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[.74rem] text-muted">
             {count} thread{count === 1 ? "" : "s"} ticked
           </span>
-          <button type="button" className="selpv-close" onClick={onClose}>
+          <Button type="button" density="compact" className="bg-[var(--bg)] px-[.55rem] py-[.28rem] text-[.72rem] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={onClose}>
             Close
-          </button>
+          </Button>
         </div>
-        <div className="selform braidform">
-          <label className="self">
-            <span>Page title</span>
-            <input
+        <div className="my-[.7rem] mx-[.8rem] mb-[.2rem] flex flex-wrap items-end gap-[.6rem]">
+          <label className="flex flex-[1_1_18rem] flex-col gap-[.18rem]">
+            <span className="text-[.66rem] font-bold uppercase tracking-[.09em] text-[var(--muted)]">Page title</span>
+            <TextInput
+              className="w-full px-[.45rem] py-[.32rem] text-[.86rem]"
               autoFocus
               value={title}
               onChange={(e) => onTitle(e.target.value)}
               placeholder="optional"
             />
           </label>
-          <button type="button" disabled={busy} onClick={onBraid}>
+          <Button type="button" variant="subtle" density="compact" className="px-[.7rem] py-[.32rem] text-[.78rem]" disabled={busy} onClick={onBraid}>
             {busy ? "Braiding…" : "Braid"}
-          </button>
+          </Button>
         </div>
-        <p className="selnote">
+        <p className="selnote mx-[.8rem] my-2 flex-[1_1_100%] text-[.78rem] text-muted">
           Left empty, the page is titled with the earliest thread's subject.
         </p>
         {/* Seconds of silence reads as a broken page, so the wait says what it is
             waiting on and how much of it there is. */}
         {busy ? (
-          <p className="selnote" role="status">
+          <p className="selnote mx-[.8rem] my-2 flex-[1_1_100%] text-[.78rem] text-muted" role="status">
             Recovering HTML and detecting boilerplate across {count} thread
             {count === 1 ? "" : "s"}. This takes a few seconds.
           </p>

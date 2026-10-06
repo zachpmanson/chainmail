@@ -144,7 +144,7 @@ export function SplitPane({
 
   return (
     <div
-      className={`ibsplit${hasChoice ? " has-choice" : ""}${dragging ? " dragging" : ""}`}
+      className={`ibsplit grid min-w-0 grid-cols-[minmax(0,1fr)] gap-[.9rem] min-[60rem]:[--divider:calc(.45rem+.55rem/2)] min-[60rem]:grid-cols-[var(--listw,minmax(15rem,24rem))_var(--divider)_minmax(0,1fr)] min-[60rem]:items-stretch min-[60rem]:min-h-0 min-[60rem]:flex-1${hasChoice ? " has-choice" : ""}${dragging ? " dragging" : ""}`}
       ref={split}
       // The list's width where the reader has said, and the grid's own
       // minmax() where they have not. Setting it as a custom property rather
@@ -152,7 +152,7 @@ export function SplitPane({
       // what the two columns are.
       style={width === null ? undefined : ({ "--listw": `${width}px` } as CSSProperties)}
     >
-      <div className="ibcol" ref={column}>
+      <div className="ibcol flex min-w-0 flex-col gap-[.8rem] pt-[.8rem] min-[60rem]:h-full min-[60rem]:min-h-0 min-[60rem]:pl-[.8rem]" ref={column}>
         {list}
       </div>
 
@@ -161,7 +161,7 @@ export function SplitPane({
           cannot drag it can still move it with the arrow keys. Double-click
           puts it back to the width the layout chose. */}
       <div
-        className="ibdrag"
+        className="ibdrag relative hidden touch-none cursor-col-resize self-stretch min-[60rem]:block"
         role="separator"
         aria-orientation="vertical"
         aria-label="Resize the list"

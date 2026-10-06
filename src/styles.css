@@ -48,7 +48,6 @@
      out, not read), and the app's own pages opt out below, because a list and a
      reading pane are laid out too. */
   .wrap { max-width:76rem; margin:0 auto; padding:1.75rem 1.25rem 3.5rem; }
-  header.top { border-bottom:1px solid var(--line); padding-bottom:.7rem; margin-bottom:.25rem; }
   /* The shell fills the window. A cap here put the nav in the middle of a wide
      screen with a third of it empty to either side, on every page. */
   /* A row, so the corpus search can sit at its end: `margin-left:auto` is what
@@ -70,18 +69,12 @@
      that a narrow screen scrolls the strip rather than wrapping it into two
      rows: that wrap was the other half of the jump, since opening the search
      hides the links and the wrapper went with them. */
-  header.sitehead { --navh:2.15rem; max-width:none; margin:0;
-    padding:1rem 1.25rem .85rem;
-    border-bottom:1px solid var(--line); color:var(--muted); font-size:.86rem;
-    display:flex; align-items:center; flex-wrap:wrap; }
   /* The nav's items, as one element, because one element is what the selection
      bar replaces: the reader ticked some chains, so the row the links were on is
      the bar's until the selection clears. One line, scrolled when the links and
      the box together do not fit (see --navh above), and exactly `--navh` tall
      however long the line is — this is the row the bar is measured against, and
      both are the same number rather than two numbers that happen to agree. */
-  .sitenav { position:relative; display:flex; align-items:center; flex-wrap:nowrap; flex:1 1 auto;
-    min-width:0; overflow-x:auto; overflow-y:hidden; height:var(--navh); }
   /* The panel's containing block is this row, and that is the one ancestor whose
      width is the same whether the panel is open or shut: it is the header's own
      content width (see `flex:1 1 100%` below), and the panel no longer holds any
@@ -126,9 +119,6 @@
      panel, and the row is the bar's height exactly. A `padding-top` of a couple of
      pixels used to live here, which is what made the nav's row a hair taller
      than the bar that replaces it. */
-  .navright { --navgap:1.1rem; margin-left:auto; display:flex; align-items:center;
-    gap:var(--navgap); flex-wrap:nowrap; justify-content:flex-end;
-    padding-right:calc(12rem + var(--navgap)); }
   /* Shut: a field showing what the address asks, and the whole of the search. The
      height is the row's, so the panel is the same size open as shut and the page
      below never moves for it.
@@ -152,12 +142,7 @@
      in the arrangement: 1.85rem is the dismissal's box (an 18px glyph in .25rem
      .3rem of padding with a 1px border — see the icon button above), and
      `--navgap` is the same gap `.navright` puts between its own items. */
-  .navsearch { position:absolute; top:0; right:0;
-    --searchgap: calc(1.85rem + var(--navgap));
-    display:flex; align-items:center; gap:.4rem;
-    width:12rem; height:var(--navh); padding:.26rem .5rem;
-    border:1px solid var(--line);
-    border-radius:6px; background:var(--card); overflow:hidden; }
+  .navsearch { --searchgap: calc(1.85rem + var(--navgap)); }
   /* The width is grown rather than switched: the panel becoming the row is one
      thing turning into the other, and the movement is what says so. The house
      rule for a reader who has asked for less motion: no animation, same layout.
@@ -169,20 +154,15 @@
      state you are leaving is a percentage that steps. */
   @media (prefers-reduced-motion: no-preference) { .navsearch { transition:width .18s ease; } }
   .navsearch:hover, .navsearch:focus-within { border-color:var(--accent); }
-  .navsearch .navq { flex:1 1 auto; min-width:6rem; font:inherit; font-size:.84rem;
-    padding:.12rem 0; border:0; background:none; color:var(--fg); }
   /* The panel's own way out, and it stands outside the box rather than in it: the
      box is the field and the four controls that ask a question, and a dismissal is
      not one of the things a search is made of. It wears the nav's icon button (see
      .navrefresh above), and its glyph is the 12px square the magnifier inside the
      box is: two controls on one line, drawn to one size. */
-  .navcancel svg { display:block; width:18px; height:18px; }
   /* The box's own border is the focus indicator (`:focus-within` above), so the
      field inside it does not draw a second one around itself: two rings for one
      focus says the field and the box are two things to the reader, and they are
      one control. */
-  .navsearch .navq:focus { outline:none; }
-  .navsearch .navq::placeholder { color:var(--muted); }
   /* No mark for the question on screen: `aria-current` is set on the field (see
      NavSearch.tsx), and nothing draws it. A live query was coloured the accent,
      and then given `--mine` behind it — the colour this app uses for the reader's
@@ -225,23 +205,13 @@
      a panel with its own width of empty space at the end of it. What the row is
      for reads left to right: the field takes the room, and the controls that ask
      the question with it wait at the end, where the box itself used to be. */
-  .navopts { display:flex; align-items:center; gap:.55rem; flex:0 1 auto;
-    flex-wrap:nowrap; min-width:0; overflow-x:auto; overflow-y:hidden; }
-  .navopt { display:flex; align-items:center; gap:.3rem; flex:none; }
-  .navopt > span { font-size:.6rem; text-transform:uppercase; letter-spacing:.08em;
-    color:var(--muted); font-weight:700; }
-  .navopt select, .navopt input { font:inherit; font-size:.78rem; padding:.16rem .35rem;
-    border:1px solid var(--line); border-radius:5px; background:var(--bg); color:var(--fg); }
-  .navopt input { width:7.5rem; }
   /* The date field is drawn by the browser, which also draws a picker button
      inside it, so it needs a little more room than a field of the same ten
      characters: 7.5rem clipped the last digit wherever the button is shown. */
-  .navopt .navsince { width:8.6rem; }
   /* The Person control shows an address, which is longer than a word, and it sits
      on the same line as the mode and the date: capped, so one long value cannot
      decide how much of that line the other two get. 20ch is a full address and no
      more — the list under it is where the whole of it is read (see .navpeople). */
-  .navopt .navperson { max-width:20ch; }
   /* The Person field's suggestions, drawn under it.
 
      Outside the nav's own tree: the row clips (`overflow-x:auto` on `.sitenav`
@@ -255,40 +225,6 @@
      Above the header's own stacking (`z-index:60`, the same layer the spec view
      opens on): the list belongs to a control being used, and nothing in the row
      it hangs from should be over it. */
-  .navpeople { position:fixed; z-index:60; margin:0; padding:.2rem; list-style:none;
-    max-height:15rem; overflow-y:auto; overflow-x:hidden; background:var(--card);
-    border:1px solid var(--line); border-radius:7px;
-    box-shadow:0 8px 24px rgba(0,0,0,.22); }
-  .navpeople li { display:flex; flex-direction:column; gap:.05rem;
-    padding:.28rem .45rem; border-radius:5px; cursor:pointer; }
-  /* The row under the pointer and the row under the keyboard are one row with
-     one look: the pointer and the arrow keys are two ways to say the same thing,
-     and two marks for it read as two selections. */
-  .navpeople li.on { background:var(--mine); }
-  .navpeople .who { font-size:.78rem; overflow-wrap:anywhere; }
-  .navpeople .adr { font-size:.66rem; color:var(--muted); overflow-wrap:anywhere; }
-  .navsearch button { font:inherit; font-size:.76rem; font-weight:650;
-    padding:.22rem .6rem; border:1px solid var(--line); border-radius:6px;
-    background:var(--mine); color:var(--fg); cursor:pointer; }
-  .navsearch button:disabled { opacity:.45; cursor:default; }
-  /* The corpus being read. A status rather than a destination, so it is quieter
-     than the links beside it and carries no separator: the space is what says it
-     is not a link. Reads at the size of the deploy stamp, which is the nav's
-     other piece of small print, and never wraps — a phrase broken across two
-     lines in a nav row reads as two facts. */
-  .reading { margin-left:1.1rem; font-size:.74rem; color:var(--muted);
-    white-space:nowrap; }
-  /* The deploy stamp. Quiet: a date and a revision, read only when something is
-     being checked, so it sits at the fainter weight and monospaced where the
-     hash is. The gap spaces the `@` between them as well as the two facts; the
-     order matches penultimate-guitar's footer. It links to the commit, which is
-     the one thing a hash is useful for — see DeployStamp for why it is served
-     rather than baked in. */
-  .deploy { display:flex; align-items:baseline; gap:.35rem; font-size:.74rem;
-    color:var(--muted); text-decoration:none; white-space:nowrap; }
-  .deploy code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
-    font-size:.72rem; }
-  .deploy:hover { color:var(--accent); }
   /* The refresh button: the stamp's neighbour, and the one control in the nav
      that asks the corpus again for what is on screen. Quiet like the stamp it
      sits beside — it is small print on every page, read when something is being
@@ -302,16 +238,6 @@
      .ibbuild .ibicon come out 29.6x28 with it, so these two do as well. A size
      smaller than the strip's read as small type rather than as controls, which is
      the opposite of what the nav's two presses are. */
-  .navrefresh, .navcancel { flex:none; display:inline-flex; align-items:center;
-    justify-content:center; padding:.25rem .3rem; border:1px solid transparent;
-    border-radius:6px; background:none; color:var(--muted); font:inherit; cursor:pointer; }
-  .navrefresh { gap:.35rem; }
-  .nav-compose svg { display:block; width:18px; height:18px; }
-  .navrefresh:hover, .navcancel:hover { color:var(--accent); border-color:var(--line);
-    background:var(--card); }
-  .navrefresh.warn { color:var(--accent); }
-  .navrefresh-label { font-size:.72rem; white-space:nowrap; }
-  .navrefresh:disabled { cursor:default; }
   /* dripfeed-web's spinner (src/index.css there): the same ↻, the same 0.8s
      linear turn, so the act reads the same in both apps. It turns only while its
      thing is working — as a button's own icon, a still ↻ is what the control
@@ -335,6 +261,7 @@
     vertical-align:middle; flex:none; }
   /* One size for the two icon buttons' glyphs; the chip keeps the .ameta size it
      inherits from the line it is in. */
+  .navrefresh.warn { color:var(--accent); }
   .navrefresh .spinner, .origbtn.busy .spinner { font-size:1.125rem; }
   /* The nav turns for a refresh or ingest. Other spinners turn only while their
      own work runs. */
@@ -344,7 +271,6 @@
   @media (prefers-reduced-motion: reduce) {
     .navrefresh.busy .spinner, .origbtn.busy .spinner, .att.busy .spinner {
       animation:none; } }
-  .navsearch svg { flex:none; opacity:.8; }
   /* The app's own pages are workspaces, not documents: an inbox is a list and a
      reading pane, and both want the width the window has. Anything not named
      here — a 404, a dropped spec — keeps the measure above.
@@ -363,45 +289,16 @@
      page's own horizontal margin are the only gaps it needs. The reading pane's
      last message now lands on the bottom edge, which is where a scroller ends. */
   .wrap.ibwrap { padding-top:0; padding-bottom:0; }
-  header.sitehead .sep { margin:0 .45rem; color:var(--line); }
-  /* The site's name, and the link home: it is the one nav item that is not a
-     page, so it is weighted like a title and sits in the same bar. */
-  header.sitehead a.brand { color:var(--fg); font-weight:700; font-size:.92rem;
-    letter-spacing:-.01em; text-decoration:none; }
-  header.sitehead a.brand:hover { color:var(--accent); }
   h1 { font-size:1.3rem; margin:0 0 .2rem; letter-spacing:-.01em; }
-  h1 .hash { color:var(--muted); font-weight:400; }
-  .sub { color:var(--muted); font-size:.86rem; margin:0 0 .5rem; }
-  .pan { border:1px solid var(--line); border-radius:9px; background:var(--card);
-    margin:.7rem 0 0; }
-  .pan > summary { cursor:pointer; padding:.4rem .7rem; font-size:.72rem; font-weight:700;
-    text-transform:uppercase; letter-spacing:.08em; color:var(--muted); list-style:none; }
   .pan > summary::-webkit-details-marker { display:none; }
   .pan > summary::before { content:""; display:inline-block; width:0; height:0;
     border:.3em solid transparent; border-left-color:currentColor;
     margin-right:.4em; vertical-align:.04em;
     transition:transform .12s; }
   .pan[open] > summary::before { transform:rotate(90deg); }
-  .pan > summary:hover { color:var(--accent); }
-  .pan .pbody { padding:.1rem .7rem .6rem; border-top:1px solid var(--line); }
-  .who { display:grid; grid-template-columns:repeat(auto-fill,minmax(15.5rem,1fr));
-    gap:.3rem .9rem; }
-  .p1 { padding:.2rem 0; min-width:0; }
-  .p1 .av { font-size:.78rem; }   /* matches .pn, so 1em tracks that text */
-  .p1 .pd { min-width:0; line-height:1.3; }
-  .p1 .pn { display:flex; align-items:center; gap:.35rem; font-size:.78rem;
-    font-weight:650; }
-  .p1 .pn span { min-width:0; overflow-wrap:anywhere; }
-  .p1 .pr { font-size:.66rem; color:var(--muted); }
-  .p1 a.pe { font-size:.68rem; color:var(--muted); text-decoration:none;
-    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
-    overflow-wrap:anywhere; }
-  .p1 a.pe:hover { color:var(--accent); text-decoration:underline; }
   /* Tinted to match the avatars under it and the org label on that group's
      bubbles. Falls back to --muted for the group of people whose org nothing in
      the trail established. */
-  .ogh { grid-column:1/-1; font-size:.66rem; text-transform:uppercase; letter-spacing:.09em;
-    color:var(--orgc,var(--muted)); font-weight:700; margin:.45rem 0 .05rem; }
   .ogh.o1 { --orgc:var(--o1); } .ogh.o2 { --orgc:var(--o2); }
   .ogh.o3 { --orgc:var(--o3); } .ogh.o4 { --orgc:var(--o4); }
   /* No .ogh.o5 on purpose. --o5 is an avatar fill carrying white text; as text
@@ -410,104 +307,21 @@
      the group whose org nothing established. A fifth org's heading is left grey
      for the same reason, which is the slot cap showing through rather than a
      second thing to fix here. */
-  .ogh:first-child { margin-top:.15rem; }
-  .srcgrp { margin:.45rem 0 0; }
-  .srcgrp:first-child { margin-top:.15rem; }
-  .srch { font-size:.66rem; text-transform:uppercase; letter-spacing:.09em; color:var(--muted);
-    font-weight:700; margin:0 0 .2rem; }
-  .srcgrp > summary { cursor:pointer; list-style:none; display:flex;
-    align-items:center; gap:.3rem; margin:0 0 .2rem; }
   .srcgrp > summary::-webkit-details-marker { display:none; }
   .srcgrp > summary::before { content:""; display:inline-block; width:0; height:0;
     border:.25em solid transparent; border-left-color:currentColor;
     transition:transform .12s; }
   .srcgrp[open] > summary::before { transform:rotate(90deg); }
-  .srcgrp > summary:hover { color:var(--accent); }
-  .srcgrp > summary .srch { margin:0; }
-  .srcgrp ul { margin:0; padding-left:1.1rem; }
-  .srcgrp li { font-size:.78rem; margin:.12rem 0; }
-  .srcgrp li .qy { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.9em; }
-  .srcgrp li .note { color:var(--muted); font-size:.92em; }
-  .chk { display:flex; align-items:flex-start; gap:.4rem; cursor:pointer; }
-  .chk input { margin:.15rem 0 0; accent-color:var(--accent); flex:0 0 auto; }
-  .chk:hover { color:var(--accent); }
-  a.srclink { font-size:.66rem; text-transform:uppercase; letter-spacing:.06em;
-    font-weight:700; color:var(--muted); text-decoration:none;
-    border:1px solid var(--line); border-radius:4px; padding:0 .25rem;
-    white-space:nowrap; }
-  a.srclink:hover { color:var(--accent); border-color:var(--accent); }
-  /* spec viewer: sits above everything, including the fixed minimap and toolbar */
-  .specview { position:fixed; inset:0; z-index:60; background:var(--bg);
-    display:flex; flex-direction:column; }
-  .specbar { display:flex; align-items:center; gap:.6rem; padding:.5rem .8rem;
-    border-bottom:1px solid var(--line); background:var(--card); }
-  .specbar b { font-size:.72rem; font-weight:700; text-transform:uppercase;
-    letter-spacing:.09em; color:var(--muted); }
-  .specbar .note { font-size:.7rem; color:var(--muted); margin-right:auto; }
-  .specpre { margin:0; flex:1 1 auto; overflow:auto; padding:.9rem 1rem 2rem;
-    font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.72rem;
-    line-height:1.5; tab-size:2; white-space:pre; color:var(--fg); }
   /* proposal evaluator: a dimmed backdrop keeps the page visible while a proposed
      chain is judged and accepted by root ext id (see refresh.go's Candidate). */
   .proposals { position:fixed; inset:0; z-index:55; background:rgba(0,0,0,.45);
     display:flex; align-items:center; justify-content:center; }
-  .proposals-panel { background:var(--card); border:1px solid var(--line);
-    border-radius:8px; max-width:44rem; max-height:70vh; display:flex;
-    flex-direction:column; box-shadow:0 8px 40px rgba(0,0,0,.35); }
-  .proposals-head { display:flex; align-items:center; gap:.6rem;
-    padding:.5rem .8rem; border-bottom:1px solid var(--line); }
-  .proposals-head b { font-size:.72rem; font-weight:700; text-transform:uppercase;
-    letter-spacing:.09em; color:var(--muted); }
-  .proposals-head .note { font-size:.7rem; color:var(--muted); margin-right:auto; }
-  .proposals-list { margin:0; padding:.5rem .8rem; overflow:auto; list-style:none;
-    display:flex; flex-direction:column; gap:.4rem; }
-  .propcard { display:flex; flex-direction:row; gap:.6rem; align-items:center;
-    padding:.5rem .6rem; border:1px solid var(--line); border-radius:5px;
-    background:var(--bg); }
-  .propcard-body { display:flex; flex-direction:column; gap:.3rem;
-    flex:1 1 auto; min-width:0; }
-  .propcard > .selpvbtn { margin-right:0; flex:0 0 auto; }
-  .proptoggle { display:flex; align-items:flex-start; gap:.5rem; flex:1 1 auto;
-    min-width:0; cursor:pointer; }
-  .proptoggle input { accent-color:var(--o1); margin-top:.18rem; }
-  .propsubj { font-weight:600; max-width:100%; overflow-wrap:break-word;
-    white-space:normal; font-family:var(--serif); }
-  .propsubj em { font-style:normal; color:var(--muted); }
-  .propmeta { font-size:.7rem; color:var(--muted); margin-top:.15rem; }
-  .proprowid { font-size:.66rem; color:var(--accent); max-width:100%;
-    overflow-wrap:break-word; margin-top:.1rem; }
-  .proposals-foot { display:flex; justify-content:flex-end; gap:.6rem;
-    padding:.5rem .8rem; border-top:1px solid var(--line); }
-  .srcgrp a { color:inherit; text-decoration-color:var(--accent); text-underline-offset:2px; }
-  .srcgrp a:hover { color:var(--accent); }
-  .newpill { font-size:.6rem; font-weight:800; text-transform:uppercase; letter-spacing:.09em;
-    color:#fff; background:var(--o1); border-radius:4px; padding:.05rem .3rem; }
-  .revpill { font-size:.6rem; font-weight:800; text-transform:uppercase; letter-spacing:.09em;
-    color:var(--fg); background:var(--dash); border:1px solid var(--muted);
-    border-radius:4px; padding:.02rem .28rem; }
-  .msg.isnew .bub, .sys.isnew { border-left:3px solid var(--o1); }
-  .states { display:grid; grid-template-columns:repeat(auto-fit,minmax(17rem,1fr));
-    gap:.35rem .9rem; margin:.6rem 0 0; font-size:.73rem; color:var(--muted); }
-  .st { display:flex; align-items:flex-start; gap:.45rem; line-height:1.4; }
-  .st b { color:var(--fg); font-weight:650; }
-  .sw { flex:0 0 1.15rem; height:1.15rem; border-radius:5px; border:1px solid var(--line);
-    margin-top:.05rem; }
-  .sw.plain { background:var(--card); }
-  .sw.dash { background:var(--dash); border-style:dashed;
-    border-color:color-mix(in srgb, var(--muted) 55%, transparent); }
-  .sw.mine { background:var(--mine); border-color:var(--o3); }
-  .sw.clipsw { border:none; display:grid; place-items:center; font-size:.8rem; }
-  .msg { margin:0 0 .5rem; }
-  .av { font-size:.83rem; flex:0 0 1em; width:1em; height:1em; border-radius:50%;
-    color:#fff; display:grid; place-items:center; align-self:center;
-    line-height:1; overflow:hidden; }
-  .av .ini { font-size:.62em; font-weight:700; line-height:1; letter-spacing:.01em; }
+  .sys.isnew { border-left:3px solid var(--o1); }
   .av.o1{background:var(--o1);--ring:var(--o1)} .av.o2{background:var(--o2);--ring:var(--o2)}
   .av.o3{background:var(--o3);--ring:var(--o3)} .av.o4{background:var(--o4);--ring:var(--o4)}
   .av.o5{background:var(--o5);--ring:var(--o5)}
   .av.pic { background-size:cover; background-position:center;
     box-shadow:0 0 0 1.5px var(--ring,var(--muted)), 0 0 0 2.5px var(--bg); }
-  .col { min-width:0; }
   /* The header is a disclosure, not a caption. The sender, the org, the clock
      and the reply the message answers are its summary — the things a page is
      scanned by — and the caret closes the line at its right edge, so it opens
@@ -515,9 +329,6 @@
      found under, and the copy control) is one click away rather than permanently
      in the bubble, where it was read once and made every bubble taller
      thereafter. */
-  details.hdr { margin:0 0 .14rem; padding:0 .1rem; }
-  details.hdr > summary { display:flex; flex-wrap:wrap; align-items:baseline;
-    gap:.3rem; cursor:pointer; list-style:none; }
   details.hdr > summary::-webkit-details-marker { display:none; }
   /* The line's right end: the reply it answers, and then the caret. One box so
      the caret closes the line whether or not there is a reply beside it — two
@@ -540,15 +351,12 @@
   details.hdr[open] > summary > .htail::after { transform:rotate(-90deg);
     border-right-color:var(--accent); }
   details.hdr > summary:focus-visible { outline:1px solid var(--accent); outline-offset:2px; }
-  .nm { font-size:.83rem; font-weight:650; }
   /* Tinted to match the bubble strip, so the colour is self-describing and the
      page needs no legend. Falls back to --muted for an entry with no org. */
-  .org { font-size:.68rem; color:var(--orgc,var(--muted)); text-transform:uppercase;
-    letter-spacing:.07em; font-weight:650; }
+  .org { color:var(--orgc,var(--muted)); }
   .msg.o1 .org { --orgc:var(--o1); } .msg.o2 .org { --orgc:var(--o2); }
   .msg.o3 .org { --orgc:var(--o3); } .msg.o4 .org { --orgc:var(--o4); }
   .msg.o5 .org { --orgc:var(--o5); }
-  .tm { font-size:.71rem; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
   /* The receipt's three controls are one shape, so they read as one line of them:
      the press that answers the message (see .replyall), the clip that copies it
      whole, and the swap to the sender's own rendering (see .origbtn further down
@@ -583,8 +391,6 @@
   /* an unknown zone is a statement, not an omission: italic and quieter still,
      so a page that is mostly unknown does not look like a page of facts */
   .tz.tzu { opacity:.45; font-style:italic; letter-spacing:.02em; cursor:help; }
-  .bub { position:relative; background:var(--card); border:1px solid var(--line);
-    border-radius:10px; padding:.45rem .7rem; overflow:hidden; }
   /* Org colour, as a strip down the bubble's inside edge. A page is scanned in
      the body column, so the avatar's colour is in the wrong place to answer
      "who is this from" while reading.
@@ -606,10 +412,6 @@
   .msg.o1 .bub { --orgc:var(--o1); } .msg.o2 .bub { --orgc:var(--o2); }
   .msg.o3 .bub { --orgc:var(--o3); } .msg.o4 .bub { --orgc:var(--o4); }
   .msg.o5 .bub { --orgc:var(--o5); }
-  .msg.q .bub { background:var(--dash); border-style:dashed;
-    border-color:color-mix(in srgb, var(--muted) 55%, transparent); }
-  .msg.me .bub { background:var(--mine); border-color:var(--o3); }
-  .ment { margin:0 0 .3rem; display:flex; flex-wrap:wrap; gap:.25rem; }
   /* The reader's second reading of one message: the sender's own html, swapped in
      for this pipeline's stripped one. The control is drawn in the receipt — the
      place a reader inspects a message (the ids it was found under, the address it
@@ -625,7 +427,6 @@
      other way; the control itself stays put either way, because the receipt is one
      click and the bubble's own line is not where a reader goes to change how a
      message is read. */
-  .hdetend { margin-left:auto; display:inline-flex; align-items:center; gap:.35rem; }
   .origbtn[aria-pressed="true"] { color:var(--accent); background:var(--mine);
     border-color:var(--accent); }
   /* Which message this box's press is about. The pane's reply box answers the newest
@@ -635,7 +436,6 @@
      state the reader set (see AnswerPress). */
   .replyall[aria-pressed="true"] { color:var(--accent); background:var(--mine);
     border-color:var(--accent); }
-  .origwhy { font-size:.66rem; color:var(--muted); font-style:italic; }
   /* The shadow host: layout only, and deliberately no colour. A rule in THIS
      stylesheet beats a :host rule written inside the shadow root, so a colour
      here would be a canvas the sender's own stylesheet could not correct — the
@@ -644,8 +444,6 @@
      mounted in: it becomes the containing block for a `position:fixed`
      descendant, and it clips a fixed-width layout's overflow at the bubble. */
   .bdo { contain:layout paint; }
-  .at { font-size:.74rem; font-weight:650; color:var(--o3); background:var(--mine);
-    border-radius:5px; padding:.02rem .35rem; }
   .bub p { margin:.2rem 0; }
   .bub p:first-of-type { margin-top:0; }
   .bub ul { margin:.25rem 0; padding-left:1rem; }
@@ -675,13 +473,11 @@
      page. These rules hold it inside the bubble: an image scales down instead of
      pushing the column out, and a table that cannot shrink any further scrolls
      in its own strip rather than widening the whole timeline. */
-  .bd { overflow-x:auto; }
   /* A message that was sent with nothing in it. The page's own voice — muted and
      italic, the same register as the receipt's notes — because the words are ours
      rather than the sender's: the answer to "why is this empty" is the corpus
      speaking, and a bold or coloured line would be read as something the message
      said. */
-  .bd .nobody { margin:0; font-size:.8rem; color:var(--muted); font-style:italic; }
   .bd img { max-width:100%; height:auto; }
   .bd table { min-width:0; max-width:100%; }
   .bd td, .bd th { vertical-align:top; }
@@ -690,12 +486,6 @@
      relation came from the ingest's graded overlap, and these classes only
      shape a visible diff — strike for the removed words, a soft highlight for
      the inserted ones. */
-  .edits { margin:.35rem 0 0; }
-  .edit { background:var(--dash); border-left:2px solid var(--line);
-    border-radius:6px; padding:.3rem .55rem; }
-  .edit .ehdr { font-size:.72rem; color:var(--muted); } .edit .ehdr a { color:var(--accent); }
-  .edit .ets { margin-left:.35rem; }
-  .edit .ebd { font-size:.92rem; overflow-x:auto; }
   .edit .edel { color:var(--muted); text-decoration:line-through; }
   .edit .eins { background:color-mix(in srgb, var(--mine) 55%, transparent);
     border-radius:3px; padding:0 .12rem; }
@@ -716,19 +506,12 @@
   /* b/i/u/strong/em are left alone on purpose: an element the sender reached for
      to stress a word says something a style attribute does not, and dropping it
      flattens a deliberately emphasised line into prose. */
-  .atts { display:flex; flex-wrap:wrap; align-items:center; gap:.3rem; margin:.4rem 0 .1rem; }
   /* The strip's head is a mark alone: the chips to its right ARE the list of
      files, so the word that used to sit here ("attached") named the row a reader
      had already recognised by its pictures and its filenames. The glyph keeps its
      colour and its size and loses the word's tracking, which only ever applied to
      the word. */
-  .clip { font-size:.72rem; color:var(--muted); }
   .clip::before { content:"\1F4CE"; }
-  .att { display:inline-flex; align-items:baseline; gap:.35rem; text-decoration:none;
-    border:1px solid var(--line); border-radius:6px; padding:.1rem .45rem;
-    background:var(--quote); color:var(--fg); }
-  .att:hover { border-color:var(--accent); }
-  .att.nolink { opacity:.6; }
   /* A chip whose file the reader has asked for and the mailbox has not answered
      yet. The press IS the download (see Attachments), so the chip is the only
      place the wait can be said — and it is said in the same ↻ and the same turn
@@ -738,8 +521,6 @@
      can be missed on a row of framed names — and under reduced motion, where the
      turn is stilled, the border and the colour are all that is left — and a chip
      that is out asking for something should not read as idle. */
-  .att.busy { border-color:var(--accent); cursor:progress; }
-  .att.busy .ameta { color:var(--fg); }
   /* The chip's spinner is the .spinner base (see .navrefresh .spinner) at the
      .ameta size it inherits, but as wide as the ↻ it replaced: a typeset glyph was
      as wide as its advance (0.838em in this host's DejaVu Sans), and the chip's
@@ -752,13 +533,10 @@
      which is what the other chips align to. Left as its own rule rather than
      changing .att, so a chip without a picture keeps sitting on the baseline of
      the line it is in. */
-  .att.haspop { align-items:center; }
   /* One copy of the bytes serves the chip and the popover, embedded at the size
      the popover needs and shown here at chip height. Cropped from the top left
      rather than letterboxed: a screenshot is unreadable at this size either way,
      and its top-left corner is the part that says which screenshot it is. */
-  .athumb { display:block; height:2.1rem; width:auto; max-width:9rem; object-fit:cover;
-    object-position:top left; border-radius:3px; border:1px solid var(--line); }
   /* A thumbnail drawn from bytes this host holds, rather than from one embedded in
      a built page. Those bytes are a file being fetched rather than a picture that
      is already in the markup, so there is no width to declare until they arrive —
@@ -767,7 +545,6 @@
      the box is stated here instead of measured: three rems by the chip's height,
      which is about what a screenshot's own ratio wants at that height, cropped the
      same way. Nothing shifts when the picture lands. */
-  .athumb.ablob { width:3rem; }
   .att.haspop::after { content:"\2922"; font-size:.7rem; color:var(--muted); }
   .att.haspop:hover::after, .att.haspop:focus-visible::after { color:var(--accent); }
   /* Enlarged picture. Above the spec viewer's siblings but below it: the spec
@@ -781,33 +558,19 @@
     background:color-mix(in srgb, var(--bg) 92%, transparent);
     backdrop-filter:blur(3px); }
   .pop[hidden] { display:none; }
-  .popbox { display:flex; flex-direction:column; gap:.4rem; max-width:100%;
-    max-height:100%; }
   /* Room is left for the bar underneath, so the caption and the controls are not
      the first thing a tall picture pushes off the screen. Never scaled up: a
      picture is shown at the size it was sent, and a small one stays small. */
-  .popimg { max-width:100%; max-height:calc(100vh - 6rem); width:auto; height:auto;
-    object-fit:contain; border:1px solid var(--line); border-radius:6px;
-    background:var(--card); }
   .popimg[hidden] { display:none; }
   /* A text file, read rather than parsed: monospace, no wrapping, scrolling both
      ways, because a CSV line and a log line are both wider than any column and a
      wrapped one is harder to read than a scrolled one. */
-  .poptext { margin:0; padding:.9rem 1rem; width:min(72rem, 92vw);
-    max-height:calc(100vh - 6rem); overflow:auto; text-align:left;
-    font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.78rem;
-    line-height:1.5; white-space:pre; tab-size:4;
-    border:1px solid var(--line); border-radius:6px; background:var(--card);
-    color:var(--fg); }
   .poptext[hidden] { display:none; }
   /* A delimited file, read as cells rather than as lines of commas: the same
      scroll-anywhere box the text window uses, with the values in a table. The
      header stays put while the rows scroll, because a column of figures is read
      against its heading, and that heading is the first thing to leave the screen.
      Monospace, so a column of amounts lines up on its digits. */
-  .popgrid { width:min(72rem, 92vw); max-height:calc(100vh - 6rem); overflow:auto;
-    border:1px solid var(--line); border-radius:6px; background:var(--card);
-    text-align:left; }
   .popgrid[hidden] { display:none; }
   .poptable { border-collapse:collapse; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
     font-size:.74rem; }
@@ -827,27 +590,12 @@
      chose (application/pdf), never the sender's claim about the bytes, and the
      PDF viewers that would break under a sandbox are the only reason to have a
      frame here at all. */
-  .popframe { width:min(72rem, 92vw); height:calc(100vh - 6rem); border:1px solid var(--line);
-    border-radius:6px; background:var(--card); }
   .popframe[hidden] { display:none; }
-  .popbar { display:flex; align-items:center; gap:.7rem; }
-  .popcap { font-size:.74rem; font-weight:650; color:var(--muted);
-    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
-    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   /* What the window has to say about itself: that a long file was cut, that the
      bytes could not be read. Not a control, so it is not framed like one. */
-  .popnote { font-size:.72rem; color:var(--muted); white-space:nowrap; }
-  .popx { margin-left:auto; font:inherit; font-size:.72rem; cursor:pointer;
-    border:1px solid var(--line); border-radius:6px; padding:.15rem .55rem;
-    background:var(--card); color:var(--fg); }
-  .popx:hover, .popx:focus-visible { border-color:var(--accent); }
   /* The original file, for a chip whose bytes are in the corpus: the click that
      opened the popover was intercepted, so this is the only route to the real
      bytes rather than the thumbnail. Same control as Close, one step quieter. */
-  .popget { font:inherit; font-size:.72rem; text-decoration:none; cursor:pointer;
-    border:1px solid var(--line); border-radius:6px; padding:.15rem .55rem;
-    background:var(--card); color:var(--muted); }
-  .popget:hover, .popget:focus-visible { border-color:var(--accent); color:var(--fg); }
   .popget[hidden] { display:none; }
   /* The transcript must not scroll behind an enlarged picture: the reader's
      position in it is what they return to when the popover closes. */
@@ -872,8 +620,6 @@
      the air between it and the subject above. Centring the items keeps the text
      beside the control rather than hung beneath it, and stops one control from
      setting the space above an entire row. */
-  .hdet { display:flex; flex-wrap:wrap; align-items:center; gap:.2rem .7rem;
-    margin:0 0 .3rem; padding:.22rem .1rem 0; }
   .to { font-size:.66rem; color:var(--muted); }
   /* The message's own subject, and the ids it was found under, sharing the
      receipt's first line: the subject keeps the left and the ids are pushed to
@@ -891,27 +637,16 @@
      the subject is what they are inspecting: one line, one glance, rather than
      the ids taking a quiet line of their own under the recipient — which was
      mostly empty and pushed the receipt's fields a line further down. */
-  .hdet .hsub { flex:1 1 100%; display:flex; align-items:baseline; gap:.3rem .7rem; }
-  .hdet .hsub .subj { flex:1 1 auto; min-width:0;
-    font-size:.72rem; color:var(--fg); line-height:1.25; }
   /* `margin-left:auto` rather than the subject taking the slack: a long subject
      that wraps must not push the ids off the row, and the ids still end at the
      right edge when the subject is short. */
   .hdet .hsub .src { margin-left:auto; }
-  .src { font-size:.64rem; color:var(--muted);
-    font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
   .src a { color:inherit; text-decoration:none; border-bottom:1px dotted currentColor; }
   .src a:hover { color:var(--accent); }
   /* An id and its "msg" are one token to the reader, so the space between them is
      not a break opportunity; the commas outside .sid are, and they are the only
      place a many-host line may wrap. */
   .src .sid { white-space:nowrap; }
-  .sys { text-align:center; margin:.7rem auto; max-width:44rem; padding:.55rem .9rem;
-    border:1px dashed var(--line); border-radius:10px; background:var(--quote); }
-  .sysday { font-size:.68rem; color:var(--muted); font-variant-numeric:tabular-nums;
-    margin-bottom:.15rem; }
-  .syslabel { font-size:.75rem; font-weight:700; text-transform:uppercase;
-    letter-spacing:.08em; color:var(--muted); margin-bottom:.3rem; }
   .sys ul { text-align:left; margin:.4rem 0 0; padding-left:1.1rem; }
   .sys li { font-size:.85rem; margin:.12rem 0; }
   .sys p { margin:.18rem 0; font-size:.86rem; text-align:left; }
@@ -925,17 +660,7 @@
     text-decoration-color:var(--accent); border-radius:3px; }
   a.pl:hover { color:var(--accent); text-decoration:underline dotted; }
   a.pl:focus-visible { outline:1.5px solid var(--accent); outline-offset:1px; }
-  .sysday a.pl:hover { color:var(--accent); }
-  .par { display:inline-flex; align-items:center; gap:.28rem; font-size:.66rem;
-    color:var(--muted); text-decoration:none; }
   .sys .par { margin-top:.3rem; }
-  .par:hover { color:var(--accent); }
-  .par .arw { font-size:.8rem; line-height:1; display:block;
-    transform:translateY(.045em); }
-  .par b { font-weight:650; color:inherit; }
-  .tstart { font-size:.6rem; font-weight:700; text-transform:uppercase;
-    letter-spacing:.09em; color:var(--muted); border:1px solid var(--line);
-    border-radius:4px; padding:.02rem .3rem; }
   a.xref { color:inherit; text-decoration:underline; text-decoration-style:dotted;
     text-underline-offset:2px; text-decoration-color:var(--accent); }
   a.xref:hover { color:var(--accent); text-decoration-style:solid; }
@@ -1099,16 +824,6 @@
      real edge rather than a fixed 16.5rem. Without JS the panel just does not
      reserve a column. */
   body.hasmap { padding-right:var(--panel); }
-  .toolbar { position:fixed; top:.5rem; right:calc(var(--panel) + .6rem); z-index:31;
-    display:flex; gap:.35rem; }
-  .tbtn { font:inherit; font-size:.66rem; font-weight:700; text-transform:uppercase;
-    letter-spacing:.08em; color:var(--muted); background:var(--card);
-    border:1px solid var(--line); border-radius:6px; padding:.2rem .45rem;
-    cursor:pointer; }
-  .tbtn:hover { color:var(--accent); border-color:var(--accent); }
-  /* a toggle shows its state, rather than renaming itself each click */
-  .tbtn[aria-pressed="true"] { color:var(--accent); border-color:var(--accent);
-    background:var(--mine); }
   body.mapoff .mini { display:none; }
   /* below this width the tree stops reserving a column and becomes an overlay:
      it keeps its fixed position and floats over the stream instead of vanishing.
@@ -1123,14 +838,8 @@
     .mini { top:2.4rem; width:max-content; max-width:16.5rem;
       background:color-mix(in srgb, var(--card) 86%, transparent); }
     #maptog { display:inline-block; }
-    /* The panel floats as an overlay now (no reserved column), so the toolbar
-       buttons sit at the stream's true right edge rather than clearing a
-       panel that is no longer beside them. */
-    .toolbar { right:.6rem; }
   }
-  @media print { .mini, .toolbar { display:none; } body.hasmap { padding-right:0; } }
-  .tbtn:disabled { opacity:.55; cursor:default; }
-  .tbtn:disabled:hover { color:var(--muted); border-color:var(--line); }
+  @media print { .mini { display:none; } body.hasmap { padding-right:0; } }
   /* --- chain columns: one column per reply chain, grid row = chronological
      position, so reading down stays in time order while each chain keeps a lane --- */
   .colhd, .spine, .chsec { display:none; }
@@ -1212,33 +921,12 @@
   }
   /* a message that only moves should slide, not cross-fade through itself */
   ::view-transition-old(root) { mix-blend-mode:normal; }
-  footer.end { margin-top:2rem; border-top:1px solid var(--line); padding-top:.9rem; }
-  footer.end h2 { font-size:.8rem; text-transform:uppercase; letter-spacing:.1em;
-    color:var(--muted); margin:0 0 .6rem; }
-  footer.end ul { margin:0; padding-left:1.15rem; }
-  footer.end li { margin:.2rem 0; font-size:.89rem; }
-  /* add-email search: one compact form row inside the proposals modal chrome */
-  .addform { display:flex; align-items:center; gap:.5rem; padding:.45rem .8rem;
-    border-bottom:1px solid var(--line); }
-  .addform label { display:flex; align-items:center; gap:.4rem; flex:1 1 auto;
-    min-width:0; font-size:.7rem; color:var(--muted); }
-  .addform input { font:inherit; font-size:.78rem; padding:.3rem .5rem; flex:1 1 auto;
-    min-width:0; border:1px solid var(--line); border-radius:5px;
-    background:var(--bg); color:var(--fg); }
-  .addform button { font:inherit; font-size:.72rem; font-weight:650;
-    padding:.3rem .7rem; border:1px solid var(--line); border-radius:5px;
-    background:var(--bg); color:var(--fg); cursor:pointer; }
-  .addform button:hover:not(:disabled) { color:var(--accent); border-color:var(--accent); }
-  .addform button:disabled { opacity:.45; cursor:default; }
   /* --- a pull that failed --- */
   /* Above the page rather than beside the chips: a pull is one message's business
      but its failure is the page's — the reader pressed a button that spends
      mailbox round trips and has to be told, in the page, that it did not work.
      Console-only is where the refresh verdict lives and where this used to be
      lost: "nothing happened" and "it failed" look identical without it. */
-  .pullnote { margin:0 0 .8rem; padding:.55rem .85rem; font-size:.85rem;
-    color:var(--fg); background:var(--card); border:1px solid var(--accent);
-    border-left-width:3px; border-radius:6px; }
 
 /* --- answering a message --- */
 /* The reply box is the pane's own foot: it sits in the stream under everything
@@ -1247,47 +935,8 @@
    width it is given rather than a measure of its own — the bubbles above it are
    the thing being read, and a field that narrowed them would be the wrong end of
    the pane growing. */
-.replybox { margin:.9rem 0 .3rem; padding:.6rem .7rem; border:1px solid var(--line);
-  border-radius:8px; background:var(--card); }
-/* To and Cc each get a full line, rather than squeezing two address lists
-   side by side.
-
-   `--addrrow` is the height of one line of an address field, and it is the row's
-   own measure rather than any one item's: the field is given it as a min-height
-   and the label and the link are given it as a height, so the three agree by
-   construction instead of by three numbers that happen to match. Measured from
-   the field's own box — .1rem padding and a 1px border each side, around an
-   input at .72rem with the body's 1.45 line-height, or around one chip, which is
-   a shade taller (1.569rem and 1.594rem at a 16px root) — so it clears both by
-   less than a tenth of a rem. Everything here is in rem, so the relationship
-   holds whatever the reader's root size is. */
-.replyrecipients { --addrrow:1.7rem; display:grid; grid-template-columns:max-content minmax(0,1fr) max-content;
-  align-items:start; column-gap:.3rem; row-gap:.4rem; margin:0 0 .55rem;
-  font-size:.74rem; color:var(--muted); }
-.replyrecipient { display:contents; }
-/* `display:contents` lets every row share these tracks: labels line up, and the
-   target link reserves the same trailing column for From, To, and Cc controls. */
-.replyrecipient { min-width:0; }
-/* The label is one line of the field tall, and its word sits in the middle of that
-   height rather than at the top of it: the field's own text is centred in its box,
-   and a label left at its natural height (a .74rem line box) with `flex-start` put
-   `to:` a couple of pixels above the first address it names. A field that WRAPS
-   grows past this height and the label does not follow — it is the first line the
-   label belongs to, which is the line the reader reads it against. */
-.replylabel { display:inline-flex; align-items:center; height:var(--addrrow); }
-.replyfrom { flex:1 1 auto; min-width:0; height:var(--addrrow); padding:0 .3rem;
-  font:inherit; font-size:.72rem; color:var(--fg); background:var(--bg);
-  border:1px solid var(--line); border-radius:6px; }
-.replyfrom:focus { border-color:var(--accent); }
-.replyfrom:disabled { opacity:.55; cursor:default; }
-.replyrecipient > .addrfield { display:flex; width:100%; min-width:0; min-height:var(--addrrow); }
-.replyrecipient .addrinput { min-width:3rem; }
-/* The link to the message being answered sits in the reserved third column of
-   the To row, rather than shrinking that field or occupying a line below Cc. It
-   is one line of the field tall (see .replylabel). */
-.replytarget { display:inline-flex; align-items:center; gap:.25rem; margin-left:auto;
-  height:var(--addrrow); white-space:nowrap; text-decoration:none; }
-.replytarget .arw { font-size:.8rem; line-height:1; }
+/* Recipient rows are display:contents so labels line up, fields take the middle
+   track, and the message target reserves the trailing track. */
 /* The collapsed recipient line: who the reply reaches, read-only, and the one
    press that opens the editors. It is styled as the message header's own
    receipt line (.to) rather than as a field, because that is what it is before a
@@ -1304,23 +953,10 @@
   text-overflow:ellipsis; white-space:nowrap; }
 .replysummary:hover .replynames { color:var(--fg); }
 .replynone { font-style:italic; }
-.replyfield { display:grid; gap:.3rem; margin:0 0 .55rem; font-size:.74rem; color:var(--muted); }
-.replybox form { margin:0; }
-.replyinput { display:block; width:100%; font:inherit; font-size:.82rem;
-  line-height:1.45; padding:.45rem .55rem; color:var(--fg); background:var(--bg);
-  border:1px solid var(--line); border-radius:6px; resize:vertical; }
-.replyinput:disabled { opacity:.55; }
 /* The plan: what will be sent, in the whole. The body is monospaced and
    pre-wrapped so that the quote is read as the lines that will be sent — the
    quote marks the server added are the thing being checked, and a proportional
    rendering of them is a drawing of the message rather than the message. */
-.replyplan { font-size:.76rem; line-height:1.5; }
-.replynote { margin:0 0 .45rem; }
-.replytext { margin:.4rem 0 0; padding:.5rem .6rem; max-height:22rem;
-  overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font-size:.76rem;
-  line-height:1.45; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
-  color:var(--fg); background:var(--bg); border:1px solid var(--line);
-  border-radius:6px; }
 /* The same preview when the reply goes out with its HTML part: the rendering the
    recipient's client gets rather than the lines that will be typed. The frame
    matches .replytext above so the two forms are one panel changing shape, but the
@@ -1329,10 +965,6 @@
    correspondent sees. The bytes inside it are the server's and are not touched
    here; these rules shape the frame and the composed elements' own margins, as
    .bd's do for a body. */
-.replyhtml { margin:.4rem 0 0; padding:.5rem .6rem; max-height:22rem;
-  overflow:auto; overflow-wrap:anywhere; font-size:.84rem; line-height:1.5;
-  color:var(--fg); background:var(--bg); border:1px solid var(--line);
-  border-radius:6px; }
 .replyhtml p { margin:.4rem 0; }
 .replyhtml p:first-of-type { margin-top:0; }
 .replyhtml blockquote { margin:.4rem 0 0; padding-left:.6rem;
@@ -1351,74 +983,10 @@
    at the left, in the reader's reading order, while what sends the reply stays
    where the sending is. They are one row and one style because they are one kind
    of thing: both ticks are on, and either can only take something off the reply. */
-.replyopts { display:flex; align-items:center; gap:1rem; margin-right:auto; }
-.replytick { display:flex; align-items:center; gap:.4rem;
-  font-size:.74rem; color:var(--muted); cursor:pointer; }
-.replytick input { margin:0; accent-color:var(--accent); cursor:pointer; }
 .replytick:has(input:disabled) { opacity:.55; cursor:default; }
-/* Each address field is one bordered run of chips with an input at the end. The
-   suggestions hang under the whole box rather than the input, so the list stays as
-   wide as the recipient row while the reader types. */
-.addrfield { position:relative; display:inline-flex; flex-wrap:wrap; align-items:center;
-  gap:.2rem; margin:0 .15rem; padding:.1rem .3rem; max-width:100%; vertical-align:middle;
-  border:1px solid var(--line); border-radius:6px; background:var(--bg); }
-.addrfield:focus-within { border-color:var(--accent); }
-.addrchip { display:inline-flex; align-items:center; gap:.2rem; max-width:100%;
-  padding:.05rem .2rem .05rem .35rem; border:1px solid var(--line); border-radius:10px;
-  background:var(--card); font-size:.72rem; }
-.addrname { overflow-wrap:anywhere; }
-.addrx { flex:none; display:inline-flex; align-items:center; padding:.1rem; color:var(--muted);
-  background:none; border:none; border-radius:4px; cursor:pointer; }
-.addrx:hover { color:var(--accent); background:var(--bg); }
-.addrx svg { display:block; }
-.addrx:disabled { opacity:.55; cursor:default; }
-.addrx:disabled:hover { color:var(--muted); background:none; }
-.addrinput { flex:1 1 7rem; min-width:7rem; font:inherit; font-size:.72rem; padding:.1rem 0;
-  color:var(--fg); background:none; border:none; outline:none; }
-.addrinput::placeholder { color:var(--muted); }
-/* The suggestions, under the field. Over the prose rather than in it: the line would
-   reflow under the reader's eyes as they typed, and the box is already the thing they
-   are looking at. */
-.addrlist { position:absolute; top:100%; left:0; z-index:20; display:flex;
-  flex-direction:column; min-width:100%; max-width:24rem; max-height:14rem; overflow:auto;
-  margin-top:.25rem; padding:.15rem; border:1px solid var(--line); border-radius:6px;
-  background:var(--card); box-shadow:0 6px 18px rgba(0,0,0,.18); }
-.addropt { display:flex; align-items:baseline; gap:.4rem; padding:.2rem .35rem;
-  font-size:.72rem; border-radius:4px; cursor:pointer; }
-.addropt.on { background:var(--mine); }
-.addroptaddr { font-size:.68rem; color:var(--muted); overflow-wrap:anywhere; }
-.addropt.none { color:var(--muted); cursor:default; }
-/* A refusal is a sentence about the address the reader just tried to add, and it sits
-   in the field rather than in the popup: the popup is where the answers are, and this
-   is the answer to what they did — the same red the other refusals on the page wear
-   (see .selfail). It goes away with the next keystroke, because it is about that one
-   address rather than a standing fact about the field. */
-.addrrefuse { flex-basis:100%; padding:.1rem .2rem; font-size:.68rem; color:crimson; }
 
 /* --- what a write leaves to say --- */
-/* The bottom-right corner, over every page. These are accounts of work that is
-   over and reasons a write was refused, and neither is a fact about the page the
-   reader is looking at: in the flow of the header they covered the top of the
-   page, and in the flow of the panel they took a line from the thread being read
-   and had to be dropped by hand when the reader moved on. Out of the flow they
-   cover nothing that is being read — the same reason a mail client puts them
-   where the eye is not working. */
-.toasts { position:fixed; z-index:80; right:.9rem; bottom:.9rem;
-  display:flex; flex-direction:column; align-items:flex-end; gap:.4rem;
-  max-width:min(26rem, calc(100vw - 1.8rem)); pointer-events:none; }
-.toast { display:flex; align-items:flex-start; gap:.5rem; pointer-events:auto;
-  padding:.5rem .55rem .5rem .7rem; font-size:.78rem; line-height:1.35;
-  color:var(--fg); background:var(--card); border:1px solid var(--line);
-  border-left-width:3px; border-radius:7px;
-  box-shadow:0 6px 20px rgba(0,0,0,.22); }
-/* A refusal is the one thing here that is not a moment passing: it is something
-   to act on, so it is marked, and it keeps its own way out (the ×) rather than
-   relying on a clock. */
-.toast.bad { border-color:crimson; }
-.toast .toasttext { flex:1 1 auto; }
-.toast .toastx { flex:none; font:inherit; line-height:1; padding:0 .1rem;
-  color:var(--muted); background:none; border:none; cursor:pointer; }
-.toast .toastx:hover { color:var(--accent); }
+/* A refusal toast keeps the standard arrival treatment but needs no timeout. */
 @media (min-width:60rem) {
   /* A wide window has room for the thing arriving to be seen arriving. */
   @media (prefers-reduced-motion: no-preference) {
@@ -1427,18 +995,3 @@
   }
 }
 
-/* Compose occupies the reading pane beside the message list. */
-.compose-panel { min-width:0; overflow:auto; border-left:1px solid var(--line);
-  background:var(--bg); }
-.compose-box { width:100%; min-height:100%; box-sizing:border-box; overflow:auto; padding:1.25rem;
-  background:var(--bg, #fff); color:var(--fg, #111); }
-.compose-head, .compose-box footer { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
-.compose-head h2 { margin: 0 0 1rem; }
-.compose-box form, .compose-box label { display: grid; gap: .5rem; }
-.compose-box form { gap: 1rem; }
-.compose-box input, .compose-box textarea { box-sizing: border-box; width: 100%; font: inherit; padding: .6rem; }
-.compose-box textarea { resize: vertical; }
-.compose-review { display: grid; grid-template-columns: 5rem minmax(0, 1fr); gap: .5rem; overflow-wrap: anywhere; }
-.compose-review dt { font-weight: 700; }
-.compose-review dd { margin: 0; }
-.compose-review pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }

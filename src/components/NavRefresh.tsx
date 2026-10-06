@@ -3,6 +3,7 @@ import { ArrowPathIcon } from "@heroicons/react/24/outline";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError, $api } from "../lib/api";
 import { when } from "../lib/stamp";
+import { IconButton } from "./controls";
 
 /**
  * Ask the mailbox for what has arrived, and the corpus again for what is on this
@@ -119,9 +120,9 @@ export function NavRefresh() {
   };
 
   return (
-    <button
+    <IconButton
       type="button"
-      className={`navrefresh${indicator ? " busy" : ""}${warning ? " warn" : ""}`}
+      className={`navrefresh gap-[.35rem] disabled:cursor-default${indicator ? " busy" : ""}${warning ? " warn" : ""}`}
       aria-label={label}
       title={title}
       aria-busy={indicator}
@@ -129,7 +130,7 @@ export function NavRefresh() {
       onClick={() => void refresh()}
     >
       <ArrowPathIcon className="spinner" width={16} height={16} aria-hidden="true" />
-      {stageLabel && <span className="navrefresh-label">{stageLabel}</span>}
-    </button>
+      {stageLabel && <span className="navrefresh-label whitespace-nowrap text-[.72rem]">{stageLabel}</span>}
+    </IconButton>
   );
 }

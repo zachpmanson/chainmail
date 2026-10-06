@@ -271,7 +271,7 @@ describe("a message whose own html the corpus holds", () => {
     // at the mail it governs.
     const switches = () =>
       [...container.querySelectorAll(".origbtn")] as HTMLElement[];
-    expect(bubbles().map((b) => b.className)).toEqual(["bd", "bd"]);
+    expect(bubbles().map((b) => b.classList.contains("bd"))).toEqual([true, true]);
 
     fireEvent.click(switches()[0]!);
     await waitFor(() => expect(container.querySelectorAll(".bdo").length).toBe(2));
@@ -284,7 +284,7 @@ describe("a message whose own html the corpus holds", () => {
     // Pressing the control on either of them turns the pair back together.
     fireEvent.click(switches()[0]!);
     await waitFor(() => expect(container.querySelectorAll(".bdo").length).toBe(0));
-    expect(bubbles().map((b) => b.className)).toEqual(["bd", "bd"]);
+    expect(bubbles().map((b) => b.classList.contains("bd"))).toEqual([true, true]);
   });
 
   it("answers a sender's mail from the stored switch, without being asked again", async () => {

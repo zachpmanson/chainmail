@@ -31,7 +31,9 @@ describe("a bubble drawn from its props alone", () => {
   it("takes the sender, the colour slot and the clock from the caller", () => {
     const { container } = draw();
     const msg = container.querySelector(".msg")!;
-    expect(msg.className).toBe("msg o2");
+    expect(msg.classList.contains("msg")).toBe(true);
+    expect(msg.classList.contains("o2")).toBe(true);
+    expect(msg.classList.contains("mb-2")).toBe(true);
     expect(msg.id).toBe("m1");
     expect(msg.querySelector(".nm")!.textContent).toBe("Ada Okoye");
     expect(msg.querySelector(".org")!.textContent).toBe("Loomworks");
@@ -165,8 +167,8 @@ describe("a bubble drawn from its props alone", () => {
     const line = container.querySelector(".hdet .hsub")!;
     expect(line.querySelector(".subj")!.textContent).toBe("Solar install quote: dates");
     // The subject first, the ids after it: one row, and the ids are its right end.
-    expect(line.firstElementChild!.className).toBe("subj");
-    expect(line.lastElementChild!.className).toBe("src");
+    expect(line.firstElementChild!.className).toContain("subj");
+    expect(line.lastElementChild!.className).toContain("src");
     // A message with no subject still shows where it was found — the row is the
     // subject's line rather than a row that needs one.
     const ids = draw({ source: <span className="src">msg 18bd3f21</span> });
@@ -176,7 +178,13 @@ describe("a bubble drawn from its props alone", () => {
 
   it("carries the flags it is given as the classes the stylesheet reads", () => {
     const { container } = draw({ me: true, quoted: true, chainStart: true });
-    expect(container.querySelector(".msg")!.className).toBe("msg o2 me q chstart");
+    expect([...container.querySelector(".msg")!.classList]).toEqual(
+      expect.arrayContaining(["msg", "o2", "me", "q", "chstart", "mb-2"]),
+    );
+    const bubble = container.querySelector(".bub")!;
+    expect([...bubble.classList]).toEqual(
+      expect.arrayContaining(["relative", "overflow-hidden", "border-line", "bg-card", "border-dashed", "bg-dash", "border-org-3", "bg-mine"]),
+    );
   });
 
   it("trims the edges of the body it is handed", () => {
@@ -184,7 +192,9 @@ describe("a bubble drawn from its props alone", () => {
     // the caller should not have to know that: the bubble is where a body's
     // edges become presentable.
     const { container } = draw({ body: "<p> </p><p>Good morning.</p>" });
-    expect(container.querySelector(".bd")!.innerHTML).toBe("<p>Good morning.</p>");
+    const body = container.querySelector(".bd")!;
+    expect(body.innerHTML).toBe("<p>Good morning.</p>");
+    expect(body.classList.contains("overflow-x-auto")).toBe(true);
   });
 
   it("stays quiet where the caller has no spec furniture to give it", () => {

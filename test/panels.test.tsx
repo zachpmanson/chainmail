@@ -47,9 +47,9 @@ describe("sources panel", () => {
     const html = renderToStaticMarkup(
       <SourcesPanel v={v} filter={{ chains, excluded: new Set(), onToggle: () => {} }} />,
     );
-    expect(html.match(/class="srclink" href="#/g)).toHaveLength(7);
+    expect(html.match(/class="[^"]*\bsrclink\b[^"]*" href="#/g)).toHaveLength(7);
     // the meeting notice never existed as an email, so it has no thread to link
-    expect(html.match(/class="srclink" href="https/g)).toHaveLength(6);
+    expect(html.match(/class="[^"]*\bsrclink\b[^"]*" href="https/g)).toHaveLength(6);
   });
 
   it("reflects exclusions in the checked state", () => {
@@ -81,7 +81,7 @@ describe("static export", () => {
     // both orientations are in the DOM; CSS shows the live one
     expect(html.match(/class="hit"/g)).toHaveLength(58 * 2);
     expect(html.match(/class="chdr"/g)).toHaveLength(7);
-    expect(html.match(/<a class="par"/g)).toHaveLength(51);
+    expect(html.match(/<a class="par[^"]*"/g)).toHaveLength(51);
   });
 
   it("emits one avatar rule per face rather than inlining each image", () => {
@@ -140,8 +140,8 @@ describe("participants panel", () => {
   /** slot -> name, for every avatar the participants panel renders. */
   function panelFaces() {
     const html = renderToStaticMarkup(<ParticipantsPanel v={derive(spec)} />);
-    const re = /class="av (o\d)[^"]*">(?:<span class="ini">[^<]*<\/span>)?<\/div><span title="[^"]*">([^<]+)<\/span>/g;
-    return new Map([...html.matchAll(re)].map((m) => [m[2]!, m[1]!]));
+    const re = /class="av (o\d)[^"]*">(?:<span class="ini[^"]*">[^<]*<\/span>)?<\/div><span class="[^"]*" title="[^"]*">([^<]+)<\/span>/g;
+    return new Map([...html.matchAll(re)].map((match) => [match[2]!, match[1]!]));
   }
 
   it("colours a person's panel row with the slot their own bubbles use", () => {
@@ -236,7 +236,8 @@ describe("participants panel", () => {
     // rows, where a strip per row would read as noise, and the avatars already
     // carry the colour per person.
     const html = renderToStaticMarkup(<ParticipantsPanel v={derive(spec)} />);
-    const heads = [...html.matchAll(/class="ogh ([^"]*)">([^<]+)</g)].map((m) => [m[2], m[1]]);
+    const heads = [...html.matchAll(/class="ogh [^"]*\b(o\d)\b[^"]*">([^<]+)</g)]
+      .map((match) => [match[2], match[1]]);
     expect(heads).toEqual([
       ["Starfleet", "o1"], ["Daystrom", "o2"], ["Utopia Planitia", "o3"],
     ]);
@@ -247,7 +248,7 @@ describe("participants panel", () => {
     const other = renderToStaticMarkup(
       <ParticipantsPanel v={derive({ ...spec, participants: [{ name: "Nobody Known" }] })} />,
     );
-    expect(other).toContain('class="ogh o5">Other<');
+    expect(other).toMatch(/class="[^"]*\bogh\b[^"]*\bo5\b[^"]*">Other</);
     expect(readFileSync("src/styles.css", "utf8")).not.toMatch(/^\s*\.ogh\.o5\s*\{/m);
   });
 });

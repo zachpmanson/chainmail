@@ -136,11 +136,11 @@ export function SelectView() {
   const reading: PreviewableThread | null = opened ? picked ?? { rootExtId: opened } : null;
 
   return (
-    <div className="wrap selwrap">
+    <div className="wrap selwrap mx-0 w-full max-w-none min-[60rem]:flex min-[60rem]:flex-1 min-[60rem]:flex-col min-[60rem]:min-h-0 min-[60rem]:px-0 min-[60rem]:pt-0 min-[60rem]:pb-0">
       {results.isError ? <Failure error={results.error} /> : null}
-      {results.isFetching ? <p className="selnote">Searching…</p> : null}
+      {results.isFetching ? <p className="selnote mt-2 flex-[1_1_100%] text-[.78rem] text-muted">Searching…</p> : null}
       {asked && !results.isFetching && !results.isError && chains.length === 0 ? (
-        <p className="selnote">No thread matched.</p>
+        <p className="selnote mt-2 flex-[1_1_100%] text-[.78rem] text-muted">No thread matched.</p>
       ) : null}
 
       {chains.length > 0 ? (
@@ -151,12 +151,12 @@ export function SelectView() {
           <SplitPane
             hasChoice={composing || Boolean(opened)}
             list={
-              <div className="iblistwrap">
-                <div className="iblist-toolbar">
+              <div className="iblistwrap min-w-0 min-[60rem]:min-h-0 min-[60rem]:flex-1 min-[60rem]:overflow-y-auto min-[60rem]:rounded-lg min-[60rem]:border min-[60rem]:border-line min-[60rem]:bg-card min-[60rem]:[scrollbar-gutter:stable]">
+                <div className="iblist-toolbar flex items-center gap-2 p-2">
                   <CompactModeToggle compact={compact} onChange={setCompact} />
                 </div>
                 {compact ? <CompactListHeader ranked /> : null}
-                <ul className={`iblist${compact ? " compact" : ""}`}>
+                <ul className={`iblist m-0 list-none divide-y divide-line overflow-hidden rounded-lg border border-line bg-card p-0 min-[60rem]:border-0 min-[60rem]:rounded-none min-[60rem]:bg-transparent${compact ? " compact" : ""}`}>
                   {chains.map((c) => (
                     <ThreadRow
                       key={c.rootExtId}

@@ -201,19 +201,19 @@ function RootLayout() {
           separate Home link beside it. A built page keeps its own title — that
           one is the page's, not the site's. */}
       {!popup ? <>
-      <header className="sitehead">
+      <header className="sitehead [--navh:2.15rem] max-w-none m-0 flex flex-wrap items-center border-b border-line px-5 pt-4 pb-[.85rem] text-[.86rem] text-muted">
         {/* The nav's items travel as one element so that the bar can replace all
             of them at once: the row is the bar's while a selection stands, and
             the links come back when it clears (see .sitenav in styles.css). */}
-        <nav className="sitenav">
-          <Link to="/" className="brand">
+        <nav className="sitenav relative flex min-w-0 flex-1 flex-nowrap items-center overflow-x-auto overflow-y-hidden h-[var(--navh)]">
+          <Link to="/" className="brand text-fg text-[.92rem] font-bold tracking-[-.01em] no-underline hover:text-accent">
             chainmail
           </Link>
-          <span className="sep">·</span>
+          <span className="sep mx-[.45rem] text-line">·</span>
           <Link to="/specs">Braids</Link>
-          <span className="sep">·</span>
+          <span className="sep mx-[.45rem] text-line">·</span>
           <Link to="/settings">Settings</Link>
-          <span className="sep">·</span>
+          <span className="sep mx-[.45rem] text-line">·</span>
           <Link to="/ops">Ops</Link>
           {/* The corpus being read is the one statement in the nav that is not a
               destination, so it carries no separator and sits where the links
@@ -225,7 +225,7 @@ function RootLayout() {
               site-level, all at the end of the nav. The box is the search itself
               while it is open, and it takes this row rather than sitting in it
               (see .navsearch and .navopts in styles.css). */}
-          <span className="navright">
+          <span className="navright [--navgap:1.1rem] ml-auto flex flex-nowrap items-center justify-end gap-[var(--navgap)] pr-[calc(12rem+var(--navgap))]">
             <DeployStamp />
             {/* The cadence travels with the press it shares its read half with:
                 the corpus is re-asked on its own (see AutoRefresh), and the
@@ -240,7 +240,7 @@ function RootLayout() {
               title="Compose"
               onClick={() => setComposing(true)}
             >
-              <PencilSquareIcon aria-hidden="true" />
+              <PencilSquareIcon className="block size-[18px]" aria-hidden="true" />
             </button>
             <NavSearch />
           </span>

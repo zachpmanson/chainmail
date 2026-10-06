@@ -42,7 +42,7 @@ const sheet = { name: "readings.csv", kind: "CSV", size: "18 KB", link: "https:/
 
 /** Just the attachment strip, so a panel above cannot satisfy an assertion. */
 const strip = (html: string) => {
-  const m = /<div class="atts">.*?<\/div>(?=<\/div><\/div><\/div>)/s.exec(html);
+  const m = /<div class="[^"]*\batts\b[^"]*">.*?<\/div>(?=<\/div><\/div><\/div>)/s.exec(html);
   if (!m) throw new Error("no attachment strip in the rendered page");
   return m[0];
 };
@@ -50,8 +50,8 @@ const strip = (html: string) => {
 describe("which attachments get a preview", () => {
   it("shows a thumbnail on an image that deserves one", () => {
     const s = strip(page([entry({ attachments: [shot] })]));
-    expect(s).toContain('class="att haspop"');
-    expect(s).toContain('class="athumb"');
+    expect(s).toMatch(/class="att [^"]*haspop/);
+    expect(s).toMatch(/class="[^"]*\bathumb\b[^"]*"/);
     expect(s).toContain('width="640"');
     expect(s).toContain('height="427"');
     expect(s).toContain(shot.name);

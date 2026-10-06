@@ -596,20 +596,20 @@ function attachPopover(doc: Document, on: On): () => void {
     host.setAttribute("aria-labelledby", "popcap");
     host.hidden = true;
     host.innerHTML =
-      '<div class="popbox"><img class="popimg" alt="" hidden>' +
-      '<pre class="poptext" hidden></pre>' +
+      '<div class="popbox flex max-h-full max-w-full flex-col gap-[.4rem]"><img class="popimg h-auto w-auto max-h-[calc(100vh-6rem)] max-w-full rounded-md border border-line bg-card object-contain" alt="" hidden>' +
+      '<pre class="poptext m-0 max-h-[calc(100vh-6rem)] w-[min(72rem,92vw)] overflow-auto whitespace-pre rounded-md border border-line bg-card p-[.9rem_1rem] text-left font-mono text-[.78rem] leading-[1.5] text-fg [tab-size:4]" hidden></pre>' +
       // A delimited file, read as cells instead of as lines of commas. Its own
       // element under the `pre` rather than a different `pre`: the text window
       // keeps `white-space:pre`, which a table must not inherit.
-      '<div class="popgrid" hidden></div>' +
+      '<div class="popgrid max-h-[calc(100vh-6rem)] w-[min(72rem,92vw)] overflow-auto rounded-md border border-line bg-card text-left" hidden></div>' +
       // A frame holds the browser's own PDF viewer. Its type comes from the blob
       // this page makes out of the served bytes, never from the sender's claim,
       // which is the whole reason it is safe to frame.
-      '<iframe class="popframe" title="" hidden></iframe>' +
-      '<div class="popbar">' +
-      '<span class="popcap" id="popcap"></span><span class="popnote"></span>' +
-      '<a class="popget" download hidden>save</a>' +
-      '<button type="button" class="popx">Close</button>' +
+      '<iframe class="popframe h-[calc(100vh-6rem)] w-[min(72rem,92vw)] rounded-md border border-line bg-card" title="" hidden></iframe>' +
+      '<div class="popbar flex items-center gap-[.7rem]">' +
+      '<span class="popcap overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[.74rem] font-semibold text-muted" id="popcap"></span><span class="popnote whitespace-nowrap text-[.72rem] text-muted"></span>' +
+      '<a class="popget cursor-pointer rounded-md border border-line bg-card px-[.55rem] py-[.15rem] font-[inherit] text-[.72rem] text-muted no-underline hover:border-accent hover:text-fg focus-visible:border-accent" download hidden>save</a>' +
+      '<button type="button" class="popx ml-auto cursor-pointer rounded-md border border-line bg-card px-[.55rem] py-[.15rem] font-[inherit] text-[.72rem] text-fg hover:border-accent focus-visible:border-accent">Close</button>' +
       "</div></div>";
     shot = host.querySelector<HTMLImageElement>(".popimg")!;
     text = host.querySelector<HTMLElement>(".poptext")!;

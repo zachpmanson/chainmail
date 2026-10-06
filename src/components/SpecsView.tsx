@@ -18,31 +18,31 @@ export function SpecsView() {
   return (
     <div className="wrap statuswrap">
       {list.isError ? (
-        <p className="selfail" role="alert">
+        <p className="selfail mt-[.7rem] rounded-md border border-line border-l-[3px] border-l-red-700 bg-card px-[.7rem] py-2 text-[.82rem]" role="alert">
           {errText(list.error)}
         </p>
       ) : null}
 
       {list.isFetching && !list.data ? (
-        <p className="stnote">Reading the saved pages…</p>
+        <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">Reading the saved pages…</p>
       ) : null}
 
       {list.data && list.data.specs.length === 0 ? (
-        <p className="stnote">
+        <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">
           No saved pages yet — build one from a <Link to="/">search</Link>, and
           it appears here.
         </p>
       ) : null}
 
-      <ul className="stlist">
+      <ul className="mt-[.7rem] list-none border-t border-[var(--line)] p-0">
         {list.data?.specs.map((s) => (
-          <li className="strow" key={s.name}>
-            <span className="stlabel">
+          <li className="flex flex-wrap items-center gap-x-[.7rem] gap-y-[.45rem] border-b border-[var(--line)] py-[.55rem]" key={s.name}>
+            <span className="min-w-32 text-[.8rem] font-semibold">
               <Link to="/view/$name" params={{ name: s.name }}>
                 {s.title || s.name}
               </Link>
             </span>
-            <span className="stdetail">{when(s.savedAt)}</span>
+            <span className="flex-[1_1_12rem] break-words text-[.72rem] text-[var(--muted)]">{when(s.savedAt)}</span>
           </li>
         ))}
       </ul>

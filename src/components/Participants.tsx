@@ -103,8 +103,8 @@ function Face({ p, v }: { p: Person; v: ParticipantsView }) {
   // reuses the per-avatar CSS rule rather than inlining the image again
   const pic = v.rows.find((r) => r.entry.sender === p.name)?.avatarClass;
   return (
-    <div className={`av ${slot}${pic ? ` pic ${pic}` : ""}`}>
-      {pic ? null : <span className="ini">{initials(p.name)}</span>}
+    <div className={`av ${slot}${pic ? ` pic ${pic}` : ""} grid size-[1em] flex-[0_0_1em] place-items-center self-center overflow-hidden rounded-full text-[.78rem] leading-none text-white`}>
+      {pic ? null : <span className="ini text-[.62em] font-bold leading-none tracking-[.01em]">{initials(p.name)}</span>}
     </div>
   );
 }
@@ -157,19 +157,19 @@ export function ParticipantsPanel({
   }
 
   return (
-    <details className="pan people" open={open}>
-      <summary>Participants ({cast.length})</summary>
-      <div className="pbody">
-        <div className="who">
+    <details className="pan people mt-[.7rem] rounded-[9px] border border-line bg-card" open={open}>
+      <summary className="list-none cursor-pointer px-[.7rem] py-[.4rem] text-[.72rem] font-bold uppercase tracking-[.08em] text-muted hover:text-accent">Participants ({cast.length})</summary>
+      <div className="pbody border-t border-line px-[.7rem] pt-[.1rem] pb-[.6rem]">
+        <div className="who grid grid-cols-[repeat(auto-fill,minmax(15.5rem,1fr))] gap-x-[.9rem] gap-y-[.3rem]">
           {groups.map((g) => (
-            <div key={g.org || "other"} style={{ display: "contents" }}>
+            <div key={g.org || "other"} className="contents">
               {/* Tinted like the org label beside a sender's name, which is how
                   the bubble strip decodes without a legend. One heading per org
                   rather than a mark per row: the transcript is 57 bubbles where a
                   strip reads as structure, and this is a dense list of a dozen
                   rows where a dozen strips would read as noise. The avatars
                   already carry the colour per person. */}
-              <div className={`ogh ${v.orgSlot(g.org || undefined)}`}>{g.org || "Other"}</div>
+              <div className={`ogh ${v.orgSlot(g.org || undefined)} col-span-full mt-[.45rem] mb-[.05rem] text-[.66rem] font-bold uppercase tracking-[.09em] first:mt-[.15rem]`}>{g.org || "Other"}</div>
               {g.people.map((p, i) => {
                 const n = stats.get(p.name)?.n;
                 // The note is shown alongside the count, not only in its absence:
@@ -184,20 +184,20 @@ export function ParticipantsPanel({
                 // people can carry one display name, and both are listed rather
                 // than one silently winning.
                 return (
-                  <div className="p1" key={i}>
-                    <div className="pd">
-                      <div className="pn">
+                  <div className="p1 min-w-0 py-[.2rem]" key={i}>
+                    <div className="pd min-w-0 leading-[1.3]">
+                      <div className="pn flex items-center gap-[.35rem] text-[.78rem] font-semibold">
                         <Face p={p} v={v} />
-                        <span title={v.whoTitle(p.name)}>{p.name}</span>
+                        <span className="min-w-0 [overflow-wrap:anywhere]" title={v.whoTitle(p.name)}>{p.name}</span>
                       </div>
                       {p.email ? (
-                        <a className="pe" href={`mailto:${p.email}`}>
+                        <a className="pe font-mono text-[.68rem] text-muted no-underline [overflow-wrap:anywhere] hover:text-accent hover:underline" href={`mailto:${p.email}`}>
                           {p.email}
                         </a>
                       ) : (
-                        <span className="pr">address not in the trail</span>
+                        <span className="pr text-[.66rem] text-muted">address not in the trail</span>
                       )}
-                      <div className="pr">{bits.join(" · ")}</div>
+                      <div className="pr text-[.66rem] text-muted">{bits.join(" · ")}</div>
                     </div>
                   </div>
                 );

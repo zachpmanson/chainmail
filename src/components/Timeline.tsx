@@ -11,6 +11,9 @@ import { trimBody } from "../lib/trimBody";
 
 const html = (s: string) => ({ __html: s });
 
+const toolbarButtonClasses =
+  "inline-flex items-center rounded-md border border-line bg-card px-[.45rem] py-[.2rem] text-[.66rem] font-bold uppercase tracking-[.08em] text-muted hover:border-accent hover:text-accent aria-pressed:border-accent aria-pressed:bg-mine aria-pressed:text-accent disabled:cursor-default disabled:opacity-55";
+
 function replyTarget(row: Row, v: View): ReplyTarget | null {
   const parent = row.entry.parent
     ? v.rows.find((r) => r.id === row.entry.parent)
@@ -61,17 +64,17 @@ function EntryBlock({ row, v, mark, anchorByGmail, onPull, pulling, mediaBase }:
     const start = row.isChainStart ? " chstart" : "";
     return (
       <div
-        className={`sys${start}${mark === "new" ? " isnew" : ""}`}
+        className={`sys mx-auto my-[.7rem] max-w-[44rem] border border-dashed border-line rounded-[10px] bg-quote px-[.9rem] py-[.55rem] text-center${start}${mark === "new" ? " isnew" : ""}`}
         id={row.id}
         data-ch={row.lane}
         style={grid}
       >
-        <div className="sysday">
+        <div className="sysday mb-[.15rem] text-[.68rem] tabular-nums text-muted">
           <a className="pl" href={`#${row.id}`} title="Link to this note">
             {e.date}
           </a>
         </div>
-        <div className="syslabel">{e.label}</div>
+        <div className="syslabel mb-[.3rem] text-[.75rem] font-bold uppercase tracking-[.08em] text-muted">{e.label}</div>
         <div className="bd" dangerouslySetInnerHTML={html(trimBody(e.body))} />
         <ReplyLink parent={replyTarget(row, v)} />
       </div>
@@ -195,42 +198,42 @@ export function Timeline({ spec, marks, prevLabel, filter, onShowSpec, onRefresh
   return (
     <>
       {v.avatarCss ? <style dangerouslySetInnerHTML={html(v.avatarCss)} /> : null}
-      <div className="toolbar">
-        <button className="tbtn" id="viewtog" type="button" aria-pressed="false"
+      <div className="fixed top-2 right-[calc(var(--panel)+.6rem)] z-[31] flex gap-[.35rem] max-[1024px]:right-[.6rem] print:hidden">
+        <button className={`tbtn ${toolbarButtonClasses}`} id="viewtog" type="button" aria-pressed="false"
                 aria-label="Thread columns view">columns</button>
         {onShowSpec ? (
-          <button className="tbtn" id="spectog" type="button" onClick={onShowSpec}
+          <button className={`tbtn ${toolbarButtonClasses}`} id="spectog" type="button" onClick={onShowSpec}
                   aria-label="Show the spec as JSON">json</button>
         ) : null}
         {onRefresh ? (
-          <button className="tbtn" id="refreshtog" type="button" onClick={onRefresh}
+          <button className={`tbtn ${toolbarButtonClasses}`} id="refreshtog" type="button" onClick={onRefresh}
                   disabled={refreshing}
                   aria-label="Re-derive this page from the corpus">
             {refreshing ? "refreshing…" : "refresh"}
           </button>
         ) : null}
         {onAdd ? (
-          <button className="tbtn" type="button" onClick={onAdd}
+          <button className={`tbtn ${toolbarButtonClasses}`} type="button" onClick={onAdd}
                   aria-label="Search the corpus for another email to add to this page">
             add email
           </button>
         ) : null}
         {onEval ? (
-          <button className="tbtn" type="button" onClick={onEval}
+          <button className={`tbtn ${toolbarButtonClasses}`} type="button" onClick={onEval}
                   aria-label="Evaluate chains the queries proposed">eval</button>
         ) : null}
-        <button className="tbtn" id="maptog" type="button" aria-pressed="true"
+        <button className={`tbtn ${toolbarButtonClasses}`} id="maptog" type="button" aria-pressed="true"
                 aria-label="Reply tree panel">tree</button>
-        <button className="tbtn" id="plaintog" type="button" aria-pressed="false"
+        <button className={`tbtn ${toolbarButtonClasses}`} id="plaintog" type="button" aria-pressed="false"
                 aria-label="Ignore the sender's own formatting">plain</button>
       </div>
-      <div className="wrap">
-      <header className="top">
-        <h1>
-          {v.hashed ? <span className="hash">#</span> : null}
+      <div className="wrap mx-auto max-w-[76rem] px-5 pt-7 pb-14">
+      <header className="top mb-[.25rem] border-b border-line pb-[.7rem]">
+        <h1 className="m-0 mb-[.2rem] text-[1.3rem] tracking-[-.01em]">
+          {v.hashed ? <span className="text-[var(--muted)] font-normal">#</span> : null}
           {v.hashed ? v.title.slice(1) : v.title}
         </h1>
-        <p className="sub" dangerouslySetInnerHTML={html(s.subtitle ?? `${s.messages.length} messages.`)} />
+        <p className="mb-2 text-[var(--muted)] text-[.86rem]" dangerouslySetInnerHTML={html(s.subtitle ?? `${s.messages.length} messages.`)} />
         <Legend />
         <ParticipantsPanel v={v} open />
         {marks ? <DiffPanel v={v} marks={marks} prevLabel={prevLabel ?? "the previous run"} /> : null}
@@ -244,11 +247,11 @@ export function Timeline({ spec, marks, prevLabel, filter, onShowSpec, onRefresh
         ))}
       </div>
       {s.openItems?.length ? (
-        <footer className="end">
-          <h2>{s.openItemsTitle ?? "Still open"}</h2>
-          <ul>
+        <footer className="end mt-8 border-t border-line pt-[.9rem]">
+          <h2 className="mb-[.6rem] mt-0 text-[.8rem] uppercase tracking-[.1em] text-muted">{s.openItemsTitle ?? "Still open"}</h2>
+          <ul className="m-0 pl-[1.15rem]">
             {s.openItems.map((i, n) => (
-              <li key={n} dangerouslySetInnerHTML={html(i)} />
+              <li className="my-[.2rem] text-[.89rem]" key={n} dangerouslySetInnerHTML={html(i)} />
             ))}
           </ul>
         </footer>

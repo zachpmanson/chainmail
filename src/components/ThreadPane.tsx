@@ -1,3 +1,4 @@
+import { Button, IconButton } from "./controls";
 import { useEffect, useRef, useState } from "react";
 import { ArrowTopRightOnSquareIcon, QueueListIcon } from "@heroicons/react/24/outline";
 import { useSearch } from "@tanstack/react-router";
@@ -153,14 +154,14 @@ export function ThreadPane({
   });
 
   return (
-    <aside className="ibread" aria-label={label}>
+    <aside className="ibread flex min-w-0 flex-col min-[60rem]:h-full min-[60rem]:min-h-0" aria-label={label}>
       {thread ? (
         <>
-          <div className="ibread-head">
-            <button type="button" className="ibback" onClick={onClose}>
+          <div className="ibread-head flex flex-none items-center gap-2 border-b border-line bg-card px-[.7rem] py-2 min-[60rem]:px-[calc(.7rem+var(--divider))]">
+            <Button type="button" density="compact" className={`min-h-0 px-[.5rem] py-[.2rem] text-[.78rem] ${backLabel === "Close" ? "" : "min-[60rem]:hidden"} ibback`} onClick={onClose}>
               {backLabel}
-            </button>
-            <span className="ibread-subj">{thread.subject || "(no subject)"}</span>
+            </Button>
+            <span className="ibread-subj min-w-0 break-words text-[.86rem] font-semibold">{thread.subject || "(no subject)"}</span>
             {/* How much mail is in the thread, how many people, and how many files
                 — worn the way the row that opened it wears them: the same glyphs,
                 the same numbers, the same classes. The head used to say "4
@@ -170,7 +171,7 @@ export function ThreadPane({
                 (see ThreadRow), the head draws the paperclip at zero too: this is
                 the thread the reader has open, and "nothing attached" is an answer
                 about it. */}
-            <span className="ibread-counts">
+            <span className="ibread-counts ml-auto flex items-center gap-2">
               {thread.people !== undefined ? <PeopleCount people={thread.people} /> : null}
               {thread.entries !== undefined ? <MailCount entries={thread.entries} /> : null}
               {thread.attachments !== undefined ? (
@@ -191,7 +192,7 @@ export function ThreadPane({
                 outermost of them on every thread (see .ibread-read). */}
             {openInWindow ? (
               <a
-                className="ibicon"
+                className="ibicon inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent p-[.25rem_.3rem] text-muted no-underline hover:border-line hover:bg-card hover:text-accent [&_svg]:block [&_svg]:size-[18px]"
                 aria-label="Open in new window"
                 title="Open in new window"
                 href={`/?open=${encodeURIComponent(thread.rootExtId)}&popup=1`}
@@ -212,9 +213,9 @@ export function ThreadPane({
                 <OpenWindowGlyph />
               </a>
             ) : null}
-            <button
+            <Button
               type="button"
-              className="ibicon ibtree"
+              className="ibicon ibtree inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent p-[.25rem_.3rem] text-muted hover:border-line hover:bg-card hover:text-accent aria-pressed:border-line aria-pressed:text-accent [&_svg]:block [&_svg]:size-[18px]"
               aria-pressed={tree}
               aria-label={treeLabel(tree)}
               title={treeLabel(tree)}
@@ -237,7 +238,7 @@ export function ThreadPane({
               }}
             >
               <TreeGlyph />
-            </button>
+            </Button>
             {/* The two mailbox verbs, beside the read circle and on the thread
                 that is open rather than on a ticked set. Glyphs, and the same two
                 the bar draws (see MailVerbs): the strip's line is the subject, and
@@ -263,9 +264,9 @@ export function ThreadPane({
                 })
               }
             />
-            <button
+            <IconButton
               type="button"
-              className="ibicon"
+              className="ibicon inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent p-[.25rem_.3rem] text-muted hover:border-line hover:bg-card hover:text-accent [&_svg]:block [&_svg]:size-[18px]"
               aria-label="Archive"
               title="Archive"
               disabled={act.isPending}
@@ -274,17 +275,17 @@ export function ThreadPane({
               }
             >
               <ArchiveGlyph />
-            </button>
-            <button
+            </IconButton>
+            <IconButton
               type="button"
-              className="ibicon"
+              className="ibicon inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent p-[.25rem_.3rem] text-muted hover:border-line hover:bg-card hover:text-accent [&_svg]:block [&_svg]:size-[18px]"
               aria-label="Delete"
               title="Delete"
               disabled={act.isPending}
               onClick={() => act.mutate({ body: { chains: [thread.rootExtId], action: "trash", ...(accountId ? { accountId } : {}) } })}
             >
               <TrashGlyph />
-            </button>
+            </IconButton>
             {/* The read-state control, and the only explicit one: nothing is
                 marked by looking at it. A pane opens the top of the list by
                 itself, so a mark-on-open rule would clear the badge for mail
@@ -306,9 +307,9 @@ export function ThreadPane({
                 second colour on one of three verbs on the line would read as
                 emphasis rather than as a state. */}
             {thread.unread !== undefined ? (
-              <button
+              <Button
                 type="button"
-                className={`ibicon ibread-read${thread.unread > 0 ? " unread" : ""}`}
+                className={`ibicon ibread-read inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent p-[.25rem_.3rem] text-muted hover:border-line hover:bg-card hover:text-accent [&_svg]:block [&_svg]:size-[18px] [&_circle]:fill-none [&_circle]:stroke-current [&_circle]:stroke-[1.6]${thread.unread > 0 ? " unread [&_circle]:fill-current [&_circle]:stroke-0" : ""}`}
                 disabled={read.isPending}
                 aria-label={thread.unread > 0 ? "Mark read" : "Mark unread"}
                 aria-pressed={thread.unread > 0}
@@ -332,19 +333,19 @@ export function ThreadPane({
                 <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
                   <circle cx="8" cy="8" r="5.2" />
                 </svg>
-              </button>
+              </Button>
             ) : null}
           </div>
           {/* The same component the page built from this thread uses, over a
               corpus read that carries each body already rendered — in the pane's
               own scroll box, so the head above is a line of the pane rather than
               the first thing in the thread (see .ibreadwrap). */}
-          <div className="ibreadwrap">
+          <div className="ibreadwrap min-h-0 min-w-0 flex-1 overflow-auto [&_.stream]:p-4 [&_.stream]:pb-40 [&_.stream_.pan.people]:mt-0 [&_.stream_.pan.people]:mb-[1.1rem]">
             <ThreadMessages thread={thread} tree={tree} />
           </div>
         </>
       ) : (
-        <p className="selnote">{empty}</p>
+        <p className="selnote mx-[.8rem] mt-[.7rem] flex-[1_1_100%] text-[.78rem] text-muted">{empty}</p>
       )}
     </aside>
   );

@@ -64,12 +64,12 @@ function SourceIds({ ids, unspooled, anchorByGmail }: {
 export function Source({ source, anchorByGmail }: { source?: string; anchorByGmail: Map<string, string> }) {
   if (!source) return null;
   const p = provenance(source);
-  if (p.kind === "prose") return <span className="src">{p.text}</span>;
+  if (p.kind === "prose") return <span className="src font-mono text-[.64rem] text-muted">{p.text}</span>;
   // "unspooled from …" lines carry an empty prefix only when not unspooled;
   // prose never reaches here, so prefix !== "" means the ids were unspooled
   const unspooled = p.prefix !== "";
   return (
-    <span className="src">
+    <span className="src font-mono text-[.64rem] text-muted">
       {p.prefix}
       <SourceIds ids={p.ids} unspooled={unspooled} anchorByGmail={anchorByGmail} />
     </span>

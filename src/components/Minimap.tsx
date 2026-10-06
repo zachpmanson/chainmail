@@ -379,30 +379,30 @@ export function Minimap({ v }: { v: View }) {
   };
 
   const tallyLegend = (
-    <div className="foot2">
-      <div className="tally">
+    <div className="foot2 border-t border-line px-[.6rem] pt-[.28rem] pb-[.35rem] text-[.64rem]">
+      <div className="tally flex flex-col gap-[.12rem]">
         <div><b>{g.roots}</b> chains</div>
         <div><b>{g.laneCount}</b> lanes</div>
         <div><b>{deepest}</b> deep</div>
         <div><b>{g.forks}</b> forks</div>
         <div><b>{g.leaves}</b> dead ends</div>
       </div>
-      <dl className="legend">
-        <div><svg className="lg" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="2.9" fill="currentColor"/></svg><dt>message</dt></div>
-        <div><svg className="lg" viewBox="0 0 10 10" aria-hidden="true"><rect x="2.6" y="2.6" width="4.8" height="4.8" fill="currentColor" transform="rotate(45 5 5)"/></svg><dt>note</dt></div>
-        <div><svg className="lg" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 2.6 H8" stroke="currentColor" strokeWidth="1.1"/><circle cx="5" cy="5.5" r="2.5" fill="currentColor"/></svg><dt>starts thread</dt></div>
-        <div><svg className="lg" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="2.9" fill="none" stroke="currentColor" strokeWidth="1.2"/></svg><dt>reconstructed</dt></div>
+      <dl className="legend m-0 mt-[.25rem] flex flex-col gap-[.1rem]">
+        <div className="flex items-center gap-[.34rem]"><svg className="lg h-[.7em] w-[.7em] shrink-0" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="2.9" fill="currentColor"/></svg><dt className="m-0 text-muted">message</dt></div>
+        <div className="flex items-center gap-[.34rem]"><svg className="lg h-[.7em] w-[.7em] shrink-0" viewBox="0 0 10 10" aria-hidden="true"><rect x="2.6" y="2.6" width="4.8" height="4.8" fill="currentColor" transform="rotate(45 5 5)"/></svg><dt className="m-0 text-muted">note</dt></div>
+        <div className="flex items-center gap-[.34rem]"><svg className="lg h-[.7em] w-[.7em] shrink-0" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 2.6 H8" stroke="currentColor" strokeWidth="1.1"/><circle cx="5" cy="5.5" r="2.5" fill="currentColor"/></svg><dt className="m-0 text-muted">starts thread</dt></div>
+        <div className="flex items-center gap-[.34rem]"><svg className="lg h-[.7em] w-[.7em] shrink-0" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="2.9" fill="none" stroke="currentColor" strokeWidth="1.2"/></svg><dt className="m-0 text-muted">reconstructed</dt></div>
       </dl>
     </div>
   );
 
   return (
-    <aside className="mini" id="mini">
-      <h3>
-        Reply tree<span className="ct">{v.rows.length}</span>
+    <aside className="mini fixed top-0 right-0 bottom-0 z-[30] flex w-max max-w-[16.5rem] flex-col border-l border-line bg-card print:hidden max-[1024px]:top-[2.4rem] max-[1024px]:bg-[color-mix(in_srgb,var(--card)_86%,transparent)]" id="mini">
+      <h3 className="m-0 flex items-center gap-[.4rem] border-b border-line px-[.7rem] pt-[.55rem] pb-[.4rem] text-[.66rem] font-bold uppercase tracking-[.09em] text-muted">
+        Reply tree<span className="ct ml-auto font-semibold opacity-75">{v.rows.length}</span>
         <button
           type="button"
-          className="xsvg"
+          className="xsvg inline-flex cursor-pointer items-center rounded border border-transparent bg-transparent px-[.18rem] py-[.05rem] font-[inherit] text-muted hover:border-line hover:bg-card hover:text-accent"
           title="Download this reply tree as an SVG file"
           aria-label="Download this reply tree as an SVG file"
           onClick={download}
@@ -413,11 +413,11 @@ export function Minimap({ v }: { v: View }) {
       {/* both orientations are in the DOM; CSS shows the live one (body.tree-h
           swaps to the horizontal row) so behaviour.js needs no React state */}
       <div className="vrow">
-        <div className="mbody">{treeSvg("v")}</div>
+        <div className="mbody min-h-0 flex-1 overflow-auto px-[.3rem] pt-[.45rem] pb-[.8rem]">{treeSvg("v")}</div>
         {tallyLegend}
       </div>
       <div className="hrow">
-        <div className="mbody">{treeSvg("h")}</div>
+        <div className="mbody min-h-0 flex-1 overflow-auto px-[.3rem] pt-[.45rem] pb-[.8rem]">{treeSvg("h")}</div>
         {tallyLegend}
       </div>
     </aside>

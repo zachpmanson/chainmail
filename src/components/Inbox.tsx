@@ -1,3 +1,4 @@
+import { Button } from "./controls";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { $api, type ChainHit } from "../lib/api";
@@ -246,14 +247,14 @@ export function Inbox() {
   }, [paging, inbox.fetchNextPage]);
 
   return (
-    <div className="wrap ibwrap">
+    <div className="wrap ibwrap mx-0 w-full max-w-none pt-0 pb-0 min-[60rem]:flex min-[60rem]:flex-1 min-[60rem]:flex-col min-[60rem]:min-h-0">
       {/* A failure with nothing to show is the whole page's; one with rows already
           on screen belongs at the end of the list, where the reader is. */}
       {inbox.isError && !inbox.data ? <Failure error={inbox.error} /> : null}
       {/* No "reading the corpus" line here: the read is the site's, not this
           page's, and it is said in the nav. */}
       {!inbox.isPending && !inbox.isError && rows.length === 0 ? (
-        <p className="selnote">
+        <p className="selnote mt-2 flex-[1_1_100%] text-[.78rem] text-muted">
           {label ? (
             <>Nothing in {label}.</>
           ) : (
@@ -275,10 +276,10 @@ export function Inbox() {
               onPick={pickFolder}
               onDefault={makeDefault}
             />
-            <div className="iblistwrap">
+            <div className="iblistwrap min-w-0 min-[60rem]:min-h-0 min-[60rem]:flex-1 min-[60rem]:overflow-y-auto min-[60rem]:rounded-lg min-[60rem]:border min-[60rem]:border-line min-[60rem]:bg-card min-[60rem]:[scrollbar-gutter:stable]">
               {compact && rows.length > 0 ? <CompactListHeader /> : null}
               {rows.length > 0 ? (
-                <ul className={`iblist${compact ? " compact" : ""}`}>
+                <ul className={`iblist m-0 list-none divide-y divide-line overflow-hidden rounded-lg border border-line bg-card p-0 min-[60rem]:border-0 min-[60rem]:rounded-none min-[60rem]:bg-transparent${compact ? " compact" : ""}`}>
                   {rows.map((c) => (
                     <ThreadRow
                       key={c.rootExtId}
@@ -301,9 +302,9 @@ export function Inbox() {
               ) : null}
 
               {paging ? (
-                <div className="ibend" ref={end}>
+                <div className="ibend py-[.6rem] text-center" ref={end}>
                   {inbox.isFetchingNextPage ? (
-                    <p className="selnote" role="status">
+                    <p className="selnote m-0 flex-[1_1_100%] text-[.78rem] text-muted" role="status">
                       Reading further back…
                     </p>
                   ) : null}
@@ -312,9 +313,9 @@ export function Inbox() {
               {inbox.isFetchNextPageError ? (
                 <>
                   <Failure error={inbox.error} />
-                  <button type="button" className="ibmore" onClick={() => inbox.fetchNextPage()}>
+                  <Button type="button" className="mx-auto mt-[.7rem] block rounded-full px-[.9rem] py-[.35rem] text-[.78rem] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={() => inbox.fetchNextPage()}>
                     Try again
-                  </button>
+                  </Button>
                 </>
               ) : null}
             </div>

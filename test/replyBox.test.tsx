@@ -1077,7 +1077,7 @@ describe("answering an older message from its own header", () => {
     };
     try {
       aimAt("Cy Devlin");
-      await waitFor(() => expect(scrolled).toContain("replybox"));
+      await waitFor(() => expect(scrolled.some((classes) => classes.split(/\s+/).includes("replybox"))).toBe(true));
       expect(document.activeElement).toBe(field());
     } finally {
       Element.prototype.scrollIntoView = scrolledBefore;

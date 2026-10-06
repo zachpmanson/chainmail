@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within, act } from "@testing-library/react";
-import { readFileSync } from "node:fs";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { makeQueryClient } from "../src/lib/queryClient";
@@ -722,7 +721,7 @@ describe("the home page with no query", () => {
     expect(router.state.location.searchStr).toBe("");
   });
 
-  it("grows the panel into the row, and back, on a width the row is not deciding", () => {
+  it("grows the panel into the row, and back, on a width the row is not deciding", async () => {
     // The panel becomes the row rather than appearing at its width, and that
     // movement is the animation — in both directions, which is what this test is
     // here for. Twice now the animation has looked right and carried one way
@@ -739,15 +738,16 @@ describe("the home page with no query", () => {
     // is the nav's own width — the same in both states, because the panel is not
     // one of the things deciding it. So `width` is the property that carries it,
     // and this pins the arrangement that makes that true.
+    handler = buildHandler;
+    await mountApp("/");
+    await screen.findByText("Loom cutover schedule");
+    const nav = document.querySelector(".sitenav");
+    const box = document.querySelector("form.navsearch");
+    expect(nav?.classList.contains("relative")).toBe(true);
+    expect(box?.classList.contains("absolute")).toBe(true);
+    expect(box?.classList.contains("w-48")).toBe(true);
+    const { readFileSync } = await import("node:fs");
     const css = readFileSync("src/styles.css", "utf8");
-    const rule = (selector: string) => {
-      const from = css.indexOf(`\n  ${selector} {`);
-      return css.slice(from, css.indexOf("\n  }", from));
-    };
-    expect(rule(".sitenav")).toContain("position:relative");
-    const box = rule(".navsearch");
-    expect(box).toContain("position:absolute");
-    expect(box).toContain("width:12rem");
     const open = css.slice(css.indexOf(".navsearch.open) .navsearch {"));
     expect(open.slice(0, open.indexOf("}"))).toContain("width:calc(100% - var(--searchgap))");
     expect(css).toMatch(/@media \(prefers-reduced-motion: no-preference\) \{ \.navsearch \{ transition:width/);

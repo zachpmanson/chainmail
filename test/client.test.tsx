@@ -2534,7 +2534,7 @@ describe("what the bar does to the mail", () => {
 
     click(screen.getByRole("button", { name: "Delete" }));
     const note = await screen.findByText(/Deleted 3 messages/);
-    expect(note.className).toBe("toasttext");
+    expect(note.classList.contains("toasttext")).toBe(true);
 
     const armedTimer = armed.mock.calls.find(([, ms]) => ms === 5000);
     armed.mockRestore();

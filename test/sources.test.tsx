@@ -37,14 +37,14 @@ const page = (messages: Entry[]) =>
 /** Just the header's receipt, so a panel above cannot satisfy an assertion by
  *  accident — cut off before the bubble, so a body cannot either. */
 const receipt = (messages: Entry[]) => {
-  const m = /<div class="hdet">(.*?)<\/div><\/details><div class="bub">/s.exec(page(messages));
+  const m = /<div class="hdet[^\"]*">(.*?)<\/div><\/details><div class="bub[^\"]*">/s.exec(page(messages));
   if (!m) throw new Error("no header receipt in the rendered page");
   return m[1]!;
 };
 
 /** Every header receipt, so a multi-message page can assert on a specific one. */
 const receipts = (messages: Entry[]) =>
-  [...page(messages).matchAll(/<div class="hdet">(.*?)<\/div><\/details><div class="bub">/gs)].map((m) => m[1]!);
+  [...page(messages).matchAll(/<div class="hdet[^\"]*">(.*?)<\/div><\/details><div class="bub[^\"]*">/gs)].map((m) => m[1]!);
 
 describe("reading a provenance line", () => {
   it("recognises a list of generated ids", () => {

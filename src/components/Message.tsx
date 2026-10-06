@@ -183,8 +183,8 @@ function Avatar({ name, orgSlot, pic, title }: {
   title?: string;
 }) {
   return (
-    <div className={`av ${orgSlot}${pic ? ` pic ${pic}` : ""}`} title={title}>
-      {pic ? null : <span className="ini">{initials(name)}</span>}
+    <div className={`av ${orgSlot}${pic ? ` pic ${pic}` : ""} grid size-[1em] flex-[0_0_1em] place-items-center self-center overflow-hidden rounded-full text-[.83rem] leading-none text-white`} title={title}>
+      {pic ? null : <span className="ini text-[.62em] font-bold leading-none tracking-[.01em]">{initials(name)}</span>}
     </div>
   );
 }
@@ -246,7 +246,7 @@ function CopyJson({ data }: { data: unknown }) {
 function Stamp({ id, stamp }: { id: string; stamp: StampData }) {
   const { date, time, tz, zone } = stamp;
   return (
-    <a className="tm pl" href={`#${id}`} title="Link to this message">
+    <a className="tm pl whitespace-nowrap text-[.71rem] tabular-nums text-muted" href={`#${id}`} title="Link to this message">
       {date}
       {time ? ` · ${time}` : ""}
       {zone === "stated" ? <span className="tz">{tz}</span> : null}
@@ -292,13 +292,13 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
   // one press puts every chip on the line into the same state.
   const fetching = pulling != null && pulling === extId;
   return (
-    <div className="atts">
+    <div className="atts my-[.4rem] mb-[.1rem] flex flex-wrap items-center gap-[.3rem]">
       {/* The mark, and no word beside it: the chips ARE the strip, and "attached"
           at the head of a list of files was a label on the obvious. The paperclip
           stays as the one thing that says what the row is before it is read, and
           it is named for a reader who cannot see it — the filenames below say what
           is there, never that these are files. */}
-      <span className="clip" role="img" aria-label="attachments" />
+      <span className="clip text-[.72rem] text-muted" role="img" aria-label="attachments" />
       {attachments.map((a, i) => {
         const local = localHref(a, mediaBase ?? "");
         const href = attHref(a, mediaBase);
@@ -319,7 +319,7 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
         const shot = thumbnail(a, mediaBase ?? "");
         const thumb = shot ? (
           <img
-            className={shot.blob ? "athumb ablob" : "athumb"}
+            className={`athumb block h-[2.1rem] w-auto max-w-36 rounded-[3px] border border-line object-cover object-left${shot.blob ? " ablob w-12" : ""}`}
             src={shot.src}
             {...(shot.w !== undefined ? { width: shot.w } : {})}
             {...(shot.h !== undefined ? { height: shot.h } : {})}
@@ -337,7 +337,7 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
           <>
             {thumb}
             <span className="afn">{a.name}</span>
-            <span className="ameta">
+            <span className={`ameta${fetching && fetchable ? " text-fg" : ""}`}>
               {fetching && fetchable ? (
                 /* The same ↻ and the same 0.8s turn the nav's refresh wears (see
                    .navrefresh .spinner): one glyph for "this is being worked on",
@@ -413,8 +413,11 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
         return href ? (
           <a
             key={i}
-            className={["att", opens && "haspop", fetching && fetchable && "busy"]
-              .filter(Boolean).join(" ")}
+            className={[
+              "att inline-flex items-baseline gap-[.35rem] rounded-md border border-line bg-quote px-[.45rem] py-[.1rem] text-fg no-underline hover:border-accent",
+              opens && "haspop items-center",
+              fetching && fetchable && "busy border-accent cursor-progress",
+            ].filter(Boolean).join(" ")}
             href={href}
             {...(tip ? { title: tip } : {})}
             {...(beside ? { target: "_blank", rel: "noopener" } : {})}
@@ -467,7 +470,7 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
           // is the only thing here that says what the file actually is. It gets
           // no popover, though: the only way to offer one would be a control
           // that does nothing at all without scripting.
-          <span key={i} className="att nolink" {...(note ? { title: note } : {})}>
+          <span key={i} className="att nolink inline-flex items-baseline gap-[.35rem] rounded-md border border-line bg-quote px-[.45rem] py-[.1rem] text-fg no-underline opacity-60 hover:border-accent" {...(note ? { title: note } : {})}>
             {label}
           </span>
         );
@@ -677,7 +680,7 @@ function OriginalControl({ on, state, ask }: { on: boolean; state: Original; ask
         )}
       </button>
       {state.at === "none" ? (
-        <span className="origwhy" title={state.why}>
+        <span className="origwhy text-[.66rem] italic text-muted" title={state.why}>
           nothing to show
         </span>
       ) : null}
@@ -712,7 +715,7 @@ function Body({ body, state }: { body: string; state: Original }) {
     /* The shadow host. Empty as far as React is concerned — the mail is written
        into its shadow root, where a rule of this page's cannot reach it and its
        own rules cannot leave. */
-    return <div key="sent" className="bd bdo" ref={host} />;
+    return <div key="sent" className="bd bdo overflow-x-auto" ref={host} />;
   }
   /* A message that carried no words at all — a mail that was only its file, a
      calendar reply that was only its invitation — says so in the page's own
@@ -721,12 +724,12 @@ function Body({ body, state }: { body: string; state: Original }) {
      the message: it is what the sender sent. */
   if (!hasBody(body)) {
     return (
-      <div key="read" className="bd">
-        <p className="nobody">No body</p>
+      <div key="read" className="bd overflow-x-auto">
+        <p className="nobody m-0 text-[.8rem] italic text-muted">No body</p>
       </div>
     );
   }
-  return <div key="read" className="bd" dangerouslySetInnerHTML={html(trimBody(body))} />;
+  return <div key="read" className="bd overflow-x-auto" dangerouslySetInnerHTML={html(trimBody(body))} />;
 }
 
 /** What became of this message's fetch, while its sender's switch is on.
@@ -751,7 +754,7 @@ export function Message(p: MessageProps) {
   // The org slot rides on the bubble so a bubble can carry its sender's colour,
   // and `me`/`quoted`/`isnew` are the same colour-and-state modifiers the
   // stylesheet already reads off this element.
-  const cls = ["msg", p.orgSlot, p.me && "me", p.quoted && "q",
+  const cls = ["msg", p.orgSlot, "mb-2", p.me && "me", p.quoted && "q",
     p.chainStart && "chstart", p.mark === "new" && "isnew", p.landed && "landed"]
     .filter(Boolean)
     .join(" ");
@@ -776,7 +779,7 @@ export function Message(p: MessageProps) {
         if (e.animationName === "flash") p.onLandedEnd?.();
       }}
     >
-      <div className="col">
+      <div className="col min-w-0">
         {/* The header is the bubble's disclosure, not a caption: the sender, the
             org, the clock and the reply the message answers are what a page is
             scanned by, and the receipt — who it was addressed to, the ids it was
@@ -785,22 +788,22 @@ export function Message(p: MessageProps) {
             only height thereafter. A native <details>, like the provenance line
             and the panels: the export stays readable without scripting, and
             find-in-page reaches the ids closed or open. */}
-        <details className="hdr">
-          <summary>
+        <details className="hdr mb-[.14rem] px-[.1rem]">
+          <summary className="flex cursor-pointer flex-wrap items-baseline gap-[.3rem] list-none">
             <Avatar name={p.sender ?? ""} orgSlot={p.orgSlot} pic={p.avatarClass} title={who} />
-            <span className="nm" title={who}>
+            <span className="nm text-[.83rem] font-[650]" title={who}>
               {p.sender}
             </span>
-            <span className="org">{p.org}</span>
+            <span className="org text-[.68rem] font-[650] uppercase tracking-[.07em]">{p.org}</span>
             <Stamp id={p.id} stamp={p.stamp} />
-            {p.mark === "new" ? <span className="newpill">new</span> : null}
-            {p.mark === "revised" ? <span className="revpill">revised</span> : null}
+            {p.mark === "new" ? <span className="newpill rounded-[4px] bg-org-1 px-[.3rem] py-[.05rem] text-[.6rem] font-extrabold uppercase tracking-[.09em] text-white">new</span> : null}
+            {p.mark === "revised" ? <span className="revpill rounded-[4px] border border-muted bg-dash px-[.28rem] py-[.02rem] text-[.6rem] font-extrabold uppercase tracking-[.09em] text-fg">revised</span> : null}
             {/* The line's right end, and always drawn even when the caller has
                 no reply to put in it: the caret lives inside this box, so an
                 empty tail still closes the line at the right edge. */}
             <span className="htail">{p.reply}</span>
           </summary>
-          <div className="hdet">
+          <div className="hdet mb-[.3rem] flex flex-wrap items-center gap-x-[.7rem] gap-y-[.2rem] px-[.1rem] pt-[.22rem]">
             {/* The subject, on its own line above the receipt's fields, and only
                 where the message had one: a message with no subject has nothing
                 to say here, and an empty line would say it anyway. */}
@@ -815,16 +818,16 @@ export function Message(p: MessageProps) {
                 Only where the message had a subject: a message with no subject
                 has nothing to put here, and an empty line would say it anyway. */}
             {p.subject || p.source ? (
-              <span className="hsub">
+              <span className="hsub flex flex-[1_1_100%] items-baseline gap-x-[.7rem] gap-y-[.3rem]">
                 {p.subject ? (
-                  <span className="subj" title={p.subject}>
+                  <span className="subj min-w-0 flex-[1_1_auto] text-[.72rem] leading-[1.25] text-fg" title={p.subject}>
                     {p.subject}
                   </span>
                 ) : null}
                 {p.source}
               </span>
             ) : null}
-            <span className="to">
+            <span className="to text-[.66rem] text-muted">
               to{" "}
               {p.to ? (
                 receiptNames(p.to).map((r, i) => (
@@ -842,7 +845,7 @@ export function Message(p: MessageProps) {
               )}
             </span>
             {p.answer !== undefined || p.original !== undefined || p.copyJson !== undefined ? (
-              <span className="hdetend">
+              <span className="hdetend ml-auto inline-flex items-center gap-[.35rem]">
                 {p.answer}
                 {p.original !== undefined ? (
                   <OriginalControl on={original.on} state={original.state} ask={original.ask} />
@@ -852,11 +855,16 @@ export function Message(p: MessageProps) {
             ) : null}
           </div>
         </details>
-        <div className="bub">
+        <div className={[
+          "bub relative overflow-hidden rounded-[10px] border border-line bg-card px-[.7rem] py-[.45rem]",
+          p.quoted && "border-dashed border-[color-mix(in_srgb,var(--muted)_55%,transparent)] bg-dash",
+          p.me && "border-org-3 bg-mine",
+          p.mark === "new" && "border-l-[3px] border-l-org-1",
+        ].filter(Boolean).join(" ")}>
           {p.mentions?.length ? (
-            <div className="ment">
+            <div className="ment mb-[.3rem] flex flex-wrap gap-1">
               {p.mentions.map((m) => (
-                <span className="at" key={m}>
+                <span className="at rounded-[5px] bg-mine px-[.35rem] py-[.02rem] text-[.74rem] font-semibold text-org-3" key={m}>
                   @{m}
                 </span>
               ))}

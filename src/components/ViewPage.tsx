@@ -172,8 +172,8 @@ export function ViewPage() {
 
   if (fetched.isError)
     return (
-      <div className="wrap">
-        <p style={{ padding: "2rem", color: "var(--muted)" }}>
+      <div className="mx-auto max-w-[76rem] px-5 pt-7 pb-14">
+        <p className="p-8 text-muted">
           No saved page named <strong>{name}</strong> — build one from a{" "}
           <Link to="/">search</Link>.
         </p>
@@ -184,7 +184,7 @@ export function ViewPage() {
   return (
     <>
       {pullNote && (
-        <p className="pullnote" role="status">
+        <p className="pullnote mb-[.8rem] mt-0 border border-accent border-l-[3px] rounded-md bg-card px-[.85rem] py-[.55rem] text-[.85rem] text-fg" role="status">
           {pullNote}
         </p>
       )}
