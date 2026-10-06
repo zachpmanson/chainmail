@@ -115,46 +115,18 @@ describe("a thread drawn as a tree", () => {
     );
   });
 
-  it("is indented by the stylesheet all the way in, with no depth capped", () => {
-    // The rule the reader actually sees, read as text. An indent is one step per
-    // level and *every* level, which is a fact about the stylesheet rather than
-    // about the walk above: a `min()` creeping back in here would leave a reply
-    // twenty deep sharing a column with one six deep — a rendering fault, not a
-    // limit — and no DOM test can see it, because jsdom computes no cascade.
-    const css = readFileSync("src/select.css", "utf8");
-    const replies = css.slice(css.indexOf(".ibread .stream .replies {"));
-    const rule = replies.slice(0, replies.indexOf("}"));
-    // The line is the container's own border, which is what makes it one rule
-    // per subtree rather than a hairline per bubble in the margin: a border only
-    // exists where a container does, and a container only exists where a message
-    // has replies, so nothing has to count levels and nothing can dangle.
-    expect(rule).toContain("border-left:2px solid var(--line)");
-    // And the step is that box's own margin and padding, one place, no cap: the
-    // fourth value of each shorthand, since the third is the gap the line is drawn
-    // through and the first is for the box above the card it hangs off. How far in
-    // the step goes is taste rather than a fact about the tree, so the numbers are
-    // not asserted here — what is asserted is that they are one plain measure each
-    // and that nothing derives a step from a depth.
-    expect(rule).toMatch(/margin:-.5rem 0 0 [\d.]+rem/);
-    expect(rule).toMatch(/padding:.5rem 0 0 [\d.]+rem/);
-    expect(rule).not.toMatch(/min\(/);
-    // The per-bubble indent and its gradient hairlines are gone: a bubble is
-    // never handed a depth, and the stylesheet has no rule that would read one.
-    expect(css).not.toContain("--nest");
-    expect(css).not.toContain("--step");
+  it("is indented by Tailwind utilities at every depth, with no cap", () => {
+    // The indentation is on each recursive replies container, so depth remains
+    // unbounded and each nesting level contributes the same step and line.
+    const component = readFileSync("src/components/ThreadMessages.tsx", "utf8");
+    expect(component).toContain('className="replies -mt-2 ml-[.3rem] border-l-2 border-line pt-2 pl-4"');
+    expect(component).not.toContain("min(");
   });
 
-  it("hangs the line off the message it belongs to, with no gap under the card", () => {
-    // The line is the container's border, so where the container's box starts is
-    // where the line starts. A card's own bottom margin would put that start half a
-    // rem below the card — a gap in the line, and (since the mark follows the line)
-    // a strip the pointer crosses with nothing marked, once per level, which is what
-    // a reader sees as flicker. The margin is taken back and spent inside the box.
-    const css = readFileSync("src/select.css", "utf8");
-    const replies = css.slice(css.indexOf(".ibread .stream .replies {"));
-    const rule = replies.slice(0, replies.indexOf("}"));
-    expect(rule).toMatch(/margin:-.5rem 0 0 [\d.]+rem/);
-    expect(rule).toMatch(/padding:.5rem 0 0 [\d.]+rem/);
+  it("hangs the reply line off its message without a gap", () => {
+    const component = readFileSync("src/components/ThreadMessages.tsx", "utf8");
+    expect(component).toContain("-mt-2");
+    expect(component).toContain("pt-2 pl-4");
   });
 
   it("marks the path to the message pointed at, on the lines, and fades it in", () => {

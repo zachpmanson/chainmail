@@ -657,7 +657,7 @@ export function ThreadMessages({
     <Fragment key={node.entry.extId}>
       {bubble(node.entry)}
       {node.replies.length ? (
-        <div className="replies">{node.replies.map((n) => draw(n))}</div>
+        <div className="replies -mt-2 ml-[.3rem] border-l-2 border-line pt-2 pl-4">{node.replies.map((n) => draw(n))}</div>
       ) : null}
     </Fragment>
   );

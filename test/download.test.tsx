@@ -252,7 +252,7 @@ describe("opening a file over the page", () => {
     // bytes (see lib/attachments' thumbnail), and the window is where the reader
     // takes the file or sees it at the size it was sent at.
     const s = strip(page([entry({ attachments: [storedSmall] })], MEDIA_BASE));
-    expect(s).toContain('class="att haspop"');
+    expect(s).toMatch(/class="[^"]*\batt\b[^"]*\bhaspop\b[^"]*"/);
     expect(s).toContain(`<img class="athumb ablob" src="${MEDIA_BASE}/${BARE}"`);
     // Asked for as the chip nears the viewport rather than with the page: a deep
     // thread can hold a dozen pictures and none of them is what the reader came
@@ -322,7 +322,7 @@ describe("opening a file over the page", () => {
     // The saved spec is a derivation, so a page written before `view` existed has
     // no such field — and the bytes it points at are just as much a picture.
     const s = strip(page([entry({ attachments: [storedSmallOld] })], MEDIA_BASE));
-    expect(s).toContain('class="att haspop"');
+    expect(s).toMatch(/class="[^"]*\batt\b[^"]*\bhaspop\b[^"]*"/);
     expect(s).toContain('data-view="image"');
   });
 
@@ -339,7 +339,7 @@ describe("opening a file over the page", () => {
     // the bytes over as a file (`Content-Disposition: attachment`), and the window
     // still frames it in the browser's own viewer.
     const s = strip(page([entry({ attachments: [storedPdf] })], MEDIA_BASE));
-    expect(s).toContain('class="att haspop"');
+    expect(s).toMatch(/class="[^"]*\batt\b[^"]*\bhaspop\b[^"]*"/);
     expect(s).toContain('data-view="pdf"');
     expect(s).not.toContain('target="_blank"');
   });
