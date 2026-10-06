@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useSearch } from "@tanstack/react-router";
 import { ArrowUturnLeftIcon } from "@heroicons/react/24/outline";
 import { $api, type CorpusEntry, type SendResponse } from "../lib/api";
 import { dismissToast, pushToast } from "../lib/toasts";
@@ -184,7 +183,8 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
   aimed: number;
 }) {
   const queryClient = useQueryClient();
-  const accountId = useSearch({ from: "/" }).accountId;
+  const [accountId, setAccountId] = useState("");
+  const accounts = $api.useQuery("get", "/auth/status", {});
   // What the reader has written, in their own words: plain text, and no quote of
   // the message being answered — that is added on the way out, so the reader is
   // never editing around text they did not write.
@@ -228,6 +228,7 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
   // take again rather than something to be carried across.
   useEffect(() => {
     setPlan(null);
+    setAccountId("");
     setTo([]);
     setCc([]);
     setToTouched(false);
@@ -418,7 +419,7 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
           all,
           html,
           confirm: true,
-          ...(accountId ? { accountId } : {}),
+          accountId: plan.accountId,
           // Only a list the reader edited is named explicitly. The other one
           // remains the mailbox's default, including Reply-To and account aliases.
           ...(toTouched ? { to: to.map((a) => a.address) } : {}),
@@ -444,6 +445,13 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
   }
 
   const editor = (
+    <>
+    <label className="compose-account">Sending account
+      <select aria-label="Sending account" value={accountId} disabled={busy} onChange={(event) => { setAccountId(event.target.value); setPlan(null); }}>
+        <option value="">Choose automatically (or select for this message)</option>
+        {(accounts.data?.accounts ?? []).filter((account) => account.signedIn).map((account) => <option key={account.id} value={account.id}>{account.displayName}{account.email ? ` (${account.email})` : ""}</option>)}
+      </select>
+    </label>
     <ComposerFields
       mode="reply"
       to={to}
@@ -461,6 +469,7 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
       onBodyChange={setOwn}
       busy={busy}
     />
+    </>
   );
   const editorActions = <div className="replyopts">
     <label className="replytick" title="Answer everyone the message was addressed to. Edit the reply's audience in the fields above.">
@@ -471,7 +480,7 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
     </label>
   </div>;
   const previewContent = plan ? <div className="replyplan">
-    <p className="replynote"><strong>Nothing has been sent yet.</strong> This is the whole message as it will go: to <strong>{plan.to || "(no recipient)"}</strong>{plan.cc ? <>, cc <strong>{plan.cc}</strong></> : null}, as <strong>{plan.subject}</strong>, in <strong>{plan.html ? "text and HTML" : "plain text alone"}</strong>. Your words come first and the message you are answering is quoted under them.</p>
+    <p className="replynote"><strong>Nothing has been sent yet.</strong> This is the whole message as it will go from <strong>{accounts.data?.accounts?.find((account) => account.id === plan.accountId)?.displayName ?? plan.accountId}</strong>: to <strong>{plan.to || "(no recipient)"}</strong>{plan.cc ? <>, cc <strong>{plan.cc}</strong></> : null}, as <strong>{plan.subject}</strong>, in <strong>{plan.html ? "text and HTML" : "plain text alone"}</strong>. Your words come first and the message you are answering is quoted under them.</p>
     {plan.html ? <div className="replyhtml" dangerouslySetInnerHTML={{ __html: plan.html }} /> : <pre className="replytext">{plan.body}</pre>}
   </div> : null;
 

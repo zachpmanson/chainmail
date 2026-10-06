@@ -1,11 +1,13 @@
 import { useMemo, useRef, useState, type FormEvent } from "react";
 import { useSearch } from "@tanstack/react-router";
+import { $api } from "../lib/api";
 import { usePersonAddresses } from "../lib/who";
 import { addressWords, type Address } from "./AddressField";
 import { ComposerFields } from "./ComposerFields";
 import { ComposerFlow } from "./ComposerFlow";
 
 type ComposeResult = {
+  accountId: string;
   to: string;
   cc?: string;
   subject: string;
@@ -29,7 +31,9 @@ async function compose(input: { to: string[]; cc: string[]; subject: string; bod
 }
 
 export function ComposeBox({ onClose }: Props) {
-  const accountId = useSearch({ from: "/" }).accountId;
+  const routeAccountId = useSearch({ from: "/" }).accountId;
+  const [accountId, setAccountId] = useState(routeAccountId ?? "");
+  const accounts = $api.useQuery("get", "/auth/status", {});
   const people = usePersonAddresses();
   const suggestions = useMemo<Address[]>(() => {
     const seen = new Set<string>();
@@ -64,7 +68,7 @@ export function ComposeBox({ onClose }: Props) {
   async function send() {
     if (!preview || preview.to !== to.join(", ") || preview.cc !== (ccRecipients.length ? ccRecipients.join(", ") : undefined) || preview.subject !== subject || preview.body !== body) return;
     setBusy(true); setError("");
-    try { setResult(await compose({ to, cc: ccRecipients, subject, body, confirm: true, ...(accountId ? { accountId } : {}) })); }
+    try { setResult(await compose({ to, cc: ccRecipients, subject, body, confirm: true, accountId: preview.accountId })); }
     catch (e) {
       // The request may have reached Gmail even if its response did not. Avoid a
       // retry that could duplicate mail; the reader must check Gmail first.
@@ -77,6 +81,12 @@ export function ComposeBox({ onClose }: Props) {
   const isPreview = preview !== null && result === null;
   const editor = (
     <form ref={form} onSubmit={prepare}>
+      <label className="compose-account">Sending account
+        <select aria-label="Sending account" value={accountId} disabled={busy} onChange={(event) => { setAccountId(event.target.value); setPreview(null); }}>
+          <option value="">Choose account</option>
+          {(accounts.data?.accounts ?? []).filter((account) => account.signedIn).map((account) => <option key={account.id} value={account.id}>{account.displayName}{account.email ? ` (${account.email})` : ""}</option>)}
+        </select>
+      </label>
       <ComposerFields
         mode="compose"
         to={recipients}
@@ -101,7 +111,7 @@ export function ComposeBox({ onClose }: Props) {
       busy={busy}
       error={error ? <>{error}{sendFailed ? " Check Gmail before attempting to send again." : ""}</> : undefined}
       editor={editor}
-      preview={preview ? <dl className="compose-review"><dt>To</dt><dd>{preview.to}</dd>{preview.cc ? <><dt>Cc</dt><dd>{preview.cc}</dd></> : null}<dt>Subject</dt><dd>{preview.subject}</dd><dt>Plain-text message</dt><dd><pre>{preview.body}</pre></dd><p>Review the exact message above. Sending is irreversible.</p></dl> : null}
+      preview={preview ? <dl className="compose-review"><dt>Sending account</dt><dd>{accounts.data?.accounts?.find((account) => account.id === preview.accountId)?.displayName ?? preview.accountId}</dd><dt>To</dt><dd>{preview.to}</dd>{preview.cc ? <><dt>Cc</dt><dd>{preview.cc}</dd></> : null}<dt>Subject</dt><dd>{preview.subject}</dd><dt>Plain-text message</dt><dd><pre>{preview.body}</pre></dd><p>Review the exact message above. Sending is irreversible.</p></dl> : null}
       done={result ? <><p>Sent to {result.to}{result.cc ? `, cc ${result.cc}` : ""}.</p><p>{result.filed ? "Filed in the corpus." : "Sent successfully, but could not be filed in the corpus."}</p></> : null}
       onReview={() => form.current?.requestSubmit()}
       onEdit={() => { if (sendFailed) onClose(); else { setPreview(null); setError(""); } }}
