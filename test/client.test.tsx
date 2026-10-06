@@ -893,6 +893,7 @@ describe("the settings rows on /settings", () => {
     expect(folder.getAttribute("aria-haspopup")).toBe("menu");
     const row = folder.closest(".stsetting-row")!;
     expect(row.querySelector(".stsetting-copy h3")!.textContent).toBe("Home folder");
+    expect(row.querySelector(".stsetting-value")!.classList.contains("stsetting-value-fill")).toBe(true);
     expect(row.closest("section")!.getAttribute("aria-labelledby")).toBe("mailbox-heading");
   });
 });
