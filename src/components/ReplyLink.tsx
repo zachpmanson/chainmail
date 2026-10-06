@@ -33,10 +33,10 @@ export interface ReplyTarget {
 }
 
 export function ReplyLink({ parent }: { parent: ReplyTarget | null }) {
-  if (!parent) return <span className="tstart">thread start</span>;
+  if (!parent) return <span className="tstart rounded-[4px] border border-line px-[.3rem] py-[.02rem] text-[.6rem] font-bold uppercase tracking-[.09em] text-muted">thread start</span>;
   return (
     <a
-      className="par"
+      className="par inline-flex items-center gap-[.28rem] text-[.66rem] text-muted no-underline hover:text-accent"
       href={`#${parent.anchor}`}
       /* The label is what the link says; the title repeats it in full for the
          hover, and is the whole of it in column mode, where CSS collapses the
@@ -46,9 +46,9 @@ export function ReplyLink({ parent }: { parent: ReplyTarget | null }) {
          arrow answers, and it is also the only place the name's address is said. */
       title={`In reply to ${parent.whoTitle ?? parent.who}, ${parent.when}`}
     >
-      <span className="arw">&#8617;</span>
+      <span className="arw block translate-y-[.045em] text-[.8rem] leading-none">&#8617;</span>
       <span className="parlbl">
-        in reply to <b>{parent.who}</b>, {parent.when}
+        in reply to <b className="font-[650] text-inherit">{parent.who}</b>, {parent.when}
       </span>
     </a>
   );

@@ -64,17 +64,17 @@ function EntryBlock({ row, v, mark, anchorByGmail, onPull, pulling, mediaBase }:
     const start = row.isChainStart ? " chstart" : "";
     return (
       <div
-        className={`sys${start}${mark === "new" ? " isnew" : ""}`}
+        className={`sys mx-auto my-[.7rem] max-w-[44rem] border border-dashed border-line rounded-[10px] bg-quote px-[.9rem] py-[.55rem] text-center${start}${mark === "new" ? " isnew" : ""}`}
         id={row.id}
         data-ch={row.lane}
         style={grid}
       >
-        <div className="sysday">
+        <div className="sysday mb-[.15rem] text-[.68rem] tabular-nums text-muted">
           <a className="pl" href={`#${row.id}`} title="Link to this note">
             {e.date}
           </a>
         </div>
-        <div className="syslabel">{e.label}</div>
+        <div className="syslabel mb-[.3rem] text-[.75rem] font-bold uppercase tracking-[.08em] text-muted">{e.label}</div>
         <div className="bd" dangerouslySetInnerHTML={html(trimBody(e.body))} />
         <ReplyLink parent={replyTarget(row, v)} />
       </div>
@@ -247,11 +247,11 @@ export function Timeline({ spec, marks, prevLabel, filter, onShowSpec, onRefresh
         ))}
       </div>
       {s.openItems?.length ? (
-        <footer className="end">
-          <h2>{s.openItemsTitle ?? "Still open"}</h2>
-          <ul>
+        <footer className="end mt-8 border-t border-line pt-[.9rem]">
+          <h2 className="mb-[.6rem] mt-0 text-[.8rem] uppercase tracking-[.1em] text-muted">{s.openItemsTitle ?? "Still open"}</h2>
+          <ul className="m-0 pl-[1.15rem]">
             {s.openItems.map((i, n) => (
-              <li key={n} dangerouslySetInnerHTML={html(i)} />
+              <li className="my-[.2rem] text-[.89rem]" key={n} dangerouslySetInnerHTML={html(i)} />
             ))}
           </ul>
         </footer>

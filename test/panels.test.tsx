@@ -81,7 +81,7 @@ describe("static export", () => {
     // both orientations are in the DOM; CSS shows the live one
     expect(html.match(/class="hit"/g)).toHaveLength(58 * 2);
     expect(html.match(/class="chdr"/g)).toHaveLength(7);
-    expect(html.match(/<a class="par"/g)).toHaveLength(51);
+    expect(html.match(/<a class="par[^"]*"/g)).toHaveLength(51);
   });
 
   it("emits one avatar rule per face rather than inlining each image", () => {
@@ -140,7 +140,7 @@ describe("participants panel", () => {
   /** slot -> name, for every avatar the participants panel renders. */
   function panelFaces() {
     const html = renderToStaticMarkup(<ParticipantsPanel v={derive(spec)} />);
-    const re = /class="av (o\d)[^"]*">(?:<span class="ini">[^<]*<\/span>)?<\/div><span class="[^"]*" title="[^"]*">([^<]+)<\/span>/g;
+    const re = /class="av (o\d)[^"]*">(?:<span class="ini[^"]*">[^<]*<\/span>)?<\/div><span class="[^"]*" title="[^"]*">([^<]+)<\/span>/g;
     return new Map([...html.matchAll(re)].map((match) => [match[2]!, match[1]!]));
   }
 

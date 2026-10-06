@@ -665,7 +665,7 @@ export function ThreadMessages({
   return (
     <div className="stream">
       {pullNote ? (
-        <p className="pullnote" role="status">
+        <p className="pullnote mb-[.8rem] mt-0 border border-accent border-l-[3px] rounded-md bg-card px-[.85rem] py-[.55rem] text-[.85rem] text-fg" role="status">
           {pullNote}
         </p>
       ) : null}

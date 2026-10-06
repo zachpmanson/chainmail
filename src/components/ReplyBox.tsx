@@ -471,8 +471,8 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
       mine={mine}
       editingRecipients={editing}
       onEditRecipients={() => setEditing(true)}
-      target={<a className="par replytarget inline-flex h-[var(--addrrow)] items-center gap-[.25rem] ml-auto whitespace-nowrap no-underline" href={`#${answerAnchor}`} aria-label={`Jump to the message being replied to: ${words.who || "the sender"}, ${words.when}`} title={`Jump to the message being replied to: ${words.whoTitle ?? words.who}, ${words.when}`}>
-        <span className="arw" aria-hidden="true">&#8617;</span><span>{words.who || "message"}</span>
+      target={<a className="par replytarget inline-flex h-[var(--addrrow)] items-center gap-[.25rem] ml-auto whitespace-nowrap no-underline hover:text-accent" href={`#${answerAnchor}`} aria-label={`Jump to the message being replied to: ${words.who || "the sender"}, ${words.when}`} title={`Jump to the message being replied to: ${words.whoTitle ?? words.who}, ${words.when}`}>
+        <span className="arw block translate-y-[.045em] text-[.8rem] leading-none" aria-hidden="true">&#8617;</span><span>{words.who || "message"}</span>
       </a>}
       body={own}
       onBodyChange={setOwn}
@@ -480,17 +480,17 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
     />
     </>
   );
-  const editorActions = <div className="replyopts">
-    <label className="replytick" title="Answer everyone the message was addressed to. Edit the reply's audience in the fields above.">
-      <input type="checkbox" checked={all} disabled={busy} onChange={(e) => onAll(e.target.checked)} /> reply all
+  const editorActions = <div className="replyopts mr-auto flex items-center gap-4">
+    <label className="replytick flex cursor-pointer items-center gap-[.4rem] text-[.74rem] text-muted" title="Answer everyone the message was addressed to. Edit the reply's audience in the fields above.">
+      <input className="m-0 cursor-pointer accent-accent" type="checkbox" checked={all} disabled={busy} onChange={(e) => onAll(e.target.checked)} /> reply all
     </label>
-    <label className="replytick" title="Send the HTML rendering beside the same plain-text message. Unchecked sends plain text alone.">
-      <input type="checkbox" checked={html} disabled={busy} onChange={(e) => setHtml(e.target.checked)} /> send html
+    <label className="replytick flex cursor-pointer items-center gap-[.4rem] text-[.74rem] text-muted" title="Send the HTML rendering beside the same plain-text message. Unchecked sends plain text alone.">
+      <input className="m-0 cursor-pointer accent-accent" type="checkbox" checked={html} disabled={busy} onChange={(e) => setHtml(e.target.checked)} /> send html
     </label>
   </div>;
   const previewContent = plan ? <div className="replyplan text-[.76rem] leading-[1.5]">
-    <p className="replynote"><strong>Nothing has been sent yet.</strong> This is the whole message as it will go from <strong>{accounts.data?.accounts?.find((account) => account.id === plan.accountId)?.displayName ?? plan.accountId}</strong>: to <strong>{plan.to || "(no recipient)"}</strong>{plan.cc ? <>, cc <strong>{plan.cc}</strong></> : null}, as <strong>{plan.subject}</strong>, in <strong>{plan.html ? "text and HTML" : "plain text alone"}</strong>. Your words come first and the message you are answering is quoted under them.</p>
-    {plan.html ? <div className="replyhtml" dangerouslySetInnerHTML={{ __html: plan.html }} /> : <pre className="replytext">{plan.body}</pre>}
+    <p className="replynote m-0 mb-[.45rem]"><strong>Nothing has been sent yet.</strong> This is the whole message as it will go from <strong>{accounts.data?.accounts?.find((account) => account.id === plan.accountId)?.displayName ?? plan.accountId}</strong>: to <strong>{plan.to || "(no recipient)"}</strong>{plan.cc ? <>, cc <strong>{plan.cc}</strong></> : null}, as <strong>{plan.subject}</strong>, in <strong>{plan.html ? "text and HTML" : "plain text alone"}</strong>. Your words come first and the message you are answering is quoted under them.</p>
+    {plan.html ? <div className="replyhtml m-[.4rem_0_0] max-h-[22rem] overflow-auto [overflow-wrap:anywhere] rounded-md border border-line bg-bg px-[.6rem] py-[.5rem] text-[.84rem] leading-[1.5] text-fg" dangerouslySetInnerHTML={{ __html: plan.html }} /> : <pre className="replytext m-[.4rem_0_0] max-h-[22rem] overflow-auto [overflow-wrap:anywhere] whitespace-pre-wrap rounded-md border border-line bg-bg px-[.6rem] py-[.5rem] font-mono text-[.76rem] leading-[1.45] text-fg">{plan.body}</pre>}
   </div> : null;
 
   return <ComposerFlow

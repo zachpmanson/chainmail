@@ -167,8 +167,8 @@ describe("a bubble drawn from its props alone", () => {
     const line = container.querySelector(".hdet .hsub")!;
     expect(line.querySelector(".subj")!.textContent).toBe("Solar install quote: dates");
     // The subject first, the ids after it: one row, and the ids are its right end.
-    expect(line.firstElementChild!.className).toBe("subj");
-    expect(line.lastElementChild!.className).toBe("src");
+    expect(line.firstElementChild!.className).toContain("subj");
+    expect(line.lastElementChild!.className).toContain("src");
     // A message with no subject still shows where it was found — the row is the
     // subject's line rather than a row that needs one.
     const ids = draw({ source: <span className="src">msg 18bd3f21</span> });

@@ -316,49 +316,12 @@
      chain is judged and accepted by root ext id (see refresh.go's Candidate). */
   .proposals { position:fixed; inset:0; z-index:55; background:rgba(0,0,0,.45);
     display:flex; align-items:center; justify-content:center; }
-  .proposals-panel { background:var(--card); border:1px solid var(--line);
-    border-radius:8px; max-width:44rem; max-height:70vh; display:flex;
-    flex-direction:column; box-shadow:0 8px 40px rgba(0,0,0,.35); }
-  .proposals-head { display:flex; align-items:center; gap:.6rem;
-    padding:.5rem .8rem; border-bottom:1px solid var(--line); }
-  .proposals-head b { font-size:.72rem; font-weight:700; text-transform:uppercase;
-    letter-spacing:.09em; color:var(--muted); }
-  .proposals-head .note { font-size:.7rem; color:var(--muted); margin-right:auto; }
-  .proposals-list { margin:0; padding:.5rem .8rem; overflow:auto; list-style:none;
-    display:flex; flex-direction:column; gap:.4rem; }
-  .propcard { display:flex; flex-direction:row; gap:.6rem; align-items:center;
-    padding:.5rem .6rem; border:1px solid var(--line); border-radius:5px;
-    background:var(--bg); }
-  .propcard-body { display:flex; flex-direction:column; gap:.3rem;
-    flex:1 1 auto; min-width:0; }
-  .propcard > .selpvbtn { margin-right:0; flex:0 0 auto; }
-  .proptoggle { display:flex; align-items:flex-start; gap:.5rem; flex:1 1 auto;
-    min-width:0; cursor:pointer; }
-  .proptoggle input { accent-color:var(--o1); margin-top:.18rem; }
-  .propsubj { font-weight:600; max-width:100%; overflow-wrap:break-word;
-    white-space:normal; font-family:var(--serif); }
-  .propsubj em { font-style:normal; color:var(--muted); }
-  .propmeta { font-size:.7rem; color:var(--muted); margin-top:.15rem; }
-  .proprowid { font-size:.66rem; color:var(--accent); max-width:100%;
-    overflow-wrap:break-word; margin-top:.1rem; }
-  .proposals-foot { display:flex; justify-content:flex-end; gap:.6rem;
-    padding:.5rem .8rem; border-top:1px solid var(--line); }
-  .newpill { font-size:.6rem; font-weight:800; text-transform:uppercase; letter-spacing:.09em;
-    color:#fff; background:var(--o1); border-radius:4px; padding:.05rem .3rem; }
-  .revpill { font-size:.6rem; font-weight:800; text-transform:uppercase; letter-spacing:.09em;
-    color:var(--fg); background:var(--dash); border:1px solid var(--muted);
-    border-radius:4px; padding:.02rem .28rem; }
   .sys.isnew { border-left:3px solid var(--o1); }
-  .av { font-size:.83rem; flex:0 0 1em; width:1em; height:1em; border-radius:50%;
-    color:#fff; display:grid; place-items:center; align-self:center;
-    line-height:1; overflow:hidden; }
-  .av .ini { font-size:.62em; font-weight:700; line-height:1; letter-spacing:.01em; }
   .av.o1{background:var(--o1);--ring:var(--o1)} .av.o2{background:var(--o2);--ring:var(--o2)}
   .av.o3{background:var(--o3);--ring:var(--o3)} .av.o4{background:var(--o4);--ring:var(--o4)}
   .av.o5{background:var(--o5);--ring:var(--o5)}
   .av.pic { background-size:cover; background-position:center;
     box-shadow:0 0 0 1.5px var(--ring,var(--muted)), 0 0 0 2.5px var(--bg); }
-  .col { min-width:0; }
   /* The header is a disclosure, not a caption. The sender, the org, the clock
      and the reply the message answers are its summary — the things a page is
      scanned by — and the caret closes the line at its right edge, so it opens
@@ -366,9 +329,6 @@
      found under, and the copy control) is one click away rather than permanently
      in the bubble, where it was read once and made every bubble taller
      thereafter. */
-  details.hdr { margin:0 0 .14rem; padding:0 .1rem; }
-  details.hdr > summary { display:flex; flex-wrap:wrap; align-items:baseline;
-    gap:.3rem; cursor:pointer; list-style:none; }
   details.hdr > summary::-webkit-details-marker { display:none; }
   /* The line's right end: the reply it answers, and then the caret. One box so
      the caret closes the line whether or not there is a reply beside it — two
@@ -391,15 +351,12 @@
   details.hdr[open] > summary > .htail::after { transform:rotate(-90deg);
     border-right-color:var(--accent); }
   details.hdr > summary:focus-visible { outline:1px solid var(--accent); outline-offset:2px; }
-  .nm { font-size:.83rem; font-weight:650; }
   /* Tinted to match the bubble strip, so the colour is self-describing and the
      page needs no legend. Falls back to --muted for an entry with no org. */
-  .org { font-size:.68rem; color:var(--orgc,var(--muted)); text-transform:uppercase;
-    letter-spacing:.07em; font-weight:650; }
+  .org { color:var(--orgc,var(--muted)); }
   .msg.o1 .org { --orgc:var(--o1); } .msg.o2 .org { --orgc:var(--o2); }
   .msg.o3 .org { --orgc:var(--o3); } .msg.o4 .org { --orgc:var(--o4); }
   .msg.o5 .org { --orgc:var(--o5); }
-  .tm { font-size:.71rem; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
   /* The receipt's three controls are one shape, so they read as one line of them:
      the press that answers the message (see .replyall), the clip that copies it
      whole, and the swap to the sender's own rendering (see .origbtn further down
@@ -470,7 +427,6 @@
      other way; the control itself stays put either way, because the receipt is one
      click and the bubble's own line is not where a reader goes to change how a
      message is read. */
-  .hdetend { margin-left:auto; display:inline-flex; align-items:center; gap:.35rem; }
   .origbtn[aria-pressed="true"] { color:var(--accent); background:var(--mine);
     border-color:var(--accent); }
   /* Which message this box's press is about. The pane's reply box answers the newest
@@ -480,7 +436,6 @@
      state the reader set (see AnswerPress). */
   .replyall[aria-pressed="true"] { color:var(--accent); background:var(--mine);
     border-color:var(--accent); }
-  .origwhy { font-size:.66rem; color:var(--muted); font-style:italic; }
   /* The shadow host: layout only, and deliberately no colour. A rule in THIS
      stylesheet beats a :host rule written inside the shadow root, so a colour
      here would be a canvas the sender's own stylesheet could not correct — the
@@ -603,33 +558,19 @@
     background:color-mix(in srgb, var(--bg) 92%, transparent);
     backdrop-filter:blur(3px); }
   .pop[hidden] { display:none; }
-  .popbox { display:flex; flex-direction:column; gap:.4rem; max-width:100%;
-    max-height:100%; }
   /* Room is left for the bar underneath, so the caption and the controls are not
      the first thing a tall picture pushes off the screen. Never scaled up: a
      picture is shown at the size it was sent, and a small one stays small. */
-  .popimg { max-width:100%; max-height:calc(100vh - 6rem); width:auto; height:auto;
-    object-fit:contain; border:1px solid var(--line); border-radius:6px;
-    background:var(--card); }
   .popimg[hidden] { display:none; }
   /* A text file, read rather than parsed: monospace, no wrapping, scrolling both
      ways, because a CSV line and a log line are both wider than any column and a
      wrapped one is harder to read than a scrolled one. */
-  .poptext { margin:0; padding:.9rem 1rem; width:min(72rem, 92vw);
-    max-height:calc(100vh - 6rem); overflow:auto; text-align:left;
-    font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.78rem;
-    line-height:1.5; white-space:pre; tab-size:4;
-    border:1px solid var(--line); border-radius:6px; background:var(--card);
-    color:var(--fg); }
   .poptext[hidden] { display:none; }
   /* A delimited file, read as cells rather than as lines of commas: the same
      scroll-anywhere box the text window uses, with the values in a table. The
      header stays put while the rows scroll, because a column of figures is read
      against its heading, and that heading is the first thing to leave the screen.
      Monospace, so a column of amounts lines up on its digits. */
-  .popgrid { width:min(72rem, 92vw); max-height:calc(100vh - 6rem); overflow:auto;
-    border:1px solid var(--line); border-radius:6px; background:var(--card);
-    text-align:left; }
   .popgrid[hidden] { display:none; }
   .poptable { border-collapse:collapse; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
     font-size:.74rem; }
@@ -649,27 +590,12 @@
      chose (application/pdf), never the sender's claim about the bytes, and the
      PDF viewers that would break under a sandbox are the only reason to have a
      frame here at all. */
-  .popframe { width:min(72rem, 92vw); height:calc(100vh - 6rem); border:1px solid var(--line);
-    border-radius:6px; background:var(--card); }
   .popframe[hidden] { display:none; }
-  .popbar { display:flex; align-items:center; gap:.7rem; }
-  .popcap { font-size:.74rem; font-weight:650; color:var(--muted);
-    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
-    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   /* What the window has to say about itself: that a long file was cut, that the
      bytes could not be read. Not a control, so it is not framed like one. */
-  .popnote { font-size:.72rem; color:var(--muted); white-space:nowrap; }
-  .popx { margin-left:auto; font:inherit; font-size:.72rem; cursor:pointer;
-    border:1px solid var(--line); border-radius:6px; padding:.15rem .55rem;
-    background:var(--card); color:var(--fg); }
-  .popx:hover, .popx:focus-visible { border-color:var(--accent); }
   /* The original file, for a chip whose bytes are in the corpus: the click that
      opened the popover was intercepted, so this is the only route to the real
      bytes rather than the thumbnail. Same control as Close, one step quieter. */
-  .popget { font:inherit; font-size:.72rem; text-decoration:none; cursor:pointer;
-    border:1px solid var(--line); border-radius:6px; padding:.15rem .55rem;
-    background:var(--card); color:var(--muted); }
-  .popget:hover, .popget:focus-visible { border-color:var(--accent); color:var(--fg); }
   .popget[hidden] { display:none; }
   /* The transcript must not scroll behind an enlarged picture: the reader's
      position in it is what they return to when the popover closes. */
@@ -694,8 +620,6 @@
      the air between it and the subject above. Centring the items keeps the text
      beside the control rather than hung beneath it, and stops one control from
      setting the space above an entire row. */
-  .hdet { display:flex; flex-wrap:wrap; align-items:center; gap:.2rem .7rem;
-    margin:0 0 .3rem; padding:.22rem .1rem 0; }
   .to { font-size:.66rem; color:var(--muted); }
   /* The message's own subject, and the ids it was found under, sharing the
      receipt's first line: the subject keeps the left and the ids are pushed to
@@ -713,27 +637,16 @@
      the subject is what they are inspecting: one line, one glance, rather than
      the ids taking a quiet line of their own under the recipient — which was
      mostly empty and pushed the receipt's fields a line further down. */
-  .hdet .hsub { flex:1 1 100%; display:flex; align-items:baseline; gap:.3rem .7rem; }
-  .hdet .hsub .subj { flex:1 1 auto; min-width:0;
-    font-size:.72rem; color:var(--fg); line-height:1.25; }
   /* `margin-left:auto` rather than the subject taking the slack: a long subject
      that wraps must not push the ids off the row, and the ids still end at the
      right edge when the subject is short. */
   .hdet .hsub .src { margin-left:auto; }
-  .src { font-size:.64rem; color:var(--muted);
-    font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
   .src a { color:inherit; text-decoration:none; border-bottom:1px dotted currentColor; }
   .src a:hover { color:var(--accent); }
   /* An id and its "msg" are one token to the reader, so the space between them is
      not a break opportunity; the commas outside .sid are, and they are the only
      place a many-host line may wrap. */
   .src .sid { white-space:nowrap; }
-  .sys { text-align:center; margin:.7rem auto; max-width:44rem; padding:.55rem .9rem;
-    border:1px dashed var(--line); border-radius:10px; background:var(--quote); }
-  .sysday { font-size:.68rem; color:var(--muted); font-variant-numeric:tabular-nums;
-    margin-bottom:.15rem; }
-  .syslabel { font-size:.75rem; font-weight:700; text-transform:uppercase;
-    letter-spacing:.08em; color:var(--muted); margin-bottom:.3rem; }
   .sys ul { text-align:left; margin:.4rem 0 0; padding-left:1.1rem; }
   .sys li { font-size:.85rem; margin:.12rem 0; }
   .sys p { margin:.18rem 0; font-size:.86rem; text-align:left; }
@@ -747,17 +660,7 @@
     text-decoration-color:var(--accent); border-radius:3px; }
   a.pl:hover { color:var(--accent); text-decoration:underline dotted; }
   a.pl:focus-visible { outline:1.5px solid var(--accent); outline-offset:1px; }
-  .sysday a.pl:hover { color:var(--accent); }
-  .par { display:inline-flex; align-items:center; gap:.28rem; font-size:.66rem;
-    color:var(--muted); text-decoration:none; }
   .sys .par { margin-top:.3rem; }
-  .par:hover { color:var(--accent); }
-  .par .arw { font-size:.8rem; line-height:1; display:block;
-    transform:translateY(.045em); }
-  .par b { font-weight:650; color:inherit; }
-  .tstart { font-size:.6rem; font-weight:700; text-transform:uppercase;
-    letter-spacing:.09em; color:var(--muted); border:1px solid var(--line);
-    border-radius:4px; padding:.02rem .3rem; }
   a.xref { color:inherit; text-decoration:underline; text-decoration-style:dotted;
     text-underline-offset:2px; text-decoration-color:var(--accent); }
   a.xref:hover { color:var(--accent); text-decoration-style:solid; }
@@ -1018,33 +921,12 @@
   }
   /* a message that only moves should slide, not cross-fade through itself */
   ::view-transition-old(root) { mix-blend-mode:normal; }
-  footer.end { margin-top:2rem; border-top:1px solid var(--line); padding-top:.9rem; }
-  footer.end h2 { font-size:.8rem; text-transform:uppercase; letter-spacing:.1em;
-    color:var(--muted); margin:0 0 .6rem; }
-  footer.end ul { margin:0; padding-left:1.15rem; }
-  footer.end li { margin:.2rem 0; font-size:.89rem; }
-  /* add-email search: one compact form row inside the proposals modal chrome */
-  .addform { display:flex; align-items:center; gap:.5rem; padding:.45rem .8rem;
-    border-bottom:1px solid var(--line); }
-  .addform label { display:flex; align-items:center; gap:.4rem; flex:1 1 auto;
-    min-width:0; font-size:.7rem; color:var(--muted); }
-  .addform input { font:inherit; font-size:.78rem; padding:.3rem .5rem; flex:1 1 auto;
-    min-width:0; border:1px solid var(--line); border-radius:5px;
-    background:var(--bg); color:var(--fg); }
-  .addform button { font:inherit; font-size:.72rem; font-weight:650;
-    padding:.3rem .7rem; border:1px solid var(--line); border-radius:5px;
-    background:var(--bg); color:var(--fg); cursor:pointer; }
-  .addform button:hover:not(:disabled) { color:var(--accent); border-color:var(--accent); }
-  .addform button:disabled { opacity:.45; cursor:default; }
   /* --- a pull that failed --- */
   /* Above the page rather than beside the chips: a pull is one message's business
      but its failure is the page's — the reader pressed a button that spends
      mailbox round trips and has to be told, in the page, that it did not work.
      Console-only is where the refresh verdict lives and where this used to be
      lost: "nothing happened" and "it failed" look identical without it. */
-  .pullnote { margin:0 0 .8rem; padding:.55rem .85rem; font-size:.85rem;
-    color:var(--fg); background:var(--card); border:1px solid var(--accent);
-    border-left-width:3px; border-radius:6px; }
 
 /* --- answering a message --- */
 /* The reply box is the pane's own foot: it sits in the stream under everything
@@ -1055,7 +937,6 @@
    the pane growing. */
 /* Recipient rows are display:contents so labels line up, fields take the middle
    track, and the message target reserves the trailing track. */
-.replytarget .arw { font-size:.8rem; line-height:1; }
 /* The collapsed recipient line: who the reply reaches, read-only, and the one
    press that opens the editors. It is styled as the message header's own
    receipt line (.to) rather than as a field, because that is what it is before a
@@ -1076,12 +957,6 @@
    pre-wrapped so that the quote is read as the lines that will be sent — the
    quote marks the server added are the thing being checked, and a proportional
    rendering of them is a drawing of the message rather than the message. */
-.replynote { margin:0 0 .45rem; }
-.replytext { margin:.4rem 0 0; padding:.5rem .6rem; max-height:22rem;
-  overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font-size:.76rem;
-  line-height:1.45; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
-  color:var(--fg); background:var(--bg); border:1px solid var(--line);
-  border-radius:6px; }
 /* The same preview when the reply goes out with its HTML part: the rendering the
    recipient's client gets rather than the lines that will be typed. The frame
    matches .replytext above so the two forms are one panel changing shape, but the
@@ -1090,10 +965,6 @@
    correspondent sees. The bytes inside it are the server's and are not touched
    here; these rules shape the frame and the composed elements' own margins, as
    .bd's do for a body. */
-.replyhtml { margin:.4rem 0 0; padding:.5rem .6rem; max-height:22rem;
-  overflow:auto; overflow-wrap:anywhere; font-size:.84rem; line-height:1.5;
-  color:var(--fg); background:var(--bg); border:1px solid var(--line);
-  border-radius:6px; }
 .replyhtml p { margin:.4rem 0; }
 .replyhtml p:first-of-type { margin-top:0; }
 .replyhtml blockquote { margin:.4rem 0 0; padding-left:.6rem;
@@ -1112,10 +983,6 @@
    at the left, in the reader's reading order, while what sends the reply stays
    where the sending is. They are one row and one style because they are one kind
    of thing: both ticks are on, and either can only take something off the reply. */
-.replyopts { display:flex; align-items:center; gap:1rem; margin-right:auto; }
-.replytick { display:flex; align-items:center; gap:.4rem;
-  font-size:.74rem; color:var(--muted); cursor:pointer; }
-.replytick input { margin:0; accent-color:var(--accent); cursor:pointer; }
 .replytick:has(input:disabled) { opacity:.55; cursor:default; }
 
 /* --- what a write leaves to say --- */

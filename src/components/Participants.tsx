@@ -103,8 +103,8 @@ function Face({ p, v }: { p: Person; v: ParticipantsView }) {
   // reuses the per-avatar CSS rule rather than inlining the image again
   const pic = v.rows.find((r) => r.entry.sender === p.name)?.avatarClass;
   return (
-    <div className={`av ${slot}${pic ? ` pic ${pic}` : ""} text-[.78rem]`}>
-      {pic ? null : <span className="ini">{initials(p.name)}</span>}
+    <div className={`av ${slot}${pic ? ` pic ${pic}` : ""} grid size-[1em] flex-[0_0_1em] place-items-center self-center overflow-hidden rounded-full text-[.78rem] leading-none text-white`}>
+      {pic ? null : <span className="ini text-[.62em] font-bold leading-none tracking-[.01em]">{initials(p.name)}</span>}
     </div>
   );
 }

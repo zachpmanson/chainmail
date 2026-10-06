@@ -224,23 +224,24 @@ function AddEmailsModal({ onClose, onAdd }: {
   return (
     <>
       <div className="proposals" role="dialog" aria-modal="true" aria-label="Add another email" onClick={onClose}>
-      <div className="proposals-panel" onClick={(e) => e.stopPropagation()}>
-        <div className="proposals-head">
-          <b>add email</b>
-          <span className="note">search the corpus for a thread to add to this page</span>
+      <div className="proposals-panel flex max-h-[70vh] max-w-[44rem] flex-col rounded-lg border border-line bg-card shadow-[0_8px_40px_rgba(0,0,0,.35)]" onClick={(e) => e.stopPropagation()}>
+        <div className="proposals-head flex items-center gap-[.6rem] border-b border-line p-[.5rem_.8rem]">
+          <b className="text-[.72rem] font-bold uppercase tracking-[.09em] text-muted">add email</b>
+          <span className="note ml-auto text-[.7rem] text-muted">search the corpus for a thread to add to this page</span>
         </div>
-        <form className="addform" onSubmit={submit}>
-          <label>
+        <form className="addform flex items-center gap-[.5rem] border-b border-line p-[.45rem_.8rem]" onSubmit={submit}>
+          <label className="flex min-w-0 flex-1 items-center gap-[.4rem] text-[.7rem] text-muted">
             <span>Query</span>
             <TextInput
               autoFocus
               value={q}
               onChange={(e) => setQ(e.target.value)}
+              className="min-w-0 flex-1 rounded-[5px] border border-line bg-bg px-[.5rem] py-[.3rem] text-[.78rem] text-fg"
               placeholder="words, a name, an id"
               aria-label="Search query"
             />
           </label>
-          <Button type="submit" disabled={!q.trim()}>
+          <Button className="!min-h-0 !rounded-[5px] !border-line !bg-bg !px-[.7rem] !py-[.3rem] !text-[.72rem] !font-semibold !text-fg !cursor-pointer hover:!border-accent hover:!text-accent disabled:!cursor-default disabled:!opacity-[.45]" type="submit" disabled={!q.trim()}>
             Search
           </Button>
         </form>
@@ -254,7 +255,7 @@ function AddEmailsModal({ onClose, onAdd }: {
           <p className="selnote mt-2 flex-[1_1_100%] text-[.78rem] text-muted">No thread matched.</p>
         ) : null}
         {chains.length > 0 ? (
-          <ul className="proposals-list">
+          <ul className="proposals-list m-0 flex list-none flex-col gap-[.4rem] overflow-auto p-[.5rem_.8rem]">
             {chains.map((c) => (
               <ThreadRow
                 key={c.rootExtId}
@@ -270,7 +271,7 @@ function AddEmailsModal({ onClose, onAdd }: {
             ))}
           </ul>
         ) : null}
-        <div className="proposals-foot">
+        <div className="proposals-foot flex justify-end gap-[.6rem] border-t border-line p-[.5rem_.8rem]">
           <Button className="tbtn" type="button" disabled={chosen.length === 0}
                   onClick={() => {
                     // asked, not the text box: the box may have been edited since
@@ -323,32 +324,32 @@ function ProposalsModal({ proposals, open, refreshing, onClose, onAccept }: {
   return (
     <>
       <div className="proposals" role="dialog" aria-modal="true" aria-label="Proposed chains">
-        <div className="proposals-panel">
-        <div className="proposals-head">
-          <b>proposed</b>
-          <span className="note">found by a query, not yet on the page — accept the ones that belong</span>
+        <div className="proposals-panel flex max-h-[70vh] max-w-[44rem] flex-col rounded-lg border border-line bg-card shadow-[0_8px_40px_rgba(0,0,0,.35)]">
+        <div className="proposals-head flex items-center gap-[.6rem] border-b border-line p-[.5rem_.8rem]">
+          <b className="text-[.72rem] font-bold uppercase tracking-[.09em] text-muted">proposed</b>
+          <span className="note ml-auto text-[.7rem] text-muted">found by a query, not yet on the page — accept the ones that belong</span>
         </div>
-        <ul className="proposals-list">
+        <ul className="proposals-list m-0 flex list-none flex-col gap-[.4rem] overflow-auto p-[.5rem_.8rem]">
           {proposals.map((p) => {
             const on = accepted.has(p.rootExtId);
             return (
-              <li key={p.subject ?? p.container ?? p.rootExtId} className="propcard">
-                <div className="propcard-body">
-                  <label className="proptoggle">
-                    <input type="checkbox" checked={on} onChange={() => toggle(p.rootExtId)} />
-                    <span className="propsubj">{p.subject ?? <em>no subject</em>}</span>
+              <li key={p.subject ?? p.container ?? p.rootExtId} className="propcard flex flex-row items-center gap-[.6rem] rounded-[5px] border border-line bg-bg p-[.5rem_.6rem]">
+                <div className="propcard-body flex min-w-0 flex-1 flex-col gap-[.3rem]">
+                  <label className="proptoggle flex min-w-0 flex-1 cursor-pointer items-start gap-[.5rem]">
+                    <input className="mt-[.18rem] accent-org-1" type="checkbox" checked={on} onChange={() => toggle(p.rootExtId)} />
+                    <span className="propsubj max-w-full break-words whitespace-normal font-[var(--serif)] font-semibold">{p.subject ?? <em className="not-italic text-muted">no subject</em>}</span>
                   </label>
-                  <span className="propmeta">
+                  <span className="propmeta mt-[.15rem] text-[.7rem] text-muted">
                     {p.matched}/{p.entries} matched · {p.span ?? ""} · {p.query}
                     {p.semantic ? ` · sim ${p.similarity?.toFixed(2) ?? "–"}${p.lexical ? " (hybrid)" : " (semantic)"}` : p.lexical ? " · word match" : ""}
                   </span>
-                  <code className="proprowid">{p.rootExtId}</code>
+                  <code className="proprowid mt-[.1rem] max-w-full break-words text-[.66rem] text-accent">{p.rootExtId}</code>
                 </div>
                 {/* Preview reads the thread as data, the same modal the search
                     page uses, so a proposal can be judged on its entries before
                     it is accepted. Kept out of the toggle label, so ticking it
                     and previewing it never fight over one hit area. */}
-                <Button type="button" className="mr-2 whitespace-nowrap px-[.6rem] py-[.3rem] text-[.72rem] font-semibold text-muted hover:border-accent hover:text-accent" aria-haspopup="dialog"
+                <Button type="button" className="mr-0 shrink-0 whitespace-nowrap px-[.6rem] py-[.3rem] text-[.72rem] font-semibold text-muted hover:border-accent hover:text-accent" aria-haspopup="dialog"
                         onClick={() => setPreview(p)}>
                   Preview
                 </Button>
@@ -356,7 +357,7 @@ function ProposalsModal({ proposals, open, refreshing, onClose, onAccept }: {
             );
           })}
         </ul>
-        <div className="proposals-foot">
+        <div className="proposals-foot flex justify-end gap-[.6rem] border-t border-line p-[.5rem_.8rem]">
           <Button className="tbtn" type="button" disabled={refreshing || accepted.size === 0}
                   onClick={() => onAccept([...accepted])}>
             {refreshing ? "accepting…" : `accept ${accepted.size}`}

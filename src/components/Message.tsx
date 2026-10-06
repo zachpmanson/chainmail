@@ -183,8 +183,8 @@ function Avatar({ name, orgSlot, pic, title }: {
   title?: string;
 }) {
   return (
-    <div className={`av ${orgSlot}${pic ? ` pic ${pic}` : ""}`} title={title}>
-      {pic ? null : <span className="ini">{initials(name)}</span>}
+    <div className={`av ${orgSlot}${pic ? ` pic ${pic}` : ""} grid size-[1em] flex-[0_0_1em] place-items-center self-center overflow-hidden rounded-full text-[.83rem] leading-none text-white`} title={title}>
+      {pic ? null : <span className="ini text-[.62em] font-bold leading-none tracking-[.01em]">{initials(name)}</span>}
     </div>
   );
 }
@@ -246,7 +246,7 @@ function CopyJson({ data }: { data: unknown }) {
 function Stamp({ id, stamp }: { id: string; stamp: StampData }) {
   const { date, time, tz, zone } = stamp;
   return (
-    <a className="tm pl" href={`#${id}`} title="Link to this message">
+    <a className="tm pl whitespace-nowrap text-[.71rem] tabular-nums text-muted" href={`#${id}`} title="Link to this message">
       {date}
       {time ? ` · ${time}` : ""}
       {zone === "stated" ? <span className="tz">{tz}</span> : null}
@@ -680,7 +680,7 @@ function OriginalControl({ on, state, ask }: { on: boolean; state: Original; ask
         )}
       </button>
       {state.at === "none" ? (
-        <span className="origwhy" title={state.why}>
+        <span className="origwhy text-[.66rem] italic text-muted" title={state.why}>
           nothing to show
         </span>
       ) : null}
@@ -779,7 +779,7 @@ export function Message(p: MessageProps) {
         if (e.animationName === "flash") p.onLandedEnd?.();
       }}
     >
-      <div className="col">
+      <div className="col min-w-0">
         {/* The header is the bubble's disclosure, not a caption: the sender, the
             org, the clock and the reply the message answers are what a page is
             scanned by, and the receipt — who it was addressed to, the ids it was
@@ -788,22 +788,22 @@ export function Message(p: MessageProps) {
             only height thereafter. A native <details>, like the provenance line
             and the panels: the export stays readable without scripting, and
             find-in-page reaches the ids closed or open. */}
-        <details className="hdr">
-          <summary>
+        <details className="hdr mb-[.14rem] px-[.1rem]">
+          <summary className="flex cursor-pointer flex-wrap items-baseline gap-[.3rem] list-none">
             <Avatar name={p.sender ?? ""} orgSlot={p.orgSlot} pic={p.avatarClass} title={who} />
-            <span className="nm" title={who}>
+            <span className="nm text-[.83rem] font-[650]" title={who}>
               {p.sender}
             </span>
-            <span className="org">{p.org}</span>
+            <span className="org text-[.68rem] font-[650] uppercase tracking-[.07em]">{p.org}</span>
             <Stamp id={p.id} stamp={p.stamp} />
-            {p.mark === "new" ? <span className="newpill">new</span> : null}
-            {p.mark === "revised" ? <span className="revpill">revised</span> : null}
+            {p.mark === "new" ? <span className="newpill rounded-[4px] bg-org-1 px-[.3rem] py-[.05rem] text-[.6rem] font-extrabold uppercase tracking-[.09em] text-white">new</span> : null}
+            {p.mark === "revised" ? <span className="revpill rounded-[4px] border border-muted bg-dash px-[.28rem] py-[.02rem] text-[.6rem] font-extrabold uppercase tracking-[.09em] text-fg">revised</span> : null}
             {/* The line's right end, and always drawn even when the caller has
                 no reply to put in it: the caret lives inside this box, so an
                 empty tail still closes the line at the right edge. */}
             <span className="htail">{p.reply}</span>
           </summary>
-          <div className="hdet">
+          <div className="hdet mb-[.3rem] flex flex-wrap items-center gap-x-[.7rem] gap-y-[.2rem] px-[.1rem] pt-[.22rem]">
             {/* The subject, on its own line above the receipt's fields, and only
                 where the message had one: a message with no subject has nothing
                 to say here, and an empty line would say it anyway. */}
@@ -818,16 +818,16 @@ export function Message(p: MessageProps) {
                 Only where the message had a subject: a message with no subject
                 has nothing to put here, and an empty line would say it anyway. */}
             {p.subject || p.source ? (
-              <span className="hsub">
+              <span className="hsub flex flex-[1_1_100%] items-baseline gap-x-[.7rem] gap-y-[.3rem]">
                 {p.subject ? (
-                  <span className="subj" title={p.subject}>
+                  <span className="subj min-w-0 flex-[1_1_auto] text-[.72rem] leading-[1.25] text-fg" title={p.subject}>
                     {p.subject}
                   </span>
                 ) : null}
                 {p.source}
               </span>
             ) : null}
-            <span className="to">
+            <span className="to text-[.66rem] text-muted">
               to{" "}
               {p.to ? (
                 receiptNames(p.to).map((r, i) => (
@@ -845,7 +845,7 @@ export function Message(p: MessageProps) {
               )}
             </span>
             {p.answer !== undefined || p.original !== undefined || p.copyJson !== undefined ? (
-              <span className="hdetend">
+              <span className="hdetend ml-auto inline-flex items-center gap-[.35rem]">
                 {p.answer}
                 {p.original !== undefined ? (
                   <OriginalControl on={original.on} state={original.state} ask={original.ask} />
