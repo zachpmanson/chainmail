@@ -396,10 +396,14 @@ export function SettingsView() {
           >
             <FolderPicker
               current={folder}
+              currentAccountId={settings.data?.defaultFolderAccountId}
               mode="default"
               ariaLabel="Which folder the home page opens in"
               disabled={busy}
-              onPick={(name) => save.mutate({ body: { defaultFolder: name } })}
+              onPick={(name, accountId) => save.mutate({ body: {
+                defaultFolder: name,
+                defaultFolderAccountId: accountId ?? "",
+              } })}
             />
           </SettingRow>
         </div>

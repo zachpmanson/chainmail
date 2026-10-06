@@ -52,6 +52,30 @@ func TestSettingAnEmptyValueClearsTheRow(t *testing.T) {
 	}
 }
 
+func TestDefaultFolderAndAccountAreStoredAndClearedTogether(t *testing.T) {
+	s := open(t)
+	if err := s.SetDefaultFolder("INBOX", "work"); err != nil {
+		t.Fatal(err)
+	}
+	for key, want := range map[string]string{
+		SettingDefaultFolder:          "INBOX",
+		SettingDefaultFolderAccountID: "work",
+	} {
+		got, ok, err := s.Setting(key)
+		if err != nil || !ok || got != want {
+			t.Errorf("Setting(%q) = %q, %v, %v; want %q, true, nil", key, got, ok, err, want)
+		}
+	}
+	if err := s.SetDefaultFolder("", ""); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{SettingDefaultFolder, SettingDefaultFolderAccountID} {
+		if got, ok, err := s.Setting(key); err != nil || ok || got != "" {
+			t.Errorf("after clearing, Setting(%q) = %q, %v, %v; want absent", key, got, ok, err)
+		}
+	}
+}
+
 // A setting is replaced, not appended, and one key does not disturb another.
 func TestSettingIsReplacedInPlace(t *testing.T) {
 	s := open(t)

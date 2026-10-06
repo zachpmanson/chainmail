@@ -998,10 +998,12 @@ export interface components {
             /** @description Messages carrying this label. Messages rather than chains: a chain count is a walk over the reply graph, and a mail client's sidebar counts messages. */
             messages: number;
         };
-        /** @description The reader's own choices. Absent means the choice has not been made — except for slurpEvery, which is always present because a host sweeps at some cadence whether or not anyone chose one. */
+        /** @description The reader's own choices. The home folder is identified by its name and, when scoped, its connected account id. Absent means the choice has not been made — except for slurpEvery, which is always present because a host sweeps at some cadence whether or not anyone chose one. */
         SettingsResponse: {
-            /** @description A mailbox label the home page opens in. Omitted when nothing has been chosen — no default is a state, not a default of nothing. */
+            /** @description The folder name the home page opens in. Omitted for no default or for All mail in an account; defaultFolderAccountId distinguishes the latter. */
             defaultFolder?: string;
+            /** @description The connected Gmail account that owns defaultFolder. Omitted when the home folder is unscoped or unset. */
+            defaultFolderAccountId?: string;
             /**
              * Format: int64
              * @description The person the reader has named as themselves, as the id of a person on /v1/people — which is what their outbound messages are marked as theirs by. Omitted when they have named nobody, which is also what clearing the setting leaves behind.
@@ -1021,10 +1023,12 @@ export interface components {
              */
             slurpEvery: string;
         };
-        /** @description The same shape written back, field by field: a field that is present sets it, and a field that is absent is left as it stands — absence and emptiness have to be told apart, because both preferences travel in one body and a reader saving the folder they are in must not clear the person that says which mail is theirs. An empty value clears its setting, so "defaultFolder": "" and "mePersonId": 0 are both requests to unset one. */
+        /** @description The same shape written back, field by field: a field that is present is written, and a field that is absent is preserved. The folder name and account id form one home-folder location; both empty clear it, while an empty folder name with an account id means All mail for that account. mePersonId 0 clears the reader identity. */
         SettingsRequest: {
-            /** @description The label to open in, or an empty string for no default. */
+            /** @description The home folder's name. Empty with no account id clears the default; empty with an account id means All mail for that account. */
             defaultFolder?: string;
+            /** @description The connected Gmail account that owns the home folder. Empty means unscoped; when the folder name is empty, a non-empty account id selects that account's All mail. */
+            defaultFolderAccountId?: string;
             /**
              * Format: int64
              * @description The person whose mail is the reader's own, as an id from /v1/people. Written as a person rather than as the addresses that person is: which addresses are one human is the identity graph's answer, and a server that accepted a list would be storing a second one that goes stale the first time an alias is learned or two people are merged. The id is validated — a person that is not in the corpus would mark nothing, and no later sweep can bring a person into existence the way it can bring in a folder — and an unknown id is refused with 400, naming this field. 0 is nobody: no person is id 0, so clearing needs no second field and no caller has to send a null to say they are nobody. The addresses this setting used to be are not part of this contract at all — "me" is not a field here, and a caller that still sends a list is reading a different one.

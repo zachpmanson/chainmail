@@ -67,7 +67,7 @@ export function Inbox() {
   // what switches panels.
   const opened = useSearch({ from: "/" }).open;
   const urlLabel = useSearch({ from: "/" }).label;
-  const accountId = useSearch({ from: "/" }).accountId;
+  const urlAccountId = useSearch({ from: "/" }).accountId;
   const settings = $api.useQuery("get", "/v1/settings", {});
   const save = $api.useMutation("post", "/v1/settings", {
     onSuccess: () => {
@@ -82,18 +82,25 @@ export function Inbox() {
   // apply — and a default that is still being read is not a decision, so the
   // list waits for it (`enabled` below) rather than showing the whole corpus
   // and then swapping it out from under the reader.
+  const home = urlLabel === undefined && urlAccountId === undefined;
   const label = urlLabel !== undefined ? urlLabel : (settings.data?.defaultFolder ?? "");
-  // Which folder chainmail opens in, as a state of the folder on screen: no
-  // default at all opens in All mail, so All mail is what is showing when there
-  // is nothing to tick.
-  const isDefault = (settings.data?.defaultFolder ?? "") === label;
+  const accountId = urlAccountId !== undefined
+    ? urlAccountId
+    : home ? settings.data?.defaultFolderAccountId : undefined;
+  // The home choice is a mailbox location, not a label name: the same folder
+  // name can be present in several connected accounts.
+  const isDefault = (settings.data?.defaultFolder ?? "") === label
+    && (settings.data?.defaultFolderAccountId ?? "") === (accountId ?? "");
   const pickFolder = (name: string, pickedAccountId?: string) =>
     navigate({ to: "/", search: (prev) => ({
       ...prev,
       label: name,
       accountId: pickedAccountId,
     }) });
-  const makeDefault = (on: boolean) => save.mutate({ body: { defaultFolder: on ? label : "" } });
+  const makeDefault = (on: boolean) => save.mutate({ body: {
+    defaultFolder: on ? label : "",
+    defaultFolderAccountId: on ? accountId ?? "" : "",
+  } });
   // Picking a mail takes the pane, and the pane holds one thing: the compose
   // panel is dismissed by the act of choosing a thread to read. Without this a
   // reader who had the compose panel open and clicked a row saw the panel stay

@@ -1516,21 +1516,73 @@ func TestSettingsRoundTripAndPreserveAnUnsetChoice(t *testing.T) {
 		t.Errorf("an unset setting is served as a key: %s", res.body)
 	}
 
-	res = srv.do(t, "POST", "/v1/settings", []byte(`{"defaultFolder":"External Conversations"}`))
+	res = srv.do(t, "POST", "/v1/settings", []byte(`{"defaultFolder":"External Conversations","defaultFolderAccountId":"work"}`))
 	if res.status != 200 {
 		t.Fatalf("setting: status = %d: %s", res.status, res.body)
 	}
 	// The answer is the state, not the request: a caller sees what it stored.
 	if got := readSettings(t, srv); got.DefaultFolder == nil || *got.DefaultFolder != "External Conversations" {
 		t.Fatalf("after setting, the settings say %v; the write answered %s", got.DefaultFolder, res.body)
+	} else if got.DefaultFolderAccountID == nil || *got.DefaultFolderAccountID != "work" {
+		t.Fatalf("defaultFolderAccountId = %v, want work", got.DefaultFolderAccountID)
 	}
 
 	// Clearing is a state of its own, and a blank folder is how it is asked for.
-	if res := srv.do(t, "POST", "/v1/settings", []byte(`{"defaultFolder":"  "}`)); res.status != 200 {
+	if res := srv.do(t, "POST", "/v1/settings", []byte(`{"defaultFolder":"  ","defaultFolderAccountId":"  "}`)); res.status != 200 {
 		t.Fatalf("clearing: status = %d: %s", res.status, res.body)
 	}
-	if got := readSettings(t, srv); got.DefaultFolder != nil {
-		t.Errorf("after clearing, defaultFolder = %q", *got.DefaultFolder)
+	if got := readSettings(t, srv); got.DefaultFolder != nil || got.DefaultFolderAccountID != nil {
+		t.Errorf("after clearing, folder = %v, account = %v", got.DefaultFolder, got.DefaultFolderAccountID)
+	}
+}
+
+func TestLegacyHomeFolderIsMigratedOnlyWhenItsAccountIsUnambiguous(t *testing.T) {
+	one := testServer(t)
+	if err := one.store.PutSetting(corpus.SettingDefaultFolder, "INBOX"); err != nil {
+		t.Fatal(err)
+	}
+	if got := readSettings(t, one); got.DefaultFolder == nil || *got.DefaultFolder != "INBOX" ||
+		got.DefaultFolderAccountID == nil || *got.DefaultFolderAccountID != "legacy" {
+		t.Fatalf("single-account legacy setting = folder %v, account %v; want INBOX/legacy",
+			got.DefaultFolder, got.DefaultFolderAccountID)
+	}
+
+	many := testServer(t)
+	for _, account := range []corpus.GmailAccount{
+		{ID: "work", Email: "work@example.test", DisplayName: "Work"},
+	} {
+		if err := many.store.PutGmailAccount(account); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := many.store.PutSetting(corpus.SettingDefaultFolder, "INBOX"); err != nil {
+		t.Fatal(err)
+	}
+	if got := readSettings(t, many); got.DefaultFolder != nil || got.DefaultFolderAccountID != nil {
+		t.Fatalf("ambiguous legacy setting = folder %v, account %v; want no default",
+			got.DefaultFolder, got.DefaultFolderAccountID)
+	}
+	if _, ok, err := many.store.Setting(corpus.SettingDefaultFolder); err != nil || ok {
+		t.Errorf("ambiguous legacy folder remains stored: present=%v err=%v", ok, err)
+	}
+}
+
+func TestLegacyFolderOnlyWriteDoesNotRetainWrongAccount(t *testing.T) {
+	srv := testServer(t)
+	for _, body := range []string{
+		`{"defaultFolder":"INBOX","defaultFolderAccountId":"work"}`,
+		`{"defaultFolder":"SENT"}`,
+	} {
+		if res := srv.do(t, "POST", "/v1/settings", []byte(body)); res.status != 200 {
+			t.Fatalf("setting %s: status = %d: %s", body, res.status, res.body)
+		}
+	}
+	got := readSettings(t, srv)
+	if got.DefaultFolder == nil || *got.DefaultFolder != "SENT" {
+		t.Fatalf("defaultFolder = %v, want SENT", got.DefaultFolder)
+	}
+	if got.DefaultFolderAccountID == nil || *got.DefaultFolderAccountID != "legacy" {
+		t.Errorf("folder-only write migrated to account %v, want only available account legacy", got.DefaultFolderAccountID)
 	}
 }
 

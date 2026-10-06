@@ -2866,24 +2866,54 @@ func (s *server) version(w http.ResponseWriter, r *http.Request) {
 }
 
 // getSettings reads the choices that are about the reader rather than about the
-// mail: the folder the home page opens in, and the person whose mail is theirs.
-// Each is served with the absence of a choice preserved — a client has to be
-// able to tell "no default" from "a default of nothing", and "nobody has said
-// who the reader is" from a reader who has — and an omitted key is how that is
-// said.
+// mail: the folder and account the home page opens in, and the person whose mail
+// is theirs. An omitted key preserves the absence of a choice, so the client can
+// distinguish no home folder from All mail in one particular account.
 func (s *server) getSettings(w http.ResponseWriter, r *http.Request) {
 	out := settingsResponse{}
 	// Unlike the reader's other choices this one is always served: the cadence is
 	// in force whether or not anyone has chosen it (DefaultSlurpEvery), and a page
 	// showing an unset control would be hiding the schedule the server is keeping.
 	out.SlurpEvery = s.slurpEveryWord()
+	accounts, err := s.store.GmailAccounts()
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
 	folder, ok, err := s.store.Setting(corpus.SettingDefaultFolder)
 	if err != nil {
 		fail(w, http.StatusInternalServerError, err)
 		return
 	}
+	folderAccountID, hasFolderAccount, err := s.store.Setting(corpus.SettingDefaultFolderAccountID)
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	if ok && folder != "" && !hasFolderAccount {
+		// Before folder choices carried an account, a saved name could only be
+		// migrated safely when exactly one mailbox exists. With several, forget
+		// the ambiguous preference rather than opening every same-named folder.
+		if len(accounts) == 1 && accounts[0].ID != "" {
+			folderAccountID = accounts[0].ID
+			if err := s.store.SetDefaultFolder(folder, folderAccountID); err != nil {
+				fail(w, http.StatusInternalServerError, err)
+				return
+			}
+			hasFolderAccount = true
+		} else if len(accounts) > 1 {
+			if err := s.store.SetDefaultFolder("", ""); err != nil {
+				fail(w, http.StatusInternalServerError, err)
+				return
+			}
+			folder, ok = "", false
+		}
+	}
 	if ok && folder != "" {
 		out.DefaultFolder = &folder
+	}
+	if hasFolderAccount && folderAccountID != "" {
+		out.DefaultFolderAccountID = &folderAccountID
 	}
 	me, err := s.store.MeAddresses()
 	if err != nil {
@@ -2893,11 +2923,6 @@ func (s *server) getSettings(w http.ResponseWriter, r *http.Request) {
 	// Connected account profiles are authoritative addresses for the reader.
 	// Add them to any deliberately configured aliases, preserving configured
 	// order and avoiding case-insensitive duplicates.
-	accounts, err := s.store.GmailAccounts()
-	if err != nil {
-		fail(w, http.StatusInternalServerError, err)
-		return
-	}
 	seenMe := make(map[string]bool, len(me)+len(accounts))
 	for _, address := range me {
 		seenMe[strings.ToLower(address)] = true
@@ -2933,21 +2958,17 @@ func (s *server) getSettings(w http.ResponseWriter, r *http.Request) {
 // setSettings records them. Each field the body names is written, and a field
 // the body leaves out is left as it stands.
 //
-// That is the opposite of the rule while there was one preference — absent meant
-// cleared — and the rule could not survive a second one: both settings travel in
-// the same body, so a reader saving the folder they are in would clear the
-// person that says which mail is theirs, and every save would have to send the
-// whole state or silently destroy the part it did not mention. Nothing on the
-// wire changed meaning with it: every caller already names the field it writes,
-// including the empty string it sends to clear one, so a cleared folder is still
-// asked for with "defaultFolder": "". What is new is that not mentioning a field
-// is now a way to leave it alone, which is what lets one screen write one
-// preference without speaking for the other.
+// A field the body leaves out is preserved, so a reader saving one preference
+// does not clear another. The folder name and account id are stored together as
+// one mailbox location; both empty clear that location, while an account id with
+// an empty folder selects All mail in that account.
 //
 // Nothing is validated against the label list. A folder may be one the next
 // slurp brings in, and refusing it would be the corpus arguing with the reader
 // about a mailbox it is behind on; a folder that is not there shows an empty
 // list under its own name, which is exactly true and one click from being fixed.
+// The folder and account are written together: a folder name alone is not a
+// unique mailbox location.
 //
 // The reader is written as a person (corpus.SetMePerson) and not as the addresses
 // that person is: which addresses are one human is the identity graph's answer,
@@ -2967,9 +2988,28 @@ func (s *server) setSettings(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, fmt.Errorf("reading the request body: %w", err))
 		return
 	}
-	if in.DefaultFolder != nil {
-		folder := strings.TrimSpace(*in.DefaultFolder)
-		if err := s.store.PutSetting(corpus.SettingDefaultFolder, folder); err != nil {
+	if in.DefaultFolder != nil || in.DefaultFolderAccountID != nil {
+		folder, _, err := s.store.Setting(corpus.SettingDefaultFolder)
+		if err != nil {
+			fail(w, http.StatusInternalServerError, err)
+			return
+		}
+		accountID, _, err := s.store.Setting(corpus.SettingDefaultFolderAccountID)
+		if err != nil {
+			fail(w, http.StatusInternalServerError, err)
+			return
+		}
+		if in.DefaultFolder != nil {
+			folder = strings.TrimSpace(*in.DefaultFolder)
+			// A legacy folder-only write explicitly names an unscoped folder.
+			if in.DefaultFolderAccountID == nil {
+				accountID = ""
+			}
+		}
+		if in.DefaultFolderAccountID != nil {
+			accountID = strings.TrimSpace(*in.DefaultFolderAccountID)
+		}
+		if err := s.store.SetDefaultFolder(folder, accountID); err != nil {
 			fail(w, http.StatusInternalServerError, err)
 			return
 		}

@@ -917,15 +917,22 @@ describe("the default folder on /settings", () => {
     expect(row.closest("section")!.getAttribute("aria-labelledby")).toBe("mailbox-heading");
   });
 
-  it("writes the chosen folder and clears it when All mail is selected", async () => {
+  it("writes the chosen folder and account, and clears both for All mail", async () => {
     let stored = "INBOX";
+    let storedAccountId = "";
     handler = (c) => {
       const p = pathOf(c);
       if (p === "/v1/settings") {
         if (c.method === "POST") {
-          stored = (JSON.parse(c.body ?? "{}") as { defaultFolder?: string }).defaultFolder ?? "";
+          const body = JSON.parse(c.body ?? "{}") as { defaultFolder?: string; defaultFolderAccountId?: string };
+          stored = body.defaultFolder ?? "";
+          storedAccountId = body.defaultFolderAccountId ?? "";
         }
-        return json(200, { slurpEvery: "10m", defaultFolder: stored });
+        return json(200, {
+          slurpEvery: "10m",
+          ...(stored ? { defaultFolder: stored } : {}),
+          ...(storedAccountId ? { defaultFolderAccountId: storedAccountId } : {}),
+        });
       }
       return statusHandler(c);
     };
@@ -936,11 +943,13 @@ describe("the default folder on /settings", () => {
     fireEvent.click(control);
     fireEvent.click(await screen.findByRole("menuitem", { name: /^Work/ }));
 
-    // Only the folder travels: the cadence beside it is left as it stands rather
-    // than sent again from this screen (see setSettings).
+    // The name and mailbox travel together; the cadence beside them is left
+    // as it stands rather than sent again from this screen (see setSettings).
     await waitFor(() => {
       const writes = calls.filter((c) => pathOf(c) === "/v1/settings" && c.method === "POST");
-      expect(writes.map((c) => JSON.parse(c.body!))).toEqual([{ defaultFolder: "Work" }]);
+      expect(writes.map((c) => JSON.parse(c.body!))).toEqual([
+        { defaultFolder: "Work", defaultFolderAccountId: "" },
+      ]);
     });
     await waitFor(() => expect(control.textContent).toContain("Work"));
 
@@ -949,9 +958,59 @@ describe("the default folder on /settings", () => {
     fireEvent.click(control);
     fireEvent.click(await screen.findByRole("menuitem", { name: "All accounts · All mail" }));
     await waitFor(() => {
-      expect(calls.filter((c) => c.method === "POST").at(-1)!.body).toBe('{"defaultFolder":""}');
+      expect(calls.filter((c) => c.method === "POST").at(-1)!.body).toBe(
+        '{"defaultFolder":"","defaultFolderAccountId":""}',
+      );
     });
     await waitFor(() => expect(control.textContent).toContain("All mail"));
+  });
+
+  it("keeps the same folder name separate across connected accounts", async () => {
+    let folder = "INBOX";
+    let accountId = "work";
+    handler = (c) => {
+      const p = pathOf(c);
+      if (p === "/v1/settings") {
+        if (c.method === "POST") {
+          const body = JSON.parse(c.body ?? "{}") as {
+            defaultFolder?: string;
+            defaultFolderAccountId?: string;
+          };
+          folder = body.defaultFolder ?? "";
+          accountId = body.defaultFolderAccountId ?? "";
+        }
+        return json(200, {
+          slurpEvery: "10m",
+          defaultFolder: folder,
+          defaultFolderAccountId: accountId,
+        });
+      }
+      if (p === "/auth/status") return json(200, {
+        signed_in: true,
+        accounts: [
+          { id: "work", email: "work@example.test", signedIn: true },
+          { id: "personal", email: "personal@example.test", signedIn: true },
+        ],
+      });
+      return statusHandler(c);
+    };
+    await mountApp("/settings");
+
+    const control = await screen.findByLabelText("Which folder the home page opens in");
+    await waitFor(() => expect(control.textContent).toContain("work@example.test"));
+    fireEvent.click(control);
+    await waitFor(() => expect(screen.getAllByRole("menuitem", { name: /^INBOX/ })).toHaveLength(2));
+    const sameNamedFolders = screen.getAllByRole("menuitem", { name: /^INBOX/ });
+    fireEvent.click(sameNamedFolders[1]!);
+
+    await waitFor(() => {
+      const write = calls.find((c) => c.method === "POST" && pathOf(c) === "/v1/settings");
+      expect(JSON.parse(write!.body!)).toEqual({
+        defaultFolder: "INBOX",
+        defaultFolderAccountId: "personal",
+      });
+    });
+    await waitFor(() => expect(control.textContent).toContain("personal@example.test"));
   });
 
   it("keeps showing a stored folder even when the corpus has no matching label", async () => {

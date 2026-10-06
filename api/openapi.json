@@ -2145,7 +2145,7 @@
       },
       "SettingsResponse": {
         "type": "object",
-        "description": "The reader's own choices. Absent means the choice has not been made — except for slurpEvery, which is always present because a host sweeps at some cadence whether or not anyone chose one.",
+        "description": "The reader's own choices. The home folder is identified by its name and, when scoped, its connected account id. Absent means the choice has not been made — except for slurpEvery, which is always present because a host sweeps at some cadence whether or not anyone chose one.",
         "required": [
           "slurpEvery"
         ],
@@ -2153,7 +2153,11 @@
         "properties": {
           "defaultFolder": {
             "type": "string",
-            "description": "A mailbox label the home page opens in. Omitted when nothing has been chosen — no default is a state, not a default of nothing."
+            "description": "The folder name the home page opens in. Omitted for no default or for All mail in an account; defaultFolderAccountId distinguishes the latter."
+          },
+          "defaultFolderAccountId": {
+            "type": "string",
+            "description": "The connected Gmail account that owns defaultFolder. Omitted when the home folder is unscoped or unset."
           },
           "mePersonId": {
             "type": "integer",
@@ -2180,12 +2184,16 @@
       },
       "SettingsRequest": {
         "type": "object",
-        "description": "The same shape written back, field by field: a field that is present sets it, and a field that is absent is left as it stands — absence and emptiness have to be told apart, because both preferences travel in one body and a reader saving the folder they are in must not clear the person that says which mail is theirs. An empty value clears its setting, so \"defaultFolder\": \"\" and \"mePersonId\": 0 are both requests to unset one.",
+        "description": "The same shape written back, field by field: a field that is present is written, and a field that is absent is preserved. The folder name and account id form one home-folder location; both empty clear it, while an empty folder name with an account id means All mail for that account. mePersonId 0 clears the reader identity.",
         "additionalProperties": false,
         "properties": {
           "defaultFolder": {
             "type": "string",
-            "description": "The label to open in, or an empty string for no default."
+            "description": "The home folder's name. Empty with no account id clears the default; empty with an account id means All mail for that account."
+          },
+          "defaultFolderAccountId": {
+            "type": "string",
+            "description": "The connected Gmail account that owns the home folder. Empty means unscoped; when the folder name is empty, a non-empty account id selects that account's All mail."
           },
           "mePersonId": {
             "type": "integer",
