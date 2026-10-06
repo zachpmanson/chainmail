@@ -377,9 +377,18 @@ func twinCopies(s *Store, person int64) ([]twinCopy, error) {
 // containment.
 func copyWords(body string, quoted bool) []string {
 	if quoted {
-		return textsim.Tokens(body)
+		return textsim.Tokens(stripQuotedClientPreamble(body))
 	}
 	return textsim.Tokens(ownWords(body))
+}
+
+// Outlook may prepend this external-sender warning inside an otherwise intact
+// quoted message. It is client chrome, not part of the quoted author's opening;
+// leaving it in makes the bidirectional head-identity gate reject the copy.
+var reExternalSenderWarning = regexp.MustCompile(`(?i)\A[ \t]*You don't often get email from [^\r\n]+?\.[ \t]*Learn why this is important(?:[ \t]*<https?://[^>\r\n]+>|[ \t]+https?://\S+)?[ \t]*(?:\r?\n|$)`)
+
+func stripQuotedClientPreamble(body string) string {
+	return reExternalSenderWarning.ReplaceAllString(body, "")
 }
 
 // proseWords is copyWords again with the residue two renditions of one message
@@ -401,6 +410,8 @@ func copyWords(body string, quoted bool) []string {
 func proseWords(body string, quoted bool) []string {
 	if !quoted {
 		body = ownWords(body)
+	} else {
+		body = stripQuotedClientPreamble(body)
 	}
 	for _, re := range markupResidue {
 		body = re.ReplaceAllString(body, " ")

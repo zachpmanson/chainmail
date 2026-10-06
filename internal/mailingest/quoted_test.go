@@ -20,6 +20,67 @@ func openTest(t *testing.T) *corpus.Store {
 	return s
 }
 
+func TestOutlookSenderWarningDoesNotSplitQuotedTwin(t *testing.T) {
+	s := openTest(t)
+	baseID := "<base@sample.test>"
+	body := "Hi Riley, the copper sample needs a new calibration before the scheduled " +
+		"bench review. We checked the local files, compared every reading against " +
+		"the reference panel, and confirmed the previous calibration was performed " +
+		"on the correct instrument. Please send the updated bench result when it is " +
+		"ready. Thanks, Morgan."
+
+	if _, err := Put(s, Message{
+		Envelope: Envelope{
+			ID: "base", MessageID: baseID, ThreadID: "sample-thread",
+			From:    "Morgan Sample <morgan@sample.test>",
+			Subject: "Equipment calibration",
+			Date:    "Thu, 1 Oct 2026 01:48:59 -0400",
+		},
+		Body: body,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	quote := "From: Morgan Sample <morgan@sample.test>\r\n" +
+		"Sent: Thursday, 1 October 2026 6:49 pm\r\n" +
+		"To: Riley Sample <riley@sample.test>\r\n" +
+		"Subject: Re: Equipment calibration\r\n\r\n" +
+		"You don't often get email from morgan@sample.test. Learn why this is " +
+		"important<https://security.example.test/sender>\r\n\r\n" + body
+	host, err := Put(s, Message{
+		Envelope: Envelope{
+			ID: "host", MessageID: "<host@sample.test>", ThreadID: "sample-thread",
+			From:      "Riley Sample <riley@sample.test>",
+			To:        "Morgan Sample <morgan@sample.test>",
+			Subject:   "Re: Equipment calibration",
+			Date:      "Mon, 5 Oct 2026 22:24:53 +0000",
+			InReplyTo: baseID, References: []string{baseID},
+		},
+		Body: quote,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var quoted int
+	if err := s.DB().QueryRow(`select count(*) from entries where quoted = 1`).Scan(&quoted); err != nil {
+		t.Fatal(err)
+	}
+	if quoted != 0 {
+		t.Fatalf("quoted entries = %d, want the warning-prefixed copy to merge into the mailbox message", quoted)
+	}
+	var base, sightings int64
+	if err := s.DB().QueryRow(`select id from entries where ext_id = ?`, "mail:"+baseID).Scan(&base); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DB().QueryRow(`select count(*) from sightings where entry_id = ? and seen_in = ? and kind = 'quoted'`, base, host.ID).Scan(&sightings); err != nil {
+		t.Fatal(err)
+	}
+	if sightings != 1 {
+		t.Fatalf("base quote sightings = %d, want 1", sightings)
+	}
+}
+
 // The same original quoted inside two different host messages must become ONE
 // entry with TWO sightings. This is the case the anonymised fixture corpus
 // cannot express — each fixture was anonymised independently, so one original
