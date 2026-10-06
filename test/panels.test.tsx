@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
+import { JSDOM } from "jsdom";
 import { SourcesPanel } from "../src/components/Panels";
 import { ParticipantsPanel } from "../src/components/Participants";
 import { Timeline } from "../src/components/Timeline";
@@ -47,9 +48,9 @@ describe("sources panel", () => {
     const html = renderToStaticMarkup(
       <SourcesPanel v={v} filter={{ chains, excluded: new Set(), onToggle: () => {} }} />,
     );
-    expect(html.match(/class="srclink" href="#/g)).toHaveLength(7);
+    expect(html.match(/class="[^"]*\bsrclink\b[^"]*" href="#/g)).toHaveLength(7);
     // the meeting notice never existed as an email, so it has no thread to link
-    expect(html.match(/class="srclink" href="https/g)).toHaveLength(6);
+    expect(html.match(/class="[^"]*\bsrclink\b[^"]*" href="https/g)).toHaveLength(6);
   });
 
   it("reflects exclusions in the checked state", () => {
@@ -140,8 +141,13 @@ describe("participants panel", () => {
   /** slot -> name, for every avatar the participants panel renders. */
   function panelFaces() {
     const html = renderToStaticMarkup(<ParticipantsPanel v={derive(spec)} />);
-    const re = /class="av (o\d)[^"]*">(?:<span class="ini">[^<]*<\/span>)?<\/div><span title="[^"]*">([^<]+)<\/span>/g;
-    return new Map([...html.matchAll(re)].map((m) => [m[2]!, m[1]!]));
+    const doc = new JSDOM(html).window.document;
+    return new Map([...doc.querySelectorAll(".p1")].flatMap((row) => {
+      const face = row.querySelector(".av");
+      const name = row.querySelector(".pn [title]");
+      const slot = [...(face?.classList ?? [])].find((value) => /^o\d$/.test(value));
+      return name?.textContent && slot ? [[name.textContent, slot] as const] : [];
+    }));
   }
 
   it("colours a person's panel row with the slot their own bubbles use", () => {
@@ -236,7 +242,11 @@ describe("participants panel", () => {
     // rows, where a strip per row would read as noise, and the avatars already
     // carry the colour per person.
     const html = renderToStaticMarkup(<ParticipantsPanel v={derive(spec)} />);
-    const heads = [...html.matchAll(/class="ogh ([^"]*)">([^<]+)</g)].map((m) => [m[2], m[1]]);
+    const doc = new JSDOM(html).window.document;
+    const heads = [...doc.querySelectorAll(".ogh")].map((head) => [
+      head.textContent,
+      [...head.classList].find((value) => /^o\d$/.test(value)),
+    ]);
     expect(heads).toEqual([
       ["Starfleet", "o1"], ["Daystrom", "o2"], ["Utopia Planitia", "o3"],
     ]);
@@ -247,7 +257,7 @@ describe("participants panel", () => {
     const other = renderToStaticMarkup(
       <ParticipantsPanel v={derive({ ...spec, participants: [{ name: "Nobody Known" }] })} />,
     );
-    expect(other).toContain('class="ogh o5">Other<');
+    expect(other).toMatch(/class="[^"]*\bogh\b[^"]*\bo5\b[^"]*">Other</);
     expect(readFileSync("src/styles.css", "utf8")).not.toMatch(/^\s*\.ogh\.o5\s*\{/m);
   });
 });
