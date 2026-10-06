@@ -2424,6 +2424,20 @@ describe("what the bar does to the mail", () => {
     expect(screen.queryByRole("button", { name: "Braid Threads" })).toBeNull();
   });
 
+  it("archives only the selected account when the inbox is account-scoped", async () => {
+    handler = mailHandler(json(200, { action: "archive", accountId: "work", changed: 1, skipped: 0, chains: [] }));
+    await mountApp("/?accountId=work&q=cutover");
+    await ticksTwo();
+
+    click(screen.getByRole("button", { name: "Archive" }));
+    await waitFor(() => expect(mailCalls()).toHaveLength(1));
+    expect(JSON.parse(mailCalls()[0]!.body!)).toMatchObject({
+      action: "archive",
+      accountId: "work",
+      chains: ["mail:<loom-cutover-1@example.fed>", "mail:<lease-renewal-1@example.fed>"],
+    });
+  });
+
   it("deletes to the trash, and says how long it can be got back", async () => {
     handler = mailHandler(json(200, { action: "trash", changed: 3, skipped: 0, chains: [] }));
     await mountApp("/?q=cutover");
