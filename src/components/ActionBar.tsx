@@ -1,3 +1,4 @@
+import { Button, IconButton, TextInput } from "./controls";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSearch } from "@tanstack/react-router";
@@ -152,18 +153,18 @@ export function ActionBar({
     <>
       {chosen.length > 0 ? (
         <div className="ibbuild">
-          <button type="button" className="ibclear" onClick={onDone}>
+          <Button type="button" className="ibclear" onClick={onDone}>
             Deselect all
-          </button>
-          <button type="button" onClick={() => setBraiding(true)}>
+          </Button>
+          <Button type="button" onClick={() => setBraiding(true)}>
             Braid Threads
-          </button>
+          </Button>
           {/* The two mailbox verbs are glyphs. The bar also holds a braid, a
               folder dropdown, the count and the way out, and spelling Archive
               and Delete along that row is what wrapped it on a laptop. The word
               is still on the button — it is the tooltip, and what a screen
               reader reads — but the row draws the box and the bin. */}
-          <button
+          <IconButton
             type="button"
             className="ibicon"
             aria-label="Archive"
@@ -172,8 +173,8 @@ export function ActionBar({
             onClick={() => act.mutate({ body: { chains: chosen, action: "archive", ...(accountId ? { accountId } : {}) } })}
           >
             <ArchiveGlyph />
-          </button>
-          <button
+          </IconButton>
+          <IconButton
             type="button"
             className="ibicon"
             aria-label="Delete"
@@ -182,7 +183,7 @@ export function ActionBar({
             onClick={() => act.mutate({ body: { chains: chosen, action: "trash", ...(accountId ? { accountId } : {}) } })}
           >
             <TrashGlyph />
-          </button>
+          </IconButton>
           {/* One control for the move, and one decision in it. It used to be a
               labelled field with a Move button beside it, which is the reader
               being asked to say the same thing twice: they know the folder when
@@ -301,23 +302,23 @@ function BraidDialog({
           <span className="note">
             {count} thread{count === 1 ? "" : "s"} ticked
           </span>
-          <button type="button" className="selpv-close" onClick={onClose}>
+          <Button type="button" className="selpv-close" onClick={onClose}>
             Close
-          </button>
+          </Button>
         </div>
         <div className="selform braidform">
           <label className="self">
             <span>Page title</span>
-            <input
+            <TextInput
               autoFocus
               value={title}
               onChange={(e) => onTitle(e.target.value)}
               placeholder="optional"
             />
           </label>
-          <button type="button" disabled={busy} onClick={onBraid}>
+          <Button type="button" disabled={busy} onClick={onBraid}>
             {busy ? "Braiding…" : "Braid"}
-          </button>
+          </Button>
         </div>
         <p className="selnote">
           Left empty, the page is titled with the earliest thread's subject.

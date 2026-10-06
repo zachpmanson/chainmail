@@ -1,6 +1,7 @@
+import { Button } from "./controls";
 export function CompactModeToggle({ compact, onChange }: { compact: boolean; onChange: (value: boolean) => void }) {
   return (
-    <button
+    <Button
       type="button"
       className={`ibcompact-toggle${compact ? " active" : ""}`}
       title="Show one line per thread"
@@ -8,7 +9,7 @@ export function CompactModeToggle({ compact, onChange }: { compact: boolean; onC
       onClick={() => onChange(!compact)}
     >
       Compact
-    </button>
+    </Button>
   );
 }
 

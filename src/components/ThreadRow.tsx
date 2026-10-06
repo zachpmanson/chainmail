@@ -1,3 +1,4 @@
+import { Button } from "./controls";
 import { useRef, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { $api, type ChainHit } from "../lib/api";
@@ -240,7 +241,7 @@ export function ThreadRow({
     >
       {/* aria-current, not a second class: the row the pane is showing is the
           current row, and a screen reader should hear it as one. */}
-      <button
+      <Button
         type="button"
         className="ibopen"
         onClick={press}
@@ -321,9 +322,9 @@ export function ThreadRow({
         {meta ? <span className="ibmeta">{meta}</span> : null}
           </>
         )}
-      </button>
+      </Button>
       {compact ? (
-        <button
+        <Button
           type="button"
           className="ibrow-archive"
           aria-label={`Archive ${subject}`}
@@ -332,7 +333,7 @@ export function ThreadRow({
           onClick={() => archive.mutate({ body: { chains: [thread.rootExtId], action: "archive" } })}
         >
           <ArchiveGlyph />
-        </button>
+        </Button>
       ) : null}
       {/* The tick sits on the first line, beside the time it belongs with,
           because that is the line a reader scans down when they are picking

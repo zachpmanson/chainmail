@@ -1,3 +1,4 @@
+import { Button, TextInput } from "./controls";
 import { useEffect, useMemo, useState } from "react";
 import { Timeline } from "./Timeline";
 import { attach } from "../client/behaviour";
@@ -135,9 +136,9 @@ export function Rendered({ spec, onBack, onRefresh, onAdd, onAccept, onPull, pul
   return (
     <>
       {onBack ? (
-        <button type="button" className="selback" onClick={onBack}>
+        <Button type="button" className="selback" onClick={onBack}>
           ← choose chains
-        </button>
+        </Button>
       ) : null}
       <Timeline
         spec={filtered}
@@ -231,7 +232,7 @@ function AddEmailsModal({ onClose, onAdd }: {
         <form className="addform" onSubmit={submit}>
           <label>
             <span>Query</span>
-            <input
+            <TextInput
               autoFocus
               value={q}
               onChange={(e) => setQ(e.target.value)}
@@ -239,9 +240,9 @@ function AddEmailsModal({ onClose, onAdd }: {
               aria-label="Search query"
             />
           </label>
-          <button type="submit" disabled={!q.trim()}>
+          <Button type="submit" disabled={!q.trim()}>
             Search
-          </button>
+          </Button>
         </form>
         {results.isError ? (
           <p className="selnote" role="alert">
@@ -270,7 +271,7 @@ function AddEmailsModal({ onClose, onAdd }: {
           </ul>
         ) : null}
         <div className="proposals-foot">
-          <button className="tbtn" type="button" disabled={chosen.length === 0}
+          <Button className="tbtn" type="button" disabled={chosen.length === 0}
                   onClick={() => {
                     // asked, not the text box: the box may have been edited since
                     // the search ran, and the page records the search that found
@@ -278,10 +279,10 @@ function AddEmailsModal({ onClose, onAdd }: {
                     if (asked) onAdd([...chosen], asked);
                   }}>
             {`add ${chosen.length} to page`}
-          </button>
-          <button className="tbtn" type="button" onClick={onClose}>
+          </Button>
+          <Button className="tbtn" type="button" onClick={onClose}>
             close
-          </button>
+          </Button>
         </div>
         </div>
       </div>
@@ -347,24 +348,24 @@ function ProposalsModal({ proposals, open, refreshing, onClose, onAccept }: {
                     page uses, so a proposal can be judged on its entries before
                     it is accepted. Kept out of the toggle label, so ticking it
                     and previewing it never fight over one hit area. */}
-                <button type="button" className="selpvbtn" aria-haspopup="dialog"
+                <Button type="button" className="selpvbtn" aria-haspopup="dialog"
                         onClick={() => setPreview(p)}>
                   Preview
-                </button>
+                </Button>
               </li>
             );
           })}
         </ul>
         <div className="proposals-foot">
-          <button className="tbtn" type="button" disabled={refreshing || accepted.size === 0}
+          <Button className="tbtn" type="button" disabled={refreshing || accepted.size === 0}
                   onClick={() => onAccept([...accepted])}>
             {refreshing ? "accepting…" : `accept ${accepted.size}`}
-          </button>
-          <button className="tbtn" type="button" disabled={refreshing}
+          </Button>
+          <Button className="tbtn" type="button" disabled={refreshing}
                   onClick={() => onAccept([...ids])}>
             accept all {proposals.length}
-          </button>
-          <button className="tbtn" type="button" onClick={onClose} disabled={refreshing}>close</button>
+          </Button>
+          <Button className="tbtn" type="button" onClick={onClose} disabled={refreshing}>close</Button>
           </div>
         </div>
       </div>
