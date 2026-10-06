@@ -41,10 +41,10 @@ export function SpecView({ spec, onClose }: { spec: Spec; onClose: () => void })
           {spec.messages.length - notes} messages · {notes} notices ·{" "}
           {(bytes / 1024).toFixed(0)} KB · images abbreviated for display
         </span>
-        <Button className="tbtn" type="button" onClick={copy}>
+        <Button variant="secondary" density="compact" type="button" onClick={copy}>
           {copied ? "copied" : "copy"}
         </Button>
-        <Button className="tbtn" type="button" onClick={onClose}>
+        <Button variant="secondary" density="compact" type="button" onClick={onClose}>
           close
         </Button>
       </div>

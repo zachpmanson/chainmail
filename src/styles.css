@@ -48,7 +48,6 @@
      out, not read), and the app's own pages opt out below, because a list and a
      reading pane are laid out too. */
   .wrap { max-width:76rem; margin:0 auto; padding:1.75rem 1.25rem 3.5rem; }
-  header.top { border-bottom:1px solid var(--line); padding-bottom:.7rem; margin-bottom:.25rem; }
   /* The shell fills the window. A cap here put the nav in the middle of a wide
      screen with a third of it empty to either side, on every page. */
   /* A row, so the corpus search can sit at its end: `margin-left:auto` is what
@@ -291,36 +290,15 @@
      last message now lands on the bottom edge, which is where a scroller ends. */
   .wrap.ibwrap { padding-top:0; padding-bottom:0; }
   h1 { font-size:1.3rem; margin:0 0 .2rem; letter-spacing:-.01em; }
-  .pan { border:1px solid var(--line); border-radius:9px; background:var(--card);
-    margin:.7rem 0 0; }
-  .pan > summary { cursor:pointer; padding:.4rem .7rem; font-size:.72rem; font-weight:700;
-    text-transform:uppercase; letter-spacing:.08em; color:var(--muted); list-style:none; }
   .pan > summary::-webkit-details-marker { display:none; }
   .pan > summary::before { content:""; display:inline-block; width:0; height:0;
     border:.3em solid transparent; border-left-color:currentColor;
     margin-right:.4em; vertical-align:.04em;
     transition:transform .12s; }
   .pan[open] > summary::before { transform:rotate(90deg); }
-  .pan > summary:hover { color:var(--accent); }
-  .pan .pbody { padding:.1rem .7rem .6rem; border-top:1px solid var(--line); }
-  .who { display:grid; grid-template-columns:repeat(auto-fill,minmax(15.5rem,1fr));
-    gap:.3rem .9rem; }
-  .p1 { padding:.2rem 0; min-width:0; }
-  .p1 .av { font-size:.78rem; }   /* matches .pn, so 1em tracks that text */
-  .p1 .pd { min-width:0; line-height:1.3; }
-  .p1 .pn { display:flex; align-items:center; gap:.35rem; font-size:.78rem;
-    font-weight:650; }
-  .p1 .pn span { min-width:0; overflow-wrap:anywhere; }
-  .p1 .pr { font-size:.66rem; color:var(--muted); }
-  .p1 a.pe { font-size:.68rem; color:var(--muted); text-decoration:none;
-    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
-    overflow-wrap:anywhere; }
-  .p1 a.pe:hover { color:var(--accent); text-decoration:underline; }
   /* Tinted to match the avatars under it and the org label on that group's
      bubbles. Falls back to --muted for the group of people whose org nothing in
      the trail established. */
-  .ogh { grid-column:1/-1; font-size:.66rem; text-transform:uppercase; letter-spacing:.09em;
-    color:var(--orgc,var(--muted)); font-weight:700; margin:.45rem 0 .05rem; }
   .ogh.o1 { --orgc:var(--o1); } .ogh.o2 { --orgc:var(--o2); }
   .ogh.o3 { --orgc:var(--o3); } .ogh.o4 { --orgc:var(--o4); }
   /* No .ogh.o5 on purpose. --o5 is an avatar fill carrying white text; as text
@@ -329,32 +307,11 @@
      the group whose org nothing established. A fifth org's heading is left grey
      for the same reason, which is the slot cap showing through rather than a
      second thing to fix here. */
-  .ogh:first-child { margin-top:.15rem; }
-  .srcgrp { margin:.45rem 0 0; }
-  .srcgrp:first-child { margin-top:.15rem; }
-  .srch { font-size:.66rem; text-transform:uppercase; letter-spacing:.09em; color:var(--muted);
-    font-weight:700; margin:0 0 .2rem; }
-  .srcgrp > summary { cursor:pointer; list-style:none; display:flex;
-    align-items:center; gap:.3rem; margin:0 0 .2rem; }
   .srcgrp > summary::-webkit-details-marker { display:none; }
   .srcgrp > summary::before { content:""; display:inline-block; width:0; height:0;
     border:.25em solid transparent; border-left-color:currentColor;
     transition:transform .12s; }
   .srcgrp[open] > summary::before { transform:rotate(90deg); }
-  .srcgrp > summary:hover { color:var(--accent); }
-  .srcgrp > summary .srch { margin:0; }
-  .srcgrp ul { margin:0; padding-left:1.1rem; }
-  .srcgrp li { font-size:.78rem; margin:.12rem 0; }
-  .srcgrp li .qy { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.9em; }
-  .srcgrp li .note { color:var(--muted); font-size:.92em; }
-  .chk { display:flex; align-items:flex-start; gap:.4rem; cursor:pointer; }
-  .chk input { margin:.15rem 0 0; accent-color:var(--accent); flex:0 0 auto; }
-  .chk:hover { color:var(--accent); }
-  a.srclink { font-size:.66rem; text-transform:uppercase; letter-spacing:.06em;
-    font-weight:700; color:var(--muted); text-decoration:none;
-    border:1px solid var(--line); border-radius:4px; padding:0 .25rem;
-    white-space:nowrap; }
-  a.srclink:hover { color:var(--accent); border-color:var(--accent); }
   /* proposal evaluator: a dimmed backdrop keeps the page visible while a proposed
      chain is judged and accepted by root ext id (see refresh.go's Candidate). */
   .proposals { position:fixed; inset:0; z-index:55; background:rgba(0,0,0,.45);
@@ -386,25 +343,12 @@
     overflow-wrap:break-word; margin-top:.1rem; }
   .proposals-foot { display:flex; justify-content:flex-end; gap:.6rem;
     padding:.5rem .8rem; border-top:1px solid var(--line); }
-  .srcgrp a { color:inherit; text-decoration-color:var(--accent); text-underline-offset:2px; }
-  .srcgrp a:hover { color:var(--accent); }
   .newpill { font-size:.6rem; font-weight:800; text-transform:uppercase; letter-spacing:.09em;
     color:#fff; background:var(--o1); border-radius:4px; padding:.05rem .3rem; }
   .revpill { font-size:.6rem; font-weight:800; text-transform:uppercase; letter-spacing:.09em;
     color:var(--fg); background:var(--dash); border:1px solid var(--muted);
     border-radius:4px; padding:.02rem .28rem; }
   .sys.isnew { border-left:3px solid var(--o1); }
-  .states { display:grid; grid-template-columns:repeat(auto-fit,minmax(17rem,1fr));
-    gap:.35rem .9rem; margin:.6rem 0 0; font-size:.73rem; color:var(--muted); }
-  .st { display:flex; align-items:flex-start; gap:.45rem; line-height:1.4; }
-  .st b { color:var(--fg); font-weight:650; }
-  .sw { flex:0 0 1.15rem; height:1.15rem; border-radius:5px; border:1px solid var(--line);
-    margin-top:.05rem; }
-  .sw.plain { background:var(--card); }
-  .sw.dash { background:var(--dash); border-style:dashed;
-    border-color:color-mix(in srgb, var(--muted) 55%, transparent); }
-  .sw.mine { background:var(--mine); border-color:var(--o3); }
-  .sw.clipsw { border:none; display:grid; place-items:center; font-size:.8rem; }
   .av { font-size:.83rem; flex:0 0 1em; width:1em; height:1em; border-radius:50%;
     color:#fff; display:grid; place-items:center; align-self:center;
     line-height:1; overflow:hidden; }
@@ -977,14 +921,6 @@
      real edge rather than a fixed 16.5rem. Without JS the panel just does not
      reserve a column. */
   body.hasmap { padding-right:var(--panel); }
-  .tbtn { font:inherit; font-size:.66rem; font-weight:700; text-transform:uppercase;
-    letter-spacing:.08em; color:var(--muted); background:var(--card);
-    border:1px solid var(--line); border-radius:6px; padding:.2rem .45rem;
-    cursor:pointer; }
-  .tbtn:hover { color:var(--accent); border-color:var(--accent); }
-  /* a toggle shows its state, rather than renaming itself each click */
-  .tbtn[aria-pressed="true"] { color:var(--accent); border-color:var(--accent);
-    background:var(--mine); }
   body.mapoff .mini { display:none; }
   /* below this width the tree stops reserving a column and becomes an overlay:
      it keeps its fixed position and floats over the stream instead of vanishing.
@@ -1001,8 +937,6 @@
     #maptog { display:inline-block; }
   }
   @media print { .mini { display:none; } body.hasmap { padding-right:0; } }
-  .tbtn:disabled { opacity:.55; cursor:default; }
-  .tbtn:disabled:hover { color:var(--muted); border-color:var(--line); }
   /* --- chain columns: one column per reply chain, grid row = chronological
      position, so reading down stays in time order while each chain keeps a lane --- */
   .colhd, .spine, .chsec { display:none; }

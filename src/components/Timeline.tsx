@@ -12,7 +12,7 @@ import { trimBody } from "../lib/trimBody";
 const html = (s: string) => ({ __html: s });
 
 const toolbarButtonClasses =
-  "inline-flex items-center rounded-md border border-[var(--line)] bg-[var(--card)] px-[.45rem] py-[.2rem] text-[.66rem] font-bold uppercase tracking-[.08em] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] aria-pressed:border-[var(--accent)] aria-pressed:bg-[var(--mine)] aria-pressed:text-[var(--accent)] disabled:cursor-default disabled:opacity-55";
+  "inline-flex items-center rounded-md border border-line bg-card px-[.45rem] py-[.2rem] text-[.66rem] font-bold uppercase tracking-[.08em] text-muted hover:border-accent hover:text-accent aria-pressed:border-accent aria-pressed:bg-mine aria-pressed:text-accent disabled:cursor-default disabled:opacity-55";
 
 function replyTarget(row: Row, v: View): ReplyTarget | null {
   const parent = row.entry.parent
@@ -228,7 +228,7 @@ export function Timeline({ spec, marks, prevLabel, filter, onShowSpec, onRefresh
                 aria-label="Ignore the sender's own formatting">plain</button>
       </div>
       <div className="wrap mx-auto max-w-[76rem] px-5 pt-7 pb-14">
-      <header className="border-b border-[var(--line)] pb-[.7rem] mb-[.25rem]">
+      <header className="top mb-[.25rem] border-b border-line pb-[.7rem]">
         <h1 className="m-0 mb-[.2rem] text-[1.3rem] tracking-[-.01em]">
           {v.hashed ? <span className="text-[var(--muted)] font-normal">#</span> : null}
           {v.hashed ? v.title.slice(1) : v.title}
