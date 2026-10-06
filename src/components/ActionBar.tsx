@@ -290,13 +290,13 @@ function BraidDialog({
 
   return (
     <div
-      className="selpv [&_.selfail]:mx-[.8rem] [&_.selfail]:mt-2 [&_.selfail]:mb-3 [&_.selnote]:mx-[.8rem] [&_.selnote]:my-2"
+      className="selpv fixed inset-0 z-[55] flex items-center justify-center bg-black/45 [&_.selfail]:mx-[.8rem] [&_.selfail]:mt-2 [&_.selfail]:mb-3"
       role="dialog"
       aria-modal="true"
       aria-label="Braid threads"
       onClick={onClose}
     >
-      <div className="selpv-panel" onClick={(e) => e.stopPropagation()}>
+      <div className="selpv-panel flex max-h-[82vh] max-w-[min(46rem,94vw)] flex-col rounded-lg border border-line bg-card shadow-[0_8px_40px_rgba(0,0,0,.35)]" onClick={(e) => e.stopPropagation()}>
         <div className="selpv-head flex items-center gap-[.6rem] border-b border-line px-[.8rem] py-2">
           <b className="text-[.72rem] font-bold uppercase tracking-[.09em] text-muted">braid threads</b>
           <span className="note ml-auto min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[.74rem] text-muted">
@@ -321,13 +321,13 @@ function BraidDialog({
             {busy ? "Braiding…" : "Braid"}
           </Button>
         </div>
-        <p className="selnote">
+        <p className="selnote mx-[.8rem] my-2 flex-[1_1_100%] text-[.78rem] text-muted">
           Left empty, the page is titled with the earliest thread's subject.
         </p>
         {/* Seconds of silence reads as a broken page, so the wait says what it is
             waiting on and how much of it there is. */}
         {busy ? (
-          <p className="selnote" role="status">
+          <p className="selnote mx-[.8rem] my-2 flex-[1_1_100%] text-[.78rem] text-muted" role="status">
             Recovering HTML and detecting boilerplate across {count} thread
             {count === 1 ? "" : "s"}. This takes a few seconds.
           </p>

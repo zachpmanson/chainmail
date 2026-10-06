@@ -254,7 +254,7 @@ export function Inbox() {
       {/* No "reading the corpus" line here: the read is the site's, not this
           page's, and it is said in the nav. */}
       {!inbox.isPending && !inbox.isError && rows.length === 0 ? (
-        <p className="selnote">
+        <p className="selnote mt-2 flex-[1_1_100%] text-[.78rem] text-muted">
           {label ? (
             <>Nothing in {label}.</>
           ) : (
@@ -304,7 +304,7 @@ export function Inbox() {
               {paging ? (
                 <div className="ibend py-[.6rem] text-center" ref={end}>
                   {inbox.isFetchingNextPage ? (
-                    <p className="selnote m-0" role="status">
+                    <p className="selnote m-0 flex-[1_1_100%] text-[.78rem] text-muted" role="status">
                       Reading further back…
                     </p>
                   ) : null}

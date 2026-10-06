@@ -245,13 +245,13 @@ function AddEmailsModal({ onClose, onAdd }: {
           </Button>
         </form>
         {results.isError ? (
-          <p className="selnote" role="alert">
+          <p className="selnote mt-2 flex-[1_1_100%] text-[.78rem] text-muted" role="alert">
             {results.error instanceof Error ? results.error.message : String(results.error)}
           </p>
         ) : null}
-        {results.isFetching ? <p className="selnote">Searching…</p> : null}
+        {results.isFetching ? <p className="selnote mt-2 flex-[1_1_100%] text-[.78rem] text-muted">Searching…</p> : null}
         {asked && !results.isFetching && !results.isError && chains.length === 0 ? (
-          <p className="selnote">No thread matched.</p>
+          <p className="selnote mt-2 flex-[1_1_100%] text-[.78rem] text-muted">No thread matched.</p>
         ) : null}
         {chains.length > 0 ? (
           <ul className="proposals-list">

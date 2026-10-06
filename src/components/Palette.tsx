@@ -23,29 +23,30 @@ export function Palette() {
   useEffect(() => setPalette(readPalette()), []);
 
   return (
-    <div className="stpalette-scroll">
-      <table className="paltab">
+    <div className="max-w-full overflow-x-auto">
+      <table className="min-w-[36rem] border-collapse mt-[.55rem] text-[.76rem]">
+
         <thead>
           <tr>
-            <th>colour</th>
-            <th>light</th>
-            <th>dark</th>
-            <th>used for</th>
+            <th className="border-b border-line pb-[.2rem] pr-[.9rem] text-left text-[.64rem] font-bold uppercase tracking-[.08em] text-muted last:pr-0">colour</th>
+            <th className="border-b border-line pb-[.2rem] pr-[.9rem] text-left text-[.64rem] font-bold uppercase tracking-[.08em] text-muted last:pr-0">light</th>
+            <th className="border-b border-line pb-[.2rem] pr-[.9rem] text-left text-[.64rem] font-bold uppercase tracking-[.08em] text-muted last:pr-0">dark</th>
+            <th className="border-b border-line pb-[.2rem] pr-[.9rem] text-left text-[.64rem] font-bold uppercase tracking-[.08em] text-muted last:pr-0">used for</th>
           </tr>
         </thead>
         <tbody>
           {PALETTE.map(({ name, what }) => (
             <tr key={name}>
-              <td>
-                <code>--{name}</code>
+              <td className="border-b border-line py-[.22rem] pr-[.9rem] align-middle whitespace-nowrap last:pr-0">
+                <code className="font-[inherit] text-[.74rem]">--{name}</code>
               </td>
-              <td>
+              <td className="border-b border-line py-[.22rem] pr-[.9rem] align-middle whitespace-nowrap last:pr-0">
                 <Swatch value={palette?.light[name]} />
               </td>
-              <td>
+              <td className="border-b border-line py-[.22rem] pr-[.9rem] align-middle whitespace-nowrap last:pr-0">
                 <Swatch value={palette?.dark[name]} />
               </td>
-              <td className="palwhat">{what}</td>
+              <td className="border-b border-line py-[.22rem] pr-[.9rem] align-middle whitespace-normal text-muted last:pr-0">{what}</td>
             </tr>
           ))}
         </tbody>
@@ -63,8 +64,8 @@ export function Palette() {
 function Swatch({ value }: { value?: string }) {
   return (
     <>
-      <span className="palsw" style={value ? { background: value } : undefined} aria-hidden="true" />
-      <span className="palval">{value ? value : "—"}</span>
+      <span className="mr-[.4rem] inline-block h-[.82rem] w-4 align-[-.09rem] rounded-[3px] border border-line" style={value ? { background: value } : undefined} aria-hidden="true" />
+      <span className="tabular-nums text-muted">{value ? value : "—"}</span>
     </>
   );
 }

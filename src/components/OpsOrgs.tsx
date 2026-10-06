@@ -67,12 +67,12 @@ function RuleRow({ d, busy, onPick }: { d: OrgRule; busy: boolean; onPick: (draf
       </p>
       <p className="my-[.15rem] text-[.84rem] leading-[1.35] [&_code]:text-[.74rem] [&_code]:[overflow-wrap:anywhere]">
         {mail} — drawn as{" "}
-        {d.org ? <code>{d.org}</code> : <span className="opwhy">no organisation</span>}
+        {d.org ? <code>{d.org}</code> : <span className="text-muted">no organisation</span>}
         {d.stored && d.guess ? (
           // What clearing the rule would restore. Without it, a reader who has
           // ruled on a domain cannot tell what the guess behind it was — and that
           // guess is the thing this screen exists to override or accept.
-          <span className="opwhy"> — cleared, it is read as {d.guess}</span>
+          <span className="text-muted"> — cleared, it is read as {d.guess}</span>
         ) : null}
       </p>
       <p className="my-[.15rem] text-[.84rem] leading-[1.35] [&_code]:text-[.74rem] [&_code]:[overflow-wrap:anywhere]">
@@ -199,14 +199,14 @@ export function OpsOrgs() {
         is nobody's.
       </p>
       {error ? (
-        <p className="selfail" role="alert">
+        <p className="selfail mt-[.7rem] rounded-md border border-line border-l-[3px] border-l-red-700 bg-card px-[.7rem] py-2 text-[.82rem]" role="alert">
           {error}
         </p>
       ) : null}
       {last ? <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">{last}. The list below is the current one.</p> : null}
 
       {draft ? (
-        <div className="opmconfirm">
+        <div className="mt-2 mb-[.15rem] rounded-md border border-line bg-quote px-[.6rem] py-2 text-[.76rem] leading-[1.5] text-fg">
           <Consequence
             shift={preview.data ?? { messages: 0, people: 0, ambiguous: 0 }}
             draft={draft}

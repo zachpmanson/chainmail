@@ -46,11 +46,11 @@ function Identity({
   onDetach: (identity: string) => void;
 }) {
   return (
-    <span className="opperson-id">
-      <code>{id}</code>
+    <span className="mr-[.3rem] mb-[.2rem] inline-flex items-center gap-[.15rem] rounded-[5px] border border-line bg-card px-[.3rem] py-[.05rem] pr-[.2rem]">
+      <code className="text-[.72rem] [overflow-wrap:anywhere]">{id}</code>
       <IconButton
         type="button"
-        className="opx"
+        className="!size-auto !min-h-0 rounded px-[.18rem] py-0 text-[.85rem] leading-none text-muted hover:bg-quote hover:text-red-700 disabled:opacity-40"
         disabled={busy}
         title={`detach ${id}`}
         aria-label={`Detach ${id} from ${owner.displayName}`}
@@ -89,9 +89,9 @@ function PersonRow({
       {/* Not .opmrule: that line is the plan's rule label and is shouted in
           capitals, which is right for "same display name" and wrong for a
           person's own name. */}
-      <p className="opperson">
-        <span className="opwhy">#{p.personId}</span> <span className="opwho">{p.displayName}</span>{" "}
-        <span className="opwhy">{mail}</span>
+      <p className="mt-0 mb-[.35rem] text-[.86rem] leading-[1.3]">
+        <span className="text-muted">#{p.personId}</span> <span className="ml-[.15rem] font-semibold">{p.displayName}</span>{" "}
+        <span className="text-muted">{mail}</span>
       </p>
       <form
         className="opwhoedit my-[.2rem] mb-[.1rem] flex flex-wrap items-center gap-[.35rem]"
@@ -115,7 +115,7 @@ function PersonRow({
       </form>
       <p className="my-[.15rem] text-[.84rem] leading-[1.35] [&_code]:text-[.74rem] [&_code]:[overflow-wrap:anywhere]">
         {(p.identities ?? []).length === 0 ? (
-          <span className="opwhy">
+          <span className="text-muted">
             No identity at all — this one is only ever the name in someone else's
             header, which is why a name is the only way to find them.
           </span>
@@ -217,7 +217,7 @@ export function OpsPeople() {
         one row after a merge, and that is the plan below, where the evidence is.
       </p>
       {error ? (
-        <p className="selfail" role="alert">
+        <p className="selfail mt-[.7rem] rounded-md border border-line border-l-[3px] border-l-red-700 bg-card px-[.7rem] py-2 text-[.82rem]" role="alert">
           {error}
         </p>
       ) : null}

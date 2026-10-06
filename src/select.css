@@ -8,105 +8,15 @@
    its own — this file's own history had one, and it is what made the same
    conversation look like two products. */
 
-.selnote { font-size:.78rem; color:var(--muted); margin:.5rem 0 0; flex:1 1 100%; }
-.selfail { font-size:.82rem; margin:.7rem 0 0; padding:.5rem .7rem;
-  border:1px solid var(--line); border-left:3px solid crimson; border-radius:6px;
-  background:var(--card); }
-.selfail strong { display:block; font-size:.7rem; text-transform:uppercase;
-  letter-spacing:.08em; color:crimson; }
-
 /* Chain preview modal. Same dimmed-backdrop family as the proposal evaluator:
    the page stays visible while a candidate chain is read as data. Its button is
    the one that opens it — the refresh dialog's proposal cards, which have no pane
    beside them to open a chain into. */
-.selpv { position:fixed; inset:0; z-index:55; background:rgba(0,0,0,.45);
-  display:flex; align-items:center; justify-content:center; }
-.selpv-panel { background:var(--card); border:1px solid var(--line); border-radius:8px;
-  width:min(46rem, 94vw); max-height:82vh; display:flex; flex-direction:column;
-  box-shadow:0 8px 40px rgba(0,0,0,.35); }
-.selpv-thread .selpv-panel { width:min(58rem, 94vw); height:min(82vh, 56rem); max-height:none;
-  overflow:hidden; }
-.selpv-thread .selpv-panel > .ibread { display:flex; flex:1 1 auto; flex-direction:column; min-height:0; }
-.selpv-thread .ibread-head { flex:none; }
-.selpv-thread .ibreadwrap { min-height:0; }
 
 
 
-/* The palette table is intentionally wider than a phone-sized card, so it scrolls
-   inside its section rather than widening the page. */
-.stpalette-scroll { max-width:100%; overflow-x:auto; }
-.stpalette-scroll .paltab { min-width:36rem; margin:.1rem 0 0; }
-.paltab { border-collapse:collapse; margin:.55rem 0 0; font-size:.76rem; }
-.paltab th { text-align:left; font-size:.64rem; font-weight:700; letter-spacing:.08em;
-  text-transform:uppercase; color:var(--muted); padding:0 .9rem .2rem 0;
-  border-bottom:1px solid var(--line); }
-.paltab td { padding:.22rem .9rem .22rem 0; border-bottom:1px solid var(--line);
-  vertical-align:middle; white-space:nowrap; }
-.paltab th:last-child, .paltab td:last-child { padding-right:0; }
-.paltab code { font:inherit; font-size:.74rem; }
-/* What the colour is for is the one column with a sentence in it, and the one
-   that may wrap: the names to its left are fixed and the table reads as a list
-   of them. */
-.palwhat { white-space:normal; color:var(--muted); }
-/* The swatch is the resolved colour itself, drawn as an inline block so it sits
-   on the baseline of the value beside it. Its height is the row's, not the
-   text's: a swatch the size of a swatch is not a colour anybody can judge. */
-.palsw { display:inline-block; width:1rem; height:.82rem; border:1px solid var(--line);
-  border-radius:3px; vertical-align:-.09rem; margin-right:.4rem; }
-.palval { font-variant-numeric:tabular-nums; color:var(--muted); }
 
 
-/* The plan's selection bar: how many pairs are ticked, and the single button
-   that takes them past the confirm. */
-.opactions { display:flex; align-items:center; justify-content:space-between;
-  gap:.6rem; margin:.5rem 0 0; padding:.4rem .7rem; border:1px solid var(--line);
-  border-radius:9px; background:var(--quote); }
-.opselectall { display:flex; align-items:center; gap:.45rem; font-size:.76rem;
-  color:var(--fg); cursor:pointer; }
-.opselectall input, .opcheck { margin:0; cursor:pointer; }
-.opcheck { margin-right:.5rem; vertical-align:middle; }
-
-/* The confirm: the warning, the pairs it will fold, then the two buttons in a
-   row of their own — never inline in the sentence, where they wrap mid-phrase
-   and the space between them depends on the words around them. */
-.opmconfirm { font-size:.76rem; line-height:1.5; margin:.5rem 0 .15rem;
-  padding:.5rem .6rem; border:1px solid var(--line); border-radius:6px;
-  background:var(--quote); color:var(--fg); }
-.opmconfirm strong { color:crimson; }
-.opmwarn { margin:0; }
-.opmpairs { list-style:none; margin:.4rem 0 0; padding:0 0 0 .1rem; }
-.opmpairs li { font-size:.76rem; line-height:1.5; padding:.08rem 0; }
-.opmpairs li code { font-size:.72rem; overflow-wrap:anywhere; }
-.oprefs { list-style:none; margin:.3rem 0 0; padding:0; }
-.oprefs li { font-size:.78rem; line-height:1.45; padding:.2rem 0; }
-.oprefs li code { font-size:.72rem; }
-.opwhy { color:var(--muted); }
-.oparrow { color:var(--muted); }
-.opwhen { font-size:.72rem; color:var(--muted); }
-.optrails { list-style:none; margin:.3rem 0 0; padding:0; }
-.optrails li { font-size:.8rem; line-height:1.5; padding:.3rem 0; }
-.optrails li .opwhy { display:block; font-size:.72rem; color:var(--muted); }
-
-/* The organisation rules: a text field sized to a domain rather than to the row,
-   because the row also carries the counts and the badges and a full-width field
-   would push the buttons off the end of a long one. Free text on purpose — a
-   domain is not chosen from the corpus, and a rule about mail that has not
-   arrived yet has to be writable. */
-
-/* The people editor: one person per row, with the name they are called and the
-   identities that resolve to them. The identities wrap rather than scroll — an
-   address is long and a person can have several, so the rule is the same as
-   everywhere else a list of small things shares a line. */
-.opperson { margin:0 0 .35rem; font-size:.86rem; line-height:1.3; }
-.opwho { font-weight:600; margin-left:.15rem; }
-.opperson-id { display:inline-flex; align-items:center; gap:.15rem;
-  margin:0 .3rem .2rem 0; padding:.05rem .2rem .05rem .3rem;
-  background:var(--card); border:1px solid var(--line); border-radius:5px; }
-.opperson-id code { font-size:.72rem; overflow-wrap:anywhere; }
-.opx { font:inherit; font-size:.85rem; line-height:1; padding:0 .18rem;
-  color:var(--muted); background:none; border:none; border-radius:4px; cursor:pointer; }
-.opx:hover:not(:disabled) { color:crimson; background:var(--quote); }
-.opx:disabled { opacity:.4; }
 
 /* The inbox: the home page with no query. Same file as the selection stage for
    the same reason — these controls exist only in the browser, and the static
@@ -527,9 +437,6 @@
      used to be before it moved in here. The head's own insets are not this number
      (`.7rem` of its strip, plus the divider on the left): the strip keeps the
      subject and the controls where they have always been. */
-  /* Compose has no stream to carry the reader's horizontal gutter, so give its
-     card the same inset the reply box gets from its stream. */
-  .compose-panel { padding-left:1.25rem; padding-right:1.25rem; }
   /* The head's own inset, the same on both sides: `.7rem` is the strip's own
      padding (base rule) and the divider is the pane's left edge, which the strip is
      painted from — so the subject and the controls are inset the same distance from
@@ -549,17 +456,3 @@
    folder list beneath it scrolls and a control about the next visit must not
    scroll away with the folders. Opaque, so the rows pass under it. */
 
-/* The ops tabs: the page manages three kinds of row — people, the organisations
-   their mail is drawn under, and the merges proposed between them — and they are
-   read one at a time rather than as sections of one long scroll. The row reuses
-   the page's own small caps as a control; the selected tab takes the foreground
-   colour and the accent rule, and the tab is the panel's heading, so no section
-   repeats its own name above itself. */
-.optabs { display:flex; align-items:stretch; gap:.15rem; margin:.5rem 0 .1rem;
-  border-bottom:1px solid var(--line); }
-.optab { font:inherit; font-size:.7rem; font-weight:700; letter-spacing:.08em;
-  text-transform:uppercase; color:var(--muted); background:none; border:none;
-  border-bottom:2px solid transparent; padding:.3rem .55rem .32rem; cursor:pointer; }
-.optab:hover { color:var(--fg); }
-.optab-on { color:var(--fg); border-bottom-color:var(--accent); }
-.oppanel { margin-top:.15rem; }

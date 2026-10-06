@@ -340,12 +340,12 @@ export function ThreadPane({
               corpus read that carries each body already rendered — in the pane's
               own scroll box, so the head above is a line of the pane rather than
               the first thing in the thread (see .ibreadwrap). */}
-          <div className="ibreadwrap min-h-0 min-w-0 flex-1 overflow-auto [&_.stream]:p-4 [&_.stream]:pb-40 [&_.stream_.replies]:mt-[-.5rem] [&_.stream_.replies]:mb-0 [&_.stream_.replies]:ml-[.3rem] [&_.stream_.replies]:border-l-2 [&_.stream_.replies]:border-line [&_.stream_.replies]:pt-2 [&_.stream_.replies]:pl-4 [&_.stream_.pan.people]:mt-0 [&_.stream_.pan.people]:mb-[1.1rem] [&_.selnote]:mt-[.7rem] [&_.selnote]:mx-[.8rem]">
+          <div className="ibreadwrap min-h-0 min-w-0 flex-1 overflow-auto [&_.stream]:p-4 [&_.stream]:pb-40 [&_.stream_.pan.people]:mt-0 [&_.stream_.pan.people]:mb-[1.1rem]">
             <ThreadMessages thread={thread} tree={tree} />
           </div>
         </>
       ) : (
-        <p className="selnote mx-[.8rem] mt-[.7rem]">{empty}</p>
+        <p className="selnote mx-[.8rem] mt-[.7rem] flex-[1_1_100%] text-[.78rem] text-muted">{empty}</p>
       )}
     </aside>
   );
