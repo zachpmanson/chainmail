@@ -1,3 +1,4 @@
+import { Button } from "./controls";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { $api, type ChainHit } from "../lib/api";
@@ -312,9 +313,9 @@ export function Inbox() {
               {inbox.isFetchNextPageError ? (
                 <>
                   <Failure error={inbox.error} />
-                  <button type="button" className="ibmore" onClick={() => inbox.fetchNextPage()}>
+                  <Button type="button" className="ibmore" onClick={() => inbox.fetchNextPage()}>
                     Try again
-                  </button>
+                  </Button>
                 </>
               ) : null}
             </div>

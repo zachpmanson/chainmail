@@ -1,3 +1,4 @@
+import { Button, IconButton } from "./controls";
 import { useEffect, useRef, useState } from "react";
 import { ArrowTopRightOnSquareIcon, QueueListIcon } from "@heroicons/react/24/outline";
 import { useSearch } from "@tanstack/react-router";
@@ -157,9 +158,9 @@ export function ThreadPane({
       {thread ? (
         <>
           <div className="ibread-head">
-            <button type="button" className="ibback" onClick={onClose}>
+            <Button type="button" className="ibback" onClick={onClose}>
               {backLabel}
-            </button>
+            </Button>
             <span className="ibread-subj">{thread.subject || "(no subject)"}</span>
             {/* How much mail is in the thread, how many people, and how many files
                 — worn the way the row that opened it wears them: the same glyphs,
@@ -212,7 +213,7 @@ export function ThreadPane({
                 <OpenWindowGlyph />
               </a>
             ) : null}
-            <button
+            <Button
               type="button"
               className="ibicon ibtree"
               aria-pressed={tree}
@@ -237,7 +238,7 @@ export function ThreadPane({
               }}
             >
               <TreeGlyph />
-            </button>
+            </Button>
             {/* The two mailbox verbs, beside the read circle and on the thread
                 that is open rather than on a ticked set. Glyphs, and the same two
                 the bar draws (see MailVerbs): the strip's line is the subject, and
@@ -263,7 +264,7 @@ export function ThreadPane({
                 })
               }
             />
-            <button
+            <IconButton
               type="button"
               className="ibicon"
               aria-label="Archive"
@@ -274,8 +275,8 @@ export function ThreadPane({
               }
             >
               <ArchiveGlyph />
-            </button>
-            <button
+            </IconButton>
+            <IconButton
               type="button"
               className="ibicon"
               aria-label="Delete"
@@ -284,7 +285,7 @@ export function ThreadPane({
               onClick={() => act.mutate({ body: { chains: [thread.rootExtId], action: "trash", ...(accountId ? { accountId } : {}) } })}
             >
               <TrashGlyph />
-            </button>
+            </IconButton>
             {/* The read-state control, and the only explicit one: nothing is
                 marked by looking at it. A pane opens the top of the list by
                 itself, so a mark-on-open rule would clear the badge for mail
@@ -306,7 +307,7 @@ export function ThreadPane({
                 second colour on one of three verbs on the line would read as
                 emphasis rather than as a state. */}
             {thread.unread !== undefined ? (
-              <button
+              <Button
                 type="button"
                 className={`ibicon ibread-read${thread.unread > 0 ? " unread" : ""}`}
                 disabled={read.isPending}
@@ -332,7 +333,7 @@ export function ThreadPane({
                 <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
                   <circle cx="8" cy="8" r="5.2" />
                 </svg>
-              </button>
+              </Button>
             ) : null}
           </div>
           {/* The same component the page built from this thread uses, over a

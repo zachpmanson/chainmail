@@ -1,3 +1,4 @@
+import { Button } from "./controls";
 import { useEffect, useRef, useState } from "react";
 import { CheckIcon, ChevronDownIcon } from "@heroicons/react/24/outline";
 import { $api } from "../lib/api";
@@ -26,7 +27,7 @@ function FolderRows({
     <>
       {folders.isPending ? <p className="ibfnote">Reading folders…</p> : null}
       {folders.isError ? <p className="ibfnote" role="alert">The folder list could not be read.</p> : null}
-      <button
+      <Button
         type="button"
         role="menuitem"
         className={`ibfrow${selectedAccount && !current ? " sel" : ""}`}
@@ -34,11 +35,11 @@ function FolderRows({
         onClick={() => pick("")}
       >
         All mail
-      </button>
+      </Button>
       {labels.map((label) => {
         const selected = selectedAccount && label.name === current;
         return (
-          <button
+          <Button
             key={label.name}
             type="button"
             role="menuitem"
@@ -48,7 +49,7 @@ function FolderRows({
           >
             <span className="ibfname">{label.name}</span>
             <span className="ibfcount">{label.messages}</span>
-          </button>
+          </Button>
         );
       })}
       {!folders.isPending && !folders.isError && labels.length === 0 ? (
@@ -113,7 +114,7 @@ export function FolderPicker({
 
   return (
     <div className="ibfolders" ref={box}>
-      <button
+      <Button
         type="button"
         className="ibfbtn"
         aria-label={ariaLabel}
@@ -132,12 +133,12 @@ export function FolderPicker({
           ) : null}
         </span>
         <ChevronDownIcon className="ibfcaret" aria-hidden="true" />
-      </button>
+      </Button>
 
       {open ? (
         <div className="ibpop" role="menu" aria-label="Folders">
           {!selectingDefault ? (
-            <button
+            <Button
               type="button"
               role="menuitemcheckbox"
               aria-checked={isDefault}
@@ -148,9 +149,9 @@ export function FolderPicker({
                 Open {current || "All mail"}{currentAccountId && accountName ? ` (${accountName})` : ""} by default
               </span>
               <span className="ibfmark" aria-hidden="true">{isDefault ? <CheckIcon /> : null}</span>
-            </button>
+            </Button>
           ) : null}
-          <button
+          <Button
             type="button"
             role="menuitem"
             className={`ibfrow${!currentAccountId && !current ? " sel" : ""}`}
@@ -158,7 +159,7 @@ export function FolderPicker({
             onClick={() => pick("")}
           >
             All accounts · All mail
-          </button>
+          </Button>
           {auth.isPending ? <p className="ibfnote">Reading connected accounts…</p> : null}
           {auth.isError ? <p className="ibfnote" role="alert">Connected accounts could not be read.</p> : null}
           {accounts.length === 0 && !auth.isPending && !auth.isError ? (
