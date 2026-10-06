@@ -80,6 +80,7 @@ export function ComposerFlow({
     </section>
   );
 
-  if (variant === "reply") return <div className="replybox" ref={containerRef}>{content}</div>;
-  return <aside className="ibread compose-panel" aria-label="Compose email"><div className="replybox">{content}</div></aside>;
+  const replyBoxClasses = "replybox mt-[.9rem] mb-[.3rem] rounded-lg border border-line bg-card px-[.7rem] py-[.6rem]";
+  if (variant === "reply") return <div className={replyBoxClasses} ref={containerRef}>{content}</div>;
+  return <aside className="ibread compose-panel min-w-0 overflow-auto border-l border-line bg-bg" aria-label="Compose email"><div className={replyBoxClasses}>{content}</div></aside>;
 }

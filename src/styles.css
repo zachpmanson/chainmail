@@ -70,18 +70,12 @@
      that a narrow screen scrolls the strip rather than wrapping it into two
      rows: that wrap was the other half of the jump, since opening the search
      hides the links and the wrapper went with them. */
-  header.sitehead { --navh:2.15rem; max-width:none; margin:0;
-    padding:1rem 1.25rem .85rem;
-    border-bottom:1px solid var(--line); color:var(--muted); font-size:.86rem;
-    display:flex; align-items:center; flex-wrap:wrap; }
   /* The nav's items, as one element, because one element is what the selection
      bar replaces: the reader ticked some chains, so the row the links were on is
      the bar's until the selection clears. One line, scrolled when the links and
      the box together do not fit (see --navh above), and exactly `--navh` tall
      however long the line is — this is the row the bar is measured against, and
      both are the same number rather than two numbers that happen to agree. */
-  .sitenav { position:relative; display:flex; align-items:center; flex-wrap:nowrap; flex:1 1 auto;
-    min-width:0; overflow-x:auto; overflow-y:hidden; height:var(--navh); }
   /* The panel's containing block is this row, and that is the one ancestor whose
      width is the same whether the panel is open or shut: it is the header's own
      content width (see `flex:1 1 100%` below), and the panel no longer holds any
@@ -126,9 +120,6 @@
      panel, and the row is the bar's height exactly. A `padding-top` of a couple of
      pixels used to live here, which is what made the nav's row a hair taller
      than the bar that replaces it. */
-  .navright { --navgap:1.1rem; margin-left:auto; display:flex; align-items:center;
-    gap:var(--navgap); flex-wrap:nowrap; justify-content:flex-end;
-    padding-right:calc(12rem + var(--navgap)); }
   /* Shut: a field showing what the address asks, and the whole of the search. The
      height is the row's, so the panel is the same size open as shut and the page
      below never moves for it.
@@ -152,12 +143,7 @@
      in the arrangement: 1.85rem is the dismissal's box (an 18px glyph in .25rem
      .3rem of padding with a 1px border — see the icon button above), and
      `--navgap` is the same gap `.navright` puts between its own items. */
-  .navsearch { position:absolute; top:0; right:0;
-    --searchgap: calc(1.85rem + var(--navgap));
-    display:flex; align-items:center; gap:.4rem;
-    width:12rem; height:var(--navh); padding:.26rem .5rem;
-    border:1px solid var(--line);
-    border-radius:6px; background:var(--card); overflow:hidden; }
+  .navsearch { --searchgap: calc(1.85rem + var(--navgap)); }
   /* The width is grown rather than switched: the panel becoming the row is one
      thing turning into the other, and the movement is what says so. The house
      rule for a reader who has asked for less motion: no animation, same layout.
@@ -169,20 +155,15 @@
      state you are leaving is a percentage that steps. */
   @media (prefers-reduced-motion: no-preference) { .navsearch { transition:width .18s ease; } }
   .navsearch:hover, .navsearch:focus-within { border-color:var(--accent); }
-  .navsearch .navq { flex:1 1 auto; min-width:6rem; font:inherit; font-size:.84rem;
-    padding:.12rem 0; border:0; background:none; color:var(--fg); }
   /* The panel's own way out, and it stands outside the box rather than in it: the
      box is the field and the four controls that ask a question, and a dismissal is
      not one of the things a search is made of. It wears the nav's icon button (see
      .navrefresh above), and its glyph is the 12px square the magnifier inside the
      box is: two controls on one line, drawn to one size. */
-  .navcancel svg { display:block; width:18px; height:18px; }
   /* The box's own border is the focus indicator (`:focus-within` above), so the
      field inside it does not draw a second one around itself: two rings for one
      focus says the field and the box are two things to the reader, and they are
      one control. */
-  .navsearch .navq:focus { outline:none; }
-  .navsearch .navq::placeholder { color:var(--muted); }
   /* No mark for the question on screen: `aria-current` is set on the field (see
      NavSearch.tsx), and nothing draws it. A live query was coloured the accent,
      and then given `--mine` behind it — the colour this app uses for the reader's
@@ -225,23 +206,13 @@
      a panel with its own width of empty space at the end of it. What the row is
      for reads left to right: the field takes the room, and the controls that ask
      the question with it wait at the end, where the box itself used to be. */
-  .navopts { display:flex; align-items:center; gap:.55rem; flex:0 1 auto;
-    flex-wrap:nowrap; min-width:0; overflow-x:auto; overflow-y:hidden; }
-  .navopt { display:flex; align-items:center; gap:.3rem; flex:none; }
-  .navopt > span { font-size:.6rem; text-transform:uppercase; letter-spacing:.08em;
-    color:var(--muted); font-weight:700; }
-  .navopt select, .navopt input { font:inherit; font-size:.78rem; padding:.16rem .35rem;
-    border:1px solid var(--line); border-radius:5px; background:var(--bg); color:var(--fg); }
-  .navopt input { width:7.5rem; }
   /* The date field is drawn by the browser, which also draws a picker button
      inside it, so it needs a little more room than a field of the same ten
      characters: 7.5rem clipped the last digit wherever the button is shown. */
-  .navopt .navsince { width:8.6rem; }
   /* The Person control shows an address, which is longer than a word, and it sits
      on the same line as the mode and the date: capped, so one long value cannot
      decide how much of that line the other two get. 20ch is a full address and no
      more — the list under it is where the whole of it is read (see .navpeople). */
-  .navopt .navperson { max-width:20ch; }
   /* The Person field's suggestions, drawn under it.
 
      Outside the nav's own tree: the row clips (`overflow-x:auto` on `.sitenav`
@@ -255,40 +226,6 @@
      Above the header's own stacking (`z-index:60`, the same layer the spec view
      opens on): the list belongs to a control being used, and nothing in the row
      it hangs from should be over it. */
-  .navpeople { position:fixed; z-index:60; margin:0; padding:.2rem; list-style:none;
-    max-height:15rem; overflow-y:auto; overflow-x:hidden; background:var(--card);
-    border:1px solid var(--line); border-radius:7px;
-    box-shadow:0 8px 24px rgba(0,0,0,.22); }
-  .navpeople li { display:flex; flex-direction:column; gap:.05rem;
-    padding:.28rem .45rem; border-radius:5px; cursor:pointer; }
-  /* The row under the pointer and the row under the keyboard are one row with
-     one look: the pointer and the arrow keys are two ways to say the same thing,
-     and two marks for it read as two selections. */
-  .navpeople li.on { background:var(--mine); }
-  .navpeople .who { font-size:.78rem; overflow-wrap:anywhere; }
-  .navpeople .adr { font-size:.66rem; color:var(--muted); overflow-wrap:anywhere; }
-  .navsearch button { font:inherit; font-size:.76rem; font-weight:650;
-    padding:.22rem .6rem; border:1px solid var(--line); border-radius:6px;
-    background:var(--mine); color:var(--fg); cursor:pointer; }
-  .navsearch button:disabled { opacity:.45; cursor:default; }
-  /* The corpus being read. A status rather than a destination, so it is quieter
-     than the links beside it and carries no separator: the space is what says it
-     is not a link. Reads at the size of the deploy stamp, which is the nav's
-     other piece of small print, and never wraps — a phrase broken across two
-     lines in a nav row reads as two facts. */
-  .reading { margin-left:1.1rem; font-size:.74rem; color:var(--muted);
-    white-space:nowrap; }
-  /* The deploy stamp. Quiet: a date and a revision, read only when something is
-     being checked, so it sits at the fainter weight and monospaced where the
-     hash is. The gap spaces the `@` between them as well as the two facts; the
-     order matches penultimate-guitar's footer. It links to the commit, which is
-     the one thing a hash is useful for — see DeployStamp for why it is served
-     rather than baked in. */
-  .deploy { display:flex; align-items:baseline; gap:.35rem; font-size:.74rem;
-    color:var(--muted); text-decoration:none; white-space:nowrap; }
-  .deploy code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
-    font-size:.72rem; }
-  .deploy:hover { color:var(--accent); }
   /* The refresh button: the stamp's neighbour, and the one control in the nav
      that asks the corpus again for what is on screen. Quiet like the stamp it
      sits beside — it is small print on every page, read when something is being
@@ -302,16 +239,6 @@
      .ibbuild .ibicon come out 29.6x28 with it, so these two do as well. A size
      smaller than the strip's read as small type rather than as controls, which is
      the opposite of what the nav's two presses are. */
-  .navrefresh, .navcancel { flex:none; display:inline-flex; align-items:center;
-    justify-content:center; padding:.25rem .3rem; border:1px solid transparent;
-    border-radius:6px; background:none; color:var(--muted); font:inherit; cursor:pointer; }
-  .navrefresh { gap:.35rem; }
-  .nav-compose svg { display:block; width:18px; height:18px; }
-  .navrefresh:hover, .navcancel:hover { color:var(--accent); border-color:var(--line);
-    background:var(--card); }
-  .navrefresh.warn { color:var(--accent); }
-  .navrefresh-label { font-size:.72rem; white-space:nowrap; }
-  .navrefresh:disabled { cursor:default; }
   /* dripfeed-web's spinner (src/index.css there): the same ↻, the same 0.8s
      linear turn, so the act reads the same in both apps. It turns only while its
      thing is working — as a button's own icon, a still ↻ is what the control
@@ -335,6 +262,7 @@
     vertical-align:middle; flex:none; }
   /* One size for the two icon buttons' glyphs; the chip keeps the .ameta size it
      inherits from the line it is in. */
+  .navrefresh.warn { color:var(--accent); }
   .navrefresh .spinner, .origbtn.busy .spinner { font-size:1.125rem; }
   /* The nav turns for a refresh or ingest. Other spinners turn only while their
      own work runs. */
@@ -344,7 +272,6 @@
   @media (prefers-reduced-motion: reduce) {
     .navrefresh.busy .spinner, .origbtn.busy .spinner, .att.busy .spinner {
       animation:none; } }
-  .navsearch svg { flex:none; opacity:.8; }
   /* The app's own pages are workspaces, not documents: an inbox is a list and a
      reading pane, and both want the width the window has. Anything not named
      here — a 404, a dropped spec — keeps the measure above.
@@ -363,12 +290,6 @@
      page's own horizontal margin are the only gaps it needs. The reading pane's
      last message now lands on the bottom edge, which is where a scroller ends. */
   .wrap.ibwrap { padding-top:0; padding-bottom:0; }
-  header.sitehead .sep { margin:0 .45rem; color:var(--line); }
-  /* The site's name, and the link home: it is the one nav item that is not a
-     page, so it is weighted like a title and sits in the same bar. */
-  header.sitehead a.brand { color:var(--fg); font-weight:700; font-size:.92rem;
-    letter-spacing:-.01em; text-decoration:none; }
-  header.sitehead a.brand:hover { color:var(--accent); }
   h1 { font-size:1.3rem; margin:0 0 .2rem; letter-spacing:-.01em; }
   .pan { border:1px solid var(--line); border-radius:9px; background:var(--card);
     margin:.7rem 0 0; }
@@ -434,17 +355,6 @@
     border:1px solid var(--line); border-radius:4px; padding:0 .25rem;
     white-space:nowrap; }
   a.srclink:hover { color:var(--accent); border-color:var(--accent); }
-  /* spec viewer: sits above everything, including the fixed minimap and toolbar */
-  .specview { position:fixed; inset:0; z-index:60; background:var(--bg);
-    display:flex; flex-direction:column; }
-  .specbar { display:flex; align-items:center; gap:.6rem; padding:.5rem .8rem;
-    border-bottom:1px solid var(--line); background:var(--card); }
-  .specbar b { font-size:.72rem; font-weight:700; text-transform:uppercase;
-    letter-spacing:.09em; color:var(--muted); }
-  .specbar .note { font-size:.7rem; color:var(--muted); margin-right:auto; }
-  .specpre { margin:0; flex:1 1 auto; overflow:auto; padding:.9rem 1rem 2rem;
-    font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.72rem;
-    line-height:1.5; tab-size:2; white-space:pre; color:var(--fg); }
   /* proposal evaluator: a dimmed backdrop keeps the page visible while a proposed
      chain is judged and accepted by root ext id (see refresh.go's Candidate). */
   .proposals { position:fixed; inset:0; z-index:55; background:rgba(0,0,0,.45);
@@ -1226,8 +1136,6 @@
    width it is given rather than a measure of its own — the bubbles above it are
    the thing being read, and a field that narrowed them would be the wrong end of
    the pane growing. */
-.replybox { margin:.9rem 0 .3rem; padding:.6rem .7rem; border:1px solid var(--line);
-  border-radius:8px; background:var(--card); }
 /* To and Cc each get a full line, rather than squeezing two address lists
    side by side.
 
@@ -1247,18 +1155,6 @@
 /* `display:contents` lets every row share these tracks: labels line up, and the
    target link reserves the same trailing column for From, To, and Cc controls. */
 .replyrecipient { min-width:0; }
-/* The label is one line of the field tall, and its word sits in the middle of that
-   height rather than at the top of it: the field's own text is centred in its box,
-   and a label left at its natural height (a .74rem line box) with `flex-start` put
-   `to:` a couple of pixels above the first address it names. A field that WRAPS
-   grows past this height and the label does not follow — it is the first line the
-   label belongs to, which is the line the reader reads it against. */
-.replylabel { display:inline-flex; align-items:center; height:var(--addrrow); }
-.replyfrom { flex:1 1 auto; min-width:0; height:var(--addrrow); padding:0 .3rem;
-  font:inherit; font-size:.72rem; color:var(--fg); background:var(--bg);
-  border:1px solid var(--line); border-radius:6px; }
-.replyfrom:focus { border-color:var(--accent); }
-.replyfrom:disabled { opacity:.55; cursor:default; }
 .replyrecipient > .addrfield { display:flex; width:100%; min-width:0; min-height:var(--addrrow); }
 .replyrecipient .addrinput { min-width:3rem; }
 /* The link to the message being answered sits in the reserved third column of
@@ -1283,12 +1179,6 @@
   text-overflow:ellipsis; white-space:nowrap; }
 .replysummary:hover .replynames { color:var(--fg); }
 .replynone { font-style:italic; }
-.replyfield { display:grid; gap:.3rem; margin:0 0 .55rem; font-size:.74rem; color:var(--muted); }
-.replybox form { margin:0; }
-.replyinput { display:block; width:100%; font:inherit; font-size:.82rem;
-  line-height:1.45; padding:.45rem .55rem; color:var(--fg); background:var(--bg);
-  border:1px solid var(--line); border-radius:6px; resize:vertical; }
-.replyinput:disabled { opacity:.55; }
 /* The plan: what will be sent, in the whole. The body is monospaced and
    pre-wrapped so that the quote is read as the lines that will be sent — the
    quote marks the server added are the thing being checked, and a proportional
@@ -1335,69 +1225,9 @@
   font-size:.74rem; color:var(--muted); cursor:pointer; }
 .replytick input { margin:0; accent-color:var(--accent); cursor:pointer; }
 .replytick:has(input:disabled) { opacity:.55; cursor:default; }
-/* Each address field is one bordered run of chips with an input at the end. The
-   suggestions hang under the whole box rather than the input, so the list stays as
-   wide as the recipient row while the reader types. */
-.addrfield { position:relative; display:inline-flex; flex-wrap:wrap; align-items:center;
-  gap:.2rem; margin:0 .15rem; padding:.1rem .3rem; max-width:100%; vertical-align:middle;
-  border:1px solid var(--line); border-radius:6px; background:var(--bg); }
-.addrfield:focus-within { border-color:var(--accent); }
-.addrchip { display:inline-flex; align-items:center; gap:.2rem; max-width:100%;
-  padding:.05rem .2rem .05rem .35rem; border:1px solid var(--line); border-radius:10px;
-  background:var(--card); font-size:.72rem; }
-.addrname { overflow-wrap:anywhere; }
-.addrx { flex:none; display:inline-flex; align-items:center; padding:.1rem; color:var(--muted);
-  background:none; border:none; border-radius:4px; cursor:pointer; }
-.addrx:hover { color:var(--accent); background:var(--bg); }
-.addrx svg { display:block; }
-.addrx:disabled { opacity:.55; cursor:default; }
-.addrx:disabled:hover { color:var(--muted); background:none; }
-.addrinput { flex:1 1 7rem; min-width:7rem; font:inherit; font-size:.72rem; padding:.1rem 0;
-  color:var(--fg); background:none; border:none; outline:none; }
-.addrinput::placeholder { color:var(--muted); }
-/* The suggestions, under the field. Over the prose rather than in it: the line would
-   reflow under the reader's eyes as they typed, and the box is already the thing they
-   are looking at. */
-.addrlist { position:absolute; top:100%; left:0; z-index:20; display:flex;
-  flex-direction:column; min-width:100%; max-width:24rem; max-height:14rem; overflow:auto;
-  margin-top:.25rem; padding:.15rem; border:1px solid var(--line); border-radius:6px;
-  background:var(--card); box-shadow:0 6px 18px rgba(0,0,0,.18); }
-.addropt { display:flex; align-items:baseline; gap:.4rem; padding:.2rem .35rem;
-  font-size:.72rem; border-radius:4px; cursor:pointer; }
-.addropt.on { background:var(--mine); }
-.addroptaddr { font-size:.68rem; color:var(--muted); overflow-wrap:anywhere; }
-.addropt.none { color:var(--muted); cursor:default; }
-/* A refusal is a sentence about the address the reader just tried to add, and it sits
-   in the field rather than in the popup: the popup is where the answers are, and this
-   is the answer to what they did — the same red the other refusals on the page wear
-   (see .selfail). It goes away with the next keystroke, because it is about that one
-   address rather than a standing fact about the field. */
-.addrrefuse { flex-basis:100%; padding:.1rem .2rem; font-size:.68rem; color:crimson; }
 
 /* --- what a write leaves to say --- */
-/* The bottom-right corner, over every page. These are accounts of work that is
-   over and reasons a write was refused, and neither is a fact about the page the
-   reader is looking at: in the flow of the header they covered the top of the
-   page, and in the flow of the panel they took a line from the thread being read
-   and had to be dropped by hand when the reader moved on. Out of the flow they
-   cover nothing that is being read — the same reason a mail client puts them
-   where the eye is not working. */
-.toasts { position:fixed; z-index:80; right:.9rem; bottom:.9rem;
-  display:flex; flex-direction:column; align-items:flex-end; gap:.4rem;
-  max-width:min(26rem, calc(100vw - 1.8rem)); pointer-events:none; }
-.toast { display:flex; align-items:flex-start; gap:.5rem; pointer-events:auto;
-  padding:.5rem .55rem .5rem .7rem; font-size:.78rem; line-height:1.35;
-  color:var(--fg); background:var(--card); border:1px solid var(--line);
-  border-left-width:3px; border-radius:7px;
-  box-shadow:0 6px 20px rgba(0,0,0,.22); }
-/* A refusal is the one thing here that is not a moment passing: it is something
-   to act on, so it is marked, and it keeps its own way out (the ×) rather than
-   relying on a clock. */
-.toast.bad { border-color:crimson; }
-.toast .toasttext { flex:1 1 auto; }
-.toast .toastx { flex:none; font:inherit; line-height:1; padding:0 .1rem;
-  color:var(--muted); background:none; border:none; cursor:pointer; }
-.toast .toastx:hover { color:var(--accent); }
+/* A refusal toast keeps the standard arrival treatment but needs no timeout. */
 @media (min-width:60rem) {
   /* A wide window has room for the thing arriving to be seen arriving. */
   @media (prefers-reduced-motion: no-preference) {
@@ -1406,18 +1236,3 @@
   }
 }
 
-/* Compose occupies the reading pane beside the message list. */
-.compose-panel { min-width:0; overflow:auto; border-left:1px solid var(--line);
-  background:var(--bg); }
-.compose-box { width:100%; min-height:100%; box-sizing:border-box; overflow:auto; padding:1.25rem;
-  background:var(--bg, #fff); color:var(--fg, #111); }
-.compose-head, .compose-box footer { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
-.compose-head h2 { margin: 0 0 1rem; }
-.compose-box form, .compose-box label { display: grid; gap: .5rem; }
-.compose-box form { gap: 1rem; }
-.compose-box input, .compose-box textarea { box-sizing: border-box; width: 100%; font: inherit; padding: .6rem; }
-.compose-box textarea { resize: vertical; }
-.compose-review { display: grid; grid-template-columns: 5rem minmax(0, 1fr); gap: .5rem; overflow-wrap: anywhere; }
-.compose-review dt { font-weight: 700; }
-.compose-review dd { margin: 0; }
-.compose-review pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }

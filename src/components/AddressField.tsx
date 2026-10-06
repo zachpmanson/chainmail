@@ -92,17 +92,17 @@ function Chip({ who, remove, disabled }: {
 }) {
   const words = addressWords(who);
   return (
-    <span className="addrchip" title={words}>
-      <span className="addrname">{words}</span>
+    <span className="addrchip inline-flex max-w-full items-center gap-[.2rem] rounded-[10px] border border-line bg-card px-[.35rem] py-[.05rem] text-[.72rem]" title={words}>
+      <span className="addrname [overflow-wrap:anywhere]">{words}</span>
       <IconButton
         type="button"
-        className="addrx"
+        className="addrx !size-auto !min-h-0 shrink-0 rounded px-[.1rem] py-[.1rem] text-muted hover:bg-bg hover:text-accent disabled:cursor-default disabled:opacity-[.55] disabled:hover:bg-transparent disabled:hover:text-muted"
         disabled={disabled}
         onClick={remove}
         title={`Take ${who.address} off this reply.`}
         aria-label={`remove ${words}`}
       >
-        <XMarkIcon width={10} height={10} aria-hidden="true" />
+        <XMarkIcon className="block" width={10} height={10} aria-hidden="true" />
       </IconButton>
     </span>
   );
@@ -237,7 +237,7 @@ export function AddressField({
   }
 
   return (
-    <span className={`addrfield${showing ? " open" : ""}`} data-list={label}>
+    <span className={`addrfield relative inline-flex min-h-[var(--addrrow)] max-w-full flex-wrap items-center gap-[.2rem] align-middle rounded-md border border-line bg-bg px-[.3rem] py-[.1rem] mx-[.15rem] focus-within:border-accent${showing ? " open" : ""}`} data-list={label}>
       {value.map((who) => (
         <Chip
           key={addressKey(who.address)}
@@ -252,7 +252,7 @@ export function AddressField({
           reader is on — which for a sighted reader is the highlight. */}
       <input
         ref={input}
-        className="addrinput"
+        className="addrinput min-w-28 flex-[1_1_7rem] border-0 bg-transparent px-0 py-[.1rem] text-[.72rem] text-fg outline-none placeholder:text-muted"
         type="text"
         role="combobox"
         aria-label={`${label} addresses`}
@@ -275,12 +275,12 @@ export function AddressField({
         onKeyDown={onKeyDown}
       />
       {showing ? (
-        <span className="addrlist" role="listbox" id={`${label}-suggestions`} aria-label={`${label} suggestions`}>
+        <span className="addrlist absolute top-full left-0 z-20 mt-1 flex max-h-56 min-w-full max-w-96 flex-col overflow-auto rounded-md border border-line bg-card p-[.15rem] shadow-[0_6px_18px_rgba(0,0,0,.18)]" role="listbox" id={`${label}-suggestions`} aria-label={`${label} suggestions`}>
           {rows.map((a, i) => (
             <span
               key={addressKey(a.address)}
               id={`${label}-option-${i}`}
-              className={`addropt${i === active ? " on" : ""}`}
+              className={`addropt flex items-baseline gap-[.4rem] rounded p-[.2rem_.35rem] text-[.72rem] cursor-pointer${i === active ? " on bg-mine" : ""}`}
               role="option"
               aria-selected={i === active}
               // The press is taken on mousedown, with the input's focus kept: a
@@ -290,12 +290,12 @@ export function AddressField({
               onClick={() => add(a)}
               title={a.name ? `${a.name} <${a.address}>` : a.address}
             >
-              <span className="addroptname">{a.name ?? a.address}</span>
-              {a.name ? <span className="addroptaddr">{a.address}</span> : null}
+              <span className="addroptname [overflow-wrap:anywhere]">{a.name ?? a.address}</span>
+              {a.name ? <span className="addroptaddr text-[.68rem] text-muted [overflow-wrap:anywhere]">{a.address}</span> : null}
             </span>
           ))}
           {rows.length === 0 ? (
-            <span className="addropt none" aria-disabled="true">
+            <span className="addropt none text-muted cursor-default" aria-disabled="true">
               {typed === null && words !== ""
                 ? `${words} is not an address — an address has something@somewhere in it.`
                 : "No address matches."}
@@ -304,7 +304,7 @@ export function AddressField({
         </span>
       ) : null}
       {refused ? (
-        <span className="addrrefuse" role="status">
+        <span className="addrrefuse basis-full px-[.2rem] py-[.1rem] text-[.68rem] text-red-700" role="status">
           {refused}
         </span>
       ) : null}

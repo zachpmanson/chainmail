@@ -9,11 +9,11 @@ import { Link, useRouterState } from "@tanstack/react-router";
 export function NotFound() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   return (
-    <div className="wrap">
-      <header className="top">
+    <div className="mx-auto max-w-[76rem] px-5 pt-7 pb-14">
+      <header className="mb-[.25rem] border-b border-line pb-[.7rem]">
         <h1>chainmail</h1>
       </header>
-      <p style={{ padding: "2rem", color: "var(--muted)" }}>
+      <p className="p-8 text-muted">
         No page at <code>{pathname}</code> — it is not a route.{" "}
         <Link to="/">Search the corpus</Link>.
       </p>
