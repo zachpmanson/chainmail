@@ -140,25 +140,12 @@
 /* The inbox: the home page with no query. Same file as the selection stage for
    the same reason — these controls exist only in the browser, and the static
    transcript ships this stylesheet minus none of it. */
-.ibcompact-toggle { display:inline-flex; align-items:center; gap:.35rem; padding:.25rem .45rem;
-  border:1px solid var(--line); border-radius:6px; background:transparent; color:var(--muted);
-  font:inherit; font-size:.78rem; white-space:nowrap; cursor:pointer; }
-.ibcompact-toggle:hover, .ibcompact-toggle.active { color:var(--text); border-color:var(--accent); }
-.ibcompact-toggle.active { background:var(--wash); }
-.ibcompact-head { display:grid; grid-template-columns:minmax(7rem, 1fr) minmax(0, 2fr) auto 1.5rem;
-  align-items:center; gap:.8rem; padding:.25rem .35rem .25rem .8rem; color:var(--muted);
-  font-size:.68rem; font-weight:650; }
-.ibcompact-head [role="columnheader"]:last-child { text-align:right; }
-.iblist { list-style:none; margin:0; padding:0; border:1px solid var(--line);
-  border-radius:9px; background:var(--card); overflow:hidden; }
 /* The row is a stacking context rather than a grid: the tick is pinned to the
    corner instead of being given a column to live in. A grid column is the full
    height of the row, so a column for the tick reserved its width the whole way
    down — every line was that much shorter, to leave a strip of nothing under a
    box that only exists on the first line. Pinned, the only width the tick costs
    is on the line it shares with the time, and the time steps around it. */
-.ibrow { position:relative; --tick:1.5rem; }
-.ibrow + .ibrow { border-top:1px solid var(--line); }
 /* Read mail, marked by dimming it: the row sits back into the list and its sender
    and subject go to regular weight (see .ibwho, below). The unread rows are the
    ones left alone, which is the whole point — a mailbox is mostly read, so the
@@ -170,7 +157,6 @@
    same step towards the background in both themes; and before `:hover` and `.sel`,
    which are the two states that overrule it — the row under the pointer, and the
    row the pane is showing. */
-.ibrow:not(.unread) { background:color-mix(in srgb, var(--muted) 12%, var(--card)); }
 /* The hover is the same on both kinds of row: the pointer is one fact, and the two
    shades made a row under the cursor look like a third state — read mail hovered
    went darker, unread went to `--quote`, so the one row you were pointing at was
@@ -178,48 +164,20 @@
    read tint, so the mark still shows up on a dimmed row, and light enough to read
    as a tint on a white one. Placed after the read rule, which is the same
    specificity, and before `.sel`, which is the row the pane is showing. */
-.ibrow:hover { background:color-mix(in srgb, var(--muted) 22%, var(--card)); }
 /* The row the pane is showing. Marked with the same left rule the selected
    candidates use, so "this one is open" reads the same on both pages — and with
    nothing else: it used to tint the row as well, which made the mark a third
    colour that said neither of the two things a row can be (open, unread). The
    rule is the whole mark now, and the row's own state stays readable behind it. */
-.ibrow.sel { box-shadow:inset 2px 0 0 var(--accent); }
 /* The tick's own box, and only the tick's: the top-right corner, which is where
    the tick is drawn and where the eye already is. Padded on the right so the hit
    area is the tick plus a little, not the glyph, and no taller than the line. */
-.ibchk { position:absolute; top:0; right:0; width:var(--tick); display:flex;
-  justify-content:flex-end; padding:.6rem .35rem .35rem 0; cursor:pointer; }
-.ibchk input { margin:0; cursor:pointer; }
 /* The row body is the thread, so it is one hit area of its own: a click opens
    the chain, and the tick beside it is only ever a selection. The tick follows
    the row rather than leading it, which puts it on the right of the time — the
    line a reader scans down while picking threads out of a list. */
-.ibopen { font:inherit; text-align:left; color:inherit; background:none; border:0;
-  cursor:pointer; width:100%; display:grid; grid-template-columns:minmax(0, 1fr) auto;
-  gap:.12rem .8rem; padding:.55rem .35rem .6rem .8rem; }
 /* Compact rows trade the preview for a three-column scan line. The checkbox stays
    pinned outside the button grid, so its width is paid only by the time cell. */
-.iblist.compact .ibopen { grid-template-columns:minmax(7rem, 1fr) minmax(0, 2fr) auto;
-  align-items:center; gap:0 .8rem; padding:.42rem calc(var(--tick) + .7rem) .42rem .8rem; }
-.iblist.compact .ibwho { grid-area:1/1; min-width:0; white-space:nowrap;
-  overflow:hidden; text-overflow:ellipsis; }
-.iblist.compact .ibsubrow { grid-area:1/2; min-width:0; margin:0; gap:.45rem; }
-.iblist.compact .ibwhen { grid-area:1/3; margin-right:0; }
-.iblist.compact .ibmeta { grid-area:2/2; min-width:0; }
-.iblist.compact .ibsnippet { display:none; }
-.ibrow-archive { position:absolute; z-index:1; right:calc(var(--tick) + .4rem); top:50%; transform:translateY(-50%);
-  display:none; align-items:center; justify-content:center; width:1.875rem; height:1.75rem; padding:.25rem .3rem;
-  border:1px solid transparent; border-radius:6px; background:var(--card); color:var(--muted); cursor:pointer; }
-.ibrow-archive svg { display:block; width:18px; height:18px; }
-.iblist.compact .ibrow:hover .ibrow-archive { display:flex; }
-.iblist.compact .ibrow:hover .ibwhen,
-.iblist.compact .ibrow:hover .ibtail { visibility:hidden; }
-.ibrow-archive:hover { border-color:var(--line); color:var(--accent); }
-.ibrow-archive:disabled { opacity:.55; cursor:default; }
-.ibwho { grid-area:1/1; font-size:.88rem; font-weight:650; overflow-wrap:anywhere; }
-.ibwhen { grid-area:1/2; font-size:.72rem; color:var(--muted); white-space:nowrap;
-  justify-self:end; margin-right:var(--tick); font-variant-numeric:tabular-nums; }
 /* The subject and its count are one cell spanning the row, the count pushed to
    the end, rather than two cells in a column each: the count is the only thing
    on that line that wants the right edge, and a column of its own would have
@@ -230,8 +188,6 @@
    statement. The grid's own gap is the smallest step there is, and it is the
    right size between the subject and what continues it — the snippet, the meta
    line — but a hair too small to part the name from the subject. */
-.ibsubrow { grid-area:2/1 / 2/3; display:flex; align-items:baseline; gap:.6rem;
-  margin-top:.2rem; }
 /* One line, elided, like the snippet under it: the subjects are what the reader
    scans down, and a subject that wrapped to three lines made every row a
    different height, so the column they were reading down stopped being a column.
@@ -239,8 +195,6 @@
    against and keeps the counts at the row's end. The whole subject is on hover
    and on the row's own accessible name (see ThreadRow), because a truncated word
    is one the reader cannot get at any other way. */
-.ibsubj { font-size:.84rem; min-width:0; flex:1 1 auto; white-space:nowrap;
-  overflow:hidden; text-overflow:ellipsis; }
 /* Unread mail, marked by what is *not* done to it: a read row is dimmed and set in
    regular weight (see .ibrow, above), and the rows left at full strength are the
    ones with something unread in them. This is the same claim drawn the other way
@@ -256,9 +210,6 @@
    The row keeps the same height in either state — a list that shifts when the
    reader opens something is a list that moves under the pointer — which is what
    weight and background can do and a glyph in the flow could not. */
-.ibrow:not(.unread) .ibwho { font-weight:400; }
-.ibrow.unread .ibwho { font-weight:750; }
-.ibrow.unread .ibsubj { font-weight:650; }
 /* A read row's subject is already at the weight every row starts at, so nothing is
    set for it: `.ibsubj` above carries no weight of its own. */
 /* The two counts in the tail are the same weight as each other and as every other
@@ -271,34 +222,20 @@
    together at the right edge whether or not the message count is drawn, and the
    people count is on every row on every page: it is a fact about the chain, not
    about the search that found it. */
-.ibtail { margin-left:auto; flex:none; display:flex; align-items:center; gap:.5rem; }
-.ibppl, .ibcount, .ibatt { display:inline-flex; align-items:center; gap:.2rem;
-  font-size:.68rem; color:var(--muted); font-variant-numeric:tabular-nums; }
-.ibppl svg, .ibcount svg, .ibatt svg { flex:none; opacity:.75; }
 /* What only a ranked row knows: the similarity and the match, under the snippet
    rather than in place of the row. The thread's own span sits at the far end of
    this line — the bottom right of the row — because it is the one thing here that
    does not come from the search: it is how long the conversation ran. */
-.ibmeta { grid-area:4/1 / 4/3; display:flex; flex-wrap:wrap; gap:.6rem;
-  font-size:.7rem; color:var(--muted); }
 /* The ratio carries the judgement the reader is being asked to make, so it is the
    one piece of the meta line not greyed down to the others' weight. */
-.ibrank { color:var(--fg); font-weight:650; }
-.ibsim { color:var(--strong); font-weight:600; }
-.ibspan { margin-left:auto; font-variant-numeric:tabular-nums; }
 /* One line, elided: a preview is a hint about what the message says, and a
    paragraph of it would push the next row off the screen. Set lighter than the
    rest of the row, on top of the muted colour: it is the one line here that is
    never read as a whole, only sampled on the way past, and the weight is what
    keeps it from competing with the subject above it. */
-.ibsnippet { grid-area:3/1 / 3/3; font-size:.78rem; color:var(--muted);
-  font-weight:300;
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
 /* The end of the list: an empty marker the scroll watcher observes, so it has to
    have height to be seen at all, and it carries the one line a reader sees while
    the next page is on its way. */
-.ibend { padding:.6rem 0; text-align:center; }
-.ibend .selnote { margin:0; }
 /* The button the automatic paging replaces, kept for the one case it still has:
    a page that failed is not something to keep asking for, so retrying is left to
    the reader rather than fired again by the marker staying in view. */
@@ -358,7 +295,6 @@
    room for both — at that width the choice of a row is what changes panels, so
    the list steps aside rather than stacking above a thread the reader has to
    scroll past to get back to it. */
-.ibsplit { display:grid; grid-template-columns:minmax(0, 1fr); gap:.9rem; }
 /* The column puts the space round its own first control rather than the control
    carrying margins of its own. A control with margins is a control that has to be
    placed; a column that pads its top and leaves a gap under the button is a column
@@ -366,19 +302,12 @@
    the one number: the panel's inset from the window, the room above the button, and
    the room between the button and the list are the same `.8rem` — a list panel
    reads as one object, and three different gaps in it read as three objects. */
-.ibcol { min-width:0; display:flex; flex-direction:column; gap:.8rem;
-  padding-top:.8rem; }
-.iblistwrap { min-width:0; }
 
 /* The border between the panels, which is also the control that moves it. Eight
    pixels of target for a one-pixel line: a drag handle the reader has to aim at
    is a drag handle they will miss. The line is drawn on the handle's *right* edge,
    which is the pane's left edge too — the pane begins at the border, so the header
    it is painted with reaches across to it (see `.ibsplit` below). */
-.ibdrag { display:none; touch-action:none; cursor:col-resize; position:relative;
-  /* The row's own height, not its content's: the items are aligned to the top, and
-     a border between two columns has to run the length of both of them. */
-  align-self:stretch; }
 .ibdrag::before { content:""; position:absolute; inset:0 0 0 auto; margin:0; width:1px;
   background:var(--line); }
 .ibdrag:hover::before, .ibdrag:focus-visible::before, .ibsplit.dragging .ibdrag::before {
@@ -397,7 +326,6 @@
    read as a page inside a page: a white box with a white box in it. What is left
    is the heading strip, which is the pane's own toolbar rather than a frame
    around the mail. */
-.ibread { min-width:0; }
 /* The pane heads itself, and **outside** its own scroll: the strip is a line of
    the pane rather than the first thing in the thread, so a long thread never
    leaves the reader without the subject, the count, or the read control — the
@@ -415,41 +343,22 @@
    and the verbs, `align-items:center` inside the counts), which is the same
    instruction written three times and a fourth thing away from the strip being
    visibly off. It is one line in the middle now. */
-.ibread-head {
-  display:flex; align-items:center; gap:.5rem; padding:.5rem .7rem;
-  /* The pane's own surface, not `--mine`: the strip names the chain that is open,
-     which is a fact about the pane rather than about the reader, and a tint there
-     read as the reader's own colour spent on a heading. White on the warm page,
-     with the line under it doing the separating. */
-  border-bottom:1px solid var(--line); background:var(--card); }
-.ibread-subj { font-weight:650; font-size:.86rem; overflow-wrap:anywhere; }
-.ibread-head .note { margin-left:auto; font-size:.72rem; color:var(--muted); white-space:nowrap; }
 /* The chain's counts in the pane's head, drawn with the row's own `.ibppl` and
    `.ibcount` (see PeopleCount / MailCount): the same marks the list scrolled past
    to get here. It takes the free space the way the row's tail does, so the pair
    stays together at the right of the strip, before the two verbs and the read
    control. */
-.ibread-counts { margin-left:auto; display:flex; align-items:center; gap:.5rem; }
 /* The two mailbox verbs in the strip, left of the read circle: the same box and bin
    the selection bar draws (see MailVerbs). Quieter than the bar's copy of them,
    because they stand on the reader's own line rather than in a row that exists to
    hold them, and they are the only things here that destroy something — the
    subject beside them is what is being read, so they wait to be pointed at. */
-.ibread-head .ibicon { flex:none; display:inline-flex; align-items:center;
-  padding:.25rem .3rem; border:1px solid transparent; border-radius:6px; background:none;
-  color:var(--muted); cursor:pointer; }
-.ibread-head a.ibicon { text-decoration:none; }
-.ibread-head .ibicon svg { display:block; }
-.ibread-head .ibicon:hover:not(:disabled) { color:var(--accent); border-color:var(--line);
-  background:var(--card); }
-.ibread-head .ibicon:disabled { opacity:.45; cursor:default; }
 /* The threading switch, on: the glyph in the accent and the box it is in drawn, so
    which way the switch is set is visible from the button rather than only from the
    transcript below it — and a reader scanning the strip after a reload can see it
    without pressing it. The accent and not a second glyph, because the state of a
    switch is the colour of a control that is on everywhere else in this app (see
    .origbtn and .tbtn, the two other switches that carry theirs this way). */
-.ibread-head .ibtree[aria-pressed="true"] { color:var(--accent); border-color:var(--line); }
 /* The read-state control, drawn as the third of the strip's icon buttons — the
    same box the archive bin and the trash can are in (see .ibread-head .ibicon),
    with the state carried by the glyph inside it. A bare circle on the line was a
@@ -465,12 +374,9 @@
    an outline is a distinction a reader makes without a colour to help. Hover,
    focus and disabled are the shared button's (muted to accent, a card behind it)
    rather than a second set of rules for this one. */
-.ibread-read svg { display:block; }
 /* Heavier than the hairline glyphs beside it (1.6 against 1.5, in a box of the
    same size): a circle is only its own edge, and an outline that had to be a mere
    edge reads as a smudge next to the letter-like shapes it sits among. */
-.ibread-read circle { fill:none; stroke:currentColor; stroke-width:1.6; }
-.ibread-read.unread circle { fill:currentColor; stroke:none; }
 /* Flush: the pane's edge is the messages' edge. The gap above the first message
    is the gap between messages, so the heading reads as a heading rather than as
    part of the first email — and the room below the last is what a reader sees when
@@ -480,7 +386,6 @@
    the last message — a couple of rems left it looking like there was more below,
    and the bottom of a long scroll is the one place a reader wants a page's worth
    of quiet rather than the next thing. */
-.ibread .stream { padding:1rem 1rem 10rem; }
 /* Replies drawn as a tree under what they answer, when the head's switch is on
    (see lib/tree). A message's replies are wrapped in one container per level, and
    that container's own left border is the line — which is how unroller draws its
@@ -522,21 +427,15 @@
    level, which reads as the mark flickering. So the margin is taken back and
    spent as the box's own top padding: the same half a rem of air between a
    message and its first reply, with the line drawn through it. */
-.ibread .stream .replies {
-  margin:-.5rem 0 0 .3rem;
-  border-left:2px solid var(--line);
-  padding:.5rem 0 0 1rem; }
 /* The participants panel, at the top of the pane's scroll, with room under it: the
    bubbles below are the thread and this is a heading over them, and flush against
    the first message it read as part of that message's card. Its own top margin is
    a document's (see .pan in styles.css) and is not wanted here — the stream's top
    padding is the space above it. */
-.ibread .pan.people { margin:0 0 1.1rem; }
 /* The pane's own scroll: the head is a line of the pane (see .ibread-head) and
    the thread is what scrolls, so the two are siblings rather than one inside the
    other. The scroll box is what carries the height — `flex:1 1 auto` with
    `min-height:0`, the same pair the list's wrapper uses. */
-.ibreadwrap { flex:1 1 auto; min-height:0; overflow:auto; scrollbar-gutter: auto; }
 
 /* A thread opened by the reading pane's popup action is the reading pane itself
    (see ThreadPane) in a window of its own: no inbox columns and no site nav. The
@@ -551,15 +450,6 @@
    wide is a reader asking for a wide thread, not for a column with margins. The cap
    only ever showed above 928px, which is why it outlived the padding it was drawn
    with. */
-.thread-popup { height:100vh; display:flex; flex-direction:column;
-  /* The pane keeps the insets it has beside a list, at every width of this window.
-     Those are the split's, and the split is what defines the divider width the
-     pane's head is painted from (see .ibsplit); a popup has no split, so the width
-     is named here with the split's own sum rather than left undefined — which is
-     what the head's own rule asks for, and what keeps the subject and the Close
-     control inset the way the messages under them are. */
-  --divider:calc(.45rem + .55rem / 2); }
-.thread-popup > .ibread { display:flex; flex:1 1 auto; flex-direction:column; min-height:0; }
 /* The pane's two insets, at every width. The split's block gives them to the pane
    when both columns fit (≥60rem), and this window is 900px by default — under it.
    But that block is asking whether the *page* has room for a list beside the pane,
@@ -570,25 +460,15 @@
    nearer the wall than they do. Same numbers, one source: the head keeps its own
    `.7rem` plus the pane's divider offset, and the stream keeps the page's gutter
    off both walls. */
-.thread-popup .ibread-head { padding:.5rem calc(.7rem + var(--divider)); }
-.thread-popup .ibreadwrap > .stream { padding-left:1rem; padding-right:1rem; }
-.thread-popup .ibread-head { flex:none; }
-.thread-popup .ibreadwrap { min-height:0; }
 /* The pane's way back is the way out here: the list "← List" returns to is the
    window behind this one, so the popup labels that control Close and closes.
    Where the pane hides it — both columns fit, so the list is already on screen — a
    popup has no list at any width, so it stays. */
-.thread-popup .ibback { display:inline-block; }
 /* The one thing the popup says without a pane: an address that names no thread
    still has to say so (see router.tsx). Read like the pane's own empty line, and
    set in from the walls by the thread's own gutter so the two line up. */
-.thread-popup > p { margin:.6rem 1.25rem 0; font-size:.78rem; color:var(--muted); }
 /* No `scroll-margin-top` any more: the head is not over the thread's scroll (see
    .ibread-head), so a landed message has nothing to be landed below. */
-.ibread .selnote { margin:.7rem .8rem 0; /* The pane is a column, and .selnote is written to fill a row of the search
-   panel (flex:1 1 100%). Loose in the pane it grew to a share of the height:
-   the empty line under the head stood as a band instead of a line. */
-  flex:none; }
 @media (min-width:60rem) {
   /* The app is one window: the nav, and under it the two panels, which scroll
      inside themselves. **`height`, not `min-height`** — a minimum lets the shell
@@ -639,11 +519,6 @@
      rather than by where it is (see SplitPane): the panel's edge is no longer
      under the pointer, so a fixed offset would jump on the first move. `row-gap`
      keeps the base rule's `.9rem`, which is the stacked layout's spacing. */
-  .ibsplit { --divider:calc(.45rem + .55rem / 2);
-    grid-template-columns:var(--listw, minmax(15rem, 24rem)) var(--divider) minmax(0, 1fr);
-    column-gap:0;
-    align-items:stretch; flex:1 1 auto; min-height:0; }
-  .ibdrag { display:block; }
   /* Both columns are the height of the window's remainder and scroll themselves,
      so a long list runs past a thread that keeps its heading — a mail client, not
      a page that grows until the reader loses where they were. The list's box
@@ -653,17 +528,11 @@
      button *plus* the list. Both claiming the full height pushed the list 22px
      past the window, which the body's overflow:hidden then cut off — a column,
      not two things each taking 100%, so the list gets what the button leaves. */
-  .ibcol, .ibread { min-height:0; height:100%; }
-  .ibcol { padding-left:.8rem; }
   /* Both scrollers reserve their scrollbar, whether or not it is there. A gutter
      that appears as the list grows past one screen takes ~15px off every row the
      moment it arrives — the timestamps jump left and the subject lines rewrap,
      which reads as the list changing under the pointer. `stable` keeps the gap
      reserved, so the first scroll and the fifth look the same. */
-  .iblistwrap { flex:1 1 auto; min-height:0; overflow-y:auto;
-    scrollbar-gutter: stable;
-    border:1px solid var(--line); border-radius:9px; background:var(--card); }
-  .iblistwrap .iblist { border:0; border-radius:0; background:none; }
   /* The search's list is the same box as the inbox's once it is in the wrapper:
      the wrapper is the edge, and the list inside it is rows and nothing else.
      `margin:0` because the standalone list carried the space the form used to
@@ -691,7 +560,6 @@
      Nothing here for the stacked layout below: by then the list *is* the page, and
      a card against the window with no margin at all is not a card. */
   .wrap.ibwrap, .wrap.selwrap { padding-left:0; padding-right:0; }
-  .ibread { display:flex; flex-direction:column; }
   /* The scroll section's padding, the same on both sides: the thread is a column of
      cards inside one box, and an inset that differs by side reads as the content
      having moved rather than as the box having walls. One number, so it is the
@@ -699,7 +567,6 @@
      used to be before it moved in here. The head's own insets are not this number
      (`.7rem` of its strip, plus the divider on the left): the strip keeps the
      subject and the controls where they have always been. */
-  .ibreadwrap > .stream { padding-left:1rem; padding-right:1rem; }
   /* Compose has no stream to carry the reader's horizontal gutter, so give its
      card the same inset the reply box gets from its stream. */
   .compose-panel { padding-left:1.25rem; padding-right:1.25rem; }
@@ -709,7 +576,6 @@
      the two edges of the box, and the subject and the verbs keep the places they
      have always had. (The scroll section's padding is the page's gutter, a little
      smaller: the thread's cards are not the strip's text.) */
-  .ibread-head { padding:.5rem calc(.7rem + var(--divider)); }
 }
 @media (max-width:59.99rem) {
   .ibsplit.has-choice .ibcol { display:none; }

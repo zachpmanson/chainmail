@@ -152,7 +152,7 @@ export function FolderPicker({
               <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
                 Open {current || "All mail"}{currentAccountId && accountName ? ` (${accountName})` : ""} by default
               </span>
-              <span className="ibfmark" aria-hidden="true">{isDefault ? <CheckIcon /> : null}</span>
+              <span className="ibfmark flex-[0_0_.8rem] text-right font-bold text-accent" aria-hidden="true">{isDefault ? <CheckIcon /> : null}</span>
             </Button>
           ) : null}
           <Button

@@ -22,7 +22,7 @@ export function ThreadPopup({ rootExtId }: { rootExtId: string }) {
   const summary = chain.data?.summary;
 
   return (
-    <main className="thread-popup">
+    <main className="thread-popup flex h-screen flex-col [--divider:calc(.45rem+.55rem/2)] [&_.ibread]:flex [&_.ibread]:flex-1 [&_.ibread]:flex-col [&_.ibread]:min-h-0 [&_.ibread-head]:flex-none [&_.ibreadwrap]:min-h-0 [&>p]:mx-5 [&>p]:mt-[.6rem] [&>p]:text-[.78rem] [&>p]:text-muted">
       <ThreadPane
         thread={{
           rootExtId,
