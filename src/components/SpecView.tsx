@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { Timeline as Spec } from "../lib/spec";
+import { Button } from "./controls";
 
 /**
  * Avatars are base64 images that dwarf everything else in the document, so the
@@ -40,12 +41,12 @@ export function SpecView({ spec, onClose }: { spec: Spec; onClose: () => void })
           {spec.messages.length - notes} messages · {notes} notices ·{" "}
           {(bytes / 1024).toFixed(0)} KB · images abbreviated for display
         </span>
-        <button className="tbtn" type="button" onClick={copy}>
+        <Button className="tbtn" type="button" onClick={copy}>
           {copied ? "copied" : "copy"}
-        </button>
-        <button className="tbtn" type="button" onClick={onClose}>
+        </Button>
+        <Button className="tbtn" type="button" onClick={onClose}>
           close
-        </button>
+        </Button>
       </div>
       <pre className="specpre" tabIndex={0}>
         {shown}

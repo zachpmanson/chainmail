@@ -3,6 +3,7 @@ import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { MagnifyingGlassIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { $api, type SearchMode } from "../lib/api";
 import { NavPerson } from "./NavPerson";
+import { Button, IconButton, SelectInput, TextInput } from "./controls";
 
 /** The default-first order is what the dropdown shows: hybrid is the default
  *  search style — lexical and semantic fused — and the order says so. It came
@@ -225,7 +226,7 @@ export function NavSearch() {
           run the very search it is here to throw away — and the panel would shut
           on that blur, taking the button with it before the click arrived. */}
       {open ? (
-        <button
+        <IconButton
           type="button"
           className="navcancel"
           title="Clear the search and shut the panel — Escape"
@@ -240,7 +241,7 @@ export function NavSearch() {
               12px it was, since it is part of the box rather than a control in the
               nav. */}
           <XMarkIcon width={18} height={18} aria-hidden="true" />
-        </button>
+        </IconButton>
       ) : null}
       <form
         className={open ? "navsearch open" : "navsearch"}
@@ -276,7 +277,7 @@ export function NavSearch() {
       {/* A magnifier rather than nothing: an empty box at the end of a nav is a
           box with no label, and this is the one glyph that says what it takes. */}
       <MagnifyingGlassIcon width={12} height={12} aria-hidden="true" />
-      <input
+      <TextInput
         className="navq"
         value={shown.q}
         onChange={(ev) => {
@@ -312,7 +313,7 @@ export function NavSearch() {
               more thing between the reader and the field. */}
           <label className="navopt">
             <span>Mode</span>
-            <select
+            <SelectInput
               value={shown.mode}
               onChange={(ev) => {
                 const mode = ev.target.value as SearchMode;
@@ -328,7 +329,7 @@ export function NavSearch() {
                   {m}
                 </option>
               ))}
-            </select>
+            </SelectInput>
           </label>
           <label className="navopt">
             <span>Person</span>
@@ -362,7 +363,7 @@ export function NavSearch() {
           </label>
           <label className="navopt">
             <span>Gmail account</span>
-            <select
+            <SelectInput
               aria-label="Gmail account"
               value={shown.accountId}
               onChange={(ev) => {
@@ -377,7 +378,7 @@ export function NavSearch() {
                   {account.email || account.displayName}
                 </option>
               ))}
-            </select>
+            </SelectInput>
           </label>
           <label className="navopt">
             <span>Since</span>
@@ -389,7 +390,7 @@ export function NavSearch() {
                 no second opinion about what a date looks like. No placeholder
                 either: the field draws its own format, and a `YYYY-MM-DD` beside
                 it would be a second answer to the same question. */}
-            <input
+            <TextInput
               className="navsince"
               type="date"
               value={shown.since}
@@ -407,9 +408,9 @@ export function NavSearch() {
           </label>
           {/* The way in for anyone not pressing Enter, and what makes Enter work
               at all: a form submits on Enter by way of its submit button. */}
-          <button type="submit" disabled={!asks(shown)}>
+          <Button type="submit" variant="primary" disabled={!asks(shown)}>
             Search
-          </button>
+          </Button>
         </span>
       ) : null}
       </form>

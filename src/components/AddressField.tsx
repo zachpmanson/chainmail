@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
+import { IconButton } from "./controls";
 
 /**
  * The address field: one control that builds a list of addresses — the mechanism a
@@ -93,7 +94,7 @@ function Chip({ who, remove, disabled }: {
   return (
     <span className="addrchip" title={words}>
       <span className="addrname">{words}</span>
-      <button
+      <IconButton
         type="button"
         className="addrx"
         disabled={disabled}
@@ -102,7 +103,7 @@ function Chip({ who, remove, disabled }: {
         aria-label={`remove ${words}`}
       >
         <XMarkIcon width={10} height={10} aria-hidden="true" />
-      </button>
+      </IconButton>
     </span>
   );
 }
