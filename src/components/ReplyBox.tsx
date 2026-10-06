@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useSearch } from "@tanstack/react-router";
 import { ArrowUturnLeftIcon } from "@heroicons/react/24/outline";
 import { $api, type CorpusEntry, type SendResponse } from "../lib/api";
 import { dismissToast, pushToast } from "../lib/toasts";
@@ -183,8 +184,11 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
   aimed: number;
 }) {
   const queryClient = useQueryClient();
-  const [accountId, setAccountId] = useState("");
+  const routeAccountId = useSearch({ from: "/" }).accountId;
+  const [accountId, setAccountId] = useState(routeAccountId ?? "");
   const accounts = $api.useQuery("get", "/auth/status", {});
+  const connectedAccounts = (accounts.data?.accounts ?? []).filter((account) => account.signedIn);
+  const displayedAccountId = accountId || (connectedAccounts.length === 1 ? connectedAccounts[0]?.id ?? "" : "");
   // What the reader has written, in their own words: plain text, and no quote of
   // the message being answered — that is added on the way out, so the reader is
   // never editing around text they did not write.
@@ -207,8 +211,8 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
   const [cc, setCc] = useState<Address[]>([]);
   const [toTouched, setToTouched] = useState(false);
   const [ccTouched, setCcTouched] = useState(false);
-  // Whether the recipient autocomplete editors are on screen. They start off:
-  // before this the compose screen opened on two fields of chips a reader mostly
+  // Whether the recipient autocomplete editors and sender selector are on screen.
+  // They start off: before this the compose screen opened on fields a reader mostly
   // did not want to arrange, and the audience they already had was harder to read
   // than the one the message header prints. Nothing is edited until the reader
   // says so, and the summary line is what says who the reply reaches.
@@ -228,13 +232,13 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
   // take again rather than something to be carried across.
   useEffect(() => {
     setPlan(null);
-    setAccountId("");
+    setAccountId(routeAccountId ?? "");
     setTo([]);
     setCc([]);
     setToTouched(false);
     setCcTouched(false);
     setEditing(false);
-  }, [answer.extId]);
+  }, [answer.extId, routeAccountId]);
 
   // A press on a message's own answer control is an intent to write, and the box
   // sits at the bottom of a thread the message may be screens away from — so the
@@ -368,12 +372,13 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
           all,
           html,
           confirm: false,
-          ...(accountId ? { accountId } : {}),
+          ...(displayedAccountId ? { accountId: displayedAccountId } : {}),
           ...(toTouched ? { to: to.map((a) => a.address) } : {}),
           ...(ccTouched ? { cc: cc.map((a) => a.address) } : {}),
         },
       });
       setPlan(res);
+      if (res.accountId) setAccountId(res.accountId);
       // While editing, the mailbox's response replaces any estimates from the
       // corpus with the exact addresses it will use. The preview itself is read-only.
       if (res.toRecipients) setTo(res.toRecipients);
@@ -446,15 +451,17 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
 
   const editor = (
     <>
-    <div className="replyrecipient compose-account">
-      <span className="replylabel">from:</span>
-      <select className="replyfrom" aria-label="From" value={accountId} disabled={busy} onChange={(event) => { setAccountId(event.target.value); setPlan(null); }}>
-        <option value="">Choose automatically (or select for this message)</option>
-        {(accounts.data?.accounts ?? []).filter((account) => account.signedIn).map((account) => <option key={account.id} value={account.id}>{account.displayName}{account.email ? ` (${account.email})` : ""}</option>)}
-      </select>
-    </div>
     <ComposerFields
       mode="reply"
+      from={(
+        <div className="replyrecipient compose-account">
+          <span className="replylabel">from:</span>
+          <select className="replyfrom" aria-label="From" value={displayedAccountId} disabled={busy} onChange={(event) => { setAccountId(event.target.value); setPlan(null); }}>
+            {!displayedAccountId ? <option value="">Choose account</option> : null}
+            {connectedAccounts.map((account) => <option key={account.id} value={account.id}>{account.displayName}{account.email ? ` (${account.email})` : ""}</option>)}
+          </select>
+        </div>
+      )}
       to={to}
       onToChange={changeTo}
       cc={cc}

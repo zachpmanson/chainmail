@@ -81,15 +81,17 @@ export function ComposeBox({ onClose }: Props) {
   const isPreview = preview !== null && result === null;
   const editor = (
     <form ref={form} onSubmit={prepare}>
-      <div className="replyrecipient compose-account">
-        <span className="replylabel">from:</span>
-        <select className="replyfrom" aria-label="From" value={accountId} disabled={busy} onChange={(event) => { setAccountId(event.target.value); setPreview(null); }}>
-          <option value="">Choose account</option>
-          {(accounts.data?.accounts ?? []).filter((account) => account.signedIn).map((account) => <option key={account.id} value={account.id}>{account.displayName}{account.email ? ` (${account.email})` : ""}</option>)}
-        </select>
-      </div>
       <ComposerFields
         mode="compose"
+        from={(
+          <div className="replyrecipient compose-account">
+            <span className="replylabel">from:</span>
+            <select className="replyfrom" aria-label="From" value={accountId} disabled={busy} onChange={(event) => { setAccountId(event.target.value); setPreview(null); }}>
+              <option value="">Choose account</option>
+              {(accounts.data?.accounts ?? []).filter((account) => account.signedIn).map((account) => <option key={account.id} value={account.id}>{account.displayName}{account.email ? ` (${account.email})` : ""}</option>)}
+            </select>
+          </div>
+        )}
         to={recipients}
         onToChange={setRecipients}
         cc={cc}
