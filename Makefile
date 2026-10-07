@@ -20,7 +20,7 @@ SINCE       ?= 2026-08-01
 ME          ?= $(CHAINMAIL_ME)
 export CHAINMAIL_CORPUS = $(CORPUS)
 
-.PHONY: help install test check format format-check slurp slurp-mail slurp-slack settle embed \
+.PHONY: dev build typecheck clean format help install test check format-check slurp slurp-mail slurp-slack settle embed \
         backup page serve api doctor
 
 help:
@@ -34,6 +34,11 @@ help:
 	@printf '  make doctor         what is in the corpus and what is missing\n'
 	@printf '  make status         probe each backend, write the connection snapshot\n'
 	@printf '\nBuild\n'
+	@printf '  make dev            start the frontend dev server\n'
+	@printf '  make build          build Go packages and the frontend\n'
+	@printf '  make typecheck      go vet and TypeScript typecheck\n'
+	@printf '  make clean          remove generated build artifacts\n'
+	@printf '  make format         format Go and TypeScript/TSX\n'
 	@printf '  make install        build the corpus binary to %s\n' '$(BIN)'
 	@printf '  make test           go + frontend tests\n'
 	@printf '  make check          test, lint, formatting, vet, gofmt, typecheck\n'
@@ -44,6 +49,20 @@ help:
 	@printf '  make serve          vite dev server\n'
 	@printf '  make api            the read-only API on 127.0.0.1:%s\n' '$(PORT)'
 	@printf '\nOverride CORPUS, SLACK, SINCE, BIN on the command line.\n'
+
+dev: serve
+
+build:
+	go build ./...
+	npm run build
+
+typecheck:
+	go vet ./...
+	npm run typecheck
+
+clean:
+	go clean ./...
+	rm -rf dist cmd/server/dist
 
 install:
 	go build -o $(BIN) ./cmd/corpus
@@ -62,6 +81,7 @@ check: test
 	npm run typecheck
 
 format:
+	gofmt -w internal cmd
 	npm run format
 
 format-check:
