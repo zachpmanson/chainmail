@@ -229,8 +229,8 @@
      glyph in a transparent box that lifts to the accent when it is pointed at.
      This is the shape of the ordinary icon buttons in this app, down to the
      radius, the hairline that arrives on hover and their 18px glyph. Mail actions
-     (archive, delete and read-state) are deliberately larger at 24px, because
-     they are the primary controls on the thread. .ibread-head .ibicon and
+     (archive, delete and read-state) fill their 32px hit area, because they are
+     the primary controls on the thread. .ibread-head .ibicon and
      .ibbuild .ibicon come out 29.6x28 with the ordinary size, so these two do as
      well. A smaller size than the strip's reads as small type rather than as
      controls, which is the opposite of what the nav's two presses are. */

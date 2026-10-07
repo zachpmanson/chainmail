@@ -259,7 +259,7 @@ export function ThreadPane({
             />
             <IconButton
               type="button"
-              className="ibicon inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent p-[.25rem_.3rem] text-muted hover:border-line hover:bg-card hover:text-accent [&_svg]:block [&_svg]:size-6"
+              className="ibicon inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent p-[.25rem_.3rem] text-muted hover:border-line hover:bg-card hover:text-accent [&_svg]:block [&_svg]:size-8 [&_svg]:shrink-0"
               aria-label="Archive"
               title="Archive"
               disabled={act.isPending}
@@ -277,7 +277,7 @@ export function ThreadPane({
             </IconButton>
             <IconButton
               type="button"
-              className="ibicon inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent p-[.25rem_.3rem] text-muted hover:border-line hover:bg-card hover:text-accent [&_svg]:block [&_svg]:size-6"
+              className="ibicon inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent p-[.25rem_.3rem] text-muted hover:border-line hover:bg-card hover:text-accent [&_svg]:block [&_svg]:size-8 [&_svg]:shrink-0"
               aria-label="Delete"
               title="Delete"
               disabled={act.isPending}
@@ -316,7 +316,7 @@ export function ThreadPane({
             {thread.unread !== undefined ? (
               <Button
                 type="button"
-                className={`ibicon ibread-read inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent p-[.25rem_.3rem] text-muted hover:border-line hover:bg-card hover:text-accent [&_svg]:block [&_svg]:size-6 [&_circle]:fill-none [&_circle]:stroke-current [&_circle]:stroke-[1.6]${thread.unread > 0 ? " unread [&_circle]:fill-current [&_circle]:stroke-0" : ""}`}
+                className={`ibicon ibread-read inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent p-[.25rem_.3rem] text-muted hover:border-line hover:bg-card hover:text-accent [&_svg]:block [&_svg]:size-8 [&_svg]:shrink-0 [&_circle]:fill-none [&_circle]:stroke-current [&_circle]:stroke-[1.6]${thread.unread > 0 ? " unread [&_circle]:fill-current [&_circle]:stroke-0" : ""}`}
                 disabled={read.isPending}
                 aria-label={thread.unread > 0 ? "Mark read" : "Mark unread"}
                 aria-pressed={thread.unread > 0}
@@ -342,13 +342,13 @@ export function ThreadPane({
                     glyphs in the same button, and the read state is a mark, not a
                     fourth shape of control. */}
                 <svg
-                  width="24"
-                  height="24"
+                  width="32"
+                  height="32"
                   viewBox="0 0 16 16"
                   aria-hidden="true"
                   focusable="false"
                 >
-                  <circle cx="8" cy="8" r="5.2" />
+                  <circle cx="8" cy="8" r="6.4" />
                 </svg>
               </Button>
             ) : null}
