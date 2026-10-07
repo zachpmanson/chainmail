@@ -28,7 +28,7 @@ import NavRefresh from "./components/navigation/NavRefresh";
 import AutoRefresh from "./components/navigation/AutoRefresh";
 import NavSearch from "./components/navigation/NavSearch";
 import ComposeProvider from "./components/compose/ComposeProvider";
-import { Button } from "./components/ui/controls";
+import IconButton from "./components/ui/IconButton";
 import type { SearchMode } from "./lib/api/api";
 
 /** The server answers every non-/v1/ path with the shell; all routing is client-side. */
@@ -116,11 +116,11 @@ function RootLayout() {
     <>
       {!popup ? (
         <>
-          <header className="sitehead max-w-none m-0 flex flex-wrap items-center border-b border-line px-5 pt-4 pb-3 text-[.86rem] text-muted">
+          <header className="sitehead max-w-none m-0 flex flex-wrap items-center border-b border-line px-5 pt-4 pb-3 text-sm text-muted">
             <nav className="sitenav relative flex min-w-0 flex-1 flex-nowrap items-center overflow-x-auto overflow-y-hidden h-9">
               <Link
                 to="/"
-                className="text-fg text-[.92rem] font-bold tracking-[-.01em] no-underline hover:text-accent"
+                className="text-fg text-sm font-bold tracking-[-.01em] no-underline hover:text-accent"
               >
                 chainmail
               </Link>
@@ -135,16 +135,9 @@ function RootLayout() {
                 <DeployStamp />
                 <AutoRefresh />
                 <NavRefresh />
-                <Button
-                  type="button"
-                  variant="quiet"
-                  className="size-8 shrink-0 p-1"
-                  aria-label="Compose"
-                  title="Compose"
-                  onClick={() => setComposing(true)}
-                >
-                  <PencilSquareIcon className="block size-[18px]" aria-hidden="true" />
-                </Button>
+                <IconButton aria-label="Compose" title="Compose" onClick={() => setComposing(true)}>
+                  <PencilSquareIcon aria-hidden="true" />
+                </IconButton>
                 <NavSearch />
               </span>
             </nav>

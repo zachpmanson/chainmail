@@ -9,7 +9,7 @@ export default function InlineAlert({
 }) {
   return (
     <p
-      className={`rounded-md border border-line border-l-[3px] border-l-red-700 bg-card px-3 py-2 text-[.82rem] ${className}`}
+      className={`rounded-md border border-line border-l-[3px] border-l-red-700 bg-card px-3 py-2 text-sm ${className}`}
       role="alert"
     >
       {children}

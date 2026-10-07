@@ -15,11 +15,11 @@ export default function SpecsView() {
       {list.isError ? <InlineAlert>{errText(list.error)}</InlineAlert> : null}
 
       {list.isFetching && !list.data ? (
-        <p className="my-1.5 mb-2 text-[.74rem] text-muted">Reading the saved pages…</p>
+        <p className="my-1.5 mb-2 text-xs text-muted">Reading the saved pages…</p>
       ) : null}
 
       {list.data && list.data.specs.length === 0 ? (
-        <p className="my-1.5 mb-2 text-[.74rem] text-muted">
+        <p className="my-1.5 mb-2 text-xs text-muted">
           No saved pages yet — build one from a <Link to="/">search</Link>, and it appears here.
         </p>
       ) : null}
@@ -30,12 +30,12 @@ export default function SpecsView() {
             className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line py-2"
             key={s.name}
           >
-            <span className="min-w-32 text-[.8rem] font-semibold">
+            <span className="min-w-32 text-sm font-semibold">
               <Link to="/view/$name" params={{ name: s.name }}>
                 {s.title || s.name}
               </Link>
             </span>
-            <span className="flex-[1_1_12rem] break-words text-[.72rem] text-muted">
+            <span className="flex-[1_1_12rem] wrap-break-word text-xs text-muted">
               {when(s.savedAt)}
             </span>
           </li>

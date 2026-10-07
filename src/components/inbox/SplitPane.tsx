@@ -105,7 +105,7 @@ export default function SplitPane({
 
   return (
     <div
-      className={`ibsplit grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 min-[60rem]:grid-cols-[var(--listw,minmax(15rem,24rem))_.75rem_minmax(0,1fr)] min-[60rem]:items-stretch min-[60rem]:min-h-0 min-[60rem]:flex-1${hasChoice ? " has-choice" : ""}${dragging ? " dragging" : ""}`}
+      className={`ibsplit grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 min-[60rem]:gap-x-0 min-[60rem]:grid-cols-[var(--listw,minmax(15rem,24rem))_.5rem_minmax(0,1fr)] min-[60rem]:items-stretch min-[60rem]:min-h-0 min-[60rem]:flex-1${hasChoice ? " has-choice" : ""}${dragging ? " dragging" : ""}`}
       ref={split}
       style={width === null ? undefined : ({ "--listw": `${width}px` } as CSSProperties)}
     >

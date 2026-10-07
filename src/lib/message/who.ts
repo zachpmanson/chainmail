@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { $api, type CorpusEntry } from "../api/api";
+import { whenOf } from "../ui/stamp";
 
 /** Email identities only; the corpus also keeps Slack uids and display names. */
 export function addressesOf(identities: readonly string[] | undefined): string[] {
@@ -39,6 +40,11 @@ export function senderTitle(e: CorpusEntry): string {
   }
   if (!name) return e.fromEmail;
   return `${name} <${e.fromEmail}>`;
+}
+
+/** Shared by ReplyLink and the reply box so both state the same clock as the bubble. */
+export function wordsOf(e: CorpusEntry): { who: string; whoTitle: string; when: string } {
+  return { who: e.author ?? "", whoTitle: senderTitle(e), when: whenOf(e) };
 }
 
 export function usePersonAddresses(): Map<number, string[]> {

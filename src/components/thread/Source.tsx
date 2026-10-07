@@ -25,7 +25,7 @@ function SourceIds({
             <span className="whitespace-nowrap">
               {anchor ? (
                 <a
-                  className="border-b border-dotted border-current text-inherit no-underline hover:text-accent"
+                  className="text-inherit no-underline hover:text-accent hover:underline"
                   href={`#${anchor}`}
                   title="The message this was unspooled from, on this page"
                 >
@@ -35,7 +35,7 @@ function SourceIds({
                 s.text
               ) : (
                 <a
-                  className="border-b border-dotted border-current text-inherit no-underline hover:text-accent"
+                  className="text-inherit no-underline hover:text-accent hover:underline"
                   href={gmailMessageURL(s.gmailId)}
                   target="_blank"
                   rel="noopener"
@@ -62,11 +62,11 @@ export default function Source({
   if (!source) return null;
   const p = provenance(source);
   if (p.kind === "prose")
-    return <span className="ml-auto font-mono text-[.64rem] text-muted">{p.text}</span>;
+    return <span className="ml-auto font-mono text-2xs text-muted">{p.text}</span>;
   // Prose never reaches here, so a non-empty prefix means the ids were unspooled.
   const unspooled = p.prefix !== "";
   return (
-    <span className="ml-auto font-mono text-[.64rem] text-muted">
+    <span className="ml-auto font-mono text-2xs text-muted">
       {p.prefix}
       <SourceIds ids={p.ids} unspooled={unspooled} anchorByGmail={anchorByGmail} />
     </span>

@@ -7,14 +7,14 @@ export default function ToastHost() {
   if (toasts.length === 0) return null;
   return (
     <div
-      className="fixed right-[.9rem] bottom-[.9rem] z-[80] flex max-w-[min(26rem,calc(100vw-1.8rem))] flex-col items-end gap-1.5 pointer-events-none"
+      className="fixed right-[.9rem] bottom-[.9rem] z-80 flex max-w-[min(26rem,calc(100vw-1.8rem))] flex-col items-end gap-1.5 pointer-events-none"
       role="status"
       aria-live="polite"
     >
       {toasts.map((t) => (
         <div
           key={t.id}
-          className={`toast flex items-start gap-2 pointer-events-auto rounded-[7px] border border-line border-l-[3px] bg-card px-2 py-2 pl-3 text-[.78rem] leading-[1.35] text-fg shadow-[0_6px_20px_rgba(0,0,0,.22)]${t.kind === "fail" ? " border-red-700" : ""}`}
+          className={`toast flex items-start gap-2 pointer-events-auto rounded-md border border-line border-l-[3px] bg-card p-2 pl-3 text-xs leading-snug text-fg shadow-[0_6px_20px_rgba(0,0,0,.22)]${t.kind === "fail" ? " border-red-700" : ""}`}
         >
           <span className="flex-1">{t.text}</span>
           <Button

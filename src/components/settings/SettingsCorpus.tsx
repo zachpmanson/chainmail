@@ -18,11 +18,13 @@ function CorpusStats({ stats }: { stats: Stats }) {
   return (
     <dl className="mt-0.5 grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-2">
       {rows.map(([term, definition]) => (
-        <div className="min-w-0 rounded-lg border border-line bg-bg px-3 py-3" key={term}>
-          <dt className="break-words text-[.63rem] font-bold uppercase tracking-[.07em] text-muted">
+        <div className="min-w-0 rounded-lg border border-line bg-bg p-3" key={term}>
+          <dt className="wrap-break-word text-2xs font-bold uppercase tracking-[.07em] text-muted">
             {term}
           </dt>
-          <dd className="mt-1 break-words text-base font-semibold tabular-nums">{definition}</dd>
+          <dd className="mt-1 wrap-break-word text-base font-semibold tabular-nums">
+            {definition}
+          </dd>
         </div>
       ))}
     </dl>
@@ -42,7 +44,7 @@ export default function SettingsCorpus({
     >
       {stats.isError ? (
         <p
-          className="mt-3 rounded-sm border-l-[3px] border-l-red-700 bg-bg px-3 py-2 text-[.76rem] leading-[1.45] text-fg break-words mb-0"
+          className="mt-3 rounded-sm border-l-[3px] border-l-red-700 bg-bg px-3 py-2 text-xs leading-normal text-fg wrap-break-word mb-0"
           role="alert"
         >
           {errText(stats.error)}
@@ -50,7 +52,7 @@ export default function SettingsCorpus({
       ) : stats.data ? (
         <CorpusStats stats={stats.data} />
       ) : (
-        <p className="mt-3 mb-0 text-[.76rem] leading-[1.45] text-muted">Reading the corpus…</p>
+        <p className="mt-3 mb-0 text-xs leading-normal text-muted">Reading the corpus…</p>
       )}
     </SettingsSection>
   );

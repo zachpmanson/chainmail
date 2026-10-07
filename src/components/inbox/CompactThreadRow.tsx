@@ -2,7 +2,7 @@ import { useRef, type ReactNode } from "react";
 import { type ChainHit } from "../../lib/api/api";
 import { newest } from "../../lib/inbox/newest";
 import { whenShort } from "../../lib/ui/stamp";
-import { Button } from "../ui/controls";
+import IconButton from "../ui/IconButton";
 import { useMailAction } from "../../lib/inbox/mailActions";
 import ArchiveGlyph from "./ArchiveGlyph";
 import { refusal, sentence, VERBS, SAID_MS } from "./MailVerbs";
@@ -46,12 +46,11 @@ export default function CompactThreadRow({
       thread={thread}
       checked={checked}
       current={current}
-      openClassName="grid-cols-[minmax(7rem,1fr)_minmax(0,2fr)_auto] items-center gap-y-0 py-2 pl-3 pr-9"
+      openClassName="items-baseline gap-3 pr-9"
       aside={
-        <Button
-          type="button"
-          density="compact"
-          className="absolute right-8 top-1/2 z-[1] hidden h-7 w-[1.875rem] -translate-y-1/2 items-center justify-center rounded-md border border-transparent bg-card p-1 text-muted group-hover:inline-flex hover:border-line hover:text-accent [&_svg]:size-5"
+        <IconButton
+          // opacity, not `invisible`, so it stays reachable by keyboard.
+          className="absolute top-1/2 right-8 z-[1] -translate-y-1/2 pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:opacity-100"
           aria-label={`Archive ${subject}`}
           title="Archive"
           disabled={archive.isPending}
@@ -60,37 +59,37 @@ export default function CompactThreadRow({
           }
         >
           <ArchiveGlyph />
-        </Button>
+        </IconButton>
       }
       onToggle={onToggle}
       onOpen={onOpen}
     >
       <span
-        className={`[grid-area:1/1] min-w-0 wrap-anywhere whitespace-nowrap overflow-hidden text-ellipsis text-[.88rem] ${thread.unread > 0 ? "[font-weight:750]" : "font-normal"}`}
+        className={`min-w-28 flex-1 truncate text-sm ${thread.unread > 0 ? "font-[750]" : "font-normal"}`}
         title={last?.person || "unknown sender"}
       >
         {last?.person || "unknown sender"}
       </span>
-      <span className="[grid-area:1/2] mt-0 min-w-0 gap-2">
-        <span
-          className={`min-w-0 flex-1 whitespace-nowrap overflow-hidden text-ellipsis text-[.84rem] ${thread.unread > 0 ? "font-semibold" : "font-normal"}`}
-          title={`${subject}${last?.snippet ? ` — ${last.snippet}` : ""}`}
-        >
-          {subject}
+      <span className="flex min-w-0 flex-2 flex-col">
+        <span className="flex items-center gap-2">
+          <span
+            className={`min-w-0 flex-1 truncate text-sm ${thread.unread > 0 ? "font-semibold" : "font-normal"}`}
+            title={`${subject}${last?.snippet ? ` — ${last.snippet}` : ""}`}
+          >
+            {subject}
+          </span>
+          <ThreadCounts
+            people={thread.people}
+            entries={thread.entries}
+            attachments={thread.attachments}
+            className="group-hover:invisible"
+          />
         </span>
-        <ThreadCounts
-          people={thread.people}
-          entries={thread.entries}
-          attachments={thread.attachments}
-          className="group-hover:invisible"
-        />
+        {meta ? (
+          <span className="flex min-w-0 flex-wrap gap-2 text-xs text-muted">{meta}</span>
+        ) : null}
       </span>
-      {meta ? (
-        <span className="[grid-area:2/2] flex min-w-0 flex-wrap gap-2 text-[.7rem] text-muted">
-          {meta}
-        </span>
-      ) : null}
-      <span className="[grid-area:1/3] mr-0 justify-self-end whitespace-nowrap text-[.72rem] tabular-nums text-muted group-hover:invisible">
+      <span className="shrink-0 whitespace-nowrap text-xs tabular-nums text-muted group-hover:invisible">
         {whenShort(last?.ts ?? thread.last)}
       </span>
     </ThreadRow>

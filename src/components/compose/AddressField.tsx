@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState } from "react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
+import { useMemo, useRef, useState } from "react";
 import { Button } from "../ui/controls";
 
 /** Text that matches no suggestion still becomes a chip once it looks like an
@@ -37,14 +37,14 @@ function Chip({ who, remove, disabled }: { who: Address; remove: () => void; dis
   const words = addressWords(who);
   return (
     <span
-      className="inline-flex max-w-full items-center gap-1 rounded-[10px] border border-line bg-card px-1.5 py-px text-[.72rem]"
+      className="inline-flex max-w-full items-center gap-1 rounded-lg border border-line bg-card px-1.5 py-px text-xs"
       title={words}
     >
-      <span className="[overflow-wrap:anywhere]">{words}</span>
+      <span className="wrap-anywhere">{words}</span>
       <Button
         type="button"
         variant="quiet"
-        className="!size-auto !min-h-0 shrink-0 rounded px-0.5 py-0.5 text-muted hover:bg-bg hover:text-accent disabled:cursor-default disabled:opacity-[.55] disabled:hover:bg-transparent disabled:hover:text-muted"
+        className="size-auto! min-h-0! shrink-0 rounded p-0.5 text-muted hover:bg-bg hover:text-accent disabled:cursor-default disabled:opacity-[.55] disabled:hover:bg-transparent disabled:hover:text-muted"
         disabled={disabled}
         onClick={remove}
         title={`Take ${who.address} off this reply.`}
@@ -183,7 +183,7 @@ export default function AddressField({
       ))}
       <input
         ref={input}
-        className="min-w-12 flex-[1_1_7rem] border-0 bg-transparent px-0 py-0.5 text-[.72rem] text-fg outline-none placeholder:text-muted"
+        className="min-w-12 flex-[1_1_7rem] border-0 bg-transparent px-0 py-0.5 text-xs text-fg outline-none placeholder:text-muted"
         type="text"
         role="combobox"
         aria-label={`${label} addresses`}
@@ -216,7 +216,7 @@ export default function AddressField({
             <span
               key={addressKey(a.address)}
               id={`${label}-option-${i}`}
-              className={`flex items-baseline gap-1.5 rounded py-1 px-1.5 text-[.72rem] cursor-pointer${i === active ? " bg-mine" : ""}`}
+              className={`flex items-baseline gap-1.5 rounded py-1 px-1.5 text-xs cursor-pointer${i === active ? " bg-mine" : ""}`}
               role="option"
               aria-selected={i === active}
               // Keep focus on mousedown, or the blur closes the list before the click lands.
@@ -224,11 +224,9 @@ export default function AddressField({
               onClick={() => add(a)}
               title={a.name ? `${a.name} <${a.address}>` : a.address}
             >
-              <span className="[overflow-wrap:anywhere]">{a.name ?? a.address}</span>
+              <span className="wrap-anywhere">{a.name ?? a.address}</span>
               {a.name ? (
-                <span className="text-[.68rem] text-muted [overflow-wrap:anywhere]">
-                  {a.address}
-                </span>
+                <span className="text-2xs text-muted wrap-anywhere">{a.address}</span>
               ) : null}
             </span>
           ))}
@@ -242,7 +240,7 @@ export default function AddressField({
         </span>
       ) : null}
       {refused ? (
-        <span className="basis-full px-1 py-0.5 text-[.68rem] text-red-700" role="status">
+        <span className="basis-full px-1 py-0.5 text-2xs text-red-700" role="status">
           {refused}
         </span>
       ) : null}

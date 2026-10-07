@@ -31,7 +31,7 @@ export default function OpsView() {
             id={`opstab-${t}`}
             aria-selected={t === open}
             aria-controls={`opspanel-${t}`}
-            className="min-h-0 rounded-none border-0 border-b-2 border-transparent px-3 py-2 text-[.7rem] font-bold tracking-[.08em] text-muted aria-selected:border-accent aria-selected:text-fg"
+            className="min-h-0 rounded-none border-0 border-b-2 border-transparent px-3 py-2 text-xs font-bold tracking-[.08em] text-muted aria-selected:border-accent aria-selected:text-fg"
             title={`${LABELS[t]} — what the corpus knows about them`}
             onClick={() => void navigate({ to: "/ops", search: { tab: t } })}
           >

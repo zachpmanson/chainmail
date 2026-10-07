@@ -9,31 +9,31 @@ function ServiceRow({ svc }: { svc: ServiceStatus }) {
     ok: {
       word: "logged in",
       className:
-        "inline-flex whitespace-nowrap rounded-full border border-current px-2 py-0.5 text-[.64rem] font-bold text-green-800",
+        "inline-flex whitespace-nowrap rounded-full border border-current px-2 py-0.5 text-2xs font-bold text-green-800",
     },
     "needs-auth": {
       word: "needs auth",
       className:
-        "inline-flex whitespace-nowrap rounded-full border border-current px-2 py-0.5 text-[.64rem] font-bold text-amber-700",
+        "inline-flex whitespace-nowrap rounded-full border border-current px-2 py-0.5 text-2xs font-bold text-amber-700",
     },
     down: {
       word: "down",
       className:
-        "inline-flex whitespace-nowrap rounded-full border border-current px-2 py-0.5 text-[.64rem] font-bold text-red-700",
+        "inline-flex whitespace-nowrap rounded-full border border-current px-2 py-0.5 text-2xs font-bold text-red-700",
     },
     unchecked: {
       word: "unchecked",
       className:
-        "inline-flex whitespace-nowrap rounded-full border border-current px-2 py-0.5 text-[.64rem] font-bold text-muted",
+        "inline-flex whitespace-nowrap rounded-full border border-current px-2 py-0.5 text-2xs font-bold text-muted",
     },
   };
   const badge = badges[svc.status] ?? badges.unchecked;
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2">
       <span className={badge.className}>{badge.word}</span>
-      <span className="min-w-32 text-[.8rem] font-semibold">{svc.label}</span>
+      <span className="min-w-32 text-sm font-semibold">{svc.label}</span>
       {svc.detail ? (
-        <span className="flex-[1_1_12rem] break-words text-[.72rem] text-muted">{svc.detail}</span>
+        <span className="flex-[1_1_12rem] wrap-break-word text-xs text-muted">{svc.detail}</span>
       ) : null}
     </li>
   );
@@ -58,7 +58,7 @@ export default function SettingsServices({
     >
       {status.isError ? (
         <p
-          className="mt-3 rounded-sm border-l-[3px] border-l-red-700 bg-bg px-3 py-2 text-[.76rem] leading-[1.45] text-fg break-words mb-0"
+          className="mt-3 rounded-sm border-l-[3px] border-l-red-700 bg-bg px-3 py-2 text-xs leading-normal text-fg wrap-break-word mb-0"
           role="alert"
         >
           {errText(status.error)}
@@ -66,13 +66,13 @@ export default function SettingsServices({
       ) : null}
       <ul className="mt-3 list-none border-t border-line p-0">
         {status.isPending ? (
-          <li className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2 text-[.78rem] text-muted">
+          <li className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2 text-xs text-muted">
             Checking services…
           </li>
         ) : status.data?.services.length ? (
           status.data.services.map((svc) => <ServiceRow key={svc.id} svc={svc} />)
         ) : (
-          <li className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2 text-[.78rem] text-muted">
+          <li className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2 text-xs text-muted">
             No services reported.
           </li>
         )}

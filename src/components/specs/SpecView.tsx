@@ -31,13 +31,13 @@ export default function SpecView({ spec, onClose }: { spec: Spec; onClose: () =>
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex flex-col bg-bg"
+      className="fixed inset-0 z-60 flex flex-col bg-bg"
       role="dialog"
       aria-label="Timeline spec as JSON"
     >
       <div className="flex items-center gap-2 border-b border-line bg-card px-3 py-2">
-        <b className="text-[.72rem] font-bold uppercase tracking-[.09em] text-muted">spec</b>
-        <span className="mr-auto text-[.7rem] text-muted">
+        <b className="text-xs font-bold uppercase tracking-[.09em] text-muted">spec</b>
+        <span className="mr-auto text-xs text-muted">
           {spec.messages.length - notes} messages · {notes} notices · {(bytes / 1024).toFixed(0)} KB
           · images abbreviated for display
         </span>
@@ -49,7 +49,7 @@ export default function SpecView({ spec, onClose }: { spec: Spec; onClose: () =>
         </Button>
       </div>
       <pre
-        className="m-0 flex-1 overflow-auto px-4 pt-4 pb-8 font-mono text-[.72rem] leading-[1.5] text-fg [tab-size:2] whitespace-pre"
+        className="m-0 flex-1 overflow-auto px-4 pt-4 pb-8 font-mono text-xs leading-normal text-fg tab-2 whitespace-pre"
         tabIndex={0}
       >
         {shown}

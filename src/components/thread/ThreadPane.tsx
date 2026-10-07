@@ -1,22 +1,22 @@
-import IconButton from "../ui/IconButton";
-import { Button } from "../ui/controls";
-import { useEffect, useRef } from "react";
 import { ArrowTopRightOnSquareIcon, QueueListIcon } from "@heroicons/react/24/outline";
 import { useSearch } from "@tanstack/react-router";
+import { useEffect, useRef } from "react";
 import { flushSync } from "react-dom";
 import { useMailAction, useReadAction } from "../../lib/inbox/mailActions";
-import { dismissToast, pushToast } from "../../lib/ui/toasts";
 import { usePrefs } from "../../lib/prefs/usePrefs";
 import { withTransition } from "../../lib/thread/viewTransition";
-import ThreadMessages from "./ThreadMessages";
-import type { PreviewableThread } from "./ThreadShared";
+import { dismissToast, pushToast } from "../../lib/ui/toasts";
+import ArchiveGlyph from "../inbox/ArchiveGlyph";
 import AttachmentCount from "../inbox/AttachmentCount";
 import MailCount from "../inbox/MailCount";
-import PeopleCount from "../inbox/PeopleCount";
-import MoveFolder from "../inbox/MoveFolder";
-import ArchiveGlyph from "../inbox/ArchiveGlyph";
-import TrashGlyph from "../inbox/TrashGlyph";
 import { SAID_MS, VERBS, refusal, sentence } from "../inbox/MailVerbs";
+import MoveFolder from "../inbox/MoveFolder";
+import PeopleCount from "../inbox/PeopleCount";
+import TrashGlyph from "../inbox/TrashGlyph";
+import IconButton from "../ui/IconButton";
+import { Button } from "../ui/controls";
+import ThreadMessages from "./ThreadMessages";
+import type { PreviewableThread } from "./ThreadShared";
 
 export default function ThreadPane({
   thread,
@@ -87,12 +87,12 @@ export default function ThreadPane({
             <Button
               type="button"
               density="compact"
-              className={`min-h-0 px-2 py-1 text-[.78rem] ${backLabel === "Close" ? "" : "min-[60rem]:hidden"}`}
+              className={`min-h-0 px-2 py-1 text-xs ${backLabel === "Close" ? "" : "min-[60rem]:hidden"}`}
               onClick={onClose}
             >
               {backLabel}
             </Button>
-            <span className="min-w-0 break-words text-[.86rem] font-semibold">
+            <span className="min-w-0 wrap-break-word text-sm font-semibold">
               {thread.subject || "(no subject)"}
             </span>
             <span className="ml-auto flex items-center gap-2">
@@ -219,7 +219,7 @@ export default function ThreadPane({
           </div>
         </>
       ) : (
-        <p className="mx-3 mt-3 flex-[1_1_100%] text-[.78rem] text-muted">{empty}</p>
+        <p className="mx-3 mt-3 flex-[1_1_100%] text-xs text-muted">{empty}</p>
       )}
     </aside>
   );

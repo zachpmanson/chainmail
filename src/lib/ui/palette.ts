@@ -57,3 +57,10 @@ export function readPalette(root: HTMLElement = document.documentElement): Palet
   else root.setAttribute("data-theme", was);
   return { light, dark };
 }
+
+/** The current colour scheme, honouring an explicit data-theme first. */
+export function prefersDark(doc: Document = document): boolean {
+  const theme = doc.documentElement.getAttribute("data-theme");
+  if (theme) return theme === "dark";
+  return typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches;
+}

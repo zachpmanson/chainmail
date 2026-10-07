@@ -16,6 +16,7 @@ import CompactListHeader from "./CompactListHeader";
 import CompactModeToggle from "./CompactModeToggle";
 import ComposeBox from "../compose/ComposeBox";
 import { useCompose } from "../compose/ComposeContext";
+import ThreadListScroll from "./ThreadListScroll";
 
 export default function SelectView() {
   const navigate = useNavigate();
@@ -81,13 +82,13 @@ export default function SelectView() {
   const reading: PreviewableThread | null = opened ? (picked ?? { rootExtId: opened }) : null;
 
   return (
-    <div className="wrap selwrap mx-0 w-full max-w-none px-0 pt-0 pb-0 min-[60rem]:flex min-[60rem]:flex-1 min-[60rem]:flex-col min-[60rem]:min-h-0 min-[60rem]:px-0 min-[60rem]:pt-0 min-[60rem]:pb-0">
+    <div className="wrap selwrap mx-0 w-full max-w-none p-0 min-[60rem]:flex min-[60rem]:flex-1 min-[60rem]:flex-col min-[60rem]:min-h-0">
       {results.isError ? <Failure error={results.error} /> : null}
       {results.isFetching ? (
-        <p className="mt-2 flex-[1_1_100%] text-[.78rem] text-muted">Searching…</p>
+        <p className="mt-2 flex-[1_1_100%] text-xs text-muted">Searching…</p>
       ) : null}
       {asked && !results.isFetching && !results.isError && chains.length === 0 ? (
-        <p className="mt-2 flex-[1_1_100%] text-[.78rem] text-muted">No thread matched.</p>
+        <p className="mt-2 flex-[1_1_100%] text-xs text-muted">No thread matched.</p>
       ) : null}
 
       {chains.length > 0 ? (
@@ -95,7 +96,7 @@ export default function SelectView() {
           <SplitPane
             hasChoice={composing || Boolean(opened)}
             list={
-              <div className="iblistwrap min-w-0 min-[60rem]:min-h-0 min-[60rem]:flex-1 min-[60rem]:overflow-y-auto min-[60rem]:rounded-lg min-[60rem]:border min-[60rem]:border-line min-[60rem]:bg-card min-[60rem]:[scrollbar-gutter:stable]">
+              <ThreadListScroll>
                 <div className="flex items-center gap-2 p-2">
                   <CompactModeToggle compact={compact} onChange={setCompact} />
                 </div>
@@ -113,7 +114,7 @@ export default function SelectView() {
                     />
                   ))}
                 </ul>
-              </div>
+              </ThreadListScroll>
             }
             pane={
               composing ? (

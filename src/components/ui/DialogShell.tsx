@@ -16,7 +16,7 @@ export default function DialogShell({
   };
   return (
     <div
-      className="fixed inset-0 z-[55] flex items-center justify-center bg-[rgba(0,0,0,.45)]"
+      className="fixed inset-0 z-55 flex items-center justify-center bg-[rgba(0,0,0,.45)]"
       role="dialog"
       aria-modal="true"
       aria-label={label}

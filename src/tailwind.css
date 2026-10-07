@@ -20,3 +20,8 @@
   --color-org-4: var(--o4);
   --color-org-5: var(--o5);
 }
+
+@theme {
+  --text-2xs: 0.65rem;
+  --text-2xs--line-height: calc(0.875 / 0.65);
+}

@@ -4,6 +4,7 @@ import { MagnifyingGlassIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { $api, type SearchMode } from "../../lib/api/api";
 import NavPerson from "./NavPerson";
 import { Button } from "../ui/controls";
+import IconButton from "../ui/IconButton";
 import { SelectInput, TextInput } from "../ui/fields";
 
 const MODES: SearchMode[] = ["hybrid", "semantic", "lexical"];
@@ -127,17 +128,15 @@ export default function NavSearch() {
       {/* Mouse-down is prevented so the field doesn't blur first: blur commits the search and shuts
          the panel, taking this button with it before the click lands. */}
       {open ? (
-        <Button
-          type="button"
-          variant="quiet"
-          className="size-8 shrink-0 p-1 navcancel"
+        <IconButton
+          className="navcancel"
           title="Clear the search and shut the panel — Escape"
           aria-label="Clear the search"
           onMouseDown={(ev) => ev.preventDefault()}
           onClick={dismiss}
         >
-          <XMarkIcon className="block size-[18px]" width={18} height={18} aria-hidden="true" />
-        </Button>
+          <XMarkIcon aria-hidden="true" />
+        </IconButton>
       ) : null}
       <form
         className={`navsearch absolute top-0 right-0 flex h-9 w-48 items-center gap-1.5 overflow-hidden rounded-md border border-line bg-card px-2 py-1${open ? " open" : ""}`}
@@ -167,7 +166,7 @@ export default function NavSearch() {
           aria-hidden="true"
         />
         <TextInput
-          className="min-h-0 min-w-24 flex-1 border-0 bg-transparent px-0 py-0.5 text-[.84rem] text-fg placeholder:text-muted focus:ring-0"
+          className="min-h-0 min-w-24 flex-1 border-0 bg-transparent px-0 py-0.5 text-sm text-fg placeholder:text-muted focus:ring-0"
           value={shown.q}
           onChange={(ev) => {
             edit({ q: ev.target.value });
@@ -182,11 +181,9 @@ export default function NavSearch() {
         {open ? (
           <span className="flex min-w-0 flex-[0_1_auto] flex-nowrap items-center gap-2 overflow-x-auto overflow-y-hidden">
             <label className="flex flex-none items-center gap-1">
-              <span className="text-[.6rem] font-bold uppercase tracking-[.08em] text-muted">
-                Mode
-              </span>
+              <span className="text-2xs font-bold uppercase tracking-[.08em] text-muted">Mode</span>
               <SelectInput
-                className="min-h-0 rounded-[5px] border border-line bg-bg px-1.5 py-0.5 text-[.78rem] text-fg"
+                className="min-h-0 rounded-md border border-line bg-bg px-1.5 py-0.5 text-xs text-fg"
                 value={shown.mode}
                 onChange={(ev) => {
                   const mode = ev.target.value as SearchMode;
@@ -202,7 +199,7 @@ export default function NavSearch() {
               </SelectInput>
             </label>
             <label className="flex flex-none items-center gap-1">
-              <span className="text-[.6rem] font-bold uppercase tracking-[.08em] text-muted">
+              <span className="text-2xs font-bold uppercase tracking-[.08em] text-muted">
                 Person
               </span>
               <NavPerson
@@ -216,11 +213,11 @@ export default function NavSearch() {
               />
             </label>
             <label className="flex flex-none items-center gap-1">
-              <span className="text-[.6rem] font-bold uppercase tracking-[.08em] text-muted">
+              <span className="text-2xs font-bold uppercase tracking-[.08em] text-muted">
                 Gmail account
               </span>
               <SelectInput
-                className="min-h-0 rounded-[5px] border border-line bg-bg px-1.5 py-0.5 text-[.78rem] text-fg"
+                className="min-h-0 rounded-md border border-line bg-bg px-1.5 py-0.5 text-xs text-fg"
                 aria-label="Gmail account"
                 value={shown.accountId}
                 onChange={(ev) => {
@@ -240,11 +237,11 @@ export default function NavSearch() {
               </SelectInput>
             </label>
             <label className="flex flex-none items-center gap-1">
-              <span className="text-[.6rem] font-bold uppercase tracking-[.08em] text-muted">
+              <span className="text-2xs font-bold uppercase tracking-[.08em] text-muted">
                 Since
               </span>
               <TextInput
-                className="w-[8.6rem] min-h-0 rounded-[5px] border border-line bg-bg px-1.5 py-0.5 text-[.78rem] text-fg"
+                className="w-[8.6rem] min-h-0 rounded-md border border-line bg-bg px-1.5 py-0.5 text-xs text-fg"
                 type="date"
                 value={shown.since}
                 onChange={(ev) => {
@@ -258,7 +255,7 @@ export default function NavSearch() {
             <Button
               type="submit"
               variant="subtle"
-              className="min-h-0 rounded-md border-line bg-mine px-2 py-1 text-[.76rem] font-semibold text-fg disabled:cursor-default disabled:opacity-[.45]"
+              className="min-h-0 rounded-md border-line bg-mine px-2 py-1 text-xs font-semibold text-fg disabled:cursor-default disabled:opacity-[.45]"
               disabled={!asks(shown)}
             >
               Search

@@ -1,23 +1,17 @@
-import { Fragment, useEffect, useRef, useState } from "react";
-import {
-  ArrowPathIcon,
-  CheckIcon,
-  ClipboardDocumentIcon,
-  CodeBracketIcon,
-} from "@heroicons/react/24/outline";
+import { Fragment } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { receiptNames } from "../../lib/message/who";
-import Avatar from "./Avatar";
-import AttachmentChip from "./AttachmentChip";
-import StatusBadge from "../ui/StatusBadge";
-import ReceiptIconButton from "../ui/ReceiptIconButton";
 import type { Attachment } from "../../lib/message/attachments";
-import type { ZoneState } from "../../lib/timeline/chronological";
-import { mountOriginal } from "../../lib/message/original";
-import { usePrefs } from "../../lib/prefs/usePrefs";
-import { hasBody, trimBody } from "../../lib/message/trimBody";
+import { useOriginal } from "../../lib/message/useOriginal";
+import type { StampData } from "../../lib/ui/stamp";
+import StatusBadge from "../ui/StatusBadge";
+import Attachments from "./Attachments";
+import Avatar from "./Avatar";
+import Body from "./Body";
+import CopyJson from "./CopyJson";
+import OriginalControl from "./OriginalControl";
+import Stamp from "./Stamp";
 
-const html = (s: string) => ({ __html: s });
 // The message-level variable colors both the org label and the bubble's decorative stripe.
 const orgColors: Record<string, string> = {
   o1: "var(--o1)",
@@ -26,232 +20,6 @@ const orgColors: Record<string, string> = {
   o4: "var(--o4)",
   o5: "var(--o5)",
 };
-
-export interface StampData {
-  /** as displayed, e.g. "Thu 16 Jul 2026" */
-  date: string;
-  /** as displayed, e.g. "11:35"; absent for an entry with no clock */
-  time?: string;
-  /** the zone label, e.g. "AEDT"; absent when nothing placed it */
-  tz?: string;
-  /** how much the page may claim about `tz` */
-  zone: ZoneState;
-}
-
-function CopyJson({ data }: { data: unknown }) {
-  const [done, setDone] = useState(false);
-  const label = done ? "Copied" : "Copy this message's JSON";
-  return (
-    <ReceiptIconButton
-      type="button"
-      title={label}
-      aria-label={label}
-      onClick={() => {
-        navigator.clipboard?.writeText(JSON.stringify(data, null, 2)).then(
-          () => setDone(true),
-          () => {},
-        );
-        window.setTimeout(() => setDone(false), 1200);
-      }}
-    >
-      {done ? (
-        <CheckIcon width={18} height={18} aria-hidden="true" />
-      ) : (
-        <ClipboardDocumentIcon width={18} height={18} aria-hidden="true" />
-      )}
-    </ReceiptIconButton>
-  );
-}
-
-function Stamp({ id, stamp }: { id: string; stamp: StampData }) {
-  const { date, time, tz, zone } = stamp;
-  return (
-    <a
-      className="whitespace-nowrap text-[.71rem] tabular-nums text-muted"
-      href={`#${id}`}
-      title="Link to this message"
-    >
-      {date}
-      {time ? ` · ${time}` : ""}
-      {zone === "stated" ? <span className="text-[.9em] opacity-[.75]">{tz}</span> : null}
-      {zone === "inferred" ? (
-        <span
-          className="border-b border-dotted border-current text-[.9em] opacity-[.55] [cursor:help]"
-          title="Inferred — this source stated no zone. The offset was worked out from the client that quoted this message; see the source notes."
-        >{` ${tz}?`}</span>
-      ) : null}
-      {zone === "unknown" ? (
-        <span
-          className="text-[.9em] italic tracking-[.02em] opacity-[.45] [cursor:help]"
-          title="Zone unknown — this source stated none and nothing available places it. The clock is a wall clock as quoted, so it cannot be compared with the times above and below it."
-        >
-          {" ?"}
-        </span>
-      ) : null}
-    </a>
-  );
-}
-
-function Attachments({
-  attachments = [],
-  extId,
-  onPull,
-  pulling,
-  mediaBase,
-}: {
-  attachments?: Attachment[];
-  /** the handle a download asks for: the message whose files it wants */
-  extId?: string;
-  /** fetch this message's files, where a host will do it at all */
-  onPull?: (extId: string) => void;
-  /** the message whose files are being fetched, so its chips can say so */
-  pulling?: string | null;
-  /** where the corpus serves stored bytes; empty in the static export, which has no server */
-  mediaBase?: string;
-}) {
-  if (!attachments.length) return null;
-  // The endpoint fetches a whole message's files at once, so all its chips share one state.
-  const fetching = pulling != null && pulling === extId;
-  return (
-    <div className="my-1.5 mb-0.5 flex flex-wrap items-center gap-1">
-      <span className="text-[.72rem] text-muted" role="img" aria-label="attachments">
-        📎
-      </span>
-      {attachments.map((a, i) => (
-        <AttachmentChip
-          key={i}
-          attachment={a}
-          mediaBase={mediaBase}
-          fetching={fetching}
-          onPull={onPull && extId !== undefined ? () => onPull(extId) : undefined}
-        />
-      ))}
-    </div>
-  );
-}
-
-/**
- * The sender's own HTML, swapped in for the transcript's rendering. The switch is per
- * sender: stored on the person where there is a corpus, else in the browser's prefs (lib/prefs/usePrefs).
- */
-function useOriginal(
-  original: { extId: string; load: (extId: string) => Promise<string> } | undefined,
-  fromEmail: string | undefined,
-  person: { id: number; preferOriginal: boolean } | undefined,
-  onPreferOriginal: ((next: boolean) => void) | undefined,
-) {
-  // A recovered entry has no From header, so the local switch falls back to the message id.
-  const key = fromEmail || original?.extId || "";
-  const extId = original?.extId;
-  const load = original?.load;
-  const stored = person !== undefined && onPreferOriginal !== undefined;
-
-  // Locally, one sender's bubbles share the switch, so each follows it rather than owning it.
-  const styled = usePrefs((s) => key !== "" && s.styledSenders.includes(key));
-  const toggleStyled = usePrefs((s) => s.toggleStyled);
-  const on = stored ? person.preferOriginal : styled;
-  const [state, setState] = useState<Original>({ at: "read" });
-  const arrived = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (!extId || !load) return;
-    if (!on) {
-      // Same object when unchanged, so switching off doesn't re-render every bubble already off.
-      setState((s) => (s.at === "read" ? s : { at: "read" }));
-      return;
-    }
-    if (arrived.current !== null) {
-      setState({ at: "sent", html: arrived.current });
-      return;
-    }
-    // A fetch landing after the switch went off must not swap the body back.
-    let live = true;
-    setState({ at: "asking" });
-    load(extId).then(
-      (html) => {
-        arrived.current = html;
-        if (live) setState({ at: "sent", html });
-      },
-      (err: unknown) => {
-        if (live) {
-          setState({
-            at: "none",
-            why:
-              err instanceof Error && err.message ? err.message : "the original is not available",
-          });
-        }
-      },
-    );
-    return () => {
-      live = false;
-    };
-  }, [on, extId, load]);
-
-  const ask = () => (stored ? onPreferOriginal(!on) : toggleStyled(key));
-
-  return { on, state, ask };
-}
-
-/** The note sits beside the control, not in its place: the switch is the sender's, so it must stay pressable. */
-function OriginalControl({ on, state, ask }: { on: boolean; state: Original; ask: () => void }) {
-  const asking = state.at === "asking";
-  const label =
-    state.at === "asking"
-      ? "Fetching the sender's own rendering…"
-      : on
-        ? "Back to the page's own rendering of this sender's mail"
-        : "Read this sender's mail as they wrote it, with their own styling";
-  return (
-    <>
-      <ReceiptIconButton
-        type="button"
-        className={asking ? "cursor-progress" : undefined}
-        aria-pressed={on}
-        disabled={asking}
-        title={label}
-        aria-label={label}
-        onClick={ask}
-      >
-        {asking ? (
-          <ArrowPathIcon className="motion-safe:animate-spin" aria-hidden="true" />
-        ) : (
-          <CodeBracketIcon width={18} height={18} aria-hidden="true" />
-        )}
-      </ReceiptIconButton>
-      {state.at === "none" ? (
-        <span className="text-[.66rem] italic text-muted" title={state.why}>
-          nothing to show
-        </span>
-      ) : null}
-    </>
-  );
-}
-
-/** Renderings are keyed apart: a shadow root can't be detached, so a reused div would keep drawing the sender's HTML. */
-function Body({ body, state }: { body: string; state: Original }) {
-  const host = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (state.at === "sent" && host.current) mountOriginal(host.current, state.html);
-  }, [state]);
-
-  if (state.at === "sent") {
-    return <div key="sent" className="bd bdo overflow-x-auto" ref={host} />;
-  }
-  if (!hasBody(body)) {
-    return (
-      <div key="read" className="bd overflow-x-auto">
-        <p className="m-0 text-[.8rem] italic text-muted">No body</p>
-      </div>
-    );
-  }
-  return (
-    <div key="read" className="bd overflow-x-auto" dangerouslySetInnerHTML={html(trimBody(body))} />
-  );
-}
-
-/** `asking` keeps the transcript's body on screen; `none` is the corpus saying this message has no original part. */
-type Original =
-  { at: "read" } | { at: "asking" } | { at: "sent"; html: string } | { at: "none"; why: string };
 
 /** One message bubble. */
 export default function Message({
@@ -379,12 +147,12 @@ export default function Message({
       <div className="min-w-0">
         {/* A native <details>, so the export works without scripting and find-in-page reaches the ids. */}
         <details className="hdr mb-0.5 px-0.5">
-          <summary className="flex cursor-pointer flex-wrap items-baseline gap-1 list-none focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent focus-visible:outline-offset-2">
+          <summary className="flex cursor-pointer flex-wrap items-baseline gap-1 list-none focus-visible:outline focus-visible:outline-accent focus-visible:outline-offset-2">
             <Avatar name={sender ?? ""} orgSlot={orgSlot} pic={avatarClass} title={who} />
-            <span className="text-[.83rem] font-[650]" title={who}>
+            <span className="text-sm font-[650]" title={who}>
               {sender}
             </span>
-            <span className="text-[var(--orgc,var(--muted))] text-[.68rem] font-[650] uppercase tracking-[.07em]">
+            <span className="text-(--orgc,var(--muted)) text-2xs font-[650] uppercase tracking-[.07em]">
               {org}
             </span>
             <Stamp id={id} stamp={stamp} />
@@ -398,7 +166,7 @@ export default function Message({
               <span className="flex flex-[1_1_100%] items-baseline gap-x-3 gap-y-1">
                 {subject ? (
                   <span
-                    className="min-w-0 flex-[1_1_auto] text-[.72rem] leading-[1.25] text-fg"
+                    className="min-w-0 flex-[1_1_auto] text-xs leading-tight text-fg"
                     title={subject}
                   >
                     {subject}
@@ -407,7 +175,7 @@ export default function Message({
                 {source}
               </span>
             ) : null}
-            <span className="text-[.66rem] text-muted">
+            <span className="text-2xs text-muted">
               to{" "}
               {to
                 ? receiptNames(to).map((r, i) => (
@@ -432,7 +200,7 @@ export default function Message({
         <div
           className={[
             // The stripe is a pseudo-element clipped by overflow-hidden, independent of border/background states.
-            "bub relative overflow-hidden rounded-[10px] border border-line bg-card px-3 py-2 before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-[var(--orgc,transparent)] before:content-['']",
+            "bub relative overflow-hidden rounded-lg border border-line bg-card px-3 py-2 before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-(--orgc,transparent) before:content-['']",
             quoted && "border-dashed border-muted/55 bg-dash",
             me && "border-org-3 bg-mine",
             mark === "new" && "border-l-[3px] border-l-org-1",
@@ -444,7 +212,7 @@ export default function Message({
             <div className="mb-1 flex flex-wrap gap-1">
               {mentions.map((m) => (
                 <span
-                  className="rounded-[5px] bg-mine px-1.5 text-[.74rem] font-semibold text-org-3"
+                  className="rounded-md bg-mine px-1.5 text-xs font-semibold text-org-3"
                   key={m}
                 >
                   @{m}

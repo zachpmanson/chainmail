@@ -466,20 +466,20 @@ function attachPopover(doc: Document, on: On): () => void {
     if (host) return;
     host = doc.createElement("div");
     host.className =
-      "pop fixed inset-0 z-[55] flex items-center justify-center p-6 bg-bg/92 backdrop-blur-[3px]";
+      "pop fixed inset-0 z-55 flex items-center justify-center p-6 bg-bg/92 backdrop-blur-[3px]";
     host.setAttribute("role", "dialog");
     host.setAttribute("aria-modal", "true");
     host.setAttribute("aria-labelledby", "popcap");
     host.hidden = true;
     host.innerHTML =
-      '<div class="flex max-h-full max-w-full flex-col gap-1.5"><img class="popimg h-auto w-auto max-h-[calc(100vh-6rem)] max-w-full rounded-md border border-line bg-card object-contain" alt="" hidden>' +
-      '<pre class="poptext m-0 max-h-[calc(100vh-6rem)] w-[min(72rem,92vw)] overflow-auto whitespace-pre rounded-md border border-line bg-card p-4 text-left font-mono text-[.78rem] leading-[1.5] text-fg [tab-size:4]" hidden></pre>' +
+      '<div class="flex max-h-full max-w-full flex-col gap-1.5"><img class="popimg size-auto max-h-[calc(100vh-6rem)] max-w-full rounded-md border border-line bg-card object-contain" alt="" hidden>' +
+      '<pre class="poptext m-0 max-h-[calc(100vh-6rem)] w-[min(72rem,92vw)] overflow-auto whitespace-pre rounded-md border border-line bg-card p-4 text-left font-mono text-[.78rem] leading-[1.5] text-fg tab-4" hidden></pre>' +
       // Separate from the `pre` so the table doesn't inherit `white-space:pre`.
       '<div class="popgrid max-h-[calc(100vh-6rem)] w-[min(72rem,92vw)] overflow-auto rounded-md border border-line bg-card text-left" hidden></div>' +
       // Blob type comes from the served bytes, never the sender's claim; that makes framing safe.
       '<iframe class="popframe h-[calc(100vh-6rem)] w-[min(72rem,92vw)] rounded-md border border-line bg-card" title="" hidden></iframe>' +
       '<div class="flex items-center gap-3">' +
-      '<span class="overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[.74rem] font-semibold text-muted" id="popcap"></span><span data-popnote class="whitespace-nowrap text-[.72rem] text-muted"></span>' +
+      '<span class="truncate font-mono text-[.74rem] font-semibold text-muted" id="popcap"></span><span data-popnote class="whitespace-nowrap text-[.72rem] text-muted"></span>' +
       '<a class="popget cursor-pointer rounded-md border border-line bg-card px-2 py-0.5 font-[inherit] text-[.72rem] text-muted no-underline hover:border-accent hover:text-fg focus-visible:border-accent" download hidden>save</a>' +
       '<button type="button" data-popclose class="ml-auto cursor-pointer rounded-md border border-line bg-card px-2 py-0.5 font-[inherit] text-[.72rem] text-fg hover:border-accent focus-visible:border-accent">Close</button>' +
       "</div></div>";
@@ -632,10 +632,10 @@ function attachPopover(doc: Document, on: On): () => void {
       const el = doc.createElement(tag);
       el.textContent = value;
       el.className = [
-        "max-w-[26rem] border-r border-b border-line px-2 py-1 text-left align-top whitespace-pre-wrap [overflow-wrap:anywhere]",
+        "max-w-[26rem] border-r border-b border-line px-2 py-1 text-left align-top whitespace-pre-wrap wrap-anywhere",
         lastColumn && "border-r-0",
         lastRow && "border-b-0",
-        tag === "th" && "sticky top-0 z-[1] bg-card font-[650] text-muted",
+        tag === "th" && "sticky top-0 z-1 bg-card font-[650] text-muted",
         tag === "td" && num && "text-right tabular-nums",
       ]
         .filter(Boolean)

@@ -16,6 +16,7 @@ import CompactListHeader from "./CompactListHeader";
 import ComposeBox from "../compose/ComposeBox";
 import { useCompose } from "../compose/ComposeContext";
 import FolderPicker from "./FolderPicker";
+import ThreadListScroll from "./ThreadListScroll";
 
 const PAGE = 50;
 
@@ -172,10 +173,10 @@ export default function Inbox() {
   }, [paging, fetchNextPage]);
 
   return (
-    <div className="wrap ibwrap mx-0 w-full max-w-none px-0 pt-0 pb-0 min-[60rem]:flex min-[60rem]:flex-1 min-[60rem]:flex-col min-[60rem]:min-h-0">
+    <div className="wrap ibwrap mx-0 w-full max-w-none p-0 min-[60rem]:flex min-[60rem]:flex-1 min-[60rem]:flex-col min-[60rem]:min-h-0">
       {inbox.isError && !inbox.data ? <Failure error={inbox.error} /> : null}
       {!inbox.isPending && !inbox.isError && rows.length === 0 ? (
-        <p className="mt-2 flex-[1_1_100%] text-[.78rem] text-muted">
+        <p className="mt-2 flex-[1_1_100%] text-xs text-muted">
           {label ? (
             <>Nothing in {label}.</>
           ) : (
@@ -197,7 +198,7 @@ export default function Inbox() {
               onPick={pickFolder}
               onDefault={makeDefault}
             />
-            <div className="iblistwrap min-w-0 min-[60rem]:min-h-0 min-[60rem]:flex-1 min-[60rem]:overflow-y-auto min-[60rem]:rounded-lg min-[60rem]:border min-[60rem]:border-line min-[60rem]:bg-card min-[60rem]:[scrollbar-gutter:stable]">
+            <ThreadListScroll>
               {compact && rows.length > 0 ? <CompactListHeader /> : null}
               {rows.length > 0 ? (
                 <ul className="m-0 list-none divide-y divide-line overflow-hidden rounded-lg border border-line bg-card p-0 min-[60rem]:border-0 min-[60rem]:rounded-none min-[60rem]:bg-transparent">
@@ -219,7 +220,7 @@ export default function Inbox() {
               {paging ? (
                 <div className="py-2 text-center" ref={end}>
                   {inbox.isFetchingNextPage ? (
-                    <p className="m-0 flex-[1_1_100%] text-[.78rem] text-muted" role="status">
+                    <p className="m-0 flex-[1_1_100%] text-xs text-muted" role="status">
                       Reading further back…
                     </p>
                   ) : null}
@@ -230,14 +231,14 @@ export default function Inbox() {
                   <Failure error={inbox.error} />
                   <Button
                     type="button"
-                    className="mx-auto mt-3 block rounded-full px-4 py-1.5 text-[.78rem] text-muted hover:border-accent hover:text-accent"
+                    className="mx-auto mt-3 block rounded-full px-4 py-1.5 text-xs text-muted hover:border-accent hover:text-accent"
                     onClick={() => inbox.fetchNextPage()}
                   >
                     Try again
                   </Button>
                 </>
               ) : null}
-            </div>
+            </ThreadListScroll>
           </>
         }
         pane={

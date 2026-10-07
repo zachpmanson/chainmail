@@ -73,7 +73,7 @@ export default function ActionBar({
           <Button
             type="button"
             density="compact"
-            className="shrink-0 px-3 py-1 text-[.78rem] text-muted hover:border-accent hover:text-accent"
+            className="shrink-0 px-3 py-1 text-xs text-muted hover:border-accent hover:text-accent"
             onClick={onDone}
           >
             Deselect all
@@ -82,7 +82,7 @@ export default function ActionBar({
             type="button"
             variant="subtle"
             density="compact"
-            className="px-3 py-1 text-[.78rem]"
+            className="px-3 py-1 text-xs"
             onClick={() => setBraiding(true)}
           >
             Braid Threads
@@ -126,7 +126,7 @@ export default function ActionBar({
             }
           />
           <span className="ml-auto flex shrink-0 items-center">
-            <span className="text-[.76rem] tabular-nums text-muted">{chosen.length} selected</span>
+            <span className="text-xs tabular-nums text-muted">{chosen.length} selected</span>
           </span>
         </div>
       ) : null}
@@ -175,7 +175,7 @@ function BraidDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[55] flex items-center justify-center bg-black/45"
+      className="fixed inset-0 z-55 flex items-center justify-center bg-black/45"
       role="dialog"
       aria-modal="true"
       aria-label="Braid threads"
@@ -186,29 +186,27 @@ function BraidDialog({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2 border-b border-line px-3 py-2">
-          <b className="text-[.72rem] font-bold uppercase tracking-[.09em] text-muted">
-            braid threads
-          </b>
-          <span className="ml-auto min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[.74rem] text-muted">
+          <b className="text-xs font-bold uppercase tracking-[.09em] text-muted">braid threads</b>
+          <span className="ml-auto min-w-0 truncate text-xs text-muted">
             {count} thread{count === 1 ? "" : "s"} ticked
           </span>
           <Button
             type="button"
             density="compact"
-            className="bg-bg px-2 py-1 text-[.72rem] text-muted hover:border-accent hover:text-accent"
+            className="bg-bg px-2 py-1 text-xs text-muted hover:border-accent hover:text-accent"
             onClick={onClose}
           >
             Close
           </Button>
         </div>
-        <div className="my-3 mx-3 mb-1 flex flex-wrap items-end gap-2">
+        <div className="m-3 mb-1 flex flex-wrap items-end gap-2">
           <FormField
             className="flex flex-[1_1_18rem] flex-col gap-1"
             label="Page title"
-            labelClassName="text-[.66rem] font-bold uppercase tracking-[.09em] text-muted"
+            labelClassName="text-2xs font-bold uppercase tracking-[.09em] text-muted"
           >
             <TextInput
-              className="w-full px-2 py-1 text-[.86rem]"
+              className="w-full px-2 py-1 text-sm"
               autoFocus
               value={title}
               onChange={(e) => onTitle(e.target.value)}
@@ -219,18 +217,18 @@ function BraidDialog({
             type="button"
             variant="subtle"
             density="compact"
-            className="px-3 py-1 text-[.78rem]"
+            className="px-3 py-1 text-xs"
             disabled={busy}
             onClick={onBraid}
           >
             {busy ? "Braiding…" : "Braid"}
           </Button>
         </div>
-        <p className="mx-3 my-2 flex-[1_1_100%] text-[.78rem] text-muted">
+        <p className="mx-3 my-2 flex-[1_1_100%] text-xs text-muted">
           Left empty, the page is titled with the earliest thread's subject.
         </p>
         {busy ? (
-          <p className="mx-3 my-2 flex-[1_1_100%] text-[.78rem] text-muted" role="status">
+          <p className="mx-3 my-2 flex-[1_1_100%] text-xs text-muted" role="status">
             Recovering HTML and detecting boilerplate across {count} thread
             {count === 1 ? "" : "s"}. This takes a few seconds.
           </p>

@@ -26,7 +26,7 @@ export default function ThreadRow({
   current: boolean;
   /** The variant's own classes on the row. */
   className?: string;
-  /** The variant's own classes on the row body, which lays out its children. */
+  /** The variant's own classes on the row body, a flex box that lays out its children. */
   openClassName?: string;
   /** What the variant draws in the row beside the body, outside its hit area. */
   aside?: ReactNode;
@@ -62,7 +62,7 @@ export default function ThreadRow({
       <button
         type="button"
         className={[
-          "grid w-full grid-cols-[minmax(0,1fr)_auto] cursor-pointer appearance-none gap-x-3 gap-y-0.5 border-0 bg-transparent pt-2 pr-1.5 pb-2 pl-3 text-left font-[inherit] text-inherit shadow-none",
+          "flex w-full cursor-pointer appearance-none border-0 bg-transparent py-2 pr-1.5 pl-3 text-left font-[inherit] text-inherit shadow-none",
           openClassName,
         ]
           .filter(Boolean)

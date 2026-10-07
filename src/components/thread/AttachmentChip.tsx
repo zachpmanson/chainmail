@@ -31,7 +31,7 @@ export default function AttachmentChip({
   const shot = thumbnail(a, mediaBase ?? "");
   const thumb = shot ? (
     <img
-      className={`block h-[2.1rem] w-auto max-w-36 rounded-[3px] border border-line object-cover object-left${shot.blob ? " w-12" : ""}`}
+      className={`block h-[2.1rem] w-auto max-w-36 rounded-sm border border-line object-cover object-left${shot.blob ? " w-12" : ""}`}
       src={shot.src}
       {...(shot.w !== undefined ? { width: shot.w } : {})}
       {...(shot.h !== undefined ? { height: shot.h } : {})}
@@ -42,8 +42,8 @@ export default function AttachmentChip({
   const label = (
     <>
       {thumb}
-      <span className="text-[.74rem] font-[650] font-mono">{a.name}</span>
-      <span className={`text-[.64rem] text-muted${fetching && fetchable ? " text-fg" : ""}`}>
+      <span className="text-xs font-[650] font-mono">{a.name}</span>
+      <span className={`text-2xs text-muted${fetching && fetchable ? " text-fg" : ""}`}>
         {fetching && fetchable ? (
           /* An image, not a status: the chip has aria-busy and the pane owns the one live region. */
           <ArrowPathIcon

@@ -84,7 +84,7 @@ export default function NavPerson({
     <>
       <input
         ref={field}
-        className="min-h-0 max-w-[20ch] rounded-[5px] border border-line bg-bg px-1.5 py-0.5 text-[.78rem] text-fg"
+        className="min-h-0 max-w-[20ch] rounded-md border border-line bg-bg px-1.5 py-0.5 text-xs text-fg"
         value={value}
         role="combobox"
         aria-expanded={open}
@@ -129,7 +129,7 @@ export default function NavPerson({
         ? createPortal(
             <ul
               id={listId}
-              className="fixed z-[60] m-0 max-h-60 list-none overflow-y-auto overflow-x-hidden rounded-[7px] border border-line bg-card p-1 shadow-[0_8px_24px_rgba(0,0,0,.22)]"
+              className="fixed z-60 m-0 max-h-60 list-none overflow-y-auto overflow-x-hidden rounded-md border border-line bg-card p-1 shadow-[0_8px_24px_rgba(0,0,0,.22)]"
               role="listbox"
               aria-label="Who the search is narrowed to"
               style={{ left: at.left, top: at.top, width: at.width }}
@@ -140,16 +140,14 @@ export default function NavPerson({
                   id={`${listId}-${i}`}
                   role="option"
                   aria-selected={i === active}
-                  className={`flex flex-col gap-px rounded-[5px] py-1 px-2 cursor-pointer${i === active ? " bg-mine" : ""}`}
+                  className={`flex flex-col gap-px rounded-md py-1 px-2 cursor-pointer${i === active ? " bg-mine" : ""}`}
                   onMouseDown={(ev) => ev.preventDefault()}
                   onMouseEnter={() => setActive(i)}
                   onClick={() => pick(row.value)}
                 >
-                  <span className="text-[.78rem] [overflow-wrap:anywhere]">{row.name}</span>
+                  <span className="text-xs wrap-anywhere">{row.name}</span>
                   {row.address && row.address !== row.name ? (
-                    <span className="text-[.66rem] text-muted [overflow-wrap:anywhere]">
-                      {row.address}
-                    </span>
+                    <span className="text-2xs text-muted wrap-anywhere">{row.address}</span>
                   ) : null}
                 </li>
               ))}

@@ -1,146 +1,112 @@
-import { useMemo, useRef, useState, type FormEvent } from "react";
+import { useReducer, type FormEvent } from "react";
 import { useSearch } from "@tanstack/react-router";
 import { $api, type ComposeResponse } from "../../lib/api/api";
-import { usePersonAddresses } from "../../lib/message/who";
-import { addressWords, type Address } from "./AddressField";
-import ComposerFields from "./ComposerFields";
-import { SelectInput } from "../ui/fields";
+import { addressWords } from "./AddressField";
 import { Button } from "../ui/controls";
 import InlineAlert from "../ui/InlineAlert";
+import ComposeDone from "./ComposeDone";
+import ComposeForm from "./ComposeForm";
+import ComposePreview from "./ComposePreview";
+import { emptyDraft, type Draft } from "./Draft";
+import useBusyTask from "./useBusyTask";
+
+const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+type Step =
+  | { kind: "editing" }
+  | { kind: "reviewing"; preview: ComposeResponse; sendFailed: boolean }
+  | { kind: "sent"; result: ComposeResponse };
+
+type State = { draft: Draft; accountId: string; step: Step };
+
+type Action =
+  | { type: "draft"; patch: Partial<Draft> }
+  | { type: "account"; accountId: string }
+  | { type: "previewed"; preview: ComposeResponse }
+  | { type: "edit" }
+  | { type: "sent"; result: ComposeResponse }
+  | { type: "sendFailed" };
+
+function reduce(state: State, action: Action): State {
+  switch (action.type) {
+    case "draft":
+      return { ...state, draft: { ...state.draft, ...action.patch } };
+    case "account":
+      return { ...state, accountId: action.accountId, step: { kind: "editing" } };
+    case "previewed":
+      return { ...state, step: { kind: "reviewing", preview: action.preview, sendFailed: false } };
+    case "edit":
+      return { ...state, step: { kind: "editing" } };
+    case "sent":
+      return { ...state, step: { kind: "sent", result: action.result } };
+    case "sendFailed":
+      return state.step.kind === "reviewing"
+        ? { ...state, step: { ...state.step, sendFailed: true } }
+        : state;
+  }
+}
 
 export default function ComposeBox({ onClose }: { onClose: () => void }) {
   const compose = $api.useMutation("post", "/v1/compose");
   const routeAccountId = useSearch({ from: "/" }).accountId;
-  const [accountId, setAccountId] = useState(routeAccountId ?? "");
-  const accounts = $api.useQuery("get", "/auth/status", {});
-  const people = usePersonAddresses();
-  const suggestions = useMemo<Address[]>(() => {
-    const seen = new Set<string>();
-    const out: Address[] = [];
-    for (const addresses of people.values())
-      for (const address of addresses) {
-        const key = address.toLowerCase();
-        if (!seen.has(key)) {
-          seen.add(key);
-          out.push({ address });
-        }
-      }
-    return out;
-  }, [people]);
-  const form = useRef<HTMLFormElement>(null);
-  const [recipients, setRecipients] = useState<Address[]>([]);
-  const [cc, setCc] = useState<Address[]>([]);
-  const [subject, setSubject] = useState("");
-  const [body, setBody] = useState("");
-  const [preview, setPreview] = useState<ComposeResponse | null>(null);
-  const [result, setResult] = useState<ComposeResponse | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [sendFailed, setSendFailed] = useState(false);
-  const [error, setError] = useState("");
-  const to = recipients.map(addressWords);
-  const ccRecipients = cc.map(addressWords);
+  const [{ draft, accountId, step }, dispatch] = useReducer(reduce, {
+    draft: emptyDraft,
+    accountId: routeAccountId ?? "",
+    step: { kind: "editing" },
+  });
+  const { busy, error, clearError, run } = useBusyTask();
+  const to = draft.to.map(addressWords);
+  const cc = draft.cc.map(addressWords);
+  const sendFailed = step.kind === "reviewing" && step.sendFailed;
   // Sending is only allowed for exactly what the reader reviewed.
   const previewIsCurrent =
-    preview !== null &&
-    preview.to === to.join(", ") &&
-    preview.cc === (ccRecipients.length ? ccRecipients.join(", ") : undefined) &&
-    preview.subject === subject &&
-    preview.body === body;
+    step.kind === "reviewing" &&
+    step.preview.to === to.join(", ") &&
+    step.preview.cc === (cc.length ? cc.join(", ") : undefined) &&
+    step.preview.subject === draft.subject &&
+    step.preview.body === draft.body;
 
   async function prepare(event: FormEvent) {
     event.preventDefault();
-    setBusy(true);
-    setError("");
-    try {
-      setPreview(
-        await compose.mutateAsync({
-          body: {
-            to,
-            cc: ccRecipients,
-            subject,
-            body,
-            confirm: false,
-            ...(accountId ? { accountId } : {}),
-          },
-        }),
-      );
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
+    await run(async () => {
+      const preview = await compose.mutateAsync({
+        body: {
+          to,
+          cc,
+          subject: draft.subject,
+          body: draft.body,
+          confirm: false,
+          ...(accountId ? { accountId } : {}),
+        },
+      });
+      dispatch({ type: "previewed", preview });
+    }, message);
   }
 
   async function send() {
-    if (!preview || !previewIsCurrent) return;
-    setBusy(true);
-    setError("");
-    try {
-      setResult(
-        await compose.mutateAsync({
+    if (step.kind !== "reviewing" || !previewIsCurrent) return;
+    const { preview } = step;
+    await run(
+      async () => {
+        const result = await compose.mutateAsync({
           body: {
             to,
-            cc: ccRecipients,
-            subject,
-            body,
+            cc,
+            subject: draft.subject,
+            body: draft.body,
             confirm: true,
             accountId: preview.accountId,
           },
-        }),
-      );
-    } catch (e) {
-      // The request may have reached Gmail even if its response did not. Avoid a
-      // retry that could duplicate mail; the reader must check Gmail first.
-      setSendFailed(true);
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
+        });
+        dispatch({ type: "sent", result });
+      },
+      (e) => {
+        // The request may have reached Gmail even if its response did not; a retry could duplicate mail.
+        dispatch({ type: "sendFailed" });
+        return message(e);
+      },
+    );
   }
-
-  const editor = (
-    <form ref={form} onSubmit={prepare}>
-      <ComposerFields
-        mode="compose"
-        from={
-          <div className="contents min-w-0">
-            <span className="inline-flex h-7 items-center">from:</span>
-            <SelectInput
-              className="h-7 min-w-0 flex-1 rounded-md border border-line bg-bg px-1 text-[.72rem] text-fg focus:border-accent disabled:cursor-default disabled:opacity-[.55]"
-              aria-label="From"
-              value={accountId}
-              disabled={busy}
-              onChange={(event) => {
-                setAccountId(event.target.value);
-                setPreview(null);
-              }}
-            >
-              <option value="">Choose account</option>
-              {(accounts.data?.accounts ?? [])
-                .filter((account) => account.signedIn)
-                .map((account) => (
-                  <option key={account.id} value={account.id}>
-                    {account.displayName}
-                    {account.email ? ` (${account.email})` : ""}
-                  </option>
-                ))}
-            </SelectInput>
-          </div>
-        }
-        to={recipients}
-        onToChange={setRecipients}
-        cc={cc}
-        onCcChange={setCc}
-        suggestions={suggestions}
-        editingRecipients={true}
-        subject={subject}
-        onSubjectChange={setSubject}
-        body={body}
-        onBodyChange={setBody}
-        busy={busy}
-      />
-    </form>
-  );
 
   const errorAlert = error ? (
     <InlineAlert>
@@ -149,120 +115,65 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
     </InlineAlert>
   ) : null;
 
-  let content;
-  if (result) {
-    content = (
-      <div role="status">
-        <p>
-          Sent to {result.to}
-          {result.cc ? `, cc ${result.cc}` : ""}.
-        </p>
-        <p>
-          {result.filed
-            ? "Filed in the corpus."
-            : "Sent successfully, but could not be filed in the corpus."}
-        </p>
-        <Button variant="subtle" density="compact" type="button" onClick={onClose}>
-          Done
-        </Button>
-      </div>
-    );
-  } else if (preview) {
-    content = (
-      <>
-        <dl className="grid grid-cols-[5rem_minmax(0,1fr)] gap-2 [overflow-wrap:anywhere]">
-          <dt className="font-bold">Sending account</dt>
-          <dd className="m-0">
-            {accounts.data?.accounts?.find((account) => account.id === preview.accountId)
-              ?.displayName ?? preview.accountId}
-          </dd>
-          <dt className="font-bold">To</dt>
-          <dd className="m-0">{preview.to}</dd>
-          {preview.cc ? (
-            <>
-              <dt className="font-bold">Cc</dt>
-              <dd className="m-0">{preview.cc}</dd>
-            </>
-          ) : null}
-          <dt className="font-bold">Subject</dt>
-          <dd className="m-0">{preview.subject}</dd>
-          <dt className="font-bold">Plain-text message</dt>
-          <dd className="m-0">
-            <pre className="m-0 whitespace-pre-wrap [overflow-wrap:anywhere] [font:inherit]">
-              {preview.body}
-            </pre>
-          </dd>
-          <p className="col-span-full">Review the exact message above. Sending is irreversible.</p>
-        </dl>
-        {errorAlert}
-        <footer className="mt-2 flex items-center justify-end gap-2">
-          {sendFailed ? (
-            <Button variant="subtle" density="compact" type="button" onClick={onClose}>
-              Close
-            </Button>
-          ) : (
-            <>
-              <Button
-                variant="subtle"
-                density="compact"
-                type="button"
-                disabled={busy}
-                onClick={() => {
-                  setPreview(null);
-                  setError("");
-                }}
-              >
-                Edit
-              </Button>
-              <Button
-                variant="danger"
-                density="compact"
-                type="button"
-                disabled={busy || !previewIsCurrent}
-                onClick={() => void send()}
-              >
-                {busy ? "Sending…" : "Confirm and send"}
-              </Button>
-            </>
-          )}
-        </footer>
-      </>
-    );
-  } else {
-    content = (
-      <>
-        {errorAlert}
-        {editor}
-        <footer className="mt-2 flex items-center justify-end gap-2">
-          <Button
-            variant="subtle"
-            density="compact"
-            type="button"
-            disabled={busy}
-            onClick={onClose}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="subtle"
-            density="compact"
-            type="button"
-            disabled={busy || recipients.length === 0}
-            onClick={() => form.current?.requestSubmit()}
-          >
-            {busy ? "Preparing…" : "Review message"}
-          </Button>
-        </footer>
-      </>
-    );
-  }
-
   return (
     <aside
-      className="ibread flex min-w-0 flex-col overflow-auto border-l border-line bg-bg min-[60rem]:h-full min-[60rem]:min-h-0 min-[60rem]:px-5"
+      className="ibread flex min-w-0 flex-col overflow-auto bg-bg min-[60rem]:h-full min-[60rem]:min-h-0 min-[60rem]:px-5"
       aria-label="Compose email"
     >
-      <div className="mt-4 mb-1 rounded-lg border border-line bg-card px-3 py-2">{content}</div>
+      <div className="mt-4 mb-1 rounded-lg border border-line bg-card px-3 py-2">
+        {step.kind === "sent" ? (
+          <ComposeDone result={step.result} onClose={onClose} />
+        ) : step.kind === "reviewing" ? (
+          <>
+            <ComposePreview preview={step.preview} />
+            {errorAlert}
+            <footer className="mt-2 flex items-center justify-end gap-2">
+              {sendFailed ? (
+                <Button variant="subtle" density="compact" type="button" onClick={onClose}>
+                  Close
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    variant="subtle"
+                    density="compact"
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {
+                      dispatch({ type: "edit" });
+                      clearError();
+                    }}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    variant="danger"
+                    density="compact"
+                    type="button"
+                    disabled={busy || !previewIsCurrent}
+                    onClick={() => void send()}
+                  >
+                    {busy ? "Sending…" : "Confirm and send"}
+                  </Button>
+                </>
+              )}
+            </footer>
+          </>
+        ) : (
+          <>
+            {errorAlert}
+            <ComposeForm
+              draft={draft}
+              onDraft={(patch) => dispatch({ type: "draft", patch })}
+              accountId={accountId}
+              onAccount={(id) => dispatch({ type: "account", accountId: id })}
+              busy={busy}
+              onSubmit={(event) => void prepare(event)}
+              onClose={onClose}
+            />
+          </>
+        )}
+      </div>
     </aside>
   );
 }

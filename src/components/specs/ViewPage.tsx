@@ -117,7 +117,7 @@ export default function ViewPage() {
     <>
       {pullNote && (
         <p
-          className="mb-3 mt-0 border border-accent border-l-[3px] rounded-md bg-card px-3 py-2 text-[.85rem] text-fg"
+          className="mb-3 mt-0 border border-accent border-l-[3px] rounded-md bg-card px-3 py-2 text-sm text-fg"
           role="status"
         >
           {pullNote}

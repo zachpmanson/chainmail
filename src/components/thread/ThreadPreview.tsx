@@ -20,7 +20,7 @@ export default function ThreadPreview({
 
   return (
     <div
-      className="fixed inset-0 z-[55] flex items-center justify-center bg-black/45"
+      className="fixed inset-0 z-55 flex items-center justify-center bg-black/45"
       role="dialog"
       aria-modal="true"
       aria-label="Thread preview"

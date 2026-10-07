@@ -22,15 +22,13 @@ export default function SettingsAccounts() {
     >
       {auth.isError ? (
         <p
-          className="mt-3 rounded-sm border-l-[3px] border-l-red-700 bg-bg px-3 py-2 text-[.76rem] leading-[1.45] text-fg break-words mb-0"
+          className="mt-3 rounded-sm border-l-[3px] border-l-red-700 bg-bg px-3 py-2 text-xs leading-normal text-fg wrap-break-word mb-0"
           role="alert"
         >
           {errText(auth.error)}
         </p>
       ) : auth.isPending ? (
-        <p className="mt-3 mb-0 text-[.76rem] leading-[1.45] text-muted">
-          Checking connected accounts…
-        </p>
+        <p className="mt-3 mb-0 text-xs leading-normal text-muted">Checking connected accounts…</p>
       ) : (
         <>
           {connected.length > 0 ? (
@@ -39,7 +37,7 @@ export default function SettingsAccounts() {
                 const label = account.email || account.displayName;
                 return (
                   <li
-                    className="flex items-center justify-between gap-3 border-b border-line py-2 text-xs break-words"
+                    className="flex items-center justify-between gap-3 border-b border-line py-2 text-xs wrap-break-word"
                     key={account.id}
                   >
                     <span>{label}</span>
@@ -69,13 +67,13 @@ export default function SettingsAccounts() {
               })}
             </ul>
           ) : (
-            <p className="mt-3 mb-0 text-[.76rem] leading-[1.45] text-muted">
+            <p className="mt-3 mb-0 text-xs leading-normal text-muted">
               No Gmail accounts connected. Mailbox syncing is paused.
             </p>
           )}
           {disconnect.isError ? (
             <p
-              className="mt-3 rounded-sm border-l-[3px] border-l-red-700 bg-bg px-3 py-2 text-[.76rem] leading-[1.45] text-fg break-words mb-0"
+              className="mt-3 rounded-sm border-l-[3px] border-l-red-700 bg-bg px-3 py-2 text-xs leading-normal text-fg wrap-break-word mb-0"
               role="alert"
             >
               Could not disconnect: {errText(disconnect.error)}

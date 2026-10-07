@@ -99,14 +99,14 @@ export default function SettingsView() {
   const busy = save.isPending || settings.isPending;
 
   return (
-    <div className="wrap mx-auto grid w-[min(calc(100%-2rem),58rem)] max-w-[58rem] content-start gap-4 px-0 py-5 max-[640px]:w-[calc(100%-.5rem)] max-[640px]:pt-3">
+    <div className="wrap mx-auto flex w-[min(calc(100%-2rem),58rem)] max-w-[58rem] flex-col gap-4 px-0 py-5 max-[640px]:w-[calc(100%-.5rem)] max-[640px]:pt-3">
       <header className="my-1 mb-1.5 mx-0.5">
-        <h1 className="m-0 text-[1.45rem]">Settings</h1>
+        <h1 className="m-0 text-2xl">Settings</h1>
       </header>
 
       {save.isError ? (
         <p
-          className="mt-3 rounded-sm border-l-[3px] border-l-red-700 bg-bg px-3 py-2 text-[.76rem] leading-[1.45] text-fg break-words mb-0"
+          className="mt-3 rounded-sm border-l-[3px] border-l-red-700 bg-bg px-3 py-2 text-xs leading-normal text-fg wrap-break-word mb-0"
           role="alert"
         >
           {errText(save.error)}
@@ -136,7 +136,7 @@ export default function SettingsView() {
             }
           >
             <SelectInput
-              className="min-w-[14rem] max-w-full cursor-pointer rounded-md border border-line bg-bg px-2 py-1.5 text-[.78rem] disabled:cursor-default disabled:opacity-60 max-[640px]:min-w-[min(100%,14rem)]"
+              className="min-w-56 max-w-full cursor-pointer rounded-md border border-line bg-bg px-2 py-1.5 text-xs disabled:cursor-default disabled:opacity-60 max-[640px]:min-w-[min(100%,14rem)]"
               aria-label="How often to sweep the mailbox"
               value={every}
               disabled={busy || every === ""}
@@ -186,7 +186,7 @@ export default function SettingsView() {
             note={compact ? "One line per thread." : "Sender, subject, and preview."}
           >
             <SelectInput
-              className="min-w-[14rem] max-w-full cursor-pointer rounded-md border border-line bg-bg px-2 py-1.5 text-[.78rem] disabled:cursor-default disabled:opacity-60 max-[640px]:min-w-[min(100%,14rem)]"
+              className="min-w-56 max-w-full cursor-pointer rounded-md border border-line bg-bg px-2 py-1.5 text-xs disabled:cursor-default disabled:opacity-60 max-[640px]:min-w-[min(100%,14rem)]"
               aria-label="Thread list layout"
               value={compact ? "compact" : "detailed"}
               onChange={(e) => setCompact(e.target.value === "compact")}
@@ -209,7 +209,7 @@ export default function SettingsView() {
             }
           >
             <SelectInput
-              className="min-w-[14rem] max-w-96 cursor-pointer rounded-md border border-line bg-bg px-2 py-1.5 text-[.78rem] disabled:cursor-default disabled:opacity-60 max-[640px]:min-w-[min(100%,14rem)]"
+              className="min-w-56 max-w-96 cursor-pointer rounded-md border border-line bg-bg px-2 py-1.5 text-xs disabled:cursor-default disabled:opacity-60 max-[640px]:min-w-[min(100%,14rem)]"
               aria-label="Which person you are"
               value={me.value}
               disabled={busy || people.isPending}
@@ -227,7 +227,7 @@ export default function SettingsView() {
         </div>
         {people.isError ? (
           <p
-            className="mt-3 rounded-sm border-l-[3px] border-l-red-700 bg-bg px-3 py-2 text-[.76rem] leading-[1.45] text-fg break-words mb-0"
+            className="mt-3 rounded-sm border-l-[3px] border-l-red-700 bg-bg px-3 py-2 text-xs leading-normal text-fg wrap-break-word mb-0"
             role="alert"
           >
             {errText(people.error)}

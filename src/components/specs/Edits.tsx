@@ -12,7 +12,7 @@ export default function Edits({ edits, fallbackWho }: { edits?: RowEdit[]; fallb
           className="edit rounded-md border-l-2 border-line bg-dash px-2 py-1"
           key={ed.base || i}
         >
-          <div className="text-[.72rem] text-muted">
+          <div className="text-xs text-muted">
             edited by <span>{ed.who || fallbackWho || "someone"}</span>
             {ed.origWho || ed.origStamp ? (
               <>
@@ -29,7 +29,7 @@ export default function Edits({ edits, fallbackWho }: { edits?: RowEdit[]; fallb
               </>
             ) : null}
           </div>
-          <div className="overflow-x-auto text-[.92rem]" dangerouslySetInnerHTML={html(ed.html)} />
+          <div className="overflow-x-auto text-sm" dangerouslySetInnerHTML={html(ed.html)} />
         </div>
       ))}
     </div>

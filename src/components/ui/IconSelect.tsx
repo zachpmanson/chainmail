@@ -22,7 +22,7 @@ export default function IconSelect({
     >
       <IconFrame>{icon}</IconFrame>
       <select
-        className="absolute inset-0 m-0 h-full w-full cursor-pointer appearance-none border-0 p-0 font-[inherit] opacity-0 focus-visible:outline-none disabled:cursor-not-allowed"
+        className="absolute inset-0 m-0 size-full cursor-pointer appearance-none border-0 p-0 font-[inherit] opacity-0 focus-visible:outline-none disabled:cursor-not-allowed"
         {...props}
       >
         {children}

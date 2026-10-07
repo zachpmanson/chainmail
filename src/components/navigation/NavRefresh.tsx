@@ -3,7 +3,7 @@ import { ArrowPathIcon } from "@heroicons/react/24/outline";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError, $api } from "../../lib/api/api";
 import { when } from "../../lib/ui/stamp";
-import { Button } from "../ui/controls";
+import IconButton from "../ui/IconButton";
 
 /**
  * Slurps the mailbox, then invalidates every query; fetch first or the refetch misses new mail.
@@ -64,21 +64,22 @@ export default function NavRefresh() {
   };
 
   return (
-    <Button
-      type="button"
-      variant="quiet"
-      className={`size-8 shrink-0 p-1 gap-1.5 disabled:cursor-default${warning ? " text-accent" : ""}`}
-      aria-label={label}
-      title={title}
-      aria-busy={indicator}
-      disabled={busy}
-      onClick={() => void refresh()}
-    >
-      <ArrowPathIcon
-        className={`size-4.5 flex-none${indicator ? " motion-safe:animate-spin" : ""}`}
-        aria-hidden="true"
-      />
-      {stageLabel && <span className="whitespace-nowrap text-[.72rem]">{stageLabel}</span>}
-    </Button>
+    <span className="inline-flex shrink-0 items-center gap-1.5">
+      <IconButton
+        aria-label={label}
+        title={title}
+        aria-busy={indicator}
+        disabled={busy}
+        onClick={() => void refresh()}
+      >
+        <ArrowPathIcon
+          className={[indicator && "motion-safe:animate-spin", warning && "text-accent"]
+            .filter(Boolean)
+            .join(" ")}
+          aria-hidden="true"
+        />
+      </IconButton>
+      {stageLabel && <span className="whitespace-nowrap text-xs">{stageLabel}</span>}
+    </span>
   );
 }

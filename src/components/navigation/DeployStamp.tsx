@@ -13,13 +13,13 @@ export default function DeployStamp() {
 
   return (
     <a
-      className="flex items-baseline gap-1.5 whitespace-nowrap text-[.74rem] text-muted no-underline hover:text-accent"
+      className="flex items-baseline gap-1.5 whitespace-nowrap text-xs text-muted no-underline hover:text-accent"
       href={`https://github.com/zachpmanson/chainmail/commit/${rev}`}
       title={`deployed ${when(startedAt)}`}
       target="_blank"
       rel="noreferrer"
     >
-      <span>{on}</span> @ <code className="font-mono text-[.72rem]">{rev.slice(0, 7)}</code>
+      <span>{on}</span> @ <code className="font-mono text-xs">{rev.slice(0, 7)}</code>
     </a>
   );
 }

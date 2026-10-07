@@ -4,7 +4,7 @@ import { UserGroupIcon } from "@heroicons/react/24/outline";
 export default function PeopleCount({ people }: { people: number }) {
   return (
     <span
-      className="inline-flex items-center gap-1 text-[.68rem] tabular-nums text-muted"
+      className="inline-flex items-center gap-1 text-2xs tabular-nums text-muted"
       title={`${people} people in this thread — senders and recipients`}
     >
       <UserGroupIcon width={11} height={11} aria-hidden="true" />

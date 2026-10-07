@@ -1,6 +1,6 @@
 /* Browser-app only; the static transcript ships only styles.css. */
 
-/* The 1px divider sits on the handle's right edge, which is the pane's left edge. */
+/* The divider sits on the handle's right edge, flush with the pane; the handle is the gutter. */
 .ibdrag::before { content:""; position:absolute; inset:0 0 0 auto; margin:0; width:1px;
   background:var(--line); }
 .ibdrag:hover::before, .ibdrag:focus-visible::before, .ibsplit.dragging .ibdrag::before {
@@ -15,7 +15,6 @@
   body.inbox #root, body.search #root { display:flex; flex-direction:column; height:100%; min-height:0; }
   .wrap.ibwrap, .wrap.selwrap { flex:1 1 auto; min-height:0;
     display:flex; flex-direction:column; }
-  .iblistwrap .sellist { border:0; border-radius:0; background:none; margin:0; }
 }
 @media (max-width:59.99rem) {
   .ibsplit.has-choice .ibcol { display:none; }

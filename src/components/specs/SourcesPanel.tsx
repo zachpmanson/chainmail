@@ -33,7 +33,7 @@ export default function SourcesPanel({ v, filter }: { v: View; filter?: ThreadFi
               <>
                 {" "}
                 <a
-                  className="whitespace-nowrap rounded border border-line px-1 text-[.66rem] font-bold uppercase tracking-[.06em] text-muted no-underline hover:border-accent hover:text-accent"
+                  className="whitespace-nowrap rounded border border-line px-1 text-2xs font-bold uppercase tracking-[.06em] text-muted no-underline hover:border-accent hover:text-accent"
                   href={gmailMessageURL(c.gmailId)}
                   target="_blank"
                   rel="noopener"
@@ -45,7 +45,7 @@ export default function SourcesPanel({ v, filter }: { v: View; filter?: ThreadFi
               </>
             ) : null}{" "}
             <a
-              className="whitespace-nowrap rounded border border-line px-1 text-[.66rem] font-bold uppercase tracking-[.06em] text-muted no-underline hover:border-accent hover:text-accent"
+              className="whitespace-nowrap rounded border border-line px-1 text-2xs font-bold uppercase tracking-[.06em] text-muted no-underline hover:border-accent hover:text-accent"
               href={`#${c.anchor}`}
               title="Jump to the start of this thread"
               onClick={(e) => e.stopPropagation()}
@@ -148,21 +148,21 @@ export default function SourcesPanel({ v, filter }: { v: View; filter?: ThreadFi
 
   if (!groups.length) return null;
   return (
-    <details className="pan mt-3 rounded-[9px] border border-line bg-card">
-      <summary className="list-none cursor-pointer px-3 py-1.5 text-[.72rem] font-bold uppercase tracking-[.08em] text-muted hover:text-accent">
+    <details className="pan mt-3 rounded-lg border border-line bg-card">
+      <summary className="list-none cursor-pointer px-3 py-1.5 text-xs font-bold uppercase tracking-[.08em] text-muted hover:text-accent">
         Sources &amp; provenance
       </summary>
       <div className="border-t border-line px-3 pt-0.5 pb-2">
         {groups.map((g) => (
           <details className="srcgrp mt-2 first:mt-0.5" key={g.title} open>
             <summary className="mb-1 flex cursor-pointer list-none items-center gap-1 hover:text-accent">
-              <span className="m-0 text-[.66rem] font-bold uppercase tracking-[.09em] text-muted">
+              <span className="m-0 text-2xs font-bold uppercase tracking-[.09em] text-muted">
                 {g.title}
               </span>
             </summary>
             <ul className="m-0 list-disc pl-4">
               {g.items.map((it, i) => (
-                <li className="my-0.5 text-[.78rem]" key={i}>
+                <li className="my-0.5 text-xs" key={i}>
                   {it}
                 </li>
               ))}

@@ -9,19 +9,19 @@ export default function Palette() {
 
   return (
     <div className="max-w-full overflow-x-auto">
-      <table className="min-w-[36rem] border-collapse mt-2 text-[.76rem]">
+      <table className="min-w-[36rem] border-collapse mt-2 text-xs">
         <thead>
           <tr>
-            <th className="border-b border-line pb-1 pr-4 text-left text-[.64rem] font-bold uppercase tracking-[.08em] text-muted last:pr-0">
+            <th className="border-b border-line pb-1 pr-4 text-left text-2xs font-bold uppercase tracking-[.08em] text-muted last:pr-0">
               colour
             </th>
-            <th className="border-b border-line pb-1 pr-4 text-left text-[.64rem] font-bold uppercase tracking-[.08em] text-muted last:pr-0">
+            <th className="border-b border-line pb-1 pr-4 text-left text-2xs font-bold uppercase tracking-[.08em] text-muted last:pr-0">
               light
             </th>
-            <th className="border-b border-line pb-1 pr-4 text-left text-[.64rem] font-bold uppercase tracking-[.08em] text-muted last:pr-0">
+            <th className="border-b border-line pb-1 pr-4 text-left text-2xs font-bold uppercase tracking-[.08em] text-muted last:pr-0">
               dark
             </th>
-            <th className="border-b border-line pb-1 pr-4 text-left text-[.64rem] font-bold uppercase tracking-[.08em] text-muted last:pr-0">
+            <th className="border-b border-line pb-1 pr-4 text-left text-2xs font-bold uppercase tracking-[.08em] text-muted last:pr-0">
               used for
             </th>
           </tr>
@@ -30,7 +30,7 @@ export default function Palette() {
           {PALETTE.map(({ name, what }) => (
             <tr key={name}>
               <td className="border-b border-line py-1 pr-4 align-middle whitespace-nowrap last:pr-0">
-                <code className="font-[inherit] text-[.74rem]">--{name}</code>
+                <code className="font-[inherit] text-xs">--{name}</code>
               </td>
               <td className="border-b border-line py-1 pr-4 align-middle whitespace-nowrap last:pr-0">
                 <Swatch value={palette?.light[name]} />
@@ -53,7 +53,7 @@ function Swatch({ value }: { value?: string }) {
   return (
     <>
       <span
-        className="mr-1.5 inline-block h-[.82rem] w-4 align-[-.09rem] rounded-[3px] border border-line"
+        className="mr-1.5 inline-block h-[.82rem] w-4 align-[-.09rem] rounded-sm border border-line"
         style={value ? { background: value } : undefined}
         aria-hidden="true"
       />

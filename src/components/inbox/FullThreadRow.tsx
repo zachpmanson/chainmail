@@ -28,20 +28,23 @@ export default function FullThreadRow({
       thread={thread}
       checked={checked}
       current={current}
+      openClassName="flex-col gap-0.5"
       onToggle={onToggle}
       onOpen={onOpen}
     >
-      <span
-        className={`[grid-area:1/1] min-w-0 wrap-anywhere text-[.88rem] ${thread.unread > 0 ? "[font-weight:750]" : "font-normal"}`}
-      >
-        {last?.person || "unknown sender"}
-      </span>
-      <span className="[grid-area:1/2] mr-6 justify-self-end whitespace-nowrap text-[.72rem] tabular-nums text-muted">
-        {whenShort(last?.ts ?? thread.last)}
-      </span>
-      <span className="[grid-area:2/1/2/3] mt-1 gap-2">
+      <span className="flex items-baseline gap-3">
         <span
-          className={`min-w-0 flex-1 whitespace-nowrap overflow-hidden text-ellipsis text-[.84rem] ${thread.unread > 0 ? "font-semibold" : "font-normal"}`}
+          className={`min-w-0 flex-1 wrap-anywhere text-sm ${thread.unread > 0 ? "font-[750]" : "font-normal"}`}
+        >
+          {last?.person || "unknown sender"}
+        </span>
+        <span className="mr-6 shrink-0 whitespace-nowrap text-xs tabular-nums text-muted">
+          {whenShort(last?.ts ?? thread.last)}
+        </span>
+      </span>
+      <span className="mt-1 flex items-center gap-2">
+        <span
+          className={`min-w-0 flex-1 truncate text-sm ${thread.unread > 0 ? "font-semibold" : "font-normal"}`}
           title={subject}
         >
           {subject}
@@ -52,14 +55,8 @@ export default function FullThreadRow({
           attachments={thread.attachments}
         />
       </span>
-      <span className="[grid-area:3/1/3/3] min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[.78rem] font-light text-muted">
-        {last?.snippet ?? ""}
-      </span>
-      {meta ? (
-        <span className="[grid-area:4/1/4/3] flex flex-wrap gap-2 text-[.7rem] text-muted">
-          {meta}
-        </span>
-      ) : null}
+      <span className="truncate text-xs font-light text-muted">{last?.snippet ?? ""}</span>
+      {meta ? <span className="flex flex-wrap gap-2 text-xs text-muted">{meta}</span> : null}
     </ThreadRow>
   );
 }

@@ -16,7 +16,7 @@ export default function DiffPanel({
 
   const list = (rs: typeof fresh) =>
     rs.map((r) => (
-      <li className="my-0.5 text-[.78rem]" key={r.id}>
+      <li className="my-0.5 text-xs" key={r.id}>
         <a
           className="text-inherit underline decoration-accent decoration-dotted underline-offset-2 hover:text-accent hover:decoration-solid"
           href={`#${r.id}`}
@@ -35,14 +35,14 @@ export default function DiffPanel({
 
   if (!fresh.length && !revised.length) {
     return (
-      <details className="pan mt-3 rounded-[9px] border border-line bg-card" open>
-        <summary className="list-none cursor-pointer px-3 py-1.5 text-[.72rem] font-bold uppercase tracking-[.08em] text-muted hover:text-accent">
+      <details className="pan mt-3 rounded-lg border border-line bg-card" open>
+        <summary className="list-none cursor-pointer px-3 py-1.5 text-xs font-bold uppercase tracking-[.08em] text-muted hover:text-accent">
           Since last run
         </summary>
         <div className="border-t border-line px-3 pt-0.5 pb-2">
           <div className="srcgrp mt-2 first:mt-0.5">
             <ul className="m-0 list-disc pl-4">
-              <li className="my-0.5 text-[.78rem]">
+              <li className="my-0.5 text-xs">
                 Nothing new. Every entry on this page was already present in {prevLabel}.
               </li>
             </ul>
@@ -53,14 +53,14 @@ export default function DiffPanel({
   }
 
   return (
-    <details className="pan mt-3 rounded-[9px] border border-line bg-card" open>
-      <summary className="list-none cursor-pointer px-3 py-1.5 text-[.72rem] font-bold uppercase tracking-[.08em] text-muted hover:text-accent">
+    <details className="pan mt-3 rounded-lg border border-line bg-card" open>
+      <summary className="list-none cursor-pointer px-3 py-1.5 text-xs font-bold uppercase tracking-[.08em] text-muted hover:text-accent">
         Since last run {"—"} {fresh.length} new, {revised.length} revised
       </summary>
       <div className="border-t border-line px-3 pt-0.5 pb-2">
         {fresh.length ? (
           <div className="srcgrp mt-2 first:mt-0.5">
-            <div className="mb-1 text-[.66rem] font-bold uppercase tracking-[.09em] text-muted">
+            <div className="mb-1 text-2xs font-bold uppercase tracking-[.09em] text-muted">
               New since {prevLabel} ({fresh.length})
             </div>
             <ul className="m-0 list-disc pl-4">{list(fresh)}</ul>
@@ -68,7 +68,7 @@ export default function DiffPanel({
         ) : null}
         {revised.length ? (
           <div className="srcgrp mt-2 first:mt-0.5">
-            <div className="mb-1 text-[.66rem] font-bold uppercase tracking-[.09em] text-muted">
+            <div className="mb-1 text-2xs font-bold uppercase tracking-[.09em] text-muted">
               Revised ({revised.length})
             </div>
             <ul className="m-0 list-disc pl-4">{list(revised)}</ul>
