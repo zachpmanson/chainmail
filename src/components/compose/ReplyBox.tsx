@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useSearch } from "@tanstack/react-router";
 import { $api, type CorpusEntry, type SendResponse } from "../../lib/api/api";
+import { useAccountId } from "../../lib/inbox/useAccountId";
 import { staleAfterMail } from "../../lib/inbox/mailActions";
 import { dismissToast, pushToast } from "../../lib/ui/toasts";
 import ComposerFields from "./ComposerFields";
 import type { Draft } from "./Draft";
 import { refusal, SAID_MS } from "../inbox/MailVerbs";
 import CheckboxRow from "../ui/CheckboxRow";
-import { Button } from "../ui/controls";
+import Button from "../ui/Button";
 import InlineAlert from "../ui/InlineAlert";
 import AccountSelect from "./AccountSelect";
 import ReplyPlan from "./ReplyPlan";
@@ -39,7 +39,7 @@ export default function ReplyBox({
   aimed: number;
 }) {
   const queryClient = useQueryClient();
-  const routeAccountId = useSearch({ from: "/" }).accountId;
+  const routeAccountId = useAccountId();
   const [accountId, setAccountId] = useState(routeAccountId ?? "");
   const { connected } = useAccounts();
   const displayedAccountId = accountId || (connected.length === 1 ? (connected[0]?.id ?? "") : "");
@@ -188,7 +188,7 @@ export default function ReplyBox({
             <footer className="mt-2 flex items-center justify-end gap-2">
               <div className="mr-auto flex items-center gap-4">
                 <CheckboxRow
-                  className="flex cursor-pointer items-center gap-1.5 text-xs text-muted has-disabled:cursor-default has-disabled:opacity-[.55]"
+                  className="flex cursor-pointer items-center gap-1.5 text-xs text-muted has-disabled:cursor-default has-disabled:opacity-55"
                   title="Answer everyone the message was addressed to. Edit the reply's audience in the fields above."
                   checked={all}
                   disabled={busy}
@@ -199,7 +199,7 @@ export default function ReplyBox({
                   reply all
                 </CheckboxRow>
                 <CheckboxRow
-                  className="flex cursor-pointer items-center gap-1.5 text-xs text-muted has-disabled:cursor-default has-disabled:opacity-[.55]"
+                  className="flex cursor-pointer items-center gap-1.5 text-xs text-muted has-disabled:cursor-default has-disabled:opacity-55"
                   title="Send the HTML rendering beside the same plain-text message. Unchecked sends plain text alone."
                   checked={html}
                   disabled={busy}

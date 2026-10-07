@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 export default function HeaderRow({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex min-w-0 items-start gap-1">
-      <span className="inline-flex h-7 w-9 shrink-0 items-center">{label}</span>
+      <span className="inline-flex h-7 w-12 shrink-0 items-center">{label}</span>
       <div className="flex min-w-0 flex-1">{children}</div>
     </div>
   );

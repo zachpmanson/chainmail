@@ -1,7 +1,8 @@
 import type { ServiceStatus, StatusResponse } from "../../lib/api/api";
 import { when } from "../../lib/ui/stamp";
 import SettingsSection from "./SettingsSection";
-import { errText } from "./errText";
+import InlineAlert from "../ui/InlineAlert";
+import { errText } from "../../lib/ui/errText";
 
 /** A service's reported state and detail, as one settings-list row. */
 function ServiceRow({ svc }: { svc: ServiceStatus }) {
@@ -56,14 +57,7 @@ export default function SettingsServices({
       title="Connected services"
       description={`Run corpus status to refresh.${status.data?.checkedAt ? ` Last checked ${when(status.data.checkedAt)}.` : " Nothing measured yet."}`}
     >
-      {status.isError ? (
-        <p
-          className="mt-3 rounded-sm border-l-[3px] border-l-red-700 bg-bg px-3 py-2 text-xs leading-normal text-fg wrap-break-word mb-0"
-          role="alert"
-        >
-          {errText(status.error)}
-        </p>
-      ) : null}
+      {status.isError ? <InlineAlert compact>{errText(status.error)}</InlineAlert> : null}
       <ul className="mt-3 list-none border-t border-line p-0">
         {status.isPending ? (
           <li className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2 text-xs text-muted">

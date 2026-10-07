@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
-import FormField from "../ui/FormField";
-import { TextArea, TextInput } from "../ui/fields";
+import TextArea from "../ui/TextArea";
 import type { Address } from "./AddressField";
 import type { Draft } from "./Draft";
+import HeaderRow from "./HeaderRow";
 import RecipientRows from "./RecipientRows";
 import RecipientSummary from "./RecipientSummary";
 
@@ -53,21 +53,25 @@ export default function ComposerFields({
             busy={busy}
           />
         )}
+        {mode.kind === "compose" ? (
+          <HeaderRow label="subject:">
+            {/* AddressField's box, so the subject reads as another header line. */}
+            <input
+              className="mx-0.5 min-h-7 w-full min-w-0 rounded-md border border-line bg-bg px-1 py-0.5 font-[inherit] text-xs text-fg outline-none placeholder:text-muted focus:border-accent disabled:opacity-55"
+              type="text"
+              aria-label="Subject"
+              required
+              value={draft.subject}
+              disabled={busy}
+              onChange={(e) => onDraft({ subject: e.target.value })}
+            />
+          </HeaderRow>
+        ) : null}
       </div>
-      {mode.kind === "compose" ? (
-        <FormField className="flex flex-col gap-1 mb-2 text-xs text-muted" label="Subject">
-          <TextInput
-            className="block w-full rounded-md border border-line bg-bg p-2 text-sm leading-normal text-fg resize-y disabled:opacity-[.55]"
-            required
-            value={draft.subject}
-            disabled={busy}
-            onChange={(e) => onDraft({ subject: e.target.value })}
-          />
-        </FormField>
-      ) : null}
       <TextArea
-        className="block w-full rounded-md border border-line bg-bg p-2 text-sm leading-normal text-fg resize-y disabled:opacity-[.55]"
+        className="block w-full rounded-md border border-line bg-bg p-2 text-sm/normal text-fg resize-y disabled:opacity-55"
         aria-label={mode.kind === "reply" ? "Your reply" : "Message"}
+        placeholder={mode.kind === "reply" ? "Write your reply…" : "Write your message…"}
         required={mode.kind === "compose"}
         rows={4}
         value={draft.body}

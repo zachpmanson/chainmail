@@ -43,6 +43,9 @@ export function dismissToast(id: number) {
   emit();
 }
 
+/** How long a success toast stays up. Refusals stay until dismissed. */
+export const SAID_MS = 5000;
+
 /** `ttl` in ms, or null to stay until dismissed. */
 export function pushToast(text: string, kind: Toast["kind"] = "note", ttl: number | null = null) {
   const id = nextID++;

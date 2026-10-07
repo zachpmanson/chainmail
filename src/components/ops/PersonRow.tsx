@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { PersonSummary } from "../../lib/api/api";
-import { Button } from "../ui/controls";
-import { TextInput } from "../ui/fields";
+import Button from "../ui/Button";
+import TextInput from "../ui/TextInput";
 import Identity from "./Identity";
 
 function asIdentity(typed: string): string {
@@ -32,7 +32,7 @@ export default function PersonRow({
   const mail = `sent ${p.sent} · received ${p.received}`;
   return (
     <article>
-      <p className="mt-0 mb-1.5 text-sm leading-snug">
+      <p className="mt-0 mb-1.5 text-sm/snug">
         <span className="text-muted">#{p.personId}</span>{" "}
         <span className="ml-0.5 font-semibold">{p.displayName}</span>{" "}
         <span className="text-muted">{mail}</span>
@@ -57,7 +57,7 @@ export default function PersonRow({
           rename
         </Button>
       </form>
-      <p className="my-0.5 text-sm leading-snug [&_code]:text-xs [&_code]:wrap-anywhere">
+      <p className="my-0.5 text-sm/snug [&_code]:text-xs [&_code]:wrap-anywhere">
         {(p.identities ?? []).length === 0 ? (
           <span className="text-muted">
             No identity at all — this one is only ever the name in someone else's header, which is

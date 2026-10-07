@@ -177,7 +177,7 @@ function renderCells(
           wi++;
           i++;
         }
-        out += `<b class="eins">${run}</b>`;
+        out += `<b class="rounded-sm bg-[color-mix(in_srgb,var(--mine)_55%,transparent)] px-0.5">${run}</b>`;
         wi++;
         i++;
       }
@@ -193,8 +193,9 @@ function flatHtml(originalText: string, editBody: string): string {
     const s = spans[i]!;
     if (i > 0) out += " ";
     const inner = escapeHtml(s.text).split("\n").join("<br>");
-    if (s.kind === "del") out += `<del class="edel">${inner}</del>`;
-    else if (s.kind === "ins") out += `<b class="eins">${inner}</b>`;
+    if (s.kind === "del") out += `<del class="text-muted line-through">${inner}</del>`;
+    else if (s.kind === "ins")
+      out += `<b class="rounded-sm bg-[color-mix(in_srgb,var(--mine)_55%,transparent)] px-0.5">${inner}</b>`;
     else out += inner;
   }
   return (

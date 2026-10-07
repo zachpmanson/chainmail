@@ -1,5 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { $api, type CorpusEntry } from "../api/api";
+import { chainsKey, invalidateChains } from "../api/queryKeys";
+import { errText } from "../ui/errText";
 import { pushToast } from "../ui/toasts";
 
 /** Optimistic: patch every cached chain for this person, then invalidate; roll back on error. */
@@ -9,7 +11,7 @@ export function usePreferOriginal(): (personId: number, next: boolean) => void {
 
   return (personId, next) => {
     queryClient.setQueriesData<{ entries: CorpusEntry[] }>(
-      { queryKey: ["get", "/v1/chains/{rootExtId}"] },
+      { queryKey: chainsKey },
       (old) =>
         old && {
           ...old,
@@ -23,13 +25,13 @@ export function usePreferOriginal(): (personId: number, next: boolean) => void {
       {
         onError: (err) => {
           pushToast(
-            `That reading style did not stick: ${err instanceof Error ? err.message : String(err)}. ` +
+            `That reading style did not stick: ${errText(err)}. ` +
               "Nothing was stored — press again to retry.",
             "fail",
           );
         },
         onSettled: () => {
-          void queryClient.invalidateQueries({ queryKey: ["get", "/v1/chains/{rootExtId}"] });
+          void invalidateChains(queryClient);
         },
       },
     );

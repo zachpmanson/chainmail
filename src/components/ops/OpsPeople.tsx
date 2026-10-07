@@ -1,14 +1,12 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { $api, type PersonSummary } from "../../lib/api/api";
+import { invalidateOpsPlan } from "../../lib/api/queryKeys";
 import FormField from "../ui/FormField";
-import { TextInput } from "../ui/fields";
+import TextInput from "../ui/TextInput";
 import InlineAlert from "../ui/InlineAlert";
 import PersonRow from "./PersonRow";
-
-function errText(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
-}
+import { errText } from "../../lib/ui/errText";
 
 const SHOWN = 25;
 
@@ -55,7 +53,7 @@ export default function OpsPeople() {
     }
     setBusy(false);
     await qc.invalidateQueries({ queryKey: ["get", "/v1/people"] });
-    await qc.invalidateQueries({ queryKey: ["get", "/v1/ops/plan"] });
+    await invalidateOpsPlan(qc);
   }
 
   return (

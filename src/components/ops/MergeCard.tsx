@@ -42,10 +42,10 @@ export default function MergeCard({
           <StatusBadge tone="neutral">read-only</StatusBadge>
         )}
       </p>
-      <p className="my-0.5 text-sm leading-snug [&_code]:text-xs [&_code]:wrap-anywhere">
+      <p className="my-0.5 text-sm/snug [&_code]:text-xs [&_code]:wrap-anywhere">
         keep&nbsp;<code>{keep}</code>
       </p>
-      <p className="my-0.5 text-sm leading-snug [&_code]:text-xs [&_code]:wrap-anywhere">
+      <p className="my-0.5 text-sm/snug [&_code]:text-xs [&_code]:wrap-anywhere">
         drop&nbsp;<code>{drop}</code>
       </p>
       {m.evidence ? <p className="my-1 mb-2 text-xs text-muted">{m.evidence}.</p> : null}

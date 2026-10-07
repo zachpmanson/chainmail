@@ -1,4 +1,4 @@
-import { Button } from "../ui/controls";
+import Button from "../ui/Button";
 
 export default function CompactModeToggle({
   compact,

@@ -1,6 +1,6 @@
-import { useSearch } from "@tanstack/react-router";
 import { FolderIcon } from "@heroicons/react/24/outline";
 import { $api } from "../../lib/api/api";
+import { useAccountId } from "../../lib/inbox/useAccountId";
 import { pushToast } from "../../lib/ui/toasts";
 import IconSelect from "../ui/IconSelect";
 
@@ -60,7 +60,7 @@ export default function MoveFolder({
   busy: boolean;
   onMove: (folder: string, accountId?: string) => void;
 }) {
-  const routeAccountId = useSearch({ from: "/" }).accountId;
+  const routeAccountId = useAccountId();
   const auth = $api.useQuery("get", "/auth/status", {});
   const accounts = (auth.data?.accounts ?? []).filter((account) => account.signedIn);
   const accountId = routeAccountId || (accounts.length === 1 ? accounts[0]?.id : undefined);

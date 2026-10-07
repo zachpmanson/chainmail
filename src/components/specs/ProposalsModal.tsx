@@ -1,7 +1,7 @@
 import { useState } from "react";
 import Checkbox from "../ui/Checkbox";
 import DialogShell from "../ui/DialogShell";
-import { Button } from "../ui/controls";
+import Button from "../ui/Button";
 import ThreadPreview from "../thread/ThreadPreview";
 import type { RefreshCandidate } from "../../lib/api/api";
 

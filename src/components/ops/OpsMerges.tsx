@@ -1,15 +1,12 @@
 import { $api } from "../../lib/api/api";
 import { useMergeRun } from "../../lib/ops/opsMerges";
 import Checkbox from "../ui/Checkbox";
-import { Button } from "../ui/controls";
+import Button from "../ui/Button";
 import InlineAlert from "../ui/InlineAlert";
 import MergeCard from "./MergeCard";
 import MergeConfirm from "./MergeConfirm";
 import MergePlanDetails from "./MergePlanDetails";
-
-function errText(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
-}
+import { errText } from "../../lib/ui/errText";
 
 export default function OpsMerges() {
   const plan = $api.useQuery("get", "/v1/ops/plan", {});

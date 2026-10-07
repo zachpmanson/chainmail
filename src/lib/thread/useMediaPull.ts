@@ -1,9 +1,22 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ApiError, $api } from "../api/api";
+import { ApiError, $api, type MediaPull } from "../api/api";
+import { invalidateChains } from "../api/queryKeys";
 import { pullSummary } from "../message/attachments";
+import { errText } from "../ui/errText";
+import { pushToast, SAID_MS } from "../ui/toasts";
 
-export function useMediaPull(accountId: string | undefined): {
+export function useMediaPull({
+  accountId,
+  name,
+  onPulled,
+}: {
+  accountId?: string;
+  /** A saved page's name: the server then rebuilds and saves that page itself. */
+  name?: string;
+  /** The button is held until this settles. Defaults to re-reading the thread. */
+  onPulled?: (data: MediaPull) => Promise<unknown> | void;
+}): {
   pulling: string | null;
   pullNote: string | null;
   pull: (extId: string) => void;
@@ -13,21 +26,19 @@ export function useMediaPull(accountId: string | undefined): {
   const [pulling, setPulling] = useState<string | null>(null);
   const [pullNote, setPullNote] = useState<string | null>(null);
 
-  // No spec to patch: re-read the thread, and release the button only once that lands.
   const mutation = $api.useMutation("post", "/v1/media/pull", {
     onSuccess: (data) => {
-      console.log(`fetch: ${pullSummary(data)}`);
+      pushToast(`Attachments: ${pullSummary(data)}`, "note", SAID_MS);
       setPullNote(null);
-      void queryClient
-        .invalidateQueries({ queryKey: ["get", "/v1/chains/{rootExtId}"] })
-        .finally(() => setPulling(null));
+      const after = onPulled ? onPulled(data) : invalidateChains(queryClient);
+      void Promise.resolve(after).finally(() => setPulling(null));
     },
     onError: (e) => {
       setPulling(null);
       setPullNote(
         e instanceof ApiError && e.status === 403
           ? "This host cannot fetch files (it was started without -media)."
-          : `Fetching the files failed: ${e instanceof Error ? e.message : String(e)}. Nothing was stored — press again to retry.`,
+          : `Fetching the files failed: ${errText(e)}. Nothing was stored — press again to retry.`,
       );
     },
   });
@@ -35,7 +46,9 @@ export function useMediaPull(accountId: string | undefined): {
   const pull = (extId: string) => {
     setPulling(extId);
     setPullNote(null);
-    mutation.mutate({ body: { entry: extId, ...(accountId ? { accountId } : {}) } });
+    mutation.mutate({
+      body: { entry: extId, ...(name ? { name } : {}), ...(accountId ? { accountId } : {}) },
+    });
   };
 
   return { pulling, pullNote, pull };

@@ -9,7 +9,7 @@ export default function ThreadPopup({ rootExtId }: { rootExtId: string }) {
   const summary = chain.data?.summary;
 
   return (
-    <main className="flex h-screen flex-col [&_.ibread]:flex [&_.ibread]:flex-1 [&_.ibread]:flex-col [&_.ibread]:min-h-0 [&_.ibread-head]:flex-none [&>p]:mx-5 [&>p]:mt-2 [&>p]:text-xs [&>p]:text-muted">
+    <main className="flex h-screen flex-col [&>p]:mx-5 [&>p]:mt-2 [&>p]:text-xs [&>p]:text-muted">
       <ThreadPane
         thread={{
           rootExtId,
@@ -24,6 +24,7 @@ export default function ThreadPopup({ rootExtId }: { rootExtId: string }) {
         empty="No thread was specified."
         onClose={() => window.close()}
         openInWindow={false}
+        className="flex-1 min-h-0"
       />
     </main>
   );

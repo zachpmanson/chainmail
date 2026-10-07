@@ -1,15 +1,12 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { $api } from "../../lib/api/api";
-import { Button } from "../ui/controls";
-import { TextInput } from "../ui/fields";
+import Button from "../ui/Button";
+import TextInput from "../ui/TextInput";
 import InlineAlert from "../ui/InlineAlert";
 import Consequence from "./Consequence";
 import RuleRow, { type Draft } from "./RuleRow";
-
-function errText(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
-}
+import { errText } from "../../lib/ui/errText";
 
 type Phase =
   | { kind: "idle" }
@@ -83,7 +80,7 @@ export default function OpsOrgs() {
       ) : null}
 
       {draft ? (
-        <div className="mt-2 mb-0.5 rounded-md border border-line bg-quote p-2 text-xs leading-normal text-fg">
+        <div className="mt-2 mb-0.5 rounded-md border border-line bg-quote p-2 text-xs/normal text-fg">
           <Consequence
             shift={preview.data ?? { messages: 0, people: 0, ambiguous: 0 }}
             draft={draft}

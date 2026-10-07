@@ -4,7 +4,7 @@ import { when } from "../../lib/ui/stamp";
 
 function OneTrail(t: OpsMergeRecord) {
   return (
-    <li className="py-1 text-sm leading-normal">
+    <li className="py-1 text-sm/normal">
       <span className="text-xs tabular-nums text-muted">{when(t.mergedAt)}</span>
       <code>#{t.keepId}</code> {t.keepName ?? ""} <span className="text-muted">←</span>{" "}
       <code>#{t.dropId}</code> {t.dropName ?? ""}
@@ -25,7 +25,7 @@ export default function MergePlanDetails({ data }: { data: OpsPlanResponse }) {
           {data.refusals.length === 0 ? (
             <p className="my-1.5 mb-2 text-xs text-muted">None.</p>
           ) : (
-            <ul className="mt-1 mb-0 list-none p-0 [&_li]:py-1 [&_li]:text-xs [&_li]:leading-normal [&_li_code]:text-xs">
+            <ul className="mt-1 mb-0 list-none p-0 [&_li]:py-1 [&_li]:text-xs/normal [&_li_code]:text-xs">
               {data.refusals.map((r) => (
                 <li key={`${r.rule}:${r.subject}`}>
                   <span className="text-muted">{ruleLabel(r.rule)}</span> <code>{r.subject}</code> —{" "}
@@ -49,7 +49,7 @@ export default function MergePlanDetails({ data }: { data: OpsPlanResponse }) {
           {data.candidates.length === 0 ? (
             <p className="my-1.5 mb-2 text-xs text-muted">None.</p>
           ) : (
-            <ul className="mt-1 mb-0 list-none p-0 [&_li]:py-1 [&_li]:text-xs [&_li]:leading-normal [&_li_code]:text-xs">
+            <ul className="mt-1 mb-0 list-none p-0 [&_li]:py-1 [&_li]:text-xs/normal [&_li_code]:text-xs">
               {data.candidates.map((c) => (
                 <li key={`${c.aId}:${c.bId}`}>
                   <code>{c.aName}</code> ~ <code>{c.bName}</code> — {c.reason}
@@ -76,7 +76,7 @@ export default function MergePlanDetails({ data }: { data: OpsPlanResponse }) {
           {data.twinsDeclined.length === 0 ? (
             <p className="my-1.5 mb-2 text-xs text-muted">None — every stored copy collapsed.</p>
           ) : (
-            <ul className="mt-1 mb-0 list-none p-0 [&_li]:py-1 [&_li]:text-xs [&_li]:leading-normal [&_li_code]:text-xs">
+            <ul className="mt-1 mb-0 list-none p-0 [&_li]:py-1 [&_li]:text-xs/normal [&_li_code]:text-xs">
               {data.twinsDeclined.map((d) => (
                 <li key={d.reason}>
                   <span className="text-muted">{d.count}</span> — {d.reason}
@@ -99,7 +99,7 @@ export default function MergePlanDetails({ data }: { data: OpsPlanResponse }) {
               made.
             </p>
           ) : (
-            <ul className="mt-1 mb-0 list-none p-0 [&_li]:py-1 [&_li]:text-sm [&_li]:leading-normal">
+            <ul className="mt-1 mb-0 list-none p-0 [&_li]:py-1 [&_li]:text-sm/normal">
               {data.trail.map((t) => (
                 <OneTrail key={`${t.keepId}:${t.dropId}:${t.mergedAt}`} {...t} />
               ))}

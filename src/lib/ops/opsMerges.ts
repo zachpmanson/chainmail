@@ -1,6 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useReducer } from "react";
 import { $api, type OpsMerge } from "../api/api";
+import { invalidateOpsPlan } from "../api/queryKeys";
+import { errText } from "../ui/errText";
 
 export type MergeTarget = Pick<OpsMerge, "keepId" | "dropId">;
 
@@ -9,10 +11,6 @@ export type MergeBatchResult = {
   total: number;
   refusal?: { target: MergeTarget; error: unknown };
 };
-
-function errText(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
-}
 
 /** The dedupe rules, labelled for a screen the CLI naming would obscure. */
 const RULES: Record<string, string> = {
@@ -144,7 +142,7 @@ export function useMergeRun(planned: OpsMerge[] | undefined) {
           `was refused: ${errText(refusal.error)}`
         : null,
     });
-    await qc.invalidateQueries({ queryKey: ["get", "/v1/ops/plan"] });
+    await invalidateOpsPlan(qc);
   }
 
   return {

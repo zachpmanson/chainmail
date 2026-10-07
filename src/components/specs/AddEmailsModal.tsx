@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import DialogShell from "../ui/DialogShell";
 import FormField from "../ui/FormField";
-import { Button } from "../ui/controls";
-import { TextInput } from "../ui/fields";
+import Button from "../ui/Button";
+import TextInput from "../ui/TextInput";
 import ThreadPreview from "../thread/ThreadPreview";
 import FullThreadRow from "../inbox/FullThreadRow";
 import RankMeta from "../inbox/RankMeta";
 import { $api, searchQuery, type ChainHit } from "../../lib/api/api";
+import { errText } from "../../lib/ui/errText";
 
 /** Sends the query with the chosen roots so the page records it and refreshes can
  *  re-find the thread. */
@@ -73,7 +74,8 @@ export default function AddEmailsModal({
             />
           </FormField>
           <Button
-            className="min-h-0! rounded-md! border-line! bg-bg! px-3! py-1! text-xs! font-semibold! text-fg! cursor-pointer! hover:border-accent! hover:text-accent! disabled:cursor-default! disabled:opacity-[.45]!"
+            density="compact"
+            className="cursor-pointer bg-bg disabled:cursor-default disabled:opacity-45"
             type="submit"
             disabled={!q.trim()}
           >
@@ -82,7 +84,7 @@ export default function AddEmailsModal({
         </form>
         {results.isError ? (
           <p className="mt-2 flex-[1_1_100%] text-xs text-muted" role="alert">
-            {results.error instanceof Error ? results.error.message : String(results.error)}
+            {errText(results.error)}
           </p>
         ) : null}
         {results.isFetching ? (

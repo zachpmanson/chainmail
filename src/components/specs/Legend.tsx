@@ -3,7 +3,7 @@ export default function Legend() {
   return (
     <div className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(17rem,1fr))] gap-x-4 gap-y-1.5 text-xs text-muted">
       <div className="flex items-start gap-2 leading-snug">
-        <span className="plain mt-px size-[1.15rem] shrink-0 rounded-md border border-line bg-card" />
+        <span className="mt-px size-[1.15rem] shrink-0 rounded-md border border-line bg-card" />
         <div>
           <b className="font-semibold text-fg">Solid</b> — a real standalone message in the mailbox.
           The caret on its header opens the ids it was found under, its Gmail message&nbsp;id among

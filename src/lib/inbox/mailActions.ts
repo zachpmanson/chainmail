@@ -6,14 +6,15 @@ import {
   type MarkReadRequest,
   type MarkReadResponse,
 } from "../api/api";
+import { invalidateChains, invalidateSearch } from "../api/queryKeys";
 import { dropFromLists, markInLists, putBackLists } from "./lists";
 
 /** Reconcile every view whose mail-derived data changes after a mailbox write. */
 export function staleAfterMail(queryClient: ReturnType<typeof useQueryClient>): void {
-  void queryClient.invalidateQueries({ queryKey: ["get", "/v1/search"] });
+  void invalidateSearch(queryClient);
   void queryClient.invalidateQueries({ queryKey: ["get", "/v1/labels"] });
   void queryClient.invalidateQueries({ queryKey: ["get", "/v1/stats"] });
-  void queryClient.invalidateQueries({ queryKey: ["get", "/v1/chains/{rootExtId}"] });
+  void invalidateChains(queryClient);
 }
 
 /** Surface-owned feedback remains a caller concern; this hook owns shared cache/write behavior. */
@@ -55,10 +56,8 @@ export function useReadAction({
       was: markInLists(queryClient, variables.body.chain, variables.body.unread),
     }),
     onSuccess: (response, variables) => {
-      void queryClient.invalidateQueries({ queryKey: ["get", "/v1/search"] });
-      if (invalidateChain) {
-        void queryClient.invalidateQueries({ queryKey: ["get", "/v1/chains/{rootExtId}"] });
-      }
+      void invalidateSearch(queryClient);
+      if (invalidateChain) void invalidateChains(queryClient);
       onSuccess?.(response, variables.body);
     },
     onError: (error, variables, context) => {

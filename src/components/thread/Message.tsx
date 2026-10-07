@@ -1,9 +1,8 @@
 import { Fragment } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { receiptNames } from "../../lib/message/who";
-import type { Attachment } from "../../lib/message/attachments";
+import type { MessageEmail } from "../../lib/message/email";
 import { useOriginal } from "../../lib/message/useOriginal";
-import type { StampData } from "../../lib/ui/stamp";
 import StatusBadge from "../ui/StatusBadge";
 import Attachments from "./Attachments";
 import Avatar from "./Avatar";
@@ -21,88 +20,10 @@ const orgColors: Record<string, string> = {
   o5: "var(--o5)",
 };
 
-/** One message bubble. */
-export default function Message({
-  id,
-  body,
-  sender,
-  subject,
-  senderTitle,
-  org,
-  orgSlot,
-  avatarClass,
-  me,
-  quoted,
-  landed,
-  onLandedEnd,
-  mentions,
-  fromEmail,
-  person,
-  onPreferOriginal,
-  attachments,
-  extId,
-  onPull,
-  pulling,
-  mediaBase,
-  to,
-  toTitle,
-  stamp,
-  style,
-  lane,
-  chainStart,
-  mark,
-  reply,
-  source,
-  edits,
-  answer,
-  copyJson,
-  original,
-}: {
+/** Where the bubble sits in its view, and its transient marks. */
+export type MessagePlace = {
   /** the bubble's anchor id; the timestamp links to it */
   id: string;
-  /** presentation HTML, already sanitised; edges are trimmed here */
-  body: string;
-  /** the sender as displayed; absent on a message with no name on it */
-  sender?: string;
-  /** the message's own subject; absent on recovered entries and notes */
-  subject?: string;
-  /** hover text for the sender, e.g. "Ada Okoye <ada@example.com>"; defaults to the name */
-  senderTitle?: string;
-  org?: string;
-  /** the org's colour slot, e.g. "o2" */
-  orgSlot: string;
-  /** the sender's avatar image class, e.g. "p0"; absent draws their initials */
-  avatarClass?: string;
-  /** the reader's own outbound */
-  me?: boolean;
-  /** reconstructed from quoted text; drawn dashed */
-  quoted?: boolean;
-  /** the message the pane opened on; flashes once (see .msg.landed) */
-  landed?: boolean;
-  /** called when that flash finishes, so the caller can take the mark off. */
-  onLandedEnd?: () => void;
-  /** people @-named in the body, shown above it */
-  mentions?: string[];
-  /** keys the local styles switch (see lib/prefs/usePrefs); absent on recovered entries */
-  fromEmail?: string;
-  /** stored half of the styles switch; absent without a corpus (built page, static export) */
-  person?: { id: number; preferOriginal: boolean };
-  /** flips that preference; absent keeps the switch local */
-  onPreferOriginal?: (next: boolean) => void;
-  attachments?: Attachment[];
-  /** the corpus's handle for this message, which the fetch button asks for */
-  extId?: string;
-  /** fetch this message's files, where a host will do it at all */
-  onPull?: (extId: string) => void;
-  /** the message whose files are being fetched, so its button can say so */
-  pulling?: string | null;
-  /** where the corpus serves stored bytes; empty in the static export */
-  mediaBase?: string;
-  /** as it appeared on the message, e.g. "Bo Halvorsen, cc …"; absent reads "—" */
-  to?: string;
-  /** hover text per `to:` name (split by lib/message/who's receiptNames); defaults to the name */
-  toTitle?: (name: string) => string;
-  stamp: StampData;
   /** where the bubble sits in the transcript grid, from the layout pass */
   style?: CSSProperties;
   /** thread-column index, for the client's column view */
@@ -111,6 +32,72 @@ export default function Message({
   chainStart?: boolean;
   /** what changed since a previous render, where there was one */
   mark?: "new" | "revised";
+  /** the message the pane opened on; flashes once */
+  landed?: boolean;
+  /** called when that flash finishes, so the caller can take the mark off. */
+  onLandedEnd?: () => void;
+};
+
+/** Presentation lookups. */
+export type MessageLook = {
+  /** the org's colour slot, e.g. "o2" */
+  orgSlot: string;
+  /** the sender's avatar image class, e.g. "p0"; absent draws their initials */
+  avatarClass?: string;
+  /** hover text per `to:` name (split by lib/message/who's receiptNames); defaults to the name */
+  toTitle?: (name: string) => string;
+};
+
+/** Fetching a message's files; absent where no host will do it. */
+export type MessageMedia = {
+  onPull: (extId: string) => void;
+  /** the message whose files are being fetched, so its button can say so */
+  pulling: string | null;
+  /** where the corpus serves stored bytes */
+  mediaBase: string;
+};
+
+/** The original-styling switch; absent unless the corpus holds the sender's own part and a server can fetch it. */
+export type MessageReading = {
+  original: { extId: string; load: (extId: string) => Promise<string> };
+  /** stored half of the switch; absent keeps it in browser storage */
+  person?: { id: number; preferOriginal: boolean };
+  /** flips that preference; absent keeps the switch local */
+  onPreferOriginal?: (next: boolean) => void;
+};
+
+/** One message bubble. */
+export default function Message({
+  email: {
+    sender,
+    senderTitle,
+    fromEmail,
+    org,
+    to,
+    subject,
+    body,
+    stamp,
+    attachments,
+    mentions,
+    extId,
+    me,
+    quoted,
+  },
+  place: { id, style, lane, chainStart, mark, landed, onLandedEnd },
+  look: { orgSlot, avatarClass, toTitle },
+  media,
+  reading,
+  reply,
+  source,
+  edits,
+  answer,
+  copyJson,
+}: {
+  email: MessageEmail;
+  place: MessagePlace;
+  look: MessageLook;
+  media?: MessageMedia;
+  reading?: MessageReading;
   /** the reply line; a node because only the pipeline can resolve the parent */
   reply?: ReactNode;
   /** where the entry was found, shown in the receipt */
@@ -121,16 +108,17 @@ export default function Message({
   answer?: ReactNode;
   /** what the clip button copies as JSON; absent hides the button */
   copyJson?: unknown;
-  /** passed only where the corpus holds the sender's own part and a server can fetch it */
-  original?: { extId: string; load: (extId: string) => Promise<string> };
 }) {
-  const styled = useOriginal(original, fromEmail, person, onPreferOriginal);
+  const styled = useOriginal(
+    reading?.original,
+    fromEmail,
+    reading?.person,
+    reading?.onPreferOriginal,
+  );
   const who = senderTitle ?? sender ?? "";
   return (
     <div
-      className={["msg", orgSlot, "mb-2 scroll-mt-6", chainStart && "chstart", landed && "landed"]
-        .filter(Boolean)
-        .join(" ")}
+      className={["msg", "mb-2 scroll-mt-6", chainStart && "chstart"].filter(Boolean).join(" ")}
       id={id}
       data-ch={lane}
       style={
@@ -165,10 +153,7 @@ export default function Message({
             {subject || source ? (
               <span className="flex flex-[1_1_100%] items-baseline gap-x-3 gap-y-1">
                 {subject ? (
-                  <span
-                    className="min-w-0 flex-[1_1_auto] text-xs leading-tight text-fg"
-                    title={subject}
-                  >
+                  <span className="min-w-0 flex-[1_1_auto] text-xs/tight text-fg" title={subject}>
                     {subject}
                   </span>
                 ) : null}
@@ -186,10 +171,10 @@ export default function Message({
                   ))
                 : "—"}
             </span>
-            {answer !== undefined || original !== undefined || copyJson !== undefined ? (
+            {answer !== undefined || reading !== undefined || copyJson !== undefined ? (
               <span className="ml-auto inline-flex items-center gap-1.5">
                 {answer}
-                {original !== undefined ? (
+                {reading !== undefined ? (
                   <OriginalControl on={styled.on} state={styled.state} ask={styled.ask} />
                 ) : null}
                 {copyJson !== undefined ? <CopyJson data={copyJson} /> : null}
@@ -203,7 +188,10 @@ export default function Message({
             "bub relative overflow-hidden rounded-lg border border-line bg-card px-3 py-2 before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-(--orgc,transparent) before:content-['']",
             quoted && "border-dashed border-muted/55 bg-dash",
             me && "border-org-3 bg-mine",
-            mark === "new" && "border-l-[3px] border-l-org-1",
+            mark === "new" && "border-l-3 border-l-org-1",
+            landed
+              ? "animate-[flash_1.6s_ease-out_1] border-accent"
+              : "in-target:animate-[flash_1.4s_ease-out_1] in-target:border-accent",
           ]
             .filter(Boolean)
             .join(" ")}
@@ -225,9 +213,9 @@ export default function Message({
           <Attachments
             attachments={attachments}
             extId={extId}
-            onPull={onPull}
-            pulling={pulling}
-            mediaBase={mediaBase}
+            onPull={media?.onPull}
+            pulling={media?.pulling}
+            mediaBase={media?.mediaBase}
           />
         </div>
       </div>

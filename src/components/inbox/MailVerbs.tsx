@@ -1,7 +1,7 @@
 import { ApiError } from "../../lib/api/api";
+import { errText } from "../../lib/ui/errText";
 
-/** How long a success toast stays up. Refusals stay until dismissed. */
-export const SAID_MS = 5000;
+export { SAID_MS } from "../../lib/ui/toasts";
 
 /** Built from the server's counts. Skipped entries (quote-only, Slack) have no
  *  mailbox copy to move, so they're named to explain a short count. */
@@ -37,5 +37,5 @@ export const VERBS: Record<string, string> = {
 export function refusal(e: unknown, flag: string, what: string): string {
   return e instanceof ApiError && e.status === 403
     ? `This host cannot change the mailbox: it was started without ${flag}.`
-    : `${what} failed: ${e instanceof Error ? e.message : String(e)}`;
+    : `${what} failed: ${errText(e)}`;
 }

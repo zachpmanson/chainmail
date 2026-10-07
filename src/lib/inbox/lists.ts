@@ -1,10 +1,11 @@
 import { useRef } from "react";
 import type { QueryClient } from "@tanstack/react-query";
 import type { ChainHit } from "../api/api";
+import { searchKey } from "../api/queryKeys";
 
 // Optimistic list updates for writes. Every list is a /v1/search query, cached either as
 // a page (`{chains}`) or as infinite-query pages (`{pages: [{chains}, …], pageParams}`).
-const LISTS = { queryKey: ["get", "/v1/search"] } as const;
+const LISTS = { queryKey: searchKey };
 
 /** What the caches held before a write touched them: enough to put every one back. */
 export type Was = [readonly unknown[], unknown][];

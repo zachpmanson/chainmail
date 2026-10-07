@@ -1,6 +1,6 @@
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import { useMemo, useRef, useState } from "react";
-import { Button } from "../ui/controls";
+import Button from "../ui/Button";
 
 /** Text that matches no suggestion still becomes a chip once it looks like an
  *  address; real validation is the server's (see cmd/server's checkAddresses). */
@@ -43,8 +43,8 @@ function Chip({ who, remove, disabled }: { who: Address; remove: () => void; dis
       <span className="wrap-anywhere">{words}</span>
       <Button
         type="button"
-        variant="quiet"
-        className="size-auto! min-h-0! shrink-0 rounded p-0.5 text-muted hover:bg-bg hover:text-accent disabled:cursor-default disabled:opacity-[.55] disabled:hover:bg-transparent disabled:hover:text-muted"
+        variant="bare"
+        className="inline-flex shrink-0 items-center justify-center rounded-sm border border-transparent p-0.5 text-muted transition-colors hover:border-line hover:bg-bg hover:text-accent disabled:cursor-default disabled:opacity-55 disabled:hover:bg-transparent disabled:hover:text-muted"
         disabled={disabled}
         onClick={remove}
         title={`Take ${who.address} off this reply.`}
@@ -168,7 +168,7 @@ export default function AddressField({
 
   return (
     <span
-      className={`relative inline-flex w-full min-w-0 min-h-7 max-w-full flex-wrap items-center gap-1 align-middle rounded-md border border-line bg-bg px-1 py-0.5 mx-0.5 focus-within:border-accent${showing ? " open" : ""}`}
+      className="relative inline-flex w-full min-w-0 min-h-7 max-w-full flex-wrap items-center gap-1 align-middle rounded-md border border-line bg-bg px-1 py-0.5 mx-0.5 focus-within:border-accent"
       data-list={label}
     >
       {value.map((who) => (
@@ -216,7 +216,7 @@ export default function AddressField({
             <span
               key={addressKey(a.address)}
               id={`${label}-option-${i}`}
-              className={`flex items-baseline gap-1.5 rounded py-1 px-1.5 text-xs cursor-pointer${i === active ? " bg-mine" : ""}`}
+              className={`flex items-baseline gap-1.5 rounded-sm py-1 px-1.5 text-xs cursor-pointer${i === active ? " bg-mine" : ""}`}
               role="option"
               aria-selected={i === active}
               // Keep focus on mousedown, or the blur closes the list before the click lands.

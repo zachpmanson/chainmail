@@ -8,8 +8,7 @@ import ParticipantsPanel from "../thread/ParticipantsPanel";
 import Minimap from "./Minimap";
 import Chains from "./Chains";
 import EntryBlock from "./EntryBlock";
-
-const html = (s: string) => ({ __html: s });
+import { html } from "../../lib/ui/html";
 
 const toolbarButtonClasses =
   "inline-flex items-center rounded-md border border-line bg-card px-2 py-1 text-2xs font-bold uppercase tracking-[.08em] text-muted hover:border-accent hover:text-accent aria-pressed:border-accent aria-pressed:bg-mine aria-pressed:text-accent disabled:cursor-default disabled:opacity-55";

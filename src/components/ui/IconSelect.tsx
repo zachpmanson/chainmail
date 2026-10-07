@@ -1,4 +1,5 @@
 import type { ReactNode, SelectHTMLAttributes } from "react";
+import { cn } from "../../lib/ui/cn";
 import IconFrame from "./IconFrame";
 
 /** A real <select> laid invisibly over the glyph, for keyboard and screen readers.
@@ -17,7 +18,10 @@ export default function IconSelect({
 } & Omit<SelectHTMLAttributes<HTMLSelectElement>, "className" | "title">) {
   return (
     <span
-      className={`group/icon relative inline-flex shrink-0 rounded-md has-[select:focus-visible]:outline-2 has-[select:focus-visible]:outline-offset-2 has-[select:focus-visible]:outline-accent ${className}`.trim()}
+      className={cn(
+        "group/icon relative inline-flex shrink-0 rounded-md has-[select:focus-visible]:outline-2 has-[select:focus-visible]:outline-offset-2 has-[select:focus-visible]:outline-accent",
+        className,
+      )}
       title={title}
     >
       <IconFrame>{icon}</IconFrame>

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Timeline as Spec } from "../../lib/timeline/spec";
-import { Button } from "../ui/controls";
+import Button from "../ui/Button";
 
 /** Abbreviates base64 avatars for display only; Copy still yields the full spec. */
 function abbreviate(_key: string, value: unknown) {
@@ -49,7 +49,7 @@ export default function SpecView({ spec, onClose }: { spec: Spec; onClose: () =>
         </Button>
       </div>
       <pre
-        className="m-0 flex-1 overflow-auto px-4 pt-4 pb-8 font-mono text-xs leading-normal text-fg tab-2 whitespace-pre"
+        className="m-0 flex-1 overflow-auto px-4 pt-4 pb-8 font-mono text-xs/normal text-fg tab-2 whitespace-pre"
         tabIndex={0}
       >
         {shown}

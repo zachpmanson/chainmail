@@ -11,7 +11,10 @@ export default function Body({ body, state }: { body: string; state: Original })
   }, [state]);
 
   if (state.at === "sent") {
-    return <div key="sent" className="bd bdo overflow-x-auto" ref={host} />;
+    // `contain` keeps the sender's position:fixed and fixed-width markup inside the pane.
+    return (
+      <div key="sent" className="bd overflow-x-auto contain-layout contain-paint" ref={host} />
+    );
   }
   if (!hasBody(body)) {
     return (

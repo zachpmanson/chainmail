@@ -1,20 +1,20 @@
 import { ArrowTopRightOnSquareIcon, QueueListIcon } from "@heroicons/react/24/outline";
-import { useSearch } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
 import { flushSync } from "react-dom";
 import { useMailAction, useReadAction } from "../../lib/inbox/mailActions";
+import { useAccountId } from "../../lib/inbox/useAccountId";
 import { usePrefs } from "../../lib/prefs/usePrefs";
 import { withTransition } from "../../lib/thread/viewTransition";
-import { dismissToast, pushToast } from "../../lib/ui/toasts";
+import { dismissToast, pushToast, SAID_MS } from "../../lib/ui/toasts";
 import ArchiveGlyph from "../inbox/ArchiveGlyph";
 import AttachmentCount from "../inbox/AttachmentCount";
 import MailCount from "../inbox/MailCount";
-import { SAID_MS, VERBS, refusal, sentence } from "../inbox/MailVerbs";
+import { VERBS, refusal, sentence } from "../inbox/MailVerbs";
 import MoveFolder from "../inbox/MoveFolder";
 import PeopleCount from "../inbox/PeopleCount";
 import TrashGlyph from "../inbox/TrashGlyph";
 import IconButton from "../ui/IconButton";
-import { Button } from "../ui/controls";
+import Button from "../ui/Button";
 import ThreadMessages from "./ThreadMessages";
 import type { PreviewableThread } from "./ThreadShared";
 
@@ -26,6 +26,7 @@ export default function ThreadPane({
   moveDefault,
   onClose,
   openInWindow = true,
+  className,
 }: {
   /** null when the page has nothing to show yet; a bare root ext id is enough to fetch by */
   thread: PreviewableThread | null;
@@ -38,8 +39,9 @@ export default function ThreadPane({
   onClose: () => void;
   /** Whether to offer a second standalone window from this reader. */
   openInWindow?: boolean;
+  className?: string;
 }) {
-  const accountId = useSearch({ from: "/" }).accountId;
+  const accountId = useAccountId();
 
   const tree = usePrefs((s) => s.tree);
   const setTree = usePrefs((s) => s.setTree);
@@ -78,7 +80,7 @@ export default function ThreadPane({
 
   return (
     <aside
-      className="ibread flex min-w-0 flex-col min-[60rem]:h-full min-[60rem]:min-h-0"
+      className={`ibread flex min-w-0 flex-col min-[60rem]:h-full min-[60rem]:min-h-0 ${className ?? ""}`}
       aria-label={label}
     >
       {thread ? (

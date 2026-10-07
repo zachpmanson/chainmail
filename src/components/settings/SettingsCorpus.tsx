@@ -1,6 +1,7 @@
 import type { Stats } from "../../lib/api/api";
 import SettingsSection from "./SettingsSection";
-import { errText } from "./errText";
+import InlineAlert from "../ui/InlineAlert";
+import { errText } from "../../lib/ui/errText";
 
 function CorpusStats({ stats }: { stats: Stats }) {
   const rows: [string, string][] = [
@@ -43,16 +44,11 @@ export default function SettingsCorpus({
       description="A snapshot of the mail and identities currently stored."
     >
       {stats.isError ? (
-        <p
-          className="mt-3 rounded-sm border-l-[3px] border-l-red-700 bg-bg px-3 py-2 text-xs leading-normal text-fg wrap-break-word mb-0"
-          role="alert"
-        >
-          {errText(stats.error)}
-        </p>
+        <InlineAlert compact>{errText(stats.error)}</InlineAlert>
       ) : stats.data ? (
         <CorpusStats stats={stats.data} />
       ) : (
-        <p className="mt-3 mb-0 text-xs leading-normal text-muted">Reading the corpus…</p>
+        <p className="mt-3 mb-0 text-xs/normal text-muted">Reading the corpus…</p>
       )}
     </SettingsSection>
   );

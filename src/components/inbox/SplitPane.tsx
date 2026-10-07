@@ -105,12 +105,12 @@ export default function SplitPane({
 
   return (
     <div
-      className={`ibsplit grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 min-[60rem]:gap-x-0 min-[60rem]:grid-cols-[var(--listw,minmax(15rem,24rem))_.5rem_minmax(0,1fr)] min-[60rem]:items-stretch min-[60rem]:min-h-0 min-[60rem]:flex-1${hasChoice ? " has-choice" : ""}${dragging ? " dragging" : ""}`}
+      className={`ibsplit grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 min-[60rem]:gap-x-0 min-[60rem]:grid-cols-[var(--listw,minmax(15rem,24rem))_.5rem_minmax(0,1fr)] min-[60rem]:items-stretch min-[60rem]:min-h-0 min-[60rem]:flex-1${hasChoice ? " has-choice" : ""}`}
       ref={split}
       style={width === null ? undefined : ({ "--listw": `${width}px` } as CSSProperties)}
     >
       <div
-        className="ibcol flex min-w-0 flex-col gap-3 pt-3 min-[60rem]:h-full min-[60rem]:min-h-0 min-[60rem]:pl-3"
+        className={`flex min-w-0 flex-col gap-3 pt-3 min-[60rem]:h-full min-[60rem]:min-h-0 min-[60rem]:pl-3${hasChoice ? " max-[60rem]:hidden" : ""}`}
         ref={column}
       >
         {list}
@@ -118,7 +118,7 @@ export default function SplitPane({
 
       {/* Arrow keys move it; double-click resets to the layout's width. */}
       <div
-        className="ibdrag relative hidden touch-none cursor-col-resize self-stretch min-[60rem]:block"
+        className={`relative hidden touch-none cursor-col-resize self-stretch min-[60rem]:block before:absolute before:inset-y-0 before:right-0 before:m-0 before:w-px before:bg-line before:content-[''] focus-visible:outline-none focus-visible:before:w-0.5 focus-visible:before:bg-accent [&:hover]:before:w-0.5 [&:hover]:before:bg-accent${dragging ? " before:w-0.5 before:bg-accent" : ""}`}
         role="separator"
         aria-orientation="vertical"
         aria-label="Resize the list"

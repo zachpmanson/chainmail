@@ -1,4 +1,4 @@
-import { Button } from "../ui/controls";
+import Button from "../ui/Button";
 import { useEffect, useRef, useState } from "react";
 import { CheckIcon, ChevronDownIcon } from "@heroicons/react/24/outline";
 import { $api } from "../../lib/api/api";
@@ -24,10 +24,10 @@ function FolderRows({
   return (
     <>
       {folders.isPending ? (
-        <p className="mx-2 my-1.5 text-xs leading-snug text-muted">Reading folders…</p>
+        <p className="mx-2 my-1.5 text-xs/snug text-muted">Reading folders…</p>
       ) : null}
       {folders.isError ? (
-        <p className="mx-2 my-1.5 text-xs leading-snug text-muted" role="alert">
+        <p className="mx-2 my-1.5 text-xs/snug text-muted" role="alert">
           The folder list could not be read.
         </p>
       ) : null}
@@ -59,7 +59,7 @@ function FolderRows({
         );
       })}
       {!folders.isPending && !folders.isError && labels.length === 0 ? (
-        <p className="mx-2 my-1.5 text-xs leading-snug text-muted">
+        <p className="mx-2 my-1.5 text-xs/snug text-muted">
           No message carries a label yet — the mailbox's own labels are what this list is, so it is
           empty rather than invented.
         </p>
@@ -119,7 +119,7 @@ export default function FolderPicker({
   };
 
   return (
-    <div className="relative z-30 m-0" ref={box}>
+    <div className="relative z-30 m-0" data-folders ref={box}>
       <Button
         type="button"
         variant="secondary"
@@ -180,12 +180,10 @@ export default function FolderPicker({
             All accounts · All mail
           </Button>
           {auth.isPending ? (
-            <p className="mx-2 my-1.5 text-xs leading-snug text-muted">
-              Reading connected accounts…
-            </p>
+            <p className="mx-2 my-1.5 text-xs/snug text-muted">Reading connected accounts…</p>
           ) : null}
           {auth.isError ? (
-            <p className="mx-2 my-1.5 text-xs leading-snug text-muted" role="alert">
+            <p className="mx-2 my-1.5 text-xs/snug text-muted" role="alert">
               Connected accounts could not be read.
             </p>
           ) : null}

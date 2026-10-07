@@ -3,10 +3,10 @@ import type { Row, View } from "../../lib/timeline/derive";
 import Message from "../thread/Message";
 import ReplyLink from "../thread/ReplyLink";
 import Edits from "./Edits";
+import { emailFromSpec } from "../../lib/message/email";
 import { trimBody } from "../../lib/message/trimBody";
 import { replyTarget } from "../../lib/timeline/replyTarget";
-
-const html = (s: string) => ({ __html: s });
+import { html } from "../../lib/ui/html";
 
 /** Adapts a spec row to `Message`; system notes have no sender or bubble so are drawn here. */
 export default function EntryBlock({
@@ -32,7 +32,7 @@ export default function EntryBlock({
   if (e.kind === "note") {
     return (
       <div
-        className={`sys scroll-mt-6 mx-auto my-3 max-w-[44rem] border border-dashed border-line rounded-lg bg-quote px-4 py-2 text-center${row.isChainStart ? " chstart" : ""}${mark === "new" ? " [border-left:3px_solid_var(--o1)]" : ""}`}
+        className={`sys scroll-mt-6 mx-auto my-3 max-w-[44rem] border border-dashed border-line rounded-lg bg-quote px-4 py-2 text-center target:animate-[flash_1.4s_ease-out_1] target:border-accent [&_.par]:mt-1${row.isChainStart ? " chstart" : ""}${mark === "new" ? "[border-left:3px_solid_var(--o1)]" : ""}`}
         id={row.id}
         data-ch={row.lane}
         style={grid}
@@ -57,29 +57,17 @@ export default function EntryBlock({
 
   return (
     <Message
-      id={row.id}
-      body={e.body}
-      sender={e.sender}
-      senderTitle={v.whoTitle(e.sender ?? "")}
-      org={e.org}
-      orgSlot={row.orgSlot}
-      avatarClass={row.avatarClass}
-      me={e.me}
-      quoted={e.quoted}
-      mentions={e.mentions}
-      attachments={e.attachments}
-      extId={e.extId}
-      onPull={onPull}
-      pulling={pulling}
-      mediaBase={mediaBase}
-      to={e.to}
-      toTitle={v.whoTitle}
-      subject={e.subject}
-      stamp={row.stamp}
-      style={grid}
-      lane={row.lane}
-      chainStart={row.isChainStart}
-      mark={mark}
+      email={emailFromSpec(e, row.stamp, v.whoTitle)}
+      place={{
+        id: row.id,
+        style: grid,
+        lane: row.lane,
+        chainStart: row.isChainStart,
+        mark,
+      }}
+      look={{ orgSlot: row.orgSlot, avatarClass: row.avatarClass, toTitle: v.whoTitle }}
+      // The app passes all three; the static export passes none.
+      media={onPull ? { onPull, pulling: pulling ?? null, mediaBase: mediaBase ?? "" } : undefined}
       reply={<ReplyLink parent={replyTarget(row, v)} />}
       edits={<Edits edits={row.edits} fallbackWho={v.title} />}
       source={<Source source={e.source} anchorByGmail={anchorByGmail} />}

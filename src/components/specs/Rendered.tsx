@@ -1,4 +1,4 @@
-import { Button } from "../ui/controls";
+import Button from "../ui/Button";
 import { useEffect, useMemo, useState } from "react";
 import Timeline from "./Timeline";
 import { attach } from "../../client/behaviour";

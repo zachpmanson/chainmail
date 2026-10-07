@@ -1,22 +1,12 @@
 /* Browser-app only; the static transcript ships only styles.css. */
 
-/* The divider sits on the handle's right edge, flush with the pane; the handle is the gutter. */
-.ibdrag::before { content:""; position:absolute; inset:0 0 0 auto; margin:0; width:1px;
-  background:var(--line); }
-.ibdrag:hover::before, .ibdrag:focus-visible::before, .ibsplit.dragging .ibdrag::before {
-  width:2px; background:var(--accent); }
-.ibdrag:focus-visible { outline:none; }
-
 @media (min-width:60rem) {
   /* `height`, not `min-height`: the panels scroll inside the viewport
      rather than growing the page. */
   body.inbox, body.search { height:100vh; overflow:hidden; }
   /* Flex only here: elsewhere a `margin:0 auto` flex item would shrink to its content. */
   body.inbox #root, body.search #root { display:flex; flex-direction:column; height:100%; min-height:0; }
-  .wrap.ibwrap, .wrap.selwrap { flex:1 1 auto; min-height:0;
-    display:flex; flex-direction:column; }
 }
 @media (max-width:59.99rem) {
-  .ibsplit.has-choice .ibcol { display:none; }
   .ibsplit:not(.has-choice) .ibread { display:none; }
 }

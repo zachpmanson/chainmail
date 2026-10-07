@@ -1,4 +1,4 @@
-import { SelectInput } from "../ui/fields";
+import SelectInput from "../ui/SelectInput";
 import useAccounts from "./useAccounts";
 
 export default function AccountSelect({
@@ -16,7 +16,7 @@ export default function AccountSelect({
   const { connected } = useAccounts();
   return (
     <SelectInput
-      className="h-7 min-w-0 flex-1 rounded-md border border-line bg-bg px-1 text-xs text-fg focus:border-accent disabled:cursor-default disabled:opacity-[.55]"
+      className="h-7 min-w-0 flex-1 rounded-md border border-line bg-bg px-1 text-xs text-fg focus:border-accent disabled:cursor-default disabled:opacity-55"
       aria-label="From"
       value={value}
       disabled={disabled}

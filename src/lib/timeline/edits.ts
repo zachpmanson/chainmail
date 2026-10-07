@@ -7,7 +7,7 @@ export interface RowEdit {
   base: string;
   who: string;
   time: string;
-  /** the quoter's modified text as diff-marked HTML (`.edel` strike / `.eins` insert) */
+  /** the quoter's modified text as diff-marked HTML (<del> strike / <b> insert) */
   html: string;
   /** the original message's sender, for "original from <y>" (may be empty) */
   origWho: string;

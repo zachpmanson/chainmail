@@ -1,10 +1,9 @@
 import { $api } from "../../lib/api/api";
-import { Button, ControlLink } from "../ui/controls";
+import Button from "../ui/Button";
+import ButtonLink from "../ui/ButtonLink";
+import { errText } from "../../lib/ui/errText";
 import SettingsSection from "./SettingsSection";
-
-function errText(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
-}
+import InlineAlert from "../ui/InlineAlert";
 
 /** Mailbox connection and disconnection controls, including their confirmation boundary. */
 export default function SettingsAccounts() {
@@ -21,14 +20,9 @@ export default function SettingsAccounts() {
       description="Connect the mailboxes Chainmail syncs. Disconnecting keeps already imported mail."
     >
       {auth.isError ? (
-        <p
-          className="mt-3 rounded-sm border-l-[3px] border-l-red-700 bg-bg px-3 py-2 text-xs leading-normal text-fg wrap-break-word mb-0"
-          role="alert"
-        >
-          {errText(auth.error)}
-        </p>
+        <InlineAlert compact>{errText(auth.error)}</InlineAlert>
       ) : auth.isPending ? (
-        <p className="mt-3 mb-0 text-xs leading-normal text-muted">Checking connected accounts…</p>
+        <p className="mt-3 mb-0 text-xs/normal text-muted">Checking connected accounts…</p>
       ) : (
         <>
           {connected.length > 0 ? (
@@ -67,21 +61,16 @@ export default function SettingsAccounts() {
               })}
             </ul>
           ) : (
-            <p className="mt-3 mb-0 text-xs leading-normal text-muted">
+            <p className="mt-3 mb-0 text-xs/normal text-muted">
               No Gmail accounts connected. Mailbox syncing is paused.
             </p>
           )}
           {disconnect.isError ? (
-            <p
-              className="mt-3 rounded-sm border-l-[3px] border-l-red-700 bg-bg px-3 py-2 text-xs leading-normal text-fg wrap-break-word mb-0"
-              role="alert"
-            >
-              Could not disconnect: {errText(disconnect.error)}
-            </p>
+            <InlineAlert compact>Could not disconnect: {errText(disconnect.error)}</InlineAlert>
           ) : null}
-          <ControlLink variant="primary" href="/auth/login">
+          <ButtonLink variant="primary" href="/auth/login">
             {connected.length === 0 ? "Sign in with Google" : "Connect another account"}
-          </ControlLink>
+          </ButtonLink>
         </>
       )}
     </SettingsSection>

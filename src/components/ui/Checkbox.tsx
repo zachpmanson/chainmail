@@ -1,4 +1,5 @@
 import { forwardRef, type InputHTMLAttributes } from "react";
+import { cn } from "../../lib/ui/cn";
 
 const accentClasses = {
   native: "",
@@ -21,7 +22,7 @@ const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(function Checkbox(
       {...props}
       ref={ref}
       type="checkbox"
-      className={[accentClasses[accent], className].filter(Boolean).join(" ") || undefined}
+      className={cn(accentClasses[accent], className) || undefined}
     />
   );
 });

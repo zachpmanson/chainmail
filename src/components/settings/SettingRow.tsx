@@ -18,15 +18,13 @@ export default function SettingRow({
     <div className="flex items-center gap-4 py-3 max-[640px]:flex-col max-[640px]:items-stretch max-[640px]:gap-2">
       <div className="min-w-0 flex-1">
         <h3 className="m-0 text-xs font-semibold">{title}</h3>
-        <p className="mt-1 text-xs leading-snug text-muted">{description}</p>
+        <p className="mt-1 text-xs/snug text-muted">{description}</p>
       </div>
       <div
-        className={`flex min-w-56 flex-[.9] flex-col items-start gap-1 max-[640px]:min-w-0${valueClassName ? ` ${valueClassName}` : ""}`}
+        className={`flex min-w-56 flex-[.9] flex-col items-start gap-1 max-[640px]:min-w-0${valueClassName ? `${valueClassName}` : ""}`}
       >
         {children}
-        {note ? (
-          <p className="m-0 wrap-break-word text-xs leading-snug text-muted">{note}</p>
-        ) : null}
+        {note ? <p className="m-0 wrap-break-word text-xs/snug text-muted">{note}</p> : null}
       </div>
     </div>
   );

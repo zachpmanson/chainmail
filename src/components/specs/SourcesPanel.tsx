@@ -33,7 +33,7 @@ export default function SourcesPanel({ v, filter }: { v: View; filter?: ThreadFi
               <>
                 {" "}
                 <a
-                  className="whitespace-nowrap rounded border border-line px-1 text-2xs font-bold uppercase tracking-[.06em] text-muted no-underline hover:border-accent hover:text-accent"
+                  className="whitespace-nowrap rounded-sm border border-line px-1 text-2xs font-bold uppercase tracking-[.06em] text-muted no-underline hover:border-accent hover:text-accent"
                   href={gmailMessageURL(c.gmailId)}
                   target="_blank"
                   rel="noopener"
@@ -45,7 +45,7 @@ export default function SourcesPanel({ v, filter }: { v: View; filter?: ThreadFi
               </>
             ) : null}{" "}
             <a
-              className="whitespace-nowrap rounded border border-line px-1 text-2xs font-bold uppercase tracking-[.06em] text-muted no-underline hover:border-accent hover:text-accent"
+              className="whitespace-nowrap rounded-sm border border-line px-1 text-2xs font-bold uppercase tracking-[.06em] text-muted no-underline hover:border-accent hover:text-accent"
               href={`#${c.anchor}`}
               title="Jump to the start of this thread"
               onClick={(e) => e.stopPropagation()}

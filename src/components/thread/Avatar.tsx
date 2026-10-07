@@ -23,7 +23,7 @@ export default function Avatar({
 }) {
   return (
     <div
-      className={`av ${orgSlot} ${orgColor[orgSlot as keyof typeof orgColor] ?? orgColor.o5}${pic ? ` ${pic} bg-cover bg-center shadow-[0_0_0_1.5px_var(--ring,var(--muted)),0_0_0_2.5px_var(--bg)]` : ""} flex size-[1em] flex-[0_0_1em] items-center justify-center self-center overflow-hidden rounded-full ${size === "participant" ? "text-xs" : "text-sm"} leading-none text-white`}
+      className={`av ${orgColor[orgSlot as keyof typeof orgColor] ?? orgColor.o5}${pic ? `${pic} bg-cover bg-center shadow-[0_0_0_1.5px_var(--ring,var(--muted)),0_0_0_2.5px_var(--bg)]` : ""} flex size-[1em] flex-[0_0_1em] items-center justify-center self-center overflow-hidden rounded-full ${size === "participant" ? "text-xs" : "text-sm"} leading-none text-white`}
       title={title}
     >
       {pic ? null : (

@@ -130,15 +130,10 @@ export default function Minimap({ v }: { v: View }) {
           const note = r.entry.kind === "note";
           const [cx, cy] = pos(o, rowOf.get(r.id)!, n.lane);
           return (
-            <g
-              key={`nd-${o}-${r.id}`}
-              className={["nd", r.orgSlot].filter(Boolean).join(" ")}
-              data-id={r.id}
-              data-p={n.parent ?? ""}
-            >
+            <g key={`nd-${o}-${r.id}`} className="nd" data-id={r.id} data-p={n.parent ?? ""}>
               {n.isRoot ? (
                 <path
-                  className="pointer-events-none fill-none stroke-muted stroke-[1.6] opacity-[.85]"
+                  className="pointer-events-none fill-none stroke-muted stroke-[1.6] opacity-85"
                   d={capD(o, cx, cy)}
                 />
               ) : null}
@@ -167,7 +162,7 @@ export default function Minimap({ v }: { v: View }) {
   };
 
   const tallyLegend = (
-    <div className="foot2 flex flex-col gap-1 border-t border-line px-2 pt-1 pb-1.5 text-2xs leading-tight text-muted">
+    <div className="foot2 flex flex-col gap-1 border-t border-line px-2 pt-1 pb-1.5 text-2xs/tight text-muted">
       <div className="flex flex-col gap-0.5 whitespace-nowrap">
         <div>
           <b className="font-semibold text-fg">{g.roots}</b> chains
@@ -231,7 +226,7 @@ export default function Minimap({ v }: { v: View }) {
         Reply tree<span className="ml-auto font-semibold opacity-75">{v.rows.length}</span>
         <button
           type="button"
-          className="inline-flex cursor-pointer items-center rounded border border-transparent bg-transparent px-1 py-px font-[inherit] text-muted hover:border-line hover:bg-card hover:text-accent"
+          className="inline-flex cursor-pointer items-center rounded-sm border border-transparent bg-transparent px-1 py-px font-[inherit] text-muted hover:border-line hover:bg-card hover:text-accent"
           title="Download this reply tree as an SVG file"
           aria-label="Download this reply tree as an SVG file"
           onClick={download}

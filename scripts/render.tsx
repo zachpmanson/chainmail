@@ -74,7 +74,11 @@ const tailwind = await compile(readFileSync(resolve(root, "src/tailwind.css"), "
 const utilityClasses = [...body.matchAll(/\bclass="([^"]*)"/g)]
   .flatMap((match) => match[1]!.split(/\s+/))
   .filter(Boolean);
-const renderedCss = `${css}\n${tailwind.build(utilityClasses)}`;
+// behaviour.ts builds the popup and table markup at runtime, so the body never shows its classes.
+const behaviourClasses = readFileSync(resolve(root, "src/client/behaviour.ts"), "utf8").split(
+  /[\s"'`<>=]+/,
+);
+const renderedCss = `${css}\n${tailwind.build([...utilityClasses, ...behaviourClasses])}`;
 const theme = spec.theme ?? "light";
 const title = (spec.title ?? "Timeline").replace(/^#+/, "");
 

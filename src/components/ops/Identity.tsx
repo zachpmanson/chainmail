@@ -1,5 +1,5 @@
 import type { PersonSummary } from "../../lib/api/api";
-import { Button } from "../ui/controls";
+import Button from "../ui/Button";
 
 export default function Identity({
   id,
@@ -17,8 +17,8 @@ export default function Identity({
       <code className="text-xs wrap-anywhere">{id}</code>
       <Button
         type="button"
-        variant="quiet"
-        className="size-auto! min-h-0! rounded px-1 py-0 text-sm leading-none text-muted hover:bg-quote hover:text-red-700 disabled:opacity-40"
+        variant="bare"
+        className="inline-flex items-center justify-center rounded-sm border border-transparent px-1 text-sm font-semibold leading-none text-muted transition-colors hover:border-line hover:bg-quote hover:text-red-700 disabled:opacity-40"
         disabled={busy}
         title={`detach ${id}`}
         aria-label={`Detach ${id} from ${owner.displayName}`}

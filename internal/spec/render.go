@@ -34,8 +34,8 @@ type Rendered struct {
 	// the reader's.
 	//
 	// The mark itself is the page's, and deliberately: the pane draws the same
-	// Message component and passes this as `me`, which is the class the
-	// stylesheet already tints (`.msg.me .bub`). A second vocabulary for one fact
+	// Message component and passes this as its `me` prop, which tints the bubble
+	// (`border-org-3 bg-mine`). A second vocabulary for one fact
 	// — a pane-only border, say — would be a second thing to keep in step with
 	// what "sent by you" means.
 	Mine bool

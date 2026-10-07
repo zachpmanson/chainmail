@@ -2,7 +2,9 @@ import { useState } from "react";
 import { ArrowPathIcon } from "@heroicons/react/24/outline";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError, $api } from "../../lib/api/api";
+import { errText } from "../../lib/ui/errText";
 import { when } from "../../lib/ui/stamp";
+import { pushToast, SAID_MS } from "../../lib/ui/toasts";
 import IconButton from "../ui/IconButton";
 
 /**
@@ -41,21 +43,33 @@ export default function NavRefresh() {
 
   // Phases are the server's choice (`manualPhases`); don't name them here.
   const slurp = $api.useMutation("post", "/v1/slurp", {
-    onSuccess: (data) => console.log(data.report?.trim() || "slurp: nothing to report"),
-    onError: (e) =>
-      console.error(
-        e instanceof ApiError && e.status === 403
-          ? "no mailbox reach on this host (the server was started without -slurp), so this re-reads what the corpus already holds"
-          : e instanceof ApiError && e.status === 409
-            ? "a sweep is already running: the mailbox is being ingested right now, and this refetch reads the corpus it is writing into"
-            : `slurp failed: ${e instanceof Error ? e.message : String(e)}`,
+    onSuccess: (data) =>
+      pushToast(
+        `Fetched mail${data.report?.trim() ? `: ${data.report.trim().split("\n").at(-1)}` : ""}`,
+        "note",
+        SAID_MS,
       ),
+    // 403 and 409 still refetch, so they are notes, not failures.
+    onError: (e) =>
+      e instanceof ApiError && e.status === 403
+        ? pushToast(
+            "This host can't reach the mailbox (no -slurp); re-reading the corpus.",
+            "note",
+            SAID_MS,
+          )
+        : e instanceof ApiError && e.status === 409
+          ? pushToast(
+              "An ingest is already running; re-reading what it has so far.",
+              "note",
+              SAID_MS,
+            )
+          : pushToast(`Fetching mail failed: ${errText(e)}`, "fail"),
   });
 
   const refresh = async () => {
     setBusy(true);
     try {
-      // The refetch runs regardless; failures are logged by the hook above.
+      // The refetch runs regardless; failures are toasted by the hook above.
       await slurp.mutateAsync({}).catch(() => {});
       await qc.invalidateQueries();
     } finally {

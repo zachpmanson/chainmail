@@ -3,9 +3,10 @@ import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { MagnifyingGlassIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { $api, type SearchMode } from "../../lib/api/api";
 import NavPerson from "./NavPerson";
-import { Button } from "../ui/controls";
+import Button from "../ui/Button";
 import IconButton from "../ui/IconButton";
-import { SelectInput, TextInput } from "../ui/fields";
+import SelectInput from "../ui/SelectInput";
+import TextInput from "../ui/TextInput";
 
 const MODES: SearchMode[] = ["hybrid", "semantic", "lexical"];
 
@@ -139,7 +140,7 @@ export default function NavSearch() {
         </IconButton>
       ) : null}
       <form
-        className={`navsearch absolute top-0 right-0 flex h-9 w-48 items-center gap-1.5 overflow-hidden rounded-md border border-line bg-card px-2 py-1${open ? " open" : ""}`}
+        className={`navsearch absolute top-0 right-0 flex h-9 w-48 items-center gap-1.5 overflow-hidden rounded-md border border-line bg-card px-2 py-1 [--searchgap:calc(1.85rem+1rem)] focus-within:border-accent motion-safe:transition-[width] motion-safe:duration-180 motion-safe:ease-[ease] [&:hover]:border-accent${open ? " open" : ""}`}
         role="search"
         onSubmit={(ev) => {
           ev.preventDefault();
@@ -255,7 +256,7 @@ export default function NavSearch() {
             <Button
               type="submit"
               variant="subtle"
-              className="min-h-0 rounded-md border-line bg-mine px-2 py-1 text-xs font-semibold text-fg disabled:cursor-default disabled:opacity-[.45]"
+              className="min-h-0 rounded-md border-line bg-mine px-2 py-1 text-xs font-semibold text-fg disabled:cursor-default disabled:opacity-45"
               disabled={!asks(shown)}
             >
               Search

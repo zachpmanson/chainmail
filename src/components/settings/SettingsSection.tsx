@@ -21,7 +21,7 @@ export default function SettingsSection({
         <h2 className="m-0 text-sm font-semibold tracking-[-.01em]" id={id}>
           {title}
         </h2>
-        <p className="mt-1 text-xs leading-normal text-muted">{description}</p>
+        <p className="mt-1 text-xs/normal text-muted">{description}</p>
       </header>
       {children}
     </section>

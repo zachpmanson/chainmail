@@ -1,6 +1,5 @@
 import type { RowEdit } from "../../lib/timeline/edits";
-
-const html = (s: string) => ({ __html: s });
+import { html } from "../../lib/ui/html";
 
 /** A quoter's inline edit to a quoted message (issue #42), drawn inside the quoting message. */
 export default function Edits({ edits, fallbackWho }: { edits?: RowEdit[]; fallbackWho?: string }) {
@@ -8,10 +7,7 @@ export default function Edits({ edits, fallbackWho }: { edits?: RowEdit[]; fallb
   return (
     <div className="mt-1.5">
       {edits.map((ed, i) => (
-        <div
-          className="edit rounded-md border-l-2 border-line bg-dash px-2 py-1"
-          key={ed.base || i}
-        >
+        <div className="rounded-md border-l-2 border-line bg-dash px-2 py-1" key={ed.base || i}>
           <div className="text-xs text-muted">
             edited by <span>{ed.who || fallbackWho || "someone"}</span>
             {ed.origWho || ed.origStamp ? (

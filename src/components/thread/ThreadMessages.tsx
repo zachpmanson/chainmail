@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, type ReactNode } from "react";
-import { useSearch } from "@tanstack/react-router";
 import { $api, type CorpusEntry } from "../../lib/api/api";
+import { useAccountId } from "../../lib/inbox/useAccountId";
 import { attach } from "../../client/behaviour";
 import { usePersonAddresses, wordsOf } from "../../lib/message/who";
 import { hoistEdits } from "../../lib/thread/hoist";
@@ -25,7 +25,7 @@ export default function ThreadMessages({
   thread: { rootExtId: string };
   tree?: boolean;
 }) {
-  const accountId = useSearch({ from: "/" }).accountId;
+  const accountId = useAccountId();
   const fetched = $api.useQuery("get", "/v1/chains/{rootExtId}", {
     params: { path: { rootExtId: thread.rootExtId } },
   });
@@ -39,7 +39,7 @@ export default function ThreadMessages({
   );
 
   const flip = usePreferOriginal();
-  const { pulling, pullNote, pull } = useMediaPull(accountId);
+  const { pulling, pullNote, pull } = useMediaPull({ accountId });
   // Re-attach when entries change: `attach` only wires elements present at the time.
   useEffect(() => {
     const detach = attach(document);
@@ -80,7 +80,7 @@ export default function ThreadMessages({
     <div className="stream">
       {pullNote ? (
         <p
-          className="mb-3 mt-0 border border-accent border-l-[3px] rounded-md bg-card px-3 py-2 text-sm text-fg"
+          className="mb-3 mt-0 border border-accent border-l-3 rounded-md bg-card px-3 py-2 text-sm text-fg"
           role="status"
         >
           {pullNote}

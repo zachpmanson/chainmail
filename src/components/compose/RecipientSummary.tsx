@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { Button } from "../ui/controls";
 import { addressKey, addressWords, type Address } from "./AddressField";
 
 function names(list: Address[]) {
@@ -35,19 +34,17 @@ export default function RecipientSummary({
 }) {
   return (
     <span className="flex min-w-0 items-center gap-1">
-      <Button
-        variant="quiet"
+      <button
         type="button"
-        className="group flex h-7 min-w-0 flex-1 items-center gap-1 overflow-hidden border-0 bg-transparent p-0 text-left font-[inherit] text-2xs font-normal text-muted cursor-pointer hover:border-0 hover:bg-transparent hover:text-muted disabled:cursor-default disabled:opacity-[.55] focus-visible:rounded-sm focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-accent"
+        className="flex h-7 min-w-0 flex-1 cursor-pointer items-center overflow-hidden border-0 bg-transparent p-0 text-left font-[inherit] text-2xs text-muted disabled:cursor-default disabled:opacity-55 focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         aria-expanded={false}
         aria-label={`Edit recipients — currently ${recipientWords(to, cc)}`}
         title="Edit recipients"
         disabled={busy}
         onClick={onEdit}
       >
-        <span>to</span>
-        <span className="min-w-0 truncate group-hover:text-fg">
-          {to.length ? names(to) : null}
+        <span className="min-w-0 truncate">
+          to {to.length ? names(to) : null}
           {cc.length ? (
             <>
               <span>{to.length ? ", cc " : "cc "}</span>
@@ -56,7 +53,7 @@ export default function RecipientSummary({
           ) : null}
           {!to.length && !cc.length ? <span className="italic">add an address</span> : null}
         </span>
-      </Button>
+      </button>
       {target}
     </span>
   );

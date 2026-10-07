@@ -1,11 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { $api } from "../../lib/api/api";
 import { when } from "../../lib/ui/stamp";
+import { errText } from "../../lib/ui/errText";
 import InlineAlert from "../ui/InlineAlert";
-
-function errText(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
-}
 
 export default function SpecsView() {
   const list = $api.useQuery("get", "/v1/specs", {});

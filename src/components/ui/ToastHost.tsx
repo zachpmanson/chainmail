@@ -1,5 +1,5 @@
 import { dismissToast, useToasts } from "../../lib/ui/toasts";
-import { Button } from "./controls";
+import Button from "./Button";
 
 /** Mounted once in the shell so a toast outlives the page that raised it. */
 export default function ToastHost() {
@@ -14,13 +14,13 @@ export default function ToastHost() {
       {toasts.map((t) => (
         <div
           key={t.id}
-          className={`toast flex items-start gap-2 pointer-events-auto rounded-md border border-line border-l-[3px] bg-card p-2 pl-3 text-xs leading-snug text-fg shadow-[0_6px_20px_rgba(0,0,0,.22)]${t.kind === "fail" ? " border-red-700" : ""}`}
+          className={`flex items-start gap-2 pointer-events-auto rounded-md border border-line border-l-3 bg-card p-2 pl-3 text-xs/snug text-fg shadow-[0_6px_20px_rgba(0,0,0,.22)] min-[60rem]:motion-safe:animate-toastin${t.kind === "fail" ? " border-red-700" : ""}`}
         >
           <span className="flex-1">{t.text}</span>
           <Button
             type="button"
-            variant="quiet"
-            className="min-h-0 size-5 shrink-0 border-0 px-0.5 py-0 leading-none text-muted hover:text-accent"
+            variant="bare"
+            className="inline-flex size-5 shrink-0 items-center justify-center rounded-md px-0.5 text-sm font-semibold leading-none text-muted transition-colors hover:text-accent"
             onClick={() => dismissToast(t.id)}
             aria-label={`Dismiss: ${t.text}`}
             title="Dismiss"

@@ -1,11 +1,11 @@
 import FormField from "../ui/FormField";
 import IconButton from "../ui/IconButton";
-import { Button } from "../ui/controls";
-import { TextInput } from "../ui/fields";
+import Button from "../ui/Button";
+import TextInput from "../ui/TextInput";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useSearch } from "@tanstack/react-router";
 import { $api } from "../../lib/api/api";
+import { useAccountId } from "../../lib/inbox/useAccountId";
 import { useMailAction } from "../../lib/inbox/mailActions";
 import { useBuildPage } from "../../lib/inbox/build";
 import { dismissToast, pushToast } from "../../lib/ui/toasts";
@@ -48,7 +48,7 @@ export default function ActionBar({
   const { build, start } = useBuildPage();
   // The corpus doesn't record whose mailbox it came from, so the braid needs the reader's addresses from settings.
   const settings = $api.useQuery("get", "/v1/settings", {});
-  const accountId = useSearch({ from: "/" }).accountId;
+  const accountId = useAccountId();
   // The header's slot, or null on a page that has no header.
   const slot = buildBarSlot();
 

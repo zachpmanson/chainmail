@@ -1,9 +1,10 @@
-import { Button } from "../ui/controls";
+import Button from "../ui/Button";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { $api, type ChainHit } from "../../lib/api/api";
 import { usePrefs } from "../../lib/prefs/usePrefs";
 import { useEscapeToClear } from "../../lib/inbox/selection";
+import { useAccountId } from "../../lib/inbox/useAccountId";
 import ActionBar from "./ActionBar";
 import { useLastDescription } from "../../lib/inbox/lists";
 import ThreadPane from "../thread/ThreadPane";
@@ -37,7 +38,7 @@ export default function Inbox() {
   // Absent means nothing is open; the pane never fills itself with the top thread.
   const opened = useSearch({ from: "/" }).open;
   const urlLabel = useSearch({ from: "/" }).label;
-  const urlAccountId = useSearch({ from: "/" }).accountId;
+  const urlAccountId = useAccountId();
   const settings = $api.useQuery("get", "/v1/settings", {});
   const save = $api.useMutation("post", "/v1/settings", {
     onSuccess: () => {
@@ -173,7 +174,7 @@ export default function Inbox() {
   }, [paging, fetchNextPage]);
 
   return (
-    <div className="wrap ibwrap mx-0 w-full max-w-none p-0 min-[60rem]:flex min-[60rem]:flex-1 min-[60rem]:flex-col min-[60rem]:min-h-0">
+    <div className="wrap mx-0 w-full max-w-none p-0 min-[60rem]:flex min-[60rem]:flex-auto min-[60rem]:flex-col min-[60rem]:min-h-0">
       {inbox.isError && !inbox.data ? <Failure error={inbox.error} /> : null}
       {!inbox.isPending && !inbox.isError && rows.length === 0 ? (
         <p className="mt-2 flex-[1_1_100%] text-xs text-muted">

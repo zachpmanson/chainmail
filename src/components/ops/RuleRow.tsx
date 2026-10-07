@@ -1,8 +1,8 @@
 import { useState } from "react";
 import type { OrgRule } from "../../lib/api/api";
 import StatusBadge from "../ui/StatusBadge";
-import { Button } from "../ui/controls";
-import { TextInput } from "../ui/fields";
+import Button from "../ui/Button";
+import TextInput from "../ui/TextInput";
 
 /** `org: null` drops the rule; `""` rules the domain is no organisation. */
 export type Draft = { domain: string; org: string | null };
@@ -34,14 +34,14 @@ export default function RuleRow({
           <StatusBadge tone="neutral">guessed</StatusBadge>
         )}
       </p>
-      <p className="my-0.5 text-sm leading-snug [&_code]:text-xs [&_code]:wrap-anywhere">
+      <p className="my-0.5 text-sm/snug [&_code]:text-xs [&_code]:wrap-anywhere">
         {mail} — drawn as{" "}
         {d.org ? <code>{d.org}</code> : <span className="text-muted">no organisation</span>}
         {d.stored && d.guess ? (
           <span className="text-muted"> — cleared, it is read as {d.guess}</span>
         ) : null}
       </p>
-      <p className="my-0.5 text-sm leading-snug [&_code]:text-xs [&_code]:wrap-anywhere">
+      <p className="my-0.5 text-sm/snug [&_code]:text-xs [&_code]:wrap-anywhere">
         <TextInput
           className="min-w-0 flex-[0_1_12rem] mr-2 px-1.5 py-1 text-xs"
           value={value}

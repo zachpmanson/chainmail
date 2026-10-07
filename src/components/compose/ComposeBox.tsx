@@ -1,16 +1,15 @@
 import { useReducer, type FormEvent } from "react";
-import { useSearch } from "@tanstack/react-router";
 import { $api, type ComposeResponse } from "../../lib/api/api";
+import { useAccountId } from "../../lib/inbox/useAccountId";
+import { errText } from "../../lib/ui/errText";
 import { addressWords } from "./AddressField";
-import { Button } from "../ui/controls";
+import Button from "../ui/Button";
 import InlineAlert from "../ui/InlineAlert";
 import ComposeDone from "./ComposeDone";
 import ComposeForm from "./ComposeForm";
 import ComposePreview from "./ComposePreview";
 import { emptyDraft, type Draft } from "./Draft";
 import useBusyTask from "./useBusyTask";
-
-const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 type Step =
   | { kind: "editing" }
@@ -48,7 +47,7 @@ function reduce(state: State, action: Action): State {
 
 export default function ComposeBox({ onClose }: { onClose: () => void }) {
   const compose = $api.useMutation("post", "/v1/compose");
-  const routeAccountId = useSearch({ from: "/" }).accountId;
+  const routeAccountId = useAccountId();
   const [{ draft, accountId, step }, dispatch] = useReducer(reduce, {
     draft: emptyDraft,
     accountId: routeAccountId ?? "",
@@ -80,7 +79,7 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
         },
       });
       dispatch({ type: "previewed", preview });
-    }, message);
+    }, errText);
   }
 
   async function send() {
@@ -103,7 +102,7 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
       (e) => {
         // The request may have reached Gmail even if its response did not; a retry could duplicate mail.
         dispatch({ type: "sendFailed" });
-        return message(e);
+        return errText(e);
       },
     );
   }

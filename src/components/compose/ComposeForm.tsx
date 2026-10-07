@@ -1,6 +1,6 @@
 import { useMemo, useRef, type FormEvent } from "react";
 import { usePersonAddresses } from "../../lib/message/who";
-import { Button } from "../ui/controls";
+import Button from "../ui/Button";
 import AccountSelect from "./AccountSelect";
 import type { Address } from "./AddressField";
 import ComposerFields from "./ComposerFields";

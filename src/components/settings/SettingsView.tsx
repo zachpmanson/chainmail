@@ -1,19 +1,18 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { $api, type PersonSummary } from "../../lib/api/api";
+import { invalidateChains } from "../../lib/api/queryKeys";
 import { when } from "../../lib/ui/stamp";
 import { usePrefs } from "../../lib/prefs/usePrefs";
 import Palette from "./Palette";
 import FolderPicker from "../inbox/FolderPicker";
-import { SelectInput } from "../ui/fields";
+import SelectInput from "../ui/SelectInput";
+import InlineAlert from "../ui/InlineAlert";
 import SettingsAccounts from "./SettingsAccounts";
 import SettingsCorpus from "./SettingsCorpus";
 import SettingsServices from "./SettingsServices";
 import SettingRow from "./SettingRow";
 import SettingsSection from "./SettingsSection";
-
-function errText(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
-}
+import { errText } from "../../lib/ui/errText";
 
 /** The server's canonical cadence words (cmd/server/schedule.go). */
 const CADENCES: [string, string][] = [
@@ -80,7 +79,7 @@ export default function SettingsView() {
       void status.refetch();
       // The pane's marks come from the stored person, so redraw the open thread.
       if (variables.body?.mePersonId !== undefined) {
-        void queryClient.invalidateQueries({ queryKey: ["get", "/v1/chains/{rootExtId}"] });
+        void invalidateChains(queryClient);
       }
     },
   });
@@ -104,14 +103,7 @@ export default function SettingsView() {
         <h1 className="m-0 text-2xl">Settings</h1>
       </header>
 
-      {save.isError ? (
-        <p
-          className="mt-3 rounded-sm border-l-[3px] border-l-red-700 bg-bg px-3 py-2 text-xs leading-normal text-fg wrap-break-word mb-0"
-          role="alert"
-        >
-          {errText(save.error)}
-        </p>
-      ) : null}
+      {save.isError ? <InlineAlert compact>{errText(save.error)}</InlineAlert> : null}
 
       <SettingsAccounts />
       <SettingsServices status={status} />
@@ -225,14 +217,7 @@ export default function SettingsView() {
             </SelectInput>
           </SettingRow>
         </div>
-        {people.isError ? (
-          <p
-            className="mt-3 rounded-sm border-l-[3px] border-l-red-700 bg-bg px-3 py-2 text-xs leading-normal text-fg wrap-break-word mb-0"
-            role="alert"
-          >
-            {errText(people.error)}
-          </p>
-        ) : null}
+        {people.isError ? <InlineAlert compact>{errText(people.error)}</InlineAlert> : null}
       </SettingsSection>
       <SettingsCorpus stats={stats} />
 

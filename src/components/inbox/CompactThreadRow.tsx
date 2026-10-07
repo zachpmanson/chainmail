@@ -50,7 +50,7 @@ export default function CompactThreadRow({
       aside={
         <IconButton
           // opacity, not `invisible`, so it stays reachable by keyboard.
-          className="absolute top-1/2 right-8 z-[1] -translate-y-1/2 pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:opacity-100"
+          className="absolute top-1/2 right-8 z-1 -translate-y-1/2 pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:opacity-100"
           aria-label={`Archive ${subject}`}
           title="Archive"
           disabled={archive.isPending}

@@ -1,4 +1,5 @@
 import { ApiError } from "../../lib/api/api";
+import { errText } from "../../lib/ui/errText";
 import InlineAlert from "../ui/InlineAlert";
 
 /** Names a failed request so distinct server responses give distinct instructions. */
@@ -18,7 +19,7 @@ export default function Failure({ error, className }: { error: unknown; classNam
       <strong>
         {api ? `${statusLabel(api.status)} (${api.status})` : "Could not reach the service"}
       </strong>{" "}
-      <span>{error instanceof Error ? error.message : String(error)}</span>
+      <span>{errText(error)}</span>
     </InlineAlert>
   );
 }

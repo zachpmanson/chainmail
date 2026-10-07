@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { cn } from "../../lib/ui/cn";
 
 const tones = {
   new: "rounded-sm bg-org-1 px-1 py-px text-2xs font-extrabold uppercase tracking-[.09em] text-white",
@@ -22,5 +23,5 @@ export default function StatusBadge({
   className?: string;
   children: ReactNode;
 }) {
-  return <span className={`${tones[tone]} ${className}`.trim()}>{children}</span>;
+  return <span className={cn(tones[tone], className)}>{children}</span>;
 }

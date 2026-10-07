@@ -1,4 +1,5 @@
 import type { MouseEvent, ReactNode } from "react";
+import { cn } from "../../lib/ui/cn";
 
 export default function DialogShell({
   label,
@@ -23,7 +24,10 @@ export default function DialogShell({
       onClick={backdropClick}
     >
       <div
-        className={`flex max-h-[70vh] max-w-[44rem] flex-col rounded-lg border border-line bg-card shadow-[0_8px_40px_rgba(0,0,0,.35)] ${panelClassName}`.trim()}
+        className={cn(
+          "flex max-h-[70vh] max-w-[44rem] flex-col rounded-lg border border-line bg-card shadow-[0_8px_40px_rgba(0,0,0,.35)]",
+          panelClassName,
+        )}
       >
         {children}
       </div>

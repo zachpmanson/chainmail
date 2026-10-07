@@ -82,7 +82,7 @@ export default function SelectView() {
   const reading: PreviewableThread | null = opened ? (picked ?? { rootExtId: opened }) : null;
 
   return (
-    <div className="wrap selwrap mx-0 w-full max-w-none p-0 min-[60rem]:flex min-[60rem]:flex-1 min-[60rem]:flex-col min-[60rem]:min-h-0">
+    <div className="wrap mx-0 w-full max-w-none p-0 min-[60rem]:flex min-[60rem]:flex-auto min-[60rem]:flex-col min-[60rem]:min-h-0">
       {results.isError ? <Failure error={results.error} /> : null}
       {results.isFetching ? (
         <p className="mt-2 flex-[1_1_100%] text-xs text-muted">Searching…</p>

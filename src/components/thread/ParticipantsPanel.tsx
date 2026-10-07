@@ -2,6 +2,14 @@ import Avatar from "./Avatar";
 import { msgCount } from "../../lib/message/sources";
 import type { Person } from "./Participants";
 
+// --o5 is unreadable as text on the dark background, so the fifth slot stays muted.
+const orgText: Record<string, string> = {
+  o1: "text-org-1",
+  o2: "text-org-2",
+  o3: "text-org-3",
+  o4: "text-org-4",
+};
+
 /** Narrower than `View` because the reading pane has no spec, only a thread read. */
 export interface ParticipantsView {
   /** A spec's `participants` is the only record of recipients who sent nothing. */
@@ -58,7 +66,7 @@ export default function ParticipantsPanel({
           {groups.map((g) => (
             <div key={g.org || "other"} className="contents">
               <div
-                className={`ogh ${v.orgSlot(g.org || undefined)} col-span-full mt-2 mb-px text-2xs font-bold uppercase tracking-[.09em] first:mt-0.5`}
+                className={`${orgText[v.orgSlot(g.org || undefined)] ?? "text-muted"} col-span-full mt-2 mb-px text-2xs font-bold uppercase tracking-[.09em] first:mt-0.5`}
               >
                 {g.org || "Other"}
               </div>

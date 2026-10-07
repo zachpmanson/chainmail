@@ -2,24 +2,20 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  lazyRouteComponent,
   Link,
   Outlet,
   useRouterState,
   useSearch,
 } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { PencilSquareIcon } from "@heroicons/react/24/outline";
 import type { Timeline } from "./lib/timeline/spec";
 import { normalise } from "./lib/timeline/normalise";
 import SelectView from "./components/inbox/SelectView";
 import Inbox from "./components/inbox/Inbox";
 import ThreadPopup from "./components/thread/ThreadPopup";
-import ViewPage from "./components/specs/ViewPage";
 import NotFound from "./components/NotFound";
-import Rendered from "./components/specs/Rendered";
-import SettingsView from "./components/settings/SettingsView";
-import SpecsView from "./components/specs/SpecsView";
-import OpsView from "./components/ops/OpsView";
 import { validateOpsTab } from "./lib/ops/opsTabs";
 import DeployStamp from "./components/navigation/DeployStamp";
 import ToastHost from "./components/ui/ToastHost";
@@ -30,6 +26,12 @@ import NavSearch from "./components/navigation/NavSearch";
 import ComposeProvider from "./components/compose/ComposeProvider";
 import IconButton from "./components/ui/IconButton";
 import type { SearchMode } from "./lib/api/api";
+
+const Rendered = lazy(() => import("./components/specs/Rendered"));
+
+function Loading() {
+  return <p className="px-5 py-4 text-xs text-muted">Loading…</p>;
+}
 
 /** The server answers every non-/v1/ path with the shell; all routing is client-side. */
 
@@ -110,7 +112,9 @@ function RootLayout() {
     );
   if (dropped)
     return (
-      <Rendered spec={dropped} onBack={pathname === "/" ? () => setDropped(null) : undefined} />
+      <Suspense fallback={<Loading />}>
+        <Rendered spec={dropped} onBack={pathname === "/" ? () => setDropped(null) : undefined} />
+      </Suspense>
     );
   return (
     <>
@@ -141,7 +145,7 @@ function RootLayout() {
                 <NavSearch />
               </span>
             </nav>
-            <div className="buildslot" />
+            <div className="buildslot not-empty:grow not-empty:basis-full" />
           </header>
         </>
       ) : null}
@@ -188,26 +192,26 @@ const searchRoute = createRoute({
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/settings",
-  component: SettingsView,
+  component: lazyRouteComponent(() => import("./components/settings/SettingsView")),
 });
 
 const specsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/specs",
-  component: SpecsView,
+  component: lazyRouteComponent(() => import("./components/specs/SpecsView")),
 });
 
 const opsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/ops",
   validateSearch: validateOpsTab,
-  component: OpsView,
+  component: lazyRouteComponent(() => import("./components/ops/OpsView")),
 });
 
 const viewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/view/$name",
-  component: ViewPage,
+  component: lazyRouteComponent(() => import("./components/specs/ViewPage")),
 });
 
 const routeTree = rootRoute.addChildren([
@@ -222,6 +226,7 @@ const routeTree = rootRoute.addChildren([
 export const router = createRouter({
   routeTree,
   defaultPreload: false,
+  defaultPendingComponent: Loading,
 });
 
 declare module "@tanstack/react-router" {

@@ -23,13 +23,8 @@
   html { scroll-behavior:smooth; }
   body { margin:0; background:var(--bg); color:var(--fg);
     font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; }
-  .buildslot:not(:empty) { flex:1 1 100%; }
   /* `:has` because the bar arrives through a portal the header doesn't own. */
   header.sitehead:has(.ibbuild) .sitenav { display:none; }
-  /* The dismissal button's 1.85rem box plus the nav's `gap-4`. */
-  .navsearch { --searchgap: calc(1.85rem + 1rem); }
-  @media (prefers-reduced-motion: no-preference) { .navsearch { transition:width .18s ease; } }
-  .navsearch:hover, .navsearch:focus-within { border-color:var(--accent); }
   header.sitehead:has(.navsearch.open) .sitenav > :not(.navright),
   header.sitehead:has(.navsearch.open) .navright > :not(.navsearch):not(.navcancel) { display:none; }
   /* The nav takes the row so the panel's `100%` resolves against a definite width. */
@@ -43,9 +38,6 @@
     margin-right:.4em; vertical-align:.04em;
     transition:transform .12s; }
   .pan[open] > summary::before { transform:rotate(90deg); }
-  .ogh.o1 { --orgc:var(--o1); } .ogh.o2 { --orgc:var(--o2); }
-  .ogh.o3 { --orgc:var(--o3); } .ogh.o4 { --orgc:var(--o4); }
-  /* No .ogh.o5: --o5 is unreadable as text on the dark background, so it stays --muted. */
   .srcgrp > summary::-webkit-details-marker { display:none; }
   .srcgrp > summary::before { content:""; display:inline-block; width:0; height:0;
     border:.25em solid transparent; border-left-color:currentColor;
@@ -59,9 +51,6 @@
   details.hdr > summary:hover > .htail::after { border-right-color:var(--accent); }
   details.hdr[open] > summary > .htail::after { transform:rotate(-90deg);
     border-right-color:var(--accent); }
-  /* No colour here: this sheet beats :host rules, so the sender's CSS couldn't override it.
-     `contain` traps position:fixed descendants and clips fixed-width overflow. */
-  .bdo { contain:layout paint; }
   .bub p { margin:.25rem 0; }
   .bub p:first-of-type { margin-top:0; }
   .bub ul { margin:.25rem 0; padding-left:1rem; }
@@ -83,9 +72,6 @@
   .bd img { max-width:100%; height:auto; }
   .bd table { min-width:0; max-width:100%; }
   .bd td, .bd th { vertical-align:top; }
-  .edit .edel { color:var(--muted); text-decoration:line-through; }
-  .edit .eins { background:color-mix(in srgb, var(--mine) 55%, transparent);
-    border-radius:.25rem; padding:0 .125rem; }
   /* !important: these override the sender's inline style attributes. */
   body.plain .bd [style] { text-decoration:none !important; text-align:inherit !important;
     font-weight:inherit !important; font-style:inherit !important; }
@@ -108,14 +94,9 @@
   table { border-collapse:collapse; font-size:.78rem; min-width:24rem; }
   th,td { text-align:left; padding:.25rem .5rem .25rem 0; border-bottom:1px solid var(--line); }
   th { color:var(--muted); font-weight:600; }
-  .sys .par { margin-top:.25rem; }
   @keyframes flash { from { box-shadow:0 0 0 3px var(--accent); }
                      to   { box-shadow:0 0 0 3px transparent; } }
-  .msg:target .bub, .sys:target { animation:flash 1.4s ease-out 1;
-    border-color:var(--accent); }
-  /* ThreadMessages removes .landed when the animation ends. */
-  .msg.landed .bub { animation:flash 1.6s ease-out 1; border-color:var(--accent); }
-  /* --- reply-tree minimap: sticky structural index of the reply graph --- */
+/* --- reply-tree minimap: sticky structural index of the reply graph --- */
   /* the active message and its ancestry stay lit; everything else recedes */
   .mini.spy .nd { opacity:.3; }
   .mini.spy .nd.anc { opacity:.85; }
@@ -165,7 +146,6 @@
   body.mapoff .mini { display:none; }
   @media (max-width:1024px) {
     body.hasmap { padding-right:0; }
-    #maptog { display:inline-block; }
   }
   @media print { body.hasmap { padding-right:0; } }
   /* --- chain columns: one lane per reply chain, grid rows in time order --- */
@@ -230,14 +210,4 @@
   border-left:2px solid var(--line); color:var(--muted); }
 .replyhtml img { max-width:100%; height:auto; }
 .replyhtml table { min-width:0; max-width:100%; }
-
-/* --- what a write leaves to say --- */
-/* A refusal toast keeps the standard arrival treatment but needs no timeout. */
-@media (min-width:60rem) {
-  /* A wide window has room for the thing arriving to be seen arriving. */
-  @media (prefers-reduced-motion: no-preference) {
-    @keyframes toastin { from { opacity:0; transform:translateY(.4rem); } }
-    .toast { animation:toastin .16s ease-out; }
-  }
-}
 

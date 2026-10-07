@@ -1,5 +1,3 @@
-const html = (s: string) => ({ __html: s });
-
 export interface ThreadFilter {
   /** every thread in the unfiltered trail, so excluded ones stay listed */
   chains: {
@@ -17,5 +15,3 @@ export interface ThreadFilter {
   excluded: Set<string>;
   onToggle: (root: string) => void;
 }
-
-export { html };

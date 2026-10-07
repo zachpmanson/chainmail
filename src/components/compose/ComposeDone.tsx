@@ -1,5 +1,5 @@
 import type { ComposeResponse } from "../../lib/api/api";
-import { Button } from "../ui/controls";
+import Button from "../ui/Button";
 
 export default function ComposeDone({
   result,

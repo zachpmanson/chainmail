@@ -2,8 +2,7 @@ import type { CorpusEntry } from "../../lib/api/api";
 import { MEDIA_BASE } from "../../lib/message/attachments";
 import { gmailIdOf, sourceLine } from "../../lib/message/sources";
 import { fetchOriginal } from "../../lib/message/original";
-import { senderTitle } from "../../lib/message/who";
-import { stampOf } from "../../lib/ui/stamp";
+import { emailFromCorpus } from "../../lib/message/email";
 import Edits from "../specs/Edits";
 import AnswerPress from "../compose/AnswerPress";
 import Message from "./Message";
@@ -21,20 +20,30 @@ export default function ThreadEntry({ entry: e }: { entry: CorpusEntry }) {
   const pull = useThreadView((v) => v.pull);
   const landed = useThreadView((v) => v.landed);
   const endLanding = useThreadView((v) => v.endLanding);
-  const at = stampOf(e);
+  const email = emailFromCorpus(e);
 
   return (
     <Message
-      id={lookup.anchorOf(e.extId)}
-      body={e.html ?? ""}
-      sender={e.author}
-      senderTitle={senderTitle(e)}
-      orgSlot={lookup.slot(e.org)}
-      me={e.mine}
-      quoted={e.quoted}
-      to={e.to}
-      toTitle={lookup.titleOf}
-      subject={e.subject}
+      email={email}
+      place={{
+        id: lookup.anchorOf(e.extId),
+        landed: e.extId === landed,
+        onLandedEnd: e.extId === landed ? endLanding : undefined,
+      }}
+      look={{ orgSlot: lookup.slot(e.org), toTitle: lookup.titleOf }}
+      media={{ onPull: pull, pulling, mediaBase: MEDIA_BASE }}
+      reading={
+        e.original
+          ? {
+              original: { extId: e.extId, load: fetchOriginal },
+              // Without a person (quote-recovered entries) the switch falls back to browser storage.
+              person: e.personId
+                ? { id: e.personId, preferOriginal: e.preferOriginal === true }
+                : undefined,
+              onPreferOriginal: e.personId ? (next: boolean) => flip(e.personId!, next) : undefined,
+            }
+          : undefined
+      }
       source={
         <Source source={sourceLine(e, lookup.mailName)} anchorByGmail={lookup.anchorByGmail} />
       }
@@ -45,23 +54,8 @@ export default function ThreadEntry({ entry: e }: { entry: CorpusEntry }) {
           <AnswerPress extId={e.extId} pressed={answerExtId === e.extId} onPress={aim} />
         ) : undefined
       }
-      edits={<Edits edits={lookup.editsOf(e, at)} />}
-      stamp={at}
+      edits={<Edits edits={lookup.editsOf(e, email.stamp)} />}
       copyJson={e}
-      original={e.original ? { extId: e.extId, load: fetchOriginal } : undefined}
-      fromEmail={e.fromEmail}
-      // Without a person (quote-recovered entries) the switch falls back to browser storage.
-      person={
-        e.personId ? { id: e.personId, preferOriginal: e.preferOriginal === true } : undefined
-      }
-      onPreferOriginal={e.personId ? (next: boolean) => flip(e.personId!, next) : undefined}
-      attachments={e.attachments}
-      extId={e.extId}
-      onPull={pull}
-      pulling={pulling}
-      mediaBase={MEDIA_BASE}
-      landed={e.extId === landed}
-      onLandedEnd={e.extId === landed ? endLanding : undefined}
     />
   );
 }
