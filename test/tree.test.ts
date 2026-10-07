@@ -29,7 +29,13 @@ const flat = (forest: Knot<string>[], depth = 0): string[] =>
 
 /** The drawn order and the indent, which is the whole of what the tree produces. */
 const drawn = (order: string[], parents: Record<string, string | undefined> = THREAD) =>
-  flat(tree(order, (k) => k, (k) => parents[k]));
+  flat(
+    tree(
+      order,
+      (k) => k,
+      (k) => parents[k],
+    ),
+  );
 
 /** The forest as one string, in the shape the pane draws it: a message, then its
  *  replies in brackets and in the transcript's own order. The recursion is the
@@ -86,7 +92,13 @@ describe("a thread drawn as a tree", () => {
       chain.push(`m${i}`);
       parents[`m${i}`] = `m${i - 1}`;
     }
-    const out = flat(tree(chain, (k) => k, (k) => parents[k]));
+    const out = flat(
+      tree(
+        chain,
+        (k) => k,
+        (k) => parents[k],
+      ),
+    );
     expect(out.map((n) => Number(n.split(":")[1]))).toEqual(chain.map((_, i) => i));
   });
 
@@ -97,29 +109,51 @@ describe("a thread drawn as a tree", () => {
     // pane renders and the line beside a level is that container's border (see
     // .ibread .stream .replies). Flat, one container per message with nothing in
     // it — which draws nothing at all.
-    expect(shape(tree(keys, (k) => k, (k) => THREAD[k]))).toBe("a(b(d),c)");
+    expect(
+      shape(
+        tree(
+          keys,
+          (k) => k,
+          (k) => THREAD[k],
+        ),
+      ),
+    ).toBe("a(b(d),c)");
   });
 
   it("opens a tree per message the corpus cannot place", () => {
-    expect(shape(tree(keys, (k) => k, (k) => ({ a: undefined, b: "gone", c: "b", d: "a" })[k]))).toBe(
-      "a(d),b(c)",
-    );
+    expect(
+      shape(
+        tree(
+          keys,
+          (k) => k,
+          (k) => ({ a: undefined, b: "gone", c: "b", d: "a" })[k],
+        ),
+      ),
+    ).toBe("a(d),b(c)");
   });
 
   it("cuts a cycle rather than building a tree with no bottom", () => {
     // The pane recurses over this structure, so a cycle is not a rendering
     // nicety: an a→b→a forest would draw until the pane gave up, and the walk is
     // the only thing standing between a malformed corpus and that.
-    expect(shape(tree(keys, (k) => k, (k) => ({ a: "b", b: "a", c: "a", d: undefined })[k]))).toBe(
-      "d,a(b,c)",
-    );
+    expect(
+      shape(
+        tree(
+          keys,
+          (k) => k,
+          (k) => ({ a: "b", b: "a", c: "a", d: undefined })[k],
+        ),
+      ),
+    ).toBe("d,a(b,c)");
   });
 
   it("is indented by Tailwind utilities at every depth, with no cap", () => {
     // The indentation is on each recursive replies container, so depth remains
     // unbounded and each nesting level contributes the same step and line.
     const component = readFileSync("src/components/ThreadMessages.tsx", "utf8");
-    expect(component).toContain('className="replies -mt-2 ml-[.3rem] border-l-2 border-line pt-2 pl-4"');
+    expect(component).toContain(
+      'className="replies -mt-2 ml-[.3rem] border-l-2 border-line pt-2 pl-4"',
+    );
     expect(component).not.toContain("min(");
   });
 
@@ -156,7 +190,9 @@ describe("a thread drawn as a tree", () => {
     expect(css).not.toContain(":has(+ .replies");
     // The fade is on the resting rule, since one declared by the arriving rule would
     // fade in and then vanish, and it is guarded like the rest of the sheet's motion.
-    const motion = css.slice(css.indexOf("@media (prefers-reduced-motion: no-preference)", css.indexOf(".mhov")));
+    const motion = css.slice(
+      css.indexOf("@media (prefers-reduced-motion: no-preference)", css.indexOf(".mhov")),
+    );
     const block = motion.slice(0, motion.indexOf("} }"));
     expect(block).toContain("transition:border-left-color");
   });
@@ -210,7 +246,11 @@ describe("a thread drawn as a tree", () => {
     // reply to a parent no one has — is drawn first and the cycle follows it,
     // flat. What matters is not where they land but that all four are here, once
     // each, however many times the graph names them.
-    const forest = tree(["a", "b", "c", "d", "a"], (k) => k, (k) => parents[k]);
+    const forest = tree(
+      ["a", "b", "c", "d", "a"],
+      (k) => k,
+      (k) => parents[k],
+    );
     const out = flat(forest).map((n) => n.split(":")[0]!);
     expect(out).toEqual(["d", "a", "b", "c"]);
     expect(new Set(out).size).toBe(out.length);

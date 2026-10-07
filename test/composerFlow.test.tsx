@@ -21,7 +21,11 @@ describe("the compose panel", () => {
       />,
     );
 
-    expect(screen.getByRole("complementary", { name: "Compose email" }).classList.contains("compose-panel")).toBe(true);
+    expect(
+      screen
+        .getByRole("complementary", { name: "Compose email" })
+        .classList.contains("compose-panel"),
+    ).toBe(true);
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(document.querySelector(".compose-backdrop")).toBeNull();
   });

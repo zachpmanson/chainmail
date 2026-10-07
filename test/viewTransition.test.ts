@@ -116,11 +116,21 @@ describe("naming the bubbles a view switch moves", () => {
     Object.assign(window, {
       matchMedia: (q: string) => {
         asked++;
-        return { matches: q.includes("prefers-reduced-motion"), media: q, addEventListener() {}, removeEventListener() {} };
+        return {
+          matches: q.includes("prefers-reduced-motion"),
+          media: q,
+          addEventListener() {},
+          removeEventListener() {},
+        };
       },
     });
     let calls = 0;
-    Object.assign(document, { startViewTransition: () => { calls++; return { finished: Promise.resolve() }; } });
+    Object.assign(document, {
+      startViewTransition: () => {
+        calls++;
+        return { finished: Promise.resolve() };
+      },
+    });
     try {
       const applied: string[] = [];
       withTransition(document, () => applied.push("changed"));
@@ -158,7 +168,11 @@ describe("naming the bubbles a view switch moves", () => {
     const names: string[][] = [];
     Object.assign(document, {
       startViewTransition: (cb: () => void) => {
-        names.push([...document.querySelectorAll<HTMLElement>(".msg")].map((e) => e.style.viewTransitionName));
+        names.push(
+          [...document.querySelectorAll<HTMLElement>(".msg")].map(
+            (e) => e.style.viewTransitionName,
+          ),
+        );
         cb();
         return { finished: Promise.resolve() };
       },
@@ -178,7 +192,6 @@ describe("naming the bubbles a view switch moves", () => {
     expect(named[0]).toBe("entry-0");
   });
 });
-
 
 /**
  * The other half of a view switch: the text, re-flowed.
@@ -205,8 +218,9 @@ const bodied = (id: string, html: string) => {
 };
 
 /** The words a body was wrapped into, in the order the walk found them. */
-const wordsOf = (root: Element | Document) =>
-  [...root.querySelectorAll<HTMLElement>("[data-vtword]")];
+const wordsOf = (root: Element | Document) => [
+  ...root.querySelectorAll<HTMLElement>("[data-vtword]"),
+];
 
 /** What each of a bubble's words is currently named. Empty string is a word with
  *  no name, which is a word the browser will not move on its own. */
@@ -479,7 +493,7 @@ describe("naming the attachments a view switch moves", () => {
     chip.className = "att";
     chip.getBoundingClientRect = () => ({ top: 99999, bottom: 100000 }) as DOMRect;
     el.append(chip);
-    stubbing((cb) => {});
+    stubbing(() => {});
     try {
       withTransition(document, () => {});
       expect(chip.style.viewTransitionName).toBe("");

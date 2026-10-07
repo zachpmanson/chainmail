@@ -23,7 +23,7 @@ describe("trimBody", () => {
       '<details class="sig"><summary>signature</summary><div><p>Regards</p></div></details>';
     expect(trimBody(body)).toBe(
       "<p>Please see below.</p>" +
-      '<details class="sig"><summary>signature</summary><div><p>Regards</p></div></details>',
+        '<details class="sig"><summary>signature</summary><div><p>Regards</p></div></details>',
     );
   });
 
@@ -34,7 +34,9 @@ describe("trimBody", () => {
   });
 
   it("keeps edge whitespace inside a <pre>", () => {
-    expect(trimBody("<p>Code:</p><pre>  indented  </pre>")).toBe("<p>Code:</p><pre>  indented  </pre>");
+    expect(trimBody("<p>Code:</p><pre>  indented  </pre>")).toBe(
+      "<p>Code:</p><pre>  indented  </pre>",
+    );
   });
 
   it("keeps an image as content", () => {
@@ -56,9 +58,9 @@ describe("trimBody", () => {
       '<details class="sig"><summary>signature</summary><div><p>Regards</p></div></details>';
     expect(trimBody(body)).toBe(
       "<p>Hello Tom,<u></u><u></u></p>" +
-      "<p> <u></u><u></u></p>" +
-      "<p>Please see below.<u></u><u></u></p>" +
-      '<details class="sig"><summary>signature</summary><div><p>Regards</p></div></details>',
+        "<p> <u></u><u></u></p>" +
+        "<p>Please see below.<u></u><u></u></p>" +
+        '<details class="sig"><summary>signature</summary><div><p>Regards</p></div></details>',
     );
   });
 
@@ -68,62 +70,62 @@ describe("trimBody", () => {
     // miss it, so the wrapper's interior is trimmed recursively.
     const body =
       '<div dir="ltr"><div>Hi Jason,</div><div>Yes we also have</div>' +
-      '<div><br/></div>' +
+      "<div><br/></div>" +
       '<details class="sig"><summary>signature</summary><div>Regards</div></details></div>';
     expect(trimBody(body)).toBe(
       '<div dir="ltr"><div>Hi Jason,</div><div>Yes we also have</div>' +
-      '<details class="sig"><summary>signature</summary><div>Regards</div></details></div>',
+        '<details class="sig"><summary>signature</summary><div>Regards</div></details></div>',
     );
   });
 });
-  it("trims a deep <br clear=\"all\"/> run before a wrapped fold", () => {
-    // Gmail nests the message and its signature as adjacent sibling blocks,
-    // and the <br clear="all"/> lives two levels down, at the tail of the
-    // content block. The trim must descend into that block so the body ends
-    // edge-on to the disclosure.
-    const body =
-      '<div dir="ltr">' +
-      '<div><span>Done.</span><br/><span><br/></span></div>' +
-      '<br clear="all"/>' +
-      '</div>' +
-      '<div><details class="sig"><summary>signature</summary><div>Ada</div></details></div>';
-    expect(trimBody(body)).toBe(
-      '<div dir="ltr"><div><span>Done.</span></div></div>' +
+it('trims a deep <br clear="all"/> run before a wrapped fold', () => {
+  // Gmail nests the message and its signature as adjacent sibling blocks,
+  // and the <br clear="all"/> lives two levels down, at the tail of the
+  // content block. The trim must descend into that block so the body ends
+  // edge-on to the disclosure.
+  const body =
+    '<div dir="ltr">' +
+    "<div><span>Done.</span><br/><span><br/></span></div>" +
+    '<br clear="all"/>' +
+    "</div>" +
+    '<div><details class="sig"><summary>signature</summary><div>Ada</div></details></div>';
+  expect(trimBody(body)).toBe(
+    '<div dir="ltr"><div><span>Done.</span></div></div>' +
       '<div><details class="sig"><summary>signature</summary><div>Ada</div></details></div>',
-    );
-  });
+  );
+});
 
-  it("trims a deep blank run at the very end of a body", () => {
-    // No fold: the trailing <br>/blank run sits nested inside the last content
-    // element. The final kept span's own tail is trimmed too.
-    const body =
-      '<div dir="ltr"><div>Thanks,</div><div><br/></div>' +
-      '<div><span>Bye.</span><br/><span style="text-align:center"><br/></span></div>' +
-      '<br clear="all"/></div>';
-    expect(trimBody(body)).toBe(
-      '<div dir="ltr"><div>Thanks,</div><div><br/></div><div><span>Bye.</span></div></div>',
-    );
-  });
+it("trims a deep blank run at the very end of a body", () => {
+  // No fold: the trailing <br>/blank run sits nested inside the last content
+  // element. The final kept span's own tail is trimmed too.
+  const body =
+    '<div dir="ltr"><div>Thanks,</div><div><br/></div>' +
+    '<div><span>Bye.</span><br/><span style="text-align:center"><br/></span></div>' +
+    '<br clear="all"/></div>';
+  expect(trimBody(body)).toBe(
+    '<div dir="ltr"><div>Thanks,</div><div><br/></div><div><span>Bye.</span></div></div>',
+  );
+});
 
-  it("trims leading blanks inside a wrap that hides a fold", () => {
-    // A Gmail signature block is an HTML table that opens with one or two
-    // <br clear="all"/> before the table, so the separator sits as leading
-    // children *inside* the wrapper that also holds the fold. The body must
-    // still lift edge-on to the disclosure — those interior leading blanks
-    // are dropped, the fold and the wrapper's open/close tags stay.
-    const body =
-      '<div dir="auto">Hi mate,</div>' +
-      '<div dir="auto"><br/></div>' +
-      '<div dir="auto">Reach Jason&nbsp;</div>' +
-      '<div><br clear="all"/><br clear="all"/>' +
-      '<div><details class="sig"><summary>signature</summary><div>Lane</div></details></div></div>';
-    expect(trimBody(body)).toBe(
-      '<div dir="auto">Hi mate,</div>' +
+it("trims leading blanks inside a wrap that hides a fold", () => {
+  // A Gmail signature block is an HTML table that opens with one or two
+  // <br clear="all"/> before the table, so the separator sits as leading
+  // children *inside* the wrapper that also holds the fold. The body must
+  // still lift edge-on to the disclosure — those interior leading blanks
+  // are dropped, the fold and the wrapper's open/close tags stay.
+  const body =
+    '<div dir="auto">Hi mate,</div>' +
+    '<div dir="auto"><br/></div>' +
+    '<div dir="auto">Reach Jason&nbsp;</div>' +
+    '<div><br clear="all"/><br clear="all"/>' +
+    '<div><details class="sig"><summary>signature</summary><div>Lane</div></details></div></div>';
+  expect(trimBody(body)).toBe(
+    '<div dir="auto">Hi mate,</div>' +
       '<div dir="auto"><br/></div>' +
       '<div dir="auto">Reach Jason&nbsp;</div>' +
       '<div><div><details class="sig"><summary>signature</summary><div>Lane</div></details></div></div>',
-    );
-  });
+  );
+});
 
 /**
  * hasBody answers the one question a bubble asks before drawing a body: is there

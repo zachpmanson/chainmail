@@ -47,7 +47,7 @@ const bubble = (over: Partial<MessageProps> = {}): MessageProps => ({
 
 /** The sender's own html, as the server would serve it: a stylesheet the
  *  transcript's rendering cannot keep, and the class that addresses it. */
-const sent = "<style>:host{background:#eef}</style><p class=\"card\">Booking confirmed</p>";
+const sent = '<style>:host{background:#eef}</style><p class="card">Booking confirmed</p>';
 
 const draw = (over: Partial<MessageProps> = {}) => render(<Message {...bubble(over)} />);
 
@@ -93,7 +93,7 @@ describe("a message whose own html the corpus holds", () => {
     // per flip would make the comparison the slow part of reading the message.
     const load = vi.fn(async () => sent);
     const { container } = draw({ original: { extId: "mail:<orig-once@loomworks.example>", load } });
-    for (const _ of [1, 2, 3]) {
+    for (let i = 0; i < 3; i += 1) {
       fireEvent.click(control()!);
       await waitFor(() => expect(container.querySelector(".bd")!.className).toMatch(/bdo|(?!)/));
       fireEvent.click(control()!);
@@ -187,7 +187,10 @@ describe("a message whose own html the corpus holds", () => {
     // nav's refresh and the attachment chips turn (see .navrefresh .spinner).
     let release: (html: string) => void = () => {};
     const load = vi.fn(
-      () => new Promise<string>((res) => { release = res; }),
+      () =>
+        new Promise<string>((res) => {
+          release = res;
+        }),
     );
     const { container } = draw({
       original: { extId: "mail:<orig-asking@loomworks.example>", load },
@@ -269,8 +272,7 @@ describe("a message whose own html the corpus holds", () => {
     const bubbles = () => [...container.querySelectorAll(".bd")] as HTMLElement[];
     // Two bubbles, two controls: one switch, drawn wherever the reader is looking
     // at the mail it governs.
-    const switches = () =>
-      [...container.querySelectorAll(".origbtn")] as HTMLElement[];
+    const switches = () => [...container.querySelectorAll(".origbtn")] as HTMLElement[];
     expect(bubbles().map((b) => b.classList.contains("bd"))).toEqual([true, true]);
 
     fireEvent.click(switches()[0]!);
@@ -466,7 +468,9 @@ describe("the sender's own colour-scheme rules", () => {
   it("is what a mount does, so no mail is drawn from its dark rules by accident", () => {
     // jsdom's shadow root has no `styleSheets`, so the host is handed a root that
     // does: what is under test is that the walk is on the mount's path at all.
-    const sheet = sheetOf(`@media (prefers-color-scheme: dark) { p { color:#e8eaed } } p { margin:0 }`);
+    const sheet = sheetOf(
+      `@media (prefers-color-scheme: dark) { p { color:#e8eaed } } p { margin:0 }`,
+    );
     const root = { innerHTML: "", styleSheets: [sheet] };
     const host = document.createElement("div");
     Object.defineProperty(host, "shadowRoot", { value: root });

@@ -27,8 +27,20 @@
  */
 
 const VOID = new Set([
-  "area", "base", "br", "col", "embed", "hr", "img", "input",
-  "link", "meta", "param", "source", "track", "wbr",
+  "area",
+  "base",
+  "br",
+  "col",
+  "embed",
+  "hr",
+  "img",
+  "input",
+  "link",
+  "meta",
+  "param",
+  "source",
+  "track",
+  "wbr",
 ]);
 
 /** Whitespace-only text: spaces, tabs, newlines, nbsp, and companions. */
@@ -64,8 +76,9 @@ function parseTag(body: string, lt: number): Tag | null {
   let quote = "";
   while (k < body.length) {
     const ch = body[k];
-    if (quote) { if (ch === quote) quote = ""; }
-    else if (ch === '"' || ch === "'") quote = ch;
+    if (quote) {
+      if (ch === quote) quote = "";
+    } else if (ch === '"' || ch === "'") quote = ch;
     else if (ch === ">") break;
     k++;
   }
@@ -107,12 +120,29 @@ function topLevelSpans(body: string): { start: number; end: number; fold: boolea
   const len = body.length;
   while (i < len) {
     const lt = body.indexOf("<", i);
-    if (lt === -1) { push(i, len, false); break; }
-    if (lt > i) { push(i, lt, false); i = lt; continue; }
+    if (lt === -1) {
+      push(i, len, false);
+      break;
+    }
+    if (lt > i) {
+      push(i, lt, false);
+      i = lt;
+      continue;
+    }
     const t = parseTag(body, lt);
-    if (!t) { i++; continue; }
-    if (t.closing) { i = t.gt; continue; } // stray close; skip
-    if (t.selfClose) { push(lt, t.gt, false); i = t.gt; continue; }
+    if (!t) {
+      i++;
+      continue;
+    }
+    if (t.closing) {
+      i = t.gt;
+      continue;
+    } // stray close; skip
+    if (t.selfClose) {
+      push(lt, t.gt, false);
+      i = t.gt;
+      continue;
+    }
     // find matching close for this element name
     let depth = 1;
     let j = t.gt;
@@ -121,16 +151,25 @@ function topLevelSpans(body: string): { start: number; end: number; fold: boolea
       const lt2 = body.indexOf("<", j);
       if (lt2 === -1) break;
       const t2 = parseTag(body, lt2);
-      if (!t2) { j = lt2 + 1; continue; }
+      if (!t2) {
+        j = lt2 + 1;
+        continue;
+      }
       if (t2.closing && t2.cls === t.cls) {
         depth--;
-        if (depth === 0) { end = t2.gt; break; }
+        if (depth === 0) {
+          end = t2.gt;
+          break;
+        }
       } else if (!t2.closing && !t2.selfClose && t2.cls === t.cls) {
         depth++;
       }
       j = t2.gt;
     }
-    if (end === -1) { push(lt, len, false); break; }
+    if (end === -1) {
+      push(lt, len, false);
+      break;
+    }
     const fold = t.cls === "details" && hasClass(t.classes, "sig");
     push(lt, end, fold);
     i = end;
@@ -204,9 +243,7 @@ export function hasBody(body: string): boolean {
   const drawn = body
     .replace(/<!--[\s\S]*?-->/g, "")
     .replace(/<(script|style)\b[\s\S]*?<\/\1\s*>/gi, "");
-  return topLevelSpans(drawn).some(
-    (s) => s.fold || subtreeHasContent(drawn, s.start, s.end),
-  );
+  return topLevelSpans(drawn).some((s) => s.fold || subtreeHasContent(drawn, s.start, s.end));
 }
 
 /** Trim the whitespace-only edges of a serialized message body. */
@@ -257,7 +294,6 @@ export function trimBody(body: string): string {
     }
   }
 
-
   // Walk back from before the trailing fold (or from the end) to the last
   // content span, skipping the blank run that sits above the fold.
   let last = endFold ? n - 2 : n - 1;
@@ -288,7 +324,10 @@ export function trimBody(body: string): string {
   for (let i = first; i <= lastContent; i++) {
     const s = spans[i]!;
     let piece = body.slice(s.start, s.end);
-    if (s.fold) { parts.push(piece); continue; }
+    if (s.fold) {
+      parts.push(piece);
+      continue;
+    }
     // The final kept span is the one that meets the trimmed edge, so its own
     // trailing whitespace is peeled as deep as it goes — the <br clear
     // style separator nest Gmail leaves just above a signature block, or a
@@ -383,6 +422,15 @@ function trimTrailingOf(body: string, start: number, end: number): string {
 // paragraphs and inline runs alone so their trailing empties (the author's own
 // spacer text or Gmail <u></u> filler) are preserved.
 const CONTAINERS: Record<string, boolean> = {
-  div: true, table: true, tbody: true, thead: true, tfoot: true,
-  tr: true, td: true, th: true, section: true, article: true, blockquote: true,
+  div: true,
+  table: true,
+  tbody: true,
+  thead: true,
+  tfoot: true,
+  tr: true,
+  td: true,
+  th: true,
+  section: true,
+  article: true,
+  blockquote: true,
 };

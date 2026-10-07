@@ -28,13 +28,20 @@ export function Edits({
   return (
     <div className="edits mt-[.35rem]">
       {edits.map((ed, i) => (
-        <div className="edit rounded-md border-l-2 border-line bg-dash px-[.55rem] py-[.3rem]" key={ed.base || i}>
+        <div
+          className="edit rounded-md border-l-2 border-line bg-dash px-[.55rem] py-[.3rem]"
+          key={ed.base || i}
+        >
           <div className="ehdr text-[.72rem] text-muted">
             edited by <span className="editwho">{ed.who || fallbackWho || "someone"}</span>
             {ed.origWho || ed.origStamp ? (
               <>
                 ,{" "}
-                <a className="text-accent" href={`#${ed.base}`} title="the message this change was made to">
+                <a
+                  className="text-accent"
+                  href={`#${ed.base}`}
+                  title="the message this change was made to"
+                >
                   original
                 </a>
                 {ed.origWho ? <span> from {ed.origWho}</span> : null}
@@ -42,7 +49,10 @@ export function Edits({
               </>
             ) : null}
           </div>
-          <div className="ebd overflow-x-auto text-[.92rem]" dangerouslySetInnerHTML={html(ed.html)} />
+          <div
+            className="ebd overflow-x-auto text-[.92rem]"
+            dangerouslySetInnerHTML={html(ed.html)}
+          />
         </div>
       ))}
     </div>

@@ -39,20 +39,8 @@ function Reply({ start = [] as Address[], other = [] as Address[] }) {
   };
   return (
     <div>
-      <AddressField
-        {...shared}
-        label="to"
-        value={to}
-        onChange={setTo}
-        taken={cc}
-      />
-      <AddressField
-        {...shared}
-        label="cc"
-        value={cc}
-        onChange={setCc}
-        taken={to}
-      />
+      <AddressField {...shared} label="to" value={to} onChange={setTo} taken={cc} />
+      <AddressField {...shared} label="cc" value={cc} onChange={setCc} taken={to} />
     </div>
   );
 }
@@ -71,8 +59,8 @@ const chips = (list: "to" | "cc") =>
 const offered = () =>
   [...document.querySelectorAll<HTMLElement>(".addropt")].map((o) => o.textContent!);
 const chipOf = (list: "to" | "cc", address: string) =>
-  [...document.querySelectorAll<HTMLElement>(`.addrfield[data-list="${list}"] .addrchip`)].find((c) =>
-    c.querySelector(".addrname")!.textContent!.includes(address),
+  [...document.querySelectorAll<HTMLElement>(`.addrfield[data-list="${list}"] .addrchip`)].find(
+    (c) => c.querySelector(".addrname")!.textContent!.includes(address),
   )!;
 const refusal = () => document.querySelector(".addrrefuse")?.textContent ?? null;
 
@@ -166,7 +154,9 @@ describe("the field that builds a list of addresses", () => {
   it("takes an address off the list when its chip's press is taken", () => {
     render(<Reply start={[CY, ADA]} />);
 
-    fireEvent.click(within(chipOf("to", "cy@loomworks.example")).getByRole("button", { name: /^remove / }));
+    fireEvent.click(
+      within(chipOf("to", "cy@loomworks.example")).getByRole("button", { name: /^remove / }),
+    );
     expect(chips("to")).toEqual(["Ada Okoye <ada@loomworks.example>"]);
   });
 
@@ -191,7 +181,10 @@ describe("the field that builds a list of addresses", () => {
     type("to", "loom");
     kind("to", "ArrowDown");
     kind("to", "Enter");
-    expect(chips("to")).toEqual(["Ada Okoye <ada@loomworks.example>", "Cy Okafor <cy@loomworks.example>"]);
+    expect(chips("to")).toEqual([
+      "Ada Okoye <ada@loomworks.example>",
+      "Cy Okafor <cy@loomworks.example>",
+    ]);
 
     // And a field that builds a list has to unbuild it without the mouse: the
     // backspace in an empty input is the chip the caret is against.

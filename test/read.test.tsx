@@ -115,51 +115,67 @@ const CHAIN_BODY = {
 };
 
 /** The whole surface the inbox reads, with /v1/search answerable per test. */
-const server = (
-  search: () => Response,
-  read?: Handler,
-  mail?: Handler,
-  /** The thread the pane opens, for a test that needs an entry the shared body
-   *  above does not have. Absent is the shared one, unchanged. */
-  chain?: () => Response,
-  defaultFolder?: string,
-): Handler => (c) => {
-  const p = pathOf(c);
-  if (p === "/v1/search") return search();
-  if (p === "/v1/read") return read ? read(c) : json(200, { chain: ROOT, unread: false, marked: 3, skipped: 0 });
-  if (p === "/v1/mail")
-    return mail
-      ? mail(c)
-      : json(200, { action: "archive", changed: 3, skipped: 0, chains: [] });
-  if (p.startsWith("/v1/chains/")) return chain ? chain() : json(200, CHAIN_BODY);
-  // The mailbox's folders, for the pane's move control. The inbox is in the list the
-  // service gives, and is what the control has to leave out.
-  if (p === "/v1/labels") {
-    return json(200, { labels: [{ name: "INBOX", messages: 5 }, { name: "Work", messages: 2 }] });
-  }
-  if (p === "/v1/settings") return json(200, defaultFolder ? { defaultFolder } : {});
-  // The corpus's identity graph, for the hover titles on names. Only the two people
-  // this thread was addressed to are in it with an address: they sent nothing, so
-  // the thread read carries no address for them (see castOfEntries), and the graph
-  // is the only place one can come from. The sender is deliberately absent from it
-  // as well, so a test can tell the graph's answer from the entry's own header.
-  if (p === "/v1/people") {
-    return json(200, {
-      people: [
-        { personId: 2, displayName: "Ada Byron", identities: ["email:ada@example.net"], sent: 0, received: 4 },
-        {
-          personId: 3,
-          displayName: "Cy Devlin",
-          identities: ["display_name:cy devlin", "email:cy@example.net", "email:c.devlin@example.org"],
-          sent: 0,
-          received: 2,
-        },
-      ],
-    });
-  }
-  if (p === "/auth/status") return json(200, { signed_in: true });
-  return json(500, { error: `unexpected call to ${c.method} ${p}` });
-};
+const server =
+  (
+    search: () => Response,
+    read?: Handler,
+    mail?: Handler,
+    /** The thread the pane opens, for a test that needs an entry the shared body
+     *  above does not have. Absent is the shared one, unchanged. */
+    chain?: () => Response,
+    defaultFolder?: string,
+  ): Handler =>
+  (c) => {
+    const p = pathOf(c);
+    if (p === "/v1/search") return search();
+    if (p === "/v1/read")
+      return read ? read(c) : json(200, { chain: ROOT, unread: false, marked: 3, skipped: 0 });
+    if (p === "/v1/mail")
+      return mail ? mail(c) : json(200, { action: "archive", changed: 3, skipped: 0, chains: [] });
+    if (p.startsWith("/v1/chains/")) return chain ? chain() : json(200, CHAIN_BODY);
+    // The mailbox's folders, for the pane's move control. The inbox is in the list the
+    // service gives, and is what the control has to leave out.
+    if (p === "/v1/labels") {
+      return json(200, {
+        labels: [
+          { name: "INBOX", messages: 5 },
+          { name: "Work", messages: 2 },
+        ],
+      });
+    }
+    if (p === "/v1/settings") return json(200, defaultFolder ? { defaultFolder } : {});
+    // The corpus's identity graph, for the hover titles on names. Only the two people
+    // this thread was addressed to are in it with an address: they sent nothing, so
+    // the thread read carries no address for them (see castOfEntries), and the graph
+    // is the only place one can come from. The sender is deliberately absent from it
+    // as well, so a test can tell the graph's answer from the entry's own header.
+    if (p === "/v1/people") {
+      return json(200, {
+        people: [
+          {
+            personId: 2,
+            displayName: "Ada Byron",
+            identities: ["email:ada@example.net"],
+            sent: 0,
+            received: 4,
+          },
+          {
+            personId: 3,
+            displayName: "Cy Devlin",
+            identities: [
+              "display_name:cy devlin",
+              "email:cy@example.net",
+              "email:c.devlin@example.org",
+            ],
+            sent: 0,
+            received: 2,
+          },
+        ],
+      });
+    }
+    if (p === "/auth/status") return json(200, { signed_in: true });
+    return json(500, { error: `unexpected call to ${c.method} ${p}` });
+  };
 
 const reads = () => calls.filter((c) => c.method === "POST" && pathOf(c) === "/v1/read");
 const mails = () => calls.filter((c) => c.method === "POST" && pathOf(c) === "/v1/mail");
@@ -214,15 +230,18 @@ const pane = () => document.querySelector(".ibread") as HTMLElement;
  *  empty — the circle only exists once there is a thread to be a state of. The
  *  rows arrive with the list, so it waits for them the way a reader has to. */
 const openRow = async (n = 0) => {
-  await waitFor(() =>
-    expect(document.querySelectorAll(".ibrow button").length).toBeGreaterThan(n),
-  );
+  await waitFor(() => expect(document.querySelectorAll(".ibrow button").length).toBeGreaterThan(n));
   fireEvent.click(document.querySelectorAll(".ibrow button")[n] as HTMLElement);
 };
 
 describe("what a thread's read state looks like", () => {
   it("marks the chains with unread mail, and dims the ones that are read", async () => {
-    handler = server(page([thread({ unread: 2 }), thread({ rootExtId: OTHER, subject: "Fence panels", unread: 0 })]));
+    handler = server(
+      page([
+        thread({ unread: 2 }),
+        thread({ rootExtId: OTHER, subject: "Fence panels", unread: 0 }),
+      ]),
+    );
     await mountApp();
 
     const rows = await screen.findAllByRole("checkbox");
@@ -269,7 +288,13 @@ describe("what a thread's read state looks like", () => {
     handler = server(
       page([
         thread({ attachments: 3, people: 3, entries: 3 }),
-        thread({ rootExtId: OTHER, subject: "Fence panels", attachments: 0, people: 2, entries: 1 }),
+        thread({
+          rootExtId: OTHER,
+          subject: "Fence panels",
+          attachments: 0,
+          people: 2,
+          entries: 1,
+        }),
       ]),
     );
     await mountApp();
@@ -309,7 +334,9 @@ describe("what a thread's read state looks like", () => {
     await waitFor(() => expect(pane().querySelectorAll(".p1").length).toBe(3));
 
     const titled = (name: string) =>
-      [...pane().querySelectorAll(".pn span")].find((n) => n.textContent === name)?.getAttribute("title");
+      [...pane().querySelectorAll(".pn span")]
+        .find((n) => n.textContent === name)
+        ?.getAttribute("title");
     // A name nothing holds an address for is the name alone — here the sender, whose
     // entry in this fixture carries no From header and whose name is in no row of the
     // graph, so nothing is invented for them. (A bubble's own title is asked a
@@ -398,7 +425,9 @@ describe("what a thread's read state looks like", () => {
     handler = server(page([thread({ unread: 0 })]), undefined, undefined, undefined, "INBOX");
     await mountApp();
     await openRow();
-    await waitFor(() => expect(pane().querySelector(".ibread-subj")?.textContent).toBe("Loom cutover schedule"));
+    await waitFor(() =>
+      expect(pane().querySelector(".ibread-subj")?.textContent).toBe("Loom cutover schedule"),
+    );
 
     const move = (await screen.findByLabelText("Move to a folder")) as HTMLSelectElement;
     // Inbox is the current folder, not a move destination. It stays selected as
@@ -443,7 +472,12 @@ describe("what a thread's read state looks like", () => {
       }
       if (p === "/v1/labels") {
         labelAccounts.push(new URL(c.url).searchParams.get("accountId") ?? "");
-        return json(200, { labels: [{ name: "INBOX", messages: 5 }, { name: "Work", messages: 2 }] });
+        return json(200, {
+          labels: [
+            { name: "INBOX", messages: 5 },
+            { name: "Work", messages: 2 },
+          ],
+        });
       }
       if (p === "/v1/mail")
         return json(200, { action: "move", labels: ["Work"], changed: 1, skipped: 0, chains: [] });
@@ -494,9 +528,9 @@ describe("what a thread's read state looks like", () => {
     expect(unread.getAttribute("aria-pressed")).toBe("true");
     fireEvent.click(unread);
     await waitFor(() =>
-      expect((pane().querySelector(".ibread-read") as HTMLElement).getAttribute("aria-pressed")).toBe(
-        "false",
-      ),
+      expect(
+        (pane().querySelector(".ibread-read") as HTMLElement).getAttribute("aria-pressed"),
+      ).toBe("false"),
     );
     const read = pane().querySelector(".ibread-read") as HTMLElement;
     expect(read.getAttribute("aria-label")).toBe("Mark unread");
@@ -525,7 +559,9 @@ describe("what a thread's read state looks like", () => {
 
   it("says so when the host cannot change the mailbox", async () => {
     handler = server(page([thread({ unread: 1 })]), () =>
-      json(403, { error: "marking mail read is disabled: this server was started without -mark-read" }),
+      json(403, {
+        error: "marking mail read is disabled: this server was started without -mark-read",
+      }),
     );
     await mountApp();
     await openRow();
@@ -669,7 +705,9 @@ describe("what the pane does to the thread it has open", () => {
     // was started without the switch that allows this one — so it names the switch
     // and it is not on the note's timer: it is something to act on.
     handler = server(page([thread({})]), undefined, () =>
-      json(403, { error: "changing mail is disabled: this server was started without -mail-write" }),
+      json(403, {
+        error: "changing mail is disabled: this server was started without -mail-write",
+      }),
     );
     const armed = vi.spyOn(globalThis, "setTimeout");
     await mountApp();
@@ -832,7 +870,17 @@ describe("how a sender's mail is read, stored against the person", () => {
     // And then the corpus answers, and it is asked again: what stands is what the
     // corpus says rather than what this pane hoped.
     const asked = chains().length;
-    act(() => c.answer(200, { person: { personId: 1, displayName: "Bo Halvorsen", sent: 3, received: 0, preferOriginal: true } }));
+    act(() =>
+      c.answer(200, {
+        person: {
+          personId: 1,
+          displayName: "Bo Halvorsen",
+          sent: 3,
+          received: 0,
+          preferOriginal: true,
+        },
+      }),
+    );
     await waitFor(() => expect(c.answers()).toBe(true));
     await waitFor(() => expect(chains().length).toBeGreaterThan(asked));
     await waitFor(() => expect(switchIn().getAttribute("aria-pressed")).toBe("true"));
@@ -844,9 +892,7 @@ describe("how a sender's mail is read, stored against the person", () => {
     handler = server(page([thread({})]), undefined, undefined, () =>
       json(200, {
         ...CHAIN_BODY,
-        entries: [
-          { ...CHAIN_BODY.entries[0], original: true, personId: 1, preferOriginal: true },
-        ],
+        entries: [{ ...CHAIN_BODY.entries[0], original: true, personId: 1, preferOriginal: true }],
       }),
     );
     await mountApp();

@@ -32,7 +32,10 @@ const META_LEAD =
 export function isMeta(e: Entry): boolean {
   if (e.meta !== undefined) return e.meta;
   if (e.kind === "note") return true;
-  const text = (e.body ?? "").replace(/<[^>]+>/g, " ").replace(/&[a-z]+;/gi, " ").trim();
+  const text = (e.body ?? "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&[a-z]+;/gi, " ")
+    .trim();
   return META_LEAD.test(e.subject ?? "") || META_LEAD.test(text);
 }
 
@@ -85,8 +88,10 @@ export function layout(entries: Entry[], idOf: (e: Entry) => string): Layout {
   const laneEnd: number[] = [];
   for (const c of chains) {
     let put = laneEnd.findIndex((end) => end < c.firstRow);
-    if (put === -1) { laneEnd.push(c.lastRow); put = laneEnd.length - 1; }
-    else laneEnd[put] = c.lastRow;
+    if (put === -1) {
+      laneEnd.push(c.lastRow);
+      put = laneEnd.length - 1;
+    } else laneEnd[put] = c.lastRow;
     c.lane = put;
   }
 
@@ -110,7 +115,10 @@ export interface GraphNode {
  * first child; a later child takes the lowest free lane. A lane is released once
  * its occupant has no descendants left to place.
  */
-export function graphLanes(entries: Entry[], idOf: (e: Entry) => string): {
+export function graphLanes(
+  entries: Entry[],
+  idOf: (e: Entry) => string,
+): {
   nodes: GraphNode[];
   laneCount: number;
   forks: number;
@@ -133,12 +141,18 @@ export function graphLanes(entries: Entry[], idOf: (e: Entry) => string): {
     let lane = parent ? holder.indexOf(parent) : -1;
     if (lane === -1) {
       lane = holder.indexOf(null);
-      if (lane === -1) { holder.push(null); lane = holder.length - 1; }
+      if (lane === -1) {
+        holder.push(null);
+        lane = holder.length - 1;
+      }
     }
     // hold the lane only while descendants are still to come
     holder[lane] = childCount.get(id) ? id : null;
     nodes.push({
-      id, lane, row: i, parent,
+      id,
+      lane,
+      row: i,
+      parent,
       isFork: parent ? (childCount.get(parent) ?? 0) > 1 : false,
       isRoot: !parent,
       isLeaf: !childCount.get(id),

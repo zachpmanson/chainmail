@@ -15,9 +15,7 @@ const toolbarButtonClasses =
   "inline-flex items-center rounded-md border border-line bg-card px-[.45rem] py-[.2rem] text-[.66rem] font-bold uppercase tracking-[.08em] text-muted hover:border-accent hover:text-accent aria-pressed:border-accent aria-pressed:bg-mine aria-pressed:text-accent disabled:cursor-default disabled:opacity-55";
 
 function replyTarget(row: Row, v: View): ReplyTarget | null {
-  const parent = row.entry.parent
-    ? v.rows.find((r) => r.id === row.entry.parent)
-    : undefined;
+  const parent = row.entry.parent ? v.rows.find((r) => r.id === row.entry.parent) : undefined;
   if (!parent) return null;
   // A note has no sender: what it answers is named by its label, which is the
   // word it was drawn under.
@@ -27,7 +25,12 @@ function replyTarget(row: Row, v: View): ReplyTarget | null {
   // link and a hover on the message it points at say one thing about one person.
   // A note's label is not a person and asks for no address (see the system note's
   // own label in the panel above).
-  return { anchor: parent.id, who, whoTitle: parent.entry.kind === "note" ? undefined : v.whoTitle(who ?? ""), when };
+  return {
+    anchor: parent.id,
+    who,
+    whoTitle: parent.entry.kind === "note" ? undefined : v.whoTitle(who ?? ""),
+    when,
+  };
 }
 
 /**
@@ -48,7 +51,15 @@ function replyTarget(row: Row, v: View): ReplyTarget | null {
  * with nothing to put in it — and a `.sys` that rendering-inspected an empty
  * sender to decide whether it was a note at all.
  */
-function EntryBlock({ row, v, mark, anchorByGmail, onPull, pulling, mediaBase }: {
+function EntryBlock({
+  row,
+  v,
+  mark,
+  anchorByGmail,
+  onPull,
+  pulling,
+  mediaBase,
+}: {
   row: Row;
   v: View;
   mark?: "new" | "revised";
@@ -74,7 +85,9 @@ function EntryBlock({ row, v, mark, anchorByGmail, onPull, pulling, mediaBase }:
             {e.date}
           </a>
         </div>
-        <div className="syslabel mb-[.3rem] text-[.75rem] font-bold uppercase tracking-[.08em] text-muted">{e.label}</div>
+        <div className="syslabel mb-[.3rem] text-[.75rem] font-bold uppercase tracking-[.08em] text-muted">
+          {e.label}
+        </div>
         <div className="bd" dangerouslySetInnerHTML={html(trimBody(e.body))} />
         <ReplyLink parent={replyTarget(row, v)} />
       </div>
@@ -185,7 +198,20 @@ export interface TimelineProps {
   refreshing?: boolean;
 }
 
-export function Timeline({ spec, marks, prevLabel, filter, onShowSpec, onRefresh, onAdd, onEval, onPull, pulling, mediaBase, refreshing }: TimelineProps) {
+export function Timeline({
+  spec,
+  marks,
+  prevLabel,
+  filter,
+  onShowSpec,
+  onRefresh,
+  onAdd,
+  onEval,
+  onPull,
+  pulling,
+  mediaBase,
+  refreshing,
+}: TimelineProps) {
   const v = derive(spec);
   const s = v.spec;
   // gmailId -> the id of the row that carries it, so an unspooled source line
@@ -193,69 +219,132 @@ export function Timeline({ spec, marks, prevLabel, filter, onShowSpec, onRefresh
   // is keyed by the first row that holds its gmailId.
   const anchorByGmail = new Map<string, string>();
   for (const r of v.rows) {
-    if (r.entry.gmailId && !anchorByGmail.has(r.entry.gmailId)) anchorByGmail.set(r.entry.gmailId, r.id);
+    if (r.entry.gmailId && !anchorByGmail.has(r.entry.gmailId))
+      anchorByGmail.set(r.entry.gmailId, r.id);
   }
   return (
     <>
       {v.avatarCss ? <style dangerouslySetInnerHTML={html(v.avatarCss)} /> : null}
       <div className="fixed top-2 right-[calc(var(--panel)+.6rem)] z-[31] flex gap-[.35rem] max-[1024px]:right-[.6rem] print:hidden">
-        <button className={`tbtn ${toolbarButtonClasses}`} id="viewtog" type="button" aria-pressed="false"
-                aria-label="Thread columns view">columns</button>
+        <button
+          className={`tbtn ${toolbarButtonClasses}`}
+          id="viewtog"
+          type="button"
+          aria-pressed="false"
+          aria-label="Thread columns view"
+        >
+          columns
+        </button>
         {onShowSpec ? (
-          <button className={`tbtn ${toolbarButtonClasses}`} id="spectog" type="button" onClick={onShowSpec}
-                  aria-label="Show the spec as JSON">json</button>
+          <button
+            className={`tbtn ${toolbarButtonClasses}`}
+            id="spectog"
+            type="button"
+            onClick={onShowSpec}
+            aria-label="Show the spec as JSON"
+          >
+            json
+          </button>
         ) : null}
         {onRefresh ? (
-          <button className={`tbtn ${toolbarButtonClasses}`} id="refreshtog" type="button" onClick={onRefresh}
-                  disabled={refreshing}
-                  aria-label="Re-derive this page from the corpus">
+          <button
+            className={`tbtn ${toolbarButtonClasses}`}
+            id="refreshtog"
+            type="button"
+            onClick={onRefresh}
+            disabled={refreshing}
+            aria-label="Re-derive this page from the corpus"
+          >
             {refreshing ? "refreshing…" : "refresh"}
           </button>
         ) : null}
         {onAdd ? (
-          <button className={`tbtn ${toolbarButtonClasses}`} type="button" onClick={onAdd}
-                  aria-label="Search the corpus for another email to add to this page">
+          <button
+            className={`tbtn ${toolbarButtonClasses}`}
+            type="button"
+            onClick={onAdd}
+            aria-label="Search the corpus for another email to add to this page"
+          >
             add email
           </button>
         ) : null}
         {onEval ? (
-          <button className={`tbtn ${toolbarButtonClasses}`} type="button" onClick={onEval}
-                  aria-label="Evaluate chains the queries proposed">eval</button>
+          <button
+            className={`tbtn ${toolbarButtonClasses}`}
+            type="button"
+            onClick={onEval}
+            aria-label="Evaluate chains the queries proposed"
+          >
+            eval
+          </button>
         ) : null}
-        <button className={`tbtn ${toolbarButtonClasses}`} id="maptog" type="button" aria-pressed="true"
-                aria-label="Reply tree panel">tree</button>
-        <button className={`tbtn ${toolbarButtonClasses}`} id="plaintog" type="button" aria-pressed="false"
-                aria-label="Ignore the sender's own formatting">plain</button>
+        <button
+          className={`tbtn ${toolbarButtonClasses}`}
+          id="maptog"
+          type="button"
+          aria-pressed="true"
+          aria-label="Reply tree panel"
+        >
+          tree
+        </button>
+        <button
+          className={`tbtn ${toolbarButtonClasses}`}
+          id="plaintog"
+          type="button"
+          aria-pressed="false"
+          aria-label="Ignore the sender's own formatting"
+        >
+          plain
+        </button>
       </div>
       <div className="wrap mx-auto max-w-[76rem] px-5 pt-7 pb-14">
-      <header className="top mb-[.25rem] border-b border-line pb-[.7rem]">
-        <h1 className="m-0 mb-[.2rem] text-[1.3rem] tracking-[-.01em]">
-          {v.hashed ? <span className="text-[var(--muted)] font-normal">#</span> : null}
-          {v.hashed ? v.title.slice(1) : v.title}
-        </h1>
-        <p className="mb-2 text-[var(--muted)] text-[.86rem]" dangerouslySetInnerHTML={html(s.subtitle ?? `${s.messages.length} messages.`)} />
-        <Legend />
-        <ParticipantsPanel v={v} open />
-        {marks ? <DiffPanel v={v} marks={marks} prevLabel={prevLabel ?? "the previous run"} /> : null}
-        <SourcesPanel v={v} filter={filter} />
-      </header>
-      <div className="stream" id="stream" style={{ ["--nch" as string]: v.layout.laneCount }}>
-        <Chains v={v} />
-        {v.rows.map((r) => (
-          <EntryBlock key={r.id} row={r} v={v} mark={marks?.get(r.id)} anchorByGmail={anchorByGmail}
-                      onPull={onPull} pulling={pulling} mediaBase={mediaBase} />
-        ))}
-      </div>
-      {s.openItems?.length ? (
-        <footer className="end mt-8 border-t border-line pt-[.9rem]">
-          <h2 className="mb-[.6rem] mt-0 text-[.8rem] uppercase tracking-[.1em] text-muted">{s.openItemsTitle ?? "Still open"}</h2>
-          <ul className="m-0 pl-[1.15rem]">
-            {s.openItems.map((i, n) => (
-              <li className="my-[.2rem] text-[.89rem]" key={n} dangerouslySetInnerHTML={html(i)} />
-            ))}
-          </ul>
-        </footer>
-      ) : null}
+        <header className="top mb-[.25rem] border-b border-line pb-[.7rem]">
+          <h1 className="m-0 mb-[.2rem] text-[1.3rem] tracking-[-.01em]">
+            {v.hashed ? <span className="text-[var(--muted)] font-normal">#</span> : null}
+            {v.hashed ? v.title.slice(1) : v.title}
+          </h1>
+          <p
+            className="mb-2 text-[var(--muted)] text-[.86rem]"
+            dangerouslySetInnerHTML={html(s.subtitle ?? `${s.messages.length} messages.`)}
+          />
+          <Legend />
+          <ParticipantsPanel v={v} open />
+          {marks ? (
+            <DiffPanel v={v} marks={marks} prevLabel={prevLabel ?? "the previous run"} />
+          ) : null}
+          <SourcesPanel v={v} filter={filter} />
+        </header>
+        <div className="stream" id="stream" style={{ ["--nch" as string]: v.layout.laneCount }}>
+          <Chains v={v} />
+          {v.rows.map((r) => (
+            <EntryBlock
+              key={r.id}
+              row={r}
+              v={v}
+              mark={marks?.get(r.id)}
+              anchorByGmail={anchorByGmail}
+              onPull={onPull}
+              pulling={pulling}
+              mediaBase={mediaBase}
+            />
+          ))}
+        </div>
+        {s.openItems?.length ? (
+          <footer className="end mt-8 border-t border-line pt-[.9rem]">
+            <h2 className="mb-[.6rem] mt-0 text-[.8rem] uppercase tracking-[.1em] text-muted">
+              {s.openItemsTitle ?? "Still open"}
+            </h2>
+            <ul className="m-0 pl-[1.15rem]">
+              {s.openItems.map((i, n) => (
+                <li
+                  className="my-[.2rem] text-[.89rem]"
+                  key={n}
+                  dangerouslySetInnerHTML={html(i)}
+                />
+              ))}
+            </ul>
+          </footer>
+        ) : null}
       </div>
       <Minimap v={v} />
     </>

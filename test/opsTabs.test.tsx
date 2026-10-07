@@ -41,11 +41,29 @@ const handler_: Handler = (c) => {
   if (p === "/v1/people") {
     return json(200, {
       people: [
-        { personId: 1, displayName: "Ada Okoye", identities: ["email:ada@loomworks.example"], sent: 2, received: 1 },
+        {
+          personId: 1,
+          displayName: "Ada Okoye",
+          identities: ["email:ada@loomworks.example"],
+          sent: 2,
+          received: 1,
+        },
       ],
     });
   }
-  if (p === "/v1/ops/orgs") return json(200, { domains: [{ domain: "loomworks.example", messages: 2, people: 1, org: "Loomworks", stored: false, guess: "Loomworks" }] });
+  if (p === "/v1/ops/orgs")
+    return json(200, {
+      domains: [
+        {
+          domain: "loomworks.example",
+          messages: 2,
+          people: 1,
+          org: "Loomworks",
+          stored: false,
+          guess: "Loomworks",
+        },
+      ],
+    });
   if (p === "/v1/ops/plan") {
     return json(200, {
       people: 1,

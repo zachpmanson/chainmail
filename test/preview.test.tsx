@@ -24,9 +24,7 @@ const entry = (over: Partial<Entry>): Entry => ({
 });
 
 const page = (messages: Entry[]) =>
-  renderToStaticMarkup(
-    <Timeline spec={normalise({ title: "Loom cutover", messages } as Spec)} />,
-  );
+  renderToStaticMarkup(<Timeline spec={normalise({ title: "Loom cutover", messages } as Spec)} />);
 
 const shot = {
   name: "loom-throughput.png",
@@ -37,8 +35,18 @@ const shot = {
   previewW: 640,
   previewH: 427,
 };
-const logo = { name: "image001.png", kind: "image", size: "4.1 KB", link: "https://chat.example/files/F009/image001.png" };
-const sheet = { name: "readings.csv", kind: "CSV", size: "18 KB", link: "https://chat.example/files/F010/readings.csv" };
+const logo = {
+  name: "image001.png",
+  kind: "image",
+  size: "4.1 KB",
+  link: "https://chat.example/files/F009/image001.png",
+};
+const sheet = {
+  name: "readings.csv",
+  kind: "CSV",
+  size: "18 KB",
+  link: "https://chat.example/files/F010/readings.csv",
+};
 
 /** Just the attachment strip, so a panel above cannot satisfy an assertion. */
 const strip = (html: string) => {
@@ -83,7 +91,7 @@ describe("which attachments get a preview", () => {
   });
 
   it("keeps a chip with nowhere to go unopenable rather than offering a dead control", () => {
-    const { link, ...noLink } = shot;
+    const noLink = { ...shot, link: undefined };
     const s = strip(page([entry({ attachments: [noLink] })]));
     expect(s).toContain("athumb"); // the picture is still worth showing
     expect(s).toContain("nolink");
@@ -122,7 +130,9 @@ class NoopObserver {
   observe() {}
   unobserve() {}
   disconnect() {}
-  takeRecords() { return []; }
+  takeRecords() {
+    return [];
+  }
 }
 (globalThis as { IntersectionObserver?: unknown }).IntersectionObserver = NoopObserver;
 
@@ -182,7 +192,12 @@ describe("enlarging a preview", () => {
     const x = pop.querySelector<HTMLButtonElement>(".popx")!;
     for (const shiftKey of [false, true]) {
       x.focus();
-      const ev = new KeyboardEvent("keydown", { key: "Tab", shiftKey, bubbles: true, cancelable: true });
+      const ev = new KeyboardEvent("keydown", {
+        key: "Tab",
+        shiftKey,
+        bubbles: true,
+        cancelable: true,
+      });
       pop.dispatchEvent(ev);
       expect(ev.defaultPrevented).toBe(true);
       expect(pop.contains(document.activeElement)).toBe(true);
@@ -194,7 +209,9 @@ describe("enlarging a preview", () => {
     const m = mount([entry({ attachments: [shot] })]);
     m.chip!.click();
     const pop = m.pop()!;
-    pop.querySelector<HTMLElement>(".popimg")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    pop
+      .querySelector<HTMLElement>(".popimg")!
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect(m.open()).toBe(true);
     pop.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect(m.open()).toBe(false);
@@ -236,14 +253,23 @@ describe("enlarging a picture the sender put in the body", () => {
     document.body.innerHTML = page([bodyWith(img)]);
     const detach = attach(document);
     const el = document.querySelector<HTMLImageElement>(".bd img")!;
-    return { detach, el, open: () => { const p = document.querySelector<HTMLElement>(".pop"); return !!p && !p.hidden; } };
+    return {
+      detach,
+      el,
+      open: () => {
+        const p = document.querySelector<HTMLElement>(".pop");
+        return !!p && !p.hidden;
+      },
+    };
   };
 
   it("enlarges a screenshot on click and on the keyboard", () => {
     const w = wire('<img src="https://cdn.example/chart.png" width="900" height="600">');
     expect(w.el.getAttribute("aria-haspopup")).toBe("dialog");
     expect(w.el.tabIndex).toBe(0); // reachable without a pointer
-    w.el.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    w.el.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+    );
     expect(w.open()).toBe(true);
     w.detach();
   });
@@ -266,7 +292,9 @@ describe("enlarging a picture the sender put in the body", () => {
     // Two tab stops for one picture would mean tabbing through the transcript
     // stopping twice in the same place.
     document.body.innerHTML = page([
-      bodyWith('<a href="https://example.test/full"><img src="https://cdn.example/c.png" width="900" height="600"></a>'),
+      bodyWith(
+        '<a href="https://example.test/full"><img src="https://cdn.example/c.png" width="900" height="600"></a>',
+      ),
     ]);
     const detach = attach(document);
     const img = document.querySelector<HTMLImageElement>(".bd img")!;
@@ -287,7 +315,9 @@ describe("a body picture whose size is not knowable yet", () => {
   // on sight would put a tab stop on every one, before anything knows whether
   // they are screenshots or wordmarks.
   const wire = (attrs: string) => {
-    document.body.innerHTML = page([entry({ body: `<img src="https://cdn.example/x.png"${attrs}>` })]);
+    document.body.innerHTML = page([
+      entry({ body: `<img src="https://cdn.example/x.png"${attrs}>` }),
+    ]);
     const detach = attach(document);
     return { detach, el: document.querySelector<HTMLImageElement>(".bd img")! };
   };
@@ -339,7 +369,9 @@ describe("the transcript behind an open popover", () => {
     // The overlay stops a pointer; this is what stops a screen reader reading
     // the transcript underneath as though it were still the page.
     expect(wrap.hasAttribute("inert")).toBe(true);
-    document.querySelector(".pop")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    document
+      .querySelector(".pop")!
+      .dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     expect(wrap.hasAttribute("inert")).toBe(false);
     detach();
   });

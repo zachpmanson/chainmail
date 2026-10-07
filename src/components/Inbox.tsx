@@ -85,23 +85,33 @@ export function Inbox() {
   // and then swapping it out from under the reader.
   const home = urlLabel === undefined && urlAccountId === undefined;
   const label = urlLabel !== undefined ? urlLabel : (settings.data?.defaultFolder ?? "");
-  const accountId = urlAccountId !== undefined
-    ? urlAccountId
-    : home ? settings.data?.defaultFolderAccountId : undefined;
+  const accountId =
+    urlAccountId !== undefined
+      ? urlAccountId
+      : home
+        ? settings.data?.defaultFolderAccountId
+        : undefined;
   // The home choice is a mailbox location, not a label name: the same folder
   // name can be present in several connected accounts.
-  const isDefault = (settings.data?.defaultFolder ?? "") === label
-    && (settings.data?.defaultFolderAccountId ?? "") === (accountId ?? "");
+  const isDefault =
+    (settings.data?.defaultFolder ?? "") === label &&
+    (settings.data?.defaultFolderAccountId ?? "") === (accountId ?? "");
   const pickFolder = (name: string, pickedAccountId?: string) =>
-    navigate({ to: "/", search: (prev) => ({
-      ...prev,
-      label: name,
-      accountId: pickedAccountId,
-    }) });
-  const makeDefault = (on: boolean) => save.mutate({ body: {
-    defaultFolder: on ? label : "",
-    defaultFolderAccountId: on ? accountId ?? "" : "",
-  } });
+    navigate({
+      to: "/",
+      search: (prev) => ({
+        ...prev,
+        label: name,
+        accountId: pickedAccountId,
+      }),
+    });
+  const makeDefault = (on: boolean) =>
+    save.mutate({
+      body: {
+        defaultFolder: on ? label : "",
+        defaultFolderAccountId: on ? (accountId ?? "") : "",
+      },
+    });
   // Picking a mail takes the pane, and the pane holds one thing: the compose
   // panel is dismissed by the act of choosing a thread to read. Without this a
   // reader who had the compose panel open and clicked a row saw the panel stay
@@ -125,7 +135,11 @@ export function Inbox() {
   const inbox = $api.useInfiniteQuery(
     "get",
     "/v1/search",
-    { params: { query: { limit: PAGE, ...(label ? { label } : {}), ...(accountId ? { accountId } : {}) } } },
+    {
+      params: {
+        query: { limit: PAGE, ...(label ? { label } : {}), ...(accountId ? { accountId } : {}) },
+      },
+    },
     {
       // Held until the settings have settled, so a default folder arrives as the
       // first page rather than as a correction to it. Settled, not successful: a
@@ -191,8 +205,11 @@ export function Inbox() {
   // Described by the list when the list has it, and by the last list that did when
   // a write has just taken it out of this view (see useLastDescription) — moving a
   // thread out of the inbox must not take its subject off the pane's head.
-  const described = useLastDescription(opened ?? null, rows.find((c) => c.rootExtId === opened) ?? null);
-  const selected: PreviewableThread | null = opened ? described ?? onlyID : null;
+  const described = useLastDescription(
+    opened ?? null,
+    rows.find((c) => c.rootExtId === opened) ?? null,
+  );
+  const selected: PreviewableThread | null = opened ? (described ?? onlyID) : null;
 
   // A deep link is answered twice: the pane reads the thread, and the list scrolls
   // to the row it is reading. The address is what one reader hands another —
@@ -231,12 +248,13 @@ export function Inbox() {
   // the same question forever. A failure shows the error and a button instead.
   const end = useRef<HTMLDivElement | null>(null);
   const paging = inbox.hasNextPage === true && inbox.isFetchNextPageError !== true;
+  const fetchNextPage = inbox.fetchNextPage;
   useEffect(() => {
     const marker = end.current;
     if (!marker || !paging) return;
     const io = new IntersectionObserver(
       (entries) => {
-        if (entries.some((e) => e.isIntersecting)) void inbox.fetchNextPage();
+        if (entries.some((e) => e.isIntersecting)) void fetchNextPage();
       },
       // Ahead of the fold: the next page lands while the reader is still going
       // through rows, rather than after they stop at the end and wait.
@@ -244,7 +262,7 @@ export function Inbox() {
     );
     io.observe(marker);
     return () => io.disconnect();
-  }, [paging, inbox.fetchNextPage]);
+  }, [paging, fetchNextPage]);
 
   return (
     <div className="wrap ibwrap mx-0 w-full max-w-none pt-0 pb-0 min-[60rem]:flex min-[60rem]:flex-1 min-[60rem]:flex-col min-[60rem]:min-h-0">
@@ -279,7 +297,9 @@ export function Inbox() {
             <div className="iblistwrap min-w-0 min-[60rem]:min-h-0 min-[60rem]:flex-1 min-[60rem]:overflow-y-auto min-[60rem]:rounded-lg min-[60rem]:border min-[60rem]:border-line min-[60rem]:bg-card min-[60rem]:[scrollbar-gutter:stable]">
               {compact && rows.length > 0 ? <CompactListHeader /> : null}
               {rows.length > 0 ? (
-                <ul className={`iblist m-0 list-none divide-y divide-line overflow-hidden rounded-lg border border-line bg-card p-0 min-[60rem]:border-0 min-[60rem]:rounded-none min-[60rem]:bg-transparent${compact ? " compact" : ""}`}>
+                <ul
+                  className={`iblist m-0 list-none divide-y divide-line overflow-hidden rounded-lg border border-line bg-card p-0 min-[60rem]:border-0 min-[60rem]:rounded-none min-[60rem]:bg-transparent${compact ? " compact" : ""}`}
+                >
                   {rows.map((c) => (
                     <ThreadRow
                       key={c.rootExtId}
@@ -304,7 +324,10 @@ export function Inbox() {
               {paging ? (
                 <div className="ibend py-[.6rem] text-center" ref={end}>
                   {inbox.isFetchingNextPage ? (
-                    <p className="selnote m-0 flex-[1_1_100%] text-[.78rem] text-muted" role="status">
+                    <p
+                      className="selnote m-0 flex-[1_1_100%] text-[.78rem] text-muted"
+                      role="status"
+                    >
                       Reading further back…
                     </p>
                   ) : null}
@@ -313,7 +336,11 @@ export function Inbox() {
               {inbox.isFetchNextPageError ? (
                 <>
                   <Failure error={inbox.error} />
-                  <Button type="button" className="mx-auto mt-[.7rem] block rounded-full px-[.9rem] py-[.35rem] text-[.78rem] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={() => inbox.fetchNextPage()}>
+                  <Button
+                    type="button"
+                    className="mx-auto mt-[.7rem] block rounded-full px-[.9rem] py-[.35rem] text-[.78rem] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                    onClick={() => inbox.fetchNextPage()}
+                  >
                     Try again
                   </Button>
                 </>
@@ -321,16 +348,20 @@ export function Inbox() {
             </div>
           </>
         }
-        pane={composing ? <ComposeBox onClose={closeCompose} /> : (
-          <ThreadPane
-            thread={selected}
-            label="The selected thread"
-            backLabel="← List"
-            empty="Nothing open — pick a thread from the list."
-            moveDefault={label}
-            onClose={closeChain}
-          />
-        )}
+        pane={
+          composing ? (
+            <ComposeBox onClose={closeCompose} />
+          ) : (
+            <ThreadPane
+              thread={selected}
+              label="The selected thread"
+              backLabel="← List"
+              empty="Nothing open — pick a thread from the list."
+              moveDefault={label}
+              onClose={closeChain}
+            />
+          )
+        }
       />
 
       {/* The bar of things to do with the ticked chains, which appears once
@@ -339,11 +370,7 @@ export function Inbox() {
           object. The same bar the search page shows, because what it acts on is
           the chains that were ticked rather than anything about the list they
           were ticked in. */}
-      <ActionBar
-        chosen={chosen}
-        moveDefault={label}
-        onDone={clearChosen}
-      />
+      <ActionBar chosen={chosen} moveDefault={label} onDone={clearChosen} />
     </div>
   );
 }

@@ -1,5 +1,10 @@
 import { Fragment, useEffect, useRef, useState } from "react";
-import { ArrowPathIcon, CheckIcon, ClipboardDocumentIcon, CodeBracketIcon } from "@heroicons/react/24/outline";
+import {
+  ArrowPathIcon,
+  CheckIcon,
+  ClipboardDocumentIcon,
+  CodeBracketIcon,
+} from "@heroicons/react/24/outline";
 import type { CSSProperties, ReactNode } from "react";
 import { receiptNames } from "../lib/who";
 import { Avatar } from "./Avatar";
@@ -231,7 +236,11 @@ function CopyJson({ data }: { data: unknown }) {
 function Stamp({ id, stamp }: { id: string; stamp: StampData }) {
   const { date, time, tz, zone } = stamp;
   return (
-    <a className="tm pl whitespace-nowrap text-[.71rem] tabular-nums text-muted" href={`#${id}`} title="Link to this message">
+    <a
+      className="tm pl whitespace-nowrap text-[.71rem] tabular-nums text-muted"
+      href={`#${id}`}
+      title="Link to this message"
+    >
       {date}
       {time ? ` · ${time}` : ""}
       {zone === "stated" ? <span className="tz">{tz}</span> : null}
@@ -260,7 +269,13 @@ function Stamp({ id, stamp }: { id: string; stamp: StampData }) {
  *  anything else the entry carries — the one handle it does need, `extId`, is
  *  the message's own and is passed as itself.
  */
-function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
+function Attachments({
+  attachments = [],
+  extId,
+  onPull,
+  pulling,
+  mediaBase,
+}: {
   attachments?: Attachment[];
   /** the handle a download asks for: the message whose files it wants */
   extId?: string;
@@ -336,7 +351,14 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
                    says it with `aria-busy`, and the pane has one live region for
                    the things that happen to it (see .pullnote) — a mark that
                    comes and goes on every chip must not be a second one. */
-                <ArrowPathIcon className="spinner" width={16} height={16} role="img" aria-label="Downloading…" aria-hidden={undefined} />
+                <ArrowPathIcon
+                  className="spinner"
+                  width={16}
+                  height={16}
+                  role="img"
+                  aria-label="Downloading…"
+                  aria-hidden={undefined}
+                />
               ) : (
                 <>
                   {a.kind ?? "file"} · {a.size ?? ""}
@@ -365,7 +387,7 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
         // carries and an old one cannot — so a PDF in an old page stays a chip
         // until the page is rebuilt.
         const showsImage = shot !== undefined;
-        const view = showsImage ? "image" : Boolean(local) ? a.view ?? "" : "";
+        const view = showsImage ? "image" : local ? (a.view ?? "") : "";
         const opens = view !== "";
         // The chip stays the same link it always was, and the popover is layered
         // onto it by script. That is deliberate: no new control appears, the
@@ -402,7 +424,9 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
               "att inline-flex items-baseline gap-[.35rem] rounded-md border border-line bg-quote px-[.45rem] py-[.1rem] text-fg no-underline hover:border-accent",
               opens && "haspop items-center",
               fetching && fetchable && "busy border-accent cursor-progress",
-            ].filter(Boolean).join(" ")}
+            ]
+              .filter(Boolean)
+              .join(" ")}
             href={href}
             {...(tip ? { title: tip } : {})}
             {...(beside ? { target: "_blank", rel: "noopener" } : {})}
@@ -455,7 +479,11 @@ function Attachments({ attachments = [], extId, onPull, pulling, mediaBase }: {
           // is the only thing here that says what the file actually is. It gets
           // no popover, though: the only way to offer one would be a control
           // that does nothing at all without scripting.
-          <span key={i} className="att nolink inline-flex items-baseline gap-[.35rem] rounded-md border border-line bg-quote px-[.45rem] py-[.1rem] text-fg no-underline opacity-60 hover:border-accent" {...(note ? { title: note } : {})}>
+          <span
+            key={i}
+            className="att nolink inline-flex items-baseline gap-[.35rem] rounded-md border border-line bg-quote px-[.45rem] py-[.1rem] text-fg no-underline opacity-60 hover:border-accent"
+            {...(note ? { title: note } : {})}
+          >
             {label}
           </span>
         );
@@ -580,7 +608,8 @@ function useOriginal(
         if (live) {
           setState({
             at: "none",
-            why: err instanceof Error && err.message ? err.message : "the original is not available",
+            why:
+              err instanceof Error && err.message ? err.message : "the original is not available",
           });
         }
       },
@@ -714,7 +743,9 @@ function Body({ body, state }: { body: string; state: Original }) {
       </div>
     );
   }
-  return <div key="read" className="bd overflow-x-auto" dangerouslySetInnerHTML={html(trimBody(body))} />;
+  return (
+    <div key="read" className="bd overflow-x-auto" dangerouslySetInnerHTML={html(trimBody(body))} />
+  );
 }
 
 /** What became of this message's fetch, while its sender's switch is on.
@@ -729,18 +760,23 @@ function Body({ body, state }: { body: string; state: Original }) {
  * still on screen, and the way back is the same switch, which belongs to every
  * message from that sender rather than to this one. */
 type Original =
-  | { at: "read" }
-  | { at: "asking" }
-  | { at: "sent"; html: string }
-  | { at: "none"; why: string };
+  { at: "read" } | { at: "asking" } | { at: "sent"; html: string } | { at: "none"; why: string };
 
 /** One message bubble. */
 export function Message(p: MessageProps) {
   // The org slot rides on the bubble so a bubble can carry its sender's colour,
   // and `me`/`quoted`/`isnew` are the same colour-and-state modifiers the
   // stylesheet already reads off this element.
-  const cls = ["msg", p.orgSlot, "mb-2", p.me && "me", p.quoted && "q",
-    p.chainStart && "chstart", p.mark === "new" && "isnew", p.landed && "landed"]
+  const cls = [
+    "msg",
+    p.orgSlot,
+    "mb-2",
+    p.me && "me",
+    p.quoted && "q",
+    p.chainStart && "chstart",
+    p.mark === "new" && "isnew",
+    p.landed && "landed",
+  ]
     .filter(Boolean)
     .join(" ");
   // The switch, and what became of this message's fetch. Both are the bubble's,
@@ -781,8 +817,16 @@ export function Message(p: MessageProps) {
             </span>
             <span className="org text-[.68rem] font-[650] uppercase tracking-[.07em]">{p.org}</span>
             <Stamp id={p.id} stamp={p.stamp} />
-            {p.mark === "new" ? <StatusBadge className="newpill" tone="new">new</StatusBadge> : null}
-            {p.mark === "revised" ? <StatusBadge className="revpill" tone="revised">revised</StatusBadge> : null}
+            {p.mark === "new" ? (
+              <StatusBadge className="newpill" tone="new">
+                new
+              </StatusBadge>
+            ) : null}
+            {p.mark === "revised" ? (
+              <StatusBadge className="revpill" tone="revised">
+                revised
+              </StatusBadge>
+            ) : null}
             {/* The line's right end, and always drawn even when the caller has
                 no reply to put in it: the caret lives inside this box, so an
                 empty tail still closes the line at the right edge. */}
@@ -805,7 +849,10 @@ export function Message(p: MessageProps) {
             {p.subject || p.source ? (
               <span className="hsub flex flex-[1_1_100%] items-baseline gap-x-[.7rem] gap-y-[.3rem]">
                 {p.subject ? (
-                  <span className="subj min-w-0 flex-[1_1_auto] text-[.72rem] leading-[1.25] text-fg" title={p.subject}>
+                  <span
+                    className="subj min-w-0 flex-[1_1_auto] text-[.72rem] leading-[1.25] text-fg"
+                    title={p.subject}
+                  >
                     {p.subject}
                   </span>
                 ) : null}
@@ -814,20 +861,18 @@ export function Message(p: MessageProps) {
             ) : null}
             <span className="to text-[.66rem] text-muted">
               to{" "}
-              {p.to ? (
-                receiptNames(p.to).map((r, i) => (
-                  <Fragment key={`${r.name}-${i}`}>
-                    {i === 0 ? "" : ", "}
-                    {/* One span per name, because the address behind a name is the
+              {p.to
+                ? receiptNames(p.to).map((r, i) => (
+                    <Fragment key={`${r.name}-${i}`}>
+                      {i === 0 ? "" : ", "}
+                      {/* One span per name, because the address behind a name is the
                         part a reader can check and this line is mostly people who
                         sent nothing in the thread — the ones the read carries no
                         address for at all (see lib/who). */}
-                    <span title={p.toTitle ? p.toTitle(r.name) : r.name}>{r.text}</span>
-                  </Fragment>
-                ))
-              ) : (
-                "—"
-              )}
+                      <span title={p.toTitle ? p.toTitle(r.name) : r.name}>{r.text}</span>
+                    </Fragment>
+                  ))
+                : "—"}
             </span>
             {p.answer !== undefined || p.original !== undefined || p.copyJson !== undefined ? (
               <span className="hdetend ml-auto inline-flex items-center gap-[.35rem]">
@@ -840,16 +885,24 @@ export function Message(p: MessageProps) {
             ) : null}
           </div>
         </details>
-        <div className={[
-          "bub relative overflow-hidden rounded-[10px] border border-line bg-card px-[.7rem] py-[.45rem]",
-          p.quoted && "border-dashed border-[color-mix(in_srgb,var(--muted)_55%,transparent)] bg-dash",
-          p.me && "border-org-3 bg-mine",
-          p.mark === "new" && "border-l-[3px] border-l-org-1",
-        ].filter(Boolean).join(" ")}>
+        <div
+          className={[
+            "bub relative overflow-hidden rounded-[10px] border border-line bg-card px-[.7rem] py-[.45rem]",
+            p.quoted &&
+              "border-dashed border-[color-mix(in_srgb,var(--muted)_55%,transparent)] bg-dash",
+            p.me && "border-org-3 bg-mine",
+            p.mark === "new" && "border-l-[3px] border-l-org-1",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        >
           {p.mentions?.length ? (
             <div className="ment mb-[.3rem] flex flex-wrap gap-1">
               {p.mentions.map((m) => (
-                <span className="at rounded-[5px] bg-mine px-[.35rem] py-[.02rem] text-[.74rem] font-semibold text-org-3" key={m}>
+                <span
+                  className="at rounded-[5px] bg-mine px-[.35rem] py-[.02rem] text-[.74rem] font-semibold text-org-3"
+                  key={m}
+                >
                   @{m}
                 </span>
               ))}

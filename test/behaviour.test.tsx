@@ -20,10 +20,22 @@ class NoopObserver {
   }
   /** The browser telling the spy about an entry, as it scrolls into the band. */
   enter(id: string, top = 0) {
-    this.cb([{ target: document.getElementById(id)!, isIntersecting: true, boundingClientRect: { top } }], this);
+    this.cb(
+      [{ target: document.getElementById(id)!, isIntersecting: true, boundingClientRect: { top } }],
+      this,
+    );
   }
   leave(id: string) {
-    this.cb([{ target: document.getElementById(id)!, isIntersecting: false, boundingClientRect: { top: 0 } }], this);
+    this.cb(
+      [
+        {
+          target: document.getElementById(id)!,
+          isIntersecting: false,
+          boundingClientRect: { top: 0 },
+        },
+      ],
+      this,
+    );
   }
 }
 (globalThis as { IntersectionObserver?: unknown }).IntersectionObserver = NoopObserver;
@@ -154,7 +166,17 @@ describe("the tree panel's scroll follow", () => {
   `;
 
   const rect = (top: number, height = 10) =>
-    ({ top, bottom: top + height, left: 0, right: 0, width: 0, height, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+    ({
+      top,
+      bottom: top + height,
+      left: 0,
+      right: 0,
+      width: 0,
+      height,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    }) as DOMRect;
   const place = (el: Element, top: number) => {
     (el as HTMLElement).getBoundingClientRect = () => rect(top);
   };
@@ -170,7 +192,9 @@ describe("the tree panel's scroll follow", () => {
     let top = 0;
     Object.defineProperty(scroller, "scrollTop", {
       get: () => top,
-      set: (v: number) => { top = v; },
+      set: (v: number) => {
+        top = v;
+      },
       configurable: true,
     });
     place(document.querySelector(".nd[data-id=a]")!, 400);
@@ -275,12 +299,14 @@ const linePane = () => {
   };
   document.querySelectorAll<HTMLElement>(".msg").forEach((el) => {
     const [left, top, right, bottom] = rects[el.id]!;
-    el.getBoundingClientRect = () => ({ left, top, right, bottom, width: right - left, height: bottom - top }) as DOMRect;
+    el.getBoundingClientRect = () =>
+      ({ left, top, right, bottom, width: right - left, height: bottom - top }) as DOMRect;
   });
   document.querySelectorAll<HTMLElement>(".replies").forEach((el, i) => {
     // the outer line hangs under entry-0 (at 116) and the inner one under entry-1 (at 216)
     const left = 116 + i * 100;
-    el.getBoundingClientRect = () => ({ left, top: 50 + i * 50, right: 400, bottom: 140 + i * -0 }) as DOMRect;
+    el.getBoundingClientRect = () =>
+      ({ left, top: 50 + i * 50, right: 400, bottom: 140 + i * -0 }) as DOMRect;
   });
   return { detach: attach(document) };
 };
@@ -374,7 +400,8 @@ describe("pointing at a reply line", () => {
   it("keeps the path lit while the pointer stays on it, and drops it on the way out", () => {
     const { detach } = linePane();
     pointAt(216, 120);
-    const lit = () => [...document.querySelectorAll(".rhov")].map((e) => e.tagName + (e.id || "line")).join(",");
+    const lit = () =>
+      [...document.querySelectorAll(".rhov")].map((e) => e.tagName + (e.id || "line")).join(",");
     const once = lit();
     // The same path, reported again by the next few pixels of the same movement: not
     // one class is touched, because touching one would start its fade over — a mark
@@ -386,7 +413,9 @@ describe("pointing at a reply line", () => {
     add.mockRestore();
     expect(lit()).toBe(once);
     // and the pointer leaving the transcript ends the path where it ends
-    document.querySelector(".ibread .stream")!.dispatchEvent(new MouseEvent("mouseleave", { bubbles: true }));
+    document
+      .querySelector(".ibread .stream")!
+      .dispatchEvent(new MouseEvent("mouseleave", { bubbles: true }));
     expect(document.querySelectorAll(".rhov").length).toBe(0);
     detach();
   });

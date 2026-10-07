@@ -8,8 +8,7 @@ import { clock, day, isoDay, when, whenShort } from "../src/lib/stamp";
  * are about the format and not about the machine the suite happens to run on —
  * the same trap the row's own date test avoids.
  */
-const at = (y: number, m: number, d: number, h: number, min: number) =>
-  new Date(y, m, d, h, min);
+const at = (y: number, m: number, d: number, h: number, min: number) => new Date(y, m, d, h, min);
 const now = at(2026, 8, 16, 15, 0);
 
 describe("a clock", () => {
@@ -52,7 +51,8 @@ describe("a stamp", () => {
   });
 });
 
-describe("a row's date", () => {  it("is a clock today, a word yesterday, and a date after that", () => {
+describe("a row's date", () => {
+  it("is a clock today, a word yesterday, and a date after that", () => {
     expect(whenShort(at(2026, 8, 16, 14, 30).toISOString(), now)).toBe("14:30");
     expect(whenShort(at(2026, 8, 15, 14, 30).toISOString(), now)).toBe("Yesterday");
     expect(whenShort(at(2026, 2, 11, 9, 0).toISOString(), now)).toBe("11 Mar");

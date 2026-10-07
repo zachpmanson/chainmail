@@ -38,9 +38,7 @@ it("says the corpus is being read while a question is out, and stops when it lan
       queryFn: () => new Promise<string>((resolve) => (land = resolve)),
     });
   });
-  await waitFor(() =>
-    expect(screen.getByRole("status").textContent).toBe("Reading the corpus…"),
-  );
+  await waitFor(() => expect(screen.getByRole("status").textContent).toBe("Reading the corpus…"));
 
   await act(async () => {
     land("answered");

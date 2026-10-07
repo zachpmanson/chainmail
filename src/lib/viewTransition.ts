@@ -75,7 +75,17 @@ const WORD = "data-vtword";
  *  whole and moves with its bubble, which is what the whole body did before any of
  *  this existed. `white-space` is checked as well as the tag, because the property
  *  is what actually decides (see collectWords). */
-const VERBATIM = new Set(["PRE", "CODE", "TEXTAREA", "SCRIPT", "STYLE", "SVG", "MATH", "TITLE", "NOSCRIPT"]);
+const VERBATIM = new Set([
+  "PRE",
+  "CODE",
+  "TEXTAREA",
+  "SCRIPT",
+  "STYLE",
+  "SVG",
+  "MATH",
+  "TITLE",
+  "NOSCRIPT",
+]);
 
 /** How many words one switch may name.
  *
@@ -159,10 +169,15 @@ function collectWords(doc: Document, root: HTMLElement, out: HTMLElement[]) {
  * drawn.
  */
 export function withTransition(doc: Document, apply: () => void) {
-  type WithVT = Document & { startViewTransition?: (cb: () => void) => { finished: Promise<void> } };
+  type WithVT = Document & {
+    startViewTransition?: (cb: () => void) => { finished: Promise<void> };
+  };
   const d = doc as WithVT;
   const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-  if (!d.startViewTransition || reduce) { apply(); return; }
+  if (!d.startViewTransition || reduce) {
+    apply();
+    return;
+  }
 
   // Everything named, across both passes, so clearing afterwards leaves nothing
   // named whether or not the change kept the node — an element left named is
@@ -239,7 +254,8 @@ export function withTransition(doc: Document, apply: () => void) {
       if (!onScreen(bubble)) continue;
       bubble.querySelectorAll<HTMLElement>(".att").forEach((el, i) => {
         const key = `${bubble.id}-a-${i}`;
-        const keep = count < ATTACHMENT_CAP && onScreen(el) && (first || chosenAttachments.has(key));
+        const keep =
+          count < ATTACHMENT_CAP && onScreen(el) && (first || chosenAttachments.has(key));
         el.style.viewTransitionName = keep ? key : "";
         if (!keep) return;
         chosenAttachments.add(key);

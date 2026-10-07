@@ -80,7 +80,8 @@ export function castOfEntries(entries: CorpusEntry[]): Person[] {
         continue;
       }
       const held = out[i]!;
-      const role = RANK[p.role]! > (held.role === undefined ? 0 : RANK[held.role]!) ? p.role : held.role;
+      const role =
+        RANK[p.role]! > (held.role === undefined ? 0 : RANK[held.role]!) ? p.role : held.role;
       const email = held.email ?? (p.role === "from" ? e.fromEmail : undefined);
       if (role !== held.role || email !== held.email) out[i] = { ...held, role, email };
     }
@@ -122,9 +123,9 @@ export function ParticipantsPanel({
   const cast: Person[] =
     people ??
     v.spec?.participants ??
-    [...new Map(v.rows.filter((r) => r.entry.sender).map((r) => [r.entry.sender!, r])).values()].map(
-      (r): Person => ({ name: r.entry.sender!, org: r.entry.org, email: r.entry.fromEmail }),
-    );
+    [
+      ...new Map(v.rows.filter((r) => r.entry.sender).map((r) => [r.entry.sender!, r])).values(),
+    ].map((r): Person => ({ name: r.entry.sender!, org: r.entry.org, email: r.entry.fromEmail }));
 
   const stats = new Map<string, { n: number }>();
   for (const r of v.rows) {
@@ -142,7 +143,9 @@ export function ParticipantsPanel({
 
   return (
     <details className="pan people mt-[.7rem] rounded-[9px] border border-line bg-card" open={open}>
-      <summary className="list-none cursor-pointer px-[.7rem] py-[.4rem] text-[.72rem] font-bold uppercase tracking-[.08em] text-muted hover:text-accent">Participants ({cast.length})</summary>
+      <summary className="list-none cursor-pointer px-[.7rem] py-[.4rem] text-[.72rem] font-bold uppercase tracking-[.08em] text-muted hover:text-accent">
+        Participants ({cast.length})
+      </summary>
       <div className="pbody border-t border-line px-[.7rem] pt-[.1rem] pb-[.6rem]">
         <div className="who grid grid-cols-[repeat(auto-fill,minmax(15.5rem,1fr))] gap-x-[.9rem] gap-y-[.3rem]">
           {groups.map((g) => (
@@ -153,17 +156,17 @@ export function ParticipantsPanel({
                   strip reads as structure, and this is a dense list of a dozen
                   rows where a dozen strips would read as noise. The avatars
                   already carry the colour per person. */}
-              <div className={`ogh ${v.orgSlot(g.org || undefined)} col-span-full mt-[.45rem] mb-[.05rem] text-[.66rem] font-bold uppercase tracking-[.09em] first:mt-[.15rem]`}>{g.org || "Other"}</div>
+              <div
+                className={`ogh ${v.orgSlot(g.org || undefined)} col-span-full mt-[.45rem] mb-[.05rem] text-[.66rem] font-bold uppercase tracking-[.09em] first:mt-[.15rem]`}
+              >
+                {g.org || "Other"}
+              </div>
               {g.people.map((p, i) => {
                 const n = stats.get(p.name)?.n;
                 // The note is shown alongside the count, not only in its absence:
                 // it says how a person was seen, which is exactly the thing a
                 // count of their messages does not tell you.
-                const bits = [
-                  p.role,
-                  n ? msgCount(n) : undefined,
-                  p.note,
-                ].filter(Boolean);
+                const bits = [p.role, n ? msgCount(n) : undefined, p.note].filter(Boolean);
                 // Keyed by position, because a name is not unique: two corpus
                 // people can carry one display name, and both are listed rather
                 // than one silently winning.
@@ -177,14 +180,24 @@ export function ParticipantsPanel({
                           pic={v.rows.find((r) => r.entry.sender === p.name)?.avatarClass}
                           size="participant"
                         />
-                        <span className="min-w-0 [overflow-wrap:anywhere]" title={v.whoTitle(p.name)}>{p.name}</span>
+                        <span
+                          className="min-w-0 [overflow-wrap:anywhere]"
+                          title={v.whoTitle(p.name)}
+                        >
+                          {p.name}
+                        </span>
                       </div>
                       {p.email ? (
-                        <a className="pe font-mono text-[.68rem] text-muted no-underline [overflow-wrap:anywhere] hover:text-accent hover:underline" href={`mailto:${p.email}`}>
+                        <a
+                          className="pe font-mono text-[.68rem] text-muted no-underline [overflow-wrap:anywhere] hover:text-accent hover:underline"
+                          href={`mailto:${p.email}`}
+                        >
                           {p.email}
                         </a>
                       ) : (
-                        <span className="pr text-[.66rem] text-muted">address not in the trail</span>
+                        <span className="pr text-[.66rem] text-muted">
+                          address not in the trail
+                        </span>
                       )}
                       <div className="pr text-[.66rem] text-muted">{bits.join(" · ")}</div>
                     </div>

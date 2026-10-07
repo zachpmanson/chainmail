@@ -7,23 +7,43 @@ import type { Timeline, Entry } from "../src/lib/spec";
  *  hoist it into the host's bubble instead of floating it. */
 const csv = (): Timeline => {
   const base: Entry = {
-    id: "c-orig", date: "Fri 21 Aug 2026", time: "09:00", tz: "+1000",
-    sender: "Charles", org: "fernbrook",
+    id: "c-orig",
+    date: "Fri 21 Aug 2026",
+    time: "09:00",
+    tz: "+1000",
+    sender: "Charles",
+    org: "fernbrook",
     body: "<p>CSV layout: ... E: Amount Due</p>",
   };
   const edited: Entry = {
-    id: "c-edit", date: "Fri 21 Aug 2026", time: "09:00", tz: "+1000",
-    sender: "Charles", org: "fernbrook", quoted: true, parent: base.id,
+    id: "c-edit",
+    date: "Fri 21 Aug 2026",
+    time: "09:00",
+    tz: "+1000",
+    sender: "Charles",
+    org: "fernbrook",
+    quoted: true,
+    parent: base.id,
     body: "<p>CSV layout: ... E: Invoice Amount</p>",
   };
   const host: Entry = {
-    id: "j-host", date: "Fri 21 Aug 2026", time: "14:00", tz: "+1000",
-    sender: "Jason", org: "termina", parent: base.id,
+    id: "j-host",
+    date: "Fri 21 Aug 2026",
+    time: "14:00",
+    tz: "+1000",
+    sender: "Jason",
+    org: "termina",
+    parent: base.id,
     body: "<p>Actually one change — we track Invoice Amount.</p>",
-    edits: [{
-      id: edited.id, base: base.id, who: "Jason", time: "14:00",
-      body: "CSV layout: ... E: Invoice Amount",
-    }],
+    edits: [
+      {
+        id: edited.id,
+        base: base.id,
+        who: "Jason",
+        time: "14:00",
+        body: "CSV layout: ... E: Invoice Amount",
+      },
+    ],
   };
   return { title: "#CSV layout", messages: [base, edited, host] };
 };
@@ -55,9 +75,15 @@ describe("hoist for a quoter's edit (#42)", () => {
   it("leaves a spec with no edits untouched", () => {
     const t: Timeline = {
       title: "T",
-      messages: [{
-        id: "a", date: "2026-08-21", time: "09:00", sender: "Ada", body: "<p>hi</p>",
-      }],
+      messages: [
+        {
+          id: "a",
+          date: "2026-08-21",
+          time: "09:00",
+          sender: "Ada",
+          body: "<p>hi</p>",
+        },
+      ],
     };
     const v = derive(t);
     expect(v.rows).toHaveLength(1);
@@ -71,23 +97,43 @@ describe("hoist for a quoter's edit (#42)", () => {
     // shape the CSV worked example did not cover. This is the #42 example Zach
     // pointed at, and it must not stay a floating node.
     const base: Entry = {
-      id: "z-base", date: "Thu 20 Aug 2026", time: "14:40", tz: "AEST",
-      sender: "Zach", org: "termina",
+      id: "z-base",
+      date: "Thu 20 Aug 2026",
+      time: "14:40",
+      tz: "AEST",
+      sender: "Zach",
+      org: "termina",
       body: "<p>I want to confirm Hewson Farms ... through your system?</p>",
     };
     const edited: Entry = {
-      id: "z-1641", date: "Thu 20 Aug 2026", time: "16:41", tz: "AEST",
-      sender: "Zach", org: "termina", quoted: true, parent: base.id,
+      id: "z-1641",
+      date: "Thu 20 Aug 2026",
+      time: "16:41",
+      tz: "AEST",
+      sender: "Zach",
+      org: "termina",
+      quoted: true,
+      parent: base.id,
       body: "<p>I want to confirm Hewson Farms ... through your system? - Yes, PDF copies.</p>",
     };
     const host: Entry = {
-      id: "j-2004", date: "Thu 20 Aug 2026", time: "20:04", tz: "AEST",
-      sender: "Jason", org: "fernbrook", parent: edited.id, // host replier replied TO the copy
+      id: "j-2004",
+      date: "Thu 20 Aug 2026",
+      time: "20:04",
+      tz: "AEST",
+      sender: "Jason",
+      org: "fernbrook",
+      parent: edited.id, // host replier replied TO the copy
       body: "<p>Morning Charles ... I answered #3 in red below.</p>",
-      edits: [{
-        id: edited.id, base: base.id, who: "Jason", time: "20:04",
-        body: "I want to confirm Hewson Farms ... through your system? - Yes, PDF copies.",
-      }],
+      edits: [
+        {
+          id: edited.id,
+          base: base.id,
+          who: "Jason",
+          time: "20:04",
+          body: "I want to confirm Hewson Farms ... through your system? - Yes, PDF copies.",
+        },
+      ],
     };
     const v = derive({ title: "# CSV", messages: [base, edited, host] });
     const ids = v.rows.map((r) => r.id);

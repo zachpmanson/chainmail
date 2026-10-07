@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import { diffBaseToEdit, toText, editHtml, type Span } from "../src/lib/editDiff";
 
 /** join spans the way the renderer does: single space between runs */
-const plain = (spans: Span[]) => spans.map((s) => s.text).join(" ").trim();
+const plain = (spans: Span[]) =>
+  spans
+    .map((s) => s.text)
+    .join(" ")
+    .trim();
 
 describe("diffBaseToEdit", () => {
   it("marks a single-word substitution as strike + insert", () => {
@@ -48,36 +52,35 @@ describe("editHtml", () => {
     const original = "<p>CSV layout: E: Amount Due</p>";
     const h = editHtml(copy, original, "CSV layout: E: Invoice Amount");
     // the added word is a live-inserted highlight (escaped source-safe)
-    expect(h).toContain("<b class=\"eins\">Invoice</b>");
+    expect(h).toContain('<b class="eins">Invoice</b>');
     // an original-only word is elided, not struck: the copy simply does not have it
     expect(h).not.toContain("Due");
   });
 
   it("keeps the rest of the CSV list and marks only the quoter's added answer", () => {
     const copy =
-      "<p>CSV layout: A: Member Number &middot; B: ATS Number " +
-      "&middot; E: Invoice Amount</p>";
+      "<p>CSV layout: A: Member Number &middot; B: ATS Number " + "&middot; E: Invoice Amount</p>";
     const original =
       "<p>CSV layout: A: Member Number &middot; B: ATS Number &middot; E: Amount Due</p>";
     const body = "CSV layout: A: Member Number \u00b7 B: ATS Number \u00b7 E: Invoice Amount";
     const h = editHtml(copy, original, body);
     // the list survives, and only Invoice is highlighted as new to the original
     expect(h).toContain("Member Number");
-    expect(h).toContain("<b class=\"eins\">Invoice</b>");
+    expect(h).toContain('<b class="eins">Invoice</b>');
     expect(h).not.toContain("Due");
   });
 
   it("keeps the copy's tags, including a coloured run (the #52 repro)", () => {
     const copy =
       "<p>Once we use the CSV, will it be ours? - " +
-      "<span style=\"color:red\">Yes, PDFs go to members</span>.</p>";
+      '<span style="color:red">Yes, PDFs go to members</span>.</p>';
     const original = "<p>Once we use the CSV, will it be ours?</p>";
     const body = "Once we use the CSV, will it be ours? - Yes, PDFs go to members.";
     const h = editHtml(copy, original, body);
     // the red span survives and the added answer is highlighted inside it
-    expect(h).toContain("<span style=\"color:red\">");
+    expect(h).toContain('<span style="color:red">');
     expect(h).toContain("Yes, PDFs go to members");
-    expect(h).toContain("<b class=\"eins\">");
+    expect(h).toContain('<b class="eins">');
   });
 
   it("renders a copy with no added words verbatim (formatting only)", () => {
@@ -93,7 +96,7 @@ describe("editHtml", () => {
     // (no copy body) → diff the original against the quoter's text, still marked
     const h = editHtml("", "<p>E: Amount Due</p>", "E: Invoice Amount");
     expect(h).toContain("Invoice");
-    expect(h).toContain("<del class=\"edel\"");
-    expect(h).toContain("<b class=\"eins\"");
+    expect(h).toContain('<del class="edel"');
+    expect(h).toContain('<b class="eins"');
   });
 });

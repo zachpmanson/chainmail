@@ -26,8 +26,7 @@ export interface SourceId {
 }
 
 export type Provenance =
-  | { kind: "prose"; text: string }
-  | { kind: "ids"; prefix: string; ids: SourceId[] };
+  { kind: "prose"; text: string } | { kind: "ids"; prefix: string; ids: SourceId[] };
 
 const UNSPOOLED = "unspooled from ";
 
@@ -122,4 +121,3 @@ export function sourceLine(e: CorpusEntry, nameOf: (extId: string) => string): s
   if (named.length) return `unspooled from ${named.join(", ")}`;
   return "unspooled from quoted text";
 }
-

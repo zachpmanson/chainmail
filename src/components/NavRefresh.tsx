@@ -58,12 +58,7 @@ import { IconButton } from "./controls";
 export function NavRefresh() {
   const qc = useQueryClient();
   const [busy, setBusy] = useState(false);
-  const status = $api.useQuery(
-    "get",
-    "/v1/status",
-    {},
-    { refetchInterval: 10_000 },
-  );
+  const status = $api.useQuery("get", "/v1/status", {}, { refetchInterval: 10_000 });
   const sweep = status.data?.sweep;
   const running = Boolean(sweep?.running);
   const warning = !running && (sweep?.outcome === "incomplete" || sweep?.outcome === "failed");
@@ -71,12 +66,16 @@ export function NavRefresh() {
   const stageLabel = running
     ? "ingesting"
     : warning
-      ? sweep?.outcome === "incomplete" ? "ingest incomplete" : "ingest failed"
+      ? sweep?.outcome === "incomplete"
+        ? "ingest incomplete"
+        : "ingest failed"
       : null;
   const label = running
     ? `Refresh; ingesting mail${sweep?.startedAt ? `, started ${when(sweep.startedAt)}` : ""}`
     : warning
-      ? sweep?.outcome === "incomplete" ? "Refresh; last ingest stopped early" : "Refresh; last ingest failed"
+      ? sweep?.outcome === "incomplete"
+        ? "Refresh; last ingest stopped early"
+        : "Refresh; last ingest failed"
       : "Refresh";
   const title = running
     ? `Ingesting mail${sweep?.startedAt ? `, started ${when(sweep.startedAt)}` : ""}. Threads fill in as the walk runs.`
@@ -130,7 +129,9 @@ export function NavRefresh() {
       onClick={() => void refresh()}
     >
       <ArrowPathIcon className="spinner" width={16} height={16} aria-hidden="true" />
-      {stageLabel && <span className="navrefresh-label whitespace-nowrap text-[.72rem]">{stageLabel}</span>}
+      {stageLabel && (
+        <span className="navrefresh-label whitespace-nowrap text-[.72rem]">{stageLabel}</span>
+      )}
     </IconButton>
   );
 }

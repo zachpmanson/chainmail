@@ -183,7 +183,16 @@ describe("a bubble drawn from its props alone", () => {
     );
     const bubble = container.querySelector(".bub")!;
     expect([...bubble.classList]).toEqual(
-      expect.arrayContaining(["relative", "overflow-hidden", "border-line", "bg-card", "border-dashed", "bg-dash", "border-org-3", "bg-mine"]),
+      expect.arrayContaining([
+        "relative",
+        "overflow-hidden",
+        "border-line",
+        "bg-card",
+        "border-dashed",
+        "bg-dash",
+        "border-org-3",
+        "bg-mine",
+      ]),
     );
   });
 
@@ -272,14 +281,18 @@ describe("a bubble drawn from its props alone", () => {
 
 describe("how a bubble says what it knows about its clock", () => {
   it("states a stated zone plainly", () => {
-    const { container } = draw({ stamp: { date: "Mon 2 Mar 2026", time: "09:15", tz: "AEDT", zone: "stated" } });
+    const { container } = draw({
+      stamp: { date: "Mon 2 Mar 2026", time: "09:15", tz: "AEDT", zone: "stated" },
+    });
     const tz = container.querySelector(".tz")!;
     expect(tz.className).toBe("tz");
     expect(tz.textContent).toBe("AEDT");
   });
 
   it("shows an inferred zone as the claim it is", () => {
-    const { container } = draw({ stamp: { date: "Mon 2 Mar 2026", time: "09:15", tz: "AEDT", zone: "inferred" } });
+    const { container } = draw({
+      stamp: { date: "Mon 2 Mar 2026", time: "09:15", tz: "AEDT", zone: "inferred" },
+    });
     expect(container.querySelector(".tz")!.className).toBe("tz tzi");
     expect(container.querySelector(".tz")!.textContent).toBe(" AEDT?");
   });
@@ -312,7 +325,15 @@ describe("a message that carried no body", () => {
   it("treats markup that says nothing as nothing", () => {
     // What an empty text part looks like once the ingest has serialized it: an
     // empty paragraph, a line break, a run of spaces. None of them is a sentence.
-    for (const body of ["<p></p>", "<p> </p>", "<br>", "<div>&nbsp;</div>", "<p>\n\t</p>", "   ", "<!-- nothing -->"]) {
+    for (const body of [
+      "<p></p>",
+      "<p> </p>",
+      "<br>",
+      "<div>&nbsp;</div>",
+      "<p>\n\t</p>",
+      "   ",
+      "<!-- nothing -->",
+    ]) {
       const { container } = draw({ body });
       expect(container.querySelector(".nobody"), JSON.stringify(body)).not.toBeNull();
     }

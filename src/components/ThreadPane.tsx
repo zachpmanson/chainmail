@@ -154,14 +154,24 @@ export function ThreadPane({
   });
 
   return (
-    <aside className="ibread flex min-w-0 flex-col min-[60rem]:h-full min-[60rem]:min-h-0" aria-label={label}>
+    <aside
+      className="ibread flex min-w-0 flex-col min-[60rem]:h-full min-[60rem]:min-h-0"
+      aria-label={label}
+    >
       {thread ? (
         <>
           <div className="ibread-head flex flex-none items-center gap-2 border-b border-line bg-card px-[.7rem] py-2 min-[60rem]:px-[calc(.7rem+var(--divider))]">
-            <Button type="button" density="compact" className={`min-h-0 px-[.5rem] py-[.2rem] text-[.78rem] ${backLabel === "Close" ? "" : "min-[60rem]:hidden"} ibback`} onClick={onClose}>
+            <Button
+              type="button"
+              density="compact"
+              className={`min-h-0 px-[.5rem] py-[.2rem] text-[.78rem] ${backLabel === "Close" ? "" : "min-[60rem]:hidden"} ibback`}
+              onClick={onClose}
+            >
               {backLabel}
             </Button>
-            <span className="ibread-subj min-w-0 break-words text-[.86rem] font-semibold">{thread.subject || "(no subject)"}</span>
+            <span className="ibread-subj min-w-0 break-words text-[.86rem] font-semibold">
+              {thread.subject || "(no subject)"}
+            </span>
             {/* How much mail is in the thread, how many people, and how many files
                 — worn the way the row that opened it wears them: the same glyphs,
                 the same numbers, the same classes. The head used to say "4
@@ -271,7 +281,13 @@ export function ThreadPane({
               title="Archive"
               disabled={act.isPending}
               onClick={() =>
-                act.mutate({ body: { chains: [thread.rootExtId], action: "archive", ...(accountId ? { accountId } : {}) } })
+                act.mutate({
+                  body: {
+                    chains: [thread.rootExtId],
+                    action: "archive",
+                    ...(accountId ? { accountId } : {}),
+                  },
+                })
               }
             >
               <ArchiveGlyph />
@@ -282,7 +298,15 @@ export function ThreadPane({
               aria-label="Delete"
               title="Delete"
               disabled={act.isPending}
-              onClick={() => act.mutate({ body: { chains: [thread.rootExtId], action: "trash", ...(accountId ? { accountId } : {}) } })}
+              onClick={() =>
+                act.mutate({
+                  body: {
+                    chains: [thread.rootExtId],
+                    action: "trash",
+                    ...(accountId ? { accountId } : {}),
+                  },
+                })
+              }
             >
               <TrashGlyph />
             </IconButton>
@@ -320,7 +344,11 @@ export function ThreadPane({
                 }
                 onClick={() =>
                   read.mutate({
-                    body: { chain: thread.rootExtId, unread: thread.unread === 0, ...(accountId ? { accountId } : {}) },
+                    body: {
+                      chain: thread.rootExtId,
+                      unread: thread.unread === 0,
+                      ...(accountId ? { accountId } : {}),
+                    },
                   })
                 }
               >
@@ -330,7 +358,13 @@ export function ThreadPane({
                     same kind of thing — the archive bin and the trash can are
                     glyphs in the same button, and the read state is a mark, not a
                     fourth shape of control. */}
-                <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 16 16"
+                  aria-hidden="true"
+                  focusable="false"
+                >
                   <circle cx="8" cy="8" r="5.2" />
                 </svg>
               </Button>
@@ -345,7 +379,9 @@ export function ThreadPane({
           </div>
         </>
       ) : (
-        <p className="selnote mx-[.8rem] mt-[.7rem] flex-[1_1_100%] text-[.78rem] text-muted">{empty}</p>
+        <p className="selnote mx-[.8rem] mt-[.7rem] flex-[1_1_100%] text-[.78rem] text-muted">
+          {empty}
+        </p>
       )}
     </aside>
   );
@@ -367,13 +403,9 @@ function treeLabel(on: boolean): string {
  *  room for. Drawn with the same stroke and the same box as the two verbs beside
  *  it rather than as a filled shape, so the strip stays one kind of thing. */
 function OpenWindowGlyph() {
-  return (
-    <ArrowTopRightOnSquareIcon width={14} height={14} aria-hidden="true" />
-  );
+  return <ArrowTopRightOnSquareIcon width={14} height={14} aria-hidden="true" />;
 }
 
 function TreeGlyph() {
-  return (
-    <QueueListIcon width={14} height={14} aria-hidden="true" />
-  );
+  return <QueueListIcon width={14} height={14} aria-hidden="true" />;
 }

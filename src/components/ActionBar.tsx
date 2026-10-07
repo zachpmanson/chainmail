@@ -154,10 +154,21 @@ export function ActionBar({
     <>
       {chosen.length > 0 ? (
         <div className="ibbuild flex min-w-0 items-center gap-[.55rem] h-[var(--navh)] overflow-x-auto overflow-y-hidden [&_.ibmovewrap]:rounded-md [&_.ibmovewrap]:border-line [&_.ibmovewrap]:bg-card [&_.ibmovewrap]:px-[.5rem] [&_.ibmovewrap]:py-[.45rem] [&_.ibmovewrap:hover]:border-accent [&_.ibmovewrap:hover]:text-accent [&_.selfail]:mt-[.2rem] [&_.selfail]:flex-[1_1_100%]">
-          <Button type="button" density="compact" className="ibclear shrink-0 px-[.7rem] py-[.32rem] text-[.78rem] text-muted hover:border-accent hover:text-accent" onClick={onDone}>
+          <Button
+            type="button"
+            density="compact"
+            className="ibclear shrink-0 px-[.7rem] py-[.32rem] text-[.78rem] text-muted hover:border-accent hover:text-accent"
+            onClick={onDone}
+          >
             Deselect all
           </Button>
-          <Button type="button" variant="subtle" density="compact" className="px-[.7rem] py-[.32rem] text-[.78rem]" onClick={() => setBraiding(true)}>
+          <Button
+            type="button"
+            variant="subtle"
+            density="compact"
+            className="px-[.7rem] py-[.32rem] text-[.78rem]"
+            onClick={() => setBraiding(true)}
+          >
             Braid Threads
           </Button>
           {/* The two mailbox verbs are glyphs. The bar also holds a braid, a
@@ -171,7 +182,11 @@ export function ActionBar({
             aria-label="Archive"
             title="Archive"
             disabled={busy}
-            onClick={() => act.mutate({ body: { chains: chosen, action: "archive", ...(accountId ? { accountId } : {}) } })}
+            onClick={() =>
+              act.mutate({
+                body: { chains: chosen, action: "archive", ...(accountId ? { accountId } : {}) },
+              })
+            }
           >
             <ArchiveGlyph />
           </IconButton>
@@ -181,7 +196,11 @@ export function ActionBar({
             aria-label="Delete"
             title="Delete"
             disabled={busy}
-            onClick={() => act.mutate({ body: { chains: chosen, action: "trash", ...(accountId ? { accountId } : {}) } })}
+            onClick={() =>
+              act.mutate({
+                body: { chains: chosen, action: "trash", ...(accountId ? { accountId } : {}) },
+              })
+            }
           >
             <TrashGlyph />
           </IconButton>
@@ -237,9 +256,7 @@ export function ActionBar({
           busy={build.isPending}
           error={build.isError ? build.error : null}
           onClose={() => setBraiding(false)}
-          onBraid={() =>
-            start({ chains: chosen, title, me: settings.data?.me ?? [], queries })
-          }
+          onBraid={() => start({ chains: chosen, title, me: settings.data?.me ?? [], queries })}
         />
       ) : null}
     </>
@@ -297,18 +314,32 @@ function BraidDialog({
       aria-label="Braid threads"
       onClick={onClose}
     >
-      <div className="selpv-panel flex max-h-[82vh] max-w-[min(46rem,94vw)] flex-col rounded-lg border border-line bg-card shadow-[0_8px_40px_rgba(0,0,0,.35)]" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="selpv-panel flex max-h-[82vh] max-w-[min(46rem,94vw)] flex-col rounded-lg border border-line bg-card shadow-[0_8px_40px_rgba(0,0,0,.35)]"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="selpv-head flex items-center gap-[.6rem] border-b border-line px-[.8rem] py-2">
-          <b className="text-[.72rem] font-bold uppercase tracking-[.09em] text-muted">braid threads</b>
+          <b className="text-[.72rem] font-bold uppercase tracking-[.09em] text-muted">
+            braid threads
+          </b>
           <span className="note ml-auto min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[.74rem] text-muted">
             {count} thread{count === 1 ? "" : "s"} ticked
           </span>
-          <Button type="button" density="compact" className="bg-[var(--bg)] px-[.55rem] py-[.28rem] text-[.72rem] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={onClose}>
+          <Button
+            type="button"
+            density="compact"
+            className="bg-[var(--bg)] px-[.55rem] py-[.28rem] text-[.72rem] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            onClick={onClose}
+          >
             Close
           </Button>
         </div>
         <div className="my-[.7rem] mx-[.8rem] mb-[.2rem] flex flex-wrap items-end gap-[.6rem]">
-          <FormField className="flex flex-[1_1_18rem] flex-col gap-[.18rem]" label="Page title" labelClassName="text-[.66rem] font-bold uppercase tracking-[.09em] text-[var(--muted)]">
+          <FormField
+            className="flex flex-[1_1_18rem] flex-col gap-[.18rem]"
+            label="Page title"
+            labelClassName="text-[.66rem] font-bold uppercase tracking-[.09em] text-[var(--muted)]"
+          >
             <TextInput
               className="w-full px-[.45rem] py-[.32rem] text-[.86rem]"
               autoFocus
@@ -317,7 +348,14 @@ function BraidDialog({
               placeholder="optional"
             />
           </FormField>
-          <Button type="button" variant="subtle" density="compact" className="px-[.7rem] py-[.32rem] text-[.78rem]" disabled={busy} onClick={onBraid}>
+          <Button
+            type="button"
+            variant="subtle"
+            density="compact"
+            className="px-[.7rem] py-[.32rem] text-[.78rem]"
+            disabled={busy}
+            onClick={onBraid}
+          >
             {busy ? "Braiding…" : "Braid"}
           </Button>
         </div>
@@ -327,7 +365,10 @@ function BraidDialog({
         {/* Seconds of silence reads as a broken page, so the wait says what it is
             waiting on and how much of it there is. */}
         {busy ? (
-          <p className="selnote mx-[.8rem] my-2 flex-[1_1_100%] text-[.78rem] text-muted" role="status">
+          <p
+            className="selnote mx-[.8rem] my-2 flex-[1_1_100%] text-[.78rem] text-muted"
+            role="status"
+          >
             Recovering HTML and detecting boilerplate across {count} thread
             {count === 1 ? "" : "s"}. This takes a few seconds.
           </p>

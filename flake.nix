@@ -35,7 +35,7 @@
           version = "0.1.0";
           src = self;
           nodejs = pkgs.nodejs_22;
-          npmDepsHash = "sha256-KUZcGGB7Jr5ysOWB4iKbr7FrjAOfZ0wQo6kpj6SLBNM=";
+          npmDepsHash = "sha256-tKivZsLbemiBeNw0m/JlZl+XWOvNS//3pKg9duuiF+E=";
           # The default npmInstallHook re-installs from package.json, which
           # drops the vite-built cmd/server/dist (untracked, not in `files`).
           # The only artifact this package must ship IS that dist, so the
@@ -97,6 +97,10 @@
             echo "  npm install        once, or after package.json changes"
             echo "  npm run dev        vite, then ?spec=<path|url> or drop a file on the page"
             echo "  npm test           vitest"
+            echo "  npm run lint       ESLint for TypeScript/React"
+            echo "  npm run format     format TypeScript/TSX"
+            echo "  npm run format:check  check formatting without changes"
+            echo "  make check         full tests, lint, formatting and static checks"
             echo "  npm run typecheck  tsc --noEmit"
             echo "  npm run render -- <spec.json> -o out/page.html [--since prev.html]"
             echo "  npm run gen:types  regenerate src/lib/spec.d.ts from the schema"

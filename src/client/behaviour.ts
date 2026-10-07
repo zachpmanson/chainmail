@@ -9,7 +9,12 @@ import { withTransition } from "../lib/viewTransition";
  * inside the server-rendered single-file export. Two implementations would drift.
  */
 /** The listener registrar `attach` hands to the behaviours it delegates to. */
-type On = (el: EventTarget, type: string, fn: (ev: Event) => void, opts?: AddEventListenerOptions) => void;
+type On = (
+  el: EventTarget,
+  type: string,
+  fn: (ev: Event) => void,
+  opts?: AddEventListenerOptions,
+) => void;
 
 /**
  * How far to either side of a line a pointer still counts as being on it. A line
@@ -40,7 +45,10 @@ export function lineAt(doc: Document, x: number, y: number): HTMLElement | null 
     const r = line.getBoundingClientRect();
     if (x < r.left - LINE_REACH || x > r.left + LINE_REACH) continue;
     if (y < r.top || y > r.bottom) continue;
-    if (r.left > deepest) { deepest = r.left; found = line; }
+    if (r.left > deepest) {
+      deepest = r.left;
+      found = line;
+    }
   }
   return found;
 }
@@ -69,7 +77,10 @@ export function messageAt(doc: Document, x: number, y: number): HTMLElement | nu
     const r = card.getBoundingClientRect();
     if (x < r.left || x > r.right) continue;
     if (y < r.top || y > r.bottom + MARGIN_REACH) continue;
-    if (r.left > deepest) { deepest = r.left; found = card; }
+    if (r.left > deepest) {
+      deepest = r.left;
+      found = card;
+    }
   }
   return found;
 }
@@ -106,10 +117,18 @@ export function attach(doc: Document = document): () => void {
     const set = (isOn: boolean) => {
       body.classList.toggle(cls, isOn);
       btn.setAttribute("aria-pressed", isOn ? "true" : "false");
-      try { localStorage.setItem(key, isOn ? "1" : "0"); } catch { /* private mode */ }
+      try {
+        localStorage.setItem(key, isOn ? "1" : "0");
+      } catch {
+        /* private mode */
+      }
     };
     let stored: string | null = null;
-    try { stored = localStorage.getItem(key); } catch { /* ignore */ }
+    try {
+      stored = localStorage.getItem(key);
+    } catch {
+      /* ignore */
+    }
     set(stored === null ? defaultOn : stored === "1");
     return { btn, set, isOn: () => body.classList.contains(cls) };
   };
@@ -158,18 +177,29 @@ export function attach(doc: Document = document): () => void {
       body.classList.toggle("tree-h", m === "h");
       maptog.setAttribute("aria-pressed", m === "off" ? "false" : "true");
       maptog.setAttribute("aria-label", treeLabel(m));
-      try { localStorage.setItem("cm-tree", m); } catch { /* private mode */ }
+      try {
+        localStorage.setItem("cm-tree", m);
+      } catch {
+        /* private mode */
+      }
       syncPanel();
     };
     let stored: string | null = null;
-    try { stored = localStorage.getItem("cm-tree"); } catch { /* ignore */ }
+    try {
+      stored = localStorage.getItem("cm-tree");
+    } catch {
+      /* ignore */
+    }
     apply(fromStored(stored));
     on(maptog, "click", () => {
       const i = TREE_MODES.indexOf(mode);
       apply(TREE_MODES[(i + 1) % TREE_MODES.length]!);
     });
   }
-  if (mini) { on(window, "resize", syncPanel); syncPanel(); }
+  if (mini) {
+    on(window, "resize", syncPanel);
+    syncPanel();
+  }
 
   // A body is the sender's markup, so its emphasis and alignment are theirs, not
   // the page's. "plain" neutralises what is left of that presentation without
@@ -252,8 +282,9 @@ export function attach(doc: Document = document): () => void {
 
   const lightChain = (root: string) => {
     if (!mini) return;
-    const members = new Set(nodes.filter((n) => rootOf(n.dataset.id!) === root)
-      .map((n) => n.dataset.id!));
+    const members = new Set(
+      nodes.filter((n) => rootOf(n.dataset.id!) === root).map((n) => n.dataset.id!),
+    );
     for (const n of nodes) {
       n.classList.remove("cur", "hov", "anc");
       n.classList.toggle("chn", members.has(n.dataset.id!));
@@ -339,7 +370,10 @@ export function attach(doc: Document = document): () => void {
   // hovering a chain in the sources panel outranks both the pointer and the
   // scroll position, since it is the most explicit thing the reader asked for
   const refresh = () => {
-    if (hovChain) { lightChain(hovChain); return; }
+    if (hovChain) {
+      lightChain(hovChain);
+      return;
+    }
     clearChain();
     const id = hovId ?? spyId;
     if (id) light(id, hovId !== null);
@@ -357,10 +391,17 @@ export function attach(doc: Document = document): () => void {
         el?.scrollIntoView({ block: "center" });
         history.replaceState(null, "", `#${id}`);
       });
-      on(hit, "mouseenter", () => { el?.classList.add("mhov"); hovId = id; refresh(); });
+      on(hit, "mouseenter", () => {
+        el?.classList.add("mhov");
+        hovId = id;
+        refresh();
+      });
       on(hit, "mouseleave", () => {
         el?.classList.remove("mhov");
-        if (hovId === id) { hovId = null; refresh(); }
+        if (hovId === id) {
+          hovId = null;
+          refresh();
+        }
       });
     }
   }
@@ -500,9 +541,15 @@ export function attach(doc: Document = document): () => void {
   /* ---------- hovering a chain row in the sources panel ---------- */
   for (const row of doc.querySelectorAll<HTMLElement>("[data-chain]")) {
     const root = row.dataset.chain!;
-    on(row, "mouseenter", () => { hovChain = root; refresh(); });
+    on(row, "mouseenter", () => {
+      hovChain = root;
+      refresh();
+    });
     on(row, "mouseleave", () => {
-      if (hovChain === root) { hovChain = null; refresh(); }
+      if (hovChain === root) {
+        hovChain = null;
+        refresh();
+      }
     });
   }
 
@@ -513,29 +560,49 @@ export function attach(doc: Document = document): () => void {
   // than assumed because this module is attached by the reading pane too, and a
   // runtime without IntersectionObserver must lose the highlight and not the
   // thread: a throw in here comes out of the renderer's own effect.
-  const io = typeof IntersectionObserver === "function"
-    ? new IntersectionObserver(
-        (records) => {
-          for (const r of records) {
-            if (r.isIntersecting) visible.set(r.target.id, r.boundingClientRect.top);
-            else visible.delete(r.target.id);
-          }
-          let best: string | null = null;
-          let top = Infinity;
-          for (const [id, y] of visible) if (y < top) { top = y; best = id; }
-          if (best) { spyId = best; refresh(); }
-        },
-        { rootMargin: "-8% 0px -55% 0px" },
-      )
-    : null;
+  const io =
+    typeof IntersectionObserver === "function"
+      ? new IntersectionObserver(
+          (records) => {
+            for (const r of records) {
+              if (r.isIntersecting) visible.set(r.target.id, r.boundingClientRect.top);
+              else visible.delete(r.target.id);
+            }
+            let best: string | null = null;
+            let top = Infinity;
+            for (const [id, y] of visible)
+              if (y < top) {
+                top = y;
+                best = id;
+              }
+            if (best) {
+              spyId = best;
+              refresh();
+            }
+          },
+          { rootMargin: "-8% 0px -55% 0px" },
+        )
+      : null;
   if (io) cleanups.push(() => io.disconnect());
   for (const el of entries) {
     if (io) io.observe(el);
-    on(el, "mouseenter", () => { if (nodeById.has(el.id)) { hovId = el.id; refresh(); } });
-    on(el, "mouseleave", () => { if (hovId === el.id) { hovId = null; refresh(); } });
+    on(el, "mouseenter", () => {
+      if (nodeById.has(el.id)) {
+        hovId = el.id;
+        refresh();
+      }
+    });
+    on(el, "mouseleave", () => {
+      if (hovId === el.id) {
+        hovId = null;
+        refresh();
+      }
+    });
   }
 
-  return () => { for (const c of cleanups) c(); };
+  return () => {
+    for (const c of cleanups) c();
+  };
 }
 
 /**
@@ -624,13 +691,19 @@ function attachPopover(doc: Document, on: On): () => void {
     on(closeBtn, "click", close);
     // The backdrop is the host itself; a click that lands on the picture or the
     // bar must not dismiss, or dragging to select the caption closes the popover.
-    on(host, "click", (ev: Event) => { if (ev.target === host) close(); });
+    on(host, "click", (ev: Event) => {
+      if (ev.target === host) close();
+    });
     on(host, "keydown", (ev: Event) => {
       const k = ev as KeyboardEvent;
       // A framed document keeps its own keys — a PDF viewer swallows Escape and
       // Tab both — so this reaches the picture and text windows and the bar, and
       // Close and the backdrop are the way out of a PDF.
-      if (k.key === "Escape") { k.preventDefault(); close(); return; }
+      if (k.key === "Escape") {
+        k.preventDefault();
+        close();
+        return;
+      }
       // Close and save are the only focusable things inside, so the trap is Tab
       // staying put rather than a cycle through a list. Written as a wrap anyway:
       // it stays correct with the save link showing as well. `hidden` is excluded
@@ -638,8 +711,9 @@ function attachPopover(doc: Document, on: On): () => void {
       // cannot take focus — the trap would land on nothing and Tab would stop
       // moving.
       if (k.key !== "Tab") return;
-      const stops = [...host!.querySelectorAll<HTMLElement>(
-        "button:not([hidden]), [href]:not([hidden])")];
+      const stops = [
+        ...host!.querySelectorAll<HTMLElement>("button:not([hidden]), [href]:not([hidden])"),
+      ];
       if (!stops.length) return;
       const edge = k.shiftKey ? stops[0]! : stops[stops.length - 1]!;
       if (doc.activeElement === edge || !host!.contains(doc.activeElement)) {
@@ -675,7 +749,10 @@ function attachPopover(doc: Document, on: On): () => void {
     note.textContent = "";
     // A blob is held by the document until it is told otherwise, which for a
     // window the reader has closed is a file kept in memory for nothing.
-    if (blobURL) { URL.revokeObjectURL(blobURL); blobURL = ""; }
+    if (blobURL) {
+      URL.revokeObjectURL(blobURL);
+      blobURL = "";
+    }
   }
 
   /**
@@ -694,7 +771,11 @@ function attachPopover(doc: Document, on: On): () => void {
    * attachment renders nothing.
    */
   const open = (
-    from: HTMLElement, caption: string, preview: string, full: string, view: string,
+    from: HTMLElement,
+    caption: string,
+    preview: string,
+    full: string,
+    view: string,
   ) => {
     build();
     const mine = ++opening;
@@ -796,13 +877,15 @@ function attachPopover(doc: Document, on: On): () => void {
     table.className = "poptable";
     const head = doc.createElement("thead");
     const hr = doc.createElement("tr");
-    for (const [i, value] of t.header.entries()) hr.appendChild(cell("th", value, t.numeric[i] === true));
+    for (const [i, value] of t.header.entries())
+      hr.appendChild(cell("th", value, t.numeric[i] === true));
     head.appendChild(hr);
     table.appendChild(head);
     const body = doc.createElement("tbody");
     for (const row of t.rows) {
       const tr = doc.createElement("tr");
-      for (const [i, value] of row.entries()) tr.appendChild(cell("td", value, t.numeric[i] === true));
+      for (const [i, value] of row.entries())
+        tr.appendChild(cell("td", value, t.numeric[i] === true));
       body.appendChild(tr);
     }
     table.appendChild(body);
@@ -820,7 +903,8 @@ function attachPopover(doc: Document, on: On): () => void {
   const tableNote = (t: Table, cut: boolean) => {
     const bits: string[] = [];
     if (t.rowCount > t.rows.length) bits.push(`first ${t.rows.length} of ${t.rowCount} rows`);
-    if (t.colCount > t.header.length) bits.push(`first ${t.header.length} of ${t.colCount} columns`);
+    if (t.colCount > t.header.length)
+      bits.push(`first ${t.header.length} of ${t.colCount} columns`);
     if (cut) bits.push("truncated — save it for the rest");
     return bits.join(" · ");
   };
@@ -846,8 +930,13 @@ function attachPopover(doc: Document, on: On): () => void {
     // which is a picture by the fact that it is an img.
     const view = isChip ? trig.dataset.view || "image" : "image";
     const show = () =>
-      open(trig, label, thumb ? thumb.currentSrc || thumb.src : "",
-        isChip ? trig.dataset.get ?? "" : "", view);
+      open(
+        trig,
+        label,
+        thumb ? thumb.currentSrc || thumb.src : "",
+        isChip ? (trig.dataset.get ?? "") : "",
+        view,
+      );
     on(trig, "click", (ev) => {
       const m = ev as MouseEvent;
       // A modified click is the reader asking for a new tab or a download, and
@@ -894,13 +983,22 @@ function attachPopover(doc: Document, on: On): () => void {
         // No declared size and not yet loaded, so nothing can be measured. Ask
         // again when the bytes arrive, which is the first moment the picture's
         // own dimensions exist.
-        on(img, "load", () => { if (worthEnlarging(img) === "yes") arm(t, img, false); },
-          { once: true });
+        on(
+          img,
+          "load",
+          () => {
+            if (worthEnlarging(img) === "yes") arm(t, img, false);
+          },
+          { once: true },
+        );
         break;
     }
   }
 
-  return () => { host?.remove(); host = null; };
+  return () => {
+    host?.remove();
+    host = null;
+  };
 }
 
 /**

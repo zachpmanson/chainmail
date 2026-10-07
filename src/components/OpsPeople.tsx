@@ -78,7 +78,11 @@ function PersonRow({
 }: {
   p: PersonSummary;
   busy: boolean;
-  onEdit: (edit: { displayName?: string; addIdentities?: string[]; removeIdentities?: string[] }) => void;
+  onEdit: (edit: {
+    displayName?: string;
+    addIdentities?: string[];
+    removeIdentities?: string[];
+  }) => void;
 }) {
   const [name, setName] = useState<string | null>(null);
   const [add, setAdd] = useState("");
@@ -91,7 +95,8 @@ function PersonRow({
           capitals, which is right for "same display name" and wrong for a
           person's own name. */}
       <p className="mt-0 mb-[.35rem] text-[.86rem] leading-[1.3]">
-        <span className="text-muted">#{p.personId}</span> <span className="ml-[.15rem] font-semibold">{p.displayName}</span>{" "}
+        <span className="text-muted">#{p.personId}</span>{" "}
+        <span className="ml-[.15rem] font-semibold">{p.displayName}</span>{" "}
         <span className="text-muted">{mail}</span>
       </p>
       <form
@@ -110,19 +115,31 @@ function PersonRow({
           aria-label={`Name for ${p.displayName}`}
           onChange={(e) => setName(e.target.value)}
         />
-        <Button type="submit" variant="subtle" density="compact" className="opbtn" disabled={busy || !renamed}>
+        <Button
+          type="submit"
+          variant="subtle"
+          density="compact"
+          className="opbtn"
+          disabled={busy || !renamed}
+        >
           rename
         </Button>
       </form>
       <p className="my-[.15rem] text-[.84rem] leading-[1.35] [&_code]:text-[.74rem] [&_code]:[overflow-wrap:anywhere]">
         {(p.identities ?? []).length === 0 ? (
           <span className="text-muted">
-            No identity at all — this one is only ever the name in someone else's
-            header, which is why a name is the only way to find them.
+            No identity at all — this one is only ever the name in someone else's header, which is
+            why a name is the only way to find them.
           </span>
         ) : (
           (p.identities ?? []).map((id) => (
-            <Identity key={id} id={id} owner={p} busy={busy} onDetach={(i) => onEdit({ removeIdentities: [i] })} />
+            <Identity
+              key={id}
+              id={id}
+              owner={p}
+              busy={busy}
+              onDetach={(i) => onEdit({ removeIdentities: [i] })}
+            />
           ))
         )}
       </p>
@@ -144,7 +161,13 @@ function PersonRow({
           aria-label={`Identity to add to ${p.displayName}`}
           onChange={(e) => setAdd(e.target.value)}
         />
-        <Button type="submit" variant="subtle" density="compact" className="opbtn" disabled={busy || asIdentity(add) === ""}>
+        <Button
+          type="submit"
+          variant="subtle"
+          density="compact"
+          className="opbtn"
+          disabled={busy || asIdentity(add) === ""}
+        >
           attach
         </Button>
       </form>
@@ -171,10 +194,11 @@ export function OpsPeople() {
   const [error, setError] = useState<string | null>(null);
   const [last, setLast] = useState<string | null>(null);
 
-  const all = people.data?.people ?? [];
+  const all = people.data?.people;
   const shown = useMemo(() => {
+    const entries = all ?? [];
     const needle = q.trim().toLowerCase();
-    const hits = needle === "" ? all : all.filter((p) => haystack(p).includes(needle));
+    const hits = needle === "" ? entries : entries.filter((p) => haystack(p).includes(needle));
     return { hits, capped: hits.slice(0, SHOWN), more: Math.max(0, hits.length - SHOWN) };
   }, [all, q]);
 
@@ -211,19 +235,28 @@ export function OpsPeople() {
   return (
     <>
       <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">
-        Everyone the corpus knows, and every address that resolves to them. The
-        mail client reads its senders from here, so correcting a name or an
-        address here corrects it wherever that person appears — in the list, in a
-        thread, in the person field of the search. Two rows that are one human are
-        one row after a merge, and that is the plan below, where the evidence is.
+        Everyone the corpus knows, and every address that resolves to them. The mail client reads
+        its senders from here, so correcting a name or an address here corrects it wherever that
+        person appears — in the list, in a thread, in the person field of the search. Two rows that
+        are one human are one row after a merge, and that is the plan below, where the evidence is.
       </p>
       {error ? (
-        <p className="selfail mt-[.7rem] rounded-md border border-line border-l-[3px] border-l-red-700 bg-card px-[.7rem] py-2 text-[.82rem]" role="alert">
+        <p
+          className="selfail mt-[.7rem] rounded-md border border-line border-l-[3px] border-l-red-700 bg-card px-[.7rem] py-2 text-[.82rem]"
+          role="alert"
+        >
           {error}
         </p>
       ) : null}
-      {last ? <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">{last}. The list below is the current one.</p> : null}
-      <FormField className="opfilter my-[.5rem] mb-[.2rem] flex items-center gap-[.4rem] text-[.78rem]" label="Find a person">
+      {last ? (
+        <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">
+          {last}. The list below is the current one.
+        </p>
+      ) : null}
+      <FormField
+        className="opfilter my-[.5rem] mb-[.2rem] flex items-center gap-[.4rem] text-[.78rem]"
+        label="Find a person"
+      >
         <TextInput
           className="min-w-0 flex-[0_1_18rem] mr-0 px-[.4rem] py-[.2rem] text-xs"
           value={q}
@@ -233,18 +266,22 @@ export function OpsPeople() {
         />
       </FormField>
       {!people.data ? (
-        <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">{people.isPending ? "Reading the people…" : "No people."}</p>
+        <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">
+          {people.isPending ? "Reading the people…" : "No people."}
+        </p>
       ) : shown.hits.length === 0 ? (
         <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">
-          Nobody matches {q.trim() === "" ? "—" : <code>{q.trim()}</code>}. A person
-          the corpus has never seen cannot be added here: a row exists because the
-          mail named them, and a hand-made row would be one no message could ever
-          reach.
+          Nobody matches {q.trim() === "" ? "—" : <code>{q.trim()}</code>}. A person the corpus has
+          never seen cannot be added here: a row exists because the mail named them, and a hand-made
+          row would be one no message could ever reach.
         </p>
       ) : (
         <ol className="mt-2 list-none p-0">
           {shown.capped.map((p) => (
-            <li key={p.personId} className="oprow not-first:mt-[.45rem] rounded-[9px] border border-[var(--line)] bg-[var(--card)] px-[.7rem] py-[.55rem]">
+            <li
+              key={p.personId}
+              className="oprow not-first:mt-[.45rem] rounded-[9px] border border-[var(--line)] bg-[var(--card)] px-[.7rem] py-[.55rem]"
+            >
               <PersonRow
                 p={p}
                 busy={busy}

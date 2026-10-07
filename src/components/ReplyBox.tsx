@@ -176,7 +176,15 @@ export function AnswerPress({
   );
 }
 
-export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aimed }: {
+export function ReplyBox({
+  thread,
+  answer,
+  answerAnchor,
+  words,
+  all,
+  onAll,
+  aimed,
+}: {
   thread: { rootExtId: string };
   answer: CorpusEntry;
   answerAnchor: string;
@@ -190,7 +198,8 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
   const [accountId, setAccountId] = useState(routeAccountId ?? "");
   const accounts = $api.useQuery("get", "/auth/status", {});
   const connectedAccounts = (accounts.data?.accounts ?? []).filter((account) => account.signedIn);
-  const displayedAccountId = accountId || (connectedAccounts.length === 1 ? connectedAccounts[0]?.id ?? "" : "");
+  const displayedAccountId =
+    accountId || (connectedAccounts.length === 1 ? (connectedAccounts[0]?.id ?? "") : "");
   // What the reader has written, in their own words: plain text, and no quote of
   // the message being answered — that is added on the way out, so the reader is
   // never editing around text they did not write.
@@ -295,7 +304,8 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
   // The reader's own addresses, which must not appear in the suggested reply-all
   // audience. The identity graph is the corpus's answer about mailbox aliases.
   const mine = useMemo(
-    () => (settings.data?.mePersonId === undefined ? [] : people.get(settings.data.mePersonId) ?? []),
+    () =>
+      settings.data?.mePersonId === undefined ? [] : (people.get(settings.data.mePersonId) ?? []),
     [people, settings.data],
   );
 
@@ -453,80 +463,137 @@ export function ReplyBox({ thread, answer, answerAnchor, words, all, onAll, aime
 
   const editor = (
     <>
-    <ComposerFields
-      mode="reply"
-      from={(
-        <div className="replyrecipient contents min-w-0 compose-account">
-          <span className="replylabel inline-flex h-[var(--addrrow)] items-center">from:</span>
-          <SelectInput className="replyfrom h-[var(--addrrow)] min-w-0 flex-1 rounded-md border border-line bg-bg px-[.3rem] text-[.72rem] text-fg focus:border-accent disabled:cursor-default disabled:opacity-[.55]" aria-label="From" value={displayedAccountId} disabled={busy} onChange={(event) => { setAccountId(event.target.value); setPlan(null); }}>
-            {!displayedAccountId ? <option value="">Choose account</option> : null}
-            {connectedAccounts.map((account) => <option key={account.id} value={account.id}>{account.displayName}{account.email ? ` (${account.email})` : ""}</option>)}
-          </SelectInput>
-        </div>
-      )}
-      to={to}
-      onToChange={changeTo}
-      cc={cc}
-      onCcChange={changeCc}
-      suggestions={suggestions}
-      mine={mine}
-      editingRecipients={editing}
-      onEditRecipients={() => setEditing(true)}
-      target={<a className="par replytarget inline-flex h-[var(--addrrow)] items-center gap-[.25rem] ml-auto whitespace-nowrap no-underline hover:text-accent" href={`#${answerAnchor}`} aria-label={`Jump to the message being replied to: ${words.who || "the sender"}, ${words.when}`} title={`Jump to the message being replied to: ${words.whoTitle ?? words.who}, ${words.when}`}>
-        <span className="arw block translate-y-[.045em] text-[.8rem] leading-none" aria-hidden="true">&#8617;</span><span>{words.who || "message"}</span>
-      </a>}
-      body={own}
-      onBodyChange={setOwn}
-      busy={busy}
-    />
+      <ComposerFields
+        mode="reply"
+        from={
+          <div className="replyrecipient contents min-w-0 compose-account">
+            <span className="replylabel inline-flex h-[var(--addrrow)] items-center">from:</span>
+            <SelectInput
+              className="replyfrom h-[var(--addrrow)] min-w-0 flex-1 rounded-md border border-line bg-bg px-[.3rem] text-[.72rem] text-fg focus:border-accent disabled:cursor-default disabled:opacity-[.55]"
+              aria-label="From"
+              value={displayedAccountId}
+              disabled={busy}
+              onChange={(event) => {
+                setAccountId(event.target.value);
+                setPlan(null);
+              }}
+            >
+              {!displayedAccountId ? <option value="">Choose account</option> : null}
+              {connectedAccounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.displayName}
+                  {account.email ? ` (${account.email})` : ""}
+                </option>
+              ))}
+            </SelectInput>
+          </div>
+        }
+        to={to}
+        onToChange={changeTo}
+        cc={cc}
+        onCcChange={changeCc}
+        suggestions={suggestions}
+        mine={mine}
+        editingRecipients={editing}
+        onEditRecipients={() => setEditing(true)}
+        target={
+          <a
+            className="par replytarget inline-flex h-[var(--addrrow)] items-center gap-[.25rem] ml-auto whitespace-nowrap no-underline hover:text-accent"
+            href={`#${answerAnchor}`}
+            aria-label={`Jump to the message being replied to: ${words.who || "the sender"}, ${words.when}`}
+            title={`Jump to the message being replied to: ${words.whoTitle ?? words.who}, ${words.when}`}
+          >
+            <span
+              className="arw block translate-y-[.045em] text-[.8rem] leading-none"
+              aria-hidden="true"
+            >
+              &#8617;
+            </span>
+            <span>{words.who || "message"}</span>
+          </a>
+        }
+        body={own}
+        onBodyChange={setOwn}
+        busy={busy}
+      />
     </>
   );
-  const editorActions = <div className="replyopts mr-auto flex items-center gap-4">
-    <CheckboxRow
-      className="replytick flex cursor-pointer items-center gap-[.4rem] text-[.74rem] text-muted"
-      title="Answer everyone the message was addressed to. Edit the reply's audience in the fields above."
-      checked={all}
-      disabled={busy}
-      accent="accent"
-      inputClassName="m-0 cursor-pointer"
-      onChange={(e) => onAll(e.target.checked)}
-    >
-      reply all
-    </CheckboxRow>
-    <CheckboxRow
-      className="replytick flex cursor-pointer items-center gap-[.4rem] text-[.74rem] text-muted"
-      title="Send the HTML rendering beside the same plain-text message. Unchecked sends plain text alone."
-      checked={html}
-      disabled={busy}
-      accent="accent"
-      inputClassName="m-0 cursor-pointer"
-      onChange={(e) => setHtml(e.target.checked)}
-    >
-      send html
-    </CheckboxRow>
-  </div>;
-  const previewContent = plan ? <div className="replyplan text-[.76rem] leading-[1.5]">
-    <p className="replynote m-0 mb-[.45rem]"><strong>Nothing has been sent yet.</strong> This is the whole message as it will go from <strong>{accounts.data?.accounts?.find((account) => account.id === plan.accountId)?.displayName ?? plan.accountId}</strong>: to <strong>{plan.to || "(no recipient)"}</strong>{plan.cc ? <>, cc <strong>{plan.cc}</strong></> : null}, as <strong>{plan.subject}</strong>, in <strong>{plan.html ? "text and HTML" : "plain text alone"}</strong>. Your words come first and the message you are answering is quoted under them.</p>
-    {plan.html ? <div className="replyhtml m-[.4rem_0_0] max-h-[22rem] overflow-auto [overflow-wrap:anywhere] rounded-md border border-line bg-bg px-[.6rem] py-[.5rem] text-[.84rem] leading-[1.5] text-fg" dangerouslySetInnerHTML={{ __html: plan.html }} /> : <pre className="replytext m-[.4rem_0_0] max-h-[22rem] overflow-auto [overflow-wrap:anywhere] whitespace-pre-wrap rounded-md border border-line bg-bg px-[.6rem] py-[.5rem] font-mono text-[.76rem] leading-[1.45] text-fg">{plan.body}</pre>}
-  </div> : null;
+  const editorActions = (
+    <div className="replyopts mr-auto flex items-center gap-4">
+      <CheckboxRow
+        className="replytick flex cursor-pointer items-center gap-[.4rem] text-[.74rem] text-muted"
+        title="Answer everyone the message was addressed to. Edit the reply's audience in the fields above."
+        checked={all}
+        disabled={busy}
+        accent="accent"
+        inputClassName="m-0 cursor-pointer"
+        onChange={(e) => onAll(e.target.checked)}
+      >
+        reply all
+      </CheckboxRow>
+      <CheckboxRow
+        className="replytick flex cursor-pointer items-center gap-[.4rem] text-[.74rem] text-muted"
+        title="Send the HTML rendering beside the same plain-text message. Unchecked sends plain text alone."
+        checked={html}
+        disabled={busy}
+        accent="accent"
+        inputClassName="m-0 cursor-pointer"
+        onChange={(e) => setHtml(e.target.checked)}
+      >
+        send html
+      </CheckboxRow>
+    </div>
+  );
+  const previewContent = plan ? (
+    <div className="replyplan text-[.76rem] leading-[1.5]">
+      <p className="replynote m-0 mb-[.45rem]">
+        <strong>Nothing has been sent yet.</strong> This is the whole message as it will go from{" "}
+        <strong>
+          {accounts.data?.accounts?.find((account) => account.id === plan.accountId)?.displayName ??
+            plan.accountId}
+        </strong>
+        : to <strong>{plan.to || "(no recipient)"}</strong>
+        {plan.cc ? (
+          <>
+            , cc <strong>{plan.cc}</strong>
+          </>
+        ) : null}
+        , as <strong>{plan.subject}</strong>, in{" "}
+        <strong>{plan.html ? "text and HTML" : "plain text alone"}</strong>. Your words come first
+        and the message you are answering is quoted under them.
+      </p>
+      {plan.html ? (
+        <div
+          className="replyhtml m-[.4rem_0_0] max-h-[22rem] overflow-auto [overflow-wrap:anywhere] rounded-md border border-line bg-bg px-[.6rem] py-[.5rem] text-[.84rem] leading-[1.5] text-fg"
+          dangerouslySetInnerHTML={{ __html: plan.html }}
+        />
+      ) : (
+        <pre className="replytext m-[.4rem_0_0] max-h-[22rem] overflow-auto [overflow-wrap:anywhere] whitespace-pre-wrap rounded-md border border-line bg-bg px-[.6rem] py-[.5rem] font-mono text-[.76rem] leading-[1.45] text-fg">
+          {plan.body}
+        </pre>
+      )}
+    </div>
+  ) : null;
 
-  return <ComposerFlow
-    variant="reply"
-    step={plan ? "preview" : "compose"}
-    busy={busy}
-    error={error}
-    editor={editor}
-    editorActions={editorActions}
-    preview={previewContent}
-    onReview={() => void review()}
-    onEdit={unplan}
-    onConfirm={() => void ship()}
-    confirmDisabled={!(to ?? []).length}
-    reviewDisabled={own.trim() === "" || (toTouched && to.length === 0)}
-    reviewTitle={to.length === 0 ? "Add somebody in to before previewing this reply." : undefined}
-    reviewLabel={busy ? "preparing…" : "preview"}
-    editLabel="keep editing"
-    confirmLabel="send this reply"
-    containerRef={host}
-  />;
+  return (
+    <ComposerFlow
+      variant="reply"
+      step={plan ? "preview" : "compose"}
+      busy={busy}
+      error={error}
+      editor={editor}
+      editorActions={editorActions}
+      preview={previewContent}
+      onReview={() => void review()}
+      onEdit={unplan}
+      onConfirm={() => void ship()}
+      confirmDisabled={!(to ?? []).length}
+      reviewDisabled={own.trim() === "" || (toTouched && to.length === 0)}
+      reviewTitle={to.length === 0 ? "Add somebody in to before previewing this reply." : undefined}
+      reviewLabel={busy ? "preparing…" : "preview"}
+      editLabel="keep editing"
+      confirmLabel="send this reply"
+      containerRef={host}
+    />
+  );
 }

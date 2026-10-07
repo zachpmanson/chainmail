@@ -134,10 +134,20 @@ function AccountFolderOptions({ account }: { account: MoveAccount }) {
 
   return (
     <optgroup label={account.email || account.displayName || account.id}>
-      {labels.isPending ? <option value="" disabled>Loading folders…</option> : null}
-      {labels.isError ? <option value="" disabled>Folders unavailable</option> : null}
+      {labels.isPending ? (
+        <option value="" disabled>
+          Loading folders…
+        </option>
+      ) : null}
+      {labels.isError ? (
+        <option value="" disabled>
+          Folders unavailable
+        </option>
+      ) : null}
       {!labels.isPending && !labels.isError && folders.length === 0 ? (
-        <option value="" disabled>No folders available</option>
+        <option value="" disabled>
+          No folders available
+        </option>
       ) : null}
       {folders.map((folder) => (
         <option key={folder} value={JSON.stringify([account.id, folder])}>
@@ -174,7 +184,10 @@ export function MoveFolder({
     "get",
     "/v1/labels",
     { params: { query: accountId ? { accountId } : {} } },
-    { enabled: Boolean(routeAccountId) || (!auth.isPending && !auth.isError && accounts.length <= 1) },
+    {
+      enabled:
+        Boolean(routeAccountId) || (!auth.isPending && !auth.isError && accounts.length <= 1),
+    },
   );
   const folders = (labels.data?.labels ?? [])
     .map((label) => label.name)
@@ -200,13 +213,21 @@ export function MoveFolder({
   };
 
   return (
-    <span className="ibicon ibmovewrap relative inline-flex items-center justify-center rounded-md border border-transparent bg-transparent p-[.25rem_.3rem] text-muted hover:border-line hover:bg-card hover:text-accent" title="Move to a folder">
+    <span
+      className="ibicon ibmovewrap relative inline-flex items-center justify-center rounded-md border border-transparent bg-transparent p-[.25rem_.3rem] text-muted hover:border-line hover:bg-card hover:text-accent"
+      title="Move to a folder"
+    >
       <FolderIcon width={14} height={14} aria-hidden="true" />
       <select
         className="ibmove absolute inset-0 h-full w-full cursor-pointer appearance-none border-0 p-0 opacity-0 focus-visible:outline-none"
         aria-label="Move to a folder"
-        value={allAccounts ? "" : defaultFolder ?? ""}
-        disabled={busy || auth.isPending || auth.isError || (!allAccounts && (labels.isPending || labels.isError))}
+        value={allAccounts ? "" : (defaultFolder ?? "")}
+        disabled={
+          busy ||
+          auth.isPending ||
+          auth.isError ||
+          (!allAccounts && (labels.isPending || labels.isError))
+        }
         onChange={(event) => move(event.target.value)}
       >
         {!allAccounts && defaultFolder && !folders.includes(defaultFolder) ? (
@@ -216,9 +237,15 @@ export function MoveFolder({
         ) : null}
         {!allAccounts ? (
           <>
-            {!defaultFolder ? <option value="">{pending ? "Loading folders…" : unavailable ? "Folders unavailable" : "Move…"}</option> : null}
+            {!defaultFolder ? (
+              <option value="">
+                {pending ? "Loading folders…" : unavailable ? "Folders unavailable" : "Move…"}
+              </option>
+            ) : null}
             {folders.map((folder) => (
-              <option key={folder} value={folder}>{folder}</option>
+              <option key={folder} value={folder}>
+                {folder}
+              </option>
             ))}
           </>
         ) : (

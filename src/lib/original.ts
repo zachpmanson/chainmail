@@ -85,9 +85,10 @@ function store(): Set<string> {
   styled = new Set<string>();
   try {
     const held = globalThis.localStorage?.getItem(STYLED_KEY);
-    if (held) for (const key of JSON.parse(held) as unknown[]) {
-      if (typeof key === "string" && key !== "") styled.add(key);
-    }
+    if (held)
+      for (const key of JSON.parse(held) as unknown[]) {
+        if (typeof key === "string" && key !== "") styled.add(key);
+      }
   } catch {
     // No storage, or somebody else's key under this name: an unreadable answer
     // is the same as no answer, and the reader starts from the default rather

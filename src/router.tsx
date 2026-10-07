@@ -200,58 +200,63 @@ function RootLayout() {
           said nothing the nav did not. It is also the way home, so there is no
           separate Home link beside it. A built page keeps its own title — that
           one is the page's, not the site's. */}
-      {!popup ? <>
-      <header className="sitehead [--navh:2.15rem] max-w-none m-0 flex flex-wrap items-center border-b border-line px-5 pt-4 pb-[.85rem] text-[.86rem] text-muted">
-        {/* The nav's items travel as one element so that the bar can replace all
+      {!popup ? (
+        <>
+          <header className="sitehead [--navh:2.15rem] max-w-none m-0 flex flex-wrap items-center border-b border-line px-5 pt-4 pb-[.85rem] text-[.86rem] text-muted">
+            {/* The nav's items travel as one element so that the bar can replace all
             of them at once: the row is the bar's while a selection stands, and
             the links come back when it clears (see .sitenav in styles.css). */}
-        <nav className="sitenav relative flex min-w-0 flex-1 flex-nowrap items-center overflow-x-auto overflow-y-hidden h-[var(--navh)]">
-          <Link to="/" className="brand text-fg text-[.92rem] font-bold tracking-[-.01em] no-underline hover:text-accent">
-            chainmail
-          </Link>
-          <span className="sep mx-[.45rem] text-line">·</span>
-          <Link to="/specs">Braids</Link>
-          <span className="sep mx-[.45rem] text-line">·</span>
-          <Link to="/settings">Settings</Link>
-          <span className="sep mx-[.45rem] text-line">·</span>
-          <Link to="/ops">Ops</Link>
-          {/* The corpus being read is the one statement in the nav that is not a
+            <nav className="sitenav relative flex min-w-0 flex-1 flex-nowrap items-center overflow-x-auto overflow-y-hidden h-[var(--navh)]">
+              <Link
+                to="/"
+                className="brand text-fg text-[.92rem] font-bold tracking-[-.01em] no-underline hover:text-accent"
+              >
+                chainmail
+              </Link>
+              <span className="sep mx-[.45rem] text-line">·</span>
+              <Link to="/specs">Braids</Link>
+              <span className="sep mx-[.45rem] text-line">·</span>
+              <Link to="/settings">Settings</Link>
+              <span className="sep mx-[.45rem] text-line">·</span>
+              <Link to="/ops">Ops</Link>
+              {/* The corpus being read is the one statement in the nav that is not a
               destination, so it carries no separator and sits where the links
               end. It is not in the right-hand group: see NavReading. */}
-          <NavReading />
-          {/* The stamp and the search box travel together: the stamp is about the
+              <NavReading />
+              {/* The stamp and the search box travel together: the stamp is about the
               build this page was served from, the refresh beside it asks the
               corpus again, and the search is the app's one way in — all
               site-level, all at the end of the nav. The box is the search itself
               while it is open, and it takes this row rather than sitting in it
               (see .navsearch and .navopts in styles.css). */}
-          <span className="navright [--navgap:1.1rem] ml-auto flex flex-nowrap items-center justify-end gap-[var(--navgap)] pr-[calc(12rem+var(--navgap))]">
-            <DeployStamp />
-            {/* The cadence travels with the press it shares its read half with:
+              <span className="navright [--navgap:1.1rem] ml-auto flex flex-nowrap items-center justify-end gap-[var(--navgap)] pr-[calc(12rem+var(--navgap))]">
+                <DeployStamp />
+                {/* The cadence travels with the press it shares its read half with:
                 the corpus is re-asked on its own (see AutoRefresh), and the
                 button beside it is what adds the mailbox fetch. It draws
                 nothing, and is mounted by the shell so every page has it. */}
-            <AutoRefresh />
-            <NavRefresh />
-            <button
-              type="button"
-              className="navrefresh nav-compose"
-              aria-label="Compose"
-              title="Compose"
-              onClick={() => setComposing(true)}
-            >
-              <PencilSquareIcon className="block size-[18px]" aria-hidden="true" />
-            </button>
-            <NavSearch />
-          </span>
-        </nav>
-        {/* The bar's place. Empty until a chain is ticked, and then the whole row
+                <AutoRefresh />
+                <NavRefresh />
+                <button
+                  type="button"
+                  className="navrefresh nav-compose"
+                  aria-label="Compose"
+                  title="Compose"
+                  onClick={() => setComposing(true)}
+                >
+                  <PencilSquareIcon className="block size-[18px]" aria-hidden="true" />
+                </button>
+                <NavSearch />
+              </span>
+            </nav>
+            {/* The bar's place. Empty until a chain is ticked, and then the whole row
             — the nav beside it is hidden while the bar is here, and the sentence
             a finished action leaves behind is a line of its own under the nav
             (see .buildslot and .ibbuild). */}
-        <div className="buildslot" />
-      </header>
-      </> : null}
+            <div className="buildslot" />
+          </header>
+        </>
+      ) : null}
       <ComposeProvider composing={composing} closeCompose={() => setComposing(false)}>
         <Outlet />
       </ComposeProvider>
@@ -285,7 +290,9 @@ function Home() {
     return urlSearch.open ? (
       <ThreadPopup rootExtId={urlSearch.open} />
     ) : (
-      <main className="thread-popup"><p>No thread was specified.</p></main>
+      <main className="thread-popup">
+        <p>No thread was specified.</p>
+      </main>
     );
   }
   // A question is being asked when the address carries something to ask — a
@@ -333,7 +340,13 @@ const viewRoute = createRoute({
   component: ViewPage,
 });
 
-const routeTree = rootRoute.addChildren([searchRoute, settingsRoute, specsRoute, opsRoute, viewRoute]);
+const routeTree = rootRoute.addChildren([
+  searchRoute,
+  settingsRoute,
+  specsRoute,
+  opsRoute,
+  viewRoute,
+]);
 
 /** The app's router, bound to the browser's history. */
 export const router = createRouter({

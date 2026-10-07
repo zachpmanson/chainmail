@@ -9,7 +9,11 @@ import { gmailMessageURL } from "../lib/gmailUrl";
  * after a comma: inside .sid, "msg" and its handle are one token to the reader
  * and splitting them across lines reads as two truncated ids.
  */
-function SourceIds({ ids, unspooled, anchorByGmail }: {
+function SourceIds({
+  ids,
+  unspooled,
+  anchorByGmail,
+}: {
   ids: SourceId[];
   /** the line is "unspooled from …"; its ids name the message the content was lifted out of */
   unspooled: boolean;
@@ -34,11 +38,7 @@ function SourceIds({ ids, unspooled, anchorByGmail }: {
               ) : unspooled || !s.gmailId ? (
                 s.text
               ) : (
-                <a
-                  href={gmailMessageURL(s.gmailId)}
-                  target="_blank"
-                  rel="noopener"
-                >
+                <a href={gmailMessageURL(s.gmailId)} target="_blank" rel="noopener">
                   {s.text}
                 </a>
               )}
@@ -61,10 +61,17 @@ function SourceIds({ ids, unspooled, anchorByGmail }: {
  * exactly where a reader wants them — every host this message came out of, in
  * one line that can be read, copied and found by find-in-page.
  */
-export function Source({ source, anchorByGmail }: { source?: string; anchorByGmail: Map<string, string> }) {
+export function Source({
+  source,
+  anchorByGmail,
+}: {
+  source?: string;
+  anchorByGmail: Map<string, string>;
+}) {
   if (!source) return null;
   const p = provenance(source);
-  if (p.kind === "prose") return <span className="src font-mono text-[.64rem] text-muted">{p.text}</span>;
+  if (p.kind === "prose")
+    return <span className="src font-mono text-[.64rem] text-muted">{p.text}</span>;
   // "unspooled from …" lines carry an empty prefix only when not unspooled;
   // prose never reaches here, so prefix !== "" means the ids were unspooled
   const unspooled = p.prefix !== "";

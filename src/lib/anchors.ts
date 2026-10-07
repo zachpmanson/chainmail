@@ -1,6 +1,6 @@
 import type { Entry } from "./spec";
 
-const MONTHS = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 
 export function parseDate(date: string | undefined): { y: number; m: number; d: number } | null {
   const m = /(\d{1,2})\s+([A-Za-z]{3})[a-z]*\s+(\d{4})/.exec(date ?? "");
@@ -22,12 +22,20 @@ export function entryId(e: Entry, used: Set<string>): string {
     base = e.id;
   } else {
     const d = parseDate(e.date);
-    const day = d ? `${d.y}${String(d.m).padStart(2, "0")}${String(d.d).padStart(2, "0")}` : "undated";
+    const day = d
+      ? `${d.y}${String(d.m).padStart(2, "0")}${String(d.d).padStart(2, "0")}`
+      : "undated";
     if (e.kind === "note") {
       base = `m-${day}-note`;
     } else {
       const t = (e.time ?? "").replace(/\D/g, "").slice(0, 4) || "0000";
-      const who = (e.sender ?? "").match(/[A-Za-z]+/g)?.map((w) => w[0]).join("").slice(0, 3).toLowerCase() || "x";
+      const who =
+        (e.sender ?? "")
+          .match(/[A-Za-z]+/g)
+          ?.map((w) => w[0])
+          .join("")
+          .slice(0, 3)
+          .toLowerCase() || "x";
       base = `m-${day}-${t}-${who}`;
     }
   }
@@ -38,7 +46,10 @@ export function entryId(e: Entry, used: Set<string>): string {
 }
 
 export function initials(name: string): string {
-  const parts = name.replace(/\(/g, " ").split(/\s+/).filter((p) => /^[A-Za-z]/.test(p));
+  const parts = name
+    .replace(/\(/g, " ")
+    .split(/\s+/)
+    .filter((p) => /^[A-Za-z]/.test(p));
   if (parts.length === 0) return "?";
   if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
   return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase();

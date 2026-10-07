@@ -51,36 +51,117 @@ export function ComposerFlow({
   containerRef,
 }: Props) {
   const content = (
-    <section className={`composer-flow composer-flow--${variant}`} aria-label={variant === "compose" ? "Compose email" : "Reply"}>
+    <section
+      className={`composer-flow composer-flow--${variant}`}
+      aria-label={variant === "compose" ? "Compose email" : "Reply"}
+    >
       {step === "done" ? (
         <div role="status">
           {done}
-          {onClose ? <Button variant="subtle" density="compact" className="opbtn" type="button" onClick={onClose}>{doneLabel}</Button> : null}
+          {onClose ? (
+            <Button
+              variant="subtle"
+              density="compact"
+              className="opbtn"
+              type="button"
+              onClick={onClose}
+            >
+              {doneLabel}
+            </Button>
+          ) : null}
         </div>
       ) : step === "preview" ? (
         <>
           {preview}
-          {error ? <p className="selfail mt-[.7rem] rounded-md border border-line border-l-[3px] border-l-red-700 bg-card px-[.7rem] py-2 text-[.82rem]" role="alert">{error}</p> : null}
+          {error ? (
+            <p
+              className="selfail mt-[.7rem] rounded-md border border-line border-l-[3px] border-l-red-700 bg-card px-[.7rem] py-2 text-[.82rem]"
+              role="alert"
+            >
+              {error}
+            </p>
+          ) : null}
           <footer className="opmact replyacts mt-[.55rem] flex items-center justify-end gap-2">
-            <Button variant="subtle" density="compact" className="opbtn" type="button" disabled={busy} onClick={onEdit}>{busy ? "Working…" : editLabel}</Button>
-            {showConfirm ? <Button variant="danger" density="compact" className="opbtn opbtn-after" type="button" disabled={busy || confirmDisabled} onClick={onConfirm}>{busy ? "Sending…" : confirmLabel}</Button> : null}
+            <Button
+              variant="subtle"
+              density="compact"
+              className="opbtn"
+              type="button"
+              disabled={busy}
+              onClick={onEdit}
+            >
+              {busy ? "Working…" : editLabel}
+            </Button>
+            {showConfirm ? (
+              <Button
+                variant="danger"
+                density="compact"
+                className="opbtn opbtn-after"
+                type="button"
+                disabled={busy || confirmDisabled}
+                onClick={onConfirm}
+              >
+                {busy ? "Sending…" : confirmLabel}
+              </Button>
+            ) : null}
           </footer>
         </>
       ) : (
         <>
-          {error ? <p className="selfail mt-[.7rem] rounded-md border border-line border-l-[3px] border-l-red-700 bg-card px-[.7rem] py-2 text-[.82rem]" role="alert">{error}</p> : null}
+          {error ? (
+            <p
+              className="selfail mt-[.7rem] rounded-md border border-line border-l-[3px] border-l-red-700 bg-card px-[.7rem] py-2 text-[.82rem]"
+              role="alert"
+            >
+              {error}
+            </p>
+          ) : null}
           {editor}
           <footer className="opmact replyacts mt-[.55rem] flex items-center justify-end gap-2">
             {editorActions}
-            {onClose ? <Button variant="subtle" density="compact" className="opbtn" type="button" disabled={busy} onClick={onClose}>Cancel</Button> : null}
-            <Button variant="subtle" density="compact" className="opbtn" type="button" title={reviewTitle} disabled={busy || reviewDisabled} onClick={onReview}>{busy ? "Preparing…" : reviewLabel}</Button>
+            {onClose ? (
+              <Button
+                variant="subtle"
+                density="compact"
+                className="opbtn"
+                type="button"
+                disabled={busy}
+                onClick={onClose}
+              >
+                Cancel
+              </Button>
+            ) : null}
+            <Button
+              variant="subtle"
+              density="compact"
+              className="opbtn"
+              type="button"
+              title={reviewTitle}
+              disabled={busy || reviewDisabled}
+              onClick={onReview}
+            >
+              {busy ? "Preparing…" : reviewLabel}
+            </Button>
           </footer>
         </>
       )}
     </section>
   );
 
-  const replyBoxClasses = "replybox mt-[.9rem] mb-[.3rem] rounded-lg border border-line bg-card px-[.7rem] py-[.6rem]";
-  if (variant === "reply") return <div className={replyBoxClasses} ref={containerRef}>{content}</div>;
-  return <aside className="ibread compose-panel flex min-w-0 flex-col overflow-auto border-l border-line bg-bg min-[60rem]:h-full min-[60rem]:min-h-0 min-[60rem]:px-5" aria-label="Compose email"><div className={replyBoxClasses}>{content}</div></aside>;
+  const replyBoxClasses =
+    "replybox mt-[.9rem] mb-[.3rem] rounded-lg border border-line bg-card px-[.7rem] py-[.6rem]";
+  if (variant === "reply")
+    return (
+      <div className={replyBoxClasses} ref={containerRef}>
+        {content}
+      </div>
+    );
+  return (
+    <aside
+      className="ibread compose-panel flex min-w-0 flex-col overflow-auto border-l border-line bg-bg min-[60rem]:h-full min-[60rem]:min-h-0 min-[60rem]:px-5"
+      aria-label="Compose email"
+    >
+      <div className={replyBoxClasses}>{content}</div>
+    </aside>
+  );
 }
