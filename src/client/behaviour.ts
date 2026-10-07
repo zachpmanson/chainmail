@@ -165,7 +165,7 @@ export function attach(doc: Document = document): () => void {
 
   /* Replays a download press once the re-render puts bytes behind the chip. The flag lives on
      the element because the render replaces every attachment, and an attribute survives that. */
-  for (const chip of doc.querySelectorAll<HTMLElement>(".att[data-download]")) {
+  for (const chip of doc.querySelectorAll<HTMLElement>("[data-attachment][data-download]")) {
     if (!chip.dataset.get) continue;
     chip.removeAttribute("data-download");
     chip.click();
@@ -442,7 +442,7 @@ export function attach(doc: Document = document): () => void {
 function attachPopover(doc: Document, on: On): () => void {
   // Strictly additive: without script, triggers still navigate to the file.
   const triggers = [
-    ...doc.querySelectorAll<HTMLElement>(".att[data-pop]"),
+    ...doc.querySelectorAll<HTMLElement>("[data-attachment][data-pop]"),
     ...doc.querySelectorAll<HTMLImageElement>(".bd img"),
   ];
   if (!triggers.length) return () => {};
@@ -710,7 +710,7 @@ function attachPopover(doc: Document, on: On): () => void {
   };
 
   for (const t of triggers) {
-    const isChip = t.classList.contains("att");
+    const isChip = t.hasAttribute("data-attachment");
     if (isChip) {
       // Small pictures have no embedded preview, so the thumbnail is optional.
       arm(t, t.querySelector<HTMLImageElement>("img"), true);

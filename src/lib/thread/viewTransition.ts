@@ -114,7 +114,7 @@ export function withTransition(doc: Document, apply: () => void) {
     let count = 0;
     for (const bubble of doc.querySelectorAll<HTMLElement>(".msg[id]")) {
       if (!onScreen(bubble)) continue;
-      bubble.querySelectorAll<HTMLElement>(".att").forEach((el, i) => {
+      bubble.querySelectorAll<HTMLElement>("[data-attachment]").forEach((el, i) => {
         const key = `${bubble.id}-a-${i}`;
         const keep =
           count < ATTACHMENT_CAP && onScreen(el) && (first || chosenAttachments.has(key));
