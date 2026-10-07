@@ -67,6 +67,32 @@ export default tseslint.config(
         },
       ],
       "better-tailwindcss/no-unnecessary-whitespace": "error",
+      // The type scale: theme steps only. em sizes stay allowed, since they scale with the parent on purpose.
+      "better-tailwindcss/no-restricted-classes": [
+        "error",
+        {
+          restrict: [
+            {
+              pattern: "^(?:.*:)?text-\\[[0-9.]+(?:rem|px)\\]$",
+              message:
+                "Use a text-scale step (text-2xs, text-xs, text-sm, …), not an arbitrary size.",
+            },
+            {
+              pattern: "^(?:.*:)?(?:leading-\\[[0-9.]|text-[a-z0-9]+/\\[[0-9.])",
+              message:
+                "Use a leading step (leading-tight/snug/normal or text-xs/snug), not an arbitrary line-height.",
+            },
+            {
+              pattern: "^(?:.*:)?rounded(?:-[a-z]+)?-\\[[0-9.]+(?:px|rem)\\]$",
+              message: "Use a radius step (rounded-sm/md/lg), not an arbitrary radius.",
+            },
+            {
+              pattern: "^(?:.*:)?opacity-\\[",
+              message: "Use an opacity step (opacity-55 etc.), not an arbitrary value.",
+            },
+          ],
+        },
+      ],
     },
   },
 );

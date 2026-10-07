@@ -110,7 +110,7 @@ export default function SplitPane({
       style={width === null ? undefined : ({ "--listw": `${width}px` } as CSSProperties)}
     >
       <div
-        className={`flex min-w-0 flex-col gap-3 pt-3 min-[60rem]:h-full min-[60rem]:min-h-0 min-[60rem]:pl-3${hasChoice ? " max-[60rem]:hidden" : ""}`}
+        className={`flex min-w-0 flex-col gap-3 px-1 pt-3 min-[60rem]:h-full min-[60rem]:min-h-0 min-[60rem]:pr-0${hasChoice ? " max-[60rem]:hidden" : ""}`}
         ref={column}
       >
         {list}
