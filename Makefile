@@ -20,7 +20,7 @@ SINCE       ?= 2026-08-01
 ME          ?= $(CHAINMAIL_ME)
 export CHAINMAIL_CORPUS = $(CORPUS)
 
-.PHONY: deps dev build typecheck clean format help install test check format-check slurp slurp-mail slurp-slack settle embed \
+.PHONY: deps dev build frontend typecheck clean format help install test check format-check slurp slurp-mail slurp-slack settle embed \
         backup page serve api doctor
 
 help:
@@ -56,11 +56,13 @@ deps:
 
 dev: serve
 
-build:
+build: frontend
 	go build ./...
+
+frontend:
 	npm run build
 
-typecheck:
+typecheck: frontend
 	go vet ./...
 	npm run typecheck
 
@@ -68,7 +70,7 @@ clean:
 	go clean ./...
 	rm -rf dist cmd/server/dist
 
-install:
+install: frontend
 	go build -o $(BIN) ./cmd/corpus
 	go build -o $(SERVER) ./cmd/server
 
@@ -184,5 +186,5 @@ serve:
 # Loopback, and it refuses anything else without a flag that says why. There is
 # no authentication and spec bodies are unsanitised sender HTML (#14), so the
 # dev client reaches this through a Vite proxy rather than over CORS.
-api:
+api: frontend
 	go run ./cmd/server -addr 127.0.0.1:$(PORT) -corpus $(CORPUS)
