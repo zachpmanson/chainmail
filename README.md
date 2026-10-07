@@ -177,6 +177,7 @@ stated elsewhere and never allowed to invert a reply chain).
 
 ```bash
 nix develop             # go, node 22, npm, typescript-language-server
+npm ci                  # install the locked frontend dependencies
 make check              # tests, ESLint, Prettier check, go vet/gofmt, typecheck
 npm run format          # format TypeScript/TSX
 npm run format:check    # check formatting without changing files
