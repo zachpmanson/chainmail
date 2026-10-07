@@ -67,14 +67,17 @@ export default function NavRefresh() {
     <Button
       type="button"
       variant="quiet"
-      className={`size-8 shrink-0 p-1 navrefresh gap-1.5 disabled:cursor-default${indicator ? " busy" : ""}${warning ? " warn" : ""}`}
+      className={`size-8 shrink-0 p-1 gap-1.5 disabled:cursor-default${warning ? " text-accent" : ""}`}
       aria-label={label}
       title={title}
       aria-busy={indicator}
       disabled={busy}
       onClick={() => void refresh()}
     >
-      <ArrowPathIcon className="spinner" width={16} height={16} aria-hidden="true" />
+      <ArrowPathIcon
+        className={`size-4.5 flex-none${indicator ? " motion-safe:animate-spin" : ""}`}
+        aria-hidden="true"
+      />
       {stageLabel && <span className="whitespace-nowrap text-[.72rem]">{stageLabel}</span>}
     </Button>
   );

@@ -148,9 +148,7 @@ function Attachments({
               {fetching && fetchable ? (
                 /* An image, not a status: the chip has aria-busy and the pane owns the one live region. */
                 <ArrowPathIcon
-                  className="spinner w-[.838em]"
-                  width={16}
-                  height={16}
+                  className="inline-block size-[1em] align-middle motion-safe:animate-spin"
                   role="img"
                   aria-label="Downloading…"
                   aria-hidden={undefined}
@@ -185,7 +183,7 @@ function Attachments({
             className={[
               "att inline-flex items-baseline gap-1.5 rounded-md border border-line bg-quote px-2 py-0.5 text-fg no-underline hover:border-accent",
               opens && "group/attachment items-center",
-              fetching && fetchable && "busy border-accent cursor-progress",
+              fetching && fetchable && "border-accent cursor-progress",
             ]
               .filter(Boolean)
               .join(" ")}
@@ -316,7 +314,7 @@ function OriginalControl({ on, state, ask }: { on: boolean; state: Original; ask
     <>
       <ReceiptIconButton
         type="button"
-        className={asking ? "origbtn busy cursor-progress" : "origbtn"}
+        className={asking ? "cursor-progress" : undefined}
         aria-pressed={on}
         disabled={asking}
         title={label}
@@ -324,7 +322,7 @@ function OriginalControl({ on, state, ask }: { on: boolean; state: Original; ask
         onClick={ask}
       >
         {asking ? (
-          <ArrowPathIcon className="spinner" width={18} height={18} aria-hidden="true" />
+          <ArrowPathIcon className="motion-safe:animate-spin" aria-hidden="true" />
         ) : (
           <CodeBracketIcon width={18} height={18} aria-hidden="true" />
         )}

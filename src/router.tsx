@@ -138,7 +138,7 @@ function RootLayout() {
                 <Button
                   type="button"
                   variant="quiet"
-                  className="size-8 shrink-0 p-1 navrefresh"
+                  className="size-8 shrink-0 p-1"
                   aria-label="Compose"
                   title="Compose"
                   onClick={() => setComposing(true)}

@@ -36,18 +36,6 @@
   header.sitehead:has(.navsearch.open) .sitenav { flex:1 1 100%; }
   header.sitehead:has(.navsearch.open) .navright { flex:1 1 auto; justify-content:flex-start; }
   header.sitehead:has(.navsearch.open) .navsearch { width:calc(100% - var(--searchgap)); }
-  /* ↻ is a path drawn to the box centre, not a glyph: a glyph's ink isn't centred
-     in its em box, so rotate() would wobble. */
-  .spinner { display:inline-block; width:1em; height:1em; line-height:1;
-    vertical-align:middle; flex:none; }
-  .navrefresh.warn { color:var(--accent); }
-  .navrefresh .spinner, .origbtn.busy .spinner { font-size:1.125rem; }
-  .navrefresh.busy .spinner, .origbtn.busy .spinner, .att.busy .spinner {
-    animation:spin .8s linear infinite; }
-  @keyframes spin { to { transform:rotate(360deg); } }
-  @media (prefers-reduced-motion: reduce) {
-    .navrefresh.busy .spinner, .origbtn.busy .spinner, .att.busy .spinner {
-      animation:none; } }
   h1 { font-size:1.3rem; margin:0 0 .25rem; letter-spacing:-.01em; }
   .pan > summary::-webkit-details-marker { display:none; }
   .pan > summary::before { content:""; display:inline-block; width:0; height:0;
