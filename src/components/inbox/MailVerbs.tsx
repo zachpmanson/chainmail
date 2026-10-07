@@ -39,13 +39,13 @@ export const SAID_MS = 5000;
  * place.
  */
 export function ArchiveGlyph() {
-  return <ArchiveBoxIcon className="block size-[18px]" aria-hidden="true" />;
+  return <ArchiveBoxIcon className="block size-6" aria-hidden="true" />;
 }
 
 /** The bin. Delete is a move to the trash in the mailbox's own words, and this
  *  is the glyph that says so without the word. */
 export function TrashGlyph() {
-  return <TrashIcon className="block size-[18px]" aria-hidden="true" />;
+  return <TrashIcon className="block size-6" aria-hidden="true" />;
 }
 
 /**

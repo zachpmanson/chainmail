@@ -227,12 +227,13 @@
 
      It and the panel's own dismissal are one rule, because they are one thing: a
      glyph in a transparent box that lifts to the accent when it is pointed at.
-     This is the shape every icon button in this app has, down to the radius, the
-     hairline that arrives on hover and the 18px glyph inside it (see .ibicon svg),
-     which is what the padding is measured against — .ibread-head .ibicon and
-     .ibbuild .ibicon come out 29.6x28 with it, so these two do as well. A size
-     smaller than the strip's read as small type rather than as controls, which is
-     the opposite of what the nav's two presses are. */
+     This is the shape of the ordinary icon buttons in this app, down to the
+     radius, the hairline that arrives on hover and their 18px glyph. Mail actions
+     (archive, delete and read-state) are deliberately larger at 24px, because
+     they are the primary controls on the thread. .ibread-head .ibicon and
+     .ibbuild .ibicon come out 29.6x28 with the ordinary size, so these two do as
+     well. A smaller size than the strip's reads as small type rather than as
+     controls, which is the opposite of what the nav's two presses are. */
   /* dripfeed-web's spinner (src/index.css there): the same ↻, the same 0.8s
      linear turn, so the act reads the same in both apps. It turns only while its
      thing is working — as a button's own icon, a still ↻ is what the control

@@ -507,6 +507,8 @@ describe("what a thread's read state looks like", () => {
     await openRow();
 
     const button = await screen.findByRole("button", { name: "Mark read" });
+    expect(button.className).toContain("[&_svg]:size-6");
+    expect(button.querySelector("svg")?.getAttribute("width")).toBe("24");
     fireEvent.click(button);
     await waitFor(() => expect(reads()).toHaveLength(1));
     expect(JSON.parse(reads()[0]!.body ?? "{}")).toEqual({ chain: ROOT, unread: false });
@@ -628,6 +630,7 @@ describe("what the pane does to the thread it has open", () => {
     await openRow();
 
     const asked = searches().length;
+    expect((await verb("Archive")).querySelector("svg")?.classList).toContain("size-6");
     fireEvent.click(await verb("Archive"));
     await waitFor(() => expect(mails()).toHaveLength(1));
     // One thread, named by its root ext id: the same verb the bar sends for a
@@ -651,6 +654,7 @@ describe("what the pane does to the thread it has open", () => {
     await mountApp();
     await openRow();
 
+    expect((await verb("Delete")).querySelector("svg")?.classList).toContain("size-6");
     fireEvent.click(await verb("Delete"));
     await waitFor(() => expect(mails()).toHaveLength(1));
     expect(JSON.parse(mails()[0]!.body ?? "{}")).toEqual({ chains: [ROOT], action: "trash" });

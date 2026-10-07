@@ -172,7 +172,7 @@ export function ActionBar({
               reader reads — but the row draws the box and the bin. */}
           <IconButton
             type="button"
-            className="ibicon shrink-0 inline-flex items-center rounded-md border border-transparent bg-transparent p-[.45rem_.5rem] text-muted hover:border-line hover:bg-card hover:text-accent [&_svg]:block [&_svg]:size-[18px]"
+            className="ibicon shrink-0 inline-flex items-center rounded-md border border-transparent bg-transparent p-[.45rem_.5rem] text-muted hover:border-line hover:bg-card hover:text-accent [&_svg]:block [&_svg]:size-6"
             aria-label="Archive"
             title="Archive"
             disabled={busy}
@@ -186,7 +186,7 @@ export function ActionBar({
           </IconButton>
           <IconButton
             type="button"
-            className="ibicon shrink-0 inline-flex items-center rounded-md border border-transparent bg-transparent p-[.45rem_.5rem] text-muted hover:border-line hover:bg-card hover:text-accent [&_svg]:block [&_svg]:size-[18px]"
+            className="ibicon shrink-0 inline-flex items-center rounded-md border border-transparent bg-transparent p-[.45rem_.5rem] text-muted hover:border-line hover:bg-card hover:text-accent [&_svg]:block [&_svg]:size-6"
             aria-label="Delete"
             title="Delete"
             disabled={busy}
