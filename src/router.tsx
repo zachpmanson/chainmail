@@ -30,6 +30,7 @@ import { NavRefresh } from "./components/navigation/NavRefresh";
 import { AutoRefresh } from "./components/navigation/AutoRefresh";
 import { NavSearch } from "./components/navigation/NavSearch";
 import { ComposeProvider } from "./components/compose/ComposeContext";
+import { IconButton } from "./components/ui/controls";
 import type { SearchMode } from "./lib/api";
 
 /**
@@ -237,7 +238,7 @@ function RootLayout() {
                 nothing, and is mounted by the shell so every page has it. */}
                 <AutoRefresh />
                 <NavRefresh />
-                <button
+                <IconButton
                   type="button"
                   className="navrefresh nav-compose"
                   aria-label="Compose"
@@ -245,7 +246,7 @@ function RootLayout() {
                   onClick={() => setComposing(true)}
                 >
                   <PencilSquareIcon className="block size-[18px]" aria-hidden="true" />
-                </button>
+                </IconButton>
                 <NavSearch />
               </span>
             </nav>
