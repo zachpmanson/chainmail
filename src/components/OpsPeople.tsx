@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { $api, type PersonSummary } from "../lib/api";
 import { FormField } from "./FormField";
 import { Button, IconButton, TextInput } from "./controls";
+import { InlineAlert } from "./InlineAlert";
 
 function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -240,14 +241,7 @@ export function OpsPeople() {
         person appears — in the list, in a thread, in the person field of the search. Two rows that
         are one human are one row after a merge, and that is the plan below, where the evidence is.
       </p>
-      {error ? (
-        <p
-          className="selfail mt-[.7rem] rounded-md border border-line border-l-[3px] border-l-red-700 bg-card px-[.7rem] py-2 text-[.82rem]"
-          role="alert"
-        >
-          {error}
-        </p>
-      ) : null}
+      {error ? <InlineAlert>{error}</InlineAlert> : null}
       {last ? (
         <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">
           {last}. The list below is the current one.

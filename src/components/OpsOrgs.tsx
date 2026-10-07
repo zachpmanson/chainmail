@@ -3,6 +3,7 @@ import { useState } from "react";
 import { $api, type OrgRule } from "../lib/api";
 import { StatusBadge } from "./StatusBadge";
 import { Button, TextInput } from "./controls";
+import { InlineAlert } from "./InlineAlert";
 
 function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -222,14 +223,7 @@ export function OpsOrgs() {
         domain; where that reads wrong, write the name here — two domains with one name are one
         organisation, and a domain you leave empty is nobody's.
       </p>
-      {error ? (
-        <p
-          className="selfail mt-[.7rem] rounded-md border border-line border-l-[3px] border-l-red-700 bg-card px-[.7rem] py-2 text-[.82rem]"
-          role="alert"
-        >
-          {error}
-        </p>
-      ) : null}
+      {error ? <InlineAlert>{error}</InlineAlert> : null}
       {last ? (
         <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">
           {last}. The list below is the current one.

@@ -4,6 +4,7 @@ import { Avatar } from "../src/components/Avatar";
 import { Checkbox, CheckboxRow } from "../src/components/Checkbox";
 import { DialogShell } from "../src/components/DialogShell";
 import { FormField } from "../src/components/FormField";
+import { InlineAlert } from "../src/components/InlineAlert";
 import { StatusBadge } from "../src/components/StatusBadge";
 
 describe("shared UI primitives", () => {
@@ -66,6 +67,19 @@ describe("shared UI primitives", () => {
     expect(dialog).toContain('role="dialog" aria-modal="true" aria-label="Confirm"');
     expect(dialog).toContain("proposals-panel flex max-h-[70vh]");
     expect(dialog).toContain("<p>Proceed?</p>");
+  });
+
+  it("shares the inline alert surface and keeps caller-provided message markup", () => {
+    const alert = renderToStaticMarkup(
+      <InlineAlert>
+        <strong>Could not save</strong> Try again.
+      </InlineAlert>,
+    );
+    expect(alert).toContain(
+      'class="selfail mt-[.7rem] rounded-md border border-line border-l-[3px] border-l-red-700 bg-card px-[.7rem] py-2 text-[.82rem]"',
+    );
+    expect(alert).toContain('role="alert"');
+    expect(alert).toContain("<strong>Could not save</strong> Try again.");
   });
 
   it("associates field text with its control", () => {
