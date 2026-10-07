@@ -20,7 +20,7 @@ SINCE       ?= 2026-08-01
 ME          ?= $(CHAINMAIL_ME)
 export CHAINMAIL_CORPUS = $(CORPUS)
 
-.PHONY: dev build typecheck clean format help install test check format-check slurp slurp-mail slurp-slack settle embed \
+.PHONY: deps dev build typecheck clean format help install test check format-check slurp slurp-mail slurp-slack settle embed \
         backup page serve api doctor
 
 help:
@@ -34,6 +34,7 @@ help:
 	@printf '  make doctor         what is in the corpus and what is missing\n'
 	@printf '  make status         probe each backend, write the connection snapshot\n'
 	@printf '\nBuild\n'
+	@printf '  make deps           install frontend dependencies from the lockfile\n'
 	@printf '  make dev            start the frontend dev server\n'
 	@printf '  make build          build Go packages and the frontend\n'
 	@printf '  make typecheck      go vet and TypeScript typecheck\n'
@@ -49,6 +50,9 @@ help:
 	@printf '  make serve          vite dev server\n'
 	@printf '  make api            the read-only API on 127.0.0.1:%s\n' '$(PORT)'
 	@printf '\nOverride CORPUS, SLACK, SINCE, BIN on the command line.\n'
+
+deps:
+	npm ci
 
 dev: serve
 
