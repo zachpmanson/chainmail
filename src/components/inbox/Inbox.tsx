@@ -1,10 +1,11 @@
 import Button from "../ui/Button";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { $api, type ChainHit } from "../../lib/api/api";
 import { usePrefs } from "../../lib/prefs/usePrefs";
 import { useEscapeToClear } from "../../lib/inbox/selection";
-import { useAccountId } from "../../lib/inbox/useAccountId";
+import useFolder from "../../lib/inbox/useFolder";
+import useThreadList from "../../lib/inbox/useThreadList";
+import useLoadMore from "../../lib/ui/useLoadMore";
 import ActionBar from "./ActionBar";
 import { useLastDescription } from "../../lib/inbox/lists";
 import ThreadPane from "../thread/ThreadPane";
@@ -18,8 +19,6 @@ import ComposeBox from "../compose/ComposeBox";
 import { useCompose } from "../compose/ComposeContext";
 import FolderPicker from "./FolderPicker";
 import ThreadListScroll from "./ThreadListScroll";
-
-const PAGE = 50;
 
 export default function Inbox() {
   const navigate = useNavigate();
@@ -37,45 +36,11 @@ export default function Inbox() {
 
   // Absent means nothing is open; the pane never fills itself with the top thread.
   const opened = useSearch({ from: "/" }).open;
-  const urlLabel = useSearch({ from: "/" }).label;
-  const urlAccountId = useAccountId();
-  const settings = $api.useQuery("get", "/v1/settings", {});
-  const save = $api.useMutation("post", "/v1/settings", {
-    onSuccess: () => {
-      void settings.refetch();
-    },
-  });
+  const folder = useFolder();
+  const { label } = folder;
+  // Waits for settings so the default folder doesn't swap in after All mail.
+  const { list: inbox, rows } = useThreadList(label, folder.accountId, folder.settled);
 
-  // "" in the URL is All mail chosen on purpose; only undefined falls back to the
-  // default, and the list waits for settings (`enabled` below) to avoid a swap.
-  const home = urlLabel === undefined && urlAccountId === undefined;
-  const label = urlLabel !== undefined ? urlLabel : (settings.data?.defaultFolder ?? "");
-  const accountId =
-    urlAccountId !== undefined
-      ? urlAccountId
-      : home
-        ? settings.data?.defaultFolderAccountId
-        : undefined;
-  // Compare the whole location: one folder name can exist in several accounts.
-  const isDefault =
-    (settings.data?.defaultFolder ?? "") === label &&
-    (settings.data?.defaultFolderAccountId ?? "") === (accountId ?? "");
-  const pickFolder = (name: string, pickedAccountId?: string) =>
-    navigate({
-      to: "/",
-      search: (prev) => ({
-        ...prev,
-        label: name,
-        accountId: pickedAccountId,
-      }),
-    });
-  const makeDefault = (on: boolean) =>
-    save.mutate({
-      body: {
-        defaultFolder: on ? label : "",
-        defaultFolderAccountId: on ? (accountId ?? "") : "",
-      },
-    });
   // Choosing a thread dismisses compose, or the thread would open hidden beneath it.
   const openChain = (root: string) => {
     closeCompose();
@@ -83,48 +48,6 @@ export default function Inbox() {
     navigate({ to: "/", search: (prev) => ({ ...prev, open: root }) });
   };
   const closeChain = () => navigate({ to: "/", search: (prev) => ({ ...prev, open: undefined }) });
-
-  // pageParamName injects the cursor as `before`.
-  const inbox = $api.useInfiniteQuery(
-    "get",
-    "/v1/search",
-    {
-      params: {
-        query: { limit: PAGE, ...(label ? { label } : {}), ...(accountId ? { accountId } : {}) },
-      },
-    },
-    {
-      // Settled, not succeeded: a failed settings read means All mail, not waiting forever.
-      enabled: !settings.isPending,
-      pageParamName: "before",
-      initialPageParam: "",
-      getNextPageParam: (last, pages, cursor) => {
-        const chains = last.chains ?? [];
-        // A short page is the end; asking again would return the same page forever.
-        if (chains.length < PAGE) return undefined;
-        const oldest = chains[chains.length - 1];
-        if (!oldest) return undefined;
-        // A thread's `last` is its newest message, so a long thread can straddle the
-        // cursor. Stop unless the page moves the cursor and adds threads, or paging loops.
-        if (cursor && oldest.last >= cursor) return undefined;
-        const shown = new Set(
-          pages.slice(0, -1).flatMap((p) => (p.chains ?? []).map((c) => c.rootExtId)),
-        );
-        return chains.some((c) => !shown.has(c.rootExtId)) ? oldest.last : undefined;
-      },
-    },
-  );
-
-  // Straddling threads come back on both pages; dedupe, since rows key on root ext id.
-  const seen = new Set<string>();
-  const rows: ChainHit[] = [];
-  for (const page of inbox.data?.pages ?? []) {
-    for (const c of page.chains ?? []) {
-      if (seen.has(c.rootExtId)) continue;
-      seen.add(c.rootExtId);
-      rows.push(c);
-    }
-  }
 
   const toggle = (root: string) =>
     setChosen((prev) => (prev.includes(root) ? prev.filter((r) => r !== root) : [...prev, root]));
@@ -159,19 +82,7 @@ export default function Inbox() {
   // The sentinel isn't rendered after a failed page, or it would refire every render.
   const end = useRef<HTMLDivElement | null>(null);
   const paging = inbox.hasNextPage === true && inbox.isFetchNextPageError !== true;
-  const fetchNextPage = inbox.fetchNextPage;
-  useEffect(() => {
-    const marker = end.current;
-    if (!marker || !paging) return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((e) => e.isIntersecting)) void fetchNextPage();
-      },
-      { rootMargin: "300px" },
-    );
-    io.observe(marker);
-    return () => io.disconnect();
-  }, [paging, fetchNextPage]);
+  useLoadMore(end, paging, inbox.fetchNextPage);
 
   return (
     <div className="wrap mx-0 w-full max-w-none p-0 min-[60rem]:flex min-[60rem]:min-h-0 min-[60rem]:flex-auto min-[60rem]:flex-col">
@@ -194,10 +105,10 @@ export default function Inbox() {
           <>
             <FolderPicker
               current={label}
-              currentAccountId={accountId}
-              isDefault={isDefault}
-              onPick={pickFolder}
-              onDefault={makeDefault}
+              currentAccountId={folder.accountId}
+              isDefault={folder.isDefault}
+              onPick={folder.pick}
+              onDefault={folder.makeDefault}
             />
             <ThreadListScroll>
               {compact && rows.length > 0 ? <CompactListHeader /> : null}

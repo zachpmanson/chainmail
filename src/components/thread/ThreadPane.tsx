@@ -1,11 +1,10 @@
 import { ArrowTopRightOnSquareIcon, QueueListIcon } from "@heroicons/react/24/outline";
-import { useEffect, useRef } from "react";
 import { flushSync } from "react-dom";
 import { useMailAction, useReadAction } from "../../lib/inbox/mailActions";
 import { useAccountId } from "../../lib/inbox/useAccountId";
 import { usePrefs } from "../../lib/prefs/usePrefs";
 import { withTransition } from "../../lib/thread/viewTransition";
-import { dismissToast, pushToast, SAID_MS } from "../../lib/ui/toasts";
+import useOwnToast from "../../lib/ui/useOwnToast";
 import ArchiveGlyph from "../inbox/ArchiveGlyph";
 import AttachmentCount from "../inbox/AttachmentCount";
 import MailCount from "../inbox/MailCount";
@@ -46,17 +45,8 @@ export default function ThreadPane({
   const tree = usePrefs((s) => s.tree);
   const setTree = usePrefs((s) => s.setTree);
 
-  // The pane outlives the thread, so its toast is taken down by hand when the thread changes.
-  const said = useRef<number | null>(null);
-  const say = (text: string, kind: "note" | "fail") => {
-    if (said.current !== null) dismissToast(said.current);
-    said.current = pushToast(text, kind, kind === "note" ? SAID_MS : null);
-  };
-
-  useEffect(() => {
-    if (said.current !== null) dismissToast(said.current);
-    said.current = null;
-  }, [thread?.rootExtId]);
+  // The pane outlives the thread, so its toast goes when the thread changes.
+  const say = useOwnToast(thread?.rootExtId);
 
   // Optimistic (see lib/inbox/lists), then re-read: the server reconciles every message in the
   // thread, and a refusal puts the count back.

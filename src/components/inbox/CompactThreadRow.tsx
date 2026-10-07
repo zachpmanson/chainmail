@@ -1,12 +1,12 @@
-import { useRef, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { type ChainHit } from "../../lib/api/api";
 import { newest } from "../../lib/inbox/newest";
 import { whenShort } from "../../lib/ui/stamp";
 import IconButton from "../ui/IconButton";
 import { useMailAction } from "../../lib/inbox/mailActions";
 import ArchiveGlyph from "./ArchiveGlyph";
-import { refusal, sentence, VERBS, SAID_MS } from "./MailVerbs";
-import { dismissToast, pushToast } from "../../lib/ui/toasts";
+import { refusal, sentence, VERBS } from "./MailVerbs";
+import useOwnToast from "../../lib/ui/useOwnToast";
 import ThreadCounts from "./ThreadCounts";
 import ThreadRow, { subjectOf } from "./ThreadRow";
 
@@ -28,11 +28,7 @@ export default function CompactThreadRow({
 }) {
   const last = newest(thread.best ?? []);
   const subject = subjectOf(thread);
-  const archiveToast = useRef<number | null>(null);
-  const sayArchive = (text: string, kind: "note" | "fail") => {
-    if (archiveToast.current !== null) dismissToast(archiveToast.current);
-    archiveToast.current = pushToast(text, kind, kind === "note" ? SAID_MS : null);
-  };
+  const sayArchive = useOwnToast();
   const archive = useMailAction({
     onError: (error, request) => {
       sayArchive(refusal(error, "-mail-write", VERBS[request.action] ?? "That change"), "fail");

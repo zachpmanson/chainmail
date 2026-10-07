@@ -36,13 +36,15 @@ const trim = (a: Asked): Asked => ({
   accountId: a.accountId,
 });
 
-/** The same four questions, said two ways. */
-const same = (a: Asked, b: Asked) =>
-  a.q.trim() === b.q.trim() &&
-  a.mode === b.mode &&
-  a.person.trim() === b.person.trim() &&
-  a.since.trim() === b.since.trim() &&
-  a.accountId === b.accountId;
+/** Field order is fixed by `Asked`'s constructors, so equal questions give equal keys. */
+const key = (a: Asked) => JSON.stringify(a);
+
+/** The same questions, said two ways. */
+const same = (a: Asked, b: Asked) => key(trim(a)) === key(trim(b));
+
+/** The home page's search params, or null on any other page. */
+const homeSearch = (location: { pathname: string; search: unknown }) =>
+  location.pathname === "/" ? (location.search as Record<string, unknown>) : null;
 
 /**
  * Nav search: focus expands it over the nav, blur commits the draft, and Escape, × or clearing
@@ -53,8 +55,8 @@ export default function NavSearch() {
   // Read from the URL each render so links, Back and reload move the box too.
   const asked = useRouterState({
     select: (s): Asked => {
-      if (s.location.pathname !== "/") return NOTHING;
-      const search = s.location.search as Record<string, unknown>;
+      const search = homeSearch(s.location);
+      if (!search) return NOTHING;
       return {
         q: typeof search.q === "string" ? search.q : "",
         mode: isMode(search.mode) ? search.mode : "hybrid",
@@ -67,9 +69,8 @@ export default function NavSearch() {
 
   const openThread = useRouterState({
     select: (s): string | undefined => {
-      if (s.location.pathname !== "/") return undefined;
-      const search = s.location.search as Record<string, unknown>;
-      return typeof search.open === "string" ? search.open : undefined;
+      const open = homeSearch(s.location)?.open;
+      return typeof open === "string" ? open : undefined;
     },
   });
 
@@ -79,7 +80,7 @@ export default function NavSearch() {
   const shown = draft ?? asked;
 
   // Drop the draft only once the new URL lands, or the fields flash the old question for a frame.
-  const address = `${asked.q}\u0000${asked.mode}\u0000${asked.person}\u0000${asked.since}\u0000${asked.accountId}`;
+  const address = key(asked);
   useEffect(() => {
     setDraft(null);
   }, [address]);

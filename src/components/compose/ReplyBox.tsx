@@ -1,12 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useReducer, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { $api, type CorpusEntry, type SendResponse } from "../../lib/api/api";
 import { useAccountId } from "../../lib/inbox/useAccountId";
 import { staleAfterMail } from "../../lib/inbox/mailActions";
-import { dismissToast, pushToast } from "../../lib/ui/toasts";
+import useOwnToast from "../../lib/ui/useOwnToast";
 import ComposerFields from "./ComposerFields";
 import type { Draft } from "./Draft";
-import { refusal, SAID_MS } from "../inbox/MailVerbs";
+import { refusal } from "../inbox/MailVerbs";
 import CheckboxRow from "../ui/CheckboxRow";
 import Button from "../ui/Button";
 import InlineAlert from "../ui/InlineAlert";
@@ -16,6 +16,61 @@ import ReplyTarget from "./ReplyTarget";
 import useAccounts from "./useAccounts";
 import useBusyTask from "./useBusyTask";
 import useReplyRecipients from "./useReplyRecipients";
+
+type Step = { kind: "editing" } | { kind: "reviewing"; plan: SendResponse; sendFailed: boolean };
+
+type State = {
+  /** The reader's words alone; the quote is added on the way out. */
+  own: string;
+  html: boolean;
+  accountId: string;
+  /** The recipient fields and sender selector start closed behind a summary line. */
+  editingRecipients: boolean;
+  step: Step;
+};
+
+type Action =
+  | { type: "retarget"; accountId: string }
+  | { type: "words"; own: string }
+  | { type: "html"; html: boolean }
+  | { type: "account"; accountId: string }
+  | { type: "editRecipients" }
+  | { type: "planned"; plan: SendResponse }
+  | { type: "edit" }
+  | { type: "sent" }
+  | { type: "sendFailed" };
+
+const editing: Step = { kind: "editing" };
+
+function reduce(state: State, action: Action): State {
+  switch (action.type) {
+    // A plan quotes the message it was made for, so retargeting drops it; the words stay.
+    case "retarget":
+      return { ...state, accountId: action.accountId, editingRecipients: false, step: editing };
+    case "words":
+      return { ...state, own: action.own };
+    case "html":
+      return { ...state, html: action.html };
+    case "account":
+      return { ...state, accountId: action.accountId, step: editing };
+    case "editRecipients":
+      return { ...state, editingRecipients: true };
+    case "planned":
+      return {
+        ...state,
+        accountId: action.plan.accountId || state.accountId,
+        step: { kind: "reviewing", plan: action.plan, sendFailed: false },
+      };
+    case "edit":
+      return { ...state, step: editing };
+    case "sent":
+      return { ...state, own: "", editingRecipients: false, step: editing };
+    case "sendFailed":
+      return state.step.kind === "reviewing"
+        ? { ...state, step: { ...state.step, sendFailed: true } }
+        : state;
+  }
+}
 
 /**
  * Answers the newest answerable message unless AnswerPress names another. The quote is
@@ -40,35 +95,34 @@ export default function ReplyBox({
 }) {
   const queryClient = useQueryClient();
   const routeAccountId = useAccountId();
-  const [accountId, setAccountId] = useState(routeAccountId ?? "");
+  const [{ own, html, accountId, editingRecipients, step }, dispatch] = useReducer(reduce, {
+    own: "",
+    html: true,
+    accountId: routeAccountId ?? "",
+    editingRecipients: false,
+    step: editing,
+  });
   const { connected } = useAccounts();
   const displayedAccountId = accountId || (connected.length === 1 ? (connected[0]?.id ?? "") : "");
-  // The reader's words alone; the quote is added on the way out.
-  const [own, setOwn] = useState("");
-  const [html, setHtml] = useState(true);
-  const [plan, setPlan] = useState<SendResponse | null>(null);
-  // The recipient fields and sender selector start closed behind a summary line.
-  const [editing, setEditing] = useState(false);
   const recipients = useReplyRecipients(answer, all, routeAccountId);
   const { to, cc } = recipients;
-  const { busy, error, run } = useBusyTask();
+  const { busy, error, clearError, run } = useBusyTask();
   const send = $api.useMutation("post", "/v1/send");
-  const say = useReplyToast(thread.rootExtId);
+  // The box isn't remounted between threads, so its toast goes when the thread changes.
+  const say = useOwnToast(thread.rootExtId);
+  const sendFailed = step.kind === "reviewing" && step.sendFailed;
   // Replies have no subject field; the server derives it.
   const draft: Draft = { to, cc, subject: "", body: own };
   const onDraft = (patch: Partial<Draft>) => {
     if (patch.to) recipients.changeTo(patch.to);
     if (patch.cc) recipients.changeCc(patch.cc);
-    if (patch.body !== undefined) setOwn(patch.body);
+    if (patch.body !== undefined) dispatch({ type: "words", own: patch.body });
   };
   // A ref rather than a document query: this is one box among any the shell has drawn.
   const host = useRef<HTMLDivElement | null>(null);
 
-  // A plan quotes the message it was made for, so retargeting drops it; the words stay.
   useEffect(() => {
-    setPlan(null);
-    setAccountId(routeAccountId ?? "");
-    setEditing(false);
+    dispatch({ type: "retarget", accountId: routeAccountId ?? "" });
   }, [answer.extId, routeAccountId]);
 
   // A press on a message's answer control brings the box, which may be screens away, to the reader.
@@ -82,7 +136,7 @@ export default function ReplyBox({
   const review = () =>
     run(
       async () => {
-        const res = await send.mutateAsync({
+        const plan = await send.mutateAsync({
           body: {
             entry: answer.extId,
             body: own,
@@ -93,9 +147,8 @@ export default function ReplyBox({
             ...recipients.edited,
           },
         });
-        setPlan(res);
-        if (res.accountId) setAccountId(res.accountId);
-        recipients.adopt(res);
+        dispatch({ type: "planned", plan });
+        recipients.adopt(plan);
       },
       (e) => refusal(e, "-send-mail", "Preparing the reply"),
     );
@@ -103,7 +156,8 @@ export default function ReplyBox({
   // The server files the sent message into the corpus in the same request, so the
   // thread is re-read rather than drawn optimistically.
   async function ship() {
-    if (!plan) return;
+    if (step.kind !== "reviewing") return;
+    const { plan } = step;
     await run(
       async () => {
         await send.mutateAsync({
@@ -117,26 +171,32 @@ export default function ReplyBox({
             ...recipients.edited,
           },
         });
-        setPlan(null);
-        setOwn("");
+        dispatch({ type: "sent" });
         recipients.untouch();
-        setEditing(false);
         say(`Answered ${words.who || "the sender"} — sent, and filed in the trail below.`);
       },
-      // The plan stays on screen; the server's message says whether it may have sent.
-      (e) => refusal(e, "-send-mail", "Sending the reply"),
+      (e) => {
+        // The request may have reached Gmail even if its response did not; a retry could duplicate mail.
+        dispatch({ type: "sendFailed" });
+        return refusal(e, "-send-mail", "Sending the reply");
+      },
     );
     staleAfterMail(queryClient);
   }
 
-  const errorAlert = error ? <InlineAlert>{error}</InlineAlert> : null;
+  const errorAlert = error ? (
+    <InlineAlert>
+      {error}
+      {sendFailed ? " Check Gmail before attempting to send again." : ""}
+    </InlineAlert>
+  ) : null;
 
   return (
     <div className="mt-4 mb-1 rounded-lg border border-line bg-card px-3 py-2" ref={host}>
       <section aria-label="Reply">
-        {plan ? (
+        {step.kind === "reviewing" ? (
           <>
-            <ReplyPlan plan={plan} />
+            <ReplyPlan plan={step.plan} />
             {errorAlert}
             <footer className="mt-2 flex items-center justify-end gap-2">
               <Button
@@ -144,19 +204,24 @@ export default function ReplyBox({
                 density="compact"
                 type="button"
                 disabled={busy}
-                onClick={() => setPlan(null)}
+                onClick={() => {
+                  dispatch({ type: "edit" });
+                  clearError();
+                }}
               >
                 {busy ? "Working…" : "keep editing"}
               </Button>
-              <Button
-                variant="danger"
-                density="compact"
-                type="button"
-                disabled={busy || to.length === 0}
-                onClick={() => void ship()}
-              >
-                {busy ? "Sending…" : "send this reply"}
-              </Button>
+              {sendFailed ? null : (
+                <Button
+                  variant="danger"
+                  density="compact"
+                  type="button"
+                  disabled={busy || to.length === 0}
+                  onClick={() => void ship()}
+                >
+                  {busy ? "Sending…" : "send this reply"}
+                </Button>
+              )}
             </footer>
           </>
         ) : (
@@ -165,18 +230,15 @@ export default function ReplyBox({
             <ComposerFields
               mode={{
                 kind: "reply",
-                editingRecipients: editing,
-                onEditRecipients: () => setEditing(true),
+                editingRecipients,
+                onEditRecipients: () => dispatch({ type: "editRecipients" }),
                 target: <ReplyTarget answerAnchor={answerAnchor} words={words} />,
               }}
               from={
                 <AccountSelect
                   value={displayedAccountId}
                   disabled={busy}
-                  onChange={(id) => {
-                    setAccountId(id);
-                    setPlan(null);
-                  }}
+                  onChange={(id) => dispatch({ type: "account", accountId: id })}
                 />
               }
               draft={draft}
@@ -205,7 +267,7 @@ export default function ReplyBox({
                   disabled={busy}
                   accent="accent"
                   inputClassName="m-0 cursor-pointer"
-                  onChange={(e) => setHtml(e.target.checked)}
+                  onChange={(e) => dispatch({ type: "html", html: e.target.checked })}
                 >
                   send html
                 </CheckboxRow>
@@ -228,17 +290,4 @@ export default function ReplyBox({
       </section>
     </div>
   );
-}
-
-/** The box isn't remounted between threads, so its toast goes when the thread changes; each send replaces the last. */
-function useReplyToast(threadKey: string) {
-  const said = useRef<number | null>(null);
-  useEffect(() => {
-    if (said.current !== null) dismissToast(said.current);
-    said.current = null;
-  }, [threadKey]);
-  return (text: string) => {
-    if (said.current !== null) dismissToast(said.current);
-    said.current = pushToast(text, "note", SAID_MS);
-  };
 }

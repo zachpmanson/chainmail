@@ -2,18 +2,18 @@ import FormField from "../ui/FormField";
 import IconButton from "../ui/IconButton";
 import Button from "../ui/Button";
 import TextInput from "../ui/TextInput";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { $api } from "../../lib/api/api";
 import { useAccountId } from "../../lib/inbox/useAccountId";
 import { useMailAction } from "../../lib/inbox/mailActions";
 import { useBuildPage } from "../../lib/inbox/build";
-import { dismissToast, pushToast } from "../../lib/ui/toasts";
+import useOwnToast from "../../lib/ui/useOwnToast";
 import Failure from "../thread/Failure";
 import ArchiveGlyph from "./ArchiveGlyph";
 import MoveFolder from "./MoveFolder";
 import TrashGlyph from "./TrashGlyph";
-import { SAID_MS, VERBS, refusal, sentence } from "./MailVerbs";
+import { VERBS, refusal, sentence } from "./MailVerbs";
 
 /**
  * Read per render, not memoised: the header commits with the page's first render,
@@ -39,12 +39,8 @@ export default function ActionBar({
 }) {
   const [title, setTitle] = useState("");
   const [braiding, setBraiding] = useState(false);
-  // Keep the toast id so a later action replaces its toast rather than stacking.
-  const said = useRef<number | null>(null);
-  const say = (text: string, kind: "note" | "fail") => {
-    if (said.current !== null) dismissToast(said.current);
-    said.current = pushToast(text, kind, kind === "note" ? SAID_MS : null);
-  };
+  // A later action replaces its toast rather than stacking.
+  const say = useOwnToast();
   const { build, start } = useBuildPage();
   // The corpus doesn't record whose mailbox it came from, so the braid needs the reader's addresses from settings.
   const settings = $api.useQuery("get", "/v1/settings", {});
