@@ -11,7 +11,7 @@ import { ComposerFields } from "./ComposerFields";
 import { ComposerFlow } from "./ComposerFlow";
 import { refusal, SAID_MS } from "../inbox/MailVerbs";
 import { CheckboxRow } from "../ui/Checkbox";
-import { IconButton, SelectInput } from "../ui/controls";
+import { ReceiptIconButton, SelectInput } from "../ui/controls";
 
 /**
  * The reply box: the one thing this pane can say back.
@@ -164,7 +164,7 @@ export function AnswerPress({
     ? "This is the message the box below is answering"
     : "Reply all to this message, in the box at the bottom of the thread";
   return (
-    <IconButton
+    <ReceiptIconButton
       type="button"
       className="replyall"
       aria-pressed={pressed}
@@ -173,7 +173,7 @@ export function AnswerPress({
       onClick={() => onPress(extId)}
     >
       <ArrowUturnLeftIcon width={18} height={18} aria-hidden="true" />
-    </IconButton>
+    </ReceiptIconButton>
   );
 }
 

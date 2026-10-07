@@ -68,6 +68,22 @@ export function IconButton({ className = "", ...props }: ButtonHTMLAttributes<HT
   );
 }
 
+/**
+ * Compact icon button for message receipts. Keep the 18px glyph, compact hit area,
+ * hover state and pressed state together here rather than spread across a stylesheet.
+ */
+export function ReceiptIconButton({
+  className = "",
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      className={`inline-flex shrink-0 items-center justify-center rounded-[6px] border border-transparent bg-transparent p-[.25rem_.3rem] font-[inherit] text-muted [cursor:pointer] hover:border-line hover:bg-card hover:text-accent aria-pressed:border-accent aria-pressed:bg-mine aria-pressed:text-accent [&_svg]:block [&_svg]:size-[18px] ${className}`.trim()}
+      {...props}
+    />
+  );
+}
+
 const fieldBase =
   "min-h-8 min-w-0 rounded-md border border-line bg-card px-2 py-1 font-[inherit] text-sm text-fg placeholder:text-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent disabled:cursor-not-allowed disabled:opacity-60";
 
