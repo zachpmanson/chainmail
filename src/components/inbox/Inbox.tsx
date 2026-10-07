@@ -265,7 +265,7 @@ export function Inbox() {
   }, [paging, fetchNextPage]);
 
   return (
-    <div className="wrap ibwrap mx-0 w-full max-w-none pt-0 pb-0 min-[60rem]:flex min-[60rem]:flex-1 min-[60rem]:flex-col min-[60rem]:min-h-0">
+    <div className="wrap ibwrap mx-0 w-full max-w-none px-0 pt-0 pb-0 min-[60rem]:flex min-[60rem]:flex-1 min-[60rem]:flex-col min-[60rem]:min-h-0">
       {/* A failure with nothing to show is the whole page's; one with rows already
           on screen belongs at the end of the list, where the reader is. */}
       {inbox.isError && !inbox.data ? <Failure error={inbox.error} /> : null}

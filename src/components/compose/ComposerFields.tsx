@@ -84,7 +84,7 @@ export function ComposerFields({
             <Button
               variant="quiet"
               type="button"
-              className="replysummary"
+              className="replysummary group col-span-2 flex h-[var(--addrrow)] min-w-0 flex-1 gap-[.3rem] overflow-hidden border-0 bg-transparent p-0 text-left font-[inherit] text-[.74rem] font-normal text-muted cursor-pointer hover:border-0 hover:bg-transparent hover:text-muted disabled:cursor-default disabled:opacity-[.55] focus-visible:rounded-[4px] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent"
               aria-expanded={false}
               aria-label={`Edit recipients — currently ${recipientWords(to, cc)}`}
               title="Edit recipients"
@@ -92,7 +92,7 @@ export function ComposerFields({
               onClick={onEditRecipients}
             >
               <span className="replylabel inline-flex h-[var(--addrrow)] items-center">to:</span>
-              <span className="replynames">
+              <span className="replynames min-w-0 overflow-hidden text-ellipsis whitespace-nowrap group-hover:text-fg">
                 {to.length ? names(to) : null}
                 {cc.length ? (
                   <>
@@ -100,9 +100,7 @@ export function ComposerFields({
                     {names(cc)}
                   </>
                 ) : null}
-                {!to.length && !cc.length ? (
-                  <span className="replynone">add an address</span>
-                ) : null}
+                {!to.length && !cc.length ? <span className="italic">add an address</span> : null}
               </span>
             </Button>
           )}

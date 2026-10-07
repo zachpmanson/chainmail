@@ -522,7 +522,7 @@ export function ReplyBox({
   const editorActions = (
     <div className="replyopts mr-auto flex items-center gap-4">
       <CheckboxRow
-        className="replytick flex cursor-pointer items-center gap-[.4rem] text-[.74rem] text-muted"
+        className="replytick flex cursor-pointer items-center gap-[.4rem] text-[.74rem] text-muted has-[:disabled]:cursor-default has-[:disabled]:opacity-[.55]"
         title="Answer everyone the message was addressed to. Edit the reply's audience in the fields above."
         checked={all}
         disabled={busy}
@@ -533,7 +533,7 @@ export function ReplyBox({
         reply all
       </CheckboxRow>
       <CheckboxRow
-        className="replytick flex cursor-pointer items-center gap-[.4rem] text-[.74rem] text-muted"
+        className="replytick flex cursor-pointer items-center gap-[.4rem] text-[.74rem] text-muted has-[:disabled]:cursor-default has-[:disabled]:opacity-[.55]"
         title="Send the HTML rendering beside the same plain-text message. Unchecked sends plain text alone."
         checked={html}
         disabled={busy}

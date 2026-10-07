@@ -14,6 +14,22 @@ const ACROSS = { v: 11, h: 16 } as const;
 /* keep just enough floor for a single thread lane to stay readable; the svg is
    otherwise sized to its lane count so the overlay panel can hug the tree */
 const MIN_W = 96;
+const orgFill = {
+  o1: "fill-org-1",
+  o2: "fill-org-2",
+  o3: "fill-org-3",
+  o4: "fill-org-4",
+  o5: "fill-org-5",
+} as const;
+const orgStroke = {
+  o1: "stroke-org-1",
+  o2: "stroke-org-2",
+  o3: "stroke-org-3",
+  o4: "stroke-org-4",
+  o5: "stroke-org-5",
+} as const;
+const colorClass = (classes: typeof orgFill | typeof orgStroke, slot: string) =>
+  classes[slot as keyof typeof orgFill] ?? classes.o5;
 
 export type Orient = "v" | "h";
 
@@ -311,6 +327,7 @@ export function Minimap({ v }: { v: View }) {
     const [width, height] = size(o, v.rows.length, g.laneCount);
     return (
       <svg
+        className="block"
         width={width}
         height={height}
         viewBox={`0 0 ${width} ${height}`}
@@ -331,7 +348,7 @@ export function Minimap({ v }: { v: View }) {
           return (
             <rect
               key={`hit-${o}-${r.id}`}
-              className="hit"
+              className="hit fill-transparent cursor-pointer hover:fill-quote"
               data-id={r.id}
               x={x2}
               y={y2}
@@ -352,7 +369,7 @@ export function Minimap({ v }: { v: View }) {
           if (!n.parent) return null;
           const [x1, y1] = pos(o, rowOf.get(n.parent)!, byId.get(n.parent)!.lane);
           const [x2, y2] = pos(o, rowOf.get(r.id)!, n.lane);
-          const cls = `lk${n.isFork ? " fk" : ""}`;
+          const cls = `lk fill-none stroke-line stroke-[1.3] pointer-events-none${n.isFork ? " fk stroke-org-4 stroke-[1.6]" : ""}`;
           return (
             <path
               key={`lk-${o}-${r.id}`}
@@ -372,9 +389,15 @@ export function Minimap({ v }: { v: View }) {
           const [cx, cy] = pos(o, rowOf.get(r.id)!, n.lane);
           return (
             <g key={`nd-${o}-${r.id}`} className={cls} data-id={r.id} data-p={n.parent ?? ""}>
-              {n.isRoot ? <path className="rtcap" d={capD(o, cx, cy)} /> : null}
+              {n.isRoot ? (
+                <path
+                  className="rtcap pointer-events-none fill-none stroke-muted stroke-[1.6] opacity-[.85]"
+                  d={capD(o, cx, cy)}
+                />
+              ) : null}
               {note ? (
                 <rect
+                  className="pointer-events-none fill-muted stroke-card stroke-[1.4]"
                   x={cx - 3.5}
                   y={cy - 3.5}
                   width={7}
@@ -382,7 +405,12 @@ export function Minimap({ v }: { v: View }) {
                   transform={`rotate(45 ${cx} ${cy})`}
                 />
               ) : (
-                <circle cx={cx} cy={cy} r={3.9} />
+                <circle
+                  className={`pointer-events-none cursor-pointer stroke-card stroke-[1.4] ${r.entry.quoted ? `fill-card stroke-[1.9] ${colorClass(orgStroke, r.orgSlot)}` : colorClass(orgFill, r.orgSlot)}`}
+                  cx={cx}
+                  cy={cy}
+                  r={3.9}
+                />
               )}
             </g>
           );
@@ -392,25 +420,25 @@ export function Minimap({ v }: { v: View }) {
   };
 
   const tallyLegend = (
-    <div className="foot2 border-t border-line px-[.6rem] pt-[.28rem] pb-[.35rem] text-[.64rem]">
-      <div className="tally flex flex-col gap-[.12rem]">
+    <div className="foot2 flex flex-col gap-[.22rem] border-t border-line px-[.6rem] pt-[.28rem] pb-[.35rem] text-[.58rem] leading-[1.25] text-muted">
+      <div className="tally flex flex-col gap-[.12rem] whitespace-nowrap">
         <div>
-          <b>{g.roots}</b> chains
+          <b className="font-semibold text-fg">{g.roots}</b> chains
         </div>
         <div>
-          <b>{g.laneCount}</b> lanes
+          <b className="font-semibold text-fg">{g.laneCount}</b> lanes
         </div>
         <div>
-          <b>{deepest}</b> deep
+          <b className="font-semibold text-fg">{deepest}</b> deep
         </div>
         <div>
-          <b>{g.forks}</b> forks
+          <b className="font-semibold text-fg">{g.forks}</b> forks
         </div>
         <div>
-          <b>{g.leaves}</b> dead ends
+          <b className="font-semibold text-fg">{g.leaves}</b> dead ends
         </div>
       </div>
-      <dl className="legend m-0 mt-[.25rem] flex flex-col gap-[.1rem]">
+      <dl className="legend m-0 flex flex-col gap-[.1rem]">
         <div className="flex items-center gap-[.34rem]">
           <svg className="lg h-[.7em] w-[.7em] shrink-0" viewBox="0 0 10 10" aria-hidden="true">
             <circle cx="5" cy="5" r="2.9" fill="currentColor" />
@@ -466,13 +494,13 @@ export function Minimap({ v }: { v: View }) {
       </h3>
       {/* both orientations are in the DOM; CSS shows the live one (body.tree-h
           swaps to the horizontal row) so behaviour.js needs no React state */}
-      <div className="vrow">
+      <div className="vrow flex min-h-0 flex-1 flex-col">
         <div className="mbody min-h-0 flex-1 overflow-auto px-[.3rem] pt-[.45rem] pb-[.8rem]">
           {treeSvg("v")}
         </div>
         {tallyLegend}
       </div>
-      <div className="hrow">
+      <div className="hrow hidden min-h-0 flex-1">
         <div className="mbody min-h-0 flex-1 overflow-auto px-[.3rem] pt-[.45rem] pb-[.8rem]">
           {treeSvg("h")}
         </div>

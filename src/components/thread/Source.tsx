@@ -30,15 +30,24 @@ function SourceIds({
         return (
           <Fragment key={i}>
             {i ? ", " : ""}
-            <span className="sid">
+            <span className="sid whitespace-nowrap">
               {anchor ? (
-                <a href={`#${anchor}`} title="The message this was unspooled from, on this page">
+                <a
+                  className="border-b border-dotted border-current text-inherit no-underline hover:text-accent"
+                  href={`#${anchor}`}
+                  title="The message this was unspooled from, on this page"
+                >
                   {s.text}
                 </a>
               ) : unspooled || !s.gmailId ? (
                 s.text
               ) : (
-                <a href={gmailMessageURL(s.gmailId)} target="_blank" rel="noopener">
+                <a
+                  className="border-b border-dotted border-current text-inherit no-underline hover:text-accent"
+                  href={gmailMessageURL(s.gmailId)}
+                  target="_blank"
+                  rel="noopener"
+                >
                   {s.text}
                 </a>
               )}
@@ -71,12 +80,12 @@ export function Source({
   if (!source) return null;
   const p = provenance(source);
   if (p.kind === "prose")
-    return <span className="src font-mono text-[.64rem] text-muted">{p.text}</span>;
+    return <span className="src ml-auto font-mono text-[.64rem] text-muted">{p.text}</span>;
   // "unspooled from …" lines carry an empty prefix only when not unspooled;
   // prose never reaches here, so prefix !== "" means the ids were unspooled
   const unspooled = p.prefix !== "";
   return (
-    <span className="src font-mono text-[.64rem] text-muted">
+    <span className="src ml-auto font-mono text-[.64rem] text-muted">
       {p.prefix}
       <SourceIds ids={p.ids} unspooled={unspooled} anchorByGmail={anchorByGmail} />
     </span>

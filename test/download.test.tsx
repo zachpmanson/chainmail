@@ -507,6 +507,11 @@ describe("a delimited file in the window", () => {
         "note",
       ]);
       expect(t.querySelectorAll("tbody tr").length).toBe(3);
+      expect(t.classList).toContain("border-collapse");
+      expect(t.querySelector("thead th")!.classList).toContain("sticky");
+      const lastCell = t.querySelector("tbody tr:last-child td:last-child")!;
+      expect(lastCell.classList).toContain("border-r-0");
+      expect(lastCell.classList).toContain("border-b-0");
       expect(t.querySelector("tbody tr td")!.textContent).toBe("Nova");
       // One element at a time: the text window is not also showing the same file.
       expect(m.grid()!.hidden).toBe(false);
@@ -571,7 +576,8 @@ describe("a delimited file in the window", () => {
     return vi.waitFor(() => {
       const first = m.table()!.querySelector("tbody tr")!;
       const cells = [...first.querySelectorAll("td")];
-      expect(cells.map((c) => c.className)).toEqual(["", "num", ""]);
+      expect(cells.map((c) => c.classList.contains("text-right"))).toEqual([false, true, false]);
+      expect(cells[1]!.classList).toContain("tabular-nums");
       m.detach();
     });
   });

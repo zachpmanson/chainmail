@@ -654,7 +654,8 @@ function attachPopover(doc: Document, on: On): () => void {
   const build = () => {
     if (host) return;
     host = doc.createElement("div");
-    host.className = "pop";
+    host.className =
+      "pop fixed inset-0 z-[55] flex items-center justify-center p-6 bg-[color-mix(in_srgb,var(--bg)_92%,transparent)] backdrop-blur-[3px]";
     host.setAttribute("role", "dialog");
     host.setAttribute("aria-modal", "true");
     // Named by its caption rather than by a fixed string: the window holds a
@@ -867,25 +868,41 @@ function attachPopover(doc: Document, on: On): () => void {
    *  any of it become markup. A rounded row is padded rather than broken, so a
    *  ragged export still lines up under its header. */
   const drawTable = (t: Table) => {
-    const cell = (tag: "th" | "td", value: string, num: boolean) => {
+    const cell = (
+      tag: "th" | "td",
+      value: string,
+      num: boolean,
+      lastColumn: boolean,
+      lastRow: boolean,
+    ) => {
       const el = doc.createElement(tag);
       el.textContent = value;
-      if (num && tag === "td") el.className = "num";
+      el.className = [
+        "max-w-[26rem] border-r border-b border-line px-[.6rem] py-[.28rem] text-left align-top whitespace-pre-wrap [overflow-wrap:anywhere]",
+        lastColumn && "border-r-0",
+        lastRow && "border-b-0",
+        tag === "th" && "sticky top-0 z-[1] bg-card font-[650] text-muted",
+        tag === "td" && num && "text-right tabular-nums",
+      ]
+        .filter(Boolean)
+        .join(" ");
       return el;
     };
     const table = doc.createElement("table");
-    table.className = "poptable";
+    table.className = "poptable border-collapse font-mono text-[.74rem]";
     const head = doc.createElement("thead");
     const hr = doc.createElement("tr");
     for (const [i, value] of t.header.entries())
-      hr.appendChild(cell("th", value, t.numeric[i] === true));
+      hr.appendChild(cell("th", value, false, i === t.header.length - 1, t.rows.length === 0));
     head.appendChild(hr);
     table.appendChild(head);
     const body = doc.createElement("tbody");
-    for (const row of t.rows) {
+    for (const [ri, row] of t.rows.entries()) {
       const tr = doc.createElement("tr");
       for (const [i, value] of row.entries())
-        tr.appendChild(cell("td", value, t.numeric[i] === true));
+        tr.appendChild(
+          cell("td", value, t.numeric[i] === true, i === row.length - 1, ri === t.rows.length - 1),
+        );
       body.appendChild(tr);
     }
     table.appendChild(body);

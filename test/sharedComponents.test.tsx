@@ -16,10 +16,10 @@ describe("shared UI primitives", () => {
     const picture = renderToStaticMarkup(
       <Avatar name="Ada Byron" orgSlot="o2" pic="p0" title="Ada Byron <ada@example.test>" />,
     );
-    expect(initials).toContain('class="av o2 grid');
+    expect(initials).toContain('class="av o2 bg-org-2 [--ring:var(--o2)] grid');
     expect(initials).toContain("AB");
     expect(initials).toContain("text-[.78rem]");
-    expect(picture).toContain("av o2 pic p0");
+    expect(picture).toContain("av o2 bg-org-2 [--ring:var(--o2)] pic p0 bg-cover bg-center");
     expect(picture).not.toContain("ini ");
     expect(picture).toContain('title="Ada Byron &lt;ada@example.test&gt;"');
   });

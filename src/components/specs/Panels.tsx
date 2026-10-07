@@ -262,7 +262,7 @@ export function DiffPanel({
     rs.map((r) => (
       <li className="my-[.12rem] text-[.78rem]" key={r.id}>
         <a
-          className="xref text-inherit underline decoration-accent underline-offset-2 hover:text-accent"
+          className="xref text-inherit underline decoration-accent decoration-dotted underline-offset-2 hover:text-accent hover:decoration-solid"
           href={`#${r.id}`}
         >
           <b>{r.entry.kind === "note" ? r.entry.label : r.entry.sender}</b>,{" "}

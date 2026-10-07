@@ -142,7 +142,7 @@ export function Rendered({
 
   if (empty) {
     return (
-      <div className="wrap">
+      <div className="wrap mx-auto max-w-[76rem] px-5 pt-7 pb-14">
         <p style={{ padding: "2rem", color: "var(--muted)" }}>
           Every thread is excluded. Re-enable one from Sources &amp; provenance — reload to reset.
         </p>
