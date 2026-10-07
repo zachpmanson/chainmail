@@ -35,7 +35,7 @@
           version = "0.1.0";
           src = self;
           nodejs = pkgs.nodejs_22;
-          npmDepsHash = "sha256-tKivZsLbemiBeNw0m/JlZl+XWOvNS//3pKg9duuiF+E=";
+          npmDepsHash = "sha256-g0SEep3yu1aBs2CPxo3rAjUkCWTr79u9nGtQTsM3P1c=";
           # The default npmInstallHook re-installs from package.json, which
           # drops the vite-built cmd/server/dist (untracked, not in `files`).
           # The only artifact this package must ship IS that dist, so the
