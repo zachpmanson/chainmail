@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Timeline } from "../src/components/Timeline";
+import { Timeline } from "../src/components/specs/Timeline";
 import { MEDIA_BASE, attHref, localHref, thumbnail } from "../src/lib/attachments";
 import { normalise } from "../src/lib/normalise";
 import { attach } from "../src/client/behaviour";

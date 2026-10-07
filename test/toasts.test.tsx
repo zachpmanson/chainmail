@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { ToastHost } from "../src/components/Toasts";
+import { ToastHost } from "../src/components/ui/Toasts";
 import { clearToasts, dismissToast, pushToast } from "../src/lib/toasts";
 
 afterEach(() => {

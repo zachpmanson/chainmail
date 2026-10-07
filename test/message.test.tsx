@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
-import { Message, type MessageProps } from "../src/components/Message";
+import { Message, type MessageProps } from "../src/components/thread/Message";
 
 afterEach(cleanup);
 

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
-import { SourcesPanel } from "../src/components/Panels";
-import { ParticipantsPanel } from "../src/components/Participants";
-import { Timeline } from "../src/components/Timeline";
+import { SourcesPanel } from "../src/components/specs/Panels";
+import { ParticipantsPanel } from "../src/components/thread/Participants";
+import { Timeline } from "../src/components/specs/Timeline";
 import { derive } from "../src/lib/derive";
 import { normalise } from "../src/lib/normalise";
 

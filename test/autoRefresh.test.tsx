@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render } from "@testing-library/react";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { makeQueryClient } from "../src/lib/queryClient";
-import { AUTO_REFRESH_MS, AutoRefresh } from "../src/components/AutoRefresh";
+import { AUTO_REFRESH_MS, AutoRefresh } from "../src/components/navigation/AutoRefresh";
 
 // React refuses to batch updates outside act() unless told it is under test.
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
