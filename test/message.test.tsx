@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { readFileSync } from "node:fs";
 import { Message, type MessageProps } from "../src/components/thread/Message";
 
 afterEach(cleanup);
@@ -30,10 +29,11 @@ const draw = (over: Partial<MessageProps> = {}) => render(<Message {...bubble(ov
 describe("a bubble drawn from its props alone", () => {
   it("takes the sender, the colour slot and the clock from the caller", () => {
     const { container } = draw();
-    const msg = container.querySelector(".msg")!;
+    const msg = container.querySelector<HTMLElement>(".msg")!;
     expect(msg.classList.contains("msg")).toBe(true);
     expect(msg.classList.contains("o2")).toBe(true);
     expect(msg.classList.contains("mb-2")).toBe(true);
+    expect(msg.style.getPropertyValue("--orgc")).toBe("var(--o2)");
     expect(msg.id).toBe("m1");
     expect(msg.querySelector(".nm")!.textContent).toBe("Ada Okoye");
     expect(msg.querySelector(".org")!.textContent).toBe("Loomworks");
@@ -74,19 +74,8 @@ describe("a bubble drawn from its props alone", () => {
   });
 
   it("draws the copy control as the app's own icon button, and copies", async () => {
-    // The box is the stylesheet's, not the component's: jsdom computes no cascade, so
-    // what is asserted here is the shape the rule states — the 18px glyph and the
-    // padding the pane strip's five icon buttons and the nav's pair are built from.
-    // The receipt's controls share the one rule, so they cannot drift apart.
-    const css = readFileSync("src/styles.css", "utf8");
-    const rule = /\.copyjson, \.origbtn, \.replyall \{([^}]*)\}/.exec(css)?.[1] ?? "";
-    expect(rule).toContain("padding:.25rem .3rem");
-    expect(rule).toContain("border-radius:6px");
-    expect(rule).toContain("border:1px solid transparent");
-    const glyph = /\.copyjson svg, \.origbtn svg, \.replyall svg \{([^}]*)\}/.exec(css)?.[1] ?? "";
-    expect(glyph).toContain("width:18px");
-    expect(glyph).toContain("height:18px");
-
+    // Receipt controls share their presentational component. jsdom does not
+    // compute styles, so assert the Tailwind classes carried by that component.
     // And the state is the glyph, not a word: pressing it must not change the size of
     // what the reader is holding, which is what the word "copied" used to do.
     const writeText = vi.fn().mockResolvedValue(undefined);
@@ -99,8 +88,10 @@ describe("a bubble drawn from its props alone", () => {
     fireEvent.click(btn);
     expect(writeText).toHaveBeenCalledWith(JSON.stringify({ hello: "world" }, null, 2));
     await waitFor(() => expect(btn.getAttribute("title")).toBe("Copied"));
-    expect(btn.className).toBe("copyjson");
-    expect(btn.querySelector("svg")).not.toBeNull();
+    expect(btn.classList.contains("copyjson")).toBe(true);
+    expect(btn.classList.contains("p-[.25rem_.3rem]")).toBe(true);
+    expect(btn.classList.contains("aria-pressed:bg-mine")).toBe(true);
+    expect(btn.classList.contains("[&_svg]:size-[18px]")).toBe(true);
   });
 
   it("draws the answer press in the receipt with the other controls, where it is given one", () => {
@@ -120,7 +111,8 @@ describe("a bubble drawn from its props alone", () => {
       copyJson: { hello: "world" },
     });
     const end = container.querySelector(".hdet .hdetend")!;
-    expect([...end.children].map((el) => el.className)).toEqual(["replyall", "copyjson"]);
+    expect(end.children.item(0)!.classList.contains("replyall")).toBe(true);
+    expect(end.children.item(1)!.classList.contains("copyjson")).toBe(true);
     expect(end.textContent).toBe("answer");
 
     // And a caller with no box to point at draws no press: a built page has no
@@ -285,7 +277,8 @@ describe("how a bubble says what it knows about its clock", () => {
       stamp: { date: "Mon 2 Mar 2026", time: "09:15", tz: "AEDT", zone: "stated" },
     });
     const tz = container.querySelector(".tz")!;
-    expect(tz.className).toBe("tz");
+    expect(tz.classList.contains("text-[.9em]")).toBe(true);
+    expect(tz.classList.contains("opacity-[.75]")).toBe(true);
     expect(tz.textContent).toBe("AEDT");
   });
 
@@ -293,13 +286,13 @@ describe("how a bubble says what it knows about its clock", () => {
     const { container } = draw({
       stamp: { date: "Mon 2 Mar 2026", time: "09:15", tz: "AEDT", zone: "inferred" },
     });
-    expect(container.querySelector(".tz")!.className).toBe("tz tzi");
+    expect(container.querySelector(".tz")!.classList.contains("tzi")).toBe(true);
     expect(container.querySelector(".tz")!.textContent).toBe(" AEDT?");
   });
 
   it("says an unplaced clock is unplaced, rather than leaving it bare", () => {
     const { container } = draw({ stamp: { date: "Mon 2 Mar 2026", zone: "unknown" } });
-    expect(container.querySelector(".tz")!.className).toBe("tz tzu");
+    expect(container.querySelector(".tz")!.classList.contains("tzu")).toBe(true);
     // One mark, and a tooltip that says why: an unplaced clock is common enough
     // that a sentence at each one stops being read.
     expect(container.querySelector(".tz")!.textContent).toBe(" ?");

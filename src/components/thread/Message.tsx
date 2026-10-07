@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import {
   ArrowPathIcon,
+  ArrowTopRightOnSquareIcon,
   CheckIcon,
   ClipboardDocumentIcon,
   CodeBracketIcon,
@@ -9,6 +10,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { receiptNames } from "../../lib/who";
 import { Avatar } from "./Avatar";
 import { StatusBadge } from "../ui/StatusBadge";
+import { ReceiptIconButton } from "../ui/controls";
 import {
   attHref,
   isSkipped,
@@ -49,6 +51,14 @@ import { hasBody, trimBody } from "../../lib/trimBody";
  */
 
 const html = (s: string) => ({ __html: s });
+// The message-level variable colors both the org label and the bubble's decorative stripe.
+const orgColors: Record<string, string> = {
+  o1: "var(--o1)",
+  o2: "var(--o2)",
+  o3: "var(--o3)",
+  o4: "var(--o4)",
+  o5: "var(--o5)",
+};
 
 /** What the header's timestamp needs: the clock as written, and how much of it
  *  is the page's own claim. No `Row` — a caller holding a date, a time and a
@@ -188,8 +198,8 @@ export interface MessageProps {
  * somewhere and inspected whole; all this end knows is that it is JSON.
  */
 /**
- * The copy control, as an icon button: the same 18px glyph in the same box as every
- * other one in the app (see .copyjson in styles.css).
+ * The copy control, as a receipt icon button: the same 18px glyph and compact hit
+ * area as the other receipt controls (see ReceiptIconButton).
  *
  * Its two states are two glyphs rather than a glyph and the word "copied", because
  * a button that grows a word when it is pressed moves the receipt's line under the
@@ -201,7 +211,7 @@ function CopyJson({ data }: { data: unknown }) {
   const [done, setDone] = useState(false);
   const label = done ? "Copied" : "Copy this message's JSON";
   return (
-    <button
+    <ReceiptIconButton
       type="button"
       className="copyjson"
       title={label}
@@ -219,7 +229,7 @@ function CopyJson({ data }: { data: unknown }) {
       ) : (
         <ClipboardDocumentIcon width={18} height={18} aria-hidden="true" />
       )}
-    </button>
+    </ReceiptIconButton>
   );
 }
 
@@ -243,16 +253,16 @@ function Stamp({ id, stamp }: { id: string; stamp: StampData }) {
     >
       {date}
       {time ? ` · ${time}` : ""}
-      {zone === "stated" ? <span className="tz">{tz}</span> : null}
+      {zone === "stated" ? <span className="tz text-[.9em] opacity-[.75]">{tz}</span> : null}
       {zone === "inferred" ? (
         <span
-          className="tz tzi"
+          className="tz tzi border-b border-dotted border-current text-[.9em] opacity-[.55] [cursor:help]"
           title="Inferred — this source stated no zone. The offset was worked out from the client that quoted this message; see the source notes."
         >{` ${tz}?`}</span>
       ) : null}
       {zone === "unknown" ? (
         <span
-          className="tz tzu"
+          className="tz tzu text-[.9em] italic tracking-[.02em] opacity-[.45] [cursor:help]"
           title="Zone unknown — this source stated none and nothing available places it. The clock is a wall clock as quoted, so it cannot be compared with the times above and below it."
         >
           {" ?"}
@@ -298,7 +308,9 @@ function Attachments({
           stays as the one thing that says what the row is before it is read, and
           it is named for a reader who cannot see it — the filenames below say what
           is there, never that these are files. */}
-      <span className="clip text-[.72rem] text-muted" role="img" aria-label="attachments" />
+      <span className="clip text-[.72rem] text-muted" role="img" aria-label="attachments">
+        📎
+      </span>
       {attachments.map((a, i) => {
         const local = localHref(a, mediaBase ?? "");
         const href = attHref(a, mediaBase);
@@ -336,8 +348,10 @@ function Attachments({
         const label = (
           <>
             {thumb}
-            <span className="afn">{a.name}</span>
-            <span className={`ameta${fetching && fetchable ? " text-fg" : ""}`}>
+            <span className="afn text-[.74rem] font-[650] font-mono">{a.name}</span>
+            <span
+              className={`ameta text-[.64rem] text-muted${fetching && fetchable ? " text-fg" : ""}`}
+            >
               {fetching && fetchable ? (
                 /* The same ↻ and the same 0.8s turn the nav's refresh wears (see
                    .navrefresh .spinner): one glyph for "this is being worked on",
@@ -352,7 +366,7 @@ function Attachments({
                    the things that happen to it (see .pullnote) — a mark that
                    comes and goes on every chip must not be a second one. */
                 <ArrowPathIcon
-                  className="spinner"
+                  className="spinner w-[.838em]"
                   width={16}
                   height={16}
                   role="img"
@@ -422,7 +436,7 @@ function Attachments({
             key={i}
             className={[
               "att inline-flex items-baseline gap-[.35rem] rounded-md border border-line bg-quote px-[.45rem] py-[.1rem] text-fg no-underline hover:border-accent",
-              opens && "haspop items-center",
+              opens && "haspop group/attachment items-center",
               fetching && fetchable && "busy border-accent cursor-progress",
             ]
               .filter(Boolean)
@@ -473,6 +487,12 @@ function Attachments({
             {...(fetching && fetchable ? { "aria-busy": true } : {})}
           >
             {label}
+            {opens ? (
+              <ArrowTopRightOnSquareIcon
+                className="size-[.7rem] shrink-0 text-muted group-hover/attachment:text-accent group-focus-visible/attachment:text-accent"
+                aria-hidden="true"
+              />
+            ) : null}
           </a>
         ) : (
           // A thumbnail still earns its place on a chip with nowhere to go — it
@@ -655,8 +675,8 @@ function useOriginal(
  * answer for this message, so it rides the note's title rather than being replaced
  * with a word.
  *
- * The button is an icon button, the same 18px box as every other one in the app
- * (see .copyjson and .origbtn in styles.css). It said "Toggle Styles" and
+ * The button is an icon button, the same 18px box as every other receipt control
+ * (see ReceiptIconButton). It said "Toggle Styles" and
  * "loading…" — a word, and then a different word — which is two widths in the one
  * place a reader is looking when they press it, and made the receipt's line ragged
  * beside the copy control's glyph. What the words meant is the title and the label
@@ -674,9 +694,9 @@ function OriginalControl({ on, state, ask }: { on: boolean; state: Original; ask
         : "Read this sender's mail as they wrote it, with their own styling";
   return (
     <>
-      <button
+      <ReceiptIconButton
         type="button"
-        className={asking ? "origbtn busy" : "origbtn"}
+        className={asking ? "origbtn busy cursor-progress" : "origbtn"}
         aria-pressed={on}
         disabled={asking}
         title={label}
@@ -692,7 +712,7 @@ function OriginalControl({ on, state, ask }: { on: boolean; state: Original; ask
              app states which of a switch's two readings is on. */
           <CodeBracketIcon width={18} height={18} aria-hidden="true" />
         )}
-      </button>
+      </ReceiptIconButton>
       {state.at === "none" ? (
         <span className="origwhy text-[.66rem] italic text-muted" title={state.why}>
           nothing to show
@@ -791,7 +811,12 @@ export function Message(p: MessageProps) {
       className={cls}
       id={p.id}
       data-ch={p.lane}
-      style={p.style}
+      style={
+        {
+          ...p.style,
+          ...(orgColors[p.orgSlot] ? { "--orgc": orgColors[p.orgSlot] } : {}),
+        } as CSSProperties
+      }
       // The flash is on the bubble (see .msg.landed), so it is the bubble's
       // animation end that reaches this handler; the name is checked because an
       // entry with any other animation must not clear a mark that is still
@@ -815,7 +840,9 @@ export function Message(p: MessageProps) {
             <span className="nm text-[.83rem] font-[650]" title={who}>
               {p.sender}
             </span>
-            <span className="org text-[.68rem] font-[650] uppercase tracking-[.07em]">{p.org}</span>
+            <span className="org text-[var(--orgc,var(--muted))] text-[.68rem] font-[650] uppercase tracking-[.07em]">
+              {p.org}
+            </span>
             <Stamp id={p.id} stamp={p.stamp} />
             {p.mark === "new" ? (
               <StatusBadge className="newpill" tone="new">
@@ -887,7 +914,9 @@ export function Message(p: MessageProps) {
         </details>
         <div
           className={[
-            "bub relative overflow-hidden rounded-[10px] border border-line bg-card px-[.7rem] py-[.45rem]",
+            // Keep the sender stripe independent of border/background state (mine, quoted,
+            // hover, permalink flash), and clip it to the rounded bubble via overflow-hidden.
+            "bub relative overflow-hidden rounded-[10px] border border-line bg-card px-[.7rem] py-[.45rem] before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-[var(--orgc,transparent)] before:content-['']",
             p.quoted &&
               "border-dashed border-[color-mix(in_srgb,var(--muted)_55%,transparent)] bg-dash",
             p.me && "border-org-3 bg-mine",

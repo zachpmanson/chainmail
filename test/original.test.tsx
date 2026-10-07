@@ -177,7 +177,7 @@ describe("a message whose own html the corpus holds", () => {
     // The clip is the last thing on the line and the swap sits immediately before
     // it: both in the one group that is pushed to the right edge, so the pair
     // stays together however the receipt's fields above them wrap.
-    expect(end.lastElementChild!.className).toBe("copyjson");
+    expect(end.lastElementChild!.classList.contains("copyjson")).toBe(true);
   });
 
   it("turns the same ↻ the rest of the app turns while it is being fetched", async () => {
@@ -211,7 +211,7 @@ describe("a message whose own html the corpus holds", () => {
     release(sent);
     await waitFor(() => expect(container.querySelector(".bdo")).not.toBeNull());
     const after = container.querySelector(".origbtn") as HTMLElement;
-    expect(after.className).toBe("origbtn");
+    expect(after.classList.contains("origbtn")).toBe(true);
     expect(after.querySelector(".spinner")).toBeNull();
     expect(after.querySelector("svg")).not.toBeNull();
   });
