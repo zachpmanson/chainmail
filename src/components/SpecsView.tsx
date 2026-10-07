@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { $api } from "../lib/api";
 import { when } from "../lib/stamp";
+import { InlineAlert } from "./InlineAlert";
 
 function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -17,14 +18,7 @@ export function SpecsView() {
 
   return (
     <div className="wrap statuswrap">
-      {list.isError ? (
-        <p
-          className="selfail mt-[.7rem] rounded-md border border-line border-l-[3px] border-l-red-700 bg-card px-[.7rem] py-2 text-[.82rem]"
-          role="alert"
-        >
-          {errText(list.error)}
-        </p>
-      ) : null}
+      {list.isError ? <InlineAlert>{errText(list.error)}</InlineAlert> : null}
 
       {list.isFetching && !list.data ? (
         <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">

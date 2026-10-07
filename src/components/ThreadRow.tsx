@@ -150,6 +150,27 @@ export function AttachmentCount({ attachments }: { attachments: number }) {
   );
 }
 
+/** The counts shown at the end of a thread row, with the row's minimum-noise thresholds. */
+export function ThreadCounts({
+  people,
+  entries,
+  attachments,
+  className = "",
+}: {
+  people: number;
+  entries: number;
+  attachments: number;
+  className?: string;
+}) {
+  return (
+    <span className={`ibtail ml-auto flex shrink-0 items-center gap-2 ${className}`.trim()}>
+      {people > 2 ? <PeopleCount people={people} /> : null}
+      {entries > 1 ? <MailCount entries={entries} /> : null}
+      {attachments > 0 ? <AttachmentCount attachments={attachments} /> : null}
+    </span>
+  );
+}
+
 export function ThreadRow({
   thread,
   checked,
@@ -312,13 +333,12 @@ export function ThreadRow({
               >
                 {subject}
               </span>
-              <span className="ibtail ml-auto flex shrink-0 items-center gap-2 group-hover:invisible">
-                {thread.people > 2 ? <PeopleCount people={thread.people} /> : null}
-                {thread.entries > 1 ? <MailCount entries={thread.entries} /> : null}
-                {thread.attachments > 0 ? (
-                  <AttachmentCount attachments={thread.attachments} />
-                ) : null}
-              </span>
+              <ThreadCounts
+                people={thread.people}
+                entries={thread.entries}
+                attachments={thread.attachments}
+                className="group-hover:invisible"
+              />
             </span>
             {meta ? (
               <span className="ibmeta [grid-area:2/2] flex min-w-0 flex-wrap gap-[.6rem] text-[.7rem] text-muted [&_.ibspan]:ml-auto [&_.ibspan]:tabular-nums [&_.ibrank]:font-semibold [&_.ibrank]:text-fg [&_.ibsim]:font-semibold [&_.ibsim]:text-strong">
@@ -365,13 +385,11 @@ export function ThreadRow({
               the thread is a single message. And the paperclip is drawn only when
               the thread carries something: an empty clip says nothing on a page of
               mail where most threads have no files. */}
-              <span className="ibtail ml-auto flex shrink-0 items-center gap-2">
-                {thread.people > 2 ? <PeopleCount people={thread.people} /> : null}
-                {thread.entries > 1 ? <MailCount entries={thread.entries} /> : null}
-                {thread.attachments > 0 ? (
-                  <AttachmentCount attachments={thread.attachments} />
-                ) : null}
-              </span>
+              <ThreadCounts
+                people={thread.people}
+                entries={thread.entries}
+                attachments={thread.attachments}
+              />
             </span>
             <span className="ibsnippet [grid-area:3/1/3/3] min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[.78rem] font-light text-muted">
               {last?.snippet ?? ""}

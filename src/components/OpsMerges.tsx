@@ -1,10 +1,12 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { $api, type OpsMerge, type OpsMergeRecord } from "../lib/api";
+import { applyMergeBatch } from "../lib/opsMerges";
 import { when } from "../lib/stamp";
 import { Checkbox } from "./Checkbox";
 import { StatusBadge } from "./StatusBadge";
 import { Button } from "./controls";
+import { InlineAlert } from "./InlineAlert";
 
 function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -151,47 +153,32 @@ export function OpsMerges() {
     setConfirming(false);
     setError(null);
     setBusy(true);
-    let done = 0;
-    for (const m of batch) {
-      setProgress(`${done + 1} of ${batch.length}`);
-      try {
-        await apply.mutateAsync({ body: { keepId: m.keepId, dropId: m.dropId } });
-      } catch (e) {
-        setError(
-          `${done} of ${batch.length} merged, then folding #${m.dropId} into #${m.keepId} ` +
-            `was refused: ${errText(e)}`,
-        );
-        break;
-      }
-      done += 1;
-      setApplied((prev) => new Set(prev).add(m.dropId));
+    const result = await applyMergeBatch(
+      batch,
+      (target) => apply.mutateAsync({ body: { keepId: target.keepId, dropId: target.dropId } }),
+      setProgress,
+      (dropId) => setApplied((prev) => new Set(prev).add(dropId)),
+    );
+    if (result.refusal) {
+      const { target, error: refusal } = result.refusal;
+      setError(
+        `${result.merged} of ${result.total} merged, then folding #${target.dropId} into #${target.keepId} ` +
+          `was refused: ${errText(refusal)}`,
+      );
     }
     setSelected(new Set());
     setBusy(false);
     setProgress(null);
-    if (done > 0) setLast(done === 1 ? "merged 1 pair" : `merged ${done} pairs`);
+    if (result.merged > 0)
+      setLast(result.merged === 1 ? "merged 1 pair" : `merged ${result.merged} pairs`);
     // Refetch either way: what applied is gone, and a refusal is a statement
     // about the plan, so the screen should show the plan as it is now.
     await qc.invalidateQueries({ queryKey: ["get", "/v1/ops/plan"] });
   }
   return (
     <>
-      {plan.isError ? (
-        <p
-          className="selfail mt-[.7rem] rounded-md border border-line border-l-[3px] border-l-red-700 bg-card px-[.7rem] py-2 text-[.82rem]"
-          role="alert"
-        >
-          {errText(plan.error)}
-        </p>
-      ) : null}
-      {error ? (
-        <p
-          className="selfail mt-[.7rem] rounded-md border border-line border-l-[3px] border-l-red-700 bg-card px-[.7rem] py-2 text-[.82rem]"
-          role="alert"
-        >
-          {error}
-        </p>
-      ) : null}
+      {plan.isError ? <InlineAlert>{errText(plan.error)}</InlineAlert> : null}
+      {error ? <InlineAlert>{error}</InlineAlert> : null}
       {last ? (
         <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">
           {last} — the plan below is the current one.

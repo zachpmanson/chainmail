@@ -1,4 +1,5 @@
 import { ApiError } from "../lib/api";
+import { InlineAlert } from "./InlineAlert";
 
 /** Names a failed request so distinct server responses give distinct instructions. */
 export function statusLabel(status: number): string {
@@ -13,15 +14,12 @@ export function statusLabel(status: number): string {
 export function Failure({ error }: { error: unknown }) {
   const api = error instanceof ApiError ? error : null;
   return (
-    <p
-      className="selfail mt-[.7rem] rounded-md border border-line border-l-[3px] border-l-red-700 bg-card px-[.7rem] py-2 text-[.82rem]"
-      role="alert"
-    >
+    <InlineAlert>
       <strong>
         {api ? `${statusLabel(api.status)} (${api.status})` : "Could not reach the service"}
       </strong>{" "}
       <span>{error instanceof Error ? error.message : String(error)}</span>
-    </p>
+    </InlineAlert>
   );
 }
 

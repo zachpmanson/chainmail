@@ -1,157 +1,16 @@
 import { useQueryClient } from "@tanstack/react-query";
-import type { ReactNode } from "react";
-import { $api, type PersonSummary, type ServiceStatus, type Stats } from "../lib/api";
+import { $api, type PersonSummary } from "../lib/api";
 import { when } from "../lib/stamp";
 import { useCompactMode } from "../lib/compactMode";
 import { Palette } from "./Palette";
 import { FolderPicker } from "./FolderPicker";
-import { Button, ControlLink, SelectInput } from "./controls";
+import { SelectInput } from "./controls";
+import { SettingsAccounts } from "./SettingsAccounts";
+import { SettingsCorpus, SettingsServices } from "./SettingsOverview";
+import { SettingRow, SettingsSection } from "./SettingsScaffold";
 
 function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
-}
-
-function SettingsSection({
-  id,
-  title,
-  description,
-  children,
-}: {
-  id: string;
-  title: string;
-  description: string;
-  children: ReactNode;
-}) {
-  return (
-    <section
-      className="stsection min-w-0 rounded-[10px] border border-[var(--line)] bg-[var(--card)] px-4 py-[.95rem] max-[640px]:p-[.8rem]"
-      aria-labelledby={id}
-    >
-      <header className="mb-[.7rem]">
-        <h2 className="m-0 text-[.91rem] font-semibold tracking-[-.01em]" id={id}>
-          {title}
-        </h2>
-        <p className="mt-1 text-[.74rem] leading-[1.45] text-[var(--muted)]">{description}</p>
-      </header>
-      {children}
-    </section>
-  );
-}
-
-function SettingRow({
-  title,
-  description,
-  note,
-  valueClassName,
-  children,
-}: {
-  title: string;
-  description: string;
-  note?: ReactNode;
-  valueClassName?: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="stsetting-row grid grid-cols-[minmax(0,1fr)_minmax(14rem,.9fr)] items-center gap-4 py-[.78rem] max-[640px]:grid-cols-1 max-[640px]:gap-[.55rem]">
-      <div className="stsetting-copy min-w-0">
-        <h3 className="m-0 text-[.78rem] font-semibold">{title}</h3>
-        <p className="mt-[.2rem] text-[.72rem] leading-[1.4] text-[var(--muted)]">{description}</p>
-      </div>
-      <div
-        className={`stsetting-value flex min-w-0 flex-col items-start gap-1${valueClassName ? ` ${valueClassName}` : ""}`}
-      >
-        {children}
-        {note ? (
-          <p className="stsetting-note m-0 break-words text-[.7rem] leading-[1.4] text-[var(--muted)]">
-            {note}
-          </p>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function GmailAccounts() {
-  const auth = $api.useQuery("get", "/auth/status", {});
-  const disconnect = $api.useMutation("post", "/auth/accounts/{accountId}/disconnect", {
-    onSuccess: () => auth.refetch(),
-  });
-  const connected = (auth.data?.accounts ?? []).filter((account) => account.signedIn);
-
-  return (
-    <SettingsSection
-      id="gmail-accounts-heading"
-      title="Gmail accounts"
-      description="Connect the mailboxes Chainmail syncs. Disconnecting keeps already imported mail."
-    >
-      {auth.isError ? (
-        <p
-          className="stmessage-error mt-[.65rem] rounded-sm border-l-[3px] border-l-red-700 bg-[var(--bg)] px-[.65rem] py-2 text-[.76rem] leading-[1.45] text-[var(--fg)] break-words mb-0"
-          role="alert"
-        >
-          {errText(auth.error)}
-        </p>
-      ) : auth.isPending ? (
-        <p className="mt-[.65rem] mb-0 text-[.76rem] leading-[1.45] text-[var(--muted)]">
-          Checking connected accounts…
-        </p>
-      ) : (
-        <>
-          {connected.length > 0 ? (
-            <ul className="mb-[.7rem] mt-0 list-none border-t border-[var(--line)] p-0">
-              {connected.map((account) => {
-                const label = account.email || account.displayName;
-                return (
-                  <li
-                    className="flex items-center justify-between gap-3 border-b border-[var(--line)] py-[.55rem] text-xs break-words"
-                    key={account.id}
-                  >
-                    <span>{label}</span>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      aria-label={`Disconnect ${label}`}
-                      disabled={disconnect.isPending}
-                      onClick={() => {
-                        const warning =
-                          account.id === "legacy"
-                            ? " This also removes the shared Docket token."
-                            : "";
-                        if (
-                          window.confirm(
-                            `Disconnect ${label}? Chainmail will stop syncing from this mailbox, but imported mail stays in the corpus.${warning}`,
-                          )
-                        ) {
-                          disconnect.mutate({ params: { path: { accountId: account.id } } });
-                        }
-                      }}
-                    >
-                      Disconnect
-                    </Button>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <p className="mt-[.65rem] mb-0 text-[.76rem] leading-[1.45] text-[var(--muted)]">
-              No Gmail accounts connected. Mailbox syncing is paused.
-            </p>
-          )}
-          {disconnect.isError ? (
-            <p
-              className="mt-[.65rem] rounded-sm border-l-[3px] border-l-red-700 bg-[var(--bg)] px-[.65rem] py-2 text-[.76rem] leading-[1.45] text-[var(--fg)] break-words mb-0"
-              role="alert"
-            >
-              Could not disconnect: {errText(disconnect.error)}
-            </p>
-          ) : null}
-          <ControlLink variant="primary" href="/auth/login">
-            {connected.length === 0 ? "Sign in with Google" : "Connect another account"}
-          </ControlLink>
-        </>
-      )}
-    </SettingsSection>
-  );
 }
 
 /**
@@ -264,70 +123,6 @@ function meLine(me: { person: string; addresses: string[] }): string {
  * calm first-boot grey rather than an error, because nothing has been asked
  * yet and the answer is not "no".
  */
-const BADGES: Record<ServiceStatus["status"], { word: string; cls: string }> = {
-  ok: {
-    word: "logged in",
-    cls: "inline-flex whitespace-nowrap rounded-full border border-current px-[.48rem] py-[.13rem] text-[.64rem] font-bold text-green-800",
-  },
-  "needs-auth": {
-    word: "needs auth",
-    cls: "inline-flex whitespace-nowrap rounded-full border border-current px-[.48rem] py-[.13rem] text-[.64rem] font-bold text-amber-700",
-  },
-  down: {
-    word: "down",
-    cls: "inline-flex whitespace-nowrap rounded-full border border-current px-[.48rem] py-[.13rem] text-[.64rem] font-bold text-red-700",
-  },
-  unchecked: {
-    word: "unchecked",
-    cls: "inline-flex whitespace-nowrap rounded-full border border-current px-[.48rem] py-[.13rem] text-[.64rem] font-bold text-[var(--muted)]",
-  },
-};
-
-function OneRow({ svc }: { svc: ServiceStatus }) {
-  const badge = BADGES[svc.status] ?? BADGES.unchecked;
-  return (
-    <li className="flex flex-wrap items-center gap-x-[.7rem] gap-y-[.45rem] py-[.55rem]">
-      <span className={badge.cls}>{badge.word}</span>
-      <span className="min-w-32 text-[.8rem] font-semibold">{svc.label}</span>
-      {svc.detail ? (
-        <span className="flex-[1_1_12rem] break-words text-[.72rem] text-[var(--muted)]">
-          {svc.detail}
-        </span>
-      ) : null}
-    </li>
-  );
-}
-
-function CorpusStats({ s }: { s: Stats }) {
-  const rows: [string, string][] = [
-    ["entries", String(s.entries)],
-    ["people", String(s.people)],
-    ["thread roots", String(s.chainRoots)],
-    ["unresolved", String(s.unresolved)],
-  ];
-  for (const [src, n] of Object.entries(s.bySource)) {
-    rows.push([`${src} entries`, String(n)]);
-  }
-  for (const m of s.embeddings) {
-    rows.push([`embeddings · ${m.model}`, `${m.vectors} vectors`]);
-  }
-  return (
-    <dl className="mt-[.1rem] grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-2">
-      {rows.map(([term, def]) => (
-        <div
-          className="min-w-0 rounded-lg border border-[var(--line)] bg-[var(--bg)] px-[.7rem] py-[.65rem]"
-          key={term}
-        >
-          <dt className="break-words text-[.63rem] font-bold uppercase tracking-[.07em] text-[var(--muted)]">
-            {term}
-          </dt>
-          <dd className="mt-[.3rem] break-words text-base font-semibold tabular-nums">{def}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
 /**
  * Account management, service health, mailbox preferences, reading options,
  * and a compact view of the corpus, grouped into consistently framed sections.
@@ -399,35 +194,8 @@ export function SettingsView() {
         </p>
       ) : null}
 
-      <GmailAccounts />
-
-      <SettingsSection
-        id="services-heading"
-        title="Connected services"
-        description={`Run corpus status to refresh.${status.data?.checkedAt ? ` Last checked ${when(status.data.checkedAt)}.` : " Nothing measured yet."}`}
-      >
-        {status.isError ? (
-          <p
-            className="mt-[.65rem] rounded-sm border-l-[3px] border-l-red-700 bg-[var(--bg)] px-[.65rem] py-2 text-[.76rem] leading-[1.45] text-[var(--fg)] break-words mb-0"
-            role="alert"
-          >
-            {errText(status.error)}
-          </p>
-        ) : null}
-        <ul className="mt-[.7rem] list-none border-t border-[var(--line)] p-0">
-          {status.isPending ? (
-            <li className="flex flex-wrap items-center gap-x-[.7rem] gap-y-[.45rem] py-[.55rem] text-[.78rem] text-[var(--muted)]">
-              Checking services…
-            </li>
-          ) : status.data?.services.length ? (
-            status.data.services.map((svc) => <OneRow key={svc.id} svc={svc} />)
-          ) : (
-            <li className="flex flex-wrap items-center gap-x-[.7rem] gap-y-[.45rem] py-[.55rem] text-[.78rem] text-[var(--muted)]">
-              No services reported.
-            </li>
-          )}
-        </ul>
-      </SettingsSection>
+      <SettingsAccounts />
+      <SettingsServices status={status} />
 
       <SettingsSection
         id="mailbox-heading"
@@ -547,26 +315,7 @@ export function SettingsView() {
           </p>
         ) : null}
       </SettingsSection>
-      <SettingsSection
-        id="corpus-heading"
-        title="Corpus"
-        description="A snapshot of the mail and identities currently stored."
-      >
-        {stats.isError ? (
-          <p
-            className="mt-[.65rem] rounded-sm border-l-[3px] border-l-red-700 bg-[var(--bg)] px-[.65rem] py-2 text-[.76rem] leading-[1.45] text-[var(--fg)] break-words mb-0"
-            role="alert"
-          >
-            {errText(stats.error)}
-          </p>
-        ) : stats.data ? (
-          <CorpusStats s={stats.data} />
-        ) : (
-          <p className="mt-[.65rem] mb-0 text-[.76rem] leading-[1.45] text-[var(--muted)]">
-            Reading the corpus…
-          </p>
-        )}
-      </SettingsSection>
+      <SettingsCorpus stats={stats} />
 
       <SettingsSection
         id="appearance-heading"

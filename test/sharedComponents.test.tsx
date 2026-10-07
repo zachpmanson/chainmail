@@ -4,6 +4,8 @@ import { Avatar } from "../src/components/Avatar";
 import { Checkbox, CheckboxRow } from "../src/components/Checkbox";
 import { DialogShell } from "../src/components/DialogShell";
 import { FormField } from "../src/components/FormField";
+import { InlineAlert } from "../src/components/InlineAlert";
+import { ThreadCounts } from "../src/components/ThreadRow";
 import { StatusBadge } from "../src/components/StatusBadge";
 
 describe("shared UI primitives", () => {
@@ -66,6 +68,38 @@ describe("shared UI primitives", () => {
     expect(dialog).toContain('role="dialog" aria-modal="true" aria-label="Confirm"');
     expect(dialog).toContain("proposals-panel flex max-h-[70vh]");
     expect(dialog).toContain("<p>Proceed?</p>");
+  });
+
+  it("shares thread-row count thresholds and marks across row layouts", () => {
+    const populated = renderToStaticMarkup(
+      <ThreadCounts people={3} entries={2} attachments={1} className="group-hover:invisible" />,
+    );
+    expect(populated).toContain(
+      'class="ibtail ml-auto flex shrink-0 items-center gap-2 group-hover:invisible"',
+    );
+    expect(populated).toContain('title="3 people in this thread — senders and recipients"');
+    expect(populated).toContain('title="2 messages in this thread"');
+    expect(populated).toContain('title="1 attachment in this thread"');
+
+    const belowThreshold = renderToStaticMarkup(
+      <ThreadCounts people={2} entries={1} attachments={0} />,
+    );
+    expect(belowThreshold).not.toContain("people in this thread");
+    expect(belowThreshold).not.toContain("messages in this thread");
+    expect(belowThreshold).not.toContain("attachment in this thread");
+  });
+
+  it("shares the inline alert surface and keeps caller-provided message markup", () => {
+    const alert = renderToStaticMarkup(
+      <InlineAlert>
+        <strong>Could not save</strong> Try again.
+      </InlineAlert>,
+    );
+    expect(alert).toContain(
+      'class="selfail mt-[.7rem] rounded-md border border-line border-l-[3px] border-l-red-700 bg-card px-[.7rem] py-2 text-[.82rem]"',
+    );
+    expect(alert).toContain('role="alert"');
+    expect(alert).toContain("<strong>Could not save</strong> Try again.");
   });
 
   it("associates field text with its control", () => {

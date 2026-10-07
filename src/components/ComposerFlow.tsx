@@ -1,5 +1,6 @@
 import type { ReactNode, Ref } from "react";
 import { Button } from "./controls";
+import { InlineAlert } from "./InlineAlert";
 
 type Props = {
   variant: "compose" | "reply";
@@ -73,14 +74,7 @@ export function ComposerFlow({
       ) : step === "preview" ? (
         <>
           {preview}
-          {error ? (
-            <p
-              className="selfail mt-[.7rem] rounded-md border border-line border-l-[3px] border-l-red-700 bg-card px-[.7rem] py-2 text-[.82rem]"
-              role="alert"
-            >
-              {error}
-            </p>
-          ) : null}
+          {error ? <InlineAlert>{error}</InlineAlert> : null}
           <footer className="opmact replyacts mt-[.55rem] flex items-center justify-end gap-2">
             <Button
               variant="subtle"
@@ -108,14 +102,7 @@ export function ComposerFlow({
         </>
       ) : (
         <>
-          {error ? (
-            <p
-              className="selfail mt-[.7rem] rounded-md border border-line border-l-[3px] border-l-red-700 bg-card px-[.7rem] py-2 text-[.82rem]"
-              role="alert"
-            >
-              {error}
-            </p>
-          ) : null}
+          {error ? <InlineAlert>{error}</InlineAlert> : null}
           {editor}
           <footer className="opmact replyacts mt-[.55rem] flex items-center justify-end gap-2">
             {editorActions}
