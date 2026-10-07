@@ -1,14 +1,8 @@
 import { Fragment } from "react";
-import { provenance, type SourceId } from "../../lib/sources";
-import { gmailMessageURL } from "../../lib/gmailUrl";
+import { provenance, type SourceId } from "../../lib/message/sources";
+import { gmailMessageURL } from "../../lib/message/gmailUrl";
 
-/**
- * The ids on a provenance line, comma-run, each openable where it can be.
- *
- * The separator sits outside .sid so that the only place the line may break is
- * after a comma: inside .sid, "msg" and its handle are one token to the reader
- * and splitting them across lines reads as two truncated ids.
- */
+/** The separator sits outside each nowrap span so the line only breaks after a comma. */
 function SourceIds({
   ids,
   unspooled,
@@ -23,14 +17,12 @@ function SourceIds({
   return (
     <>
       {ids.map((s, i) => {
-        // An unspooled id names a sibling message on this very page, so it links
-        // there (a fragment anchor) instead of shipping the reader out to Gmail.
-        // A direct message's own id still opens its mailbox copy.
+        // An unspooled id links to its sibling on this page rather than out to Gmail.
         const anchor = unspooled && s.gmailId ? anchorByGmail.get(s.gmailId) : undefined;
         return (
           <Fragment key={i}>
             {i ? ", " : ""}
-            <span className="sid whitespace-nowrap">
+            <span className="whitespace-nowrap">
               {anchor ? (
                 <a
                   className="border-b border-dotted border-current text-inherit no-underline hover:text-accent"
@@ -59,18 +51,8 @@ function SourceIds({
   );
 }
 
-/**
- * Where an entry was found: `msg <id>`, `unspooled from msg <id>, msg <id>`, or
- * the corpus handle where no mailbox id is known.
- *
- * The whole line, never a disclosure of its own. It is drawn inside the bubble's
- * receipt, and the receipt is already a <details> (see Message): a second one
- * nested in it asked the reader to open the receipt and then open the line to
- * see the ids, which are the one useful thing on it. Opened, the receipt is
- * exactly where a reader wants them — every host this message came out of, in
- * one line that can be read, copied and found by find-in-page.
- */
-export function Source({
+/** Where an entry was found: `msg <id>`, `unspooled from msg <id>, …`, or the corpus handle. */
+export default function Source({
   source,
   anchorByGmail,
 }: {
@@ -80,12 +62,11 @@ export function Source({
   if (!source) return null;
   const p = provenance(source);
   if (p.kind === "prose")
-    return <span className="src ml-auto font-mono text-[.64rem] text-muted">{p.text}</span>;
-  // "unspooled from …" lines carry an empty prefix only when not unspooled;
-  // prose never reaches here, so prefix !== "" means the ids were unspooled
+    return <span className="ml-auto font-mono text-[.64rem] text-muted">{p.text}</span>;
+  // Prose never reaches here, so a non-empty prefix means the ids were unspooled.
   const unspooled = p.prefix !== "";
   return (
-    <span className="src ml-auto font-mono text-[.64rem] text-muted">
+    <span className="ml-auto font-mono text-[.64rem] text-muted">
       {p.prefix}
       <SourceIds ids={p.ids} unspooled={unspooled} anchorByGmail={anchorByGmail} />
     </span>

@@ -1,7 +1,7 @@
 node_modules/
 cmd/server/dist/
-src/lib/api.d.ts
-src/lib/spec.d.ts
+src/lib/api/api.d.ts
+src/lib/timeline/spec.d.ts
 
 src/styles.css
 src/select.css

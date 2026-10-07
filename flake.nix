@@ -95,15 +95,14 @@
           shellHook = ''
             echo "chainmail  ·  node $(node --version)  npm $(npm --version)"
             echo "  npm install        once, or after package.json changes"
-            echo "  npm run dev        vite, then ?spec=<path|url> or drop a file on the page"
-            echo "  npm test           vitest"
+            echo "  npm run dev        vite, then drop a spec file on the page"
             echo "  npm run lint       ESLint for TypeScript/React"
             echo "  npm run format     format TypeScript/TSX"
             echo "  npm run format:check  check formatting without changes"
             echo "  make check         full tests, lint, formatting and static checks"
             echo "  npm run typecheck  tsc --noEmit"
             echo "  npm run render -- <spec.json> -o out/page.html [--since prev.html]"
-            echo "  npm run gen:types  regenerate src/lib/spec.d.ts from the schema"
+            echo "  npm run gen:types  regenerate src/lib/timeline/spec.d.ts from the schema"
             echo "  go test ./...      corpus + ingest"
             echo "  go run ./cmd/corpus init | stats | ingest mail -q <query>"
           '';

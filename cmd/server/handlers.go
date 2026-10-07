@@ -2674,7 +2674,7 @@ func (s *server) acquireSpecSlot(ctx context.Context) bool {
 // no-cache, not no-store: this is derived from a corpus that is rewritten by
 // every slurp, so an intermediary holding it is holding yesterday's message. The
 // client is the thing that makes a flip cheap — it holds the part for the length
-// of the session (src/lib/original.ts), which is what a reader comparing the two
+// of the session (src/lib/message/original.ts), which is what a reader comparing the two
 // renderings is doing — and the part is only asked for on the first flip, which
 // is why this is a route of its own rather than a field on every chain read.
 func (s *server) original(w http.ResponseWriter, r *http.Request) {

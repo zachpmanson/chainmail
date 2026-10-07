@@ -1,5 +1,4 @@
 import {
-  createMemoryHistory,
   createRootRoute,
   createRoute,
   createRouter,
@@ -10,63 +9,31 @@ import {
 } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { PencilSquareIcon } from "@heroicons/react/24/outline";
-import type { Timeline } from "./lib/spec";
-import { loadSpec } from "./lib/loadSpec";
-import { normalise } from "./lib/normalise";
-import { SelectView } from "./components/inbox/Select";
-import { Inbox } from "./components/inbox/Inbox";
-import { ThreadPopup } from "./components/thread/ThreadPopup";
-import { ViewPage } from "./components/specs/ViewPage";
-import { NotFound } from "./components/NotFound";
-import { Rendered } from "./components/specs/Rendered";
-import { SettingsView } from "./components/settings/SettingsView";
-import { SpecsView } from "./components/specs/SpecsView";
-import { OpsView } from "./components/ops/OpsView";
-import { validateOpsTab } from "./lib/opsTabs";
-import { DeployStamp } from "./components/navigation/DeployStamp";
-import { ToastHost } from "./components/ui/Toasts";
-import { NavReading } from "./components/navigation/NavReading";
-import { NavRefresh } from "./components/navigation/NavRefresh";
-import { AutoRefresh } from "./components/navigation/AutoRefresh";
-import { NavSearch } from "./components/navigation/NavSearch";
-import { ComposeProvider } from "./components/compose/ComposeContext";
-import { IconButton } from "./components/ui/controls";
-import type { SearchMode } from "./lib/api";
+import type { Timeline } from "./lib/timeline/spec";
+import { normalise } from "./lib/timeline/normalise";
+import SelectView from "./components/inbox/SelectView";
+import Inbox from "./components/inbox/Inbox";
+import ThreadPopup from "./components/thread/ThreadPopup";
+import ViewPage from "./components/specs/ViewPage";
+import NotFound from "./components/NotFound";
+import Rendered from "./components/specs/Rendered";
+import SettingsView from "./components/settings/SettingsView";
+import SpecsView from "./components/specs/SpecsView";
+import OpsView from "./components/ops/OpsView";
+import { validateOpsTab } from "./lib/ops/opsTabs";
+import DeployStamp from "./components/navigation/DeployStamp";
+import ToastHost from "./components/ui/ToastHost";
+import NavReading from "./components/navigation/NavReading";
+import NavRefresh from "./components/navigation/NavRefresh";
+import AutoRefresh from "./components/navigation/AutoRefresh";
+import NavSearch from "./components/navigation/NavSearch";
+import ComposeProvider from "./components/compose/ComposeProvider";
+import { Button } from "./components/ui/controls";
+import type { SearchMode } from "./lib/api/api";
 
-/**
- * The two real routes of the app, owned entirely by the client:
- *
- *   "/"            — search, choose, build. Its search parameters (q, mode,
- *                    person, since) ARE the home page: they live in the URL so
- *                    Back from a built page restores them, and a reload restores
- *                    them too. The params are optional-typed so a partial or
- *                    empty search is a valid URL; validation applies the
- *                    defaults when they are read. The nav's box is the field
- *                    that writes them (see NavSearch) — this route only reads.
- *   "/view/<name>" — a page POST /v1/spec saved under that name, reloadable by
- *                    the URL alone. The server answers any /view/* path with
- *                    the shell; everything deeper is this route's business.
- *   "/settings"      — which backends the corpus reads through are logged in.
- *   "/specs"      — every page saved under /view/<name>, newest first, so a
- *                     saved build can be reopened without remembering its name.
- *   "/ops"        — the people-merge review surface: the dedupe plan, shown
- *                     with the evidence, applied one pair at a time behind a
- *                     confirm. Read-only here means read-only there.
- *   "*"            — the client's own 404. Unknown paths reach the shell too,
- *                    so the client (which knows every route) is the one that
- *                    can truthfully say "no page here".
- *
- * Two legacy ways in survive on top of the routes, owned by the root layout:
- * ?spec=<file> loads a static spec from disk (the static pipeline's output,
- * the fixtures, vite's /@fs), and a spec dropped on the page is a transient
- * page that owns no URL. Both take over the whole screen while set — the URL
- * does not pretend to name them. ?spec= is deliberately declared on no route:
- * it is read from the router's location, so it passes through on any path,
- * and no route's search schema has to know about it.
- */
+/** The server answers every non-/v1/ path with the shell; all routing is client-side. */
 
-/** The search route's parameters. Optional, because the URL may name any
- * subset; the validators apply "" and "hybrid" as the defaults when read. */
+/** All optional; the validators apply the defaults when read. */
 export interface SearchParams {
   q?: string;
   mode?: SearchMode;
@@ -74,15 +41,7 @@ export interface SearchParams {
   since?: string;
   /** Limit the inbox/search to copies in one connected Gmail account. */
   accountId?: string;
-  /** The folder the list is showing: a mailbox label, and a filter rather than
-   *  a query — it narrows the same list the inbox shows and leaves the ordering
-   *  alone. Optional, so `/` is every folder at once. */
   label?: string;
-  /** The chain the inbox has open. Not a filter — the search route answers it
-   *  nothing — but it lives in the URL for the same reason the query does: a
-   *  reader who reloads, or sends the address to themselves, means to come back
-   *  to that thread rather than to the top of the list. Optional, so `/` is the
-   *  inbox with nothing open yet. */
   open?: string;
   /** Render a focused thread-only page intended for a script-sized popup. */
   popup?: string;
@@ -106,20 +65,11 @@ function validateSearchParams(search: Record<string, unknown>): SearchParams {
   };
 }
 
-/** The full screen is the app shell; this root owns the legacy ways in. */
+/** The full screen is the app shell; this root owns the legacy way in. */
 function RootLayout() {
   const [composing, setComposing] = useState(false);
-  // ?spec= is read from the router's location, not declared on any route, so
-  // it passes through on any path without a route schema having to know it.
-  const specParam = useRouterState({
-    select: (s) => (s.location.search as Record<string, unknown>).spec,
-  });
-  const [specFile, setSpecFile] = useState<Timeline | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dropped, setDropped] = useState<Timeline | null>(null);
-  // Where the dropped spec was dropped, decided when it lands: a page dropped
-  // on the search route gets a way back ("← choose chains"), one dropped on a
-  // page route just is.
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const popup = useRouterState({
     select: (s) => {
@@ -128,32 +78,7 @@ function RootLayout() {
     },
   });
 
-  // ?spec=<file>: load the static spec once per URL. A blanking spec param
-  // (navigation away) clears it, and an in-flight load is cancelled rather
-  // than racing the next one.
-  useEffect(() => {
-    if (!specParam) {
-      setSpecFile(null);
-      return;
-    }
-    let cancelled = false;
-    loadSpec(String(specParam))
-      .then((sp) => {
-        if (!cancelled) {
-          setSpecFile(sp);
-          setError(null);
-        }
-      })
-      .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [specParam]);
-
-  // A spec dropped on the page is a transient page that owns no URL of its
-  // own; it joins under whatever route is current.
+  // A dropped spec is a transient page that owns no URL.
   useEffect(() => {
     const onDrop = async (ev: DragEvent) => {
       ev.preventDefault();
@@ -183,77 +108,46 @@ function RootLayout() {
         {"\n\nOr drop a spec JSON onto the page."}
       </pre>
     );
-  if (specFile) return <Rendered spec={specFile} />;
   if (dropped)
     return (
       <Rendered spec={dropped} onBack={pathname === "/" ? () => setDropped(null) : undefined} />
     );
   return (
     <>
-      {/* The site nav is the header: the same cross-links that used to sit in
-          the footer, at the top of every page instead — above the page's own
-          header, so it is the first thing read and the one place site-level
-          navigation lives.
-
-          The name lives here rather than in a title block on each page: "which
-          site is this" is a fact about the site, not about the page, and a
-          <h1> repeating it above every panel was the one thing on screen that
-          said nothing the nav did not. It is also the way home, so there is no
-          separate Home link beside it. A built page keeps its own title — that
-          one is the page's, not the site's. */}
       {!popup ? (
         <>
-          <header className="sitehead [--navh:2.15rem] max-w-none m-0 flex flex-wrap items-center border-b border-line px-5 pt-4 pb-[.85rem] text-[.86rem] text-muted">
-            {/* The nav's items travel as one element so that the bar can replace all
-            of them at once: the row is the bar's while a selection stands, and
-            the links come back when it clears (see .sitenav in styles.css). */}
-            <nav className="sitenav relative flex min-w-0 flex-1 flex-nowrap items-center overflow-x-auto overflow-y-hidden h-[var(--navh)]">
+          <header className="sitehead max-w-none m-0 flex flex-wrap items-center border-b border-line px-5 pt-4 pb-3 text-[.86rem] text-muted">
+            <nav className="sitenav relative flex min-w-0 flex-1 flex-nowrap items-center overflow-x-auto overflow-y-hidden h-9">
               <Link
                 to="/"
-                className="brand text-fg text-[.92rem] font-bold tracking-[-.01em] no-underline hover:text-accent"
+                className="text-fg text-[.92rem] font-bold tracking-[-.01em] no-underline hover:text-accent"
               >
                 chainmail
               </Link>
-              <span className="sep mx-[.45rem] text-line">·</span>
+              <span className="mx-2 text-line">·</span>
               <Link to="/specs">Braids</Link>
-              <span className="sep mx-[.45rem] text-line">·</span>
+              <span className="mx-2 text-line">·</span>
               <Link to="/settings">Settings</Link>
-              <span className="sep mx-[.45rem] text-line">·</span>
+              <span className="mx-2 text-line">·</span>
               <Link to="/ops">Ops</Link>
-              {/* The corpus being read is the one statement in the nav that is not a
-              destination, so it carries no separator and sits where the links
-              end. It is not in the right-hand group: see NavReading. */}
               <NavReading />
-              {/* The stamp and the search box travel together: the stamp is about the
-              build this page was served from, the refresh beside it asks the
-              corpus again, and the search is the app's one way in — all
-              site-level, all at the end of the nav. The box is the search itself
-              while it is open, and it takes this row rather than sitting in it
-              (see .navsearch and .navopts in styles.css). */}
-              <span className="navright [--navgap:1.1rem] ml-auto flex flex-nowrap items-center justify-end gap-[var(--navgap)] pr-[calc(12rem+var(--navgap))]">
+              <span className="navright ml-auto flex flex-nowrap items-center justify-end gap-4 pr-52">
                 <DeployStamp />
-                {/* The cadence travels with the press it shares its read half with:
-                the corpus is re-asked on its own (see AutoRefresh), and the
-                button beside it is what adds the mailbox fetch. It draws
-                nothing, and is mounted by the shell so every page has it. */}
                 <AutoRefresh />
                 <NavRefresh />
-                <IconButton
+                <Button
                   type="button"
-                  className="navrefresh nav-compose"
+                  variant="quiet"
+                  className="size-8 shrink-0 p-1 navrefresh"
                   aria-label="Compose"
                   title="Compose"
                   onClick={() => setComposing(true)}
                 >
                   <PencilSquareIcon className="block size-[18px]" aria-hidden="true" />
-                </IconButton>
+                </Button>
                 <NavSearch />
               </span>
             </nav>
-            {/* The bar's place. Empty until a chain is ticked, and then the whole row
-            — the nav beside it is hidden while the bar is here, and the sentence
-            a finished action leaves behind is a line of its own under the nav
-            (see .buildslot and .ibbuild). */}
             <div className="buildslot" />
           </header>
         </>
@@ -261,9 +155,6 @@ function RootLayout() {
       <ComposeProvider composing={composing} closeCompose={() => setComposing(false)}>
         <Outlet />
       </ComposeProvider>
-      {/* What a write leaves to say, over everything and out of the flow of any
-          page: an account of work that is over must not take a row from the mail
-          being read, and a refusal must not be scrolled away from (see Toasts). */}
       <ToastHost />
     </>
   );
@@ -271,38 +162,23 @@ function RootLayout() {
 
 const rootRoute = createRootRoute({
   component: RootLayout,
-  // Unmatched paths are the client's 404: the server answers every non-`/v1/`
-  // path with the shell, and only the client knows all the routes, so it is the
-  // one that can truthfully say no page lives here. The old catch-all route
-  // (`path: "*"`) rendered the router's default `<p>Not Found</p>` instead, so the
-  // not-found component is registered on the root route, not as a leaf.
+  // Registered on the root, not as a `path: "*"` leaf, which renders the router's default 404.
   notFoundComponent: NotFound,
 });
 
-/**
- * The home page, which is two pages: with a question it is the selection stage,
- * and with none of q, person or since it is the inbox — the corpus in the order
- * it arrived. One route and one rule, so Back and a reload land where the person
- * was, and neither page needs a URL of its own to be shareable.
- */
+/** With q, person or since it's the selection stage; otherwise the inbox. */
 function Home() {
   const urlSearch = useSearch({ from: "/" });
   if (urlSearch.popup === "1") {
     return urlSearch.open ? (
       <ThreadPopup rootExtId={urlSearch.open} />
     ) : (
-      <main className="thread-popup">
+      <main>
         <p>No thread was specified.</p>
       </main>
     );
   }
-  // A question is being asked when the address carries something to ask — a
-  // query, a person, or a date. An **empty** one is not a question: the nav's box
-  // is opened and cleared in place now, so `?q=` (or a query of spaces) is a box
-  // somebody emptied, and what belongs under it is the default view rather than a
-  // search page with nothing asked of it. `mode` alone does not count either,
-  // because a mode with nothing to ask is not a question, and `label`/`open`
-  // belong to the inbox.
+  // `?q=` or whitespace is a cleared box, not a search; `mode`, `label`, `open` alone don't count.
   const asking = Boolean(
     urlSearch.q?.trim() || urlSearch.person?.trim() || urlSearch.since?.trim(),
   );
@@ -359,18 +235,4 @@ declare module "@tanstack/react-router" {
   interface Register {
     router: typeof router;
   }
-}
-
-/**
- * A fresh router for tests: memory history (jsdom's window.history is shared
- * across a file, and a singleton router would keep its first URL forever), so
- * each test starts from its own initial URL and can assert on
- * router.state.location.
- */
-export function createChainmailRouter(initialEntries: string[]) {
-  return createRouter({
-    routeTree,
-    history: createMemoryHistory({ initialEntries }),
-    defaultPreload: false,
-  });
 }

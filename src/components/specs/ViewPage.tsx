@@ -1,19 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "@tanstack/react-router";
-import { ApiError, $api, type RefreshReport } from "../../lib/api";
-import { normalise } from "../../lib/normalise";
-import type { Timeline } from "../../lib/spec";
-import { MEDIA_BASE, pullSummary } from "../../lib/attachments";
-import { Rendered } from "./Rendered";
+import { ApiError, $api, type RefreshReport } from "../../lib/api/api";
+import { normalise } from "../../lib/timeline/normalise";
+import type { Timeline } from "../../lib/timeline/spec";
+import { MEDIA_BASE, pullSummary } from "../../lib/message/attachments";
+import Rendered from "./Rendered";
 
-/**
- * One line saying what a refresh did. NothingNew is the calm default: a page
- * that was already current should not read as if it changed. The other states
- * are the four thread lists the report can hold, joined by comma, plus the
- * searches it recorded (the add-email search) and any twins it collapsed. A
- * page that changed only its counts (entries) is still reported — those are the
- * chains a reader can see grew.
- */
 function refreshSummary(r: RefreshReport): string {
   if (r.nothingNew) return "already up to date";
   const parts: string[] = [];
@@ -30,43 +22,18 @@ function refreshSummary(r: RefreshReport): string {
   return parts.length ? `refresh: ${parts.join(", ")}` : "refresh: nothing changed";
 }
 
-/**
- * The page route /view/<name>: load the page POST /v1/spec saved under that
- * name, and offer refresh — the read half of the CLI's `refresh` command,
- * available only here, where the name lets the server rewrite the file too, so
- * a reload lands on the same run.
- *
- * Refresh asks the server to slurp before it re-derives: POST /v1/slurp is the
- * fetching half, and a host that was not started with -slurp answers 403, which
- * leaves exactly the old behaviour — re-derive what the corpus already holds.
- * So the button is always worth pressing; on a slurp host it also brings in mail
- * that arrived since the last cron ingest.
- *
- * A name that was never saved is a client-side dead end with a way home; the
- * server's 404 names the missing page, and there is no point pretending a URL
- * that never resolved is anything else.
- */
-export function ViewPage() {
+/** POST /v1/slurp answers 403 on hosts without -slurp; refresh re-derives regardless. */
+export default function ViewPage() {
   const { name } = useParams({ from: "/view/$name" });
   const fetched = $api.useQuery("get", "/v1/specs/{name}", {
     params: { path: { name } },
   });
-  // A local, refreshed spec that wins over the stale cached fetch, plus the
-  // report that produced it. The report is kept so proposals can be shown and
-  // accepted (a count alone would hide what was found).
   const [local, setLocal] = useState<Timeline | null>(null);
   const [report, setReport] = useState<RefreshReport | null>(null);
-  // The message whose files are being fetched: its button says so, and every
-  // other one is held until this pull and the rebuild behind it have finished.
+  // Holds every other button until this pull and the rebuild behind it finish.
   const [pulling, setPulling] = useState<string | null>(null);
-  // Why the last pull failed, when it did. Console-only went with the refresh
-  // verdict and was wrong for this one: a pull is slow (mailbox round trips,
-  // then a page rebuild), it costs quota, and "nothing happened" is
-  // indistinguishable from "it failed" without it.
   const [pullNote, setPullNote] = useState<string | null>(null);
 
-  // A different page means a different run: drop the refreshed copy and any
-  // report from the previous one.
   useEffect(() => {
     setLocal(null);
     setReport(null);
@@ -76,8 +43,6 @@ export function ViewPage() {
     onSuccess: (data) => {
       setLocal(normalise(data.spec));
       setReport(data.report);
-      // The verdict used to float in a corner box that outlived the click; it
-      // is console-only now — the page's job is the page, the log's is the log.
       console.log(refreshSummary(data.report));
     },
     onError: (e) => {
@@ -86,13 +51,8 @@ export function ViewPage() {
     },
   });
 
-  // Slurp, then refresh. The fetch is the server's job — POST /v1/slurp, which
-  // it runs only when it was started with -slurp. A 403 is not a failure here,
-  // it is the read-most fallback, so the refresh runs either way: a rebuild is
-  // always safe and always the point of the button.
-  //
-  // OnSettled needs the spec the click saw, but this hook is defined before the
-  // null-check narrows `spec`, so the click snapshots it into a ref first.
+  // A slurp 403 just means the host lacks -slurp; refresh anyway.
+  // specRef: onSettled needs the spec, but this hook runs before the null-check narrows it.
   const specRef = useRef<Timeline | null>(null);
   const slurp = $api.useMutation("post", "/v1/slurp", {
     onSuccess: (data) => console.log(data.report?.trim() || "slurp: nothing to report"),
@@ -104,30 +64,12 @@ export function ViewPage() {
       ),
     onSettled: () => {
       const s = specRef.current;
-      // The wire spec is exactly the shape the server accepts: optional
-      // specVersion/theme/kind, no renderer-only fields. The renderer's
-      // Timeline is a superset (openItemsTitle and friends), which assignment
-      // allows, so the loaded spec goes straight out.
       if (s) refresh.mutate({ body: { spec: s, name, includeNew: false } });
     },
   });
 
-  // Fetch one message's attachment bytes: the pull writes into the corpus and
-  // the page is a picture of the corpus, so the pictures appear by rebuilding
-  // the page rather than by patching a chip.
-  //
-  // The rebuild is the server's, and the page's name is what it needs: it
-  // re-derives the saved page and rewrites it while the fetch is still in
-  // flight for us, so the bytes land on the page even if this browser has
-  // already navigated away — which is what a reload during a fetch used to
-  // cost, since a browser cancels its own request when the reader leaves and
-  // the refresh that made the files visible was the client's to run. The
-  // refreshed page comes back on this response, so one call is the whole
-  // operation and there is no second round trip to be abandoned.
-  //
-  // `pulling` covers both halves — the fetch and the rebuild behind it — so the
-  // button cannot be pressed twice in a row against a page already being
-  // replaced.
+  // Sends the page name so the server rebuilds and saves the page itself; the bytes
+  // then land even if this browser navigates away mid-request.
   const pull = $api.useMutation("post", "/v1/media/pull", {
     onSuccess: (data) => {
       console.log(`fetch: ${pullSummary(data)}`);
@@ -138,9 +80,7 @@ export function ViewPage() {
         setPulling(null);
         return;
       }
-      // No page came back: the server was given no name, or its rebuild could
-      // not run. The bytes are stored either way, so the page is re-derived
-      // here instead — the old behaviour, and still the right fallback.
+      // No page came back (no name, or the rebuild failed): re-derive client-side.
       const s = specRef.current;
       if (!s) {
         setPulling(null);
@@ -153,8 +93,6 @@ export function ViewPage() {
     },
     onError: (e) => {
       setPulling(null);
-      // Said on the page, not only in the console: a press that spends mailbox
-      // round trips and then fails must not look like nothing happening.
       setPullNote(
         e instanceof ApiError && e.status === 403
           ? "This host cannot fetch files (it was started without -media)."
@@ -162,10 +100,6 @@ export function ViewPage() {
       );
     },
   });
-
-  // Accept, by root ext id, a thread the queries proposed but did not include.
-  // Re-running the refresh with accept is how a proposal becomes membership.
-  // Defined where `spec` is known non-null (the guard below narrows it).
 
   const spec = local ?? (fetched.data ? normalise(fetched.data) : null);
 
@@ -183,7 +117,7 @@ export function ViewPage() {
     <>
       {pullNote && (
         <p
-          className="pullnote mb-[.8rem] mt-0 border border-accent border-l-[3px] rounded-md bg-card px-[.85rem] py-[.55rem] text-[.85rem] text-fg"
+          className="mb-3 mt-0 border border-accent border-l-[3px] rounded-md bg-card px-3 py-2 text-[.85rem] text-fg"
           role="status"
         >
           {pullNote}
@@ -196,11 +130,7 @@ export function ViewPage() {
           slurp.mutate({});
         }}
         onAccept={(ids) => refresh.mutate({ body: { spec, name, accept: ids } })}
-        // Adding a thread by hand sends the search that found it as well, so the
-        // page records it: an accepted thread whose query the spec does not hold
-        // is one nothing can explain or re-find. The server dedupes it against
-        // what the spec already records, so re-adding from the same search is
-        // harmless. The modal searches hybrid, and says so in the note.
+        // Send the query too, so the page records how the thread was found; the server dedupes it.
         onAdd={(ids, query) =>
           refresh.mutate({
             body: {
@@ -218,9 +148,7 @@ export function ViewPage() {
           pull.mutate({ body: { entry: extId, name } });
         }}
         pulling={pulling}
-        // The endpoint stored bytes come from. Named here and nowhere else,
-        // because this component is the app: the static export renders Timeline
-        // without it, and a shared page has no server to point at.
+        // Only the app has a server; the static export renders Timeline without mediaBase.
         mediaBase={MEDIA_BASE}
         report={report}
         refreshing={slurp.isPending || refresh.isPending}

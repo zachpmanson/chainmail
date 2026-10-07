@@ -1,17 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearch } from "@tanstack/react-router";
-import { ArrowUturnLeftIcon } from "@heroicons/react/24/outline";
-import { $api, type CorpusEntry, type SendResponse } from "../../lib/api";
-import { staleAfterMail } from "../../lib/mailActions";
-import { dismissToast, pushToast } from "../../lib/toasts";
-import { addressesOf, usePersonAddresses } from "../../lib/who";
+import { $api, type CorpusEntry, type SendResponse } from "../../lib/api/api";
+import { staleAfterMail } from "../../lib/inbox/mailActions";
+import { dismissToast, pushToast } from "../../lib/ui/toasts";
+import { addressesOf, usePersonAddresses } from "../../lib/message/who";
 import { addressKey, type Address } from "./AddressField";
-import { ComposerFields } from "./ComposerFields";
-import { ComposerFlow } from "./ComposerFlow";
+import ComposerFields from "./ComposerFields";
 import { refusal, SAID_MS } from "../inbox/MailVerbs";
-import { CheckboxRow } from "../ui/Checkbox";
-import { ReceiptIconButton, SelectInput } from "../ui/controls";
+import CheckboxRow from "../ui/CheckboxRow";
+import { SelectInput } from "../ui/fields";
+import { Button } from "../ui/controls";
+import InlineAlert from "../ui/InlineAlert";
 
 /**
  * The reply box: the one thing this pane can say back.
@@ -117,67 +117,7 @@ import { ReceiptIconButton, SelectInput } from "../ui/controls";
  * must not take a row from the trail the reader is reading, and it outlives this
  * box the moment somebody clicks another thread.
  */
-/**
- * The press that points the box below at the message above it: "reply all", in
- * the receipt of a bubble's header, beside the control that copies the message and
- * the one that switches to the sender's own rendering.
- *
- * **It is what makes the box's target a choice, and it is the whole of that
- * choice.** Before it, the box answered the newest message the mailbox held and
- * there was nothing on the screen that could name a different one; now a reader
- * who wants to answer the message that asked them something — rather than the
- * latest line in the thread, which often answers nothing — can say so from the
- * message itself. What it does to the audience is the rest of its name: the box's
- * reply-all tick goes on, because a press that says "reply all" and leaves a
- * reply to the sender alone would be a button lying about what it had done.
- *
- * **It chooses the message rather than the audience.** The message is a message on
- * this page, one the corpus holds — a press cannot name a correspondent the reader
- * has not been reading — and the audience of the answer is still assembled from that
- * message's own headers by the mailbox. What a reader gains here is an older message,
- * not a new recipient: who else the reply ends up reaching is decided in the To/Cc
- * fields on the compose screen (see ReplyBox).
- *
- * Drawn only where the caller has both things: a mailbox copy of the message to
- * thread an answer onto (see gmailIdOf), and a box to point at it. A message
- * recovered from somebody's quote has no mailbox copy, and a built page has no
- * box — in both the press is left off rather than offered and refused.
- *
- * Pressed is which message the box is answering now, which is state of the pane
- * rather than of this message: the newest answerable message wears it until a
- * reader presses something else, so the one piece of the box's state a reader
- * cannot see from here — which message, out of a thread of thirty — is legible in
- * the thread itself.
- */
-export function AnswerPress({
-  extId,
-  pressed,
-  onPress,
-}: {
-  /** The message this press names, as the box takes it. */
-  extId: string;
-  /** Whether the box is already answering this message. */
-  pressed: boolean;
-  onPress: (extId: string) => void;
-}) {
-  const label = pressed
-    ? "This is the message the box below is answering"
-    : "Reply all to this message, in the box at the bottom of the thread";
-  return (
-    <ReceiptIconButton
-      type="button"
-      className="replyall"
-      aria-pressed={pressed}
-      title={label}
-      aria-label={label}
-      onClick={() => onPress(extId)}
-    >
-      <ArrowUturnLeftIcon width={18} height={18} aria-hidden="true" />
-    </ReceiptIconButton>
-  );
-}
-
-export function ReplyBox({
+export default function ReplyBox({
   thread,
   answer,
   answerAnchor,
@@ -467,10 +407,10 @@ export function ReplyBox({
       <ComposerFields
         mode="reply"
         from={
-          <div className="replyrecipient contents min-w-0 compose-account">
-            <span className="replylabel inline-flex h-[var(--addrrow)] items-center">from:</span>
+          <div className="contents min-w-0">
+            <span className="inline-flex h-7 items-center">from:</span>
             <SelectInput
-              className="replyfrom h-[var(--addrrow)] min-w-0 flex-1 rounded-md border border-line bg-bg px-[.3rem] text-[.72rem] text-fg focus:border-accent disabled:cursor-default disabled:opacity-[.55]"
+              className="h-7 min-w-0 flex-1 rounded-md border border-line bg-bg px-1 text-[.72rem] text-fg focus:border-accent disabled:cursor-default disabled:opacity-[.55]"
               aria-label="From"
               value={displayedAccountId}
               disabled={busy}
@@ -499,13 +439,13 @@ export function ReplyBox({
         onEditRecipients={() => setEditing(true)}
         target={
           <a
-            className="par replytarget inline-flex h-[var(--addrrow)] items-center gap-[.25rem] ml-auto whitespace-nowrap no-underline hover:text-accent"
+            className="par inline-flex h-7 items-center gap-1 ml-auto whitespace-nowrap no-underline hover:text-accent"
             href={`#${answerAnchor}`}
             aria-label={`Jump to the message being replied to: ${words.who || "the sender"}, ${words.when}`}
             title={`Jump to the message being replied to: ${words.whoTitle ?? words.who}, ${words.when}`}
           >
             <span
-              className="arw block translate-y-[.045em] text-[.8rem] leading-none"
+              className="block translate-y-[.045em] text-[.8rem] leading-none"
               aria-hidden="true"
             >
               &#8617;
@@ -520,9 +460,9 @@ export function ReplyBox({
     </>
   );
   const editorActions = (
-    <div className="replyopts mr-auto flex items-center gap-4">
+    <div className="mr-auto flex items-center gap-4">
       <CheckboxRow
-        className="replytick flex cursor-pointer items-center gap-[.4rem] text-[.74rem] text-muted has-[:disabled]:cursor-default has-[:disabled]:opacity-[.55]"
+        className="flex cursor-pointer items-center gap-1.5 text-[.74rem] text-muted has-[:disabled]:cursor-default has-[:disabled]:opacity-[.55]"
         title="Answer everyone the message was addressed to. Edit the reply's audience in the fields above."
         checked={all}
         disabled={busy}
@@ -533,7 +473,7 @@ export function ReplyBox({
         reply all
       </CheckboxRow>
       <CheckboxRow
-        className="replytick flex cursor-pointer items-center gap-[.4rem] text-[.74rem] text-muted has-[:disabled]:cursor-default has-[:disabled]:opacity-[.55]"
+        className="flex cursor-pointer items-center gap-1.5 text-[.74rem] text-muted has-[:disabled]:cursor-default has-[:disabled]:opacity-[.55]"
         title="Send the HTML rendering beside the same plain-text message. Unchecked sends plain text alone."
         checked={html}
         disabled={busy}
@@ -546,8 +486,8 @@ export function ReplyBox({
     </div>
   );
   const previewContent = plan ? (
-    <div className="replyplan text-[.76rem] leading-[1.5]">
-      <p className="replynote m-0 mb-[.45rem]">
+    <div className="text-[.76rem] leading-[1.5]">
+      <p className="m-0 mb-2">
         <strong>Nothing has been sent yet.</strong> This is the whole message as it will go from{" "}
         <strong>
           {accounts.data?.accounts?.find((account) => account.id === plan.accountId)?.displayName ??
@@ -565,36 +505,69 @@ export function ReplyBox({
       </p>
       {plan.html ? (
         <div
-          className="replyhtml m-[.4rem_0_0] max-h-[22rem] overflow-auto [overflow-wrap:anywhere] rounded-md border border-line bg-bg px-[.6rem] py-[.5rem] text-[.84rem] leading-[1.5] text-fg"
+          className="replyhtml mt-1.5 max-h-[22rem] overflow-auto [overflow-wrap:anywhere] rounded-md border border-line bg-bg px-2 py-2 text-[.84rem] leading-[1.5] text-fg"
           dangerouslySetInnerHTML={{ __html: plan.html }}
         />
       ) : (
-        <pre className="replytext m-[.4rem_0_0] max-h-[22rem] overflow-auto [overflow-wrap:anywhere] whitespace-pre-wrap rounded-md border border-line bg-bg px-[.6rem] py-[.5rem] font-mono text-[.76rem] leading-[1.45] text-fg">
+        <pre className="mt-1.5 max-h-[22rem] overflow-auto [overflow-wrap:anywhere] whitespace-pre-wrap rounded-md border border-line bg-bg px-2 py-2 font-mono text-[.76rem] leading-[1.45] text-fg">
           {plan.body}
         </pre>
       )}
     </div>
   ) : null;
 
+  const errorAlert = error ? <InlineAlert>{error}</InlineAlert> : null;
+
   return (
-    <ComposerFlow
-      variant="reply"
-      step={plan ? "preview" : "compose"}
-      busy={busy}
-      error={error}
-      editor={editor}
-      editorActions={editorActions}
-      preview={previewContent}
-      onReview={() => void review()}
-      onEdit={unplan}
-      onConfirm={() => void ship()}
-      confirmDisabled={!(to ?? []).length}
-      reviewDisabled={own.trim() === "" || (toTouched && to.length === 0)}
-      reviewTitle={to.length === 0 ? "Add somebody in to before previewing this reply." : undefined}
-      reviewLabel={busy ? "preparing…" : "preview"}
-      editLabel="keep editing"
-      confirmLabel="send this reply"
-      containerRef={host}
-    />
+    <div className="mt-4 mb-1 rounded-lg border border-line bg-card px-3 py-2" ref={host}>
+      <section aria-label="Reply">
+        {plan ? (
+          <>
+            {previewContent}
+            {errorAlert}
+            <footer className="mt-2 flex items-center justify-end gap-2">
+              <Button
+                variant="subtle"
+                density="compact"
+                type="button"
+                disabled={busy}
+                onClick={unplan}
+              >
+                {busy ? "Working…" : "keep editing"}
+              </Button>
+              <Button
+                variant="danger"
+                density="compact"
+                type="button"
+                disabled={busy || to.length === 0}
+                onClick={() => void ship()}
+              >
+                {busy ? "Sending…" : "send this reply"}
+              </Button>
+            </footer>
+          </>
+        ) : (
+          <>
+            {errorAlert}
+            {editor}
+            <footer className="mt-2 flex items-center justify-end gap-2">
+              {editorActions}
+              <Button
+                variant="subtle"
+                density="compact"
+                type="button"
+                title={
+                  to.length === 0 ? "Add somebody in to before previewing this reply." : undefined
+                }
+                disabled={busy || own.trim() === "" || (toTouched && to.length === 0)}
+                onClick={() => void review()}
+              >
+                {busy ? "Preparing…" : "preview"}
+              </Button>
+            </footer>
+          </>
+        )}
+      </section>
+    </div>
   );
 }

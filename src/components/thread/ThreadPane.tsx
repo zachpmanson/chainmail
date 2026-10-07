@@ -1,46 +1,24 @@
-import { Button, IconButton } from "../ui/controls";
-import { useEffect, useRef, useState } from "react";
+import IconButton from "../ui/IconButton";
+import { Button } from "../ui/controls";
+import { useEffect, useRef } from "react";
 import { ArrowTopRightOnSquareIcon, QueueListIcon } from "@heroicons/react/24/outline";
 import { useSearch } from "@tanstack/react-router";
 import { flushSync } from "react-dom";
-import { useMailAction, useReadAction } from "../../lib/mailActions";
-import { dismissToast, pushToast } from "../../lib/toasts";
-import { readTree, rememberTree } from "../../lib/tree";
-import { withTransition } from "../../lib/viewTransition";
-import { ThreadMessages } from "./ThreadMessages";
+import { useMailAction, useReadAction } from "../../lib/inbox/mailActions";
+import { dismissToast, pushToast } from "../../lib/ui/toasts";
+import { usePrefs } from "../../lib/prefs/usePrefs";
+import { withTransition } from "../../lib/thread/viewTransition";
+import ThreadMessages from "./ThreadMessages";
 import type { PreviewableThread } from "./ThreadShared";
-import { AttachmentCount, MailCount, PeopleCount } from "../inbox/ThreadRow";
-import {
-  MoveFolder,
-  ArchiveGlyph,
-  SAID_MS,
-  TrashGlyph,
-  VERBS,
-  refusal,
-  sentence,
-} from "../inbox/MailVerbs";
+import AttachmentCount from "../inbox/AttachmentCount";
+import MailCount from "../inbox/MailCount";
+import PeopleCount from "../inbox/PeopleCount";
+import MoveFolder from "../inbox/MoveFolder";
+import ArchiveGlyph from "../inbox/ArchiveGlyph";
+import TrashGlyph from "../inbox/TrashGlyph";
+import { SAID_MS, VERBS, refusal, sentence } from "../inbox/MailVerbs";
 
-/**
- * The reading pane: the thread a list has open, read at the right of it.
- *
- * One pane for both pages. The search page drew a candidate as its own cards
- * (sender, day, plain text), so the same conversation looked like different
- * software depending on whether you had browsed to it or searched for it — the
- * complaint the pane's own renderer already answered once
- * (`spec.RenderBodies`, `ThreadMessages`), and the answer is the same here: the
- * transcript's own bubbles, over a corpus read that carries each body rendered.
- *
- * What each page keeps is where the pane goes back to ("← List" and "← Results"
- * — CSS-hidden where both panels fit) and what it says with nothing open, since
- * those are facts about the page rather than about the thread.
- *
- * The pane is also where the two mailbox verbs live for the thread that is open
- * (see MailVerbs): archiving the thread you have just read is the commonest way of
- * finishing with it, and reaching for it should not mean ticking the row behind
- * the pane you are reading.
- */
-
-export function ThreadPane({
+export default function ThreadPane({
   thread,
   label,
   backLabel,
@@ -49,9 +27,7 @@ export function ThreadPane({
   onClose,
   openInWindow = true,
 }: {
-  /** The thread to read, or null when the page has nothing to show yet. A caller
-   *  holding only a root ext id is enough: the thread is fetched by id, and the
-   *  head then claims no subject and no count rather than inventing them. */
+  /** null when the page has nothing to show yet; a bare root ext id is enough to fetch by */
   thread: PreviewableThread | null;
   /** The pane's accessible name, which is the page's word for what is in it. */
   label: string;
@@ -65,23 +41,10 @@ export function ThreadPane({
 }) {
   const accountId = useSearch({ from: "/" }).accountId;
 
-  // The pane's own view switch: replies drawn as a tree under the message they
-  // answer, or the transcript's flat order (see lib/tree). Read once, at mount,
-  // and written when it is pressed — this button is the only thing that sets it,
-  // so there is nothing to watch for. It sits above the threads rather than in
-  // one, because a reader's answer about how they read a thread is not a fact
-  // about the thread they happen to have open — and the pane is not remounted
-  // between threads, only its contents change, so the switch survives opening
-  // another.
-  const [tree, setTree] = useState(readTree);
+  const tree = usePrefs((s) => s.tree);
+  const setTree = usePrefs((s) => s.setTree);
 
-  // What the last write here has to say is drawn in the shell's corner, not in
-  // this pane (see Toasts): an account of work that is over must not take a row
-  // from the thread being read. What the pane keeps is the id of its own
-  // notification, because an account of what happened to one thread is a claim
-  // about a thread the reader may have left — the pane is not remounted between
-  // threads, only its contents change — so it is taken down by hand when the
-  // thread changes rather than left to its clock.
+  // The pane outlives the thread, so its toast is taken down by hand when the thread changes.
   const said = useRef<number | null>(null);
   const say = (text: string, kind: "note" | "fail") => {
     if (said.current !== null) dismissToast(said.current);
@@ -93,40 +56,17 @@ export function ThreadPane({
     said.current = null;
   }, [thread?.rootExtId]);
 
-  // The read-state write: the one thing a list changes in the mailbox itself, and
-  // the reason the unread counts it draws mean what the reader's phone means.
-  //
-  // The thread's own count is the state the button acts on, and the list is what
-  // holds it, so the write changes the list as it is pressed (see lib/lists) and
-  // then re-reads it: the server reconciles every message in the thread, and the
-  // number it comes back with is the mailbox's answer about all of them — a client
-  // that ended there would be claiming something it had not been told. Both pages
-  // ask that question of the same endpoint, so one invalidation serves either of
-  // them, and a refusal puts the count back rather than leaving a mark the mailbox
-  // does not agree with.
+  // Optimistic (see lib/inbox/lists), then re-read: the server reconciles every message in the
+  // thread, and a refusal puts the count back.
   const read = useReadAction({
     invalidateChain: true,
     onError: (error) => {
-      // Said in the pane, not only in the console, and the disabled case in words
-      // a reader can act on: a host started without -mark-read refuses every
-      // press, and a silent button would read as a broken one.
+      // A host started without -mark-read refuses every press, so say so in words.
       say(refusal(error, "-mark-read", "Marking"), "fail");
     },
   });
 
-  // The two mailbox verbs, on the one thread this pane has open: the same pair the
-  // bar draws for threads a reader has ticked, doing the same thing to a set of
-  // one. Nothing is confirmed first — the sentence says what happened and that the
-  // trash keeps it for 30 days, which is the account the bar gives for the same
-  // press.
-  //
-  // The row goes as it is pressed, out of the folder view it was listed in (see
-  // lib/lists): archiving a thread the reader is looking at is answered by it not
-  // being there any more, and waiting for the mailbox made the bin look like a
-  // button that had missed. A refusal puts it back and says so in the same breath.
-  //
-  // A write here does not tick or untick anything, so the bar has nothing to say
-  // about it: the account belongs to the surface the reader pressed.
+  // The row leaves its folder view on press (see lib/inbox/lists); a refusal puts it back.
   const act = useMailAction({
     onSuccess: (res) => {
       say(sentence(res.action, res.labels, res.changed, res.skipped), "note");
@@ -143,58 +83,34 @@ export function ThreadPane({
     >
       {thread ? (
         <>
-          <div className="ibread-head flex flex-none items-center gap-2 border-b border-line bg-card px-[.7rem] py-2 min-[60rem]:px-[calc(.7rem+var(--divider))]">
+          <div className="ibread-head flex flex-none items-center gap-2 border-b border-line bg-card px-3 py-2 min-[60rem]:px-6">
             <Button
               type="button"
               density="compact"
-              className={`min-h-0 px-[.5rem] py-[.2rem] text-[.78rem] ${backLabel === "Close" ? "" : "min-[60rem]:hidden"} ibback`}
+              className={`min-h-0 px-2 py-1 text-[.78rem] ${backLabel === "Close" ? "" : "min-[60rem]:hidden"}`}
               onClick={onClose}
             >
               {backLabel}
             </Button>
-            <span className="ibread-subj min-w-0 break-words text-[.86rem] font-semibold">
+            <span className="min-w-0 break-words text-[.86rem] font-semibold">
               {thread.subject || "(no subject)"}
             </span>
-            {/* How much mail is in the thread, how many people, and how many files
-                — worn the way the row that opened it wears them: the same glyphs,
-                the same numbers, the same classes. The head used to say "4
-                entries" in words, which made the pane and the list describe one
-                thread in two vocabularies — and it is the same reader, a moment
-                later. Where the row draws a count only when it is worth the room
-                (see ThreadRow), the head draws the paperclip at zero too: this is
-                the thread the reader has open, and "nothing attached" is an answer
-                about it. */}
-            <span className="ibread-counts ml-auto flex items-center gap-2">
+            <span className="ml-auto flex items-center gap-2">
               {thread.people !== undefined ? <PeopleCount people={thread.people} /> : null}
               {thread.entries !== undefined ? <MailCount entries={thread.entries} /> : null}
               {thread.attachments !== undefined ? (
                 <AttachmentCount attachments={thread.attachments} />
               ) : null}
             </span>
-            {/* How the thread is drawn, which is the reader's to say and belongs
-                with the other things that act on the thread being read. The
-                switch is the same button the verbs beside it are — same box,
-                same glyph size, same hover (see .ibicon) — and it wears its
-                state in `aria-pressed` and in the accent colour of a pressed
-                control rather than in a second glyph: one mark for the switch,
-                and which way it is set is visible without the tooltip.
-
-                Between the counts and the verbs, so that the subject keeps its
-                numbers beside it and the controls that act on the mailbox stay
-                together at the end of the line, where the read circle is the
-                outermost of them on every thread (see .ibread-read). */}
             {openInWindow ? (
-              <a
-                className="ibicon inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent p-[.25rem_.3rem] text-muted no-underline hover:border-line hover:bg-card hover:text-accent [&_svg]:block [&_svg]:size-[18px]"
+              <IconButton
                 aria-label="Open in new window"
                 title="Open in new window"
                 href={`/?open=${encodeURIComponent(thread.rootExtId)}&popup=1`}
                 target="_blank"
                 rel="noopener"
                 onClick={(event) => {
-                  // This action is specifically a popup, not a second copy of the
-                  // full app in a tab. If the browser blocks popups, do not fall
-                  // back to navigating this window or opening a tab.
+                  // Deliberately a popup: if the browser blocks it, don't fall back to a tab or navigation.
                   event.preventDefault();
                   window.open(
                     event.currentTarget.href,
@@ -203,46 +119,20 @@ export function ThreadPane({
                   );
                 }}
               >
-                <OpenWindowGlyph />
-              </a>
+                <ArrowTopRightOnSquareIcon aria-hidden="true" />
+              </IconButton>
             ) : null}
-            <Button
-              type="button"
-              className="ibicon ibtree inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent p-[.25rem_.3rem] text-muted hover:border-line hover:bg-card hover:text-accent aria-pressed:border-line aria-pressed:text-accent [&_svg]:block [&_svg]:size-[18px]"
+            <IconButton
               aria-pressed={tree}
               aria-label={treeLabel(tree)}
               title={treeLabel(tree)}
               onClick={() => {
-                // The switch is the one thing here that rearranges what the reader
-                // is looking at, so it is the one thing that animates: the bubbles
-                // are named by their anchors and morph to their new places as the
-                // render lands (see lib/viewTransition). The state change has to be
-                // in the DOM before the browser takes its second snapshot, which is
-                // what `flushSync` is for — without it the transition would animate
-                // between two copies of the same view.
-                withTransition(document, () =>
-                  flushSync(() =>
-                    setTree((on) => {
-                      rememberTree(!on);
-                      return !on;
-                    }),
-                  ),
-                );
+                // flushSync puts the state in the DOM before the transition's second snapshot (see lib/thread/viewTransition).
+                withTransition(document, () => flushSync(() => setTree(!tree)));
               }}
             >
-              <TreeGlyph />
-            </Button>
-            {/* The two mailbox verbs, beside the read circle and on the thread
-                that is open rather than on a ticked set. Glyphs, and the same two
-                the bar draws (see MailVerbs): the strip's line is the subject, and
-                two words here would be two more things to read on it — the word is
-                still the button's name and its tooltip.
-
-                Before the circle rather than past it, so the read control keeps
-                the end of the row on every thread, ticked or not, and so Delete is
-                not the outermost thing under the pointer. */}
-            {/* Move, drawn as the selection bar draws it: one dropdown, and the
-                glyph the verbs beside it are drawn as (see MoveFolder). */}
+              <QueueListIcon aria-hidden="true" />
+            </IconButton>
             <MoveFolder
               defaultFolder={moveDefault}
               busy={act.isPending}
@@ -258,8 +148,6 @@ export function ThreadPane({
               }
             />
             <IconButton
-              type="button"
-              className="ibicon inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent p-[.25rem_.3rem] text-muted hover:border-line hover:bg-card hover:text-accent [&_svg]:block [&_svg]:size-8 [&_svg]:shrink-0"
               aria-label="Archive"
               title="Archive"
               disabled={act.isPending}
@@ -276,8 +164,6 @@ export function ThreadPane({
               <ArchiveGlyph />
             </IconButton>
             <IconButton
-              type="button"
-              className="ibicon inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent p-[.25rem_.3rem] text-muted hover:border-line hover:bg-card hover:text-accent [&_svg]:block [&_svg]:size-8 [&_svg]:shrink-0"
               aria-label="Delete"
               title="Delete"
               disabled={act.isPending}
@@ -293,30 +179,10 @@ export function ThreadPane({
             >
               <TrashGlyph />
             </IconButton>
-            {/* The read-state control, and the only explicit one: nothing is
-                marked by looking at it. A pane opens the top of the list by
-                itself, so a mark-on-open rule would clear the badge for mail
-                nobody has read — and undoing that is a second click nobody knows
-                to make. Absent when the caller holds only an id, because then the
-                state is unknown and the button could only guess which way it
-                goes.
-
-                Rightmost in the strip, past the count and past the two verbs, so
-                it is one place to reach for on every thread. It is the same button
-                as the two verbs beside it — same box, same glyph size, same hover
-                (see .ibread-read) — because a circle floating on the line reads as
-                a mark rather than as something to press, and this is the control
-                pressed most in this pane. The circle *is* the state, filled for
-                unread and an outline for read, and the press is the other one: no
-                label, because a word here would be a second thing to read on a
-                line whose subject is the thing being read. The two states are the
-                same grey — the shape is the whole of the difference, since a
-                second colour on one of three verbs on the line would read as
-                emphasis rather than as a state. */}
+            {/* The only read control: the pane opens the top thread by itself, so marking on open would
+               clear mail nobody read. Absent when only an id is held and the state is unknown. */}
             {thread.unread !== undefined ? (
-              <Button
-                type="button"
-                className={`ibicon ibread-read inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-transparent p-[.25rem_.3rem] text-muted hover:border-line hover:bg-card hover:text-accent [&_svg]:block [&_svg]:size-8 [&_svg]:shrink-0 [&_circle]:fill-none [&_circle]:stroke-current [&_circle]:stroke-[1.6]${thread.unread > 0 ? " unread [&_circle]:fill-current [&_circle]:stroke-0" : ""}`}
+              <IconButton
                 disabled={read.isPending}
                 aria-label={thread.unread > 0 ? "Mark read" : "Mark unread"}
                 aria-pressed={thread.unread > 0}
@@ -335,60 +201,33 @@ export function ThreadPane({
                   })
                 }
               >
-                {/* One circle, and the state is how it is drawn: a filled disc for
-                    unread, an outline for read. Drawn as a glyph rather than as a
-                    bordered box so that all three controls in this strip are the
-                    same kind of thing — the archive bin and the trash can are
-                    glyphs in the same button, and the read state is a mark, not a
-                    fourth shape of control. */}
-                <svg
-                  width="32"
-                  height="32"
-                  viewBox="0 0 16 16"
-                  aria-hidden="true"
-                  focusable="false"
-                >
-                  <circle cx="8" cy="8" r="6.4" />
+                <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                  <circle
+                    cx="8"
+                    cy="8"
+                    r="6.4"
+                    className={
+                      thread.unread > 0 ? "fill-current" : "fill-none stroke-current stroke-[1.6]"
+                    }
+                  />
                 </svg>
-              </Button>
+              </IconButton>
             ) : null}
           </div>
-          {/* The same component the page built from this thread uses, over a
-              corpus read that carries each body already rendered — in the pane's
-              own scroll box, so the head above is a line of the pane rather than
-              the first thing in the thread (see .ibreadwrap). */}
-          <div className="ibreadwrap min-h-0 min-w-0 flex-1 overflow-auto [&_.stream]:p-4 [&_.stream]:pb-40 [&_.stream_.pan.people]:mt-0 [&_.stream_.pan.people]:mb-[1.1rem]">
+          <div className="min-h-0 min-w-0 flex-1 overflow-auto [&_.stream]:p-4 [&_.stream]:pb-40 [&_.stream_.pan.people]:mt-0 [&_.stream_.pan.people]:mb-4">
             <ThreadMessages thread={thread} tree={tree} />
           </div>
         </>
       ) : (
-        <p className="selnote mx-[.8rem] mt-[.7rem] flex-[1_1_100%] text-[.78rem] text-muted">
-          {empty}
-        </p>
+        <p className="mx-3 mt-3 flex-[1_1_100%] text-[.78rem] text-muted">{empty}</p>
       )}
     </aside>
   );
 }
 
-/** What the switch says it is, and what pressing it does — the same shape the
- *  page's own reply-tree button names itself in (see behaviour.ts's treeLabel):
- *  the state, then the press. The words are the reader's two options rather than
- *  the feature's name, because "a reply tree" is what this build calls it and what
- *  a reader sees is the difference between two shapes of transcript. */
+/** Same shape as behaviour.ts's treeLabel: the state, then the press. */
 function treeLabel(on: boolean): string {
   return on
     ? "Reply tree: each answer under the message it answers — click for the order they were sent"
     : "Reply tree: the order they were sent — click to draw each answer under the message it answers";
-}
-
-/** The switch's mark: a message, two answers to it, and an answer to one of
- *  those — the three levels the tree draws, in the four lines a 14px glyph has
- *  room for. Drawn with the same stroke and the same box as the two verbs beside
- *  it rather than as a filled shape, so the strip stays one kind of thing. */
-function OpenWindowGlyph() {
-  return <ArrowTopRightOnSquareIcon width={14} height={14} aria-hidden="true" />;
-}
-
-function TreeGlyph() {
-  return <QueueListIcon width={14} height={14} aria-hidden="true" />;
 }

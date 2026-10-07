@@ -182,13 +182,13 @@ make check              # tests, ESLint, Prettier check, go vet/gofmt, typecheck
 npm run format          # format TypeScript/TSX
 npm run format:check    # check formatting without changing files
 # CSS is excluded: source-level tests assert exact CSS declarations.
-npm run gen:types  # regenerate src/lib/spec.d.ts from the schema
-npm run gen:api    # regenerate src/lib/api.d.ts from openapi.json
+npm run gen:types  # regenerate src/lib/timeline/spec.d.ts from the schema
+npm run gen:api    # regenerate src/lib/api/api.d.ts from openapi.json
 ```
 
 The Go side has no direct dependencies; the JS runtime is three packages (`react`,
 `@tanstack/react-query`, `openapi-fetch`) — keep it that way unless a dependency earns
 itself. Generated files are never hand-edited. `fixtures/synthetic.json` is a
 full-complexity trail for the renderer; real trails are sensitive and stay untracked at
-`fixtures/local.json` (loaded with `?spec=`). `corpus eval` A/Bs retrieval configs over
+`fixtures/local.json` (drop it on the page). `corpus eval` A/Bs retrieval configs over
 a judged query set (`fixtures/eval.synthetic.json`).

@@ -32,7 +32,7 @@ const (
 // resolve, not every label in existence — an unlisted one yields nothing rather
 // than a guess.
 //
-// Mirrors TZ_OFFSETS in src/lib/chronological.ts so that the offset a label
+// Mirrors TZ_OFFSETS in src/lib/timeline/chronological.ts so that the offset a label
 // implies here is the one the renderer will order by.
 var offsets = map[string]int{
 	"AEST": 600, "AEDT": 660, "NZST": 720, "NZDT": 780, "AWST": 480,

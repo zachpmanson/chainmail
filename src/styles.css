@@ -1,21 +1,8 @@
-/* Ported verbatim from the original build.py CSS constant.
-   It lived inside a Python string literal, where `content:"\\25B8"` was
-   parsed as an octal escape and shipped a control character. In a real .css
-   file that class of bug cannot happen. */
-
 :root {
     --bg:#f6f4f1; --fg:#1e1c1a; --muted:#6f6963; --line:#e3ded7; --card:#fff;
     --accent:#8a5a2b; --mine:#f2dcb4; --quote:#faf8f5; --dash:#eae5dc;
     --o1:#2f6f5f; --o2:#4a5b9c; --o3:#8a5a2b; --o4:#8c4a6b; --o5:#77716a;
     --strong:#2e7d4f;
-    /* The serif a subject is set in, where a subject is drawn: the select panel's
-       rows and a rendered page's proposals. A subject is a title rather than a
-       field of one, and there the page's sans makes it read as another label in a
-       table.
-
-       Nowhere in the mail itself: the list rows, the pane's head and the receipt
-       inside a bubble are all deliberately left in the page's own sans. It sits
-       outside the theme blocks below because the same faces are wanted in both. */
     --serif:Charter,"Bitstream Charter","Sitka Text",Cambria,serif;
   }
   @media (prefers-color-scheme: dark) {
@@ -36,281 +23,47 @@
   html { scroll-behavior:smooth; }
   body { margin:0; background:var(--bg); color:var(--fg);
     font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; }
-  /* No shell rule here on purpose. Making #root a flex column for every page
-     silently disabled the centring the document measure relies on: a flex item
-     with `margin:0 auto` is sized to its *content*, because auto margins take
-     precedence over `align-items:stretch` — so /specs, /status, /ops and the
-     search page all shrank to a centred column on a wide screen. The shell is a
-     flex column only where a page has to fill the window: the workspaces,
-     body.inbox and body.search, below. */
-  /* The shell fills the window. A cap here put the nav in the middle of a wide
-     screen with a third of it empty to either side, on every page. */
-  /* A row, so the corpus search can sit at its end: `margin-left:auto` is what
-     puts it on the right.
-
-     The row has one height, `--navh`, whatever is in it — the links with the
-     search box shut, the panel wide open with its four controls out, or the
-     selection bar in the nav's place. It is a constant rather than three heights
-     that happen to agree, because the difference between them is a layout jump: a
-     header that grows by four pixels when the panel opens makes the whole page
-     below it move mid-animation, and one that shrinks when the bar arrives moves
-     it again a moment later.
-
-     So the two things that used to decide the height are both sized to fit it
-     instead: the search panel and the selection bar take `height:var(--navh)`,
-     and the rows of controls inside them — the four pickers, the bar's verbs —
-     scroll sideways rather than wrapping, because a second line is exactly the
-     height change this is here to prevent. The nav's own items do the same, so
-     that a narrow screen scrolls the strip rather than wrapping it into two
-     rows: that wrap was the other half of the jump, since opening the search
-     hides the links and the wrapper went with them. */
-  /* The nav's items, as one element, because one element is what the selection
-     bar replaces: the reader ticked some chains, so the row the links were on is
-     the bar's until the selection clears. One line, scrolled when the links and
-     the box together do not fit (see --navh above), and exactly `--navh` tall
-     however long the line is — this is the row the bar is measured against, and
-     both are the same number rather than two numbers that happen to agree. */
-  /* The panel's containing block is this row, and that is the one ancestor whose
-     width is the same whether the panel is open or shut: it is the header's own
-     content width (see `flex:1 1 100%` below), and the panel no longer holds any
-     of it. Which matters because the panel is positioned against it — see
-     `.navsearch`. */
-  /* The bar's place in the header, and the sentence an action leaves behind. It
-     is empty while nothing is ticked, and a line of its own when it is not: the
-     bar takes the whole row because the nav it replaces has gone, and the report
-     of a finished action stands under the nav, which is back by then. */
   .buildslot:not(:empty) { flex:1 1 100%; }
-  /* The bar replaces the nav rather than sitting above it. `:has` rather than a
-     class on the header because the bar arrives through a portal and the header
-     is not the component that decides whether it is there — which is exactly
-     the fact `:has` can test for, and the reason the bar cannot test it itself. */
+  /* `:has` because the bar arrives through a portal the header doesn't own. */
   header.sitehead:has(.ibbuild) .sitenav { display:none; }
-  /* The app's one way into the search, and the same box on every page. It used
-     to be a button onto a page that owned the query — and the page's own box was
-     the one the results answered, so the nav's copy could only ever disagree with
-     it. The four controls that ask the question live in here now, and the page
-     below is the answer. */
-  /* The nav's right end: the deploy stamp, then the search panel's place, held
-     together by one `margin-left:auto` so the stamp stays immediately left of the
-     panel rather than drifting into the middle of a wide screen.
-
-     The panel itself is out of this row (see `.navsearch`), so its place is kept
-     for it as padding rather than by an item: the panel's own width, against the
-     row's right edge, which is where the panel is pinned — plus the one gap this
-     group would have put between the panel and the refresh button if the panel were
-     still an item in it. Nothing else can put that gap there: a box out of the flow
-     takes no gap with it, and a refresh button flush against the search panel reads
-     as the two being one control. Shut, the stamp and the button sit where they
-     always sat, moved left by that one gap; open, the padding is behind the panel
-     and costs nothing.
-
-     `--navgap` is the gap, named once, because three distances in this nav are that
-     one number: the space between the group's items, the space reserved in front of
-     the panel here, and the space the panel leaves for its own dismissal button
-     when it is open (see `--searchgap` below, which is inherited from here).
-
-     Nothing here is nudged vertically: the group is centred in a row that is
-     already `--navh`, so the stamp sits on the same line as the links and the
-     panel, and the row is the bar's height exactly. A `padding-top` of a couple of
-     pixels used to live here, which is what made the nav's row a hair taller
-     than the bar that replaces it. */
-  /* Shut: a field showing what the address asks, and the whole of the search. The
-     height is the row's, so the panel is the same size open as shut and the page
-     below never moves for it.
-
-     It is out of the row's flow, and that is what makes it animatable. In flow it
-     was a flex item with `flex-grow:1`, so on the way open the width it ended up
-     with was decided by the flex algorithm (the row's free space) and its own
-     `width` never sized it; on the way shut `flex-grow` flipped to 0 and the width
-     it ended up with was its `width` property again, in one frame, while the group
-     around it collapsed from the whole row to the stamp and the button. Either
-     direction, the property it was drawn at was not the property the transition
-     asked for: `max-width` carried the growth (the clamp is applied to the flex
-     result) and carried nothing on the way back, which is why the panel grew open
-     and snapped shut. Positioned against `.sitenav`, with no clamp on it and no
-     share of a line to be given, its `width` is what sizes it in both directions.
-
-     The panel starts after the dismissal button, so the row's left-hand control
-     and the panel do not overlap: `--searchgap` is the button's own width and the
-     gap this group puts between it and the next thing. The two are one sum rather
-     than two numbers because they are one distance, and it is the only arithmetic
-     in the arrangement: 1.85rem is the dismissal's box (an 18px glyph in .25rem
-     .3rem of padding with a 1px border — see the icon button above), and
-     `--navgap` is the same gap `.navright` puts between its own items. */
-  .navsearch { --searchgap: calc(1.85rem + var(--navgap)); }
-  /* The width is grown rather than switched: the panel becoming the row is one
-     thing turning into the other, and the movement is what says so. The house
-     rule for a reader who has asked for less motion: no animation, same layout.
-
-     `12rem` and `calc(100% - --searchgap)` are both length-percentages, so there
-     is something to interpolate at every frame, and the `100%` is `.sitenav`'s own
-     width — 1260px at a 1300px window, open or shut, because the panel is not one
-     of the things deciding it. A percentage against a box that is resized by the
-     state you are leaving is a percentage that steps. */
+  /* The dismissal button's 1.85rem box plus the nav's `gap-4`. */
+  .navsearch { --searchgap: calc(1.85rem + 1rem); }
   @media (prefers-reduced-motion: no-preference) { .navsearch { transition:width .18s ease; } }
   .navsearch:hover, .navsearch:focus-within { border-color:var(--accent); }
-  /* The panel's own way out, and it stands outside the box rather than in it: the
-     box is the field and the four controls that ask a question, and a dismissal is
-     not one of the things a search is made of. It wears the nav's icon button (see
-     .navrefresh above), and its glyph is the 12px square the magnifier inside the
-     box is: two controls on one line, drawn to one size. */
-  /* The box's own border is the focus indicator (`:focus-within` above), so the
-     field inside it does not draw a second one around itself: two rings for one
-     focus says the field and the box are two things to the reader, and they are
-     one control. */
-  /* No mark for the question on screen: `aria-current` is set on the field (see
-     NavSearch.tsx), and nothing draws it. A live query was coloured the accent,
-     and then given `--mine` behind it — the colour this app uses for the reader's
-     own mail, which turned the box brown when a search was run and said "you are
-     here" in a colour that already means something else. The box's background is
-     the box's. */
-  /* Open: the panel is the row. The links beside it are taken out of the row
-     rather than covered by it, so the row holds the dismissal and the panel and
-     nothing else — and the dismissal takes the row's left end, which is where a
-     way out of a panel belongs. `.sitenav` is the ancestor that can see the state:
-     the panel sits in `.navright`, whose siblings the links are, and no selector
-     reaches them from the panel itself. */
   header.sitehead:has(.navsearch.open) .sitenav > :not(.navright),
   header.sitehead:has(.navsearch.open) .navright > :not(.navsearch):not(.navcancel) { display:none; }
-  /* Open, the panel is the row less the dismissal's place, and it gets there by
-     growing — three of them, in a chain: the nav takes the row, which is what
-     makes `100%` in the panel the row's width in both states (the only one of the
-     three that resolves against something definite — everything inside the row was
-     sizing itself to its own contents, which is why the panel used to open a third
-     of the way across and stop), the group takes the nav, and the panel is the nav
-     less the distance to its own left edge. */
+  /* The nav takes the row so the panel's `100%` resolves against a definite width. */
   header.sitehead:has(.navsearch.open) .sitenav { flex:1 1 100%; }
   header.sitehead:has(.navsearch.open) .navright { flex:1 1 auto; justify-content:flex-start; }
   header.sitehead:has(.navsearch.open) .navsearch { width:calc(100% - var(--searchgap)); }
-  /* The options, which exist only while the panel is open: shut, the box is the
-     whole interface, and a row of pickers beside a field being read is in the way
-     of it. `overflow:hidden` on the panel above is the reveal — they arrive
-     clipped by the box's growing edge rather than in front of it.
-
-     One line, and it does not wrap: the panel's height is the row's height, so a
-     second line here would be a taller panel and a header that moves. When the
-     four controls and the field cannot share the row, the pickers scroll
-     sideways — `min-width:0` is what lets the row be narrower than they are,
-     which is the whole reason a flex row needs a scroller rather than a wrap.
-
-     Only the *field* grows, and the four controls keep the width they need
-     (`flex:0 1 auto`: free to shrink, never to swell). Both were growing before,
-     so the field and the controls each took half of the row's slack — the field
-     stopped half way across and the cluster of controls floated in the middle of
-     a panel with its own width of empty space at the end of it. What the row is
-     for reads left to right: the field takes the room, and the controls that ask
-     the question with it wait at the end, where the box itself used to be. */
-  /* The date field is drawn by the browser, which also draws a picker button
-     inside it, so it needs a little more room than a field of the same ten
-     characters: 7.5rem clipped the last digit wherever the button is shown. */
-  /* The Person control shows an address, which is longer than a word, and it sits
-     on the same line as the mode and the date: capped, so one long value cannot
-     decide how much of that line the other two get. 20ch is a full address and no
-     more — the list under it is where the whole of it is read (see .navpeople). */
-  /* The Person field's suggestions, drawn under it.
-
-     Outside the nav's own tree: the row clips (`overflow-x:auto` on `.sitenav`
-     and `.navopts`, `overflow:hidden` on `.navsearch`), which is what the panel's
-     reveal is made of, and a list inside one of those is a list with its bottom
-     cut off. So it is a fixed box, placed from the field's own rectangle and
-     re-placed as the page scrolls under it (see NavPerson) — `position:fixed`
-     cannot be absolutely positioned by an ancestor, because there is no ancestor
-     left by the time it is drawn.
-
-     Above the header's own stacking (`z-index:60`, the same layer the spec view
-     opens on): the list belongs to a control being used, and nothing in the row
-     it hangs from should be over it. */
-  /* The refresh button: the stamp's neighbour, and the one control in the nav
-     that asks the corpus again for what is on screen. Quiet like the stamp it
-     sits beside — it is small print on every page, read when something is being
-     checked.
-
-     It and the panel's own dismissal are one rule, because they are one thing: a
-     glyph in a transparent box that lifts to the accent when it is pointed at.
-     This is the shape of the ordinary icon buttons in this app, down to the
-     radius, the hairline that arrives on hover and their 18px glyph. Mail actions
-     (archive, delete and read-state) fill their 32px hit area, because they are
-     the primary controls on the thread. .ibread-head .ibicon and
-     .ibbuild .ibicon come out 29.6x28 with the ordinary size, so these two do as
-     well. A smaller size than the strip's reads as small type rather than as
-     controls, which is the opposite of what the nav's two presses are. */
-  /* dripfeed-web's spinner (src/index.css there): the same ↻, the same 0.8s
-     linear turn, so the act reads the same in both apps. It turns only while its
-     thing is working — as a button's own icon, a still ↻ is what the control
-     *is*, and a turning one is what it is doing.
-
-     One box, the drawn mark's 1em square, on all three sites: no forced 18px box
-     with a `line-height` picked to line the ink up inside it, which is a font
-     constant and not a fix. The 18px look is kept with `font-size` on the two
-     buttons (the app's glyph size, the same as the svg glyphs in every other icon
-     button — see .ibicon svg); the chip keeps the .ameta size it inherits.
-
-     The mark is DRAWN, not typeset, and that is the whole of the wobble fix. A
-     transform turns about the box centre, and a character's ink is NOT centred
-     in its em box: measured in a real browser, DejaVu Sans' ↻ ink centre sits
-     0.097em above the box centre, so a typeset ↻ orbits the axis rather than
-     turning on it. That offset is a font constant — swapping `line-height` only
-     re-centres it for the one font it was measured against, and Zach's browser
-     does not set ↻ in DejaVu. The path is drawn to the box centre instead, so
-     rotate() is exact on every font, browser and size. */
+  /* ↻ is a path drawn to the box centre, not a glyph: a glyph's ink isn't centred
+     in its em box, so rotate() would wobble. */
   .spinner { display:inline-block; width:1em; height:1em; line-height:1;
     vertical-align:middle; flex:none; }
-  /* One size for the two icon buttons' glyphs; the chip keeps the .ameta size it
-     inherits from the line it is in. */
   .navrefresh.warn { color:var(--accent); }
   .navrefresh .spinner, .origbtn.busy .spinner { font-size:1.125rem; }
-  /* The nav turns for a refresh or ingest. Other spinners turn only while their
-     own work runs. */
   .navrefresh.busy .spinner, .origbtn.busy .spinner, .att.busy .spinner {
     animation:spin .8s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) {
     .navrefresh.busy .spinner, .origbtn.busy .spinner, .att.busy .spinner {
       animation:none; } }
-  h1 { font-size:1.3rem; margin:0 0 .2rem; letter-spacing:-.01em; }
+  h1 { font-size:1.3rem; margin:0 0 .25rem; letter-spacing:-.01em; }
   .pan > summary::-webkit-details-marker { display:none; }
   .pan > summary::before { content:""; display:inline-block; width:0; height:0;
     border:.3em solid transparent; border-left-color:currentColor;
     margin-right:.4em; vertical-align:.04em;
     transition:transform .12s; }
   .pan[open] > summary::before { transform:rotate(90deg); }
-  /* Tinted to match the avatars under it and the org label on that group's
-     bubbles. Falls back to --muted for the group of people whose org nothing in
-     the trail established. */
   .ogh.o1 { --orgc:var(--o1); } .ogh.o2 { --orgc:var(--o2); }
   .ogh.o3 { --orgc:var(--o3); } .ogh.o4 { --orgc:var(--o4); }
-  /* No .ogh.o5 on purpose. --o5 is an avatar fill carrying white text; as text
-     on the page background it is #4d4a52 on #141317 in the dark theme, which is
-     not readable at .66rem. --muted is, and "no colour" is the right reading for
-     the group whose org nothing established. A fifth org's heading is left grey
-     for the same reason, which is the slot cap showing through rather than a
-     second thing to fix here. */
+  /* No .ogh.o5: --o5 is unreadable as text on the dark background, so it stays --muted. */
   .srcgrp > summary::-webkit-details-marker { display:none; }
   .srcgrp > summary::before { content:""; display:inline-block; width:0; height:0;
     border:.25em solid transparent; border-left-color:currentColor;
     transition:transform .12s; }
   .srcgrp[open] > summary::before { transform:rotate(90deg); }
-  /* proposal evaluator: a dimmed backdrop keeps the page visible while a proposed
-     chain is judged and accepted by root ext id (see refresh.go's Candidate). */
-  /* The header is a disclosure, not a caption. The sender, the org, the clock
-     and the reply the message answers are its summary — the things a page is
-     scanned by — and the caret closes the line at its right edge, so it opens
-     from where the eye already is. The receipt behind it (to/cc, the ids it was
-     found under, and the copy control) is one click away rather than permanently
-     in the bubble, where it was read once and made every bubble taller
-     thereafter. */
   details.hdr > summary::-webkit-details-marker { display:none; }
-  /* The line's right end: the reply it answers, and then the caret. One box so
-     the caret closes the line whether or not there is a reply beside it — two
-     items each claiming the free space would leave the reply stranded
-     mid-line. The caret takes the accent on hover and when open, so the line
-     reads as a control without recolouring the name sitting beside it.
-     The caret is drawn as a LEFT triangle, because that is where it stands: at the
-     end of the line, shut, it should point back along the line at the message it
-     belongs to rather than away from it — a caret at the far right pointing right
-     points at the edge of the box. Open, it turns a quarter clockwise to point down
-     at the receipt that has just appeared under it, which is the rotation the shape
-     itself asks for (a left triangle turned left by 90° is a down one). */
   details.hdr > summary > .htail::after { content:""; display:inline-block;
     width:0; height:0;
     border:.25em solid transparent; border-right-color:var(--muted);
@@ -318,26 +71,15 @@
   details.hdr > summary:hover > .htail::after { border-right-color:var(--accent); }
   details.hdr[open] > summary > .htail::after { transform:rotate(-90deg);
     border-right-color:var(--accent); }
-  /* The shadow host: layout only, and deliberately no colour. A rule in THIS
-     stylesheet beats a :host rule written inside the shadow root, so a colour
-     here would be a canvas the sender's own stylesheet could not correct — the
-     app's canvas is written inside the root instead, first (see spec.original).
-     `contain` is what contains the two things a mail can do to a page it is
-     mounted in: it becomes the containing block for a `position:fixed`
-     descendant, and it clips a fixed-width layout's overflow at the bubble. */
+  /* No colour here: this sheet beats :host rules, so the sender's CSS couldn't override it.
+     `contain` traps position:fixed descendants and clips fixed-width overflow. */
   .bdo { contain:layout paint; }
-  .bub p { margin:.2rem 0; }
+  .bub p { margin:.25rem 0; }
   .bub p:first-of-type { margin-top:0; }
   .bub ul { margin:.25rem 0; padding-left:1rem; }
-  .bub li { margin:.08rem 0; font-size:.9rem; }
+  .bub li { margin:1px 0; font-size:.9rem; }
   .ed { font-size:.8rem; color:var(--muted); font-style:italic; }
-  /* A signature or a legal notice is folded, never dropped — the phone number in
-     one is sometimes the thing being searched for, and the text stays in the
-     document either way, so find-in-page and grep still reach it.
-     The control is deliberately given the weight of an editorial aside, matching
-     .ed above: on a page where most entries carry one, an expander styled to be
-     noticed trades one kind of noise for another. */
-  .bd details.sig { margin:.25rem 0 .1rem; }
+  .bd details.sig { margin:.25rem 0 .125rem; }
   .bd details.sig > summary { list-style:none; cursor:pointer; display:inline-block;
     font-size:.8rem; color:var(--muted); font-style:italic; }
   .bd details.sig > summary::-webkit-details-marker { display:none; }
@@ -346,38 +88,17 @@
     margin-right:.35em; vertical-align:.02em; transition:transform .12s; }
   .bd details.sig[open] > summary::before { transform:rotate(90deg); }
   .bd details.sig > summary:hover { color:var(--accent); }
-  .bd details.sig .sigbd { border-left:2px solid var(--line); padding-left:.6rem;
-    margin:.2rem 0 .1rem; color:var(--muted); }
-  /* Print is the one reader that cannot click, and a page whose signatures are
-     unreachable on paper is not the same document. */
+  .bd details.sig .sigbd { border-left:2px solid var(--line); padding-left:.5rem;
+    margin:.25rem 0 .125rem; color:var(--muted); }
   @media print { .bd details.sig .sigbd { display:block; } }
-  /* A body is often the sender's own markup, laid out for a fixed-width white
-     page. These rules hold it inside the bubble: an image scales down instead of
-     pushing the column out, and a table that cannot shrink any further scrolls
-     in its own strip rather than widening the whole timeline. */
-  /* A message that was sent with nothing in it. The page's own voice — muted and
-     italic, the same register as the receipt's notes — because the words are ours
-     rather than the sender's: the answer to "why is this empty" is the corpus
-     speaking, and a bold or coloured line would be read as something the message
-     said. */
+  /* Keep the sender's fixed-width markup inside the bubble. */
   .bd img { max-width:100%; height:auto; }
   .bd table { min-width:0; max-width:100%; }
   .bd td, .bd th { vertical-align:top; }
-  /* A quoter's inline edit to a quoted message (issue #42) renders as a pale
-     block inside the quoting message's bubble. No colour is load-bearing: the
-     relation came from the ingest's graded overlap, and these classes only
-     shape a visible diff — strike for the removed words, a soft highlight for
-     the inserted ones. */
   .edit .edel { color:var(--muted); text-decoration:line-through; }
   .edit .eins { background:color-mix(in srgb, var(--mine) 55%, transparent);
-    border-radius:3px; padding:0 .12rem; }
-  /* "plain" mode. The Go side already drops what would break a theme — colours,
-     pixel widths, stylesheets — so what survives into a body is the emphasis and
-     alignment the sender chose. This turns that off without removing structure:
-     a table keeps being a table because its columns are the meaning (a recovered
-     column-mapping table is exactly what this page exists to show), and a list
-     keeps being a list. !important is required because these declarations arrive
-     inline, where a cascade rule cannot reach them. */
+    border-radius:3px; padding:0 .125rem; }
+  /* !important: these override the sender's inline style attributes. */
   body.plain .bd [style] { text-decoration:none !important; text-align:inherit !important;
     font-weight:inherit !important; font-style:inherit !important; }
   body.plain .bd [align], body.plain .bd [valign] { text-align:inherit !important;
@@ -385,101 +106,27 @@
   body.plain .bd font { font:inherit !important; }
   body.plain .bd center { text-align:inherit !important; }
   body.plain .bd img { width:auto !important; height:auto !important; }
-  /* b/i/u/strong/em are left alone on purpose: an element the sender reached for
-     to stress a word says something a style attribute does not, and dropping it
-     flattens a deliberately emphasised line into prose. */
-  /* Enlarged picture. Above the spec viewer's siblings but below it: the spec
-     viewer replaces the page, and a picture floating over it would be orphaned.
-     The veil is opaque enough to read as a different layer rather than as part
-     of the transcript: a picture at its real size is often larger than the
-     column it came from, and the reader needs to see that it is over the page
-     and not in it. */
   .pop[hidden] { display:none; }
-  /* Room is left for the bar underneath, so the caption and the controls are not
-     the first thing a tall picture pushes off the screen. Never scaled up: a
-     picture is shown at the size it was sent, and a small one stays small. */
   .popimg[hidden] { display:none; }
-  /* A text file, read rather than parsed: monospace, no wrapping, scrolling both
-     ways, because a CSV line and a log line are both wider than any column and a
-     wrapped one is harder to read than a scrolled one. */
   .poptext[hidden] { display:none; }
-  /* A delimited file, read as cells rather than as lines of commas: the same
-     scroll-anywhere box the text window uses, with the values in a table. The
-     header stays put while the rows scroll, because a column of figures is read
-     against its heading, and that heading is the first thing to leave the screen.
-     Monospace, so a column of amounts lines up on its digits. */
   .popgrid[hidden] { display:none; }
-  /* A framed document: the browser's own viewer, sized like a page. No sandbox
-     attribute — the frame's content is a blob this page built with a type it
-     chose (application/pdf), never the sender's claim about the bytes, and the
-     PDF viewers that would break under a sandbox are the only reason to have a
-     frame here at all. */
   .popframe[hidden] { display:none; }
-  /* What the window has to say about itself: that a long file was cut, that the
-     bytes could not be read. Not a control, so it is not framed like one. */
-  /* The original file, for a chip whose bytes are in the corpus: the click that
-     opened the popover was intercepted, so this is the only route to the real
-     bytes rather than the thumbnail. Same control as Close, one step quieter. */
   .popget[hidden] { display:none; }
-  /* The transcript must not scroll behind an enlarged picture: the reader's
-     position in it is what they return to when the popover closes. */
   body.popped { overflow:hidden; }
-  /* The header's expanded section: the message's receipt, in the same quiet hand
-     as the bubble's other asides, closed by the copy control at the right edge —
-     where it sat when it was the header's own, so it is still found without
-     being looked for.
-
-     No rule across the top of it. The line it opened under is the header it belongs
-     to — the sender, the clock, the reply — so a border here divided the disclosure
-     from the very line the reader had just pressed, and made the receipt look like
-     the start of a new block rather than the rest of that one. The indent and the
-     quiet hand already say it is a detail; the caret and the darker text say which
-     line it came from.
-
-     Centre, not baseline. The receipt's own line holds the copy control, whose
-     box is taller than the text beside it; under baseline alignment that control
-     pushed the whole receipt down to meet its baseline, which opened up most of
-     the air between it and the subject above. Centring the items keeps the text
-     beside the control rather than hung beneath it, and stops one control from
-     setting the space above an entire row. */
-  /* The message's own subject, and the ids it was found under, sharing the
-     receipt's first line: the subject keeps the left and the ids are pushed to
-     the right end of the same line. A subject is a sentence rather than a field
-     of one, so the row takes the whole width instead of running into the
-     recipient list below it; and it is read as a title — quieter than the header
-     line, louder than the receipt — which is what `--fg` at this size against the
-     asides' `--muted` looks like.
-
-     Its leading is tighter than the page's: a title is one line read against the
-     receipt under it, and the body's leading put as much air around the subject
-     as there was between it and the line it belongs to.
-
-     The ids are what a reader looks for on the message they are inspecting, and
-     the subject is what they are inspecting: one line, one glance, rather than
-     the ids taking a quiet line of their own under the recipient — which was
-     mostly empty and pushed the receipt's fields a line further down. */
-  /* `margin-left:auto` rather than the subject taking the slack: a long subject
-     that wraps must not push the ids off the row, and the ids still end at the
-     right edge when the subject is short. */
-  .sys ul { text-align:left; margin:.4rem 0 0; padding-left:1.1rem; }
-  .sys li { font-size:.85rem; margin:.12rem 0; }
-  .sys p { margin:.18rem 0; font-size:.86rem; text-align:left; }
+  .sys ul { text-align:left; margin:.375rem 0 0; padding-left:1rem; }
+  .sys li { font-size:.85rem; margin:.125rem 0; }
+  .sys p { margin:.25rem 0; font-size:.86rem; text-align:left; }
   code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.86em; }
-  .scroll { overflow-x:auto; margin:.35rem 0; }
+  .scroll { overflow-x:auto; margin:.375rem 0; }
   table { border-collapse:collapse; font-size:.78rem; min-width:24rem; }
-  th,td { text-align:left; padding:.18rem .6rem .18rem 0; border-bottom:1px solid var(--line); }
+  th,td { text-align:left; padding:.25rem .5rem .25rem 0; border-bottom:1px solid var(--line); }
   th { color:var(--muted); font-weight:600; }
-  .sys .par { margin-top:.3rem; }
+  .sys .par { margin-top:.25rem; }
   @keyframes flash { from { box-shadow:0 0 0 3px var(--accent); }
                      to   { box-shadow:0 0 0 3px transparent; } }
   .msg:target .bub, .sys:target { animation:flash 1.4s ease-out 1;
     border-color:var(--accent); }
-  /* The message the pane opened on: the chain's newest, which is what the row
-     that was opened was a summary of. It flashes and then settles — the mark is
-     about the arrival, not a state the message is in — so the class is taken off
-     when the animation ends (see ThreadMessages). It repeats the :target pair
-     above rather than reusing them, because landing is not following a permalink:
-     nothing is navigated to, and no anchor in the address names this message. */
+  /* ThreadMessages removes .landed when the animation ends. */
   .msg.landed .bub { animation:flash 1.6s ease-out 1; border-color:var(--accent); }
   /* --- reply-tree minimap: sticky structural index of the reply graph --- */
   /* the active message and its ancestry stay lit; everything else recedes */
@@ -494,64 +141,16 @@
   .mini.spy .lk.chn { opacity:1; stroke:var(--accent); stroke-width:1.8; }
   .mini.spy .lk { opacity:.35; }
   .mini.spy .lk.anc { opacity:1; stroke:var(--accent); stroke-width:1.8; }
-  /* hover takes over the highlight; the accent ring says it is pointer-driven
-     rather than scroll-driven */
   .mini.spy .nd.hov { opacity:1; }
   .mini.spy .nd.hov circle { r:5.4; stroke:var(--accent); stroke-width:2.2; }
   .mini.spy .nd.hov rect { stroke:var(--accent); stroke-width:2.2; }
-  /* Hovering a row, or the "in reply to" link on a message, marks the message it
-     names. A ring rather than a border colour, so it is unmistakable against both
-     bubble states (solid card and dashed quote) without shifting layout. It is the
-     loud mark of the pair, and both its drivers have stopped on a named message to
-     ask about it — the quiet one below answers a pointer that is only passing
-     (see `.rhov`, which is about reply LINES and not about this link). */
   .msg.mhov .bub, .sys.mhov { border-color:var(--accent);
     box-shadow:0 0 0 2.5px var(--accent), 0 1px 8px -2px var(--accent); }
-  /* The same idea at a lower volume, for the reading pane's reply lines.
-
-     There are two marks here because there are two ways to arrive at one: the
-     loud one answers a reader who set the pointer down on a minimap row, and
-     this one follows a pointer that is only travelling through the pane — often
-     on its way somewhere else, never having asked about a message at all. A mark
-     that shouts under a passing pointer is noise on every line of a deep thread,
-     so this one is a shade of the line itself: the line's own colour taken one
-     step towards `--muted`. That is darker than the line in the light theme and
-     lighter in the dark one, which is the same move in both — a step away from
-     the background, on the part of the picture the pointer is actually near. It
-     is deliberately not the accent: the accent is the other mark's voice, and it
-     says "this one" about a bubble the reader chose rather than about a line they
-     crossed on the way past. The step is a third of the way to the muted ink: a
-     fifteenth was tried first and was too little to find, and the accent — which
-     is the same move taken all the way — is the wrong volume for a pointer that is
-     only passing through. The mark's job here is to be found by an eye following a
-     pointer, not to be noticed by one that is reading the messages.
-
-     Nothing but the line is painted. The bubble keeps its own border, dashes and
-     all, and what is marked is a path rather than a message: every line from the
-     message pointed at up to the first one under the root, so that pointing at a
-     reply six answers deep lights the whole way down to it. A path drawn on six
-     cards is six rings to read, and the reader already knows which message they
-     are pointing at; the lines are the part of the tree that says where it came
-     from. It is worked out in client/behaviour, from the pointer's coordinates,
-     and `.rhov` is the class it puts on each line of that path (`:hover` cannot be
-     asked this question: a hovered line hovers every container it is nested in,
-     which is an ancestry, but not the one that ends where the reader is pointing).
-
-     Written here rather than in select.css so the two marks — one idea, two
-     volumes — are read together; it matches nothing on a built page, which has
-     no pane. */
+  /* client/behaviour.ts sets .rhov on each reply line from the pointed-at message
+     up to the root. */
   .ibread .stream .replies.rhov {
     border-left-color:color-mix(in srgb, var(--line) 65%, var(--muted)); }
-  /* The path arrives rather than snaps — and it is one thing appearing on several
-     lines at once, which is what makes a fade the right arrival: a pointer crosses
-     a thread quickly and often without meaning to, and the lighting of six lines in
-     a blink reads as a flicker at exactly the moment the reader is moving on.
-
-     The transition is declared on the resting rule, not on the hovering one,
-     because a transition declared by the rule that arrives does nothing on the way
-     back out — the mark would fade in and then vanish. Nothing here moves anything:
-     a line's colour is paint only. Under `no-preference`, as the rest of the sheet's
-     motion is. */
+  /* On the resting rule so the colour also fades back out. */
   @media (prefers-reduced-motion: no-preference) {
     .ibread .stream .replies { transition:border-left-color .18s ease; } }
   /* --- horizontal tree: a strip pinned to the bottom of the viewport --- */
@@ -565,61 +164,38 @@
   /* only the tree scrolls, and only along time: the strip moves lengthwise */
   body.tree-h .mini .hrow .mbody {
     overflow-x:auto; overflow-y:hidden; display:flex; align-items:center;
-    flex:1 1 auto; padding:.3rem .45rem;
+    flex:1 1 auto; padding:.25rem .5rem;
   }
   /* the tally + legend detach from the tree and stand beside it, pinned */
   body.tree-h .mini .hrow .foot2 {
     flex:none; border-top:0; border-left:1px solid var(--line);
-    padding:.3rem .7rem; justify-content:center; gap:.3rem;
+    padding:.25rem .75rem; justify-content:center; gap:.25rem;
   }
 
-  /* Panel width lives in one variable; the toolbar and the content margin both
-     derive from it, so hiding the tree cannot leave a button stranded over it. */
   body { --panel:0rem; padding-right:var(--panel); }
-  /* JS feeds the panel's rendered width into --panel, so the toolbar, the
-     refresh verdict and the reserved content column all sit at the panel's
-     real edge rather than a fixed 16.5rem. Without JS the panel just does not
-     reserve a column. */
+  /* --panel is set from JS to the minimap's rendered width. */
   body.hasmap { padding-right:var(--panel); }
   body.mapoff .mini { display:none; }
-  /* below this width the tree stops reserving a column and becomes an overlay:
-     it keeps its fixed position and floats over the stream instead of vanishing.
-     Tucked just under the toolbar (which keeps the right edge), and the toggle
-     stays reachable so the overlay is dismissible. */
   @media (max-width:1024px) {
-    /* overlay: the panel no longer reserves a column, so the stream runs out
-       to the edge under it. The toolbar flushes to the true edge here too;
-       --panel is only for the reserved-column layout, where the buttons clear
-       the panel's left edge. */
     body.hasmap { padding-right:0; }
     #maptog { display:inline-block; }
   }
   @media print { body.hasmap { padding-right:0; } }
-  /* --- chain columns: one column per reply chain, grid row = chronological
-     position, so reading down stays in time order while each chain keeps a lane --- */
+  /* --- chain columns: one lane per reply chain, grid rows in time order --- */
   .colhd, .spine, .chsec { display:none; }
   body.chains .spine, body.chains .chsec { display:block; }
-  /* the spine sits under the bubbles and shows through the gaps between them, so a
-     chain reads as continuous even where other chains own the intervening rows */
-  /* align-self:stretch is load-bearing: .stream sets align-items:start, which
-     shrinks an empty grid item to zero height and leaves nothing for the line
-     to span. */
+  /* stretch is load-bearing: .stream's align-items:start collapses an empty grid item. */
   body.chains .spine { position:relative; align-self:stretch; pointer-events:none;
     z-index:0; }
   body.chains .spine::before { content:""; position:absolute; left:50%;
     transform:translateX(-50%); top:0; bottom:0; width:2px; border-radius:1px;
     background:color-mix(in srgb, var(--muted) 45%, transparent); }
-  /* The header is scoped to its chain's row span, which is what makes one chain's
-     header push the previous chain's out when a lane is reused — sticky is clamped
-     to its containing block, so a header spanning only its own chain cannot follow
-     the next one. */
+  /* Spans only its chain's rows: sticky is clamped to its containing block. */
   body.chains .chsec { pointer-events:none; z-index:5; align-self:stretch; }
-  /* Header height is pinned rather than left to content: the clearance below it
-     is derived from the same variable, so the two cannot drift apart. Both lines
-     are single-line with explicit line-height, which is what makes it predictable. */
+  /* The first bubble's clearance is derived from this. */
   body.chains { --chdr-h:2.5rem; }
   body.chains .chdr { position:sticky; top:0; pointer-events:auto; box-sizing:border-box;
-    height:var(--chdr-h); padding:.32rem .6rem .3rem .15rem; margin-right:1rem;
+    height:var(--chdr-h); padding:.25rem .5rem .25rem .125rem; margin-right:1rem;
     background:var(--bg); box-shadow:0 1px 0 var(--line), 0 6px 10px -8px var(--fg); }
   body.chains .chdr b { display:block; font-size:.74rem; font-weight:700;
     line-height:1.3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -630,41 +206,30 @@
   /* clear the floating header, plus a gap so the first bubble is not flush to it */
   body.chains .msg.chstart, body.chains .sys.chstart {
     padding-top:calc(var(--chdr-h) + .75rem); }
-  /* Column mode is a workspace, not a document: drop the 76rem reading measure so
-     the scrollable grid gets the whole window (less the minimap), and keep the
-     prose blocks at a readable width. */
   body.chains .wrap { max-width:none; padding-right:0; }
   body.chains header.top > *, body.chains footer.end { max-width:76rem; }
   body.chains .stream { margin-right:0; }
   body.chains .stream {
     display:grid; grid-template-columns:repeat(var(--nch,1), var(--cw,25rem));
     align-items:start; gap:0 0; overflow:visible; width:max-content;
-    padding-bottom:.6rem;
-    /* alternate column tint; tied to --cw so it tracks the column width.
-       background-attachment:local so the stripes scroll with the columns rather
-       than staying pinned to the scrollport. */
+    padding-bottom:.5rem;
+    /* local: the stripes scroll with the columns, not the scrollport. */
     background-attachment:local;
     background-image:repeating-linear-gradient(to right,
       color-mix(in srgb, var(--quote) 70%, transparent) 0 var(--cw,25rem),
       transparent var(--cw,25rem) calc(var(--cw,25rem) * 2)); }
   body.chains .stream > * { padding-right:1rem; }
   body.chains .colhd { display:block; position:sticky; top:0; z-index:2;
-    padding:.35rem 1rem .4rem .15rem; margin-bottom:.35rem;
+    padding:.375rem 1rem .375rem .125rem; margin-bottom:.375rem;
     /* opaque: message bubbles scroll underneath it */
     background:var(--bg); box-shadow:0 1px 0 var(--line), 0 6px 8px -8px var(--fg); }
   body.chains .colhd b { display:block; font-size:.76rem; font-weight:700;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   body.chains .colhd span { font-size:.66rem; color:var(--muted); }
-  body.chains .sys { max-width:none; margin:.15rem 0; }
-  /* Reply arrows stay in column mode: a lane shows which CHAIN an entry belongs
-     to, never which message it answers — and inside a 27-message chain that is the
-     more useful question. What is redundant here is the thread-start chip, since
-     the chain header already names the opener. */
+  body.chains .sys { max-width:none; margin:.125rem 0; }
   body.chains .tstart { display:none; }
-  /* Columns are narrow, so the reply link collapses to its icon; the anchor's
-     title still carries "in reply to <who>, <when>". */
   body.chains .parlbl { display:none; }
-  body.chains .par { padding:.05rem .18rem; border:1px solid var(--line);
+  body.chains .par { padding:1px .25rem; border:1px solid var(--line);
     border-radius:4px; line-height:1; }
   body.chains .par:hover { border-color:var(--accent); }
   /* --- view transitions for the timeline <-> columns switch --- */
@@ -676,37 +241,12 @@
   }
   /* a message that only moves should slide, not cross-fade through itself */
   ::view-transition-old(root) { mix-blend-mode:normal; }
-  /* --- a pull that failed --- */
-  /* Above the page rather than beside the chips: a pull is one message's business
-     but its failure is the page's — the reader pressed a button that spends
-     mailbox round trips and has to be told, in the page, that it did not work.
-     Console-only is where the refresh verdict lives and where this used to be
-     lost: "nothing happened" and "it failed" look identical without it. */
 
 /* --- answering a message --- */
-/* The reply box is the pane's own foot: it sits in the stream under everything
-   said so far, because the newest message on screen is the one it answers. Its
-   box is the card every other control in this pane is drawn on, and it takes the
-   width it is given rather than a measure of its own — the bubbles above it are
-   the thing being read, and a field that narrowed them would be the wrong end of
-   the pane growing. */
-/* Recipient rows are display:contents so labels line up, fields take the middle
-   track, and the message target reserves the trailing track. */
-/* The plan: what will be sent, in the whole. The body is monospaced and
-   pre-wrapped so that the quote is read as the lines that will be sent — the
-   quote marks the server added are the thing being checked, and a proportional
-   rendering of them is a drawing of the message rather than the message. */
-/* The same preview when the reply goes out with its HTML part: the rendering the
-   recipient's client gets rather than the lines that will be typed. The frame
-   matches .replytext above so the two forms are one panel changing shape, but the
-   text is read the way the app reads a body — the blockquote a quote, the
-   paragraphs prose — because the whole point of the tick is which of the two the
-   correspondent sees. The bytes inside it are the server's and are not touched
-   here; these rules shape the frame and the composed elements' own margins, as
-   .bd's do for a body. */
-.replyhtml p { margin:.4rem 0; }
+/* Preview of the reply's HTML part, styled like .bd. */
+.replyhtml p { margin:.375rem 0; }
 .replyhtml p:first-of-type { margin-top:0; }
-.replyhtml blockquote { margin:.4rem 0 0; padding-left:.6rem;
+.replyhtml blockquote { margin:.375rem 0 0; padding-left:.5rem;
   border-left:2px solid var(--line); color:var(--muted); }
 .replyhtml img { max-width:100%; height:auto; }
 .replyhtml table { min-width:0; max-width:100%; }

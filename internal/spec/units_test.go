@@ -7,7 +7,7 @@ import (
 	"github.com/zachpmanson/chainmail/internal/corpus"
 )
 
-// entryID must stay in lockstep with entryId in src/lib/anchors.ts: the ids
+// entryID must stay in lockstep with entryId in src/lib/timeline/anchors.ts: the ids
 // emitted here are the anchors the renderer would have derived, and `parent`
 // names them.
 func TestEntryIDMirrorsTheRendererDerivation(t *testing.T) {

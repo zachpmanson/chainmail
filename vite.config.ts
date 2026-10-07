@@ -1,50 +1,21 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 
-// The dev server is for iterating on the view against a spec on disk.
-// Shipping artifacts come from `npm run render` (scripts/render.tsx), which
-// server-renders a spec to one self-contained HTML file.
-// The production build (vite build) emits into cmd/server/dist/, which the Go
-// server embeds with `//go:embed all:dist` — one binary, both API and UI.
+// `vite build` emits into cmd/server/dist/, which the Go server embeds.
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   publicDir: "fixtures",
   build: {
-    // Where the Go package expects the embedded client. The embed directive is
-    // evaluated relative to cmd/server/ (go:embed cannot reach parent dirs).
+    // go:embed is relative to cmd/server/ and cannot reach parent dirs.
     outDir: fileURLToPath(new URL("./cmd/server/dist", import.meta.url)),
-    // The client is served from a single file server; hashed asset names are
-    // what vite produces by default, and emptyOutDir keeps a stale build from
-    // serving old hashes.
     emptyOutDir: true,
   },
-  define: {
-    // lets the client expand a leading ~ in ?spec=
-    __HOME__: JSON.stringify(homedir()),
-  },
-  // Every test file runs against the same module graph, and the notification
-  // store is module state: the reset in here is what keeps one test's sentence
-  // out of the next one's corner.
-  test: {
-    setupFiles: ["./test/setup.ts"],
-    // `nix develop` leaves a source snapshot of this repo in .direnv/flake-inputs,
-    // which the default include glob picks up as a second copy of the suite —
-    // those files are symlinks into the store and fail to load, so `make check`
-    // reported 13 failed files next to 531 passing tests. Excluded, not skipped:
-    // they are not this checkout's tests.
-    exclude: ["**/node_modules/**", "**/.direnv/**", "**/dist/**"],
-  },
   server: {
-    open: "/?spec=/synthetic.json",
-    // The API is a separate localhost process, so its routes are proxied rather
-    // than called cross-origin: a same-origin client needs no CORS allowance on
-    // the service, and widening the service's origin policy is the one change
-    // that would make its unsanitised sender HTML reachable from another page.
-    // `/auth` matters here too: otherwise Vite serves index.html for auth status,
-    // which the JSON client reports as a parse error.
+    open: "/",
+    // Same-origin proxy so the service needs no CORS: widening its origin policy would
+    // expose its unsanitised sender HTML. `/auth` too, or Vite serves index.html for it.
     proxy: {
       "/v1": {
         target: process.env.CHAINMAIL_API ?? "http://127.0.0.1:8765",
@@ -52,12 +23,6 @@ export default defineConfig({
       "/auth": {
         target: process.env.CHAINMAIL_API ?? "http://127.0.0.1:8765",
       },
-    },
-    fs: {
-      // Absolute paths passed as ?spec= are fetched through Vite's /@fs/ route,
-      // which refuses anything outside this allow-list. Scoped to the home
-      // directory: specs are personal files, and this server is localhost-only.
-      allow: [process.cwd(), homedir()],
     },
   },
 });

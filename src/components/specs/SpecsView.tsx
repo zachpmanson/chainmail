@@ -1,41 +1,33 @@
 import { Link } from "@tanstack/react-router";
-import { $api } from "../../lib/api";
-import { when } from "../../lib/stamp";
-import { InlineAlert } from "../ui/InlineAlert";
+import { $api } from "../../lib/api/api";
+import { when } from "../../lib/ui/stamp";
+import InlineAlert from "../ui/InlineAlert";
 
 function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-/**
- * The /specs route: the index of every page POST /v1/spec saved, newest first,
- * so a saved build can be reopened without remembering its name. Distinct pages
- * routinely share a title, so each row leans on the saved-at time to tell them
- * apart, and the whole name is the link — /view/<name> is what a saved page is.
- */
-export function SpecsView() {
+export default function SpecsView() {
   const list = $api.useQuery("get", "/v1/specs", {});
 
   return (
-    <div className="wrap statuswrap mx-0 w-full max-w-none px-5 pt-7 pb-14">
+    <div className="wrap mx-0 w-full max-w-none px-5 pt-7 pb-14">
       {list.isError ? <InlineAlert>{errText(list.error)}</InlineAlert> : null}
 
       {list.isFetching && !list.data ? (
-        <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">
-          Reading the saved pages…
-        </p>
+        <p className="my-1.5 mb-2 text-[.74rem] text-muted">Reading the saved pages…</p>
       ) : null}
 
       {list.data && list.data.specs.length === 0 ? (
-        <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">
+        <p className="my-1.5 mb-2 text-[.74rem] text-muted">
           No saved pages yet — build one from a <Link to="/">search</Link>, and it appears here.
         </p>
       ) : null}
 
-      <ul className="mt-[.7rem] list-none border-t border-[var(--line)] p-0">
+      <ul className="mt-3 list-none border-t border-line p-0">
         {list.data?.specs.map((s) => (
           <li
-            className="flex flex-wrap items-center gap-x-[.7rem] gap-y-[.45rem] border-b border-[var(--line)] py-[.55rem]"
+            className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line py-2"
             key={s.name}
           >
             <span className="min-w-32 text-[.8rem] font-semibold">
@@ -43,7 +35,7 @@ export function SpecsView() {
                 {s.title || s.name}
               </Link>
             </span>
-            <span className="flex-[1_1_12rem] break-words text-[.72rem] text-[var(--muted)]">
+            <span className="flex-[1_1_12rem] break-words text-[.72rem] text-muted">
               {when(s.savedAt)}
             </span>
           </li>

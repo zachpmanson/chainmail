@@ -5,7 +5,12 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["cmd/server/dist/**", "node_modules/**", "src/lib/api.d.ts", "src/lib/spec.d.ts"],
+    ignores: [
+      "cmd/server/dist/**",
+      "node_modules/**",
+      "src/lib/api/api.d.ts",
+      "src/lib/timeline/spec.d.ts",
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

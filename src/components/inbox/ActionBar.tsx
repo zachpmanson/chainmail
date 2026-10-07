@@ -1,75 +1,29 @@
-import { FormField } from "../ui/FormField";
-import { Button, IconButton, TextInput } from "../ui/controls";
+import FormField from "../ui/FormField";
+import IconButton from "../ui/IconButton";
+import { Button } from "../ui/controls";
+import { TextInput } from "../ui/fields";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSearch } from "@tanstack/react-router";
-import { $api } from "../../lib/api";
-import { useMailAction } from "../../lib/mailActions";
-import { useBuildPage } from "../../lib/build";
-import { dismissToast, pushToast } from "../../lib/toasts";
-import { Failure } from "../thread/ThreadShared";
-import {
-  ArchiveGlyph,
-  MoveFolder,
-  SAID_MS,
-  TrashGlyph,
-  VERBS,
-  refusal,
-  sentence,
-} from "./MailVerbs";
+import { $api } from "../../lib/api/api";
+import { useMailAction } from "../../lib/inbox/mailActions";
+import { useBuildPage } from "../../lib/inbox/build";
+import { dismissToast, pushToast } from "../../lib/ui/toasts";
+import Failure from "../thread/Failure";
+import ArchiveGlyph from "./ArchiveGlyph";
+import MoveFolder from "./MoveFolder";
+import TrashGlyph from "./TrashGlyph";
+import { SAID_MS, VERBS, refusal, sentence } from "./MailVerbs";
 
 /**
- * Where the bar is drawn: the slot the site header leaves in its own row.
- *
- * Looked up rather than handed down. The bar is not a panel at the foot of the
- * page any more: it takes the nav's row while a selection stands — see the `:has`
- * rule in styles.css — because the reader has ticked some rows and the only thing
- * the top of the page then needs to say is what can be done with them. The slot
- * is the shell's, the selection is the page's, and the pages draw this bar.
- *
- * The read is per render and not memoised, because the header is committed in the
- * same commit as the first render of the page below it: on that render there is
- * no slot in the document yet, and a value captured then would be null forever.
- * Nothing renders the bar before that — it appears when a thread is ticked, which
- * is a later render by construction.
- *
- * Null where there is no header at all: the static pages scripts/render.tsx ships
- * have no nav and no bar. The bar is then drawn where it stands, which is the
- * fallback for a page with no slot rather than a second layout.
+ * Read per render, not memoised: the header commits with the page's first render,
+ * so an early read would stay null. Null on static pages, which have no header.
  */
 function buildBarSlot(): HTMLElement | null {
   return typeof document === "undefined" ? null : document.querySelector(".buildslot");
 }
 
-/**
- * The bar of things a reader can do to the chains they ticked: braid them into a
- * page, or move them out of the inbox.
- *
- * One bar for both pages. It was written twice — at the foot of the inbox and at
- * the foot of the search results — and the two copies had already drifted: the
- * inbox's recorded the reader's addresses as a preference on the way past, the
- * search page's used them once and dropped them, so naming yourself while
- * building from the search left the inbox pane refusing to mark your own mail.
- * Which list the chains were ticked in is not a fact about what the bar does; the
- * bar appears once something is ticked, on both pages, and the rules about what
- * happens to the ticked set live in one place.
- *
- * Building and moving are the same kind of decision from the reader's side — they
- * ticked some threads and now something happens to all of them — so they are the
- * same bar, even though one writes a file and the other writes the mailbox. What
- * is *not* here is a second copy of either: the braid asks the service through
- * `useBuildPage`, exactly as the page route does, and the three mail actions are
- * one call to one endpoint that spells what each action means in the mailbox's
- * own vocabulary.
- *
- * The reader's own addresses are **not** here either, and not only because the
- * bar has no room for them: they are a setting, not a field about the page being
- * braided. They decide which messages are marked as the reader's wherever mail is
- * read, including threads nobody ever braided a page from, so they are written on
- * the services page with the other settings and read from there by whoever needs
- * them — here, and the reading pane.
- */
-export function ActionBar({
+export default function ActionBar({
   chosen,
   queries,
   moveDefault,
@@ -79,79 +33,47 @@ export function ActionBar({
   chosen: string[];
   /** Current folder when the selected rows are known to share one. */
   moveDefault?: string;
-  /**
-   * The searches to record on the page, when a search is what found the chains,
-   * so a later refresh can propose what the same query would find now. The inbox
-   * passes none: no query found its chains, and a made-up one would have refresh
-   * proposing threads nobody asked about.
-   */
+  /** Recorded on the page so a later refresh can rerun the query. */
   queries?: { q: string; note?: string }[];
-  /**
-   * What to do once the ticked chains are no longer the ones to act on, whether
-   * because a mail action took them out of the list or because the reader said
-   * "Deselect all". A mail action's chains are gone — a message that has been
-   * archived, deleted or moved is not in the inbox any more — so leaving the
-   * boxes ticked would invite a second action on threads that are already gone.
-   */
   onDone: () => void;
 }) {
   const [title, setTitle] = useState("");
   const [braiding, setBraiding] = useState(false);
-  // What the last action here had to say is drawn in the shell's corner, not in
-  // the bar (see Toasts): the bar has to be able to leave as soon as the ticks
-  // are cleared, and a sentence that kept it on the page would hold the header's
-  // row for a claim about work that is already over. The id is kept so that a
-  // later action replaces its own sentence rather than stacking a second one.
+  // Keep the toast id so a later action replaces its toast rather than stacking.
   const said = useRef<number | null>(null);
   const say = (text: string, kind: "note" | "fail") => {
     if (said.current !== null) dismissToast(said.current);
     said.current = pushToast(text, kind, kind === "note" ? SAID_MS : null);
   };
   const { build, start } = useBuildPage();
-  // The reader's addresses, read where they are resolved. The braid needs them to
-  // mark the reader's own messages as theirs; nothing in the corpus records which
-  // mailbox it was collected from, so they can only be told, never inferred — and
-  // the setting tells it as a person, which the server reads back out as that
-  // person's mailboxes, so a page braided today marks the aliases the corpus knows
-  // today rather than the ones the reader had written down.
+  // The corpus doesn't record whose mailbox it came from, so the braid needs the reader's addresses from settings.
   const settings = $api.useQuery("get", "/v1/settings", {});
   const accountId = useSearch({ from: "/" }).accountId;
   // The header's slot, or null on a page that has no header.
   const slot = buildBarSlot();
 
-  // The ticked chains are filed away as the button is pressed, out of the folder
-  // view they were listed in (see lib/lists): a reader who archives six threads
-  // means them to be gone from the list they are looking at, and waiting for the
-  // mailbox left six rows sitting there under a sentence saying they had moved. A
-  // refusal puts them back — and the sentence is written from the server's own
-  // answer either way, so what is claimed afterwards is never what was assumed.
+  // Filed out of the list view optimistically (see lib/inbox/lists); a refusal puts them back.
   const act = useMailAction({
     onSuccess: (res) => {
       say(sentence(res.action, res.labels, res.changed, res.skipped), "note");
       onDone();
     },
     onError: (error, request) => {
-      // Said in the same words the pane uses for the same write, and in the same
-      // place: the server's own answer, in the corner. Nothing is filed as a report
-      // of work that did happen — a refusal names the verb that did not run.
       say(refusal(error, "-mail-write", VERBS[request.action] ?? "That change"), "fail");
     },
   });
 
-  // The clock and the way out are the store's now, so nothing here waits on a
-  // sentence or keeps one alive past the ticks it was about: the bar is on the
-  // page because there is a selection to act on, and for no other reason.
   if (chosen.length === 0) return null;
 
   const busy = act.isPending;
   const body = (
     <>
       {chosen.length > 0 ? (
-        <div className="ibbuild flex min-w-0 items-center gap-[.55rem] h-[var(--navh)] overflow-x-auto overflow-y-hidden [&_.ibmovewrap]:rounded-md [&_.ibmovewrap]:border-line [&_.ibmovewrap]:bg-card [&_.ibmovewrap]:px-[.5rem] [&_.ibmovewrap]:py-[.45rem] [&_.ibmovewrap:hover]:border-accent [&_.ibmovewrap:hover]:text-accent [&_.selfail]:mt-[.2rem] [&_.selfail]:flex-[1_1_100%]">
+        <div className="ibbuild flex min-w-0 items-center gap-2 h-9 overflow-x-auto overflow-y-hidden">
           <Button
             type="button"
             density="compact"
-            className="ibclear shrink-0 px-[.7rem] py-[.32rem] text-[.78rem] text-muted hover:border-accent hover:text-accent"
+            className="shrink-0 px-3 py-1 text-[.78rem] text-muted hover:border-accent hover:text-accent"
             onClick={onDone}
           >
             Deselect all
@@ -160,19 +82,12 @@ export function ActionBar({
             type="button"
             variant="subtle"
             density="compact"
-            className="px-[.7rem] py-[.32rem] text-[.78rem]"
+            className="px-3 py-1 text-[.78rem]"
             onClick={() => setBraiding(true)}
           >
             Braid Threads
           </Button>
-          {/* The two mailbox verbs are glyphs. The bar also holds a braid, a
-              folder dropdown, the count and the way out, and spelling Archive
-              and Delete along that row is what wrapped it on a laptop. The word
-              is still on the button — it is the tooltip, and what a screen
-              reader reads — but the row draws the box and the bin. */}
           <IconButton
-            type="button"
-            className="ibicon shrink-0 inline-flex items-center rounded-md border border-transparent bg-transparent p-[.45rem_.5rem] text-muted hover:border-line hover:bg-card hover:text-accent [&_svg]:block [&_svg]:size-8 [&_svg]:shrink-0"
             aria-label="Archive"
             title="Archive"
             disabled={busy}
@@ -185,8 +100,6 @@ export function ActionBar({
             <ArchiveGlyph />
           </IconButton>
           <IconButton
-            type="button"
-            className="ibicon shrink-0 inline-flex items-center rounded-md border border-transparent bg-transparent p-[.45rem_.5rem] text-muted hover:border-line hover:bg-card hover:text-accent [&_svg]:block [&_svg]:size-8 [&_svg]:shrink-0"
             aria-label="Delete"
             title="Delete"
             disabled={busy}
@@ -198,20 +111,6 @@ export function ActionBar({
           >
             <TrashGlyph />
           </IconButton>
-          {/* One control for the move, and one decision in it. It used to be a
-              labelled field with a Move button beside it, which is the reader
-              being asked to say the same thing twice: they know the folder when
-              they reach for the dropdown, and naming it again is a second act
-              with no second thought behind it. So the choice is the action, and
-              the control goes on showing nothing but its own glyph: what it did is
-              not a state of the mailbox this bar can hold — the mail has gone, and
-              the sentence below says where (see MoveFolder for why the control is
-              an icon button with the real dropdown over it).
-
-              The empty option is the placeholder and is the state the control
-              stays in: a select whose value never moves needs no state of its
-              own, and a folder named in it would be a folder the reader could
-              pick a second time by accident. */}
           <MoveFolder
             defaultFolder={moveDefault}
             busy={busy}
@@ -226,21 +125,11 @@ export function ActionBar({
               })
             }
           />
-          {/* The count stays at the far end; the way out is the first control
-              on the left, before any action on the selected mail. */}
-          <span className="ibright ml-auto flex shrink-0 items-center">
-            <span className="ibselcount text-[.76rem] tabular-nums text-muted">
-              {chosen.length} selected
-            </span>
+          <span className="ml-auto flex shrink-0 items-center">
+            <span className="text-[.76rem] tabular-nums text-muted">{chosen.length} selected</span>
           </span>
         </div>
       ) : null}
-
-      {/* What happened is drawn in the shell's corner (see Toasts): which verb, how
-          many messages, and the one number that outlives the action — what is in
-          the trash can be got back, and how long that lasts is the whole reason
-          Delete is not frightening. Nothing about it is a line of this bar, which
-          is here for the ticks and leaves with them. */}
 
       {braiding ? (
         <BraidDialog
@@ -256,23 +145,9 @@ export function ActionBar({
     </>
   );
 
-  // Portalled into the header where there is one, so the bar replaces the nav
-  // rather than sitting above the page's own controls; drawn in place otherwise.
   return slot ? createPortal(body, slot) : body;
 }
 
-/**
- * The braid dialog: a title, and the button that asks the service for the page.
- *
- * A modal rather than a field in the bar, because a title is a decision about the
- * page — the file it is saved as, and the heading it carries — and it belongs
- * beside the button that commits to it. In the bar it competed for the same line
- * as the two mailbox verbs, which is a line about a different set of decisions.
- *
- * The field is optional and its default is stated: the service borrows the
- * earliest ticked thread's subject when none is given, which is right far more
- * often than a name a second field could invent.
- */
 function BraidDialog({
   count,
   title,
@@ -290,8 +165,6 @@ function BraidDialog({
   onBraid: () => void;
   onClose: () => void;
 }) {
-  // Escape closes the dialog, matching the thread preview's habits; the listener
-  // lives here because the dialog only exists while it is open.
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
       if (ev.key === "Escape") onClose();
@@ -302,40 +175,40 @@ function BraidDialog({
 
   return (
     <div
-      className="selpv fixed inset-0 z-[55] flex items-center justify-center bg-black/45 [&_.selfail]:mx-[.8rem] [&_.selfail]:mt-2 [&_.selfail]:mb-3"
+      className="fixed inset-0 z-[55] flex items-center justify-center bg-black/45"
       role="dialog"
       aria-modal="true"
       aria-label="Braid threads"
       onClick={onClose}
     >
       <div
-        className="selpv-panel flex max-h-[82vh] max-w-[min(46rem,94vw)] flex-col rounded-lg border border-line bg-card shadow-[0_8px_40px_rgba(0,0,0,.35)]"
+        className="flex max-h-[82vh] max-w-[min(46rem,94vw)] flex-col rounded-lg border border-line bg-card shadow-[0_8px_40px_rgba(0,0,0,.35)]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="selpv-head flex items-center gap-[.6rem] border-b border-line px-[.8rem] py-2">
+        <div className="flex items-center gap-2 border-b border-line px-3 py-2">
           <b className="text-[.72rem] font-bold uppercase tracking-[.09em] text-muted">
             braid threads
           </b>
-          <span className="note ml-auto min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[.74rem] text-muted">
+          <span className="ml-auto min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[.74rem] text-muted">
             {count} thread{count === 1 ? "" : "s"} ticked
           </span>
           <Button
             type="button"
             density="compact"
-            className="bg-[var(--bg)] px-[.55rem] py-[.28rem] text-[.72rem] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            className="bg-bg px-2 py-1 text-[.72rem] text-muted hover:border-accent hover:text-accent"
             onClick={onClose}
           >
             Close
           </Button>
         </div>
-        <div className="my-[.7rem] mx-[.8rem] mb-[.2rem] flex flex-wrap items-end gap-[.6rem]">
+        <div className="my-3 mx-3 mb-1 flex flex-wrap items-end gap-2">
           <FormField
-            className="flex flex-[1_1_18rem] flex-col gap-[.18rem]"
+            className="flex flex-[1_1_18rem] flex-col gap-1"
             label="Page title"
-            labelClassName="text-[.66rem] font-bold uppercase tracking-[.09em] text-[var(--muted)]"
+            labelClassName="text-[.66rem] font-bold uppercase tracking-[.09em] text-muted"
           >
             <TextInput
-              className="w-full px-[.45rem] py-[.32rem] text-[.86rem]"
+              className="w-full px-2 py-1 text-[.86rem]"
               autoFocus
               value={title}
               onChange={(e) => onTitle(e.target.value)}
@@ -346,28 +219,23 @@ function BraidDialog({
             type="button"
             variant="subtle"
             density="compact"
-            className="px-[.7rem] py-[.32rem] text-[.78rem]"
+            className="px-3 py-1 text-[.78rem]"
             disabled={busy}
             onClick={onBraid}
           >
             {busy ? "Braiding…" : "Braid"}
           </Button>
         </div>
-        <p className="selnote mx-[.8rem] my-2 flex-[1_1_100%] text-[.78rem] text-muted">
+        <p className="mx-3 my-2 flex-[1_1_100%] text-[.78rem] text-muted">
           Left empty, the page is titled with the earliest thread's subject.
         </p>
-        {/* Seconds of silence reads as a broken page, so the wait says what it is
-            waiting on and how much of it there is. */}
         {busy ? (
-          <p
-            className="selnote mx-[.8rem] my-2 flex-[1_1_100%] text-[.78rem] text-muted"
-            role="status"
-          >
+          <p className="mx-3 my-2 flex-[1_1_100%] text-[.78rem] text-muted" role="status">
             Recovering HTML and detecting boilerplate across {count} thread
             {count === 1 ? "" : "s"}. This takes a few seconds.
           </p>
         ) : null}
-        {error ? <Failure error={error} /> : null}
+        {error ? <Failure error={error} className="mx-3 mt-2 mb-3" /> : null}
       </div>
     </div>
   );

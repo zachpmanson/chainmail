@@ -1,11 +1,6 @@
 /**
- * chainmail render — turn a timeline spec into one self-contained HTML file.
- *
+ * chainmail render — turn a timeline spec into one self-contained static HTML file.
  *   npm run render -- fixtures/synthetic.json -o out/page.html
- *
- * Server-renders rather than shipping a client-rendered shell, so the artifact
- * stays static: greppable, printable, and readable with scripting disabled.
- * Interactivity is layered on top, not required to see the content.
  */
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { buildSync } from "esbuild";
@@ -13,9 +8,9 @@ import { dirname, resolve } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import Ajv from "ajv";
 import { compile } from "@tailwindcss/node";
-import { Timeline } from "../src/components/specs/Timeline";
-import { normalise } from "../src/lib/normalise";
-import { diff, extractSpec, type Mark } from "../src/lib/diff";
+import Timeline from "../src/components/specs/Timeline";
+import { normalise } from "../src/lib/timeline/normalise";
+import { diff, extractSpec, type Mark } from "../src/lib/timeline/diff";
 
 const args = process.argv.slice(2);
 const flag = (name: string) => {
@@ -35,8 +30,6 @@ const root = resolve(import.meta.dirname, "..");
 const raw = JSON.parse(readFileSync(specPath, "utf8"));
 const spec = normalise(raw);
 
-// Validate at the boundary: a spec that violates the contract should fail loudly
-// here rather than render a subtly wrong page.
 const schema = JSON.parse(readFileSync(resolve(root, "schema/timeline.schema.json"), "utf8"));
 const ajv = new Ajv({ allErrors: true, strict: false });
 if (!ajv.validate(schema, spec)) {
@@ -45,9 +38,7 @@ if (!ajv.validate(schema, spec)) {
   process.exit(1);
 }
 
-// --since: recover the previous run's spec from the page it produced, and mark
-// what this pass added. Diffing is a spec-level operation; the renderer only
-// honours the marks.
+// --since: diff against the spec embedded in the previous run's page.
 let marks: Map<string, Mark> | undefined;
 let prevLabel: string | undefined;
 if (sincePath) {
@@ -64,8 +55,6 @@ if (sincePath) {
 
 const css = readFileSync(resolve(root, "src/styles.css"), "utf8");
 
-// Bundle the same behaviour module the dev app uses, so interactivity has one
-// implementation rather than a copy that drifts.
 const behaviour = buildSync({
   entryPoints: [resolve(root, "src/client/behaviour.ts")],
   bundle: true,
@@ -77,9 +66,7 @@ const behaviour = buildSync({
   globalName: "chainmail",
 }).outputFiles[0]!.text;
 const body = renderToStaticMarkup(<Timeline spec={spec} marks={marks} prevLabel={prevLabel} />);
-// Static exports do not pass through Vite, so compile the same utility stylesheet
-// here from the classes the rendered page actually uses. This keeps exports
-// self-contained and avoids depending on a prior `npm run build`.
+// Static exports bypass Vite, so compile Tailwind here from the classes the page uses.
 const tailwind = await compile(readFileSync(resolve(root, "src/tailwind.css"), "utf8"), {
   base: root,
   onDependency: () => {},
@@ -91,8 +78,7 @@ const renderedCss = `${css}\n${tailwind.build(utilityClasses)}`;
 const theme = spec.theme ?? "light";
 const title = (spec.title ?? "Timeline").replace(/^#+/, "");
 
-// The spec travels with the page, so a later pass reloads exact structured input
-// instead of scraping rendered HTML.
+// Embedded so a later --since pass reloads exact input instead of scraping HTML.
 const embedded = JSON.stringify(spec).replace(/<\//g, "<\\/");
 
 const page = `<!doctype html>

@@ -1,13 +1,6 @@
-/**
- * chainmail extract — print the spec embedded in a rendered page.
- *
- *   chainmail extract page.html > spec.json
- *
- * Rendered HTML is lossy and messy to reparse; the embedded JSON is the exact
- * input, so reloading a previous run is a clean round-trip rather than a scrape.
- */
+/** chainmail extract page.html > spec.json — print the spec embedded in a rendered page. */
 import { readFileSync } from "node:fs";
-import { extractSpec } from "../src/lib/diff";
+import { extractSpec } from "../src/lib/timeline/diff";
 
 const path = process.argv[2];
 if (!path) {

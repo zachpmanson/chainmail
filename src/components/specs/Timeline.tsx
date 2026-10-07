@@ -1,30 +1,28 @@
-import { Source } from "../thread/Source";
-import { derive, type Row, type View } from "../../lib/derive";
-import type { Timeline as Spec } from "../../lib/spec";
-import { DiffPanel, Legend, SourcesPanel, type ThreadFilter } from "./Panels";
-import { ParticipantsPanel } from "../thread/Participants";
-import { Minimap } from "./Minimap";
-import { Message } from "../thread/Message";
-import { ReplyLink, type ReplyTarget } from "../thread/ReplyLink";
-import { Edits } from "./Edits";
-import { trimBody } from "../../lib/trimBody";
+import Source from "../thread/Source";
+import { derive, type Row, type View } from "../../lib/timeline/derive";
+import type { Timeline as Spec } from "../../lib/timeline/spec";
+import DiffPanel from "./DiffPanel";
+import Legend from "./Legend";
+import SourcesPanel from "./SourcesPanel";
+import { type ThreadFilter } from "./Panels";
+import ParticipantsPanel from "../thread/ParticipantsPanel";
+import Minimap from "./Minimap";
+import Message from "../thread/Message";
+import ReplyLink from "../thread/ReplyLink";
+import { type ReplyTarget } from "../thread/ReplyLink";
+import Edits from "./Edits";
+import { trimBody } from "../../lib/message/trimBody";
 
 const html = (s: string) => ({ __html: s });
 
 const toolbarButtonClasses =
-  "inline-flex items-center rounded-md border border-line bg-card px-[.45rem] py-[.2rem] text-[.66rem] font-bold uppercase tracking-[.08em] text-muted hover:border-accent hover:text-accent aria-pressed:border-accent aria-pressed:bg-mine aria-pressed:text-accent disabled:cursor-default disabled:opacity-55";
+  "inline-flex items-center rounded-md border border-line bg-card px-2 py-1 text-[.66rem] font-bold uppercase tracking-[.08em] text-muted hover:border-accent hover:text-accent aria-pressed:border-accent aria-pressed:bg-mine aria-pressed:text-accent disabled:cursor-default disabled:opacity-55";
 
 function replyTarget(row: Row, v: View): ReplyTarget | null {
   const parent = row.entry.parent ? v.rows.find((r) => r.id === row.entry.parent) : undefined;
   if (!parent) return null;
-  // A note has no sender: what it answers is named by its label, which is the
-  // word it was drawn under.
   const who = parent.entry.kind === "note" ? parent.entry.label : parent.entry.sender;
   const when = [parent.entry.date, parent.entry.time].filter(Boolean).join(" ");
-  // The same "Name <address>" the bubble under that name wears, so a hover on the
-  // link and a hover on the message it points at say one thing about one person.
-  // A note's label is not a person and asks for no address (see the system note's
-  // own label in the panel above).
   return {
     anchor: parent.id,
     who,
@@ -33,24 +31,7 @@ function replyTarget(row: Row, v: View): ReplyTarget | null {
   };
 }
 
-/**
- * One row of the transcript: a spec `Row` and `View` resolved into a `Message`.
- *
- * This is the adapter, and this file is the only place that knows both halves.
- * Everything a bubble cannot be drawn without goes over as data — the sender,
- * the org slot, the attachments, the clock, the grid position. Everything that
- * takes the spec to work out goes over as a node: the reply link (which resolves
- * the parent through the reply graph), the provenance line (which resolves ids to
- * anchors on this page), a quoter's inline edit (which resolves a diff against
- * the message it was made to), and the payload the copy button puts on the
- * clipboard.
- *
- * A system note is not a message and is drawn here rather than through `Message`.
- * It has no sender, no bubble, no org colour and no attachments, so pushing it
- * through the bubble component would mean a component reaching every bubble part
- * with nothing to put in it — and a `.sys` that rendering-inspected an empty
- * sender to decide whether it was a note at all.
- */
+/** Adapts a spec row to `Message`; system notes have no sender or bubble so are drawn here. */
 function EntryBlock({
   row,
   v,
@@ -72,24 +53,23 @@ function EntryBlock({
   const grid = { gridColumn: row.lane + 1, gridRow: row.row };
 
   if (e.kind === "note") {
-    const start = row.isChainStart ? " chstart" : "";
     return (
       <div
-        className={`sys scroll-mt-6 mx-auto my-[.7rem] max-w-[44rem] border border-dashed border-line rounded-[10px] bg-quote px-[.9rem] py-[.55rem] text-center${start}${mark === "new" ? " isnew border-l-[3px_solid_var(--o1)]" : ""}`}
+        className={`sys scroll-mt-6 mx-auto my-3 max-w-[44rem] border border-dashed border-line rounded-[10px] bg-quote px-4 py-2 text-center${row.isChainStart ? " chstart" : ""}${mark === "new" ? " border-l-[3px_solid_var(--o1)]" : ""}`}
         id={row.id}
         data-ch={row.lane}
         style={grid}
       >
-        <div className="sysday mb-[.15rem] text-[.68rem] tabular-nums text-muted">
+        <div className="mb-0.5 text-[.68rem] tabular-nums text-muted">
           <a
-            className="pl rounded-[3px] text-inherit underline-offset-2 decoration-accent no-underline hover:text-accent hover:underline hover:decoration-dotted focus-visible:outline focus-visible:outline-[1.5px] focus-visible:outline-accent focus-visible:outline-offset-1"
+            className="rounded-[3px] text-inherit underline-offset-2 decoration-accent no-underline hover:text-accent hover:underline hover:decoration-dotted focus-visible:outline focus-visible:outline-[1.5px] focus-visible:outline-accent focus-visible:outline-offset-1"
             href={`#${row.id}`}
             title="Link to this note"
           >
             {e.date}
           </a>
         </div>
-        <div className="syslabel mb-[.3rem] text-[.75rem] font-bold uppercase tracking-[.08em] text-muted">
+        <div className="mb-1 text-[.75rem] font-bold uppercase tracking-[.08em] text-muted">
           {e.label}
         </div>
         <div className="bd" dangerouslySetInnerHTML={html(trimBody(e.body))} />
@@ -116,9 +96,6 @@ function EntryBlock({
       pulling={pulling}
       mediaBase={mediaBase}
       to={e.to}
-      // The page's own answer for a name's address, the same one the panel and the
-      // bubble's sender use (see derive.ts's whoTitle): a page build knows the
-      // addresses it was built with, and says the name alone for anyone it does not.
       toTitle={v.whoTitle}
       subject={e.subject}
       stamp={row.stamp}
@@ -129,9 +106,6 @@ function EntryBlock({
       reply={<ReplyLink parent={replyTarget(row, v)} />}
       edits={<Edits edits={row.edits} fallbackWho={v.title} />}
       source={<Source source={e.source} anchorByGmail={anchorByGmail} />}
-      /* The spec entry as the renderer saw it, plus the row id and any resolved
-         quote-edits (the "edited by … original from …" attribution), so a message
-         that renders wrong can be pasted somewhere and inspected whole. */
       copyJson={{
         id: row.id,
         thread: row.chain ?? null,
@@ -171,7 +145,20 @@ function Chains({ v }: { v: View }) {
   );
 }
 
-export interface TimelineProps {
+export default function Timeline({
+  spec,
+  marks,
+  prevLabel,
+  filter,
+  onShowSpec,
+  onRefresh,
+  onAdd,
+  onEval,
+  onPull,
+  pulling,
+  mediaBase,
+  refreshing,
+}: {
   spec: Spec;
   /** entry id -> what changed since a previous render, from `--since` */
   marks?: Map<string, "new" | "revised">;
@@ -186,41 +173,17 @@ export interface TimelineProps {
   onAdd?: () => void;
   /** app-only: opens the proposal evaluator, when the last refresh proposed chains. */
   onEval?: () => void;
-  /**
-   * app-only, and only on a host that was started with -media: fetch one
-   * message's attachment bytes, so a chip under it can become the file rather
-   * than a link back to Gmail for it.
-   */
+  /** App-only, and only on a host started with -media. */
   onPull?: (extId: string) => void;
   /** the ext id whose files are being fetched, so its button says so and no second pull starts */
   pulling?: string | null;
-  /**
-   * Where the app serves stored attachment bytes. Absent in the static export,
-   * which has no server to serve them: a shared page keeps its source links.
-   */
+  /** Absent in the static export, which has no server. */
   mediaBase?: string;
   refreshing?: boolean;
-}
-
-export function Timeline({
-  spec,
-  marks,
-  prevLabel,
-  filter,
-  onShowSpec,
-  onRefresh,
-  onAdd,
-  onEval,
-  onPull,
-  pulling,
-  mediaBase,
-  refreshing,
-}: TimelineProps) {
+}) {
   const v = derive(spec);
   const s = v.spec;
-  // gmailId -> the id of the row that carries it, so an unspooled source line
-  // can anchor to the message it was lifted out of on this same page. A message
-  // is keyed by the first row that holds its gmailId.
+  // gmailId -> first row holding it, so unspooled source lines can anchor on this page.
   const anchorByGmail = new Map<string, string>();
   for (const r of v.rows) {
     if (r.entry.gmailId && !anchorByGmail.has(r.entry.gmailId))
@@ -229,9 +192,9 @@ export function Timeline({
   return (
     <>
       {v.avatarCss ? <style dangerouslySetInnerHTML={html(v.avatarCss)} /> : null}
-      <div className="fixed top-2 right-[calc(var(--panel)+.6rem)] z-[31] flex gap-[.35rem] max-[1024px]:right-[.6rem] print:hidden">
+      <div className="fixed top-2 right-[calc(var(--panel)+.6rem)] z-[31] flex gap-1.5 max-[1024px]:right-[.6rem] print:hidden">
         <button
-          className={`tbtn ${toolbarButtonClasses}`}
+          className={toolbarButtonClasses}
           id="viewtog"
           type="button"
           aria-pressed="false"
@@ -241,7 +204,7 @@ export function Timeline({
         </button>
         {onShowSpec ? (
           <button
-            className={`tbtn ${toolbarButtonClasses}`}
+            className={toolbarButtonClasses}
             id="spectog"
             type="button"
             onClick={onShowSpec}
@@ -252,7 +215,7 @@ export function Timeline({
         ) : null}
         {onRefresh ? (
           <button
-            className={`tbtn ${toolbarButtonClasses}`}
+            className={toolbarButtonClasses}
             id="refreshtog"
             type="button"
             onClick={onRefresh}
@@ -264,7 +227,7 @@ export function Timeline({
         ) : null}
         {onAdd ? (
           <button
-            className={`tbtn ${toolbarButtonClasses}`}
+            className={toolbarButtonClasses}
             type="button"
             onClick={onAdd}
             aria-label="Search the corpus for another email to add to this page"
@@ -274,7 +237,7 @@ export function Timeline({
         ) : null}
         {onEval ? (
           <button
-            className={`tbtn ${toolbarButtonClasses}`}
+            className={toolbarButtonClasses}
             type="button"
             onClick={onEval}
             aria-label="Evaluate chains the queries proposed"
@@ -283,7 +246,7 @@ export function Timeline({
           </button>
         ) : null}
         <button
-          className={`tbtn ${toolbarButtonClasses}`}
+          className={toolbarButtonClasses}
           id="maptog"
           type="button"
           aria-pressed="true"
@@ -292,7 +255,7 @@ export function Timeline({
           tree
         </button>
         <button
-          className={`tbtn ${toolbarButtonClasses}`}
+          className={toolbarButtonClasses}
           id="plaintog"
           type="button"
           aria-pressed="false"
@@ -302,13 +265,13 @@ export function Timeline({
         </button>
       </div>
       <div className="wrap mx-auto max-w-[76rem] px-5 pt-7 pb-14">
-        <header className="top mb-[.25rem] border-b border-line pb-[.7rem]">
-          <h1 className="m-0 mb-[.2rem] text-[1.3rem] tracking-[-.01em]">
-            {v.hashed ? <span className="text-[var(--muted)] font-normal">#</span> : null}
+        <header className="top mb-1 border-b border-line pb-3">
+          <h1 className="m-0 mb-1 text-[1.3rem] tracking-[-.01em]">
+            {v.hashed ? <span className="text-muted font-normal">#</span> : null}
             {v.hashed ? v.title.slice(1) : v.title}
           </h1>
           <p
-            className="mb-2 text-[var(--muted)] text-[.86rem]"
+            className="mb-2 text-muted text-[.86rem]"
             dangerouslySetInnerHTML={html(s.subtitle ?? `${s.messages.length} messages.`)}
           />
           <Legend />
@@ -334,17 +297,13 @@ export function Timeline({
           ))}
         </div>
         {s.openItems?.length ? (
-          <footer className="end mt-8 border-t border-line pt-[.9rem]">
-            <h2 className="mb-[.6rem] mt-0 text-[.8rem] uppercase tracking-[.1em] text-muted">
+          <footer className="end mt-8 border-t border-line pt-4">
+            <h2 className="mb-2 mt-0 text-[.8rem] uppercase tracking-[.1em] text-muted">
               {s.openItemsTitle ?? "Still open"}
             </h2>
-            <ul className="m-0 pl-[1.15rem]">
+            <ul className="m-0 pl-5">
               {s.openItems.map((i, n) => (
-                <li
-                  className="my-[.2rem] text-[.89rem]"
-                  key={n}
-                  dangerouslySetInnerHTML={html(i)}
-                />
+                <li className="my-1 text-[.89rem]" key={n} dangerouslySetInnerHTML={html(i)} />
               ))}
             </ul>
           </footer>

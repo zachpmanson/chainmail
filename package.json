@@ -8,12 +8,11 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "lint": "eslint src test scripts vite.config.ts eslint.config.js",
-    "format": "prettier --write \"src/**/*.{ts,tsx}\" \"test/**/*.{ts,tsx}\" \"scripts/**/*.{ts,tsx}\" vite.config.ts eslint.config.js package.json tsconfig.json",
-    "format:check": "prettier --check \"src/**/*.{ts,tsx}\" \"test/**/*.{ts,tsx}\" \"scripts/**/*.{ts,tsx}\" vite.config.ts eslint.config.js package.json tsconfig.json",
-    "gen:types": "json2ts -i schema/timeline.schema.json -o src/lib/spec.d.ts --additionalProperties false",
-    "gen:api": "openapi-typescript api/openapi.json -o src/lib/api.d.ts",
+    "lint": "eslint src scripts vite.config.ts eslint.config.js",
+    "format": "prettier --write \"src/**/*.{ts,tsx}\" \"scripts/**/*.{ts,tsx}\" vite.config.ts eslint.config.js package.json tsconfig.json",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx}\" \"scripts/**/*.{ts,tsx}\" vite.config.ts eslint.config.js package.json tsconfig.json",
+    "gen:types": "json2ts -i schema/timeline.schema.json -o src/lib/timeline/spec.d.ts --additionalProperties false",
+    "gen:api": "openapi-typescript api/openapi.json -o src/lib/api/api.d.ts",
     "render": "tsx scripts/render.tsx"
   },
   "dependencies": {
@@ -26,11 +25,11 @@
     "openapi-react-query": "^0.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "tailwindcss": "^4.3.3"
+    "tailwindcss": "^4.3.3",
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
-    "@testing-library/react": "^16.3.2",
     "@types/node": "^26.2.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
@@ -40,14 +39,12 @@
     "eslint": "10.12.0",
     "eslint-plugin-react-hooks": "7.1.1",
     "globals": "17.13.0",
-    "jsdom": "^30.0.1",
     "json-schema-to-typescript": "^15.0.4",
     "openapi-typescript": "^7.13.0",
     "prettier": "3.9.9",
     "tsx": "^4.19.2",
     "typescript": "^5.9.3",
     "typescript-eslint": "8.71.1",
-    "vite": "^6.0.7",
-    "vitest": "^2.1.8"
+    "vite": "^6.0.7"
   }
 }

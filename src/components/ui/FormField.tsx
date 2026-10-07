@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 /** Label/control association without prescribing a field's layout or sizing. */
-export function FormField({
+export default function FormField({
   label,
   children,
   className = "",

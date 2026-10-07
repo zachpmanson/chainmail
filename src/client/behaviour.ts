@@ -1,13 +1,7 @@
-import { readTable, type Table } from "../lib/tables";
-import { withTransition } from "../lib/viewTransition";
+import { readTable, type Table } from "../lib/message/tables";
+import { withTransition } from "../lib/thread/viewTransition";
 
-/**
- * All page interactivity, as a framework-agnostic module that attaches to
- * already-rendered DOM by selector.
- *
- * Deliberately not React: the same behaviour has to run inside the dev app and
- * inside the server-rendered single-file export. Two implementations would drift.
- */
+/** Not React: the same behaviour runs in the dev app and the server-rendered single-file export. */
 /** The listener registrar `attach` hands to the behaviours it delegates to. */
 type On = (
   el: EventTarget,
@@ -16,28 +10,10 @@ type On = (
   opts?: AddEventListenerOptions,
 ) => void;
 
-/**
- * How far to either side of a line a pointer still counts as being on it. A line
- * is two pixels wide and a reader's hand is not, so the mark cannot be asked for
- * by landing on the rule itself; ten pixels is a mouse's width of forgiveness and
- * less than the gutter the indent leaves between a line and the bubble beside it,
- * so nothing can be reached by accident.
- */
+// Pointer slack around a 2px reply line; less than the indent gutter beside it.
 const LINE_REACH = 5;
 
-/**
- * The reply line under a point, if there is one: the deepest line whose strip the
- * point is in.
- *
- * The lines run down the indent, each nested a step inside the last, so the
- * deepest one under a point is also the nearest — there is only ever one answer,
- * and it is decided by comparing two rectangles rather than by asking the browser.
- * This cannot be a CSS `:hover`, which is why the arithmetic is here: hovering a
- * nested line hovers every container it is nested in, so a rule written with
- * `:has()` marks a message, and its parent, and its parent's — a whole ancestry lit
- * up by one pointer. Narrowing that to the nearest line needs a `:has()` inside a
- * `:has()`, which the selector syntax forbids.
- */
+/** Arithmetic, not `:hover`: a nested line's hover hits every ancestor, and `:has()` can't nest. */
 export function lineAt(doc: Document, x: number, y: number): HTMLElement | null {
   let found: HTMLElement | null = null;
   let deepest = -Infinity;
@@ -53,23 +29,9 @@ export function lineAt(doc: Document, x: number, y: number): HTMLElement | null 
   return found;
 }
 
-/**
- * The margin a card owns below itself, as far as the pointer is concerned. The
- * space between two messages is the upper one's `margin-bottom` (styles.css), so a
- * pointer in it is still on the upper card — which is what stops the mark blinking
- * out for eight pixels at every boundary as the reader runs the pointer up a thread.
- * A little over the half rem that margin is, and still less than a card is tall.
- */
+// A card's hit box includes its margin-bottom, so the mark doesn't blink out between messages.
 const MARGIN_REACH = 9;
 
-/**
- * The message the pointer is on: the deepest card whose box holds the point, its
- * own bottom margin included.
- *
- * Cards at different depths overlap in x — an answer is drawn inside its parent's
- * span — so the deepest one containing the point is the one being pointed at. Its
- * margin is part of it for this purpose and for no other: nothing is drawn there.
- */
 export function messageAt(doc: Document, x: number, y: number): HTMLElement | null {
   let found: HTMLElement | null = null;
   let deepest = -Infinity;
@@ -101,15 +63,6 @@ export function attach(doc: Document = document): () => void {
   const mini = doc.getElementById("mini");
   const entries = [...doc.querySelectorAll<HTMLElement>(".msg[id], .sys[id]")];
 
-  /* ---------- in-page anchors scroll, not teleport ----------
-   * Every internal cross-reference (reply spine, unspooled-from, xref, or a
-   * permalink link) is a bare href="#id", and CSS sets
-   * `scroll-behavior:smooth` on the root — so the browser's OWN fragment
-   * navigation already smooth-scrolls to the target, updates the URL hash and
-   * fires :target. No JS needed here; intercepting the click (as a earlier
-   * version did to force `behavior:"smooth"`) is what the CSS makes redundant.
-   */
-
   /* ---------- toggles ---------- */
   const toggle = (id: string, cls: string, key: string, defaultOn: boolean) => {
     const btn = doc.getElementById(id) as HTMLButtonElement | null;
@@ -133,19 +86,9 @@ export function attach(doc: Document = document): () => void {
     return { btn, set, isOn: () => body.classList.contains(cls) };
   };
 
-  /**
-   * Panel width is its content (fit to lane count, tallies, legend), not a fixed
-   * column — but the toolbar, refresh verdict and reserved content column all
-   * offset from it. Feed the measured rendered width back into --panel, and
-   * re-measure when the panel is toggled or the window resizes.
-   *
-   * Reads the live offsetWidth, so when the panel is hidden (mapoff) no column
-   * is reserved either.
-   */
+  // Feed the panel's rendered width into --panel, which the toolbar and content column offset from.
   const syncPanel = () => {
     if (!mini) return;
-    // the horizontal strip spans the viewport, so it reserves no column; only
-    // the right-edge vertical panel does
     if (body.classList.contains("mapoff") || body.classList.contains("tree-h"))
       body.style.removeProperty("--panel");
     else body.style.setProperty("--panel", `${Math.round(mini.offsetWidth)}px`);
@@ -201,11 +144,6 @@ export function attach(doc: Document = document): () => void {
     syncPanel();
   }
 
-  // A body is the sender's markup, so its emphasis and alignment are theirs, not
-  // the page's. "plain" neutralises what is left of that presentation without
-  // touching structure: a table stays a table because its columns carry the
-  // meaning, and a list stays a list. Off by default — the sender's formatting is
-  // usually what they meant.
   const plainCtl = toggle("plaintog", "plain", "cm-plain", false);
   if (plainCtl) on(plainCtl.btn, "click", () => plainCtl.set(!plainCtl.isOn()));
 
@@ -216,8 +154,7 @@ export function attach(doc: Document = document): () => void {
       const keep = hovId ?? spyId;
       withTransition(doc, () => {
         viewCtl.set(next);
-        // re-anchor inside the callback so the transition animates to the final
-        // scrolled position instead of landing and then jumping
+        // Re-anchor inside the callback so the transition animates to the final scroll position.
         if (keep) doc.getElementById(keep)?.scrollIntoView({ block: "center" });
       });
     });
@@ -226,25 +163,8 @@ export function attach(doc: Document = document): () => void {
   /* ---------- enlarging a preview ---------- */
   cleanups.push(attachPopover(doc, on));
 
-  /* ---------- a download that was asked for before the bytes were here ----------
-   *
-   * A chip whose file is still in the mailbox is a download: the press asks the
-   * host for it and marks itself (`data-download`, see Attachments), and the
-   * renderer puts the bytes behind the chip a moment later — a rebuilt page, or a
-   * re-read thread. The press is replayed here, at the first moment it can mean
-   * what it meant.
-   *
-   * A click, rather than a second way to open things: whatever a chip does with
-   * bytes in hand is what the reader asked for — the window for what this host can
-   * show, the browser's own save for what it cannot — and one rule stays one rule.
-   * The element is the only place that fact could have waited, because the render
-   * that follows the pull replaces every attachment on the strip: state in the
-   * renderer would have to survive that, and an attribute does by being there.
-   *
-   * Only a chip that has bytes behind it is replayed. One whose fetch failed, or
-   * which the corpus then declined, keeps its mark and nothing happens: a later
-   * pull that does bring the file is still the thing the reader asked for.
-   */
+  /* Replays a download press once the re-render puts bytes behind the chip. The flag lives on
+     the element because the render replaces every attachment, and an attribute survives that. */
   for (const chip of doc.querySelectorAll<HTMLElement>(".att[data-download]")) {
     if (!chip.dataset.get) continue;
     chip.removeAttribute("data-download");
@@ -301,16 +221,11 @@ export function attach(doc: Document = document): () => void {
     for (const l of links) l.classList.remove("chn");
   };
 
-  /* The panel follows the page, but the reader can take it back. Centring on
-     the spied entry on every light would undo a scroll the reader just made in
-     the panel itself — they scroll down, the panel snaps back. So it is centred
-     once per entry, and not at all for a moment after the reader scrolls the
-     panel: a wheel or a drag in there means they are looking somewhere else. */
+  /* Centre once per entry, and not just after the reader scrolls the panel, or it snaps back. */
   let centred: string | null = null;
   let readerTouchedAt = 0;
   const READER_GRACE_MS = 2500;
-  /* The offset we last wrote into a scroller, so the scroll event our own write
-     fires is not mistaken for the reader's. */
+  // Our last write per scroller, so the scroll event it fires isn't mistaken for the reader's.
   const ours = new Map<HTMLElement, [number, number]>();
   const readerTookOver = (id: string) =>
     id !== centred && Date.now() - readerTouchedAt > READER_GRACE_MS;
@@ -346,9 +261,6 @@ export function attach(doc: Document = document): () => void {
     for (const l of links) l.classList.toggle("anc", chain.has(l.dataset.c!));
     mini.classList.add("spy");
     const el = nodeById.get(id);
-    // the strip that is live depends on the mode: the vertical panel scrolls
-    // its rows into view, the horizontal one its columns. Either way the node
-    // is nudged toward the middle of the viewport, along the axis time runs.
     const scroller = mini.querySelector<HTMLElement>(
       body.classList.contains("tree-h") ? ".hrow .mbody" : ".vrow .mbody",
     );
@@ -367,8 +279,6 @@ export function attach(doc: Document = document): () => void {
       }
     }
   };
-  // hovering a chain in the sources panel outranks both the pointer and the
-  // scroll position, since it is the most explicit thing the reader asked for
   const refresh = () => {
     if (hovChain) {
       lightChain(hovChain);
@@ -381,12 +291,9 @@ export function attach(doc: Document = document): () => void {
 
   /* ---------- the minimap's full-width row strips own the pointer ---------- */
   if (mini) {
-    for (const hit of mini.querySelectorAll<SVGRectElement>(".hit")) {
+    for (const hit of mini.querySelectorAll<SVGRectElement>("[data-hit]")) {
       const id = hit.dataset.id!;
       const el = doc.getElementById(id);
-      // The minimap's nodes are SVG rectangles, not links, so they still need JS
-      // to say *which* message to show — but CSS scroll-behavior:smooth makes
-      // the resulting scroll glide, so no behavior:"smooth" is needed here.
       on(hit, "click", () => {
         el?.scrollIntoView({ block: "center" });
         history.replaceState(null, "", `#${id}`);
@@ -406,28 +313,8 @@ export function attach(doc: Document = document): () => void {
     }
   }
 
-  /* ---------- pointing at a message, or at a line ----------
-   * What the pointer marks is a path, and it is marked on the lines: every line
-   * from the message pointed at up to the line under the root, so that pointing at
-   * a reply six answers deep lights the whole way down to it (see `.rhov` in
-   * styles.css — the mark itself, and why the bubbles are left alone).
-   *
-   * Every line above a message is a `.replies` box it is inside, and the box is
-   * drawn under the card whose line hangs off it (see `.replies` in select.css) — so
-   * the path is the ancestor chain, walked in the DOM rather than in the tree's own
-   * data: this runs on the pane's rendered bubbles, in both views, and in a built
-   * page there is neither tree nor data to walk.
-   *
-   * The line under the pointer is found by arithmetic (`lineAt`) rather than by CSS
-   * hover, for the reason given there: lines nest, so a hovered line hovers every
-   * line it is nested in, and a `:has()` rule would mark a whole ancestry — which is
-   * what this wants, but only one of the two things it wants, and only by accident.
-   * Here the walk up the DOM is the same walk in both cases, so pointing at a line
-   * and pointing at its message cannot disagree about what is lit.
-   *
-   * Only a change of path touches the DOM: a pointer moving along a line or across a
-   * message reports every few pixels, and re-adding a class that is already there
-   * would restart the fades under it. */
+  /* Lights every `.replies` line from the pointed message up to the root, walked in the DOM so it
+     works in built pages. Only a change of path touches the DOM; re-adding classes restarts fades. */
   const stream = doc.querySelector<HTMLElement>(".ibread .stream");
   if (stream) {
     let lit: HTMLElement[] = [];
@@ -442,9 +329,6 @@ export function attach(doc: Document = document): () => void {
       clear();
       if (!msg) return;
       litFor = msg;
-      // up the boxes the message is inside, which are the lines it descends
-      // through — the box under its parent card, then the one under its
-      // grandparent's, as far as the top of the thread
       for (let node = msg.parentElement; node && node !== stream; node = node.parentElement) {
         if (!node.classList.contains("replies")) continue;
         node.classList.add("rhov");
@@ -454,57 +338,16 @@ export function attach(doc: Document = document): () => void {
     on(stream, "mousemove", (ev) => {
       const e = ev as MouseEvent;
       const under = lineAt(doc, e.clientX, e.clientY);
-      // A line is a way of pointing at the message it hangs off, and the walk above
-      // is the same walk from there: the path leads to the message the reader is
-      // asking about, not to the line they happened to find it by.
       const msg = under
         ? (under.previousElementSibling as HTMLElement | null)
         : messageAt(doc, e.clientX, e.clientY);
       light(msg?.classList.contains("msg") ? msg : null);
     });
-    // The pointer leaving the stream leaves the transcript, and a lit path that
-    // outlived the hover would sit on lines the reader has stopped pointing at.
     on(stream, "mouseleave", clear);
   }
 
-  /* ---------- pointing at a claim about a message marks that message ----------
-   *
-   * Two links on this page name another message and can be checked where the
-   * pointer already is: "↩ in reply to Ada Okoye, Mon 2 Mar 2026 19:15" under a
-   * bubble's header, and the compact target link on the reply composer. Each says
-   * which message the reader is answering. Following the composer link would take
-   * the reader away from the reply they were composing, so both links light their
-   * target with the same ring the minimap's rows use (see `.mhov` in styles.css).
-   * One mark for all of them is what stops links and the minimap from disagreeing
-   * about the answer.
-   *
-   * The loud ring rather than the quiet colour the pane lights a path of reply
-   * LINES with (see `.rhov` below): those lines answer a pointer travelling
-   * through the transcript, and this pointer has stopped — on a named message, to
-   * ask about it. Marking nothing is the honest answer when the target is not on
-   * this page, which a built page can be: it carries a reply whose parent is not
-   * among its rows (see ReplyLink). A link that cannot be followed lights
-   * nothing, exactly as a minimap row does.
-   *
-   * Wired here rather than in the component because a built page is static markup
-   * with this module layered over it and no React at runtime: an `onMouseEnter`
-   * would light the ring in the dev app and nowhere else.
-   *
-   * Delegated from the document rather than bound to each link, which is the
-   * opposite of how the other pointer targets above are wired. Those are elements
-   * the page draws once and `attach` wires once; these are redrawn whenever the
-   * reading pane's tree switch moves a reply link into or out of a `.replies` box,
-   * or whenever the box is aimed at a different message, and that is React state
-   * this module is never re-attached for — a listener bound to the old node would
-   * be a hover that works until the reader presses "reply tree". One listener over
-   * the document survives the redraw, and it is also what lets a page attaching
-   * once cover the links of a pane that redraws under it.
-   *
-   * The messages that were lit are remembered so that a detach can take their
-   * rings off: a pane re-attaching while the pointer rests on a link retires the
-   * listener that was going to clear the ring, and a mark left with no pointer to
-   * hold it is the one thing a hover may never leave behind.
-   */
+  /* Reply links ring their target message (`.mhov`). Delegated from the document because React
+     redraws these links without re-attaching this module; `ringed` lets detach clear stale rings. */
   const ringed = new Set<HTMLElement>();
   const ring = (el: HTMLElement | null, lit: boolean) => {
     if (!el) return;
@@ -512,11 +355,6 @@ export function attach(doc: Document = document): () => void {
     if (lit) ringed.add(el);
     else ringed.delete(el);
   };
-  /** The element a hover is about, and the message id it names, or nothing when
-   *  the event is about something else. Reply links name their target in the href;
-   *  resolving it here keeps the link's ring in step with the bubble ids and the
-   *  pane's anchor map. `closest` because the pointer reports the innermost element
-   *  it is on, and the arrow and label are inside the link that makes the claim. */
   const claimAt = (el: EventTarget | null): { el: Element; id: string } | null => {
     if (!(el instanceof Element)) return null;
     const link = el.closest<HTMLAnchorElement>("a.par[href^='#']");
@@ -526,9 +364,7 @@ export function attach(doc: Document = document): () => void {
     on(doc, type, (ev) => {
       const claim = claimAt(ev.target);
       if (!claim) return;
-      // Crossing from the arrow to the label, or from a name in the header to the
-      // words beside it, is still the same claim: only a pointer that came from
-      // outside it has arrived, and only one that left has gone.
+      // Ignore moves between children of the same link.
       if (claimAt((ev as MouseEvent).relatedTarget)?.el === claim.el) return;
       ring(doc.getElementById(claim.id), type === "mouseover");
     });
@@ -555,11 +391,7 @@ export function attach(doc: Document = document): () => void {
 
   /* ---------- scroll-spy + hovering a message ---------- */
   const visible = new Map<string, number>();
-  // The spy is an enhancement — it tells the minimap which message is on screen,
-  // and a document with no minimap highlights nothing either way. Guarded rather
-  // than assumed because this module is attached by the reading pane too, and a
-  // runtime without IntersectionObserver must lose the highlight and not the
-  // thread: a throw in here comes out of the renderer's own effect.
+  // Guarded: without IntersectionObserver, lose the highlight rather than throw in a React effect.
   const io =
     typeof IntersectionObserver === "function"
       ? new IntersectionObserver(
@@ -605,28 +437,10 @@ export function attach(doc: Document = document): () => void {
   };
 }
 
-/**
- * Click-to-enlarge for attachment thumbnails, and for pictures the sender put
- * in the body: one window over the page, still called `pop` after the popover it
- * grew out of. What it shows is the server's `view`: a picture, a block of text,
- * a framed PDF.
- *
- * Not a `<details>`: a disclosure reveals content in place and leaves the
- * document readable around it, which is right for the panels and the signature
- * folds. An enlarged screenshot wants the opposite — it covers the transcript,
- * takes the keyboard, and is dismissed rather than left open. Dressing that up
- * as a disclosure would give it a summary marker that behaves like nothing else
- * on the page.
- *
- * Nor a native `<dialog>`, which would give modality and the focus trap for
- * free. Its `showModal` is absent from the DOM implementation the tests run in,
- * so choosing it would mean the trap — the part most likely to be got wrong —
- * could never be asserted. The cost of doing it by hand is one Tab handler.
- */
+/** Click-to-enlarge window for attachments and body pictures. Not a native `<dialog>` because
+ *  jsdom lacks `showModal`, so the hand-rolled focus trap stays testable. */
 function attachPopover(doc: Document, on: On): () => void {
-  // Every trigger is an element that already navigates somewhere on its own, so
-  // the popover is strictly additive: with no script the click opens the file at
-  // its source, and body pictures stay the plain images the sender sent.
+  // Strictly additive: without script, triggers still navigate to the file.
   const triggers = [
     ...doc.querySelectorAll<HTMLElement>(".att[data-pop]"),
     ...doc.querySelectorAll<HTMLImageElement>(".bd img"),
@@ -643,10 +457,7 @@ function attachPopover(doc: Document, on: On): () => void {
   let save: HTMLAnchorElement;
   let closeBtn: HTMLButtonElement;
   let opener: HTMLElement | null = null;
-  // Whatever a slow fetch was going to put in the window belongs to the opening
-  // that asked for it. Closing, or opening something else, retires the number and
-  // the reply is dropped: the reader has moved on, and bytes arriving late must
-  // not paint over what they are looking at now.
+  // Each open bumps this; a late fetch for an earlier open is dropped.
   let opening = 0;
   let blobURL = "";
 
@@ -655,62 +466,47 @@ function attachPopover(doc: Document, on: On): () => void {
     if (host) return;
     host = doc.createElement("div");
     host.className =
-      "pop fixed inset-0 z-[55] flex items-center justify-center p-6 bg-[color-mix(in_srgb,var(--bg)_92%,transparent)] backdrop-blur-[3px]";
+      "pop fixed inset-0 z-[55] flex items-center justify-center p-6 bg-bg/92 backdrop-blur-[3px]";
     host.setAttribute("role", "dialog");
     host.setAttribute("aria-modal", "true");
-    // Named by its caption rather than by a fixed string: the window holds a
-    // picture, a file's text or a framed document, and the one thing that is true
-    // of all three is the file's name or the picture's alt text.
     host.setAttribute("aria-labelledby", "popcap");
     host.hidden = true;
     host.innerHTML =
-      '<div class="popbox flex max-h-full max-w-full flex-col gap-[.4rem]"><img class="popimg h-auto w-auto max-h-[calc(100vh-6rem)] max-w-full rounded-md border border-line bg-card object-contain" alt="" hidden>' +
-      '<pre class="poptext m-0 max-h-[calc(100vh-6rem)] w-[min(72rem,92vw)] overflow-auto whitespace-pre rounded-md border border-line bg-card p-[.9rem_1rem] text-left font-mono text-[.78rem] leading-[1.5] text-fg [tab-size:4]" hidden></pre>' +
-      // A delimited file, read as cells instead of as lines of commas. Its own
-      // element under the `pre` rather than a different `pre`: the text window
-      // keeps `white-space:pre`, which a table must not inherit.
+      '<div class="flex max-h-full max-w-full flex-col gap-1.5"><img class="popimg h-auto w-auto max-h-[calc(100vh-6rem)] max-w-full rounded-md border border-line bg-card object-contain" alt="" hidden>' +
+      '<pre class="poptext m-0 max-h-[calc(100vh-6rem)] w-[min(72rem,92vw)] overflow-auto whitespace-pre rounded-md border border-line bg-card p-4 text-left font-mono text-[.78rem] leading-[1.5] text-fg [tab-size:4]" hidden></pre>' +
+      // Separate from the `pre` so the table doesn't inherit `white-space:pre`.
       '<div class="popgrid max-h-[calc(100vh-6rem)] w-[min(72rem,92vw)] overflow-auto rounded-md border border-line bg-card text-left" hidden></div>' +
-      // A frame holds the browser's own PDF viewer. Its type comes from the blob
-      // this page makes out of the served bytes, never from the sender's claim,
-      // which is the whole reason it is safe to frame.
+      // Blob type comes from the served bytes, never the sender's claim; that makes framing safe.
       '<iframe class="popframe h-[calc(100vh-6rem)] w-[min(72rem,92vw)] rounded-md border border-line bg-card" title="" hidden></iframe>' +
-      '<div class="popbar flex items-center gap-[.7rem]">' +
-      '<span class="popcap overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[.74rem] font-semibold text-muted" id="popcap"></span><span class="popnote whitespace-nowrap text-[.72rem] text-muted"></span>' +
-      '<a class="popget cursor-pointer rounded-md border border-line bg-card px-[.55rem] py-[.15rem] font-[inherit] text-[.72rem] text-muted no-underline hover:border-accent hover:text-fg focus-visible:border-accent" download hidden>save</a>' +
-      '<button type="button" class="popx ml-auto cursor-pointer rounded-md border border-line bg-card px-[.55rem] py-[.15rem] font-[inherit] text-[.72rem] text-fg hover:border-accent focus-visible:border-accent">Close</button>' +
+      '<div class="flex items-center gap-3">' +
+      '<span class="overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[.74rem] font-semibold text-muted" id="popcap"></span><span data-popnote class="whitespace-nowrap text-[.72rem] text-muted"></span>' +
+      '<a class="popget cursor-pointer rounded-md border border-line bg-card px-2 py-0.5 font-[inherit] text-[.72rem] text-muted no-underline hover:border-accent hover:text-fg focus-visible:border-accent" download hidden>save</a>' +
+      '<button type="button" data-popclose class="ml-auto cursor-pointer rounded-md border border-line bg-card px-2 py-0.5 font-[inherit] text-[.72rem] text-fg hover:border-accent focus-visible:border-accent">Close</button>' +
       "</div></div>";
     shot = host.querySelector<HTMLImageElement>(".popimg")!;
     text = host.querySelector<HTMLElement>(".poptext")!;
     grid = host.querySelector<HTMLElement>(".popgrid")!;
     frame = host.querySelector<HTMLIFrameElement>(".popframe")!;
-    cap = host.querySelector<HTMLElement>(".popcap")!;
-    note = host.querySelector<HTMLElement>(".popnote")!;
+    cap = host.querySelector<HTMLElement>("#popcap")!;
+    note = host.querySelector<HTMLElement>("[data-popnote]")!;
     save = host.querySelector<HTMLAnchorElement>(".popget")!;
-    closeBtn = host.querySelector<HTMLButtonElement>(".popx")!;
+    closeBtn = host.querySelector<HTMLButtonElement>("[data-popclose]")!;
     doc.body.appendChild(host);
 
     on(closeBtn, "click", close);
-    // The backdrop is the host itself; a click that lands on the picture or the
-    // bar must not dismiss, or dragging to select the caption closes the popover.
+    // Only backdrop clicks dismiss, so drag-selecting the caption doesn't close it.
     on(host, "click", (ev: Event) => {
       if (ev.target === host) close();
     });
     on(host, "keydown", (ev: Event) => {
       const k = ev as KeyboardEvent;
-      // A framed document keeps its own keys — a PDF viewer swallows Escape and
-      // Tab both — so this reaches the picture and text windows and the bar, and
-      // Close and the backdrop are the way out of a PDF.
+      // A framed PDF swallows Escape and Tab, so Close and the backdrop are its way out.
       if (k.key === "Escape") {
         k.preventDefault();
         close();
         return;
       }
-      // Close and save are the only focusable things inside, so the trap is Tab
-      // staying put rather than a cycle through a list. Written as a wrap anyway:
-      // it stays correct with the save link showing as well. `hidden` is excluded
-      // rather than left to fail, because a hidden element is in this list and
-      // cannot take focus — the trap would land on nothing and Tab would stop
-      // moving.
+      // Skip `hidden` stops: they can't take focus, and the trap would land on nothing.
       if (k.key !== "Tab") return;
       const stops = [
         ...host!.querySelectorAll<HTMLElement>("button:not([hidden]), [href]:not([hidden])"),
@@ -731,8 +527,6 @@ function attachPopover(doc: Document, on: On): () => void {
     host.hidden = true;
     doc.body.classList.remove("popped");
     doc.querySelector(".wrap")?.removeAttribute("inert");
-    // Returning the keyboard where it came from: a reader who enlarged a picture
-    // mid-transcript must not be dropped back at the top of the document.
     opener?.focus();
     opener = null;
   }
@@ -748,8 +542,6 @@ function attachPopover(doc: Document, on: On): () => void {
     frame.hidden = true;
     frame.removeAttribute("src");
     note.textContent = "";
-    // A blob is held by the document until it is told otherwise, which for a
-    // window the reader has closed is a file kept in memory for nothing.
     if (blobURL) {
       URL.revokeObjectURL(blobURL);
       blobURL = "";
@@ -757,19 +549,8 @@ function attachPopover(doc: Document, on: On): () => void {
   }
 
   /**
-   * Enlarge one file over the page.
-   *
-   * A picture is shown from the bytes this host holds — the original, at its real
-   * size — rather than from the preview the builder embedded, which is capped at
-   * 640 pixels on its long edge and reads as a blur when it is blown up to fill a
-   * screen. The preview is what is shown when those bytes cannot be fetched: the
-   * corpus prunes bytes nothing points at, and a saved page can outlive them.
-   *
-   * Text and PDFs need the bytes in hand before they can be shown, so the window
-   * is opened empty and filled when they arrive: text goes into a `pre` (so no
-   * markup from a file ever becomes markup in the page), and a PDF becomes a blob
-   * the browser will frame — the served URL is a download, and a frame handed an
-   * attachment renders nothing.
+   * Pictures load the full bytes; the embedded preview (capped at 640px) is the fallback when
+   * they're pruned. PDFs become a blob because a frame won't render the served attachment URL.
    */
   const open = (
     from: HTMLElement,
@@ -784,17 +565,10 @@ function attachPopover(doc: Document, on: On): () => void {
     cap.textContent = caption;
     shot.alt = caption;
     frame.title = caption;
-    // The save control, for a chip whose bytes this host holds. The window is
-    // reached by clicking a chip, and that click is intercepted — so without this
-    // there would be no route to the original file at all, only to what the page
-    // can show of it. `download` is what makes it a save rather than a view: the
-    // response is inline for a picture, and the attribute overrides that, with the
-    // filename still coming from the Content-Disposition header.
+    // The chip's click is intercepted, so this is the only route to the original file.
     save.hidden = !full;
     if (full) save.href = full;
     if (view === "image") {
-      // A 404 — bytes pruned since the page was saved — must not leave the window
-      // empty-handed when there is a thumbnail to fall back to.
       shot.onerror = () => {
         shot.onerror = null;
         if (preview) shot.src = preview;
@@ -805,9 +579,7 @@ function attachPopover(doc: Document, on: On): () => void {
       void bring(full, view, mine, caption);
     }
     host!.hidden = false;
-    // The overlay covers the viewport, so a pointer cannot reach the transcript
-    // anyway; inert is what says the same thing to a screen reader and to the
-    // tab order, which the Tab handler alone could only enforce for the keyboard.
+    // inert hides the transcript from screen readers and the tab order too.
     doc.querySelector(".wrap")?.setAttribute("inert", "");
     doc.body.classList.add("popped");
     opener = from;
@@ -823,16 +595,9 @@ function attachPopover(doc: Document, on: On): () => void {
       if (view === "text") {
         const body = await res.text();
         if (mine !== opening) return;
-        // A file longer than this is one to save and open elsewhere: a window is
-        // for reading something, and a megabyte of log is not read by scrolling.
-        // The bytes are already here, so the save control is right beside it.
         const cut = body.length > TEXT_CAP;
         const shown = cut ? body.slice(0, TEXT_CAP) : body;
-        // A delimited file is drawn as the table it is — read off the bytes and
-        // the served type, not off a field on the wire, so a page saved before
-        // this existed gets its table too. Everything else stays text, and a file
-        // that merely has commas in it (prose, a malformed export) is refused by
-        // `readTable` and read as itself.
+        // Sniffed from bytes and served type, so old saved pages get tables. `readTable` refuses prose.
         const table = readTable(shown, caption, res.headers.get("content-type") ?? "");
         if (table) {
           drawTable(table);
@@ -841,9 +606,6 @@ function attachPopover(doc: Document, on: On): () => void {
           return;
         }
         text.textContent = shown;
-        // No units claimed: the cap is in characters and the file's size is on the
-        // chip behind this window, so the honest thing to say here is that there
-        // is more of it and where to get it.
         if (cut) note.textContent = "truncated — save it for the rest";
         text.hidden = false;
         return;
@@ -854,19 +616,11 @@ function attachPopover(doc: Document, on: On): () => void {
       frame.src = blobURL;
       frame.hidden = false;
     } catch {
-      // A file that cannot be read says so in the window rather than leaving it
-      // blank: the reader asked for it and is owed an answer. The save control is
-      // still there, since the bytes may well save perfectly well.
       if (mine === opening) note.textContent = "could not be read here";
     }
   };
 
-  /** Draw a delimited file as a table.
-   *
-   *  Built node by node and filled with `textContent`, exactly as the text window
-   *  is: the cells are a sender's bytes, and a spreadsheet is not a reason to let
-   *  any of it become markup. A rounded row is padded rather than broken, so a
-   *  ragged export still lines up under its header. */
+  /** Cells are sender bytes, so they go in via `textContent`, never markup. */
   const drawTable = (t: Table) => {
     const cell = (
       tag: "th" | "td",
@@ -878,7 +632,7 @@ function attachPopover(doc: Document, on: On): () => void {
       const el = doc.createElement(tag);
       el.textContent = value;
       el.className = [
-        "max-w-[26rem] border-r border-b border-line px-[.6rem] py-[.28rem] text-left align-top whitespace-pre-wrap [overflow-wrap:anywhere]",
+        "max-w-[26rem] border-r border-b border-line px-2 py-1 text-left align-top whitespace-pre-wrap [overflow-wrap:anywhere]",
         lastColumn && "border-r-0",
         lastRow && "border-b-0",
         tag === "th" && "sticky top-0 z-[1] bg-card font-[650] text-muted",
@@ -889,7 +643,7 @@ function attachPopover(doc: Document, on: On): () => void {
       return el;
     };
     const table = doc.createElement("table");
-    table.className = "poptable border-collapse font-mono text-[.74rem]";
+    table.className = "border-collapse font-mono text-[.74rem]";
     const head = doc.createElement("thead");
     const hr = doc.createElement("tr");
     for (const [i, value] of t.header.entries())
@@ -910,13 +664,6 @@ function attachPopover(doc: Document, on: On): () => void {
     grid.appendChild(table);
   };
 
-  /** What the table window is not showing, when it is not showing all of it.
-   *
-   *  The same shape as the text window's note and for the same reason — a reader
-   *  must know that a file continues — with the counts a table can give and a
-   *  paragraph cannot: the rows and columns left out, then the fact that the
-   *  bytes themselves were cut before the file ended. `save` is the way to the
-   *  rest, and it is in the bar either way. */
   const tableNote = (t: Table, cut: boolean) => {
     const bits: string[] = [];
     if (t.rowCount > t.rows.length) bits.push(`first ${t.rows.length} of ${t.rowCount} rows`);
@@ -926,25 +673,15 @@ function attachPopover(doc: Document, on: On): () => void {
     return bits.join(" · ");
   };
 
-  /** Wire one chip up, once it is known to be worth opening.
-   *
-   *  `thumb` is the chip's embedded preview, when it has one: null for a small
-   *  stored picture, whose bytes the corpus holds but never embedded.
-   */
+  /** `thumb` is null for a small stored picture, which the corpus never embedded. */
   const arm = (t: HTMLElement, thumb: HTMLImageElement | null, isChip: boolean) => {
     if (isChip && !thumb && !t.dataset.get) return;
     const label = isChip ? t.dataset.pop! : thumb?.getAttribute("alt") || "";
-    // The keyboard has to reach whatever already takes focus. A chip is the link
-    // itself; a body picture may be wrapped in one, and the wrapper is the tab
-    // stop, so a listener on the picture would never see the Enter key.
+    // Listen on the focusable wrapper, or the picture never sees Enter.
     const trig: HTMLElement = isChip ? t : (t.closest("a") ?? t);
     if (trig === t && !isChip && !t.hasAttribute("tabindex")) t.tabIndex = 0;
     trig.setAttribute("aria-haspopup", "dialog");
 
-    // Resolved at open time: the thumbnail is what is on screen to start with,
-    // and the bytes this host holds are what the window actually shows. The view
-    // is the renderer's — the server's for a chip, `image` for a body picture,
-    // which is a picture by the fact that it is an img.
     const view = isChip ? trig.dataset.view || "image" : "image";
     const show = () =>
       open(
@@ -956,14 +693,12 @@ function attachPopover(doc: Document, on: On): () => void {
       );
     on(trig, "click", (ev) => {
       const m = ev as MouseEvent;
-      // A modified click is the reader asking for a new tab or a download, and
-      // the link underneath is the right answer to that. Leave it alone.
+      // Leave modified clicks (new tab, download) to the link.
       if (m.metaKey || m.ctrlKey || m.shiftKey || m.altKey || m.button !== 0) return;
       ev.preventDefault();
       show();
     });
-    // An anchor already fires a click on Enter; a bare picture does not, and
-    // Space would otherwise scroll the page out from under it.
+    // A bare picture gets no click on Enter, and Space would scroll the page.
     if (trig.tagName !== "A") {
       on(trig, "keydown", (ev) => {
         const k = ev as KeyboardEvent;
@@ -977,29 +712,18 @@ function attachPopover(doc: Document, on: On): () => void {
   for (const t of triggers) {
     const isChip = t.classList.contains("att");
     if (isChip) {
-      // Armed by the renderer, which knows what this browser can be shown: the
-      // embedded preview, or bytes this host holds. A small picture is the second
-      // case — no preview, because the builder embeds one only above a size floor
-      // — so the thumbnail is optional here rather than required, and its absence
-      // is what used to leave these chips navigating away instead of popping up.
-      arm(t, t.querySelector<HTMLImageElement>(".athumb"), true);
+      // Small pictures have no embedded preview, so the thumbnail is optional.
+      arm(t, t.querySelector<HTMLImageElement>("img"), true);
       continue;
     }
     const img = t as HTMLImageElement;
-    // A body picture has had no such filter: it is whatever the sender's markup
-    // contained, which on a real mail page is mostly letterhead, wordmarks and
-    // tracking pixels — 21 of 29 on one. Nothing is armed until the picture is
-    // known to be worth it, because arming adds a tab stop, and a tab stop that
-    // enlarges a 120×22 wordmark is worse than none.
+    // Body pictures are mostly letterhead and tracking pixels; arming adds a tab stop, so filter.
     if (!img.getAttribute("src")) continue;
     switch (worthEnlarging(img)) {
       case "yes":
         arm(t, img, false);
         break;
       case "unknown":
-        // No declared size and not yet loaded, so nothing can be measured. Ask
-        // again when the bytes arrive, which is the first moment the picture's
-        // own dimensions exist.
         on(
           img,
           "load",
@@ -1018,35 +742,13 @@ function attachPopover(doc: Document, on: On): () => void {
   };
 }
 
-/**
- * The floor separating a picture worth enlarging from decoration, in pixels on
- * both edges. Deliberately the same number the spec builder applies to decoded
- * attachment bytes (minPreviewEdge in preview.go): one rule for "this is a
- * picture and not furniture", so the page never offers to enlarge something the
- * builder would have refused to embed.
- */
+// Matches minPreviewEdge in internal/spec/preview.go: don't enlarge what the builder won't embed.
 const MIN_ENLARGE_EDGE = 100;
 
-/**
- * How much of a text file the window will hold, in characters.
- *
- * A window is for reading something, and a transcript, a CSV or a log past this
- * length is a file to save and open somewhere that scrolls properly. The bytes
- * are already here, so the save control sits right beside the truncated text; the
- * note says what was cut. Characters rather than bytes: this is a limit on what
- * goes into the DOM, and `text` is what comes out of the response.
- */
+// In characters, since it limits what goes into the DOM.
 const TEXT_CAP = 256 * 1024;
 
-/**
- * Whether a body picture is worth the window, or whether that cannot be told yet.
- *
- * Two things disqualify one: being small enough to be furniture, and already
- * being on screen at its full size, where enlarging shows nothing new. Both are
- * measured where the measurement exists — a loaded picture knows its natural
- * size, an unloaded one only has the width and height the sender declared, and a
- * picture with neither cannot be judged at all until it loads.
- */
+/** "no" if small enough to be furniture or already shown at full size; "unknown" until it loads. */
 function worthEnlarging(img: HTMLImageElement): "yes" | "no" | "unknown" {
   const box = img.clientWidth || Number(img.getAttribute("width")) || 0;
   const boxH = img.clientHeight || Number(img.getAttribute("height")) || 0;
@@ -1054,9 +756,7 @@ function worthEnlarging(img: HTMLImageElement): "yes" | "no" | "unknown" {
   if (box && boxH && (box < MIN_ENLARGE_EDGE || boxH < MIN_ENLARGE_EDGE)) return "no";
   if (nat) {
     if (nat < MIN_ENLARGE_EDGE || img.naturalHeight < MIN_ENLARGE_EDGE) return "no";
-    // Shown at full size already. Compared against the box rather than the
-    // viewport: a picture the sender sized down is worth opening, one they did
-    // not is already as large as it gets.
+    // Against the rendered box, not the viewport: a picture the sender sized down is worth opening.
     if (box && nat <= box) return "no";
     return "yes";
   }

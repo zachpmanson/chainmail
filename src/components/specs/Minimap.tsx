@@ -1,18 +1,12 @@
 import { ArrowDownTrayIcon } from "@heroicons/react/24/outline";
-import { graphLanes, type GraphNode } from "../../lib/lanes";
-import type { Row, View } from "../../lib/derive";
+import { graphLanes, type GraphNode } from "../../lib/timeline/lanes";
+import type { Row, View } from "../../lib/timeline/derive";
 
-/* The tree panel's two live geometries. Time runs down the page in vertical
-   mode (the right-edge panel) and rightward in horizontal mode (the bottom
-   strip); step is the pitch along time, across the pitch between lanes. The
-   horizontal lane pitch is larger because a bottom strip has the depth to
-   spare and crossing-branch links want the room. */
+/* step is the pitch along time, across the pitch between lanes. */
 const X0 = 11;
 const Y0 = 9;
 const STEP = { v: 12, h: 14 } as const;
 const ACROSS = { v: 11, h: 16 } as const;
-/* keep just enough floor for a single thread lane to stay readable; the svg is
-   otherwise sized to its lane count so the overlay panel can hug the tree */
 const MIN_W = 96;
 const orgFill = {
   o1: "fill-org-1",
@@ -33,13 +27,7 @@ const colorClass = (classes: typeof orgFill | typeof orgStroke, slot: string) =>
 
 export type Orient = "v" | "h";
 
-/**
- * The tree panel's palette as concrete hex, for the standalone export. The
- * on-screen svg is styled by CSS classes over :root variables; a downloaded
- * .svg has neither, so every fill and stroke has to be baked in at export
- * time. Values mirror styles.css's light and dark themes, and the background
- * is the panel's own card colour rather than the page's.
- */
+/** A downloaded .svg has no page CSS, so colours are baked in; keep in step with styles.css. */
 const PALETTES = {
   light: {
     bg: "#fff",
@@ -87,9 +75,7 @@ export interface TreeExport {
   horizontal?: boolean;
 }
 
-/* Shared geometry: node position, panel size, link path and root cap for an
-   orientation. The two orientations are transposes of each other — row (time)
-   and lane (across) swap axes — so one pair of functions covers both. */
+/* The two orientations are transposes (row and lane swap axes). */
 
 const pos = (o: Orient, row: number, lane: number): [number, number] =>
   o === "v" ? [X0 + lane * ACROSS.v, Y0 + row * STEP.v] : [X0 + row * STEP.h, Y0 + lane * ACROSS.h];
@@ -99,8 +85,6 @@ const size = (o: Orient, rows: number, laneCount: number): [number, number] =>
     ? [Math.max(X0 + (laneCount - 1) * ACROSS.v + 13, MIN_W), Y0 + (rows - 1) * STEP.v + 10]
     : [X0 + (rows - 1) * STEP.h + 13, Y0 + (laneCount - 1) * ACROSS.h + 10];
 
-/** The connector from a parent node to one of its children. Vertical mode
- *  descends then jogs across; horizontal mode runs right then jogs down. */
 function linkD(o: Orient, xp: number, yp: number, xc: number, yc: number): string {
   if (o === "v") {
     return Math.abs(xp - xc) < 0.5
@@ -112,21 +96,12 @@ function linkD(o: Orient, xp: number, yp: number, xc: number, yc: number): strin
     : `M${xp + 4.4} ${yp} H${xc - 4.5} Q${xc} ${yp} ${xc} ${yp + 4.5} V${yc - 4}`;
 }
 
-/** The cap marking a thread start: a bar above the node vertically, beside it
- *  (upstream, on the time side) horizontally. */
 function capD(o: Orient, cx: number, cy: number): string {
   return o === "v"
     ? `M${cx - 4.6} ${cy - 6.6} H${cx + 4.6}`
     : `M${cx - 6.6} ${cy - 4.6} V${cy + 4.6}`;
 }
 
-/**
- * A standalone SVG of the whole reply-tree panel — the graph, the tally
- * (chains / lanes / deep / forks / dead ends) and the legend (message, note,
- * starts thread, reconstructed) — with every style baked in, since a downloaded
- * .svg carries no page CSS. Horizontal mode lays the tree out left-to-right,
- * matching the bottom strip.
- */
 export function treeSvgString(o: TreeExport): string {
   const pal: Palette = PALETTES[o.dark ? "dark" : "light"];
   const orient: Orient = o.horizontal ? "h" : "v";
@@ -149,10 +124,6 @@ export function treeSvgString(o: TreeExport): string {
   const legend = ["message", "note", "starts thread", "reconstructed"];
 
   const M = 14; // outer margin
-  // Title and divider sit on their own offsets (RULE_Y = label + 10); the tree
-  // starts on its own TREE_TOP so the gaps above and below the rule can be
-  // tuned independently of each other. Similarly the footer divider floats
-  // close under the tree while the footer text keeps its own offset.
   const RULE_Y = 34; // the title rule, between the label and the tree
   const TREE_TOP = 48; // first row's centre: title + rule + room under it
   const ROW_H = 17; // footer row pitch
@@ -273,14 +244,7 @@ function fileName(title: string): string {
   return `reply-tree-${slug}.svg`;
 }
 
-/**
- * A sticky index of the reply graph, in either orientation. Vertical: down is
- * time, so rows follow the transcript's own order and the panel is
- * row-aligned with the page. Horizontal: right is time; the panel is a bottom
- * strip and scrolls lengthwise. Across (lanes) is only lane allocation in
- * both: concurrently-live chains, and somewhere for a fork to go.
- */
-export function Minimap({ v }: { v: View }) {
+export default function Minimap({ v }: { v: View }) {
   const g = graphLanes(
     v.rows.map((r) => r.entry),
     (e) => v.rows.find((r) => r.entry === e)!.id,
@@ -307,8 +271,6 @@ export function Minimap({ v }: { v: View }) {
       laneCount: g.laneCount,
       deepest,
       dark: prefersDark(),
-      // the export follows the live panel: the horizontal strip exports the
-      // rotated geometry, the right-edge panel the vertical one
       horizontal: document.body.classList.contains("tree-h"),
     });
     const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
@@ -336,10 +298,7 @@ export function Minimap({ v }: { v: View }) {
           o === "v" ? "time downward" : "time rightward"
         }`}
       >
-        {/* hit strips first: the hover band paints behind the dots, and .nd/.lk
-            are pointer-events:none so the strip always receives the pointer.
-            A strip spans the whole panel across time's axis — the full row
-            vertically, the full column horizontally. */}
+        {/* Hit strips first: .nd/.lk are pointer-events:none so the strip gets the pointer. */}
         {v.rows.map((r) => {
           const n = byId.get(r.id)!;
           const [cx, cy] = pos(o, rowOf.get(r.id)!, n.lane);
@@ -348,7 +307,8 @@ export function Minimap({ v }: { v: View }) {
           return (
             <rect
               key={`hit-${o}-${r.id}`}
-              className="hit fill-transparent cursor-pointer hover:fill-quote"
+              className="fill-transparent cursor-pointer hover:fill-quote"
+              data-hit=""
               data-id={r.id}
               x={x2}
               y={y2}
@@ -369,11 +329,10 @@ export function Minimap({ v }: { v: View }) {
           if (!n.parent) return null;
           const [x1, y1] = pos(o, rowOf.get(n.parent)!, byId.get(n.parent)!.lane);
           const [x2, y2] = pos(o, rowOf.get(r.id)!, n.lane);
-          const cls = `lk fill-none stroke-line stroke-[1.3] pointer-events-none${n.isFork ? " fk stroke-org-4 stroke-[1.6]" : ""}`;
           return (
             <path
               key={`lk-${o}-${r.id}`}
-              className={cls}
+              className={`lk fill-none stroke-line stroke-[1.3] pointer-events-none${n.isFork ? " stroke-org-4 stroke-[1.6]" : ""}`}
               data-c={r.id}
               d={linkD(o, x1, y1, x2, y2)}
             />
@@ -383,15 +342,17 @@ export function Minimap({ v }: { v: View }) {
         {v.rows.map((r) => {
           const n = byId.get(r.id)!;
           const note = r.entry.kind === "note";
-          const cls = ["nd", r.orgSlot, note && "sysn", r.entry.quoted && "qd", n.isRoot && "rt"]
-            .filter(Boolean)
-            .join(" ");
           const [cx, cy] = pos(o, rowOf.get(r.id)!, n.lane);
           return (
-            <g key={`nd-${o}-${r.id}`} className={cls} data-id={r.id} data-p={n.parent ?? ""}>
+            <g
+              key={`nd-${o}-${r.id}`}
+              className={["nd", r.orgSlot].filter(Boolean).join(" ")}
+              data-id={r.id}
+              data-p={n.parent ?? ""}
+            >
               {n.isRoot ? (
                 <path
-                  className="rtcap pointer-events-none fill-none stroke-muted stroke-[1.6] opacity-[.85]"
+                  className="pointer-events-none fill-none stroke-muted stroke-[1.6] opacity-[.85]"
                   d={capD(o, cx, cy)}
                 />
               ) : null}
@@ -420,8 +381,8 @@ export function Minimap({ v }: { v: View }) {
   };
 
   const tallyLegend = (
-    <div className="foot2 flex flex-col gap-[.22rem] border-t border-line px-[.6rem] pt-[.28rem] pb-[.35rem] text-[.58rem] leading-[1.25] text-muted">
-      <div className="tally flex flex-col gap-[.12rem] whitespace-nowrap">
+    <div className="foot2 flex flex-col gap-1 border-t border-line px-2 pt-1 pb-1.5 text-[.58rem] leading-[1.25] text-muted">
+      <div className="flex flex-col gap-0.5 whitespace-nowrap">
         <div>
           <b className="font-semibold text-fg">{g.roots}</b> chains
         </div>
@@ -438,15 +399,15 @@ export function Minimap({ v }: { v: View }) {
           <b className="font-semibold text-fg">{g.leaves}</b> dead ends
         </div>
       </div>
-      <dl className="legend m-0 flex flex-col gap-[.1rem]">
-        <div className="flex items-center gap-[.34rem]">
-          <svg className="lg h-[.7em] w-[.7em] shrink-0" viewBox="0 0 10 10" aria-hidden="true">
+      <dl className="m-0 flex flex-col gap-0.5">
+        <div className="flex items-center gap-1.5">
+          <svg className="h-[.7em] w-[.7em] shrink-0" viewBox="0 0 10 10" aria-hidden="true">
             <circle cx="5" cy="5" r="2.9" fill="currentColor" />
           </svg>
           <dt className="m-0 text-muted">message</dt>
         </div>
-        <div className="flex items-center gap-[.34rem]">
-          <svg className="lg h-[.7em] w-[.7em] shrink-0" viewBox="0 0 10 10" aria-hidden="true">
+        <div className="flex items-center gap-1.5">
+          <svg className="h-[.7em] w-[.7em] shrink-0" viewBox="0 0 10 10" aria-hidden="true">
             <rect
               x="2.6"
               y="2.6"
@@ -458,15 +419,15 @@ export function Minimap({ v }: { v: View }) {
           </svg>
           <dt className="m-0 text-muted">note</dt>
         </div>
-        <div className="flex items-center gap-[.34rem]">
-          <svg className="lg h-[.7em] w-[.7em] shrink-0" viewBox="0 0 10 10" aria-hidden="true">
+        <div className="flex items-center gap-1.5">
+          <svg className="h-[.7em] w-[.7em] shrink-0" viewBox="0 0 10 10" aria-hidden="true">
             <path d="M2 2.6 H8" stroke="currentColor" strokeWidth="1.1" />
             <circle cx="5" cy="5.5" r="2.5" fill="currentColor" />
           </svg>
           <dt className="m-0 text-muted">starts thread</dt>
         </div>
-        <div className="flex items-center gap-[.34rem]">
-          <svg className="lg h-[.7em] w-[.7em] shrink-0" viewBox="0 0 10 10" aria-hidden="true">
+        <div className="flex items-center gap-1.5">
+          <svg className="h-[.7em] w-[.7em] shrink-0" viewBox="0 0 10 10" aria-hidden="true">
             <circle cx="5" cy="5" r="2.9" fill="none" stroke="currentColor" strokeWidth="1.2" />
           </svg>
           <dt className="m-0 text-muted">reconstructed</dt>
@@ -477,14 +438,14 @@ export function Minimap({ v }: { v: View }) {
 
   return (
     <aside
-      className="mini fixed top-0 right-0 bottom-0 z-[30] flex w-max max-w-[16.5rem] flex-col border-l border-line bg-card print:hidden max-[1024px]:top-[2.4rem] max-[1024px]:bg-[color-mix(in_srgb,var(--card)_86%,transparent)]"
+      className="mini fixed top-0 right-0 bottom-0 z-[30] flex w-max max-w-[16.5rem] flex-col border-l border-line bg-card print:hidden max-[1024px]:top-[2.4rem] max-[1024px]:bg-card/86"
       id="mini"
     >
-      <h3 className="m-0 flex items-center gap-[.4rem] border-b border-line px-[.7rem] pt-[.55rem] pb-[.4rem] text-[.66rem] font-bold uppercase tracking-[.09em] text-muted">
-        Reply tree<span className="ct ml-auto font-semibold opacity-75">{v.rows.length}</span>
+      <h3 className="m-0 flex items-center gap-1.5 border-b border-line px-3 pt-2 pb-1.5 text-[.66rem] font-bold uppercase tracking-[.09em] text-muted">
+        Reply tree<span className="ml-auto font-semibold opacity-75">{v.rows.length}</span>
         <button
           type="button"
-          className="xsvg inline-flex cursor-pointer items-center rounded border border-transparent bg-transparent px-[.18rem] py-[.05rem] font-[inherit] text-muted hover:border-line hover:bg-card hover:text-accent"
+          className="inline-flex cursor-pointer items-center rounded border border-transparent bg-transparent px-1 py-px font-[inherit] text-muted hover:border-line hover:bg-card hover:text-accent"
           title="Download this reply tree as an SVG file"
           aria-label="Download this reply tree as an SVG file"
           onClick={download}
@@ -492,18 +453,13 @@ export function Minimap({ v }: { v: View }) {
           <ArrowDownTrayIcon width={11} height={11} aria-hidden="true" />
         </button>
       </h3>
-      {/* both orientations are in the DOM; CSS shows the live one (body.tree-h
-          swaps to the horizontal row) so behaviour.js needs no React state */}
+      {/* Both orientations render; body.tree-h picks one in CSS, so no React state. */}
       <div className="vrow flex min-h-0 flex-1 flex-col">
-        <div className="mbody min-h-0 flex-1 overflow-auto px-[.3rem] pt-[.45rem] pb-[.8rem]">
-          {treeSvg("v")}
-        </div>
+        <div className="mbody min-h-0 flex-1 overflow-auto px-1 pt-2 pb-3">{treeSvg("v")}</div>
         {tallyLegend}
       </div>
       <div className="hrow hidden min-h-0 flex-1">
-        <div className="mbody min-h-0 flex-1 overflow-auto px-[.3rem] pt-[.45rem] pb-[.8rem]">
-          {treeSvg("h")}
-        </div>
+        <div className="mbody min-h-0 flex-1 overflow-auto px-1 pt-2 pb-3">{treeSvg("h")}</div>
         {tallyLegend}
       </div>
     </aside>

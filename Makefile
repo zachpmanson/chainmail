@@ -41,7 +41,7 @@ help:
 	@printf '  make clean          remove generated build artifacts\n'
 	@printf '  make format         format Go and TypeScript/TSX\n'
 	@printf '  make install        build the corpus binary to %s\n' '$(BIN)'
-	@printf '  make test           go + frontend tests\n'
+	@printf '  make test           go tests\n'
 	@printf '  make check          test, lint, formatting, vet, gofmt, typecheck\n'
 	@printf '  make format         format TypeScript/TSX\n'
 	@printf '  make format-check   check TypeScript/TSX formatting\n'
@@ -77,7 +77,6 @@ install: frontend
 test:
 	npm run build
 	go test ./...
-	npm test
 
 check: test
 	npm run lint
@@ -165,8 +164,6 @@ page:
 	$(BIN) spec -q "$(Q)" -limit $(or $(LIMIT),6) -title "$(or $(T),$(Q))" \
 	  -me $(ME) -o $(HOME)/Downloads/spec.json
 	npm run render -- $(HOME)/Downloads/spec.json -o $(HOME)/Downloads/page.html
-	@echo
-	@echo "http://localhost:5173/?spec=/@fs$(HOME)/Downloads/spec.json"
 
 # make repage P=$(HOME)/Downloads/page.html
 #

@@ -1,65 +1,20 @@
 import { useMemo, useRef, useState } from "react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
-import { IconButton } from "../ui/controls";
+import { Button } from "../ui/controls";
 
-/**
- * The address field: one control that builds a list of addresses — the mechanism a
- * reply's To and Cc are edited through, and the only thing on this page a reader
- * types an address into.
- *
- * **The suggestions are the corpus's, not an address book this component keeps.** A
- * caller hands them in (see ReplyBox, which draws them from /v1/people and from the
- * addresses on the message being answered), and what this component does with them
- * is filter them as the reader types and hand back what was picked. It knows nothing
- * about where they came from or what a person is — an address and the name to print
- * beside it, which is all an address chip needs.
- *
- * **Typing an address that matches nothing still works**, and that is the point of
- * the control rather than a fallback: a reader who is answering somebody the corpus
- * has never seen has no suggestion to pick, so what they type becomes a chip once it
- * looks like an address. "Looks like an address" is deliberately shallow (an `@`
- * with something either side of it, in a bare address or inside angle brackets) —
- * whether it can be delivered to is the mailbox's answer, and the last place a shape
- * is checked is the server (see cmd/server's checkAddresses).
- *
- * **The list is the reader's to arrange and nothing may be said twice.** Three
- * addresses are refused however they are typed or picked: one already in this list,
- * one in the other one (a recipient is one recipient, in one list — see
- * gmailclient's ReplyOptions), and one of the reader's own addresses, which a reply
- * is not sent to. The refusal is said in words beside the field rather than by
- * silently dropping the text, because a control that answered a press with nothing
- * reads as broken.
- *
- * The markup is phrasing content throughout — spans, an input, buttons — because
- * ReplyBox embeds each field in a labeled recipient row on the compose screen.
- */
+/** Text that matches no suggestion still becomes a chip once it looks like an
+ *  address; real validation is the server's (see cmd/server's checkAddresses). */
 
-/** One address as this page holds it: the address, which is what a message is sent
- *  to, and the name to print with it when something knows one. Structurally the
- *  contract's Recipient (see api.d.ts) and gmailclient's Recipient. */
 export type Address = { name?: string; address: string };
 
-/** An address as a chip prints it: `Ada Okoye <ada@loomworks.example>`, or the bare
- *  address when nothing knew a name for it. The address is always in there — this is
- *  the last screen before a message that cannot be recalled, and the address is what
- *  it is sent to. */
+/** Always includes the address: this is the last screen before an unrecallable send. */
 export function addressWords(a: Address): string {
   return a.name ? `${a.name} <${a.address}>` : a.address;
 }
 
-/** The fold two addresses are the same by. The domain is case-insensitive and the
- *  local part is in practice, so a chip and a suggestion that differ only in case are
- *  one person rather than two. */
 export const addressKey = (address: string) => address.trim().toLowerCase();
 
-/** What a reader typed, as an address — or nothing, when it is not one.
- *
- *  Deliberately shallow: an `@` with something either side, and no separators or
- *  spaces around it. `Ada Okoye <ada@loomworks.example>` is read as that name and
- *  that address, because a reader pasting a name out of a message should not have to
- *  strip it first. Anything past this — whether the domain resolves, whether the
- *  mailbox exists — is the mailbox's answer rather than this component's.
- */
+/** Deliberately shallow; accepts `Name <addr>` so a pasted name needn't be stripped. */
 export function typedAddress(text: string): Address | null {
   const trimmed = text.trim();
   const angled = /^(.*?)\s*<([^<>]+)>$/.exec(trimmed);
@@ -69,10 +24,6 @@ export function typedAddress(text: string): Address | null {
   return name ? { name, address: bare } : { address: bare };
 }
 
-/** Whether an address halves as the reader typed them: the part before the `@`, and
- *  the part after. A suggestion matches when the reader's text is in either, so
- *  "loom" finds loomworks.example and "oka" finds Cy Okafor — the two things a
- *  reader half-remembers about a person. */
 function matches(suggestion: Address, query: string): boolean {
   if (query === "") return true;
   const words = query.toLowerCase();
@@ -82,32 +33,30 @@ function matches(suggestion: Address, query: string): boolean {
   );
 }
 
-/** One chip: the address and the press that takes it off. The list itself says
- *  whether it is To or Cc, so a second toggle inside every chip only repeats that
- *  context and makes the control harder to scan. */
 function Chip({ who, remove, disabled }: { who: Address; remove: () => void; disabled: boolean }) {
   const words = addressWords(who);
   return (
     <span
-      className="addrchip inline-flex max-w-full items-center gap-[.2rem] rounded-[10px] border border-line bg-card px-[.35rem] py-[.05rem] text-[.72rem]"
+      className="inline-flex max-w-full items-center gap-1 rounded-[10px] border border-line bg-card px-1.5 py-px text-[.72rem]"
       title={words}
     >
-      <span className="addrname [overflow-wrap:anywhere]">{words}</span>
-      <IconButton
+      <span className="[overflow-wrap:anywhere]">{words}</span>
+      <Button
         type="button"
-        className="addrx !size-auto !min-h-0 shrink-0 rounded px-[.1rem] py-[.1rem] text-muted hover:bg-bg hover:text-accent disabled:cursor-default disabled:opacity-[.55] disabled:hover:bg-transparent disabled:hover:text-muted"
+        variant="quiet"
+        className="!size-auto !min-h-0 shrink-0 rounded px-0.5 py-0.5 text-muted hover:bg-bg hover:text-accent disabled:cursor-default disabled:opacity-[.55] disabled:hover:bg-transparent disabled:hover:text-muted"
         disabled={disabled}
         onClick={remove}
         title={`Take ${who.address} off this reply.`}
         aria-label={`remove ${words}`}
       >
         <XMarkIcon className="block" width={10} height={10} aria-hidden="true" />
-      </IconButton>
+      </Button>
     </span>
   );
 }
 
-export function AddressField({
+export default function AddressField({
   label,
   value,
   onChange,
@@ -116,18 +65,13 @@ export function AddressField({
   mine = [],
   disabled = false,
 }: {
-  /** The list this field is, in the words the sentence around it uses: "to" or
-   *  "cc". It is the accessible name of the input and of every chip in it. */
+  /** "to" or "cc"; the accessible name of the input and every chip. */
   label: string;
   /** The addresses this list holds, in the order the reader put them. */
   value: Address[];
   onChange: (next: Address[]) => void;
-  /** Every address the page can offer, in the order it would rather offer them
-   *  (see ReplyBox). Filtered by what the reader types and by what is already on
-   *  the reply. */
   suggestions: Address[];
-  /** The addresses on the reply in the *other* list, which may not be added here:
-   *  one recipient is one address in one list. */
+  /** Addresses in the other list; a recipient can be in only one. */
   taken?: Address[];
   /** The reader's own addresses, which a reply is not sent to. */
   mine?: string[];
@@ -136,9 +80,6 @@ export function AddressField({
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
-  /** What the last press that could not be honoured said. Cleared by the next thing
-   *  the reader does, because it is an answer about the address they just typed
-   *  rather than a standing fact about the field. */
   const [refused, setRefused] = useState<string | null>(null);
   const input = useRef<HTMLInputElement | null>(null);
 
@@ -147,8 +88,6 @@ export function AddressField({
   const own = useMemo(() => new Set(mine.map(addressKey)), [mine]);
 
   const words = query.trim();
-  // Everything already spoken for, so a reader is never offered what the field
-  // would refuse: their own address, one in this list, and one in the other.
   const offered = useMemo(
     () =>
       suggestions.filter((a) => {
@@ -161,9 +100,6 @@ export function AddressField({
     () => offered.filter((a) => matches(a, words)).slice(0, 8),
     [offered, words],
   );
-  // What the reader typed, when it is an address no suggestion already names: the
-  // row that makes "an address the corpus has never seen" visible rather than a
-  // thing that only works if they press Enter at the right moment.
   const typed = typedAddress(words);
   const typedRow =
     typed && !matches_.some((a) => addressKey(a.address) === addressKey(typed.address))
@@ -173,9 +109,6 @@ export function AddressField({
 
   const showing = open && words !== "";
 
-  /** Add an address, or say why it cannot be added. The refusals are the three
-   *  things that are already spoken for, and they are checked here rather than left
-   *  to the server because the reader is owed the answer at the keyboard. */
   function add(who: Address) {
     const key = addressKey(who.address);
     if (own.has(key)) {
@@ -214,10 +147,6 @@ export function AddressField({
       return;
     }
     if (e.key === "Enter" || e.key === "," || e.key === ";") {
-      // Enter takes the row the reader has moved to, or what they typed when they
-      // have moved to nothing; a comma or a semicolon is the same act, because a
-      // list of addresses separated by commas is how an address field is typed into
-      // everywhere else. Nothing to take leaves the text alone rather than guessing.
       const pick = rows[active] ?? typed;
       if (!pick) return;
       e.preventDefault();
@@ -232,8 +161,6 @@ export function AddressField({
       return;
     }
     if (e.key === "Backspace" && query === "" && value.length) {
-      // The last chip, which is the one the caret is against: a field that builds a
-      // list has to be able to unbuild it without reaching for the mouse.
       e.preventDefault();
       onChange(value.slice(0, -1));
     }
@@ -241,7 +168,7 @@ export function AddressField({
 
   return (
     <span
-      className={`addrfield relative inline-flex w-full min-w-0 min-h-[var(--addrrow)] max-w-full flex-wrap items-center gap-[.2rem] align-middle rounded-md border border-line bg-bg px-[.3rem] py-[.1rem] mx-[.15rem] focus-within:border-accent${showing ? " open" : ""}`}
+      className={`relative inline-flex w-full min-w-0 min-h-7 max-w-full flex-wrap items-center gap-1 align-middle rounded-md border border-line bg-bg px-1 py-0.5 mx-0.5 focus-within:border-accent${showing ? " open" : ""}`}
       data-list={label}
     >
       {value.map((who) => (
@@ -254,13 +181,9 @@ export function AddressField({
           }
         />
       ))}
-      {/* aria-autocomplete, expanded, controls and activedescendant are what make
-          this a combobox rather than a text box with a list under it: a screen
-          reader is told there is a list, whether it is open, and which row the
-          reader is on — which for a sighted reader is the highlight. */}
       <input
         ref={input}
-        className="addrinput min-w-12 flex-[1_1_7rem] border-0 bg-transparent px-0 py-[.1rem] text-[.72rem] text-fg outline-none placeholder:text-muted"
+        className="min-w-12 flex-[1_1_7rem] border-0 bg-transparent px-0 py-0.5 text-[.72rem] text-fg outline-none placeholder:text-muted"
         type="text"
         role="combobox"
         aria-label={`${label} addresses`}
@@ -284,7 +207,7 @@ export function AddressField({
       />
       {showing ? (
         <span
-          className="addrlist absolute top-full left-0 z-20 mt-1 flex max-h-56 min-w-full max-w-96 flex-col overflow-auto rounded-md border border-line bg-card p-[.15rem] shadow-[0_6px_18px_rgba(0,0,0,.18)]"
+          className="absolute top-full left-0 z-20 mt-1 flex max-h-56 min-w-full max-w-96 flex-col overflow-auto rounded-md border border-line bg-card p-0.5 shadow-[0_6px_18px_rgba(0,0,0,.18)]"
           role="listbox"
           id={`${label}-suggestions`}
           aria-label={`${label} suggestions`}
@@ -293,26 +216,24 @@ export function AddressField({
             <span
               key={addressKey(a.address)}
               id={`${label}-option-${i}`}
-              className={`addropt flex items-baseline gap-[.4rem] rounded p-[.2rem_.35rem] text-[.72rem] cursor-pointer${i === active ? " on bg-mine" : ""}`}
+              className={`flex items-baseline gap-1.5 rounded py-1 px-1.5 text-[.72rem] cursor-pointer${i === active ? " bg-mine" : ""}`}
               role="option"
               aria-selected={i === active}
-              // The press is taken on mousedown, with the input's focus kept: a
-              // click that blurred the field first would close the list under the
-              // pointer and the press would land on nothing.
+              // Keep focus on mousedown, or the blur closes the list before the click lands.
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => add(a)}
               title={a.name ? `${a.name} <${a.address}>` : a.address}
             >
-              <span className="addroptname [overflow-wrap:anywhere]">{a.name ?? a.address}</span>
+              <span className="[overflow-wrap:anywhere]">{a.name ?? a.address}</span>
               {a.name ? (
-                <span className="addroptaddr text-[.68rem] text-muted [overflow-wrap:anywhere]">
+                <span className="text-[.68rem] text-muted [overflow-wrap:anywhere]">
                   {a.address}
                 </span>
               ) : null}
             </span>
           ))}
           {rows.length === 0 ? (
-            <span className="addropt none text-muted cursor-default" aria-disabled="true">
+            <span className="text-muted cursor-default" aria-disabled="true">
               {typed === null && words !== ""
                 ? `${words} is not an address — an address has something@somewhere in it.`
                 : "No address matches."}
@@ -321,10 +242,7 @@ export function AddressField({
         </span>
       ) : null}
       {refused ? (
-        <span
-          className="addrrefuse basis-full px-[.2rem] py-[.1rem] text-[.68rem] text-red-700"
-          role="status"
-        >
+        <span className="basis-full px-1 py-0.5 text-[.68rem] text-red-700" role="status">
           {refused}
         </span>
       ) : null}

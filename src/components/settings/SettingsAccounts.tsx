@@ -1,13 +1,13 @@
-import { $api } from "../../lib/api";
+import { $api } from "../../lib/api/api";
 import { Button, ControlLink } from "../ui/controls";
-import { SettingsSection } from "./SettingsScaffold";
+import SettingsSection from "./SettingsSection";
 
 function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
 /** Mailbox connection and disconnection controls, including their confirmation boundary. */
-export function SettingsAccounts() {
+export default function SettingsAccounts() {
   const auth = $api.useQuery("get", "/auth/status", {});
   const disconnect = $api.useMutation("post", "/auth/accounts/{accountId}/disconnect", {
     onSuccess: () => auth.refetch(),
@@ -22,24 +22,24 @@ export function SettingsAccounts() {
     >
       {auth.isError ? (
         <p
-          className="stmessage-error mt-[.65rem] rounded-sm border-l-[3px] border-l-red-700 bg-[var(--bg)] px-[.65rem] py-2 text-[.76rem] leading-[1.45] text-[var(--fg)] break-words mb-0"
+          className="mt-3 rounded-sm border-l-[3px] border-l-red-700 bg-bg px-3 py-2 text-[.76rem] leading-[1.45] text-fg break-words mb-0"
           role="alert"
         >
           {errText(auth.error)}
         </p>
       ) : auth.isPending ? (
-        <p className="mt-[.65rem] mb-0 text-[.76rem] leading-[1.45] text-[var(--muted)]">
+        <p className="mt-3 mb-0 text-[.76rem] leading-[1.45] text-muted">
           Checking connected accounts…
         </p>
       ) : (
         <>
           {connected.length > 0 ? (
-            <ul className="mb-[.7rem] mt-0 list-none border-t border-[var(--line)] p-0">
+            <ul className="mb-3 mt-0 list-none border-t border-line p-0">
               {connected.map((account) => {
                 const label = account.email || account.displayName;
                 return (
                   <li
-                    className="flex items-center justify-between gap-3 border-b border-[var(--line)] py-[.55rem] text-xs break-words"
+                    className="flex items-center justify-between gap-3 border-b border-line py-2 text-xs break-words"
                     key={account.id}
                   >
                     <span>{label}</span>
@@ -69,13 +69,13 @@ export function SettingsAccounts() {
               })}
             </ul>
           ) : (
-            <p className="mt-[.65rem] mb-0 text-[.76rem] leading-[1.45] text-[var(--muted)]">
+            <p className="mt-3 mb-0 text-[.76rem] leading-[1.45] text-muted">
               No Gmail accounts connected. Mailbox syncing is paused.
             </p>
           )}
           {disconnect.isError ? (
             <p
-              className="mt-[.65rem] rounded-sm border-l-[3px] border-l-red-700 bg-[var(--bg)] px-[.65rem] py-2 text-[.76rem] leading-[1.45] text-[var(--fg)] break-words mb-0"
+              className="mt-3 rounded-sm border-l-[3px] border-l-red-700 bg-bg px-3 py-2 text-[.76rem] leading-[1.45] text-fg break-words mb-0"
               role="alert"
             >
               Could not disconnect: {errText(disconnect.error)}

@@ -1,19 +1,7 @@
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext } from "react";
 
-type ComposeContextValue = { composing: boolean; closeCompose: () => void };
-const ComposeContext = createContext<ComposeContextValue | null>(null);
-
-export function ComposeProvider({
-  children,
-  composing,
-  closeCompose,
-}: ComposeContextValue & { children: ReactNode }) {
-  return (
-    <ComposeContext.Provider value={{ composing, closeCompose }}>
-      {children}
-    </ComposeContext.Provider>
-  );
-}
+export type ComposeContextValue = { composing: boolean; closeCompose: () => void };
+export const ComposeContext = createContext<ComposeContextValue | null>(null);
 
 export function useCompose() {
   const value = useContext(ComposeContext);

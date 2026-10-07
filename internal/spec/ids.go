@@ -7,7 +7,7 @@ import (
 )
 
 // Ids are emitted explicitly, computed with the same formula the renderer would
-// have used (src/lib/anchors.ts, entryId). The schema invites a collector to
+// have used (src/lib/timeline/anchors.ts, entryId). The schema invites a collector to
 // omit `id` and let the renderer derive one from date+time+sender, and that is
 // the right default for a hand-written spec — but `parent` has to name the id
 // the renderer settles on, so a generator has to know the formula either way.
@@ -34,7 +34,7 @@ import (
 var reWord = regexp.MustCompile(`[A-Za-z]+`)
 var reDigits = regexp.MustCompile(`\D`)
 
-// entryID mirrors entryId in src/lib/anchors.ts for an entry we are about to
+// entryID mirrors entryId in src/lib/timeline/anchors.ts for an entry we are about to
 // emit. The caller owns uniqueness (see idAllocator).
 func entryID(e Entry) string {
 	day := "undated"

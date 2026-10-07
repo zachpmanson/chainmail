@@ -1,12 +1,8 @@
-/* Tailwind utilities are used by the React app. Preflight is intentionally not
-   enabled: the transcript stylesheet also renders untrusted sender HTML, whose
-   browser defaults and inherited typography are part of the reading experience. */
+/* No Preflight: rendered sender HTML relies on browser default styles. */
 @import "tailwindcss/theme" theme(reference);
 @import "tailwindcss/utilities";
 
-/* Runtime theme colors live in the legacy-compatible CSS variables defined in
-   styles.css. Tailwind utilities resolve against them, so auto/light/dark theme
-   switching remains a single source of truth. */
+/* Resolve to styles.css variables so light/dark switching stays in one place. */
 @theme inline {
   --color-bg: var(--bg);
   --color-fg: var(--fg);

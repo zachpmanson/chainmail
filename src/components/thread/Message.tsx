@@ -7,10 +7,10 @@ import {
   CodeBracketIcon,
 } from "@heroicons/react/24/outline";
 import type { CSSProperties, ReactNode } from "react";
-import { receiptNames } from "../../lib/who";
-import { Avatar } from "./Avatar";
-import { StatusBadge } from "../ui/StatusBadge";
-import { ReceiptIconButton } from "../ui/controls";
+import { receiptNames } from "../../lib/message/who";
+import Avatar from "./Avatar";
+import StatusBadge from "../ui/StatusBadge";
+import ReceiptIconButton from "../ui/ReceiptIconButton";
 import {
   attHref,
   isSkipped,
@@ -18,37 +18,11 @@ import {
   skipNote,
   thumbnail,
   type Attachment,
-} from "../../lib/attachments";
-import type { ZoneState } from "../../lib/chronological";
-import { isStyled, mountOriginal, toggleStyled, watchStyled } from "../../lib/original";
-import { hasBody, trimBody } from "../../lib/trimBody";
-
-/**
- * Message — one message of a transcript, drawn from data alone.
- *
- * The presentation half of the transcript. Everything it needs arrives as a
- * prop: the body is already the HTML the reader will see, the org colour has
- * already been resolved to a slot class ("o2"), and the transcript's layout
- * arrives as the grid position to apply rather than as something to work out.
- * Nothing here imports `Row` or `View`, so a bubble can be drawn by any caller
- * that has a sender, a clock and a body — the timeline is only the first one.
- *
- * The rule the split is built on is what a piece needs, not whether it is
- * optional:
- *
- *   - What the caller decides, passed as data: the clock and how much of it is
- *     a claim, the "to" line, the payload behind the copy button.
- *   - What only the pipeline can produce, passed as an optional slot (a
- *     rendered node): the reply link (which resolves a parent through the reply
- *     graph), the provenance line (which resolves ids to anchors on this page),
- *     and a quoter's inline edit (which resolves a diff against the message it
- *     was made to). Nodes rather than spec types, so this file stays ignorant of
- *     both the spec and `derive`.
- *
- * An absent slot renders nothing, so a caller that has none of that furniture
- * gets a plain bubble — and the timeline, which passes all of it, renders the
- * DOM it rendered before the split.
- */
+} from "../../lib/message/attachments";
+import type { ZoneState } from "../../lib/timeline/chronological";
+import { mountOriginal } from "../../lib/message/original";
+import { usePrefs } from "../../lib/prefs/usePrefs";
+import { hasBody, trimBody } from "../../lib/message/trimBody";
 
 const html = (s: string) => ({ __html: s });
 // The message-level variable colors both the org label and the bubble's decorative stripe.
@@ -60,9 +34,6 @@ const orgColors: Record<string, string> = {
   o5: "var(--o5)",
 };
 
-/** What the header's timestamp needs: the clock as written, and how much of it
- *  is the page's own claim. No `Row` — a caller holding a date, a time and a
- *  zone has everything this asks for. */
 export interface StampData {
   /** as displayed, e.g. "Thu 16 Jul 2026" */
   date: string;
@@ -74,146 +45,12 @@ export interface StampData {
   zone: ZoneState;
 }
 
-export interface MessageProps {
-  /** the bubble's anchor id; the timestamp links to it */
-  id: string;
-  /** presentation HTML, already sanitised; its edges are trimmed here, because
-   *  which whitespace the reader must not see is a rendering question */
-  body: string;
-  /** the sender as displayed; absent on a message with no name on it */
-  sender?: string;
-  /** the message's own subject, as the message stated it; absent on a message
-   *  that carried none (a recovered entry, a note). Drawn in the header's
-   *  receipt rather than on the header line: the line is who and when, and a
-   *  subject there would be a second title under the thread's own — but a reply
-   *  that renames a thread is otherwise unrecoverable, so each message states
-   *  the one it had where the reader has gone to read *this* message. */
-  subject?: string;
-  /** what hovering the sender says, e.g. "Ada Okoye <ada@example.com>"; absent
-   *  falls back to the name */
-  senderTitle?: string;
-  org?: string;
-  /** the org's colour slot, e.g. "o2". It rides on the bubble, not only on the
-   *  avatar: a page is scanned in the body column, so the colour has to be
-   *  where the eye already is. */
-  orgSlot: string;
-  /** the sender's avatar image class, e.g. "p0"; absent draws their initials */
-  avatarClass?: string;
-  /** the reader's own outbound */
-  me?: boolean;
-  /** reconstructed from quoted text; drawn dashed, since the page did not
-   *  receive it as a standalone message */
-  quoted?: boolean;
-  /** the message the pane landed on when this thread opened: the newest, which is
-   *  what the row that was clicked was a summary of. Drawn as a one-shot flash
-   *  (see .msg.landed), because landing is an arrival rather than a state the
-   *  message is in. */
-  landed?: boolean;
-  /** called when that flash finishes, so the caller can take the mark off. */
-  onLandedEnd?: () => void;
-  /** people @-named in the body, shown above it */
-  mentions?: string[];
-  /** the address this message came from, e.g. "ada@loomworks.example". It is
-   *  what the styles switch is kept against where the corpus cannot say whose
-   *  mail this is (see lib/original): the reader's answer to "show me this
-   *  sender's own html" is about the sender, so it is the address that holds
-   *  it. Absent on a recovered entry, which has no From header of its own. */
-  fromEmail?: string;
-  /** the person the corpus resolved this sender to, and whether the reader reads
-   *  them as they wrote it — the stored half of the switch below (see
-   *  prefs). Both come from the entry, so a bubble draws the control without a
-   *  second read, and the pair is passed together because the answer is useless
-   *  without the handle to write it back with. Absent in a built page and in a
-   *  static export: those have no corpus to store the answer in, and they fall
-   *  back to this browser's own memory. */
-  person?: { id: number; preferOriginal: boolean };
-  /** flip that preference, for a caller with a corpus behind it. The pane passes
-   *  one that writes the person and repaints the transcript; a page passes
-   *  nothing, and the switch stays local. */
-  onPreferOriginal?: (next: boolean) => void;
-  attachments?: Attachment[];
-  /** the corpus's handle for this message, which the fetch button asks for */
-  extId?: string;
-  /** fetch this message's files, where a host will do it at all */
-  onPull?: (extId: string) => void;
-  /** the message whose files are being fetched, so its button can say so */
-  pulling?: string | null;
-  /** where the corpus serves stored bytes; empty in the static export, which has
-   *  no server to serve them from */
-  mediaBase?: string;
-  /** as it appeared on the message, e.g. "Bo Halvorsen, cc …"; absent reads "—" */
-  to?: string;
-  /** What hovering a name on the `to:` line says, when the caller can do better
-   *  than the name alone — a caller that holds the addresses answers with
-   *  "Name <address>" (see lib/who) and one that does not leaves this out and gets
-   *  the name. A function rather than a string because the line holds several names
-   *  and each one is a different person; the names are split by lib/who's
-   *  receiptNames, which is where that format is understood. */
-  toTitle?: (name: string) => string;
-  stamp: StampData;
-  /** where the bubble sits in the transcript grid, from the layout pass */
-  style?: CSSProperties;
-  /** thread-column index, for the client's column view */
-  lane?: number;
-  /** opens its thread; marked where the columns are shown */
-  chainStart?: boolean;
-  /** what changed since a previous render, where there was one */
-  mark?: "new" | "revised";
-  /** the reply relationship — a node, because only the pipeline knows how a
-   *  message resolves the parent it replies to. Drawn at the right of the
-   *  header line, beside the caret, where the transcript is scanned. */
-  reply?: ReactNode;
-  /** where the entry was found — the ids under it, in the header's expanded
-   *  section beside the to/cc line */
-  source?: ReactNode;
-  /** a quoter's inline edit to text this message quoted */
-  edits?: ReactNode;
-  /** The press that makes the reading pane's reply box answer THIS message,
-   *  where the caller has a box to point at it — the pane does, and a built page
-   *  does not. Not to be read as `reply` above: that node is the line naming the
-   *  message this one answers, and this one is the control that answers this
-   *  message. Drawn with the receipt's other controls, at the right end of the
-   *  to/cc line, where a reader who has opened a message to see what it is looks
-   *  for what to do with it. */
-  answer?: ReactNode;
-  /** what the clip button puts on the clipboard as JSON; absent leaves the
-   *  button off, since a button that copies nothing is a lie. The button rides
-   *  in the header's expanded section, with the rest of the receipt. */
-  copyJson?: unknown;
-  /** The sender's own html for this message, and how to fetch it: passed exactly
-   *  where a caller knows the corpus holds a part for the entry (the `original`
-   *  flag on a chain or entry read) and has a server to fetch it from. So what is
-   *  absent here is absent everywhere — on a page rendered to a file, in a static
-   *  export, on a message that arrived as plain text — and no control is drawn,
-   *  because a control that cannot answer is worse than no control. */
-  original?: { extId: string; load: (extId: string) => Promise<string> };
-}
-
-/**
- * A clip button that drops the payload it is handed onto the clipboard as JSON.
- *
- * Quiet, and not a navigational control: inline handlers only, no listener of
- * its own. The payload is the caller's business — the timeline hands it the spec
- * entry as the renderer saw it, so a message that renders wrong can be pasted
- * somewhere and inspected whole; all this end knows is that it is JSON.
- */
-/**
- * The copy control, as a receipt icon button: the same 18px glyph and compact hit
- * area as the other receipt controls (see ReceiptIconButton).
- *
- * Its two states are two glyphs rather than a glyph and the word "copied", because
- * a button that grows a word when it is pressed moves the receipt's line under the
- * reader's hand — and the tick is the state, in the same vocabulary as the read
- * circle next to the timestamp, which is one box either way. The word is not lost:
- * it is the title and the label, which is where a word belongs on a shape this small.
- */
 function CopyJson({ data }: { data: unknown }) {
   const [done, setDone] = useState(false);
   const label = done ? "Copied" : "Copy this message's JSON";
   return (
     <ReceiptIconButton
       type="button"
-      className="copyjson"
       title={label}
       aria-label={label}
       onClick={() => {
@@ -233,36 +70,26 @@ function CopyJson({ data }: { data: unknown }) {
   );
 }
 
-/**
- * A zone is shown three ways, because the reader's next move differs in each.
- * Stated is a fact and reads as one. Inferred is a claim and is dotted, dimmed
- * and suffixed so it cannot be mistaken for the source's own words. Unknown is
- * neither, and is marked with a bare "?" rather than left as whitespace — an
- * unlabelled clock beside a labelled one silently invites the reader to compare
- * them, and on this page most clocks are unlabelled. The mark is the whole of it:
- * "zone unknown" at every held-back message is a sentence the reader learns to
- * skip, and the tooltip still says why.
- */
 function Stamp({ id, stamp }: { id: string; stamp: StampData }) {
   const { date, time, tz, zone } = stamp;
   return (
     <a
-      className="tm pl whitespace-nowrap text-[.71rem] tabular-nums text-muted"
+      className="whitespace-nowrap text-[.71rem] tabular-nums text-muted"
       href={`#${id}`}
       title="Link to this message"
     >
       {date}
       {time ? ` · ${time}` : ""}
-      {zone === "stated" ? <span className="tz text-[.9em] opacity-[.75]">{tz}</span> : null}
+      {zone === "stated" ? <span className="text-[.9em] opacity-[.75]">{tz}</span> : null}
       {zone === "inferred" ? (
         <span
-          className="tz tzi border-b border-dotted border-current text-[.9em] opacity-[.55] [cursor:help]"
+          className="border-b border-dotted border-current text-[.9em] opacity-[.55] [cursor:help]"
           title="Inferred — this source stated no zone. The offset was worked out from the client that quoted this message; see the source notes."
         >{` ${tz}?`}</span>
       ) : null}
       {zone === "unknown" ? (
         <span
-          className="tz tzu text-[.9em] italic tracking-[.02em] opacity-[.45] [cursor:help]"
+          className="text-[.9em] italic tracking-[.02em] opacity-[.45] [cursor:help]"
           title="Zone unknown — this source stated none and nothing available places it. The clock is a wall clock as quoted, so it cannot be compared with the times above and below it."
         >
           {" ?"}
@@ -272,13 +99,6 @@ function Stamp({ id, stamp }: { id: string; stamp: StampData }) {
   );
 }
 
-/** The attachment strip: a link to where a file already is, and — where it is not
- *  here yet and somebody can go and get it — the download itself.
- *
- *  It reads an attachment list rather than an entry, because nothing below needs
- *  anything else the entry carries — the one handle it does need, `extId`, is
- *  the message's own and is passed as itself.
- */
 function Attachments({
   attachments = [],
   extId,
@@ -297,74 +117,36 @@ function Attachments({
   mediaBase?: string;
 }) {
   if (!attachments.length) return null;
-  // Whether THIS message's files are being fetched. A message is the unit the
-  // endpoint works in — one mailbox round trip, and every file it carried — so
-  // one press puts every chip on the line into the same state.
+  // The endpoint fetches a whole message's files at once, so all its chips share one state.
   const fetching = pulling != null && pulling === extId;
   return (
-    <div className="atts my-[.4rem] mb-[.1rem] flex flex-wrap items-center gap-[.3rem]">
-      {/* The mark, and no word beside it: the chips ARE the strip, and "attached"
-          at the head of a list of files was a label on the obvious. The paperclip
-          stays as the one thing that says what the row is before it is read, and
-          it is named for a reader who cannot see it — the filenames below say what
-          is there, never that these are files. */}
-      <span className="clip text-[.72rem] text-muted" role="img" aria-label="attachments">
+    <div className="my-1.5 mb-0.5 flex flex-wrap items-center gap-1">
+      <span className="text-[.72rem] text-muted" role="img" aria-label="attachments">
         📎
       </span>
       {attachments.map((a, i) => {
         const local = localHref(a, mediaBase ?? "");
         const href = attHref(a, mediaBase);
-        // Whether this chip can go and get the file. It is offered only where
-        // there is something to fetch and somebody able to fetch it: a host
-        // started without -media never passes onPull, a page rendered to a file
-        // never does, and a message whose bytes are already here has nothing to
-        // ask for. A file the corpus has DECLINED cannot be asked for again —
-        // the reason is recorded, not the answer — so it stays the plain link to
-        // its source that every chip used to be.
+        // A file the corpus declined can't be requested again, so it stays a plain link.
         const fetchable = !local && !isSkipped(a) && onPull !== undefined && extId !== undefined;
-        // The picture on the chip, where there is one: the bytes this host holds,
-        // once they have been pulled, or the thumbnail a built page embedded (see
-        // lib/attachments' thumbnail). A file that has been downloaded is a file the
-        // reader can now recognise at a glance, which is the whole of what a preview
-        // is for — and nothing appears before that, because until the bytes are here
-        // there is nothing to draw.
         const shot = thumbnail(a, mediaBase ?? "");
         const thumb = shot ? (
           <img
-            className={`athumb block h-[2.1rem] w-auto max-w-36 rounded-[3px] border border-line object-cover object-left${shot.blob ? " ablob w-12" : ""}`}
+            className={`block h-[2.1rem] w-auto max-w-36 rounded-[3px] border border-line object-cover object-left${shot.blob ? " w-12" : ""}`}
             src={shot.src}
             {...(shot.w !== undefined ? { width: shot.w } : {})}
             {...(shot.h !== undefined ? { height: shot.h } : {})}
-            /* Bytes are asked for as the chip nears the viewport and decoded off the
-               main thread: a deep thread can hold a dozen pictures and none of them
-               is what the reader came for. An embedded thumbnail is already here,
-               and has nothing to defer. */
             {...(shot.blob ? { loading: "lazy" as const, decoding: "async" as const } : {})}
-            /* Decorative here: the filename beside it already names the file, so
-               announcing it twice only makes the chip longer to listen to. */
             alt=""
           />
         ) : null;
         const label = (
           <>
             {thumb}
-            <span className="afn text-[.74rem] font-[650] font-mono">{a.name}</span>
-            <span
-              className={`ameta text-[.64rem] text-muted${fetching && fetchable ? " text-fg" : ""}`}
-            >
+            <span className="text-[.74rem] font-[650] font-mono">{a.name}</span>
+            <span className={`text-[.64rem] text-muted${fetching && fetchable ? " text-fg" : ""}`}>
               {fetching && fetchable ? (
-                /* The same ↻ and the same 0.8s turn the nav's refresh wears (see
-                   .navrefresh .spinner): one glyph for "this is being worked on",
-                   in both the places this app asks a server for something that
-                   takes a moment. The turn is the whole of it — the words that
-                   used to sit beside it changed the chip's width mid-download and
-                   reflowed the line of files, and the file's own name still says
-                   which one is being fetched. Named rather than hidden for a
-                   reader who cannot see it turn, and named as a picture rather
-                   than as a status: the waiting is on the chip, which already
-                   says it with `aria-busy`, and the pane has one live region for
-                   the things that happen to it (see .pullnote) — a mark that
-                   comes and goes on every chip must not be a second one. */
+                /* An image, not a status: the chip has aria-busy and the pane owns the one live region. */
                 <ArrowPathIcon
                   className="spinner w-[.838em]"
                   width={16}
@@ -381,49 +163,15 @@ function Attachments({
             </span>
           </>
         );
-        // What shows these bytes in the window over the page, when anything can:
-        // the preview the builder embedded — a picture by definition — or the
-        // server's `view` for bytes this host holds. The preview comes first
-        // because a thumbnail from the archive has a picture here and no bytes of
-        // ours to fetch.
-        //
-        // `view` is asked separately from `open` and not derived from it, because
-        // they answer different questions: `open` is what a click does with the
-        // link, `view` is what the window contains. The PDF is where they differ
-        // — a click takes it (Content-Disposition `attachment`) and the window
-        // still frames it. A file with no view can only be taken: an archive, a
-        // document, markup (a frame is a document, so a sender's HTML framed here
-        // would be script in our origin), and media, which plays in a tab.
-        // A picture is a picture whether or not the spec that carried it knew the
-        // word for one: a page saved before `view` existed still holds bytes and a
-        // kind, and re-deriving it must not be the price of enlarging something.
-        // Everything else is the server's `view`, which a fresh derivation
-        // carries and an old one cannot — so a PDF in an old page stays a chip
-        // until the page is rebuilt.
+        // `view` is separate from `open`: a PDF downloads on click but still frames. Markup never
+        // gets a view, since a framed sender document would run script in our origin. Pages built
+        // before `view` existed lack it, so their PDFs stay plain chips until rebuilt.
         const showsImage = shot !== undefined;
         const view = showsImage ? "image" : local ? (a.view ?? "") : "";
         const opens = view !== "";
-        // The chip stays the same link it always was, and the popover is layered
-        // onto it by script. That is deliberate: no new control appears, the
-        // trigger is already in the tab order, and with scripting unavailable
-        // the click still opens the attachment rather than doing nothing.
-        //
-        // Once the bytes are local, where the click goes changes but the shape
-        // does not: the chip is still one link, and the server decides whether it
-        // downloads or opens by the same `open` rule. A file the reader is TAKING
-        // opens in no tab at all — the browser saves it and the page stays put,
-        // which is what a download should do. One they are LOOKING at opens
-        // beside the page, so the transcript is still there behind it.
+        // The popover is layered onto the existing link, so without scripting the click still opens the file.
         const beside = !local || a.open !== "download";
-        // A file the corpus has refused says so where the reader is already
-        // looking, rather than in a console they will not open. It is a tooltip
-        // and not more chip text: the chip is a list of files, and a sentence in
-        // the middle of it would push the next file off the line.
         const note = skipNote(a);
-        // What a chip says when the pointer is on it. The skip reason first, since
-        // a chip that cannot be fetched is the one whose state is not visible from
-        // the outside; then what a press will do, because the href under the chip
-        // names the mailbox and the press is not going there.
         const tip =
           note ??
           (fetchable
@@ -435,8 +183,8 @@ function Attachments({
           <a
             key={i}
             className={[
-              "att inline-flex items-baseline gap-[.35rem] rounded-md border border-line bg-quote px-[.45rem] py-[.1rem] text-fg no-underline hover:border-accent",
-              opens && "haspop group/attachment items-center",
+              "att inline-flex items-baseline gap-1.5 rounded-md border border-line bg-quote px-2 py-0.5 text-fg no-underline hover:border-accent",
+              opens && "group/attachment items-center",
               fetching && fetchable && "busy border-accent cursor-progress",
             ]
               .filter(Boolean)
@@ -451,33 +199,17 @@ function Attachments({
                   "aria-haspopup": "dialog" as const,
                 }
               : {})}
-            /* The popover's save control reads this, not the href: a Slack chip's
-               href is a permalink and a body picture has no href at all, so the
-               presence of the local URL is what says "these bytes are here". */
+            /* The popover's save reads this, not href: Slack hrefs are permalinks and body pictures have none. */
             {...(local ? { "data-get": local } : {})}
-            /* The download itself, on a chip whose file is not here yet: the press
-               asks the host for this message's files, and the request is marked on
-               the element so the click can be replayed the moment there are bytes
-               behind the chip (see behaviour.ts). That is what makes the press a
-               download rather than a promise — press, wait, and the file opens.
-
-               A modified press is left alone: it is the reader asking for a new tab
-               or a download of the link *under* the chip, which is where the file
-               is today, and the link is the right answer to that.
-
-               The marker is set on the element rather than rendered from state,
-               because the render that follows the pull is the one that has to find
-               it — state would have to survive a props change that replaces every
-               attachment, and a DOM attribute does that by being there. */
+            /* Marked on the element, not in state, so the click can be replayed once bytes arrive
+               (see behaviour.ts); state wouldn't survive the props change that replaces every
+               attachment. Modified clicks fall through to the link. */
             {...(fetchable
               ? {
                   onClick: (ev: React.MouseEvent<HTMLAnchorElement>) => {
                     if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey || ev.button !== 0)
                       return;
                     ev.preventDefault();
-                    // Already asked for, and the answer is on its way: a second
-                    // press would spend a second mailbox round trip on files that
-                    // are already coming.
                     if (fetching) return;
                     ev.currentTarget.setAttribute("data-download", "");
                     onPull!(extId!);
@@ -495,13 +227,10 @@ function Attachments({
             ) : null}
           </a>
         ) : (
-          // A thumbnail still earns its place on a chip with nowhere to go — it
-          // is the only thing here that says what the file actually is. It gets
-          // no popover, though: the only way to offer one would be a control
-          // that does nothing at all without scripting.
+          // No popover: it would need a control that does nothing without scripting.
           <span
             key={i}
-            className="att nolink inline-flex items-baseline gap-[.35rem] rounded-md border border-line bg-quote px-[.45rem] py-[.1rem] text-fg no-underline opacity-60 hover:border-accent"
+            className="att inline-flex items-baseline gap-1.5 rounded-md border border-line bg-quote px-2 py-0.5 text-fg no-underline opacity-60 hover:border-accent"
             {...(note ? { title: note } : {})}
           >
             {label}
@@ -513,101 +242,32 @@ function Attachments({
 }
 
 /**
- * The reader's second reading of one message.
- *
- * By default a body is the transcript's: the sender's markup as this pipeline
- * renders it, stripped of the stylesheet and the class names that made it what it
- * was, so that a page of other people's design reads as one page. That stripping
- * is what makes some mail illegible — a calendar invite is tables and classes and
- * nothing else, and a newsletter's white text loses the background it was white
- * against along with the rule that set it. Where the corpus holds the sender's own
- * part, the reader can ask for it instead, and it is mounted in a shadow root of
- * its own so nothing in it can reach the app and nothing in the app can reach it.
- *
- * It is swapped and not added. Two renditions stacked would be twice the height of
- * a thread to hold a comparison the reader has already made by the time they reach
- * for the control — and the whole reason to reach for it is that one of the two is
- * wrong for this message.
- *
- * The state lives here, at the bubble, rather than in either end of the swap: the
- * control belongs in the receipt (where the reader goes to inspect a message) and
- * the body it replaces belongs in the bubble, and one of them cannot own the other
- * without the other reaching for it. The control is drawn only where a caller
- * passed somewhere to fetch from, so a built page and a static export never show
- * one — see MessageProps.original.
- *
- * The switch behind the control is per sender rather than per message, and it is
- * kept against the person: the mail this is for arrives as a run of notifications
- * from one address, and the reader who has decided how to read that address has
- * decided it for all of it. Storing it on the person rather than in this browser
- * is what makes that decision true on the phone as well as here, and keeps it
- * true through an identity merge — see prefs.ts, and lib/original for the local
- * fallback that a built page still uses.
- *
- * So this hook holds two things — whether this bubble's sender is currently read
- * their way, and what became of this one message's fetch — and the second only
- * exists while the first is true. Where the caller passed a person, the first is
- * just what the corpus said, and the press is handed straight back out to be
- * written; without one, it is this browser's memory of the same answer, watched
- * so a second bubble for the same sender follows it.
+ * The sender's own HTML, swapped in for the transcript's rendering. The switch is per
+ * sender: stored on the person where there is a corpus, else in the browser's prefs (lib/prefs/usePrefs).
  */
 function useOriginal(
-  original: MessageProps["original"],
+  original: { extId: string; load: (extId: string) => Promise<string> } | undefined,
   fromEmail: string | undefined,
-  person: MessageProps["person"],
-  onPreferOriginal: MessageProps["onPreferOriginal"],
+  person: { id: number; preferOriginal: boolean } | undefined,
+  onPreferOriginal: ((next: boolean) => void) | undefined,
 ) {
-  // Whose switch this bubble follows where nothing stored answers it: the
-  // address it came from, or the message itself where there is no address to hold
-  // the answer (a recovered entry has no From header, so it names no sender to
-  // remember anything about).
+  // A recovered entry has no From header, so the local switch falls back to the message id.
   const key = fromEmail || original?.extId || "";
   const extId = original?.extId;
   const load = original?.load;
-  // Whether the corpus is what answers: a caller with a person has passed both
-  // halves of that answer, and one without them is a page with no corpus behind
-  // it at all.
   const stored = person !== undefined && onPreferOriginal !== undefined;
 
-  const [on, setOn] = useState(() => (stored ? person.preferOriginal : isStyled(key)));
-  // The corpus's answer, held out of the dependency list as a plain value: the
-  // effect below must re-read the switch when the corpus's answer changes, and
-  // reading it off `person` inside the effect would hide that from the array.
-  const storedOn = person?.preferOriginal === true;
+  // Locally, one sender's bubbles share the switch, so each follows it rather than owning it.
+  const styled = usePrefs((s) => key !== "" && s.styledSenders.includes(key));
+  const toggleStyled = usePrefs((s) => s.toggleStyled);
+  const on = stored ? person.preferOriginal : styled;
   const [state, setState] = useState<Original>({ at: "read" });
-  // What arrived, held apart from what is on screen: the reader who flips back and
-  // forth is comparing two renderings of one body, and re-asking for bytes this
-  // bubble already has would make the comparison a round trip each way. lib/original
-  // holds the same answer for the whole session (a second bubble for the same
-  // message, or one remounted, pays nothing either) — this is what keeps the flip
-  // itself free.
   const arrived = useRef<string | null>(null);
 
-  // The switch, wherever it is kept. Stored: it is the corpus's word and this
-  // bubble follows it, including when the write comes back and the entry is read
-  // again. Local: a sender's mail is usually several bubbles at once, so the
-  // press that happens on one of them has to reach the others — this bubble
-  // follows the switch rather than owning it, and follows it wherever it was
-  // pressed. The initial read happens in the state above so that a reader who has
-  // already answered for this sender opens on their answer rather than on the
-  // default.
-  useEffect(() => {
-    if (stored) {
-      setOn(storedOn);
-      return;
-    }
-    setOn(isStyled(key));
-    return watchStyled(() => setOn(isStyled(key)));
-  }, [key, stored, storedOn]);
-
-  // The switch, turned into a rendering. On: ask for this message's own part and
-  // mount it in place of the transcript's rendering. Off: back to the
-  // transcript's, with the bytes held so the flip back costs nothing.
   useEffect(() => {
     if (!extId || !load) return;
     if (!on) {
-      // Same object when there is nothing to change, so switching off does not
-      // re-render every bubble that was already off.
+      // Same object when unchanged, so switching off doesn't re-render every bubble already off.
       setState((s) => (s.at === "read" ? s : { at: "read" }));
       return;
     }
@@ -615,8 +275,7 @@ function useOriginal(
       setState({ at: "sent", html: arrived.current });
       return;
     }
-    // A fetch that arrives after the switch went back off must not swap the body
-    // back out from under the reader.
+    // A fetch landing after the switch went off must not swap the body back.
     let live = true;
     setState({ at: "asking" });
     load(extId).then(
@@ -639,51 +298,12 @@ function useOriginal(
     };
   }, [on, extId, load]);
 
-  // The control is only ever a press on the sender's switch. Whether that press
-  // means "fetch this one" or "fetch the rest of them" is not the control's to
-  // know: it is one switch, drawn wherever the reader is looking at the mail it
-  // governs. Where the answer is stored, the press is handed out rather than
-  // written here — whether it lands in the corpus is the caller's business, and
-  // the corpus is what will answer this bubble next time it is read.
   const ask = () => (stored ? onPreferOriginal(!on) : toggleStyled(key));
 
   return { on, state, ask };
 }
 
-/**
- * The control, in the bubble's receipt beside the copy button — pressed or not.
- *
- * The receipt is where a reader goes to inspect a message rather than read it: the
- * ids it was found under, the address it was sent to, the JSON behind it, and the
- * subject and the ids on the line above. This asks for the same message a second
- * way, so it belongs with those rather than on the bubble — as chrome over the body
- * it would be a control on every message that had one (most of them), while the
- * reader who needs it is the one who has already noticed the rendering is wrong.
- *
- * It stays here when the switch is on, where Zach wants it: the receipt is one
- * click away and the bubble's own line is not where a reader goes to change how a
- * message is read. What the reader who has swapped the body needs is that the way
- * back still exists at all, and that is what the note below is about.
- *
- * The note is the corpus's answer that this message carries nothing of the sender's
- * own, and it is drawn *beside* the control rather than in place of it: the switch
- * it belongs to is the sender's and not this message's, so a message with no part
- * is still a way to stop reading the rest of them this way. That is the dead end
- * this control used to have — the note replaced the button, so a fetch that came
- * back with nothing left the reader a switch they could not press, on the one
- * sender they had just asked to read differently. The server's own sentence is the
- * answer for this message, so it rides the note's title rather than being replaced
- * with a word.
- *
- * The button is an icon button, the same 18px box as every other receipt control
- * (see ReceiptIconButton). It said "Toggle Styles" and
- * "loading…" — a word, and then a different word — which is two widths in the one
- * place a reader is looking when they press it, and made the receipt's line ragged
- * beside the copy control's glyph. What the words meant is the title and the label
- * now, where a word belongs on a shape this small; the glyph is `</>` because what
- * the switch asks for is the sender's own markup, and the waiting is the same ↻
- * the nav's refresh turns.
- */
+/** The note sits beside the control, not in its place: the switch is the sender's, so it must stay pressable. */
 function OriginalControl({ on, state, ask }: { on: boolean; state: Original; ask: () => void }) {
   const asking = state.at === "asking";
   const label =
@@ -706,15 +326,11 @@ function OriginalControl({ on, state, ask }: { on: boolean; state: Original; ask
         {asking ? (
           <ArrowPathIcon className="spinner" width={18} height={18} aria-hidden="true" />
         ) : (
-          /* The sender's own markup, as one glyph: the two carets and the slash
-             between them. Nothing marks the pressed state here — that is the colour
-             and the background the rule gives a pressed button, which is how this
-             app states which of a switch's two readings is on. */
           <CodeBracketIcon width={18} height={18} aria-hidden="true" />
         )}
       </ReceiptIconButton>
       {state.at === "none" ? (
-        <span className="origwhy text-[.66rem] italic text-muted" title={state.why}>
+        <span className="text-[.66rem] italic text-muted" title={state.why}>
           nothing to show
         </span>
       ) : null}
@@ -722,44 +338,20 @@ function OriginalControl({ on, state, ask }: { on: boolean; state: Original; ask
   );
 }
 
-/**
- * The bubble's body, in whichever of the two renderings the reader last asked
- * for. The mount is the only imperative thing in this file: a shadow root is DOM
- * rather than React, and the element it is created on is created by the render.
- *
- * The two renderings are keyed apart so that React replaces the element rather
- * than reusing it. React reconciles by element type where the key is the same, so
- * an unkeyed swap hands the same `<div>` back with a different class on it — and
- * **a shadow root cannot be detached from the element it was created on**, so the
- * sender's html goes on being drawn inside it however empty the light DOM is. The
- * body stayed on screen when the switch was turned off, until a reload built the
- * bubble again. A key is the whole fix: one rendering, one element.
- */
+/** Renderings are keyed apart: a shadow root can't be detached, so a reused div would keep drawing the sender's HTML. */
 function Body({ body, state }: { body: string; state: Original }) {
   const host = useRef<HTMLDivElement | null>(null);
-  // Mounted by effect rather than in the ref callback: the element exists on the
-  // render that swaps to it, and the shadow root is created on the element as
-  // part of that commit. React owns the host as an empty div; the mail is written
-  // into it by this one call, and never read back.
   useEffect(() => {
     if (state.at === "sent" && host.current) mountOriginal(host.current, state.html);
   }, [state]);
 
   if (state.at === "sent") {
-    /* The shadow host. Empty as far as React is concerned — the mail is written
-       into its shadow root, where a rule of this page's cannot reach it and its
-       own rules cannot leave. */
     return <div key="sent" className="bd bdo overflow-x-auto" ref={host} />;
   }
-  /* A message that carried no words at all — a mail that was only its file, a
-     calendar reply that was only its invitation — says so in the page's own
-     voice rather than drawing an empty bubble. The gap a blank body leaves reads
-     as something failing to render, and "there was nothing here" is a fact about
-     the message: it is what the sender sent. */
   if (!hasBody(body)) {
     return (
       <div key="read" className="bd overflow-x-auto">
-        <p className="nobody m-0 text-[.8rem] italic text-muted">No body</p>
+        <p className="m-0 text-[.8rem] italic text-muted">No body</p>
       </div>
     );
   }
@@ -768,168 +360,202 @@ function Body({ body, state }: { body: string; state: Original }) {
   );
 }
 
-/** What became of this message's fetch, while its sender's switch is on.
- *
- * `read` is the transcript's own rendering and what a bubble shows with the switch
- * off; `asking` is a fetch in flight, during which the transcript's rendering is
- * still what is on screen, because taking the body away before the replacement
- * arrives would be a blank bubble on a slow corpus. `sent` is the sender's own
- * html, mounted. `none` is the corpus's answer that there is nothing of theirs to
- * show on this message — an answer rather than a failure, and the one state where
- * the switch is on and this message's body cannot follow it: what was on screen is
- * still on screen, and the way back is the same switch, which belongs to every
- * message from that sender rather than to this one. */
+/** `asking` keeps the transcript's body on screen; `none` is the corpus saying this message has no original part. */
 type Original =
   { at: "read" } | { at: "asking" } | { at: "sent"; html: string } | { at: "none"; why: string };
 
 /** One message bubble. */
-export function Message(p: MessageProps) {
-  // The org slot rides on the bubble so a bubble can carry its sender's colour,
-  // and `me`/`quoted`/`isnew` are the same colour-and-state modifiers the
-  // stylesheet already reads off this element.
-  const cls = [
-    "msg",
-    p.orgSlot,
-    "mb-2 scroll-mt-6",
-    p.me && "me",
-    p.quoted && "q",
-    p.chainStart && "chstart",
-    p.mark === "new" && "isnew",
-    p.landed && "landed",
-  ]
-    .filter(Boolean)
-    .join(" ");
-  // The switch, and what became of this message's fetch. Both are the bubble's,
-  // because the two halves of the swap are on either side of it: the control in
-  // the receipt, the body in the bubble.
-  const original = useOriginal(p.original, p.fromEmail, p.person, p.onPreferOriginal);
-  // The name's hover title, and the avatar's: both name the person the same way,
-  // and a caller that supplies no title gets the name it already gave us.
-  const who = p.senderTitle ?? p.sender ?? "";
+export default function Message({
+  id,
+  body,
+  sender,
+  subject,
+  senderTitle,
+  org,
+  orgSlot,
+  avatarClass,
+  me,
+  quoted,
+  landed,
+  onLandedEnd,
+  mentions,
+  fromEmail,
+  person,
+  onPreferOriginal,
+  attachments,
+  extId,
+  onPull,
+  pulling,
+  mediaBase,
+  to,
+  toTitle,
+  stamp,
+  style,
+  lane,
+  chainStart,
+  mark,
+  reply,
+  source,
+  edits,
+  answer,
+  copyJson,
+  original,
+}: {
+  /** the bubble's anchor id; the timestamp links to it */
+  id: string;
+  /** presentation HTML, already sanitised; edges are trimmed here */
+  body: string;
+  /** the sender as displayed; absent on a message with no name on it */
+  sender?: string;
+  /** the message's own subject; absent on recovered entries and notes */
+  subject?: string;
+  /** hover text for the sender, e.g. "Ada Okoye <ada@example.com>"; defaults to the name */
+  senderTitle?: string;
+  org?: string;
+  /** the org's colour slot, e.g. "o2" */
+  orgSlot: string;
+  /** the sender's avatar image class, e.g. "p0"; absent draws their initials */
+  avatarClass?: string;
+  /** the reader's own outbound */
+  me?: boolean;
+  /** reconstructed from quoted text; drawn dashed */
+  quoted?: boolean;
+  /** the message the pane opened on; flashes once (see .msg.landed) */
+  landed?: boolean;
+  /** called when that flash finishes, so the caller can take the mark off. */
+  onLandedEnd?: () => void;
+  /** people @-named in the body, shown above it */
+  mentions?: string[];
+  /** keys the local styles switch (see lib/prefs/usePrefs); absent on recovered entries */
+  fromEmail?: string;
+  /** stored half of the styles switch; absent without a corpus (built page, static export) */
+  person?: { id: number; preferOriginal: boolean };
+  /** flips that preference; absent keeps the switch local */
+  onPreferOriginal?: (next: boolean) => void;
+  attachments?: Attachment[];
+  /** the corpus's handle for this message, which the fetch button asks for */
+  extId?: string;
+  /** fetch this message's files, where a host will do it at all */
+  onPull?: (extId: string) => void;
+  /** the message whose files are being fetched, so its button can say so */
+  pulling?: string | null;
+  /** where the corpus serves stored bytes; empty in the static export */
+  mediaBase?: string;
+  /** as it appeared on the message, e.g. "Bo Halvorsen, cc …"; absent reads "—" */
+  to?: string;
+  /** hover text per `to:` name (split by lib/message/who's receiptNames); defaults to the name */
+  toTitle?: (name: string) => string;
+  stamp: StampData;
+  /** where the bubble sits in the transcript grid, from the layout pass */
+  style?: CSSProperties;
+  /** thread-column index, for the client's column view */
+  lane?: number;
+  /** opens its thread; marked where the columns are shown */
+  chainStart?: boolean;
+  /** what changed since a previous render, where there was one */
+  mark?: "new" | "revised";
+  /** the reply line; a node because only the pipeline can resolve the parent */
+  reply?: ReactNode;
+  /** where the entry was found, shown in the receipt */
+  source?: ReactNode;
+  /** a quoter's inline edit to text this message quoted */
+  edits?: ReactNode;
+  /** control that points the pane's reply box at this message (unlike `reply`, which names its parent) */
+  answer?: ReactNode;
+  /** what the clip button copies as JSON; absent hides the button */
+  copyJson?: unknown;
+  /** passed only where the corpus holds the sender's own part and a server can fetch it */
+  original?: { extId: string; load: (extId: string) => Promise<string> };
+}) {
+  const styled = useOriginal(original, fromEmail, person, onPreferOriginal);
+  const who = senderTitle ?? sender ?? "";
   return (
     <div
-      className={cls}
-      id={p.id}
-      data-ch={p.lane}
+      className={["msg", orgSlot, "mb-2 scroll-mt-6", chainStart && "chstart", landed && "landed"]
+        .filter(Boolean)
+        .join(" ")}
+      id={id}
+      data-ch={lane}
       style={
         {
-          ...p.style,
-          ...(orgColors[p.orgSlot] ? { "--orgc": orgColors[p.orgSlot] } : {}),
+          ...style,
+          ...(orgColors[orgSlot] ? { "--orgc": orgColors[orgSlot] } : {}),
         } as CSSProperties
       }
-      // The flash is on the bubble (see .msg.landed), so it is the bubble's
-      // animation end that reaches this handler; the name is checked because an
-      // entry with any other animation must not clear a mark that is still
-      // running.
+      // Only the flash animation clears the mark; another animation ending must not.
       onAnimationEnd={(e) => {
-        if (e.animationName === "flash") p.onLandedEnd?.();
+        if (e.animationName === "flash") onLandedEnd?.();
       }}
     >
-      <div className="col min-w-0">
-        {/* The header is the bubble's disclosure, not a caption: the sender, the
-            org, the clock and the reply the message answers are what a page is
-            scanned by, and the receipt — who it was addressed to, the ids it was
-            found under, and the control that copies it whole — opens beneath
-            rather than sitting inside the bubble, where it is read once and is
-            only height thereafter. A native <details>, like the provenance line
-            and the panels: the export stays readable without scripting, and
-            find-in-page reaches the ids closed or open. */}
-        <details className="hdr mb-[.14rem] px-[.1rem]">
-          <summary className="flex cursor-pointer flex-wrap items-baseline gap-[.3rem] list-none focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent focus-visible:outline-offset-2">
-            <Avatar name={p.sender ?? ""} orgSlot={p.orgSlot} pic={p.avatarClass} title={who} />
-            <span className="nm text-[.83rem] font-[650]" title={who}>
-              {p.sender}
+      <div className="min-w-0">
+        {/* A native <details>, so the export works without scripting and find-in-page reaches the ids. */}
+        <details className="hdr mb-0.5 px-0.5">
+          <summary className="flex cursor-pointer flex-wrap items-baseline gap-1 list-none focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent focus-visible:outline-offset-2">
+            <Avatar name={sender ?? ""} orgSlot={orgSlot} pic={avatarClass} title={who} />
+            <span className="text-[.83rem] font-[650]" title={who}>
+              {sender}
             </span>
-            <span className="org text-[var(--orgc,var(--muted))] text-[.68rem] font-[650] uppercase tracking-[.07em]">
-              {p.org}
+            <span className="text-[var(--orgc,var(--muted))] text-[.68rem] font-[650] uppercase tracking-[.07em]">
+              {org}
             </span>
-            <Stamp id={p.id} stamp={p.stamp} />
-            {p.mark === "new" ? (
-              <StatusBadge className="newpill" tone="new">
-                new
-              </StatusBadge>
-            ) : null}
-            {p.mark === "revised" ? (
-              <StatusBadge className="revpill" tone="revised">
-                revised
-              </StatusBadge>
-            ) : null}
-            {/* The line's right end, and always drawn even when the caller has
-                no reply to put in it: the caret lives inside this box, so an
-                empty tail still closes the line at the right edge. */}
-            <span className="htail ml-auto inline-flex items-baseline gap-[.5rem]">{p.reply}</span>
+            <Stamp id={id} stamp={stamp} />
+            {mark === "new" ? <StatusBadge tone="new">new</StatusBadge> : null}
+            {mark === "revised" ? <StatusBadge tone="revised">revised</StatusBadge> : null}
+            {/* Always drawn: the caret lives in this box. */}
+            <span className="htail ml-auto inline-flex items-baseline gap-2">{reply}</span>
           </summary>
-          <div className="hdet mb-[.3rem] flex flex-wrap items-center gap-x-[.7rem] gap-y-[.2rem] px-[.1rem] pt-[.22rem]">
-            {/* The subject, on its own line above the receipt's fields, and only
-                where the message had one: a message with no subject has nothing
-                to say here, and an empty line would say it anyway. */}
-            {/* The subject, and the ids it was found under, on one line: the
-                subject is what the message is about and the id is where it is,
-                and a reader who is looking for one of them is usually looking
-                for the other. So the subject keeps the left of the line and the
-                ids sit at its right, rather than the ids taking a line of their
-                own under the recipient — a line that was mostly empty on every
-                message that carried one.
-
-                Only where the message had a subject: a message with no subject
-                has nothing to put here, and an empty line would say it anyway. */}
-            {p.subject || p.source ? (
-              <span className="hsub flex flex-[1_1_100%] items-baseline gap-x-[.7rem] gap-y-[.3rem]">
-                {p.subject ? (
+          <div className="mb-1 flex flex-wrap items-center gap-x-3 gap-y-1 px-0.5 pt-1">
+            {subject || source ? (
+              <span className="flex flex-[1_1_100%] items-baseline gap-x-3 gap-y-1">
+                {subject ? (
                   <span
-                    className="subj min-w-0 flex-[1_1_auto] text-[.72rem] leading-[1.25] text-fg"
-                    title={p.subject}
+                    className="min-w-0 flex-[1_1_auto] text-[.72rem] leading-[1.25] text-fg"
+                    title={subject}
                   >
-                    {p.subject}
+                    {subject}
                   </span>
                 ) : null}
-                {p.source}
+                {source}
               </span>
             ) : null}
-            <span className="to text-[.66rem] text-muted">
+            <span className="text-[.66rem] text-muted">
               to{" "}
-              {p.to
-                ? receiptNames(p.to).map((r, i) => (
+              {to
+                ? receiptNames(to).map((r, i) => (
                     <Fragment key={`${r.name}-${i}`}>
                       {i === 0 ? "" : ", "}
-                      {/* One span per name, because the address behind a name is the
-                        part a reader can check and this line is mostly people who
-                        sent nothing in the thread — the ones the read carries no
-                        address for at all (see lib/who). */}
-                      <span title={p.toTitle ? p.toTitle(r.name) : r.name}>{r.text}</span>
+                      <span title={toTitle ? toTitle(r.name) : r.name}>{r.text}</span>
                     </Fragment>
                   ))
                 : "—"}
             </span>
-            {p.answer !== undefined || p.original !== undefined || p.copyJson !== undefined ? (
-              <span className="hdetend ml-auto inline-flex items-center gap-[.35rem]">
-                {p.answer}
-                {p.original !== undefined ? (
-                  <OriginalControl on={original.on} state={original.state} ask={original.ask} />
+            {answer !== undefined || original !== undefined || copyJson !== undefined ? (
+              <span className="ml-auto inline-flex items-center gap-1.5">
+                {answer}
+                {original !== undefined ? (
+                  <OriginalControl on={styled.on} state={styled.state} ask={styled.ask} />
                 ) : null}
-                {p.copyJson !== undefined ? <CopyJson data={p.copyJson} /> : null}
+                {copyJson !== undefined ? <CopyJson data={copyJson} /> : null}
               </span>
             ) : null}
           </div>
         </details>
         <div
           className={[
-            // Keep the sender stripe independent of border/background state (mine, quoted,
-            // hover, permalink flash), and clip it to the rounded bubble via overflow-hidden.
-            "bub relative overflow-hidden rounded-[10px] border border-line bg-card px-[.7rem] py-[.45rem] before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-[var(--orgc,transparent)] before:content-['']",
-            p.quoted &&
-              "border-dashed border-[color-mix(in_srgb,var(--muted)_55%,transparent)] bg-dash",
-            p.me && "border-org-3 bg-mine",
-            p.mark === "new" && "border-l-[3px] border-l-org-1",
+            // The stripe is a pseudo-element clipped by overflow-hidden, independent of border/background states.
+            "bub relative overflow-hidden rounded-[10px] border border-line bg-card px-3 py-2 before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-[var(--orgc,transparent)] before:content-['']",
+            quoted && "border-dashed border-muted/55 bg-dash",
+            me && "border-org-3 bg-mine",
+            mark === "new" && "border-l-[3px] border-l-org-1",
           ]
             .filter(Boolean)
             .join(" ")}
         >
-          {p.mentions?.length ? (
-            <div className="ment mb-[.3rem] flex flex-wrap gap-1">
-              {p.mentions.map((m) => (
+          {mentions?.length ? (
+            <div className="mb-1 flex flex-wrap gap-1">
+              {mentions.map((m) => (
                 <span
-                  className="at rounded-[5px] bg-mine px-[.35rem] py-[.02rem] text-[.74rem] font-semibold text-org-3"
+                  className="rounded-[5px] bg-mine px-1.5 text-[.74rem] font-semibold text-org-3"
                   key={m}
                 >
                   @{m}
@@ -937,17 +563,14 @@ export function Message(p: MessageProps) {
               ))}
             </div>
           ) : null}
-          {/* The body, and the second reading of it: this is where the sender's own
-              html is mounted in place of the rendered one. Which one to draw is the
-              sender's switch, held at the bubble above. */}
-          <Body body={p.body} state={original.state} />
-          {p.edits}
+          <Body body={body} state={styled.state} />
+          {edits}
           <Attachments
-            attachments={p.attachments}
-            extId={p.extId}
-            onPull={p.onPull}
-            pulling={p.pulling}
-            mediaBase={p.mediaBase}
+            attachments={attachments}
+            extId={extId}
+            onPull={onPull}
+            pulling={pulling}
+            mediaBase={mediaBase}
           />
         </div>
       </div>

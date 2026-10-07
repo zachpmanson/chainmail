@@ -1,12 +1,8 @@
 import { useState } from "react";
-import type { Timeline as Spec } from "../../lib/spec";
+import type { Timeline as Spec } from "../../lib/timeline/spec";
 import { Button } from "../ui/controls";
 
-/**
- * Avatars are base64 images that dwarf everything else in the document, so the
- * displayed JSON abbreviates them. Copy still yields the real thing — an
- * abbreviated spec that looks copy-pasteable but isn't would be a trap.
- */
+/** Abbreviates base64 avatars for display only; Copy still yields the full spec. */
 function abbreviate(_key: string, value: unknown) {
   if (typeof value === "string" && value.startsWith("data:") && value.length > 64) {
     const head = value.slice(0, value.indexOf(",") + 1);
@@ -15,7 +11,7 @@ function abbreviate(_key: string, value: unknown) {
   return value;
 }
 
-export function SpecView({ spec, onClose }: { spec: Spec; onClose: () => void }) {
+export default function SpecView({ spec, onClose }: { spec: Spec; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
   const shown = JSON.stringify(spec, abbreviate, 2);
   const full = JSON.stringify(spec, null, 2);
@@ -35,13 +31,13 @@ export function SpecView({ spec, onClose }: { spec: Spec; onClose: () => void })
 
   return (
     <div
-      className="specview fixed inset-0 z-[60] flex flex-col bg-bg"
+      className="fixed inset-0 z-[60] flex flex-col bg-bg"
       role="dialog"
       aria-label="Timeline spec as JSON"
     >
-      <div className="specbar flex items-center gap-[.6rem] border-b border-line bg-card px-[.8rem] py-2">
+      <div className="flex items-center gap-2 border-b border-line bg-card px-3 py-2">
         <b className="text-[.72rem] font-bold uppercase tracking-[.09em] text-muted">spec</b>
-        <span className="note mr-auto text-[.7rem] text-muted">
+        <span className="mr-auto text-[.7rem] text-muted">
           {spec.messages.length - notes} messages · {notes} notices · {(bytes / 1024).toFixed(0)} KB
           · images abbreviated for display
         </span>
@@ -53,7 +49,7 @@ export function SpecView({ spec, onClose }: { spec: Spec; onClose: () => void })
         </Button>
       </div>
       <pre
-        className="specpre m-0 flex-1 overflow-auto px-4 pt-[.9rem] pb-8 font-mono text-[.72rem] leading-[1.5] text-fg [tab-size:2] whitespace-pre"
+        className="m-0 flex-1 overflow-auto px-4 pt-4 pb-8 font-mono text-[.72rem] leading-[1.5] text-fg [tab-size:2] whitespace-pre"
         tabIndex={0}
       >
         {shown}
