@@ -1,13 +1,12 @@
 import { Checkbox } from "./Checkbox";
 import { Button } from "./controls";
 import { useRef, type ReactNode } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { $api, type ChainHit } from "../lib/api";
-import { dropFromLists, markInLists, putBackLists } from "../lib/lists";
+import { type ChainHit } from "../lib/api";
+import { useMailAction, useReadAction } from "../lib/mailActions";
 import { newest } from "../lib/newest";
 import { whenShort } from "../lib/stamp";
 import { UserGroupIcon, EnvelopeIcon, PaperClipIcon } from "@heroicons/react/24/outline";
-import { ArchiveGlyph, refusal, sentence, staleAfterMail, VERBS, SAID_MS } from "./MailVerbs";
+import { ArchiveGlyph, refusal, sentence, VERBS, SAID_MS } from "./MailVerbs";
 import { dismissToast, pushToast } from "../lib/toasts";
 
 /**
@@ -194,7 +193,6 @@ export function ThreadRow({
 }) {
   const last = newest(thread.best ?? []);
   const subject = subjectOf(thread);
-  const queryClient = useQueryClient();
   // Two clicks mark the row the other way, without opening it: the list is where a
   // reader triages, and reaching the pane's own button means walking through the
   // thread first. It is the same write as that button (`POST /v1/read`, a set of
@@ -210,30 +208,19 @@ export function ThreadRow({
   // list has no line to say it on — but the row goes back to the state it held,
   // because a refusal that left the optimistic answer on screen would be a mark the
   // mailbox does not agree with.
-  const toggle = $api.useMutation("post", "/v1/read", {
-    onMutate: (v) => ({ was: markInLists(queryClient, v.body.chain, v.body.unread) }),
-    onError: (_e, _v, ctx) => {
-      if (ctx) putBackLists(queryClient, ctx.was);
-    },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["get", "/v1/search"] });
-    },
-  });
+  const toggle = useReadAction();
   const flip = thread.unread === undefined ? null : thread.unread === 0;
   const archiveToast = useRef<number | null>(null);
   const sayArchive = (text: string, kind: "note" | "fail") => {
     if (archiveToast.current !== null) dismissToast(archiveToast.current);
     archiveToast.current = pushToast(text, kind, kind === "note" ? SAID_MS : null);
   };
-  const archive = $api.useMutation("post", "/v1/mail", {
-    onMutate: (v) => ({ was: dropFromLists(queryClient, v.body.chains) }),
-    onError: (error: unknown, v, ctx) => {
-      if (ctx) putBackLists(queryClient, ctx.was);
-      sayArchive(refusal(error, "-mail-write", VERBS[v.body.action] ?? "That change"), "fail");
+  const archive = useMailAction({
+    onError: (error, request) => {
+      sayArchive(refusal(error, "-mail-write", VERBS[request.action] ?? "That change"), "fail");
     },
     onSuccess: (res) => {
       sayArchive(sentence(res.action, res.labels, res.changed, res.skipped), "note");
-      staleAfterMail(queryClient);
     },
   });
   // One click opens the thread, two clicks mark it the other way, and neither waits

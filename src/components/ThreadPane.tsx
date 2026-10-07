@@ -3,9 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowTopRightOnSquareIcon, QueueListIcon } from "@heroicons/react/24/outline";
 import { useSearch } from "@tanstack/react-router";
 import { flushSync } from "react-dom";
-import { useQueryClient } from "@tanstack/react-query";
-import { $api } from "../lib/api";
-import { dropFromLists, markInLists, putBackLists } from "../lib/lists";
+import { useMailAction, useReadAction } from "../lib/mailActions";
 import { dismissToast, pushToast } from "../lib/toasts";
 import { readTree, rememberTree } from "../lib/tree";
 import { withTransition } from "../lib/viewTransition";
@@ -20,7 +18,6 @@ import {
   VERBS,
   refusal,
   sentence,
-  staleAfterMail,
 } from "./MailVerbs";
 
 /**
@@ -66,7 +63,6 @@ export function ThreadPane({
   /** Whether to offer a second standalone window from this reader. */
   openInWindow?: boolean;
 }) {
-  const queryClient = useQueryClient();
   const accountId = useSearch({ from: "/" }).accountId;
 
   // The pane's own view switch: replies drawn as a tree under the message they
@@ -108,23 +104,13 @@ export function ThreadPane({
   // ask that question of the same endpoint, so one invalidation serves either of
   // them, and a refusal puts the count back rather than leaving a mark the mailbox
   // does not agree with.
-  const read = $api.useMutation("post", "/v1/read", {
-    onMutate: (v) => ({ was: markInLists(queryClient, v.body.chain, v.body.unread) }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["get", "/v1/search"] });
-      // The thread's own read state is part of what the chain read says about it
-      // (see ChainSummary), which is all a pane in a window of its own has to ask:
-      // the list it would otherwise be reconciled against is not on screen behind
-      // it. Nothing is invalidated that the write did not change — the same
-      // endpoint answers both, and the search list above is what carries the rows.
-      void queryClient.invalidateQueries({ queryKey: ["get", "/v1/chains/{rootExtId}"] });
-    },
-    onError: (e: unknown, _v, ctx) => {
+  const read = useReadAction({
+    invalidateChain: true,
+    onError: (error) => {
       // Said in the pane, not only in the console, and the disabled case in words
       // a reader can act on: a host started without -mark-read refuses every
       // press, and a silent button would read as a broken one.
-      if (ctx) putBackLists(queryClient, ctx.was);
-      say(refusal(e, "-mark-read", "Marking"), "fail");
+      say(refusal(error, "-mark-read", "Marking"), "fail");
     },
   });
 
@@ -141,15 +127,12 @@ export function ThreadPane({
   //
   // A write here does not tick or untick anything, so the bar has nothing to say
   // about it: the account belongs to the surface the reader pressed.
-  const act = $api.useMutation("post", "/v1/mail", {
-    onMutate: (v) => ({ was: dropFromLists(queryClient, v.body.chains) }),
+  const act = useMailAction({
     onSuccess: (res) => {
       say(sentence(res.action, res.labels, res.changed, res.skipped), "note");
-      staleAfterMail(queryClient);
     },
-    onError: (e: unknown, v, ctx) => {
-      if (ctx) putBackLists(queryClient, ctx.was);
-      say(refusal(e, "-mail-write", VERBS[v.body.action] ?? "That change"), "fail");
+    onError: (error, request) => {
+      say(refusal(error, "-mail-write", VERBS[request.action] ?? "That change"), "fail");
     },
   });
 

@@ -3,12 +3,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useSearch } from "@tanstack/react-router";
 import { ArrowUturnLeftIcon } from "@heroicons/react/24/outline";
 import { $api, type CorpusEntry, type SendResponse } from "../lib/api";
+import { staleAfterMail } from "../lib/mailActions";
 import { dismissToast, pushToast } from "../lib/toasts";
 import { addressesOf, usePersonAddresses } from "../lib/who";
 import { addressKey, type Address } from "./AddressField";
 import { ComposerFields } from "./ComposerFields";
 import { ComposerFlow } from "./ComposerFlow";
-import { refusal, staleAfterMail, SAID_MS } from "./MailVerbs";
+import { refusal, SAID_MS } from "./MailVerbs";
 import { CheckboxRow } from "./Checkbox";
 import { IconButton, SelectInput } from "./controls";
 

@@ -132,6 +132,14 @@ export type StatusResponse = components["schemas"]["StatusResponse"];
 
 export type Stats = components["schemas"]["Stats"];
 
+export type MailActionRequest = components["schemas"]["MailActionRequest"];
+
+export type MailActionResponse = components["schemas"]["MailActionResponse"];
+
+export type MarkReadRequest = components["schemas"]["MarkReadRequest"];
+
+export type MarkReadResponse = components["schemas"]["MarkReadResponse"];
+
 export type RefreshReport = components["schemas"]["RefreshReport"];
 
 /** What one message's media pull did: the counts, and one row per file. */
