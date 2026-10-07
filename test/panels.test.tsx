@@ -64,7 +64,7 @@ describe("sources panel", () => {
   it("omits the filter entirely when none is supplied, as in the static export", () => {
     const { v } = chainRows();
     const html = renderToStaticMarkup(<SourcesPanel v={v} />);
-    expect(html).not.toContain("type=\"checkbox\"");
+    expect(html).not.toContain('type="checkbox"');
     expect(html).not.toContain("data-thread");
   });
 });
@@ -73,7 +73,7 @@ describe("static export", () => {
   it("has no app-only controls", () => {
     const html = renderToStaticMarkup(<Timeline spec={spec} />);
     expect(html).not.toContain("spectog"); // json viewer button
-    expect(html).not.toContain("type=\"checkbox\"");
+    expect(html).not.toContain('type="checkbox"');
   });
 
   it("still renders the whole transcript and the tree", () => {
@@ -123,13 +123,17 @@ describe("participants panel", () => {
     const v = derive(spec);
     const slotOf = new Map(v.rows.map((r) => [r.entry.org ?? "", r.orgSlot]));
     expect(Object.fromEntries(slotOf)).toEqual({
-      Starfleet: "o1", Daystrom: "o2", "Utopia Planitia": "o3", "": "o5",
+      Starfleet: "o1",
+      Daystrom: "o2",
+      "Utopia Planitia": "o3",
+      "": "o5",
     });
 
     const html = renderToStaticMarkup(<Timeline spec={spec} />);
     const count = (slot: string) => (html.match(new RegExp(`class="av ${slot}`, "g")) ?? []).length;
-    expect([count("o1"), count("o2"), count("o3"), count("o4"), count("o5")])
-      .toEqual([36, 28, 6, 0, 0]);
+    expect([count("o1"), count("o2"), count("o3"), count("o4"), count("o5")]).toEqual([
+      36, 28, 6, 0, 0,
+    ]);
     // Every o5 avatar the page used to carry was a panel row for someone who
     // sent nothing, coloured as though their org were unknown when the heading
     // above them named it. There is no org-less face left on this fixture, so
@@ -140,7 +144,8 @@ describe("participants panel", () => {
   /** slot -> name, for every avatar the participants panel renders. */
   function panelFaces() {
     const html = renderToStaticMarkup(<ParticipantsPanel v={derive(spec)} />);
-    const re = /class="av (o\d)[^"]*">(?:<span class="ini[^"]*">[^<]*<\/span>)?<\/div><span class="[^"]*" title="[^"]*">([^<]+)<\/span>/g;
+    const re =
+      /class="av (o\d)[^"]*">(?:<span class="ini[^"]*">[^<]*<\/span>)?<\/div><span class="[^"]*" title="[^"]*">([^<]+)<\/span>/g;
     return new Map([...html.matchAll(re)].map((match) => [match[2]!, match[1]!]));
   }
 
@@ -154,8 +159,9 @@ describe("participants panel", () => {
     const bubbles = new Map<string, Set<string>>();
     for (const r of v.rows) {
       if (!r.entry.sender) continue;
-      (bubbles.get(r.entry.sender) ?? bubbles.set(r.entry.sender, new Set()).get(r.entry.sender)!)
-        .add(r.orgSlot);
+      (
+        bubbles.get(r.entry.sender) ?? bubbles.set(r.entry.sender, new Set()).get(r.entry.sender)!
+      ).add(r.orgSlot);
     }
 
     const checked: string[] = [];
@@ -164,8 +170,9 @@ describe("participants panel", () => {
       // One slot per sender, or "the slot their bubbles use" would not be a
       // single thing to agree with.
       expect([...slots], `${name} has bubbles in more than one colour`).toHaveLength(1);
-      expect(faces.get(name), `${name}'s panel row disagrees with their bubbles`)
-        .toBe([...slots][0]);
+      expect(faces.get(name), `${name}'s panel row disagrees with their bubbles`).toBe(
+        [...slots][0],
+      );
       checked.push(name);
     }
     expect(checked.length).toBeGreaterThan(5);
@@ -182,8 +189,9 @@ describe("participants panel", () => {
     expect(silent.length).toBeGreaterThan(0);
     for (const p of silent) {
       expect(faces.get(p.name), `${p.name} is missing from the panel`).toBeDefined();
-      expect(faces.get(p.name), `${p.name} at ${p.org} is coloured as org-unknown`)
-        .toBe(derive(spec).orgSlot(p.org));
+      expect(faces.get(p.name), `${p.name} at ${p.org} is coloured as org-unknown`).toBe(
+        derive(spec).orgSlot(p.org),
+      );
       expect(faces.get(p.name)).not.toBe("o5");
     }
   });
@@ -222,7 +230,9 @@ describe("participants panel", () => {
       ...spec,
       participants: [
         ...(spec.participants ?? []),
-        { name: "D", org: "Four" }, { name: "E", org: "Five" }, { name: "F", org: "Six" },
+        { name: "D", org: "Four" },
+        { name: "E", org: "Five" },
+        { name: "F", org: "Six" },
       ],
     });
     expect(many.orgSlot("Five")).toBe("o5");
@@ -236,10 +246,14 @@ describe("participants panel", () => {
     // rows, where a strip per row would read as noise, and the avatars already
     // carry the colour per person.
     const html = renderToStaticMarkup(<ParticipantsPanel v={derive(spec)} />);
-    const heads = [...html.matchAll(/class="ogh [^"]*\b(o\d)\b[^"]*">([^<]+)</g)]
-      .map((match) => [match[2], match[1]]);
+    const heads = [...html.matchAll(/class="ogh [^"]*\b(o\d)\b[^"]*">([^<]+)</g)].map((match) => [
+      match[2],
+      match[1],
+    ]);
     expect(heads).toEqual([
-      ["Starfleet", "o1"], ["Daystrom", "o2"], ["Utopia Planitia", "o3"],
+      ["Starfleet", "o1"],
+      ["Daystrom", "o2"],
+      ["Utopia Planitia", "o3"],
     ]);
 
     // "Other" resolves to o5, and .ogh has no o5 rule: --o5 is an avatar fill

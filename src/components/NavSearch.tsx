@@ -274,67 +274,76 @@ export function NavSearch() {
           if (!asks(shown)) setOpen(false);
         }}
       >
-      {/* A magnifier rather than nothing: an empty box at the end of a nav is a
+        {/* A magnifier rather than nothing: an empty box at the end of a nav is a
           box with no label, and this is the one glyph that says what it takes. */}
-      <MagnifyingGlassIcon className="flex-none opacity-80" width={12} height={12} aria-hidden="true" />
-      <TextInput
-        className="navq min-h-0 min-w-24 flex-1 border-0 bg-transparent px-0 py-[.12rem] text-[.84rem] text-fg placeholder:text-muted focus:ring-0"
-        value={shown.q}
-        onChange={(ev) => {
-          edit({ q: ev.target.value });
-          // Typing is using the search, so the panel comes back with it: a shut
-          // panel with the caret still in the box is where Escape leaves a reader
-          // who then starts a new query, and the options are what a query is
-          // refined with.
-          setOpen(true);
-        }}
-        // The label the box is read by. Visible it has no label of its own: the
-        // glyph and the placeholder are what a person sees, and a word repeated
-        // above a twelve-rem field is a word taken from the field.
-        aria-label="Search the corpus"
-        // The address carries a question, so the box says so the way a current nav
-        // item does: `aria-current` is what a screen reader hears, and it is the
-        // whole of the mark. There is no rule for it — the text of a live query was
-        // coloured the accent, and then filled with `--mine`, which is the colour
-        // this app uses for the reader's own mail; a brown field that meant
-        // "you are here" was a second meaning for a colour that already had one,
-        // and the search box's own background is not a thing a search should
-        // change. The focus ring on the box says where the keyboard is, and this
-        // says what the address asks.
-        aria-current={asks(asked) ? "page" : undefined}
-        placeholder="Search…"
-        autoComplete="off"
-        spellCheck={false}
-      />
-      {open ? (
-        <span className="navopts flex min-w-0 flex-[0_1_auto] flex-nowrap items-center gap-[.55rem] overflow-x-auto overflow-y-hidden">
-          {/* The options exist while the panel is open and not otherwise: shut,
+        <MagnifyingGlassIcon
+          className="flex-none opacity-80"
+          width={12}
+          height={12}
+          aria-hidden="true"
+        />
+        <TextInput
+          className="navq min-h-0 min-w-24 flex-1 border-0 bg-transparent px-0 py-[.12rem] text-[.84rem] text-fg placeholder:text-muted focus:ring-0"
+          value={shown.q}
+          onChange={(ev) => {
+            edit({ q: ev.target.value });
+            // Typing is using the search, so the panel comes back with it: a shut
+            // panel with the caret still in the box is where Escape leaves a reader
+            // who then starts a new query, and the options are what a query is
+            // refined with.
+            setOpen(true);
+          }}
+          // The label the box is read by. Visible it has no label of its own: the
+          // glyph and the placeholder are what a person sees, and a word repeated
+          // above a twelve-rem field is a word taken from the field.
+          aria-label="Search the corpus"
+          // The address carries a question, so the box says so the way a current nav
+          // item does: `aria-current` is what a screen reader hears, and it is the
+          // whole of the mark. There is no rule for it — the text of a live query was
+          // coloured the accent, and then filled with `--mine`, which is the colour
+          // this app uses for the reader's own mail; a brown field that meant
+          // "you are here" was a second meaning for a colour that already had one,
+          // and the search box's own background is not a thing a search should
+          // change. The focus ring on the box says where the keyboard is, and this
+          // says what the address asks.
+          aria-current={asks(asked) ? "page" : undefined}
+          placeholder="Search…"
+          autoComplete="off"
+          spellCheck={false}
+        />
+        {open ? (
+          <span className="navopts flex min-w-0 flex-[0_1_auto] flex-nowrap items-center gap-[.55rem] overflow-x-auto overflow-y-hidden">
+            {/* The options exist while the panel is open and not otherwise: shut,
               the box is the whole interface, and every control beside it is one
               more thing between the reader and the field. */}
-          <label className="navopt flex flex-none items-center gap-[.3rem]">
-            <span className="text-[.6rem] font-bold uppercase tracking-[.08em] text-muted">Mode</span>
-            <SelectInput
-              className="min-h-0 rounded-[5px] border border-line bg-bg px-[.35rem] py-[.16rem] text-[.78rem] text-fg"
-              value={shown.mode}
-              onChange={(ev) => {
-                const mode = ev.target.value as SearchMode;
-                // A mode decides how to ask a question that is already being
-                // asked, so it is committed at once — with whatever else is in
-                // the panel, which is the question it is deciding about.
-                edit({ mode });
-                commit({ ...shown, mode });
-              }}
-            >
-              {MODES.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </SelectInput>
-          </label>
-          <label className="navopt flex flex-none items-center gap-[.3rem]">
-            <span className="text-[.6rem] font-bold uppercase tracking-[.08em] text-muted">Person</span>
-            {/* A field with the corpus's people under it, rather than a list of
+            <label className="navopt flex flex-none items-center gap-[.3rem]">
+              <span className="text-[.6rem] font-bold uppercase tracking-[.08em] text-muted">
+                Mode
+              </span>
+              <SelectInput
+                className="min-h-0 rounded-[5px] border border-line bg-bg px-[.35rem] py-[.16rem] text-[.78rem] text-fg"
+                value={shown.mode}
+                onChange={(ev) => {
+                  const mode = ev.target.value as SearchMode;
+                  // A mode decides how to ask a question that is already being
+                  // asked, so it is committed at once — with whatever else is in
+                  // the panel, which is the question it is deciding about.
+                  edit({ mode });
+                  commit({ ...shown, mode });
+                }}
+              >
+                {MODES.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </SelectInput>
+            </label>
+            <label className="navopt flex flex-none items-center gap-[.3rem]">
+              <span className="text-[.6rem] font-bold uppercase tracking-[.08em] text-muted">
+                Person
+              </span>
+              {/* A field with the corpus's people under it, rather than a list of
                 everyone in a dropdown: the people number in the hundreds, and
                 what is being looked for is a person whose name the reader
                 half-remembers (see NavPerson). What a pick writes is the alias
@@ -346,45 +355,51 @@ export function NavSearch() {
                 which is longer than a name, and this control shares its line
                 with the mode and the date — one long value must not be what
                 decides how much of that line the others get. */}
-            <NavPerson
-              people={people.data?.people ?? []}
-              value={shown.person}
-              // Typing is a draft, not a question: the box asks when it is
-              // submitted or left (see commit), which is what keeps a name
-              // being typed from being a dozen searches on the way to one.
-              onEdit={(person) => edit({ person })}
-              // A pick is a decision about a question already being asked, so it
-              // commits at once — with whatever else is in the panel, which is
-              // that question.
-              onCommit={(person) => {
-                edit({ person });
-                commit({ ...shown, person });
-              }}
-            />
-          </label>
-          <label className="navopt flex flex-none items-center gap-[.3rem]">
-            <span className="text-[.6rem] font-bold uppercase tracking-[.08em] text-muted">Gmail account</span>
-            <SelectInput
-              className="min-h-0 rounded-[5px] border border-line bg-bg px-[.35rem] py-[.16rem] text-[.78rem] text-fg"
-              aria-label="Gmail account"
-              value={shown.accountId}
-              onChange={(ev) => {
-                const accountId = ev.target.value;
-                edit({ accountId });
-                commit({ ...shown, accountId });
-              }}
-            >
-              <option value="">All accounts</option>
-              {(accounts.data?.accounts ?? []).filter((account) => account.signedIn).map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.email || account.displayName}
-                </option>
-              ))}
-            </SelectInput>
-          </label>
-          <label className="navopt flex flex-none items-center gap-[.3rem]">
-            <span className="text-[.6rem] font-bold uppercase tracking-[.08em] text-muted">Since</span>
-            {/* A date, in the browser's own picker: `since` is a date on the wire
+              <NavPerson
+                people={people.data?.people ?? []}
+                value={shown.person}
+                // Typing is a draft, not a question: the box asks when it is
+                // submitted or left (see commit), which is what keeps a name
+                // being typed from being a dozen searches on the way to one.
+                onEdit={(person) => edit({ person })}
+                // A pick is a decision about a question already being asked, so it
+                // commits at once — with whatever else is in the panel, which is
+                // that question.
+                onCommit={(person) => {
+                  edit({ person });
+                  commit({ ...shown, person });
+                }}
+              />
+            </label>
+            <label className="navopt flex flex-none items-center gap-[.3rem]">
+              <span className="text-[.6rem] font-bold uppercase tracking-[.08em] text-muted">
+                Gmail account
+              </span>
+              <SelectInput
+                className="min-h-0 rounded-[5px] border border-line bg-bg px-[.35rem] py-[.16rem] text-[.78rem] text-fg"
+                aria-label="Gmail account"
+                value={shown.accountId}
+                onChange={(ev) => {
+                  const accountId = ev.target.value;
+                  edit({ accountId });
+                  commit({ ...shown, accountId });
+                }}
+              >
+                <option value="">All accounts</option>
+                {(accounts.data?.accounts ?? [])
+                  .filter((account) => account.signedIn)
+                  .map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.email || account.displayName}
+                    </option>
+                  ))}
+              </SelectInput>
+            </label>
+            <label className="navopt flex flex-none items-center gap-[.3rem]">
+              <span className="text-[.6rem] font-bold uppercase tracking-[.08em] text-muted">
+                Since
+              </span>
+              {/* A date, in the browser's own picker: `since` is a date on the wire
                 (`format: date` in api/openapi.json), so the control that writes
                 one should offer dates rather than take a string and let the
                 corpus decide what it meant. The value is the `YYYY-MM-DD` the
@@ -392,29 +407,34 @@ export function NavSearch() {
                 no second opinion about what a date looks like. No placeholder
                 either: the field draws its own format, and a `YYYY-MM-DD` beside
                 it would be a second answer to the same question. */}
-            <TextInput
-              className="navsince w-[8.6rem] min-h-0 rounded-[5px] border border-line bg-bg px-[.35rem] py-[.16rem] text-[.78rem] text-fg"
-              type="date"
-              value={shown.since}
-              onChange={(ev) => {
-                const since = ev.target.value;
-                // Like the mode and the person: a date decides how a question
-                // already being asked is asked, so it commits at once — with
-                // whatever else is in the panel, which is that question. A date
-                // field cannot hold half a date, so there is no draft worth
-                // keeping here while the reader types.
-                edit({ since });
-                commit({ ...shown, since });
-              }}
-            />
-          </label>
-          {/* The way in for anyone not pressing Enter, and what makes Enter work
+              <TextInput
+                className="navsince w-[8.6rem] min-h-0 rounded-[5px] border border-line bg-bg px-[.35rem] py-[.16rem] text-[.78rem] text-fg"
+                type="date"
+                value={shown.since}
+                onChange={(ev) => {
+                  const since = ev.target.value;
+                  // Like the mode and the person: a date decides how a question
+                  // already being asked is asked, so it commits at once — with
+                  // whatever else is in the panel, which is that question. A date
+                  // field cannot hold half a date, so there is no draft worth
+                  // keeping here while the reader types.
+                  edit({ since });
+                  commit({ ...shown, since });
+                }}
+              />
+            </label>
+            {/* The way in for anyone not pressing Enter, and what makes Enter work
               at all: a form submits on Enter by way of its submit button. */}
-          <Button type="submit" variant="subtle" className="min-h-0 rounded-md border-line bg-mine px-[.6rem] py-[.22rem] text-[.76rem] font-semibold text-fg disabled:cursor-default disabled:opacity-[.45]" disabled={!asks(shown)}>
-            Search
-          </Button>
-        </span>
-      ) : null}
+            <Button
+              type="submit"
+              variant="subtle"
+              className="min-h-0 rounded-md border-line bg-mine px-[.6rem] py-[.22rem] text-[.76rem] font-semibold text-fg disabled:cursor-default disabled:opacity-[.45]"
+              disabled={!asks(shown)}
+            >
+              Search
+            </Button>
+          </span>
+        ) : null}
       </form>
     </>
   );

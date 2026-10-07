@@ -152,7 +152,8 @@ export function derive(input: Timeline): View {
     .join("");
 
   const emails = new Map<string, string>();
-  for (const e of ordered) if (e.sender && e.fromEmail && !emails.has(e.sender)) emails.set(e.sender, e.fromEmail);
+  for (const e of ordered)
+    if (e.sender && e.fromEmail && !emails.has(e.sender)) emails.set(e.sender, e.fromEmail);
   for (const p of spec.participants ?? []) if (p.email) emails.set(p.name, p.email);
 
   const firstRow = new Map(lay.chains.map((c) => [c.root, c.firstRow]));
@@ -180,7 +181,9 @@ export function derive(input: Timeline): View {
       time: entry.time ?? "",
     });
     return {
-      entry, id, chain,
+      entry,
+      id,
+      chain,
       row: lay.row.get(id)!,
       lane: laneOf.get(chain)!,
       isChainStart: lay.row.get(id) === firstRow.get(chain),
@@ -193,7 +196,14 @@ export function derive(input: Timeline): View {
 
   const title = (input.title ?? "Timeline").replace(/^#+/, (m) => (m ? "#" : ""));
   return {
-    spec, rows, layout: lay, zones: z, orgs, orgSlot: slot, title, avatarCss,
+    spec,
+    rows,
+    layout: lay,
+    zones: z,
+    orgs,
+    orgSlot: slot,
+    title,
+    avatarCss,
     hashed: title.startsWith("#"),
     whoTitle: (name) => (emails.has(name) ? `${name} <${emails.get(name)}>` : name),
   };
@@ -215,13 +225,12 @@ export { initials };
 export function avatarURL(v: string): string | null {
   const low = v.toLowerCase();
   const okScheme =
-    low.startsWith("data:image/") ||
-    low.startsWith("http://") ||
-    low.startsWith("https://");
+    low.startsWith("data:image/") || low.startsWith("http://") || low.startsWith("https://");
   if (!okScheme) return null;
   // Whitespace, quotes, backslash, parens and angle brackets are the bytes
   // that could end the url() or quote it; a data: URI's `;`, `,`, `+`, `/`,
   // `=` pass, and a URL's `?`, `&`, `#` pass. Control characters are refused
   // wholesale so a value cannot smuggle a newline into the stylesheet.
+  // eslint-disable-next-line no-control-regex -- reject control bytes in sender-provided URLs.
   return /[\s"'\\()<>`\u0000-\u001f]/.test(v) ? null : v;
 }

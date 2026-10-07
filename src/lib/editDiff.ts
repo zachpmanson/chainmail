@@ -42,26 +42,44 @@ export function toText(bodyHtml: string): string {
 const ENTITY_RE = /&[a-z]+;/gi;
 /** Named entities the corpus's rendered bodies commonly carry. */
 const ENTITY: Record<string, string> = {
-  amp: "&", lt: "<", gt: ">", quot: "\"", apos: "'",
-  middot: "\u00b7", mdash: "\u2014", ndash: "\u2013",
-  hellip: "\u2026", rsquo: "\u2019", lsquo: "\u2018",
-  ldquo: "\u201c", rdquo: "\u201d", nbsp: " ",
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  middot: "\u00b7",
+  mdash: "\u2014",
+  ndash: "\u2013",
+  hellip: "\u2026",
+  rsquo: "\u2019",
+  lsquo: "\u2018",
+  ldquo: "\u201c",
+  rdquo: "\u201d",
+  nbsp: " ",
 };
 
 /** Longest common subsequence of two lists of word strings, as index pairs. */
 function lcsWords(a: string[], b: string[]): [number[], number[]] {
-  const n = a.length, m = b.length;
+  const n = a.length,
+    m = b.length;
   const dp: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
   for (let i = n - 1; i >= 0; i--) {
     for (let j = m - 1; j >= 0; j--) {
-      dp[i]![j] = a[i]! === b[j]! ? dp[i + 1]![j + 1]! + 1 : Math.max(dp[i + 1]![j]!, dp[i]![j + 1]!);
+      dp[i]![j] =
+        a[i]! === b[j]! ? dp[i + 1]![j + 1]! + 1 : Math.max(dp[i + 1]![j]!, dp[i]![j + 1]!);
     }
   }
-  const ia: number[] = [], ib: number[] = [];
-  let i = 0, j = 0;
+  const ia: number[] = [],
+    ib: number[] = [];
+  let i = 0,
+    j = 0;
   while (i < n && j < m) {
-    if (a[i] === b[j]) { ia.push(i); ib.push(j); i++; j++; }
-    else if (dp[i + 1]![j]! >= dp[i]![j + 1]!) i++;
+    if (a[i] === b[j]) {
+      ia.push(i);
+      ib.push(j);
+      i++;
+      j++;
+    } else if (dp[i + 1]![j]! >= dp[i]![j + 1]!) i++;
     else j++;
   }
   return [ia, ib];
@@ -80,12 +98,14 @@ const push = (spans: Span[], kind: Span["kind"], text: string) => {
  */
 export function diffBaseToEdit(baseText: string, editText: string): Span[] {
   if (!baseText || !editText) return [{ kind: "same", text: editText }];
-  const a = words(baseText), b = words(editText);
+  const a = words(baseText),
+    b = words(editText);
   if (a.length === 0 || b.length === 0) return [{ kind: "same", text: editText }];
   const [ia, ib] = lcsWords(a, b);
 
   const spans: Span[] = [];
-  let ai = 0, ei = 0;
+  let ai = 0,
+    ei = 0;
   for (let k = 0; k < ia.length; k++) {
     // base words the quoter dropped, struck in place
     push(spans, "del", a.slice(ai, ia[k]!).join(" "));
@@ -148,7 +168,10 @@ function labelsAgainstBase(originalText: string, copyText: string): Array<"same"
 }
 
 /** Re-emit the copy's cells verbatim, highlighting runs of new ('ins') words. */
-function renderCells(cells: Array<{ tag?: string; text?: string }>, labels: Array<"same" | "ins">): string {
+function renderCells(
+  cells: Array<{ tag?: string; text?: string }>,
+  labels: Array<"same" | "ins">,
+): string {
   let wi = 0;
   return cells
     .map((c) => {
@@ -218,7 +241,12 @@ function flatHtml(originalText: string, editBody: string): string {
     else if (s.kind === "ins") out += `<b class="eins">${inner}</b>`;
     else out += inner;
   }
-  return out || escapeHtml(editBody ?? "").split("\n").join("<br>");
+  return (
+    out ||
+    escapeHtml(editBody ?? "")
+      .split("\n")
+      .join("<br>")
+  );
 }
 
 /** A body split into its tags and the raw text between them, in document order. */

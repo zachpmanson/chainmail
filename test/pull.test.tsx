@@ -42,7 +42,8 @@ const page = (messages: Entry[], onPull?: (extId: string) => void, pulling?: str
 
 // Scoped to the message's own strip: the sources panel lists these files too, and
 // it is not the chip the reader presses.
-const chip = () => within(document.querySelector(".atts")!).getByRole("link", { name: /shed\.csv/ });
+const chip = () =>
+  within(document.querySelector(".atts")!).getByRole("link", { name: /shed\.csv/ });
 const press = () => fireEvent.click(chip());
 
 describe("a chip whose file the corpus does not hold", () => {
@@ -65,11 +66,7 @@ describe("a chip whose file the corpus does not hold", () => {
 
   it("turns the chip's own ↻ and says nothing else, and takes no second press while it does", () => {
     const onPull = vi.fn();
-    page(
-      [entry({ attachments: [unFetched] })],
-      onPull,
-      "mail:<c0ffee-1@loomworks.example>",
-    );
+    page([entry({ attachments: [unFetched] })], onPull, "mail:<c0ffee-1@loomworks.example>");
 
     // The chip's own words are gone and the file's name is left alone: what used
     // to be a line that grew a word and shrank again is now the turn the nav's

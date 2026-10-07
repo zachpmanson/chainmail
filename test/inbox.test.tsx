@@ -51,7 +51,10 @@ class ScrollWatcher {
   private seen: () => void;
   constructor(cb: IntersectionObserverCallback) {
     this.seen = () =>
-      cb([{ isIntersecting: true } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+      cb(
+        [{ isIntersecting: true } as IntersectionObserverEntry],
+        this as unknown as IntersectionObserver,
+      );
     watchers.add(this.seen);
   }
   observe() {}
@@ -85,7 +88,14 @@ interface FixtureChain {
 }
 
 function thread(over: Record<string, unknown>): FixtureChain {
-  return { sources: ["mail"], entries: 1, matched: 1, people: 2, score: 0.01, ...over } as FixtureChain;
+  return {
+    sources: ["mail"],
+    entries: 1,
+    matched: 1,
+    people: 2,
+    score: 0.01,
+    ...over,
+  } as FixtureChain;
 }
 
 /** An entry attached to a thread, as the wire's EntryHit: no ranking found it,
@@ -364,9 +374,17 @@ function summaryOf(root: string, entries: unknown[]) {
 const chainHandler: Handler = (c) => {
   const root = decodeURIComponent(pathOf(c).slice("/v1/chains/".length));
   if (root === MULTI_ROOT)
-    return json(200, { rootExtId: root, entries: MULTI_ENTRIES, summary: summaryOf(root, MULTI_ENTRIES) });
+    return json(200, {
+      rootExtId: root,
+      entries: MULTI_ENTRIES,
+      summary: summaryOf(root, MULTI_ENTRIES),
+    });
   if (root === EDIT_ROOT)
-    return json(200, { rootExtId: root, entries: EDIT_ENTRIES, summary: summaryOf(root, EDIT_ENTRIES) });
+    return json(200, {
+      rootExtId: root,
+      entries: EDIT_ENTRIES,
+      summary: summaryOf(root, EDIT_ENTRIES),
+    });
   const b = CHAIN_BODIES[root];
   return b
     ? json(200, {
@@ -379,8 +397,10 @@ const chainHandler: Handler = (c) => {
 
 /** A handler that answers the pane for any thread, and lets the test's own
  *  handler see everything else. */
-const withChains = (inner: Handler): Handler => (c) =>
-  pathOf(c).startsWith("/v1/chains/") ? chainHandler(c) : inner(c);
+const withChains =
+  (inner: Handler): Handler =>
+  (c) =>
+    pathOf(c).startsWith("/v1/chains/") ? chainHandler(c) : inner(c);
 
 const buildHandler: Handler = withChains((c) => {
   const p = pathOf(c);
@@ -413,13 +433,14 @@ const buildHandler: Handler = withChains((c) => {
   // whole corpus, which is what every list test below assumes.
   if (p === "/v1/settings") return json(200, {});
   // The shell and account filter see two synthetic connected mailboxes.
-  if (p === "/auth/status") return json(200, {
-    signed_in: true,
-    accounts: [
-      { id: "work", email: "work@example.test", displayName: "Work", signedIn: true },
-      { id: "personal", email: "personal@example.test", displayName: "Personal", signedIn: true },
-    ],
-  });
+  if (p === "/auth/status")
+    return json(200, {
+      signed_in: true,
+      accounts: [
+        { id: "work", email: "work@example.test", displayName: "Work", signedIn: true },
+        { id: "personal", email: "personal@example.test", displayName: "Personal", signedIn: true },
+      ],
+    });
   return json(500, { error: `unexpected call to ${c.method} ${p}` });
 });
 
@@ -750,7 +771,9 @@ describe("the home page with no query", () => {
     const css = readFileSync("src/styles.css", "utf8");
     const open = css.slice(css.indexOf(".navsearch.open) .navsearch {"));
     expect(open.slice(0, open.indexOf("}"))).toContain("width:calc(100% - var(--searchgap))");
-    expect(css).toMatch(/@media \(prefers-reduced-motion: no-preference\) \{ \.navsearch \{ transition:width/);
+    expect(css).toMatch(
+      /@media \(prefers-reduced-motion: no-preference\) \{ \.navsearch \{ transition:width/,
+    );
   });
 
   it("says on the body that this page is a workspace, and takes it off again", async () => {
@@ -789,9 +812,9 @@ describe("the home page with no query", () => {
       expect(within(pane()).getByText(/and the gate needs a new hinge/)).toBeTruthy(),
     );
     // The top row is what the pane is showing, and it says so.
-    expect(
-      screen.getByRole("button", { name: "Fence panels" }).getAttribute("aria-current"),
-    ).toBe("true");
+    expect(screen.getByRole("button", { name: "Fence panels" }).getAttribute("aria-current")).toBe(
+      "true",
+    );
   });
 
   it("keeps the row open when it is clicked again, and closes on the pane's own Back", async () => {
@@ -849,7 +872,9 @@ describe("the home page with no query", () => {
         "aria-current",
       ),
     ).toBe("true");
-    expect(screen.getByRole("button", { name: "Fence panels" }).getAttribute("aria-current")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Fence panels" }).getAttribute("aria-current"),
+    ).toBeNull();
   });
 
   it("dismisses the compose panel when a mail is picked", async () => {
@@ -881,7 +906,9 @@ describe("the home page with no query", () => {
     // was looking at, and the row is what they asked for. The address is not
     // pushed again, because the click chose no other thread.
     handler = buildHandler;
-    const router = await mountApp(`/?open=${encodeURIComponent("mail:<loom-cutover-1@example.fed>")}`);
+    const router = await mountApp(
+      `/?open=${encodeURIComponent("mail:<loom-cutover-1@example.fed>")}`,
+    );
     await waitFor(() =>
       expect(within(pane()).getByText(/Roof access is fine from the 14th/)).toBeTruthy(),
     );
@@ -926,9 +953,13 @@ describe("the home page with no query", () => {
     async (_surface, url) => {
       handler = buildHandler;
       const router = await mountApp(url);
-      await waitFor(() => expect(within(pane()).getByText(/Roof access is fine from the 14th/)).toBeTruthy());
+      await waitFor(() =>
+        expect(within(pane()).getByText(/Roof access is fine from the 14th/)).toBeTruthy(),
+      );
 
-      const link = within(pane()).getByRole("link", { name: "Open in new window" }) as HTMLAnchorElement;
+      const link = within(pane()).getByRole("link", {
+        name: "Open in new window",
+      }) as HTMLAnchorElement;
       const popup = vi.spyOn(window, "open").mockReturnValue(null);
       const popupUrl = `/?open=${encodeURIComponent("mail:<loom-cutover-1@example.fed>")}&popup=1`;
       expect(link.getAttribute("href")).toBe(popupUrl);
@@ -992,7 +1023,9 @@ describe("the home page with no query", () => {
     // could have opened this window carries — rather than a count of the one entry
     // the fixture chain read happens to hold. The fixture row says four.
     expect(within(head!).getByTitle("4 messages in this thread")).toBeTruthy();
-    expect(within(head!).getByTitle("4 people in this thread — senders and recipients")).toBeTruthy();
+    expect(
+      within(head!).getByTitle("4 people in this thread — senders and recipients"),
+    ).toBeTruthy();
 
     // A window reading a thread offers no second window of itself, and its way
     // out is the pane's own back control — labelled for where it actually goes.
@@ -1103,11 +1136,15 @@ describe("the home page with no query", () => {
 
   it("clears the address when the list is asked for again", async () => {
     handler = buildHandler;
-    const router = await mountApp(`/?open=${encodeURIComponent("mail:<loom-cutover-1@example.fed>")}`);
+    const router = await mountApp(
+      `/?open=${encodeURIComponent("mail:<loom-cutover-1@example.fed>")}`,
+    );
     await screen.findByRole("button", { name: "Loom cutover schedule" });
 
     click(within(pane()).getByRole("button", { name: /List/ }));
-    await waitFor(() => expect(router.state.location.search).not.toMatchObject({ open: expect.anything() }));
+    await waitFor(() =>
+      expect(router.state.location.search).not.toMatchObject({ open: expect.anything() }),
+    );
 
     // Back to nothing open: the list is a list, and the pane is not showing a
     // thread nobody chose.
@@ -1131,7 +1168,9 @@ describe("the home page with no query", () => {
     expect(pane().querySelector(".bd")?.textContent).not.toContain("<b>");
     // The recipient line the message itself stated. It is the same receipt the
     // page prints, filled from the thread read rather than left as "to —".
-    expect(pane().querySelector(".msg .hdet .to")?.textContent).toBe("to Bo Halvorsen, cc Cy Okafor");
+    expect(pane().querySelector(".msg .hdet .to")?.textContent).toBe(
+      "to Bo Halvorsen, cc Cy Okafor",
+    );
     // The subject this message carried, in the same receipt: the thread's own is
     // in the head, and the entry's is the only place a renamed thread is stated.
     expect(pane().querySelector(".msg .hdet .subj")?.textContent).toBe("Fence panels");
@@ -1160,7 +1199,9 @@ describe("the home page with no query", () => {
     handler = buildHandler;
     await mountApp("/?open=quote%3A9f2c1ab4e77d");
 
-    await waitFor(() => expect(pane().querySelector(".msg .hdr .nm")?.textContent).toBe("Dana Reyes"));
+    await waitFor(() =>
+      expect(pane().querySelector(".msg .hdr .nm")?.textContent).toBe("Dana Reyes"),
+    );
     // The absence, and where the address that is offered came from: the quoter's
     // address is not the sender's, and a hover that showed it bare would
     // attribute it to Dana. The direct bubble is unchanged (the test above),
@@ -1242,7 +1283,9 @@ describe("the home page with no query", () => {
     // was edited from.
     await waitFor(() => expect(pane().querySelectorAll(".msg").length).toBe(2));
     const bubbles = [...pane().querySelectorAll(".msg .bd")].map((b) => b.textContent ?? "");
-    expect(bubbles.some((t) => t.includes("Invoice Amount") && !t.includes("One change"))).toBe(false);
+    expect(bubbles.some((t) => t.includes("Invoice Amount") && !t.includes("One change"))).toBe(
+      false,
+    );
 
     // The edit is drawn inside the reply that made it: attributed to the person
     // who sent that reply, anchored to the original it changed, and marked as a
@@ -1294,7 +1337,9 @@ describe("the home page with no query", () => {
 
     fireEvent.keyDown(document.body, { key: "Escape" });
     await waitFor(() => expect(document.querySelector(".ibbuild")).toBeNull());
-    expect((screen.getByLabelText("Select Loom cutover schedule") as HTMLInputElement).checked).toBe(false);
+    expect(
+      (screen.getByLabelText("Select Loom cutover schedule") as HTMLInputElement).checked,
+    ).toBe(false);
 
     // Ticked again, and the caret put in the search box: its Escape closes the box
     // and the ticks stay where they are.
@@ -1303,7 +1348,9 @@ describe("the home page with no query", () => {
     const box = screen.getByLabelText("Search the corpus");
     click(box);
     fireEvent.keyDown(box, { key: "Escape" });
-    expect((screen.getByLabelText("Select Loom cutover schedule") as HTMLInputElement).checked).toBe(true);
+    expect(
+      (screen.getByLabelText("Select Loom cutover schedule") as HTMLInputElement).checked,
+    ).toBe(true);
     expect(screen.getByRole("button", { name: "Deselect all" })).toBeTruthy();
   });
 
@@ -1531,16 +1578,18 @@ describe("the folder button", () => {
   it("groups each connected account's own folders in the same menu", async () => {
     handler = withChains((c) => {
       const p = pathOf(c);
-      if (p === "/auth/status") return json(200, {
-        accounts: [
-          { id: "work", email: "work@example.test", signedIn: true },
-          { id: "personal", email: "personal@example.test", signedIn: true },
-        ],
-      });
+      if (p === "/auth/status")
+        return json(200, {
+          accounts: [
+            { id: "work", email: "work@example.test", signedIn: true },
+            { id: "personal", email: "personal@example.test", signedIn: true },
+          ],
+        });
       if (p === "/v1/labels") {
-        const labels = paramsOf(c).get("accountId") === "work"
-          ? [{ name: "Work Inbox", messages: 2 }]
-          : [{ name: "Personal Sent", messages: 1 }];
+        const labels =
+          paramsOf(c).get("accountId") === "work"
+            ? [{ name: "Work Inbox", messages: 2 }]
+            : [{ name: "Personal Sent", messages: 1 }];
         return json(200, { labels });
       }
       if (p === "/v1/settings") return json(200, {});
@@ -1565,7 +1614,9 @@ describe("the folder button", () => {
     const latest = calls.filter((call) => pathOf(call) === "/v1/search").at(-1)!;
     expect(paramsOf(latest).get("accountId")).toBe("personal");
     expect(paramsOf(latest).get("label")).toBe("Personal Sent");
-    const selected = screen.getByRole("button", { name: /Personal Sent \(personal@example\.test\)/ });
+    const selected = screen.getByRole("button", {
+      name: /Personal Sent \(personal@example\.test\)/,
+    });
     expect(selected.querySelector(".ibfbtn-folder")?.textContent).toBe("Personal Sent");
     expect(selected.querySelector(".ibfbtn-account")?.textContent).toBe("(personal@example.test)");
   });
@@ -1671,13 +1722,14 @@ describe("the default folder", () => {
       if (p === "/v1/settings") {
         return json(200, { defaultFolder: "INBOX", defaultFolderAccountId: "work" });
       }
-      if (p === "/auth/status") return json(200, {
-        signed_in: true,
-        accounts: [
-          { id: "work", email: "work@example.test", signedIn: true },
-          { id: "personal", email: "personal@example.test", signedIn: true },
-        ],
-      });
+      if (p === "/auth/status")
+        return json(200, {
+          signed_in: true,
+          accounts: [
+            { id: "work", email: "work@example.test", signedIn: true },
+            { id: "personal", email: "personal@example.test", signedIn: true },
+          ],
+        });
       if (p === "/v1/labels") return json(200, { labels: [{ name: "INBOX", messages: 1 }] });
       if (p === "/v1/search") {
         const query = paramsOf(c);
@@ -1760,8 +1812,9 @@ describe("the default folder", () => {
     });
     // And it is now the folder the page opens in: the control agrees.
     expect(
-      (await screen.findByRole("menuitemcheckbox", { name: "Open INBOX by default" }))
-        .getAttribute("aria-checked"),
+      (await screen.findByRole("menuitemcheckbox", { name: "Open INBOX by default" })).getAttribute(
+        "aria-checked",
+      ),
     ).toBe("true");
   });
 
@@ -2128,20 +2181,22 @@ describe("downloading a file the pane does not hold yet", () => {
 
   /** A pane whose thread carries one file, either before or after a pull, and a
    *  pull endpoint that answers the counts. Everything else is the app's own. */
-  const paneHandler = (opts: { stored: () => boolean; pull: () => Response }): Handler => (c) => {
-    const p = pathOf(c);
-    if (p.startsWith("/v1/chains/")) {
-      return json(200, {
-        rootExtId: ROOT,
-        entries: [{ ...ENTRY, attachments: [opts.stored() ? STORED : UNFETCHED] }],
-      });
-    }
-    if (p === "/v1/media/pull" && c.method === "POST") return opts.pull();
-    // The bytes, once they are stored: the window reads them from this host.
-    if (p.startsWith("/v1/attachments/"))
-      return new Response(SHEET, { status: 200, headers: { "content-type": "text/csv" } });
-    return buildHandler(c);
-  };
+  const paneHandler =
+    (opts: { stored: () => boolean; pull: () => Response }): Handler =>
+    (c) => {
+      const p = pathOf(c);
+      if (p.startsWith("/v1/chains/")) {
+        return json(200, {
+          rootExtId: ROOT,
+          entries: [{ ...ENTRY, attachments: [opts.stored() ? STORED : UNFETCHED] }],
+        });
+      }
+      if (p === "/v1/media/pull" && c.method === "POST") return opts.pull();
+      // The bytes, once they are stored: the window reads them from this host.
+      if (p.startsWith("/v1/attachments/"))
+        return new Response(SHEET, { status: 200, headers: { "content-type": "text/csv" } });
+      return buildHandler(c);
+    };
 
   const pulledAnswer = () =>
     json(200, {
@@ -2195,9 +2250,10 @@ describe("downloading a file the pane does not hold yet", () => {
     });
     expect(win.querySelector(".popcap")!.textContent).toBe("shed.csv");
     await waitFor(() =>
-      expect(
-        [...win.querySelectorAll(".poptable tbody td")].map((td) => td.textContent),
-      ).toEqual(["Nova", "41.2"]),
+      expect([...win.querySelectorAll(".poptable tbody td")].map((td) => td.textContent)).toEqual([
+        "Nova",
+        "41.2",
+      ]),
     );
 
     // The pane is a picture of the corpus, so the bytes appearing is the thread
@@ -2214,9 +2270,7 @@ describe("downloading a file the pane does not hold yet", () => {
     handler = paneHandler({ stored: () => true, pull: pulledAnswer });
     await mountApp(OPEN_ROOT);
 
-    await waitFor(() =>
-      expect(chip().getAttribute("href")).toBe(`/v1/attachments/${SHA}`),
-    );
+    await waitFor(() => expect(chip().getAttribute("href")).toBe(`/v1/attachments/${SHA}`));
     fireEvent.click(chip());
     expect(pulls()).toHaveLength(0);
   });
@@ -2274,7 +2328,9 @@ describe("drawing a thread as a reply tree", () => {
   ];
 
   const forkHandler: Handler = (c) =>
-    pathOf(c).startsWith("/v1/chains/") ? json(200, { rootExtId: ROOT, entries: FORK }) : buildHandler(c);
+    pathOf(c).startsWith("/v1/chains/")
+      ? json(200, { rootExtId: ROOT, entries: FORK })
+      : buildHandler(c);
 
   /** The bubbles in the order they are drawn, as the anchors they carry: the id
    *  of a bubble is the entry's place in the thread as the corpus sent it, so the
@@ -2297,7 +2353,10 @@ describe("drawing a thread as a reply tree", () => {
   /** The containers, which is what the tree is drawn with: one per message that
    *  has replies, and none at all for a message that has none. */
   const containers = () => pane().querySelectorAll(".stream .replies").length;
-  const switchBtn = () => within(pane()).getByRole("button", { name: /each answer under the message it answers|the order they were sent/ });
+  const switchBtn = () =>
+    within(pane()).getByRole("button", {
+      name: /each answer under the message it answers|the order they were sent/,
+    });
 
   const openThread = async () => {
     await mountApp(OPEN_ROOT);
@@ -2398,7 +2457,11 @@ describe("drawing a thread as a reply tree", () => {
           .map((m) => (m as HTMLElement).style.viewTransitionName)
           .join(",");
         seen.push({ names, namesAfter, drawn: drawn().join(","), depths: depths().join(",") });
-        return { finished: Promise.resolve(), ready: Promise.resolve(), updateCallbackDone: Promise.resolve() };
+        return {
+          finished: Promise.resolve(),
+          ready: Promise.resolve(),
+          updateCallbackDone: Promise.resolve(),
+        };
       },
     });
     try {
@@ -2432,7 +2495,9 @@ describe("drawing a thread as a reply tree", () => {
     // No `startViewTransition` is the browser saying it cannot do this, and jsdom
     // says the same. The switch is a request to read the thread the other way
     // rather than a request to watch something, so the view changes regardless.
-    expect((document as Document & { startViewTransition?: unknown }).startViewTransition).toBeUndefined();
+    expect(
+      (document as Document & { startViewTransition?: unknown }).startViewTransition,
+    ).toBeUndefined();
     click(switchBtn());
     await waitFor(() => expect(drawn()).toEqual(["entry-0", "entry-1", "entry-3", "entry-2"]));
   });
@@ -2453,5 +2518,4 @@ describe("drawing a thread as a reply tree", () => {
     expect(pane().querySelector("#entry-3 .par")?.getAttribute("href")).toBe("#entry-1");
     expect(pane().querySelector("#entry-2 .par")?.getAttribute("href")).toBe("#entry-0");
   });
-
 });

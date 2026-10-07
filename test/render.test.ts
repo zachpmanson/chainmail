@@ -17,14 +17,11 @@ describe("standalone renderer styles", () => {
     tempDirs.push(directory);
     const output = join(directory, "page.html");
 
-    execFileSync(process.execPath, [
-      "--import",
-      "tsx",
-      "scripts/render.tsx",
-      "fixtures/synthetic.json",
-      "-o",
-      output,
-    ], { cwd: resolve(import.meta.dirname, ".."), stdio: "pipe" });
+    execFileSync(
+      process.execPath,
+      ["--import", "tsx", "scripts/render.tsx", "fixtures/synthetic.json", "-o", output],
+      { cwd: resolve(import.meta.dirname, ".."), stdio: "pipe" },
+    );
 
     const html = readFileSync(output, "utf8");
     expect(html).toContain(".fixed {");

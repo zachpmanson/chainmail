@@ -67,32 +67,85 @@ export function ComposerFields({
       <div className="replyrecipients [--addrrow:1.7rem] grid grid-cols-[max-content_minmax(0,1fr)_max-content] items-start gap-x-[.3rem] gap-y-[.4rem] mb-[.55rem] text-[.74rem] text-muted">
         {expanded ? from : null}
         <div className="replyrecipient contents min-w-0">
-          {expanded ? <>
-            <span className="replylabel inline-flex h-[var(--addrrow)] items-center">to:</span>
-            <AddressField label="to" value={to} onChange={onToChange} suggestions={suggestions} taken={cc} mine={mine} disabled={busy} />
-          </> : (
-            <Button variant="quiet" type="button" className="replysummary" aria-expanded={false} aria-label={`Edit recipients — currently ${recipientWords(to, cc)}`} title="Edit recipients" disabled={busy} onClick={onEditRecipients}>
+          {expanded ? (
+            <>
+              <span className="replylabel inline-flex h-[var(--addrrow)] items-center">to:</span>
+              <AddressField
+                label="to"
+                value={to}
+                onChange={onToChange}
+                suggestions={suggestions}
+                taken={cc}
+                mine={mine}
+                disabled={busy}
+              />
+            </>
+          ) : (
+            <Button
+              variant="quiet"
+              type="button"
+              className="replysummary"
+              aria-expanded={false}
+              aria-label={`Edit recipients — currently ${recipientWords(to, cc)}`}
+              title="Edit recipients"
+              disabled={busy}
+              onClick={onEditRecipients}
+            >
               <span className="replylabel inline-flex h-[var(--addrrow)] items-center">to:</span>
               <span className="replynames">
                 {to.length ? names(to) : null}
-                {cc.length ? <><span className="replykind">{to.length ? ", cc " : "cc "}</span>{names(cc)}</> : null}
-                {!to.length && !cc.length ? <span className="replynone">add an address</span> : null}
+                {cc.length ? (
+                  <>
+                    <span className="replykind">{to.length ? ", cc " : "cc "}</span>
+                    {names(cc)}
+                  </>
+                ) : null}
+                {!to.length && !cc.length ? (
+                  <span className="replynone">add an address</span>
+                ) : null}
               </span>
             </Button>
           )}
           {target}
         </div>
-        {expanded && hasCc ? <div className="replyrecipient contents min-w-0">
-          <span className="replylabel inline-flex h-[var(--addrrow)] items-center">cc:</span>
-          <AddressField label="cc" value={cc} onChange={onCcChange} suggestions={suggestions} taken={to} mine={mine} disabled={busy} />
-        </div> : null}
+        {expanded && hasCc ? (
+          <div className="replyrecipient contents min-w-0">
+            <span className="replylabel inline-flex h-[var(--addrrow)] items-center">cc:</span>
+            <AddressField
+              label="cc"
+              value={cc}
+              onChange={onCcChange}
+              suggestions={suggestions}
+              taken={to}
+              mine={mine}
+              disabled={busy}
+            />
+          </div>
+        ) : null}
       </div>
       {onSubjectChange ? (
-        <FormField className="replyfield grid gap-[.3rem] mb-[.55rem] text-[.74rem] text-muted" label="Subject">
-          <TextInput className="replyinput block w-full rounded-md border border-line bg-bg px-[.55rem] py-[.45rem] text-[.82rem] leading-[1.45] text-fg resize-y disabled:opacity-[.55]" required value={subject ?? ""} disabled={busy} onChange={(e) => onSubjectChange(e.target.value)} />
+        <FormField
+          className="replyfield grid gap-[.3rem] mb-[.55rem] text-[.74rem] text-muted"
+          label="Subject"
+        >
+          <TextInput
+            className="replyinput block w-full rounded-md border border-line bg-bg px-[.55rem] py-[.45rem] text-[.82rem] leading-[1.45] text-fg resize-y disabled:opacity-[.55]"
+            required
+            value={subject ?? ""}
+            disabled={busy}
+            onChange={(e) => onSubjectChange(e.target.value)}
+          />
         </FormField>
       ) : null}
-      <TextArea className="replyinput block w-full rounded-md border border-line bg-bg px-[.55rem] py-[.45rem] text-[.82rem] leading-[1.45] text-fg resize-y disabled:opacity-[.55]" aria-label={mode === "reply" ? "Your reply" : "Message"} required={mode === "compose"} rows={4} value={body} disabled={busy} onChange={(e) => onBodyChange(e.target.value)} />
+      <TextArea
+        className="replyinput block w-full rounded-md border border-line bg-bg px-[.55rem] py-[.45rem] text-[.82rem] leading-[1.45] text-fg resize-y disabled:opacity-[.55]"
+        aria-label={mode === "reply" ? "Your reply" : "Message"}
+        required={mode === "compose"}
+        rows={4}
+        value={body}
+        disabled={busy}
+        onChange={(e) => onBodyChange(e.target.value)}
+      />
     </>
   );
 }

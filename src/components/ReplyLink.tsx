@@ -33,7 +33,12 @@ export interface ReplyTarget {
 }
 
 export function ReplyLink({ parent }: { parent: ReplyTarget | null }) {
-  if (!parent) return <span className="tstart rounded-[4px] border border-line px-[.3rem] py-[.02rem] text-[.6rem] font-bold uppercase tracking-[.09em] text-muted">thread start</span>;
+  if (!parent)
+    return (
+      <span className="tstart rounded-[4px] border border-line px-[.3rem] py-[.02rem] text-[.6rem] font-bold uppercase tracking-[.09em] text-muted">
+        thread start
+      </span>
+    );
   return (
     <a
       className="par inline-flex items-center gap-[.28rem] text-[.66rem] text-muted no-underline hover:text-accent"

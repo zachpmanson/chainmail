@@ -42,9 +42,8 @@ export function SelectView() {
   const accountId = urlSearch.accountId ?? "";
   // The filters that ask something, or null. A mode alone is not a question —
   // the home page does not send one here (see router.tsx) — so it is not counted.
-  const asked: SearchParams | null = q || person || since
-    ? { q, mode, person, since, accountId }
-    : null;
+  const asked: SearchParams | null =
+    q || person || since ? { q, mode, person, since, accountId } : null;
   const [chosen, setChosen] = useState<string[]>([]);
   // The same key answers the same state here as on the inbox: Escape drops the
   // ticks, except while the search box or the folder menu has the focus, where it
@@ -132,13 +131,18 @@ export function SelectView() {
   // moving it out of the folder the search asked for is a write that takes it out of
   // these results (see dropFromLists) — and the pane's head is about the mail, not
   // about the list it was found in (see useLastDescription).
-  const picked = useLastDescription(opened ?? null, chains.find((c) => c.rootExtId === opened) ?? null);
-  const reading: PreviewableThread | null = opened ? picked ?? { rootExtId: opened } : null;
+  const picked = useLastDescription(
+    opened ?? null,
+    chains.find((c) => c.rootExtId === opened) ?? null,
+  );
+  const reading: PreviewableThread | null = opened ? (picked ?? { rootExtId: opened }) : null;
 
   return (
     <div className="wrap selwrap mx-0 w-full max-w-none min-[60rem]:flex min-[60rem]:flex-1 min-[60rem]:flex-col min-[60rem]:min-h-0 min-[60rem]:px-0 min-[60rem]:pt-0 min-[60rem]:pb-0">
       {results.isError ? <Failure error={results.error} /> : null}
-      {results.isFetching ? <p className="selnote mt-2 flex-[1_1_100%] text-[.78rem] text-muted">Searching…</p> : null}
+      {results.isFetching ? (
+        <p className="selnote mt-2 flex-[1_1_100%] text-[.78rem] text-muted">Searching…</p>
+      ) : null}
       {asked && !results.isFetching && !results.isError && chains.length === 0 ? (
         <p className="selnote mt-2 flex-[1_1_100%] text-[.78rem] text-muted">No thread matched.</p>
       ) : null}
@@ -156,7 +160,9 @@ export function SelectView() {
                   <CompactModeToggle compact={compact} onChange={setCompact} />
                 </div>
                 {compact ? <CompactListHeader ranked /> : null}
-                <ul className={`iblist m-0 list-none divide-y divide-line overflow-hidden rounded-lg border border-line bg-card p-0 min-[60rem]:border-0 min-[60rem]:rounded-none min-[60rem]:bg-transparent${compact ? " compact" : ""}`}>
+                <ul
+                  className={`iblist m-0 list-none divide-y divide-line overflow-hidden rounded-lg border border-line bg-card p-0 min-[60rem]:border-0 min-[60rem]:rounded-none min-[60rem]:bg-transparent${compact ? " compact" : ""}`}
+                >
                   {chains.map((c) => (
                     <ThreadRow
                       key={c.rootExtId}
@@ -178,15 +184,19 @@ export function SelectView() {
                 </ul>
               </div>
             }
-            pane={composing ? <ComposeBox onClose={closeCompose} /> : (
-              <ThreadPane
-                thread={reading}
-                label="The candidate being read"
-                backLabel="← Results"
-                empty="Nothing open — pick a result from the list."
-                onClose={closeChain}
-              />
-            )}
+            pane={
+              composing ? (
+                <ComposeBox onClose={closeCompose} />
+              ) : (
+                <ThreadPane
+                  thread={reading}
+                  label="The candidate being read"
+                  backLabel="← Results"
+                  empty="Nothing open — pick a result from the list."
+                  onClose={closeChain}
+                />
+              )
+            }
           />
 
           {/* The bar of things to do with the ticked candidates, at the foot of

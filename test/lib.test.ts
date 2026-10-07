@@ -60,7 +60,12 @@ describe("timezones", () => {
 
   it("distinguishes an inferred zone from a stated one", () => {
     const stated = { date: "Mon 2 Mar 2026", body: "", tz: "AEST" } as const;
-    const guessed = { date: "Mon 2 Mar 2026", body: "", tz: "+1000", tzSource: "inferred" } as const;
+    const guessed = {
+      date: "Mon 2 Mar 2026",
+      body: "",
+      tz: "+1000",
+      tzSource: "inferred",
+    } as const;
     const z = zones([stated, guessed]);
     expect(z.label(stated).state).toBe("stated");
     expect(z.label(guessed).state).toBe("inferred");
@@ -121,7 +126,12 @@ describe("lanes", () => {
     const t = load("synthetic");
     const idOf = withIds(t.messages);
     const l = layout(order(t.messages, idOf), idOf);
-    expect(l.chains.filter((c) => c.meta).map((c) => c.entries.length).sort()).toEqual([1, 2]);
+    expect(
+      l.chains
+        .filter((c) => c.meta)
+        .map((c) => c.entries.length)
+        .sort(),
+    ).toEqual([1, 2]);
     // the longest chain contains a meeting notice but also real correspondence
     expect(l.chains.find((c) => c.entries.length === 27)!.meta).toBe(false);
   });
@@ -138,14 +148,22 @@ describe("lanes", () => {
 describe("anchors", () => {
   it("derives ids from content and de-duplicates", () => {
     const used = new Set<string>();
-    const e = { kind: "message", date: "Thu 16 Jul 2026", time: "11:35", sender: "Jean-Luc Picard", body: "" } as Entry;
+    const e = {
+      kind: "message",
+      date: "Thu 16 Jul 2026",
+      time: "11:35",
+      sender: "Jean-Luc Picard",
+      body: "",
+    } as Entry;
     expect(entryId(e, used)).toBe("m-20260716-1135-jlp");
     expect(entryId(e, used)).toBe("m-20260716-1135-jlp-2");
   });
 
   it("names a note by its date", () => {
     const used = new Set<string>();
-    expect(entryId({ kind: "note", date: "Mon 17 Aug 2026", body: "" } as Entry, used)).toBe("m-20260817-note");
+    expect(entryId({ kind: "note", date: "Mon 17 Aug 2026", body: "" } as Entry, used)).toBe(
+      "m-20260817-note",
+    );
   });
 });
 
@@ -154,8 +172,10 @@ describe("legacy specs", () => {
     const t = normalise({
       title: "x",
       open_items: ["a"],
-      messages: [{ kind: "sys", date: "Mon 17 Aug 2026", body: "", label: "call" },
-                 { date: "Tue 18 Aug 2026", body: "", sender: "A B", from_email: "a@b.c", gmail_id: "g1" }],
+      messages: [
+        { kind: "sys", date: "Mon 17 Aug 2026", body: "", label: "call" },
+        { date: "Tue 18 Aug 2026", body: "", sender: "A B", from_email: "a@b.c", gmail_id: "g1" },
+      ],
     });
     expect(t.openItems).toEqual(["a"]);
     expect(t.messages[0]!.kind).toBe("note");
@@ -226,8 +246,12 @@ describe("chain filtering", () => {
 
 describe("avatarURL — the avatar value's boundary before it is emitted into url()", () => {
   it("keeps data: images and http(s) URLs", () => {
-    expect(avatarURL("data:image/png;base64,iVBORw0KGgo=")).toBe("data:image/png;base64,iVBORw0KGgo=");
-    expect(avatarURL("https://faces.example/ada.png?size=48")).toBe("https://faces.example/ada.png?size=48");
+    expect(avatarURL("data:image/png;base64,iVBORw0KGgo=")).toBe(
+      "data:image/png;base64,iVBORw0KGgo=",
+    );
+    expect(avatarURL("https://faces.example/ada.png?size=48")).toBe(
+      "https://faces.example/ada.png?size=48",
+    );
     expect(avatarURL("http://faces.example/bo.jpg")).toBe("http://faces.example/bo.jpg");
   });
 
@@ -252,7 +276,13 @@ describe("avatarURL — the avatar value's boundary before it is emitted into ur
 
 describe("the provenance line a chain pane builds", () => {
   const entry = (e: Partial<CorpusEntry>): CorpusEntry =>
-    ({ extId: "mail:<x@y>", source: "mail", quoted: false, ts: "2026-03-02T09:00:00Z", ...e }) as CorpusEntry;
+    ({
+      extId: "mail:<x@y>",
+      source: "mail",
+      quoted: false,
+      ts: "2026-03-02T09:00:00Z",
+      ...e,
+    }) as CorpusEntry;
 
   it("names a message the mailbox holds by its mailbox id", () => {
     const e = entry({
@@ -295,7 +325,10 @@ describe("the provenance line a chain pane builds", () => {
         { kind: "quoted", seenIn: "mail:<host-2@loomworks.example>" },
       ],
     });
-    const named = sourceLine(seen, (id) => "msg " + (id === "mail:<host-1@loomworks.example>" ? "a1b2" : "c3d4"));
+    const named = sourceLine(
+      seen,
+      (id) => "msg " + (id === "mail:<host-1@loomworks.example>" ? "a1b2" : "c3d4"),
+    );
     expect(named).toBe("unspooled from msg a1b2, msg c3d4");
     expect(provenance(named).kind).toBe("ids");
   });
@@ -332,7 +365,10 @@ describe("reading a delimited file as a table", () => {
   });
 
   it("reads CRLF, a trailing delimiter and a missing final newline", () => {
-    expect(parseDelimited("a,b\r\n1,2\r\n", ",")).toEqual([["a", "b"], ["1", "2"]]);
+    expect(parseDelimited("a,b\r\n1,2\r\n", ",")).toEqual([
+      ["a", "b"],
+      ["1", "2"],
+    ]);
     expect(parseDelimited("a,b,\n", ",")).toEqual([["a", "b", ""]]);
     expect(parseDelimited("a,b", ",")).toEqual([["a", "b"]]);
   });
@@ -360,7 +396,10 @@ describe("reading a delimited file as a table", () => {
   it("reads a comma file into a header and rows", () => {
     const t = readTable("shed,readings\nNova,41.2\nOrion,38.9\n", "readings.csv", "text/csv")!;
     expect(t.header).toEqual(["shed", "readings"]);
-    expect(t.rows).toEqual([["Nova", "41.2"], ["Orion", "38.9"]]);
+    expect(t.rows).toEqual([
+      ["Nova", "41.2"],
+      ["Orion", "38.9"],
+    ]);
     expect(t.rowCount).toBe(2);
     expect(t.colCount).toBe(2);
     expect(t.numeric).toEqual([false, true]);
@@ -379,7 +418,9 @@ describe("reading a delimited file as a table", () => {
   it("refuses a file that is not a table", () => {
     // One column is a list, and a list is text — which is what the window falls
     // back to. This is the guard that keeps prose out of a spreadsheet.
-    expect(readTable("Dear Ada,\n\nThanks, and regards,\nBen\n", "letter.csv", "text/plain")).toBeNull();
+    expect(
+      readTable("Dear Ada,\n\nThanks, and regards,\nBen\n", "letter.csv", "text/plain"),
+    ).toBeNull();
     expect(readTable("", "readings.csv", "")).toBeNull();
     expect(readTable("a,b", "readings.csv", "")).toBeNull(); // a header with nothing under it
     expect(readTable("a,b\n1,2\n", "slurp.log", "")).toBeNull();
@@ -387,7 +428,10 @@ describe("reading a delimited file as a table", () => {
 
   it("pads a ragged row rather than dropping it", () => {
     const t = readTable("a,b,c\n1,2\n3,4,5\n", "readings.csv", "")!;
-    expect(t.rows).toEqual([["1", "2", ""], ["3", "4", "5"]]);
+    expect(t.rows).toEqual([
+      ["1", "2", ""],
+      ["3", "4", "5"],
+    ]);
   });
 
   it("caps what it shows and counts what it saw", () => {

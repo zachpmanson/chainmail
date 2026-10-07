@@ -26,12 +26,26 @@ export type Orient = "v" | "h";
  */
 const PALETTES = {
   light: {
-    bg: "#fff", fg: "#1e1c1a", muted: "#6f6963", line: "#e3ded7",
-    o1: "#2f6f5f", o2: "#4a5b9c", o3: "#8a5a2b", o4: "#8c4a6b", o5: "#77716a",
+    bg: "#fff",
+    fg: "#1e1c1a",
+    muted: "#6f6963",
+    line: "#e3ded7",
+    o1: "#2f6f5f",
+    o2: "#4a5b9c",
+    o3: "#8a5a2b",
+    o4: "#8c4a6b",
+    o5: "#77716a",
   },
   dark: {
-    bg: "#1d1c21", fg: "#ece9e4", muted: "#9d968e", line: "#2d2a31",
-    o1: "#3d8d78", o2: "#5f74c4", o3: "#a9713a", o4: "#b8688c", o5: "#4d4a52",
+    bg: "#1d1c21",
+    fg: "#ece9e4",
+    muted: "#9d968e",
+    line: "#2d2a31",
+    o1: "#3d8d78",
+    o2: "#5f74c4",
+    o3: "#a9713a",
+    o4: "#b8688c",
+    o5: "#4d4a52",
   },
 } as const;
 type Palette = (typeof PALETTES)[keyof typeof PALETTES];
@@ -62,9 +76,7 @@ export interface TreeExport {
    and lane (across) swap axes — so one pair of functions covers both. */
 
 const pos = (o: Orient, row: number, lane: number): [number, number] =>
-  o === "v"
-    ? [X0 + lane * ACROSS.v, Y0 + row * STEP.v]
-    : [X0 + row * STEP.h, Y0 + lane * ACROSS.h];
+  o === "v" ? [X0 + lane * ACROSS.v, Y0 + row * STEP.v] : [X0 + row * STEP.h, Y0 + lane * ACROSS.h];
 
 const size = (o: Orient, rows: number, laneCount: number): [number, number] =>
   o === "v"
@@ -104,8 +116,7 @@ export function treeSvgString(o: TreeExport): string {
   const orient: Orient = o.horizontal ? "h" : "v";
   const byId = new Map(o.nodes.map((n) => [n.id, n]));
   const rowOf = new Map(o.rows.map((r, i) => [r.id, i]));
-  const at = (id: string): [number, number] =>
-    pos(orient, rowOf.get(id)!, byId.get(id)!.lane);
+  const at = (id: string): [number, number] => pos(orient, rowOf.get(id)!, byId.get(id)!.lane);
 
   const [treeW, treeH] = size(orient, o.rows.length, o.laneCount);
 
@@ -219,7 +230,9 @@ export function treeSvgString(o: TreeExport): string {
       `<path d="M${lx + 2} ${cy - 3.8} H${lx + 8}" stroke="${pal.muted}" stroke-width="1.1"/><circle cx="${lx + 5}" cy="${cy}" r="2.6" fill="${pal.muted}"/>`,
       `<circle cx="${lx + 5}" cy="${cy}" r="3.2" fill="none" stroke="${pal.muted}" stroke-width="1.3"/>`,
     ][i]!;
-    line(`${icon}<text x="${lx + 14}" y="${yy}" font-size="11" fill="${pal.muted}">${label}</text>`);
+    line(
+      `${icon}<text x="${lx + 14}" y="${yy}" font-size="11" fill="${pal.muted}">${label}</text>`,
+    );
   });
 
   line("</svg>");
@@ -262,7 +275,10 @@ export function Minimap({ v }: { v: View }) {
     ...v.rows.map((r) => {
       let d = 0;
       let cur = byId.get(r.id);
-      while (cur?.parent) { d++; cur = byId.get(cur.parent); }
+      while (cur?.parent) {
+        d++;
+        cur = byId.get(cur.parent);
+      }
       return d + 1;
     }),
   );
@@ -310,12 +326,8 @@ export function Minimap({ v }: { v: View }) {
         {v.rows.map((r) => {
           const n = byId.get(r.id)!;
           const [cx, cy] = pos(o, rowOf.get(r.id)!, n.lane);
-          const [w2, h2] = o === "v"
-            ? [width, STEP.v]
-            : [STEP.h, height];
-          const [x2, y2] = o === "v"
-            ? [0, cy - STEP.v / 2]
-            : [cx - STEP.h / 2, 0];
+          const [w2, h2] = o === "v" ? [width, STEP.v] : [STEP.h, height];
+          const [x2, y2] = o === "v" ? [0, cy - STEP.v / 2] : [cx - STEP.h / 2, 0];
           return (
             <rect
               key={`hit-${o}-${r.id}`}
@@ -341,19 +353,20 @@ export function Minimap({ v }: { v: View }) {
           const [x1, y1] = pos(o, rowOf.get(n.parent)!, byId.get(n.parent)!.lane);
           const [x2, y2] = pos(o, rowOf.get(r.id)!, n.lane);
           const cls = `lk${n.isFork ? " fk" : ""}`;
-          return <path key={`lk-${o}-${r.id}`} className={cls} data-c={r.id} d={linkD(o, x1, y1, x2, y2)} />;
+          return (
+            <path
+              key={`lk-${o}-${r.id}`}
+              className={cls}
+              data-c={r.id}
+              d={linkD(o, x1, y1, x2, y2)}
+            />
+          );
         })}
 
         {v.rows.map((r) => {
           const n = byId.get(r.id)!;
           const note = r.entry.kind === "note";
-          const cls = [
-            "nd",
-            r.orgSlot,
-            note && "sysn",
-            r.entry.quoted && "qd",
-            n.isRoot && "rt",
-          ]
+          const cls = ["nd", r.orgSlot, note && "sysn", r.entry.quoted && "qd", n.isRoot && "rt"]
             .filter(Boolean)
             .join(" ");
           const [cx, cy] = pos(o, rowOf.get(r.id)!, n.lane);
@@ -381,23 +394,64 @@ export function Minimap({ v }: { v: View }) {
   const tallyLegend = (
     <div className="foot2 border-t border-line px-[.6rem] pt-[.28rem] pb-[.35rem] text-[.64rem]">
       <div className="tally flex flex-col gap-[.12rem]">
-        <div><b>{g.roots}</b> chains</div>
-        <div><b>{g.laneCount}</b> lanes</div>
-        <div><b>{deepest}</b> deep</div>
-        <div><b>{g.forks}</b> forks</div>
-        <div><b>{g.leaves}</b> dead ends</div>
+        <div>
+          <b>{g.roots}</b> chains
+        </div>
+        <div>
+          <b>{g.laneCount}</b> lanes
+        </div>
+        <div>
+          <b>{deepest}</b> deep
+        </div>
+        <div>
+          <b>{g.forks}</b> forks
+        </div>
+        <div>
+          <b>{g.leaves}</b> dead ends
+        </div>
       </div>
       <dl className="legend m-0 mt-[.25rem] flex flex-col gap-[.1rem]">
-        <div className="flex items-center gap-[.34rem]"><svg className="lg h-[.7em] w-[.7em] shrink-0" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="2.9" fill="currentColor"/></svg><dt className="m-0 text-muted">message</dt></div>
-        <div className="flex items-center gap-[.34rem]"><svg className="lg h-[.7em] w-[.7em] shrink-0" viewBox="0 0 10 10" aria-hidden="true"><rect x="2.6" y="2.6" width="4.8" height="4.8" fill="currentColor" transform="rotate(45 5 5)"/></svg><dt className="m-0 text-muted">note</dt></div>
-        <div className="flex items-center gap-[.34rem]"><svg className="lg h-[.7em] w-[.7em] shrink-0" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 2.6 H8" stroke="currentColor" strokeWidth="1.1"/><circle cx="5" cy="5.5" r="2.5" fill="currentColor"/></svg><dt className="m-0 text-muted">starts thread</dt></div>
-        <div className="flex items-center gap-[.34rem]"><svg className="lg h-[.7em] w-[.7em] shrink-0" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="2.9" fill="none" stroke="currentColor" strokeWidth="1.2"/></svg><dt className="m-0 text-muted">reconstructed</dt></div>
+        <div className="flex items-center gap-[.34rem]">
+          <svg className="lg h-[.7em] w-[.7em] shrink-0" viewBox="0 0 10 10" aria-hidden="true">
+            <circle cx="5" cy="5" r="2.9" fill="currentColor" />
+          </svg>
+          <dt className="m-0 text-muted">message</dt>
+        </div>
+        <div className="flex items-center gap-[.34rem]">
+          <svg className="lg h-[.7em] w-[.7em] shrink-0" viewBox="0 0 10 10" aria-hidden="true">
+            <rect
+              x="2.6"
+              y="2.6"
+              width="4.8"
+              height="4.8"
+              fill="currentColor"
+              transform="rotate(45 5 5)"
+            />
+          </svg>
+          <dt className="m-0 text-muted">note</dt>
+        </div>
+        <div className="flex items-center gap-[.34rem]">
+          <svg className="lg h-[.7em] w-[.7em] shrink-0" viewBox="0 0 10 10" aria-hidden="true">
+            <path d="M2 2.6 H8" stroke="currentColor" strokeWidth="1.1" />
+            <circle cx="5" cy="5.5" r="2.5" fill="currentColor" />
+          </svg>
+          <dt className="m-0 text-muted">starts thread</dt>
+        </div>
+        <div className="flex items-center gap-[.34rem]">
+          <svg className="lg h-[.7em] w-[.7em] shrink-0" viewBox="0 0 10 10" aria-hidden="true">
+            <circle cx="5" cy="5" r="2.9" fill="none" stroke="currentColor" strokeWidth="1.2" />
+          </svg>
+          <dt className="m-0 text-muted">reconstructed</dt>
+        </div>
       </dl>
     </div>
   );
 
   return (
-    <aside className="mini fixed top-0 right-0 bottom-0 z-[30] flex w-max max-w-[16.5rem] flex-col border-l border-line bg-card print:hidden max-[1024px]:top-[2.4rem] max-[1024px]:bg-[color-mix(in_srgb,var(--card)_86%,transparent)]" id="mini">
+    <aside
+      className="mini fixed top-0 right-0 bottom-0 z-[30] flex w-max max-w-[16.5rem] flex-col border-l border-line bg-card print:hidden max-[1024px]:top-[2.4rem] max-[1024px]:bg-[color-mix(in_srgb,var(--card)_86%,transparent)]"
+      id="mini"
+    >
       <h3 className="m-0 flex items-center gap-[.4rem] border-b border-line px-[.7rem] pt-[.55rem] pb-[.4rem] text-[.66rem] font-bold uppercase tracking-[.09em] text-muted">
         Reply tree<span className="ct ml-auto font-semibold opacity-75">{v.rows.length}</span>
         <button
@@ -413,11 +467,15 @@ export function Minimap({ v }: { v: View }) {
       {/* both orientations are in the DOM; CSS shows the live one (body.tree-h
           swaps to the horizontal row) so behaviour.js needs no React state */}
       <div className="vrow">
-        <div className="mbody min-h-0 flex-1 overflow-auto px-[.3rem] pt-[.45rem] pb-[.8rem]">{treeSvg("v")}</div>
+        <div className="mbody min-h-0 flex-1 overflow-auto px-[.3rem] pt-[.45rem] pb-[.8rem]">
+          {treeSvg("v")}
+        </div>
         {tallyLegend}
       </div>
       <div className="hrow">
-        <div className="mbody min-h-0 flex-1 overflow-auto px-[.3rem] pt-[.45rem] pb-[.8rem]">{treeSvg("h")}</div>
+        <div className="mbody min-h-0 flex-1 overflow-auto px-[.3rem] pt-[.45rem] pb-[.8rem]">
+          {treeSvg("h")}
+        </div>
         {tallyLegend}
       </div>
     </aside>

@@ -67,17 +67,48 @@ let shift = { messages: 0, people: 0, ambiguous: 0 };
 /** The one thread the pane is pointed at, with the organisations the resolver put
  *  on each entry — the field this whole issue exists to carry. */
 const CHAIN_ENTRIES = [
-  { extId: "mail:<a@example.fed>", ts: "2026-03-02T09:15:00Z", html: "<p>Ada's</p>", author: "Ada Byron", org: "Loomworks" },
-  { extId: "mail:<b@example.fed>", ts: "2026-03-03T09:15:00Z", html: "<p>Bo's</p>", author: "Bo Halvorsen", org: "Fjordline" },
-  { extId: "mail:<c@example.fed>", ts: "2026-03-04T09:15:00Z", html: "<p>Ada again</p>", author: "Ada Byron", org: "Loomworks" },
+  {
+    extId: "mail:<a@example.fed>",
+    ts: "2026-03-02T09:15:00Z",
+    html: "<p>Ada's</p>",
+    author: "Ada Byron",
+    org: "Loomworks",
+  },
+  {
+    extId: "mail:<b@example.fed>",
+    ts: "2026-03-03T09:15:00Z",
+    html: "<p>Bo's</p>",
+    author: "Bo Halvorsen",
+    org: "Fjordline",
+  },
+  {
+    extId: "mail:<c@example.fed>",
+    ts: "2026-03-04T09:15:00Z",
+    html: "<p>Ada again</p>",
+    author: "Ada Byron",
+    org: "Loomworks",
+  },
   // A sender whose organisation nothing established: no colour is claimed, and
   // the unknown slot is what the page draws for them too.
-  { extId: "mail:<d@example.fed>", ts: "2026-03-05T09:15:00Z", html: "<p>Nobody's</p>", author: "Cy Okafor" },
+  {
+    extId: "mail:<d@example.fed>",
+    ts: "2026-03-05T09:15:00Z",
+    html: "<p>Nobody's</p>",
+    author: "Cy Okafor",
+  },
 ];
 
 const opsHandler: Handler = (c) => {
   const p = pathOf(c);
-  if (p === "/v1/ops/plan") return json(200, { people: 2, merges: [], refusals: [], candidates: [], twinsDeclined: [], trail: [] });
+  if (p === "/v1/ops/plan")
+    return json(200, {
+      people: 2,
+      merges: [],
+      refusals: [],
+      candidates: [],
+      twinsDeclined: [],
+      trail: [],
+    });
   if (p === "/v1/ops/orgs" && c.method === "GET") return json(200, { domains: DOMAINS() });
   if (p === "/v1/ops/orgs/preview") return json(200, { domain: "x.example", ...shift });
   if (p === "/v1/ops/orgs" && c.method === "POST") return json(200, { domains: DOMAINS() });
@@ -168,7 +199,9 @@ describe("the organisations screen", () => {
       JSON.stringify({ domain: "fjordline.example", org: "Loomworks" }),
     );
     expect(callsTo("POST", "/v1/ops/orgs")).toHaveLength(0);
-    expect(await screen.findByText(/1 message from 1 sender would be drawn differently/)).toBeTruthy();
+    expect(
+      await screen.findByText(/1 message from 1 sender would be drawn differently/),
+    ).toBeTruthy();
 
     click(screen.getByRole("button", { name: "save this grouping" }));
     await waitFor(() => expect(callsTo("POST", "/v1/ops/orgs")).toHaveLength(1));
@@ -218,7 +251,8 @@ describe("the organisations screen", () => {
   });
 });
 
-describe("the reading pane's colours", () => {  it("draws each sender on their organisation's slot, in the thread's own order", async () => {
+describe("the reading pane's colours", () => {
+  it("draws each sender on their organisation's slot, in the thread's own order", async () => {
     handler = paneHandler;
     await mountApp(`/?open=${encodeURIComponent("mail:<a@example.fed>")}`);
 

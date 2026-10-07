@@ -85,14 +85,13 @@ function matches(suggestion: Address, query: string): boolean {
 /** One chip: the address and the press that takes it off. The list itself says
  *  whether it is To or Cc, so a second toggle inside every chip only repeats that
  *  context and makes the control harder to scan. */
-function Chip({ who, remove, disabled }: {
-  who: Address;
-  remove: () => void;
-  disabled: boolean;
-}) {
+function Chip({ who, remove, disabled }: { who: Address; remove: () => void; disabled: boolean }) {
   const words = addressWords(who);
   return (
-    <span className="addrchip inline-flex max-w-full items-center gap-[.2rem] rounded-[10px] border border-line bg-card px-[.35rem] py-[.05rem] text-[.72rem]" title={words}>
+    <span
+      className="addrchip inline-flex max-w-full items-center gap-[.2rem] rounded-[10px] border border-line bg-card px-[.35rem] py-[.05rem] text-[.72rem]"
+      title={words}
+    >
       <span className="addrname [overflow-wrap:anywhere]">{words}</span>
       <IconButton
         type="button"
@@ -180,7 +179,9 @@ export function AddressField({
   function add(who: Address) {
     const key = addressKey(who.address);
     if (own.has(key)) {
-      setRefused(`${who.address} is your own address — a reply is not sent to the person writing it.`);
+      setRefused(
+        `${who.address} is your own address — a reply is not sent to the person writing it.`,
+      );
       return;
     }
     if (here.has(key)) {
@@ -188,7 +189,9 @@ export function AddressField({
       return;
     }
     if (elsewhere.has(key)) {
-      setRefused(`${who.address} is already on the reply, in the other list. Take it out of there to move it.`);
+      setRefused(
+        `${who.address} is already on the reply, in the other list. Take it out of there to move it.`,
+      );
       return;
     }
     onChange([...value, who]);
@@ -237,13 +240,18 @@ export function AddressField({
   }
 
   return (
-    <span className={`addrfield relative inline-flex w-full min-w-0 min-h-[var(--addrrow)] max-w-full flex-wrap items-center gap-[.2rem] align-middle rounded-md border border-line bg-bg px-[.3rem] py-[.1rem] mx-[.15rem] focus-within:border-accent${showing ? " open" : ""}`} data-list={label}>
+    <span
+      className={`addrfield relative inline-flex w-full min-w-0 min-h-[var(--addrrow)] max-w-full flex-wrap items-center gap-[.2rem] align-middle rounded-md border border-line bg-bg px-[.3rem] py-[.1rem] mx-[.15rem] focus-within:border-accent${showing ? " open" : ""}`}
+      data-list={label}
+    >
       {value.map((who) => (
         <Chip
           key={addressKey(who.address)}
           who={who}
           disabled={disabled}
-          remove={() => onChange(value.filter((a) => addressKey(a.address) !== addressKey(who.address)))}
+          remove={() =>
+            onChange(value.filter((a) => addressKey(a.address) !== addressKey(who.address)))
+          }
         />
       ))}
       {/* aria-autocomplete, expanded, controls and activedescendant are what make
@@ -275,7 +283,12 @@ export function AddressField({
         onKeyDown={onKeyDown}
       />
       {showing ? (
-        <span className="addrlist absolute top-full left-0 z-20 mt-1 flex max-h-56 min-w-full max-w-96 flex-col overflow-auto rounded-md border border-line bg-card p-[.15rem] shadow-[0_6px_18px_rgba(0,0,0,.18)]" role="listbox" id={`${label}-suggestions`} aria-label={`${label} suggestions`}>
+        <span
+          className="addrlist absolute top-full left-0 z-20 mt-1 flex max-h-56 min-w-full max-w-96 flex-col overflow-auto rounded-md border border-line bg-card p-[.15rem] shadow-[0_6px_18px_rgba(0,0,0,.18)]"
+          role="listbox"
+          id={`${label}-suggestions`}
+          aria-label={`${label} suggestions`}
+        >
           {rows.map((a, i) => (
             <span
               key={addressKey(a.address)}
@@ -291,7 +304,11 @@ export function AddressField({
               title={a.name ? `${a.name} <${a.address}>` : a.address}
             >
               <span className="addroptname [overflow-wrap:anywhere]">{a.name ?? a.address}</span>
-              {a.name ? <span className="addroptaddr text-[.68rem] text-muted [overflow-wrap:anywhere]">{a.address}</span> : null}
+              {a.name ? (
+                <span className="addroptaddr text-[.68rem] text-muted [overflow-wrap:anywhere]">
+                  {a.address}
+                </span>
+              ) : null}
             </span>
           ))}
           {rows.length === 0 ? (
@@ -304,7 +321,10 @@ export function AddressField({
         </span>
       ) : null}
       {refused ? (
-        <span className="addrrefuse basis-full px-[.2rem] py-[.1rem] text-[.68rem] text-red-700" role="status">
+        <span
+          className="addrrefuse basis-full px-[.2rem] py-[.1rem] text-[.68rem] text-red-700"
+          role="status"
+        >
           {refused}
         </span>
       ) : null}

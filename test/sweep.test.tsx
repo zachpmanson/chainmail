@@ -75,7 +75,9 @@ describe("refresh button ingest status", () => {
       finishedAt: "2026-09-20T10:18:00Z",
       outcome: "incomplete",
     });
-    const button = await screen.findByRole("button", { name: "Refresh; last ingest stopped early" });
+    const button = await screen.findByRole("button", {
+      name: "Refresh; last ingest stopped early",
+    });
     expect(button.getAttribute("class")).toContain("warn");
     expect(button.getAttribute("title")).toContain("stopped early");
     expect(button.textContent).toContain("ingest incomplete");

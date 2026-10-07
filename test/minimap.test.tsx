@@ -38,7 +38,14 @@ describe("treeSvgString", () => {
   it("draws one node per row plus the root caps, links for replies", () => {
     const { v, g } = graph();
     const deepest = 1;
-    const svg = treeSvgString({ title: v.title, rows: v.rows, nodes: g.nodes, laneCount: g.laneCount, deepest, dark: false });
+    const svg = treeSvgString({
+      title: v.title,
+      rows: v.rows,
+      nodes: g.nodes,
+      laneCount: g.laneCount,
+      deepest,
+      dark: false,
+    });
 
     const circles = svg.match(/<circle /g) ?? [];
     const rects = svg.match(/<rect /g) ?? [];
@@ -58,7 +65,14 @@ describe("treeSvgString", () => {
   it("renders the tally and legend, and the tally matches the graph", () => {
     const { v, g } = graph();
     const deepest = 1;
-    const svg = treeSvgString({ title: v.title, rows: v.rows, nodes: g.nodes, laneCount: g.laneCount, deepest, dark: false });
+    const svg = treeSvgString({
+      title: v.title,
+      rows: v.rows,
+      nodes: g.nodes,
+      laneCount: g.laneCount,
+      deepest,
+      dark: false,
+    });
 
     for (const label of ["chains", "lanes", "deep", "forks", "dead ends"]) {
       expect(svg).toContain(label);
@@ -72,7 +86,14 @@ describe("treeSvgString", () => {
 
   it("is well-formed XML with a size and a card background", () => {
     const { v, g } = graph();
-    const svg = treeSvgString({ title: v.title, rows: v.rows, nodes: g.nodes, laneCount: g.laneCount, deepest: 1, dark: false });
+    const svg = treeSvgString({
+      title: v.title,
+      rows: v.rows,
+      nodes: g.nodes,
+      laneCount: g.laneCount,
+      deepest: 1,
+      dark: false,
+    });
     expect(svg.startsWith("<svg xmlns=")).toBe(true);
     expect(svg.trimEnd().endsWith("</svg>")).toBe(true);
     expect(svg).toMatch(/<rect width="[\d.]+" height="[\d.]+" fill="#fff"\/>/);
@@ -80,16 +101,45 @@ describe("treeSvgString", () => {
 
   it("switches palette with the dark flag", () => {
     const { v, g } = graph();
-    const light = treeSvgString({ title: v.title, rows: v.rows, nodes: g.nodes, laneCount: g.laneCount, deepest: 1, dark: false });
-    const dark = treeSvgString({ title: v.title, rows: v.rows, nodes: g.nodes, laneCount: g.laneCount, deepest: 1, dark: true });
+    const light = treeSvgString({
+      title: v.title,
+      rows: v.rows,
+      nodes: g.nodes,
+      laneCount: g.laneCount,
+      deepest: 1,
+      dark: false,
+    });
+    const dark = treeSvgString({
+      title: v.title,
+      rows: v.rows,
+      nodes: g.nodes,
+      laneCount: g.laneCount,
+      deepest: 1,
+      dark: true,
+    });
     expect(light).toMatch(/fill="#fff"/);
     expect(dark).toMatch(/fill="#1d1c21"/);
   });
 
   it("transposes the geometry in horizontal mode: wide and short, not tall", () => {
     const { v, g } = graph();
-    const vertical = treeSvgString({ title: v.title, rows: v.rows, nodes: g.nodes, laneCount: g.laneCount, deepest: 1, dark: false });
-    const horizontal = treeSvgString({ title: v.title, rows: v.rows, nodes: g.nodes, laneCount: g.laneCount, deepest: 1, dark: false, horizontal: true });
+    const vertical = treeSvgString({
+      title: v.title,
+      rows: v.rows,
+      nodes: g.nodes,
+      laneCount: g.laneCount,
+      deepest: 1,
+      dark: false,
+    });
+    const horizontal = treeSvgString({
+      title: v.title,
+      rows: v.rows,
+      nodes: g.nodes,
+      laneCount: g.laneCount,
+      deepest: 1,
+      dark: false,
+      horizontal: true,
+    });
     const dims = (s: string) => {
       const m = s.match(/<svg[^>]*width="(\d+)" height="(\d+)"/)!;
       return { w: Number(m[1]), h: Number(m[2]) };
@@ -108,12 +158,20 @@ describe("treeSvgString", () => {
 
   it("lays time rightward in horizontal mode: rows advance left to right", () => {
     const { v, g } = graph();
-    const svg = treeSvgString({ title: v.title, rows: v.rows, nodes: g.nodes, laneCount: g.laneCount, deepest: 1, dark: false, horizontal: true });
+    const svg = treeSvgString({
+      title: v.title,
+      rows: v.rows,
+      nodes: g.nodes,
+      laneCount: g.laneCount,
+      deepest: 1,
+      dark: false,
+      horizontal: true,
+    });
     // node circles carry r="3.9" (legend icons are different radii), and they
     // are emitted in transcript order, so their x must climb with the rows;
     // notes are rotated rects, so circles number the message rows only
-    const xs = [...svg.matchAll(/<circle cx="([\d.]+)" cy="([\d.]+)" r="3.9"/g)].map(
-      (m) => Number(m[1]),
+    const xs = [...svg.matchAll(/<circle cx="([\d.]+)" cy="([\d.]+)" r="3.9"/g)].map((m) =>
+      Number(m[1]),
     );
     expect(xs.length).toBe(v.rows.filter((r) => r.entry.kind !== "note").length);
     for (let i = 1; i < xs.length; i++) {

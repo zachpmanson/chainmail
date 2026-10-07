@@ -31,7 +31,11 @@ export function OpsView() {
   const open: OpsTab = tabOf(tab);
   return (
     <div className="wrap opswrap">
-      <div className="mt-2 mb-[.1rem] flex items-stretch gap-[.15rem] border-b border-line" role="tablist" aria-label="What this page manages">
+      <div
+        className="mt-2 mb-[.1rem] flex items-stretch gap-[.15rem] border-b border-line"
+        role="tablist"
+        aria-label="What this page manages"
+      >
         {OPS_TABS.map((t) => (
           <Button
             key={t}

@@ -9,7 +9,13 @@ import { derive } from "../lib/derive";
 import { SpecView } from "./SpecView";
 import { ThreadPreview } from "./ThreadPreview";
 import { ThreadRow, RankMeta } from "./ThreadRow";
-import { $api, searchQuery, type ChainHit, type RefreshCandidate, type RefreshReport } from "../lib/api";
+import {
+  $api,
+  searchQuery,
+  type ChainHit,
+  type RefreshCandidate,
+  type RefreshReport,
+} from "../lib/api";
 import type { Timeline as Spec } from "../lib/spec";
 
 /**
@@ -20,7 +26,18 @@ import type { Timeline as Spec } from "../lib/spec";
  * Rendered is the shared presentational half of the two page routes and the
  * two legacy ways in (?spec=, drag-drop); whoever owns the spec owns this.
  */
-export function Rendered({ spec, onBack, onRefresh, onAdd, onAccept, onPull, pulling, mediaBase, report, refreshing }: {
+export function Rendered({
+  spec,
+  onBack,
+  onRefresh,
+  onAdd,
+  onAccept,
+  onPull,
+  pulling,
+  mediaBase,
+  report,
+  refreshing,
+}: {
   spec: Spec;
   onBack?: () => void;
   onRefresh?: () => void;
@@ -90,9 +107,7 @@ export function Rendered({ spec, onBack, onRefresh, onAdd, onAccept, onPull, pul
 
   const filtered = useMemo<Spec>(() => {
     if (excluded.size === 0) return spec;
-    const keep = all.rows
-      .filter((r) => !excluded.has(r.chain))
-      .map((r) => r.entry);
+    const keep = all.rows.filter((r) => !excluded.has(r.chain)).map((r) => r.entry);
     return { ...spec, messages: keep as Spec["messages"] };
   }, [spec, all, excluded]);
 
@@ -129,8 +144,7 @@ export function Rendered({ spec, onBack, onRefresh, onAdd, onAccept, onPull, pul
     return (
       <div className="wrap">
         <p style={{ padding: "2rem", color: "var(--muted)" }}>
-          Every thread is excluded. Re-enable one from Sources &amp; provenance —
-          reload to reset.
+          Every thread is excluded. Re-enable one from Sources &amp; provenance — reload to reset.
         </p>
       </div>
     );
@@ -139,7 +153,12 @@ export function Rendered({ spec, onBack, onRefresh, onAdd, onAccept, onPull, pul
   return (
     <>
       {onBack ? (
-        <Button type="button" density="compact" className="fixed bottom-[.6rem] left-[.6rem] z-[32] px-[.6rem] py-[.3rem] text-[.76rem] text-[var(--muted)] hover:text-[var(--accent)]" onClick={onBack}>
+        <Button
+          type="button"
+          density="compact"
+          className="fixed bottom-[.6rem] left-[.6rem] z-[32] px-[.6rem] py-[.3rem] text-[.76rem] text-[var(--muted)] hover:text-[var(--accent)]"
+          onClick={onBack}
+        >
           ← choose chains
         </Button>
       ) : null}
@@ -156,8 +175,13 @@ export function Rendered({ spec, onBack, onRefresh, onAdd, onAccept, onPull, pul
       />
       {showSpec ? <SpecView spec={filtered} onClose={() => setShowSpec(false)} /> : null}
       {showAdd && onAdd ? (
-        <AddEmailsModal onClose={() => setShowAdd(false)}
-                        onAdd={(ids, q) => { onAdd(ids, q); setShowAdd(false); }} />
+        <AddEmailsModal
+          onClose={() => setShowAdd(false)}
+          onAdd={(ids, q) => {
+            onAdd(ids, q);
+            setShowAdd(false);
+          }}
+        />
       ) : null}
       {report?.chainsProposed?.length ? (
         <ProposalsModal
@@ -165,7 +189,10 @@ export function Rendered({ spec, onBack, onRefresh, onAdd, onAccept, onPull, pul
           open={showProposals}
           refreshing={refreshing}
           onClose={() => setDismissed(true)}
-          onAccept={(ids) => { onAccept?.(ids); setDismissed(true); }}
+          onAccept={(ids) => {
+            onAccept?.(ids);
+            setDismissed(true);
+          }}
         />
       ) : null}
     </>
@@ -186,7 +213,10 @@ export function Rendered({ spec, onBack, onRefresh, onAdd, onAccept, onPull, pul
  * refresh could find it again. The server records it before re-deriving, so it
  * is re-run like any recorded search from here on.
  */
-function AddEmailsModal({ onClose, onAdd }: {
+function AddEmailsModal({
+  onClose,
+  onAdd,
+}: {
   onClose: () => void;
   onAdd: (ids: string[], query: string) => void;
 }) {
@@ -229,10 +259,18 @@ function AddEmailsModal({ onClose, onAdd }: {
       <DialogShell label="Add another email" onBackdropClick={onClose}>
         <div className="proposals-head flex items-center gap-[.6rem] border-b border-line p-[.5rem_.8rem]">
           <b className="text-[.72rem] font-bold uppercase tracking-[.09em] text-muted">add email</b>
-          <span className="note ml-auto text-[.7rem] text-muted">search the corpus for a thread to add to this page</span>
+          <span className="note ml-auto text-[.7rem] text-muted">
+            search the corpus for a thread to add to this page
+          </span>
         </div>
-        <form className="addform flex items-center gap-[.5rem] border-b border-line p-[.45rem_.8rem]" onSubmit={submit}>
-          <FormField className="flex min-w-0 flex-1 items-center gap-[.4rem] text-[.7rem] text-muted" label="Query">
+        <form
+          className="addform flex items-center gap-[.5rem] border-b border-line p-[.45rem_.8rem]"
+          onSubmit={submit}
+        >
+          <FormField
+            className="flex min-w-0 flex-1 items-center gap-[.4rem] text-[.7rem] text-muted"
+            label="Query"
+          >
             <TextInput
               autoFocus
               value={q}
@@ -242,7 +280,11 @@ function AddEmailsModal({ onClose, onAdd }: {
               aria-label="Search query"
             />
           </FormField>
-          <Button className="!min-h-0 !rounded-[5px] !border-line !bg-bg !px-[.7rem] !py-[.3rem] !text-[.72rem] !font-semibold !text-fg !cursor-pointer hover:!border-accent hover:!text-accent disabled:!cursor-default disabled:!opacity-[.45]" type="submit" disabled={!q.trim()}>
+          <Button
+            className="!min-h-0 !rounded-[5px] !border-line !bg-bg !px-[.7rem] !py-[.3rem] !text-[.72rem] !font-semibold !text-fg !cursor-pointer hover:!border-accent hover:!text-accent disabled:!cursor-default disabled:!opacity-[.45]"
+            type="submit"
+            disabled={!q.trim()}
+          >
             Search
           </Button>
         </form>
@@ -251,9 +293,13 @@ function AddEmailsModal({ onClose, onAdd }: {
             {results.error instanceof Error ? results.error.message : String(results.error)}
           </p>
         ) : null}
-        {results.isFetching ? <p className="selnote mt-2 flex-[1_1_100%] text-[.78rem] text-muted">Searching…</p> : null}
+        {results.isFetching ? (
+          <p className="selnote mt-2 flex-[1_1_100%] text-[.78rem] text-muted">Searching…</p>
+        ) : null}
         {asked && !results.isFetching && !results.isError && chains.length === 0 ? (
-          <p className="selnote mt-2 flex-[1_1_100%] text-[.78rem] text-muted">No thread matched.</p>
+          <p className="selnote mt-2 flex-[1_1_100%] text-[.78rem] text-muted">
+            No thread matched.
+          </p>
         ) : null}
         {chains.length > 0 ? (
           <ul className="proposals-list m-0 flex list-none flex-col gap-[.4rem] overflow-auto p-[.5rem_.8rem]">
@@ -273,13 +319,17 @@ function AddEmailsModal({ onClose, onAdd }: {
           </ul>
         ) : null}
         <div className="proposals-foot flex justify-end gap-[.6rem] border-t border-line p-[.5rem_.8rem]">
-          <Button className="tbtn" type="button" disabled={chosen.length === 0}
-                  onClick={() => {
-                    // asked, not the text box: the box may have been edited since
-                    // the search ran, and the page records the search that found
-                    // the thread, not whatever is typed after it.
-                    if (asked) onAdd([...chosen], asked);
-                  }}>
+          <Button
+            className="tbtn"
+            type="button"
+            disabled={chosen.length === 0}
+            onClick={() => {
+              // asked, not the text box: the box may have been edited since
+              // the search ran, and the page records the search that found
+              // the thread, not whatever is typed after it.
+              if (asked) onAdd([...chosen], asked);
+            }}
+          >
             {`add ${chosen.length} to page`}
           </Button>
           <Button className="tbtn" type="button" onClick={onClose}>
@@ -300,7 +350,13 @@ function AddEmailsModal({ onClose, onAdd }: {
  * query that found it, with matched/entries as the honest measure of whether the
  * thread is about the query at all.
  */
-function ProposalsModal({ proposals, open, refreshing, onClose, onAccept }: {
+function ProposalsModal({
+  proposals,
+  open,
+  refreshing,
+  onClose,
+  onAccept,
+}: {
   proposals: RefreshCandidate[];
   open: boolean;
   refreshing?: boolean;
@@ -326,30 +382,52 @@ function ProposalsModal({ proposals, open, refreshing, onClose, onAccept }: {
       <DialogShell label="Proposed chains">
         <div className="proposals-head flex items-center gap-[.6rem] border-b border-line p-[.5rem_.8rem]">
           <b className="text-[.72rem] font-bold uppercase tracking-[.09em] text-muted">proposed</b>
-          <span className="note ml-auto text-[.7rem] text-muted">found by a query, not yet on the page — accept the ones that belong</span>
+          <span className="note ml-auto text-[.7rem] text-muted">
+            found by a query, not yet on the page — accept the ones that belong
+          </span>
         </div>
         <ul className="proposals-list m-0 flex list-none flex-col gap-[.4rem] overflow-auto p-[.5rem_.8rem]">
           {proposals.map((p) => {
             const on = accepted.has(p.rootExtId);
             return (
-              <li key={p.subject ?? p.container ?? p.rootExtId} className="propcard flex flex-row items-center gap-[.6rem] rounded-[5px] border border-line bg-bg p-[.5rem_.6rem]">
+              <li
+                key={p.subject ?? p.container ?? p.rootExtId}
+                className="propcard flex flex-row items-center gap-[.6rem] rounded-[5px] border border-line bg-bg p-[.5rem_.6rem]"
+              >
                 <div className="propcard-body flex min-w-0 flex-1 flex-col gap-[.3rem]">
                   <label className="proptoggle flex min-w-0 flex-1 cursor-pointer items-start gap-[.5rem]">
-                    <Checkbox className="mt-[.18rem]" accent="org" checked={on} onChange={() => toggle(p.rootExtId)} />
-                    <span className="propsubj max-w-full break-words whitespace-normal font-[var(--serif)] font-semibold">{p.subject ?? <em className="not-italic text-muted">no subject</em>}</span>
+                    <Checkbox
+                      className="mt-[.18rem]"
+                      accent="org"
+                      checked={on}
+                      onChange={() => toggle(p.rootExtId)}
+                    />
+                    <span className="propsubj max-w-full break-words whitespace-normal font-[var(--serif)] font-semibold">
+                      {p.subject ?? <em className="not-italic text-muted">no subject</em>}
+                    </span>
                   </label>
                   <span className="propmeta mt-[.15rem] text-[.7rem] text-muted">
                     {p.matched}/{p.entries} matched · {p.span ?? ""} · {p.query}
-                    {p.semantic ? ` · sim ${p.similarity?.toFixed(2) ?? "–"}${p.lexical ? " (hybrid)" : " (semantic)"}` : p.lexical ? " · word match" : ""}
+                    {p.semantic
+                      ? ` · sim ${p.similarity?.toFixed(2) ?? "–"}${p.lexical ? " (hybrid)" : " (semantic)"}`
+                      : p.lexical
+                        ? " · word match"
+                        : ""}
                   </span>
-                  <code className="proprowid mt-[.1rem] max-w-full break-words text-[.66rem] text-accent">{p.rootExtId}</code>
+                  <code className="proprowid mt-[.1rem] max-w-full break-words text-[.66rem] text-accent">
+                    {p.rootExtId}
+                  </code>
                 </div>
                 {/* Preview reads the thread as data, the same modal the search
                     page uses, so a proposal can be judged on its entries before
                     it is accepted. Kept out of the toggle label, so ticking it
                     and previewing it never fight over one hit area. */}
-                <Button type="button" className="mr-0 shrink-0 whitespace-nowrap px-[.6rem] py-[.3rem] text-[.72rem] font-semibold text-muted hover:border-accent hover:text-accent" aria-haspopup="dialog"
-                        onClick={() => setPreview(p)}>
+                <Button
+                  type="button"
+                  className="mr-0 shrink-0 whitespace-nowrap px-[.6rem] py-[.3rem] text-[.72rem] font-semibold text-muted hover:border-accent hover:text-accent"
+                  aria-haspopup="dialog"
+                  onClick={() => setPreview(p)}
+                >
                   Preview
                 </Button>
               </li>
@@ -357,15 +435,25 @@ function ProposalsModal({ proposals, open, refreshing, onClose, onAccept }: {
           })}
         </ul>
         <div className="proposals-foot flex justify-end gap-[.6rem] border-t border-line p-[.5rem_.8rem]">
-          <Button className="tbtn" type="button" disabled={refreshing || accepted.size === 0}
-                  onClick={() => onAccept([...accepted])}>
+          <Button
+            className="tbtn"
+            type="button"
+            disabled={refreshing || accepted.size === 0}
+            onClick={() => onAccept([...accepted])}
+          >
             {refreshing ? "accepting…" : `accept ${accepted.size}`}
           </Button>
-          <Button className="tbtn" type="button" disabled={refreshing}
-                  onClick={() => onAccept([...ids])}>
+          <Button
+            className="tbtn"
+            type="button"
+            disabled={refreshing}
+            onClick={() => onAccept([...ids])}
+          >
             accept all {proposals.length}
           </Button>
-          <Button className="tbtn" type="button" onClick={onClose} disabled={refreshing}>close</Button>
+          <Button className="tbtn" type="button" onClick={onClose} disabled={refreshing}>
+            close
+          </Button>
         </div>
       </DialogShell>
       {preview ? <ThreadPreview thread={preview} onClose={() => setPreview(null)} /> : null}

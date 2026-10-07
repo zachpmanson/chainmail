@@ -23,9 +23,14 @@ function SettingsSection({
   children: ReactNode;
 }) {
   return (
-    <section className="stsection min-w-0 rounded-[10px] border border-[var(--line)] bg-[var(--card)] px-4 py-[.95rem] max-[640px]:p-[.8rem]" aria-labelledby={id}>
+    <section
+      className="stsection min-w-0 rounded-[10px] border border-[var(--line)] bg-[var(--card)] px-4 py-[.95rem] max-[640px]:p-[.8rem]"
+      aria-labelledby={id}
+    >
       <header className="mb-[.7rem]">
-        <h2 className="m-0 text-[.91rem] font-semibold tracking-[-.01em]" id={id}>{title}</h2>
+        <h2 className="m-0 text-[.91rem] font-semibold tracking-[-.01em]" id={id}>
+          {title}
+        </h2>
         <p className="mt-1 text-[.74rem] leading-[1.45] text-[var(--muted)]">{description}</p>
       </header>
       {children}
@@ -52,9 +57,15 @@ function SettingRow({
         <h3 className="m-0 text-[.78rem] font-semibold">{title}</h3>
         <p className="mt-[.2rem] text-[.72rem] leading-[1.4] text-[var(--muted)]">{description}</p>
       </div>
-      <div className={`stsetting-value flex min-w-0 flex-col items-start gap-1${valueClassName ? ` ${valueClassName}` : ""}`}>
+      <div
+        className={`stsetting-value flex min-w-0 flex-col items-start gap-1${valueClassName ? ` ${valueClassName}` : ""}`}
+      >
         {children}
-        {note ? <p className="stsetting-note m-0 break-words text-[.7rem] leading-[1.4] text-[var(--muted)]">{note}</p> : null}
+        {note ? (
+          <p className="stsetting-note m-0 break-words text-[.7rem] leading-[1.4] text-[var(--muted)]">
+            {note}
+          </p>
+        ) : null}
       </div>
     </div>
   );
@@ -74,9 +85,16 @@ function GmailAccounts() {
       description="Connect the mailboxes Chainmail syncs. Disconnecting keeps already imported mail."
     >
       {auth.isError ? (
-        <p className="stmessage-error mt-[.65rem] rounded-sm border-l-[3px] border-l-red-700 bg-[var(--bg)] px-[.65rem] py-2 text-[.76rem] leading-[1.45] text-[var(--fg)] break-words mb-0" role="alert">{errText(auth.error)}</p>
+        <p
+          className="stmessage-error mt-[.65rem] rounded-sm border-l-[3px] border-l-red-700 bg-[var(--bg)] px-[.65rem] py-2 text-[.76rem] leading-[1.45] text-[var(--fg)] break-words mb-0"
+          role="alert"
+        >
+          {errText(auth.error)}
+        </p>
       ) : auth.isPending ? (
-        <p className="mt-[.65rem] mb-0 text-[.76rem] leading-[1.45] text-[var(--muted)]">Checking connected accounts…</p>
+        <p className="mt-[.65rem] mb-0 text-[.76rem] leading-[1.45] text-[var(--muted)]">
+          Checking connected accounts…
+        </p>
       ) : (
         <>
           {connected.length > 0 ? (
@@ -84,7 +102,10 @@ function GmailAccounts() {
               {connected.map((account) => {
                 const label = account.email || account.displayName;
                 return (
-                  <li className="flex items-center justify-between gap-3 border-b border-[var(--line)] py-[.55rem] text-xs break-words" key={account.id}>
+                  <li
+                    className="flex items-center justify-between gap-3 border-b border-[var(--line)] py-[.55rem] text-xs break-words"
+                    key={account.id}
+                  >
                     <span>{label}</span>
                     <Button
                       type="button"
@@ -92,10 +113,15 @@ function GmailAccounts() {
                       aria-label={`Disconnect ${label}`}
                       disabled={disconnect.isPending}
                       onClick={() => {
-                        const warning = account.id === "legacy"
-                          ? " This also removes the shared Docket token."
-                          : "";
-                        if (window.confirm(`Disconnect ${label}? Chainmail will stop syncing from this mailbox, but imported mail stays in the corpus.${warning}`)) {
+                        const warning =
+                          account.id === "legacy"
+                            ? " This also removes the shared Docket token."
+                            : "";
+                        if (
+                          window.confirm(
+                            `Disconnect ${label}? Chainmail will stop syncing from this mailbox, but imported mail stays in the corpus.${warning}`,
+                          )
+                        ) {
                           disconnect.mutate({ params: { path: { accountId: account.id } } });
                         }
                       }}
@@ -107,10 +133,15 @@ function GmailAccounts() {
               })}
             </ul>
           ) : (
-            <p className="mt-[.65rem] mb-0 text-[.76rem] leading-[1.45] text-[var(--muted)]">No Gmail accounts connected. Mailbox syncing is paused.</p>
+            <p className="mt-[.65rem] mb-0 text-[.76rem] leading-[1.45] text-[var(--muted)]">
+              No Gmail accounts connected. Mailbox syncing is paused.
+            </p>
           )}
           {disconnect.isError ? (
-            <p className="mt-[.65rem] rounded-sm border-l-[3px] border-l-red-700 bg-[var(--bg)] px-[.65rem] py-2 text-[.76rem] leading-[1.45] text-[var(--fg)] break-words mb-0" role="alert">
+            <p
+              className="mt-[.65rem] rounded-sm border-l-[3px] border-l-red-700 bg-[var(--bg)] px-[.65rem] py-2 text-[.76rem] leading-[1.45] text-[var(--fg)] break-words mb-0"
+              role="alert"
+            >
               Could not disconnect: {errText(disconnect.error)}
             </p>
           ) : null}
@@ -234,10 +265,22 @@ function meLine(me: { person: string; addresses: string[] }): string {
  * yet and the answer is not "no".
  */
 const BADGES: Record<ServiceStatus["status"], { word: string; cls: string }> = {
-  ok: { word: "logged in", cls: "inline-flex whitespace-nowrap rounded-full border border-current px-[.48rem] py-[.13rem] text-[.64rem] font-bold text-green-800" },
-  "needs-auth": { word: "needs auth", cls: "inline-flex whitespace-nowrap rounded-full border border-current px-[.48rem] py-[.13rem] text-[.64rem] font-bold text-amber-700" },
-  down: { word: "down", cls: "inline-flex whitespace-nowrap rounded-full border border-current px-[.48rem] py-[.13rem] text-[.64rem] font-bold text-red-700" },
-  unchecked: { word: "unchecked", cls: "inline-flex whitespace-nowrap rounded-full border border-current px-[.48rem] py-[.13rem] text-[.64rem] font-bold text-[var(--muted)]" },
+  ok: {
+    word: "logged in",
+    cls: "inline-flex whitespace-nowrap rounded-full border border-current px-[.48rem] py-[.13rem] text-[.64rem] font-bold text-green-800",
+  },
+  "needs-auth": {
+    word: "needs auth",
+    cls: "inline-flex whitespace-nowrap rounded-full border border-current px-[.48rem] py-[.13rem] text-[.64rem] font-bold text-amber-700",
+  },
+  down: {
+    word: "down",
+    cls: "inline-flex whitespace-nowrap rounded-full border border-current px-[.48rem] py-[.13rem] text-[.64rem] font-bold text-red-700",
+  },
+  unchecked: {
+    word: "unchecked",
+    cls: "inline-flex whitespace-nowrap rounded-full border border-current px-[.48rem] py-[.13rem] text-[.64rem] font-bold text-[var(--muted)]",
+  },
 };
 
 function OneRow({ svc }: { svc: ServiceStatus }) {
@@ -246,7 +289,11 @@ function OneRow({ svc }: { svc: ServiceStatus }) {
     <li className="flex flex-wrap items-center gap-x-[.7rem] gap-y-[.45rem] py-[.55rem]">
       <span className={badge.cls}>{badge.word}</span>
       <span className="min-w-32 text-[.8rem] font-semibold">{svc.label}</span>
-      {svc.detail ? <span className="flex-[1_1_12rem] break-words text-[.72rem] text-[var(--muted)]">{svc.detail}</span> : null}
+      {svc.detail ? (
+        <span className="flex-[1_1_12rem] break-words text-[.72rem] text-[var(--muted)]">
+          {svc.detail}
+        </span>
+      ) : null}
     </li>
   );
 }
@@ -267,8 +314,13 @@ function CorpusStats({ s }: { s: Stats }) {
   return (
     <dl className="mt-[.1rem] grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-2">
       {rows.map(([term, def]) => (
-        <div className="min-w-0 rounded-lg border border-[var(--line)] bg-[var(--bg)] px-[.7rem] py-[.65rem]" key={term}>
-          <dt className="break-words text-[.63rem] font-bold uppercase tracking-[.07em] text-[var(--muted)]">{term}</dt>
+        <div
+          className="min-w-0 rounded-lg border border-[var(--line)] bg-[var(--bg)] px-[.7rem] py-[.65rem]"
+          key={term}
+        >
+          <dt className="break-words text-[.63rem] font-bold uppercase tracking-[.07em] text-[var(--muted)]">
+            {term}
+          </dt>
           <dd className="mt-[.3rem] break-words text-base font-semibold tabular-nums">{def}</dd>
         </div>
       ))}
@@ -339,7 +391,12 @@ export function SettingsView() {
       </header>
 
       {save.isError ? (
-        <p className="mt-[.65rem] rounded-sm border-l-[3px] border-l-red-700 bg-[var(--bg)] px-[.65rem] py-2 text-[.76rem] leading-[1.45] text-[var(--fg)] break-words mb-0" role="alert">{errText(save.error)}</p>
+        <p
+          className="mt-[.65rem] rounded-sm border-l-[3px] border-l-red-700 bg-[var(--bg)] px-[.65rem] py-2 text-[.76rem] leading-[1.45] text-[var(--fg)] break-words mb-0"
+          role="alert"
+        >
+          {errText(save.error)}
+        </p>
       ) : null}
 
       <GmailAccounts />
@@ -350,15 +407,24 @@ export function SettingsView() {
         description={`Run corpus status to refresh.${status.data?.checkedAt ? ` Last checked ${when(status.data.checkedAt)}.` : " Nothing measured yet."}`}
       >
         {status.isError ? (
-          <p className="mt-[.65rem] rounded-sm border-l-[3px] border-l-red-700 bg-[var(--bg)] px-[.65rem] py-2 text-[.76rem] leading-[1.45] text-[var(--fg)] break-words mb-0" role="alert">{errText(status.error)}</p>
+          <p
+            className="mt-[.65rem] rounded-sm border-l-[3px] border-l-red-700 bg-[var(--bg)] px-[.65rem] py-2 text-[.76rem] leading-[1.45] text-[var(--fg)] break-words mb-0"
+            role="alert"
+          >
+            {errText(status.error)}
+          </p>
         ) : null}
         <ul className="mt-[.7rem] list-none border-t border-[var(--line)] p-0">
           {status.isPending ? (
-            <li className="flex flex-wrap items-center gap-x-[.7rem] gap-y-[.45rem] py-[.55rem] text-[.78rem] text-[var(--muted)]">Checking services…</li>
+            <li className="flex flex-wrap items-center gap-x-[.7rem] gap-y-[.45rem] py-[.55rem] text-[.78rem] text-[var(--muted)]">
+              Checking services…
+            </li>
           ) : status.data?.services.length ? (
             status.data.services.map((svc) => <OneRow key={svc.id} svc={svc} />)
           ) : (
-            <li className="flex flex-wrap items-center gap-x-[.7rem] gap-y-[.45rem] py-[.55rem] text-[.78rem] text-[var(--muted)]">No services reported.</li>
+            <li className="flex flex-wrap items-center gap-x-[.7rem] gap-y-[.45rem] py-[.55rem] text-[.78rem] text-[var(--muted)]">
+              No services reported.
+            </li>
           )}
         </ul>
       </SettingsSection>
@@ -372,10 +438,15 @@ export function SettingsView() {
           <SettingRow
             title="Sync frequency"
             description="How often Chainmail checks Gmail for new messages."
-            note={status.data?.nextSlurpAt
-              ? `Next sweep ${when(status.data.nextSlurpAt)}.`
-              : every === "off" ? "No automatic sweeps; refresh when needed."
-                : every === "" ? "Reading the current schedule…" : "No automatic sweep is scheduled on this host."}
+            note={
+              status.data?.nextSlurpAt
+                ? `Next sweep ${when(status.data.nextSlurpAt)}.`
+                : every === "off"
+                  ? "No automatic sweeps; refresh when needed."
+                  : every === ""
+                    ? "Reading the current schedule…"
+                    : "No automatic sweep is scheduled on this host."
+            }
           >
             <SelectInput
               className="min-w-[14rem] max-w-full cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg)] px-[.55rem] py-[.38rem] text-[.78rem] disabled:cursor-default disabled:opacity-60 max-[640px]:min-w-[min(100%,14rem)]"
@@ -386,7 +457,9 @@ export function SettingsView() {
             >
               {every === "" ? <option value="">…</option> : null}
               {cadenceOptions(every).map(([word, label]) => (
-                <option key={word} value={word}>{label}</option>
+                <option key={word} value={word}>
+                  {label}
+                </option>
               ))}
             </SelectInput>
           </SettingRow>
@@ -401,10 +474,14 @@ export function SettingsView() {
               mode="default"
               ariaLabel="Which folder the home page opens in"
               disabled={busy}
-              onPick={(name, accountId) => save.mutate({ body: {
-                defaultFolder: name,
-                defaultFolderAccountId: accountId ?? "",
-              } })}
+              onPick={(name, accountId) =>
+                save.mutate({
+                  body: {
+                    defaultFolder: name,
+                    defaultFolderAccountId: accountId ?? "",
+                  },
+                })
+              }
             />
           </SettingRow>
         </div>
@@ -434,11 +511,15 @@ export function SettingsView() {
           <SettingRow
             title="Your mail comes from"
             description="Choose the person whose messages should be marked as yours."
-            note={!meKnown
-              ? people.isError ? "Could not read the people in this corpus."
-                : "Reading your identity…"
-              : me.value === "" ? "Nobody is selected, so no messages are marked as yours."
-                : `${meLine(me)}.`}
+            note={
+              !meKnown
+                ? people.isError
+                  ? "Could not read the people in this corpus."
+                  : "Reading your identity…"
+                : me.value === ""
+                  ? "Nobody is selected, so no messages are marked as yours."
+                  : `${meLine(me)}.`
+            }
           >
             <SelectInput
               className="min-w-[14rem] max-w-96 cursor-pointer rounded-md border border-[var(--line)] bg-[var(--bg)] px-[.55rem] py-[.38rem] text-[.78rem] disabled:cursor-default disabled:opacity-60 max-[640px]:min-w-[min(100%,14rem)]"
@@ -447,14 +528,23 @@ export function SettingsView() {
               disabled={busy || people.isPending}
               onChange={(e) => saveMe(e.target.value)}
             >
-              {people.isPending ? null : me.options.map(([value, label]) => (
-                <option key={value} value={value}>{label}</option>
-              ))}
+              {people.isPending
+                ? null
+                : me.options.map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
             </SelectInput>
           </SettingRow>
         </div>
         {people.isError ? (
-          <p className="mt-[.65rem] rounded-sm border-l-[3px] border-l-red-700 bg-[var(--bg)] px-[.65rem] py-2 text-[.76rem] leading-[1.45] text-[var(--fg)] break-words mb-0" role="alert">{errText(people.error)}</p>
+          <p
+            className="mt-[.65rem] rounded-sm border-l-[3px] border-l-red-700 bg-[var(--bg)] px-[.65rem] py-2 text-[.76rem] leading-[1.45] text-[var(--fg)] break-words mb-0"
+            role="alert"
+          >
+            {errText(people.error)}
+          </p>
         ) : null}
       </SettingsSection>
       <SettingsSection
@@ -463,11 +553,18 @@ export function SettingsView() {
         description="A snapshot of the mail and identities currently stored."
       >
         {stats.isError ? (
-          <p className="mt-[.65rem] rounded-sm border-l-[3px] border-l-red-700 bg-[var(--bg)] px-[.65rem] py-2 text-[.76rem] leading-[1.45] text-[var(--fg)] break-words mb-0" role="alert">{errText(stats.error)}</p>
+          <p
+            className="mt-[.65rem] rounded-sm border-l-[3px] border-l-red-700 bg-[var(--bg)] px-[.65rem] py-2 text-[.76rem] leading-[1.45] text-[var(--fg)] break-words mb-0"
+            role="alert"
+          >
+            {errText(stats.error)}
+          </p>
         ) : stats.data ? (
           <CorpusStats s={stats.data} />
         ) : (
-          <p className="mt-[.65rem] mb-0 text-[.76rem] leading-[1.45] text-[var(--muted)]">Reading the corpus…</p>
+          <p className="mt-[.65rem] mb-0 text-[.76rem] leading-[1.45] text-[var(--muted)]">
+            Reading the corpus…
+          </p>
         )}
       </SettingsSection>
 

@@ -77,7 +77,9 @@ export function whenShort(stamp?: string, now = new Date()): string {
   const at = new Date(stamp);
   if (Number.isNaN(at.getTime())) return stamp;
   const same = (a: Date, b: Date) =>
-    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate();
   if (same(at, now)) return clock(at);
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);

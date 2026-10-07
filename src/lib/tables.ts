@@ -16,12 +16,7 @@
 /** The extensions and types that can be a table at all. A `.txt` is prose until
  *  proven otherwise, and prose with commas in it must not become a spreadsheet. */
 const NAMED = /\.(csv|tsv|tab|psv)$/i;
-const TYPED = new Set([
-  "text/csv",
-  "application/csv",
-  "text/tab-separated-values",
-  "text/tsv",
-]);
+const TYPED = new Set(["text/csv", "application/csv", "text/tab-separated-values", "text/tsv"]);
 
 /** What a window will draw before it stops being a table and starts being a
  *  wall: rows to scroll, columns to read across. The file itself is a click away
@@ -73,14 +68,33 @@ export function parseDelimited(body: string, delim: string): string[][] {
   for (let i = 0; i < body.length; i++) {
     const ch = body[i]!;
     if (quoted) {
-      if (ch !== '"') { field += ch; continue; }
-      if (body[i + 1] === '"') { field += '"'; i++; continue; }
+      if (ch !== '"') {
+        field += ch;
+        continue;
+      }
+      if (body[i + 1] === '"') {
+        field += '"';
+        i++;
+        continue;
+      }
       quoted = false;
       continue;
     }
-    if (ch === '"' && !open) { quoted = true; open = true; continue; }
-    if (ch === delim) { row.push(field); field = ""; open = false; continue; }
-    if (ch === "\n") { end(); continue; }
+    if (ch === '"' && !open) {
+      quoted = true;
+      open = true;
+      continue;
+    }
+    if (ch === delim) {
+      row.push(field);
+      field = "";
+      open = false;
+      continue;
+    }
+    if (ch === "\n") {
+      end();
+      continue;
+    }
     // A carriage return is the other half of a CRLF and nothing else here: a
     // bare one inside a quoted field is content, and is only reachable above.
     if (ch === "\r") continue;
@@ -101,7 +115,8 @@ export function parseDelimited(body: string, delim: string): string[][] {
  *  shape is built on it. */
 export function chooseDelimiter(body: string, name: string, type: string): string | null {
   const tabby =
-    /\.(tsv|tab)$/i.test(name) || type.split(";")[0]!.trim().toLowerCase() === "text/tab-separated-values";
+    /\.(tsv|tab)$/i.test(name) ||
+    type.split(";")[0]!.trim().toLowerCase() === "text/tab-separated-values";
   return tabby ? "\t" : sniff(body);
 }
 

@@ -222,9 +222,7 @@ async function searchFromInbox(text: string) {
   const box = openSearch();
   fireEvent.change(box, { target: { value: text } });
   fireEvent.submit(box.closest("form")!);
-  await waitFor(() =>
-    expect((openSearch() as HTMLInputElement).value).toBe(text),
-  );
+  await waitFor(() => expect((openSearch() as HTMLInputElement).value).toBe(text));
 }
 
 /** The common building mocks: search answers with the two chains, a build with
@@ -253,8 +251,18 @@ const STATUS = {
   nextSlurpAt: "2026-08-22T16:00:00Z",
   services: [
     { id: "mail", label: "Gmail", status: "ok" },
-    { id: "slack", label: "Slack (slackdump)", status: "needs-auth", detail: "run the slackdump import" },
-    { id: "embed", label: "Embedding daemon (ollama)", status: "down", detail: "start it with `ollama serve`" },
+    {
+      id: "slack",
+      label: "Slack (slackdump)",
+      status: "needs-auth",
+      detail: "run the slackdump import",
+    },
+    {
+      id: "embed",
+      label: "Embedding daemon (ollama)",
+      status: "down",
+      detail: "start it with `ollama serve`",
+    },
   ],
 };
 
@@ -264,7 +272,9 @@ const STATS = {
   people: 214,
   chainRoots: 1024,
   unresolved: 13,
-  embeddings: [{ model: "nomic-embed-text", dim: 768, vectors: 4100, skipped: 120, stale: 0, eligible: 61 }],
+  embeddings: [
+    { model: "nomic-embed-text", dim: 768, vectors: 4100, skipped: 120, stale: 0, eligible: 61 },
+  ],
 };
 
 /**
@@ -302,7 +312,12 @@ const statusHandler: Handler = (c) => {
   // The folder control on this screen reads the same label list the home page's
   // own folder button does.
   if (p === "/v1/labels") {
-    return json(200, { labels: [{ name: "INBOX", messages: 210 }, { name: "Work", messages: 41 }] });
+    return json(200, {
+      labels: [
+        { name: "INBOX", messages: 210 },
+        { name: "Work", messages: 41 },
+      ],
+    });
   }
   // The people the corpus holds, for the control that says which of them the
   // reader is — and, on any page, for the nav's search (see PEOPLE).
@@ -517,11 +532,11 @@ describe("reading a candidate beside the results", () => {
       }),
     );
 
-    await waitFor(() => expect(pane().querySelector(".ibread-subj")!.textContent).toBe("Warehouse lease renewal"));
     await waitFor(() =>
-      expect(
-        calls.some((c) => decodeURIComponent(pathOf(c)) === `/v1/chains/${other}`),
-      ).toBe(true),
+      expect(pane().querySelector(".ibread-subj")!.textContent).toBe("Warehouse lease renewal"),
+    );
+    await waitFor(() =>
+      expect(calls.some((c) => decodeURIComponent(pathOf(c)) === `/v1/chains/${other}`)).toBe(true),
     );
     // The address carries it, so a reload or a shared link lands on the same
     // candidate rather than back at the top of the results.
@@ -564,11 +579,11 @@ describe("reading a candidate beside the results", () => {
 
   it("reads a candidate named on the URL, and hands the list back when it is closed", async () => {
     handler = () => json(200, { mode: "lexical", chains: CHAINS });
-    const router = await mountApp(
-      `/?q=cutover&open=${encodeURIComponent(CHAINS[1]!.rootExtId)}`,
-    );
+    const router = await mountApp(`/?q=cutover&open=${encodeURIComponent(CHAINS[1]!.rootExtId)}`);
 
-    await waitFor(() => expect(pane().querySelector(".ibread-subj")!.textContent).toBe("Warehouse lease renewal"));
+    await waitFor(() =>
+      expect(pane().querySelector(".ibread-subj")!.textContent).toBe("Warehouse lease renewal"),
+    );
 
     // The pane's own way back, which is the whole of the list on a narrow
     // screen: clearing the address is what un-picks it.
@@ -743,7 +758,9 @@ describe("building a page from the chosen set", () => {
 
     const status = await screen.findByRole("status");
     expect(status.textContent).toContain("boilerplate");
-    expect((await screen.findByRole("button", { name: "Braiding…" })).hasAttribute("disabled")).toBe(true);
+    expect(
+      (await screen.findByRole("button", { name: "Braiding…" })).hasAttribute("disabled"),
+    ).toBe(true);
 
     await act(async () => {
       release(json(200, SPEC));
@@ -777,7 +794,14 @@ describe("the status route /settings", () => {
     const heading = screen.getByRole("heading", { name: "Settings", level: 1 });
     expect(heading.closest("header")?.textContent).toBe("Settings");
     expect(screen.queryByText("Preferences")).toBeNull();
-    for (const name of ["Gmail accounts", "Connected services", "Mailbox", "Reading", "Corpus", "Appearance"]) {
+    for (const name of [
+      "Gmail accounts",
+      "Connected services",
+      "Mailbox",
+      "Reading",
+      "Corpus",
+      "Appearance",
+    ]) {
       expect(screen.getByRole("region", { name })).toBeTruthy();
     }
     expect(document.querySelectorAll(".stsection")).toHaveLength(6);
@@ -815,12 +839,15 @@ describe("the sweep cadence on /settings", () => {
     handler = statusHandler;
     await mountApp("/settings");
 
-    const control = (await screen.findByLabelText("How often to sweep the mailbox")) as HTMLSelectElement;
+    const control = (await screen.findByLabelText(
+      "How often to sweep the mailbox",
+    )) as HTMLSelectElement;
     await waitFor(() => expect(control.value).toBe("10m"));
     // The option label, not the word: the page says "10 minutes" and stores "10m".
     expect(control.selectedOptions[0]!.textContent).toBe("10 minutes");
 
-    const note = control.closest(".stsetting-row")!.querySelector(".stsetting-note")!.textContent ?? "";
+    const note =
+      control.closest(".stsetting-row")!.querySelector(".stsetting-note")!.textContent ?? "";
     expect(note).toContain("Next sweep");
   });
 
@@ -829,14 +856,17 @@ describe("the sweep cadence on /settings", () => {
     handler = (c) => {
       const p = pathOf(c);
       if (p === "/v1/settings") {
-        if (c.method === "POST") stored = (JSON.parse(c.body ?? "{}") as { slurpEvery?: string }).slurpEvery ?? "";
+        if (c.method === "POST")
+          stored = (JSON.parse(c.body ?? "{}") as { slurpEvery?: string }).slurpEvery ?? "";
         return json(200, { slurpEvery: stored });
       }
       return statusHandler(c);
     };
     await mountApp("/settings");
 
-    const control = (await screen.findByLabelText("How often to sweep the mailbox")) as HTMLSelectElement;
+    const control = (await screen.findByLabelText(
+      "How often to sweep the mailbox",
+    )) as HTMLSelectElement;
     await waitFor(() => expect(control.value).toBe("10m"));
     fireEvent.change(control, { target: { value: "30m" } });
 
@@ -856,7 +886,9 @@ describe("the settings rows on /settings", () => {
     handler = statusHandler;
     await mountApp("/settings");
 
-    const sweep = (await screen.findByLabelText("How often to sweep the mailbox")) as HTMLSelectElement;
+    const sweep = (await screen.findByLabelText(
+      "How often to sweep the mailbox",
+    )) as HTMLSelectElement;
     await waitFor(() => expect(sweep.value).toBe("10m"));
     const sweepRow = sweep.closest(".stsetting-row")!;
     expect(sweepRow.querySelector(".stsetting-copy h3")!.textContent).toBe("Sync frequency");
@@ -875,13 +907,17 @@ describe("the settings rows on /settings", () => {
 
     const layout = (await screen.findByLabelText("Thread list layout")) as HTMLSelectElement;
     expect(layout.tagName).toBe("SELECT");
-    expect(Array.from(layout.options).map((option) => option.textContent)).toEqual(["Detailed", "Compact"]);
+    expect(Array.from(layout.options).map((option) => option.textContent)).toEqual([
+      "Detailed",
+      "Compact",
+    ]);
     expect(layout.value).toBe("detailed");
 
     fireEvent.change(layout, { target: { value: "compact" } });
     await waitFor(() => expect(localStorage.getItem("cm-compact")).toBe("1"));
-    expect(layout.closest(".stsetting-row")!.querySelector(".stsetting-note")!.textContent)
-      .toBe("One line per thread.");
+    expect(layout.closest(".stsetting-row")!.querySelector(".stsetting-note")!.textContent).toBe(
+      "One line per thread.",
+    );
     localStorage.removeItem("cm-compact");
   });
 
@@ -893,7 +929,9 @@ describe("the settings rows on /settings", () => {
     expect(folder.getAttribute("aria-haspopup")).toBe("menu");
     const row = folder.closest(".stsetting-row")!;
     expect(row.querySelector(".stsetting-copy h3")!.textContent).toBe("Home folder");
-    expect(row.querySelector(".stsetting-value")!.classList.contains("stsetting-value-fill")).toBe(true);
+    expect(row.querySelector(".stsetting-value")!.classList.contains("stsetting-value-fill")).toBe(
+      true,
+    );
     expect(row.closest("section")!.getAttribute("aria-labelledby")).toBe("mailbox-heading");
   });
 });
@@ -924,7 +962,10 @@ describe("the default folder on /settings", () => {
       const p = pathOf(c);
       if (p === "/v1/settings") {
         if (c.method === "POST") {
-          const body = JSON.parse(c.body ?? "{}") as { defaultFolder?: string; defaultFolderAccountId?: string };
+          const body = JSON.parse(c.body ?? "{}") as {
+            defaultFolder?: string;
+            defaultFolderAccountId?: string;
+          };
           stored = body.defaultFolder ?? "";
           storedAccountId = body.defaultFolderAccountId ?? "";
         }
@@ -985,13 +1026,14 @@ describe("the default folder on /settings", () => {
           defaultFolderAccountId: accountId,
         });
       }
-      if (p === "/auth/status") return json(200, {
-        signed_in: true,
-        accounts: [
-          { id: "work", email: "work@example.test", signedIn: true },
-          { id: "personal", email: "personal@example.test", signedIn: true },
-        ],
-      });
+      if (p === "/auth/status")
+        return json(200, {
+          signed_in: true,
+          accounts: [
+            { id: "work", email: "work@example.test", signedIn: true },
+            { id: "personal", email: "personal@example.test", signedIn: true },
+          ],
+        });
       return statusHandler(c);
     };
     await mountApp("/settings");
@@ -999,7 +1041,9 @@ describe("the default folder on /settings", () => {
     const control = await screen.findByLabelText("Which folder the home page opens in");
     await waitFor(() => expect(control.textContent).toContain("work@example.test"));
     fireEvent.click(control);
-    await waitFor(() => expect(screen.getAllByRole("menuitem", { name: /^INBOX/ })).toHaveLength(2));
+    await waitFor(() =>
+      expect(screen.getAllByRole("menuitem", { name: /^INBOX/ })).toHaveLength(2),
+    );
     const sameNamedFolders = screen.getAllByRole("menuitem", { name: /^INBOX/ });
     fireEvent.click(sameNamedFolders[1]!);
 
@@ -1046,7 +1090,8 @@ describe("the default folder on /settings", () => {
  * so the tests assert the id travels and the addresses come back.
  */
 describe("who you are on /settings", () => {
-  const settingsWrites = () => calls.filter((c) => pathOf(c) === "/v1/settings" && c.method === "POST");
+  const settingsWrites = () =>
+    calls.filter((c) => pathOf(c) === "/v1/settings" && c.method === "POST");
   // The addresses each person is known by, as the server would resolve them. The
   // client neither sends these nor derives them: it shows what it was served.
   const ADDRESSES: Record<number, string[]> = {
@@ -1068,7 +1113,7 @@ describe("who you are on /settings", () => {
         if (c.method === "POST") {
           const body = JSON.parse(c.body ?? "{}") as { mePersonId?: number };
           mePersonId = body.mePersonId === 0 ? undefined : body.mePersonId;
-          me = mePersonId === undefined ? [] : ADDRESSES[mePersonId] ?? [];
+          me = mePersonId === undefined ? [] : (ADDRESSES[mePersonId] ?? []);
         }
         return json(200, {
           slurpEvery: "10m",
@@ -1093,9 +1138,9 @@ describe("who you are on /settings", () => {
     // name is not offered: no mail came from them, so nothing could be marked.
     await waitFor(() => expect(options(control)).toEqual(["Nobody", "Ada Byron", "Bo Halvorsen"]));
     expect(control.value).toBe("");
-    expect(control.closest(".stsetting-row")!.querySelector(".stsetting-note")!.textContent).toContain(
-      "Nobody is selected",
-    );
+    expect(
+      control.closest(".stsetting-row")!.querySelector(".stsetting-note")!.textContent,
+    ).toContain("Nobody is selected");
     expect(settingsWrites()).toHaveLength(0);
 
     fireEvent.change(control, { target: { value: "1" } });
@@ -1110,9 +1155,9 @@ describe("who you are on /settings", () => {
     // shows, and the aliases the corpus resolved them to. It is the row's third
     // column, so the control's own cell only ever holds the control.
     await waitFor(() => expect(control.selectedOptions[0]!.textContent).toBe("Ada Byron"));
-    expect(control.closest(".stsetting-row")!.querySelector(".stsetting-note")!.textContent).toContain(
-      "Ada Byron: ada@okoye.example, ada@work.example",
-    );
+    expect(
+      control.closest(".stsetting-row")!.querySelector(".stsetting-note")!.textContent,
+    ).toContain("Ada Byron: ada@okoye.example, ada@work.example");
   });
 
   it("opens on the person that is stored, and reads it without writing", async () => {
@@ -1135,9 +1180,18 @@ describe("who you are on /settings", () => {
     await mountApp("/settings");
 
     const control = (await screen.findByLabelText("Which person you are")) as HTMLSelectElement;
-    await waitFor(() => expect(control.selectedOptions[0]!.textContent).toBe("old@elsewhere.example"));
-    expect(options(control)).toEqual(["Nobody", "Ada Byron", "Bo Halvorsen", "old@elsewhere.example"]);
-    expect(control.closest(".stsetting-row")!.querySelector(".stsetting-note")!.textContent).toContain("old@elsewhere.example");
+    await waitFor(() =>
+      expect(control.selectedOptions[0]!.textContent).toBe("old@elsewhere.example"),
+    );
+    expect(options(control)).toEqual([
+      "Nobody",
+      "Ada Byron",
+      "Bo Halvorsen",
+      "old@elsewhere.example",
+    ]);
+    expect(
+      control.closest(".stsetting-row")!.querySelector(".stsetting-note")!.textContent,
+    ).toContain("old@elsewhere.example");
 
     // Nobody is a choice, asked for as the zero that is not a person id, and it
     // clears the list rather than leaving it to be read again afterwards.
@@ -1145,9 +1199,9 @@ describe("who you are on /settings", () => {
     await waitFor(() => expect(settingsWrites()).toHaveLength(1));
     expect(stored(settingsWrites()[0]!)).toEqual({ mePersonId: 0 });
     await waitFor(() => expect(control.value).toBe(""));
-    expect(control.closest(".stsetting-row")!.querySelector(".stsetting-note")!.textContent).toContain(
-      "Nobody is selected",
-    );
+    expect(
+      control.closest(".stsetting-row")!.querySelector(".stsetting-note")!.textContent,
+    ).toContain("Nobody is selected");
   });
 });
 
@@ -1269,7 +1323,9 @@ describe("the site navigation", () => {
 
     expect(screen.getByText("mira@loomworks.example")).toBeTruthy();
     expect(screen.getByRole("button", { name: "remove mira@loomworks.example" })).toBeTruthy();
-    expect((screen.getByRole("button", { name: "Review message" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(
+      (screen.getByRole("button", { name: "Review message" }) as HTMLButtonElement).disabled,
+    ).toBe(false);
   });
 
   it("names the site, and that name is the link home", async () => {
@@ -1331,9 +1387,7 @@ describe("the site navigation", () => {
     // invisible until somebody presses again.
     let release: (r: Response) => void = () => {};
     handler = (c) =>
-      pathOf(c) === "/v1/slurp"
-        ? new Promise<Response>((res) => (release = res))
-        : buildHandler(c);
+      pathOf(c) === "/v1/slurp" ? new Promise<Response>((res) => (release = res)) : buildHandler(c);
 
     click(screen.getByRole("button", { name: "Refresh" }));
 
@@ -1378,7 +1432,9 @@ describe("the site navigation", () => {
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
     handler = (c) =>
       pathOf(c) === "/v1/slurp"
-        ? json(409, { error: "a sweep is already running: the mailbox is being ingested right now" })
+        ? json(409, {
+            error: "a sweep is already running: the mailbox is being ingested right now",
+          })
         : buildHandler(c);
     await mountApp("/");
     await screen.findByText("Loom cutover schedule");
@@ -1396,7 +1452,9 @@ describe("the specs index /specs", () => {
     handler = specsHandler;
     await mountApp("/specs");
 
-    await waitFor(() => expect(calls.some((c) => pathOf(c) === "/v1/specs" && c.method === "GET")).toBe(true));
+    await waitFor(() =>
+      expect(calls.some((c) => pathOf(c) === "/v1/specs" && c.method === "GET")).toBe(true),
+    );
 
     // Each title is shown and rates its own link to /view/<name>.
     expect(await screen.findAllByText("Loom cutover")).toHaveLength(2);
@@ -1445,7 +1503,9 @@ describe("the render route /view/<name>", () => {
         : json(500, { error: "unexpected call" });
     await mountApp("/view/loom-cutover");
 
-    await waitFor(() => expect(calls.some((c) => pathOf(c) === "/v1/specs/loom-cutover")).toBe(true));
+    await waitFor(() =>
+      expect(calls.some((c) => pathOf(c) === "/v1/specs/loom-cutover")).toBe(true),
+    );
     await screen.findByText("Loom cutover");
     // No back button: a page under /view/<name> just is, it was not the result
     // of a search.
@@ -1537,7 +1597,8 @@ describe("pressing refresh on a saved page", () => {
 
   it("fetches from the mailbox before it re-derives, and shows what came back", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
-    handler = refreshHandler({ slurp: () => json(200, { report: TRANSCRIPT }) });    await mountApp("/view/loom-cutover");
+    handler = refreshHandler({ slurp: () => json(200, { report: TRANSCRIPT }) });
+    await mountApp("/view/loom-cutover");
     await screen.findByText("Loom cutover");
 
     click(screen.getByRole("button", { name: "Re-derive this page from the corpus" }));
@@ -1553,10 +1614,7 @@ describe("pressing refresh on a saved page", () => {
     // The rebuild still reports itself, and the fetch's own transcript survives
     // alongside it — in the console now, not a corner box.
     await waitFor(() =>
-      expect(log.mock.calls.map((c) => c[0])).toEqual([
-        TRANSCRIPT.trim(),
-        "already up to date",
-      ]),
+      expect(log.mock.calls.map((c) => c[0])).toEqual([TRANSCRIPT.trim(), "already up to date"]),
     );
   });
 
@@ -1568,7 +1626,8 @@ describe("pressing refresh on a saved page", () => {
     handler = refreshHandler({
       slurp: () =>
         json(403, {
-          error: "slurping is disabled: this server was started without -slurp, so it cannot reach the work mailbox.",
+          error:
+            "slurping is disabled: this server was started without -slurp, so it cannot reach the work mailbox.",
         }),
     });
     await mountApp("/view/loom-cutover");
@@ -1577,13 +1636,9 @@ describe("pressing refresh on a saved page", () => {
     click(screen.getByRole("button", { name: "Re-derive this page from the corpus" }));
 
     await waitFor(() =>
-      expect(err).toHaveBeenCalledWith(
-        expect.stringMatching(/no mailbox reach on this host/),
-      ),
+      expect(err).toHaveBeenCalledWith(expect.stringMatching(/no mailbox reach on this host/)),
     );
-    await waitFor(() =>
-      expect(log.mock.calls.map((c) => c[0])).toEqual(["already up to date"]),
-    );
+    await waitFor(() => expect(log.mock.calls.map((c) => c[0])).toEqual(["already up to date"]));
   });
 
   it("reports a failed ingest without swallowing it", async () => {
@@ -1639,16 +1694,18 @@ describe("downloading a file the page does not hold yet", () => {
     unranked: [],
   };
 
-  const handlerWith = (pull: () => Response): Handler => (c) => {
-    const p = pathOf(c);
-    if (p === "/v1/specs/loom-cutover") return json(200, PULL_SPEC);
-    if (p === "/v1/media/pull" && c.method === "POST") return pull();
-    if (p === "/v1/refresh" && c.method === "POST") return json(200, { spec: PULL_SPEC, report });
-    // The bytes, once they are stored: the window reads them from this host.
-    if (p.startsWith("/v1/attachments/"))
-      return new Response(SHEET, { status: 200, headers: { "content-type": "text/csv" } });
-    return json(500, { error: `unexpected call to ${c.method} ${p}` });
-  };
+  const handlerWith =
+    (pull: () => Response): Handler =>
+    (c) => {
+      const p = pathOf(c);
+      if (p === "/v1/specs/loom-cutover") return json(200, PULL_SPEC);
+      if (p === "/v1/media/pull" && c.method === "POST") return pull();
+      if (p === "/v1/refresh" && c.method === "POST") return json(200, { spec: PULL_SPEC, report });
+      // The bytes, once they are stored: the window reads them from this host.
+      if (p.startsWith("/v1/attachments/"))
+        return new Response(SHEET, { status: 200, headers: { "content-type": "text/csv" } });
+      return json(500, { error: `unexpected call to ${c.method} ${p}` });
+    };
 
   /** The chip in the bubble's own strip, which is the download. The sources panel
    *  lists the same file by name, and it is not the control being pressed. */
@@ -1720,9 +1777,10 @@ describe("downloading a file the page does not hold yet", () => {
     });
     expect(win.querySelector(".popcap")!.textContent).toBe("shed.csv");
     await waitFor(() =>
-      expect(
-        [...win.querySelectorAll(".poptable tbody td")].map((td) => td.textContent),
-      ).toEqual(["Nova", "41.2"]),
+      expect([...win.querySelectorAll(".poptable tbody td")].map((td) => td.textContent)).toEqual([
+        "Nova",
+        "41.2",
+      ]),
     );
     // The chip now points at this host, which is what made the window possible.
     expect(chip().getAttribute("href")).toBe("/v1/attachments/sha-of-the-bytes");
@@ -1764,7 +1822,8 @@ describe("downloading a file the page does not hold yet", () => {
   it("says so in the page on a host that will not fetch, and leaves the page alone", async () => {
     handler = handlerWith(() =>
       json(403, {
-        error: "media pulls are disabled: this server was started without -media, so it will not fetch attachment bytes.",
+        error:
+          "media pulls are disabled: this server was started without -media, so it will not fetch attachment bytes.",
       }),
     );
     await mountApp("/view/loom-cutover");
@@ -1797,8 +1856,7 @@ describe("adding another email to a page", () => {
     handler = (c) => {
       const p = pathOf(c);
       if (p === "/v1/specs/loom-cutover") return json(200, SPEC);
-      if (p === "/v1/search")
-        return json(200, { mode: "hybrid", chains: [CHAINS[1]] });
+      if (p === "/v1/search") return json(200, { mode: "hybrid", chains: [CHAINS[1]] });
       if (p === "/v1/refresh" && c.method === "POST")
         return json(200, {
           spec: SPEC,
@@ -1820,7 +1878,11 @@ describe("adding another email to a page", () => {
     await screen.findByText("Loom cutover");
 
     // The toolbar button only appears where a refresh can accept the choice.
-    click(screen.getByRole("button", { name: "Search the corpus for another email to add to this page" }));
+    click(
+      screen.getByRole("button", {
+        name: "Search the corpus for another email to add to this page",
+      }),
+    );
     const dialog = await screen.findByRole("dialog", { name: "Add another email" });
 
     // A fresh corpus search, scoped to the page, not a build.
@@ -1836,25 +1898,21 @@ describe("adding another email to a page", () => {
     // the dialog — the page behind has exclusion checkboxes of its own.
     click(within(dialog).getAllByRole("checkbox")[0]!);
     click(within(dialog).getByRole("button", { name: "add 1 to page" }));
-    await waitFor(() =>
-      expect(calls.some((c) => pathOf(c) === "/v1/refresh")).toBe(true),
-    );
-    const body = JSON.parse(
-      calls.find((c) => pathOf(c) === "/v1/refresh")!.body!,
-    );
+    await waitFor(() => expect(calls.some((c) => pathOf(c) === "/v1/refresh")).toBe(true));
+    const body = JSON.parse(calls.find((c) => pathOf(c) === "/v1/refresh")!.body!);
     expect(body.name).toBe("loom-cutover");
     expect(body.accept).toEqual(["mail:<lease-renewal-1@example.fed>"]);
     // The search that found the thread goes with it, so the page records where
     // the thread came from rather than gaining an unexplained one.
     expect(body.queries).toEqual([{ q: "lease", note: "add-email search, mode=hybrid" }]);
     // The modal closed once the add was sent.
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Add another email" })).toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Add another email" })).toBeNull(),
+    );
 
     // The refreshed page reports the growth like any other refresh — console
     // only — and says the search was recorded with it.
-    await waitFor(() =>
-      expect(log).toHaveBeenCalledWith("refresh: 1 added, 1 search recorded"),
-    );
+    await waitFor(() => expect(log).toHaveBeenCalledWith("refresh: 1 added, 1 search recorded"));
   });
 });
 
@@ -1872,7 +1930,9 @@ describe("the search lives in the URL", () => {
     // are the answer to them. The box is also filled the way a current nav item
     // is — there is a question on the address, and the nav can say so here.
     await waitFor(() =>
-      expect((screen.getByRole("textbox", { name: "Search the corpus" }) as HTMLInputElement).value).toBe("cutover"),
+      expect(
+        (screen.getByRole("textbox", { name: "Search the corpus" }) as HTMLInputElement).value,
+      ).toBe("cutover"),
     );
     expect(
       screen.getByRole("textbox", { name: "Search the corpus" }).getAttribute("aria-current"),
@@ -1905,7 +1965,9 @@ describe("the search lives in the URL", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/"));
     expect(router.state.location.searchStr).toBe("?q=cutover");
     await waitFor(() =>
-      expect((screen.getByRole("textbox", { name: "Search the corpus" }) as HTMLInputElement).value).toBe("cutover"),
+      expect(
+        (screen.getByRole("textbox", { name: "Search the corpus" }) as HTMLInputElement).value,
+      ).toBe("cutover"),
     );
     await screen.findByText("Loom cutover schedule", { selector: ".ibsubj" });
   });
@@ -2006,7 +2068,9 @@ describe("the search lives in the URL", () => {
     await waitFor(() => expect(router.state.location.searchStr).toContain("q=warehouse"));
     expect(router.state.location.searchStr).not.toContain("open=");
     await waitFor(() => expect(document.querySelector(".ibread-subj")).toBeNull());
-    expect(within(document.querySelector(".ibread") as HTMLElement).getByText(/Nothing open/)).toBeTruthy();
+    expect(
+      within(document.querySelector(".ibread") as HTMLElement).getByText(/Nothing open/),
+    ).toBeTruthy();
   });
 
   it("searches from the panel's button, not only from its Enter key", async () => {
@@ -2083,22 +2147,35 @@ const EDIT_SPEC = {
   title: "CSV layout",
   messages: [
     {
-      id: "c-orig", date: "Fri 21 Aug 2026", time: "09:00", tz: "+1000",
-      sender: "Charles XPTO", org: "fernbrook",
+      id: "c-orig",
+      date: "Fri 21 Aug 2026",
+      time: "09:00",
+      tz: "+1000",
+      sender: "Charles XPTO",
+      org: "fernbrook",
       body: "<p>CSV layout: A: Member Number &middot; E: Amount Due</p>",
     },
     {
-      id: "j-host", date: "Fri 21 Aug 2026", time: "14:00", tz: "+1000",
-      sender: "Jason Yago", org: "termina", parent: "c-orig",
+      id: "j-host",
+      date: "Fri 21 Aug 2026",
+      time: "14:00",
+      tz: "+1000",
+      sender: "Jason Yago",
+      org: "termina",
+      parent: "c-orig",
       body: "<p>Actually one change — we track Invoice Amount.</p>",
-      edits: [{
-        id: "c-edit", base: "c-orig", who: "Jason Yago", time: "14:00",
-        body: "CSV layout: A: Member Number \u00b7 E: Invoice Amount",
-      }],
+      edits: [
+        {
+          id: "c-edit",
+          base: "c-orig",
+          who: "Jason Yago",
+          time: "14:00",
+          body: "CSV layout: A: Member Number \u00b7 E: Invoice Amount",
+        },
+      ],
     },
   ],
 };
-
 
 describe("in-page anchor links", () => {
   it("are plain #-fragment links that no JS intercepts", async () => {
@@ -2236,7 +2313,9 @@ const OPS_PLAN_BEFORE = {
       suggest: "corpus alias -from quarry.example -to millrace.example",
     },
   ],
-  twinsDeclined: [{ reason: "no other copy within a plausible offset of its stated clock", count: 612 }],
+  twinsDeclined: [
+    { reason: "no other copy within a plausible offset of its stated clock", count: 612 },
+  ],
   trail: [],
 };
 
@@ -2245,7 +2324,8 @@ const OPS_RECORD = {
   keepName: "Ada Okoye",
   dropId: 8,
   dropName: "Ada Okoye",
-  reason: "dedupe:same-display-name (name-only person, and the kept person is on every entry they are)",
+  reason:
+    "dedupe:same-display-name (name-only person, and the kept person is on every entry they are)",
   mergedAt: "2026-08-22T15:04:00Z",
 };
 
@@ -2298,7 +2378,9 @@ describe("the ops route /ops", () => {
     ).toBe(true);
 
     // The reads: the refusal, the twins aggregate, the empty trail.
-    expect(await screen.findByText(/two people of that name fit the evidence equally/)).toBeTruthy();
+    expect(
+      await screen.findByText(/two people of that name fit the evidence equally/),
+    ).toBeTruthy();
     expect(screen.getByText(/twins pass declined 612 entries/)).toBeTruthy();
     expect(screen.getByText("0 merges recorded — the person_merges trail")).toBeTruthy();
 
@@ -2318,7 +2400,9 @@ describe("the ops route /ops", () => {
 
     // Success: the note counts the batch, the plan was refetched, and the folded
     // pair is gone from the list — the other applicable pair is still offered.
-    expect(await screen.findByText("merged 1 pair — the plan below is the current one.")).toBeTruthy();
+    expect(
+      await screen.findByText("merged 1 pair — the plan below is the current one."),
+    ).toBeTruthy();
     await waitFor(() => expect(screen.queryByLabelText(/Select folding #8/)).toBeNull());
     expect(screen.getByLabelText(/Select folding #22/)).toBeTruthy();
     expect(screen.getByText("1 merge recorded — the person_merges trail")).toBeTruthy();
@@ -2356,9 +2440,7 @@ describe("the ops route /ops", () => {
     click(screen.getByRole("button", { name: "merge these 2 pairs" }));
     // One POST per pair, in the order the plan lists them: the endpoint's
     // contract is a single pair, and the server re-derives the plan for each.
-    await waitFor(() =>
-      expect(calls.filter((c) => pathOf(c) === "/v1/ops/merge").length).toBe(2),
-    );
+    await waitFor(() => expect(calls.filter((c) => pathOf(c) === "/v1/ops/merge").length).toBe(2));
     expect(
       calls.filter((c) => pathOf(c) === "/v1/ops/merge").map((c) => JSON.parse(c.body ?? "{}")),
     ).toEqual([
@@ -2368,7 +2450,9 @@ describe("the ops route /ops", () => {
 
     // Both are gone: no checkbox left for either, no action bar (nothing
     // applicable remains), and the read-only tier is still listed.
-    expect(await screen.findByText("merged 2 pairs — the plan below is the current one.")).toBeTruthy();
+    expect(
+      await screen.findByText("merged 2 pairs — the plan below is the current one."),
+    ).toBeTruthy();
     await waitFor(() => expect(screen.queryAllByRole("checkbox")).toHaveLength(0));
     expect(screen.getByText("read-only")).toBeTruthy();
     expect(screen.getByText("2 merges recorded — the person_merges trail")).toBeTruthy();
@@ -2415,20 +2499,22 @@ describe("what the bar does to the mail", () => {
   /** The chains this suite ticks are the search page's rows: they are the ones
    *  reachable without a second fixture, and the bar is the same bar on both
    *  pages. */
-  const mailHandler = (answer: Response): Handler => (c) => {
-    const p = pathOf(c);
-    if (p === "/v1/mail") return answer;
-    if (p === "/v1/labels") {
-      return json(200, {
-        labels: [
-          { name: "INBOX", messages: 210 },
-          { name: "Work", messages: 41 },
-          { name: "Archive", messages: 5 },
-        ],
-      });
-    }
-    return buildHandler(c);
-  };
+  const mailHandler =
+    (answer: Response): Handler =>
+    (c) => {
+      const p = pathOf(c);
+      if (p === "/v1/mail") return answer;
+      if (p === "/v1/labels") {
+        return json(200, {
+          labels: [
+            { name: "INBOX", messages: 210 },
+            { name: "Work", messages: 41 },
+            { name: "Archive", messages: 5 },
+          ],
+        });
+      }
+      return buildHandler(c);
+    };
 
   const ticksTwo = async () => {
     await screen.findByText("Loom cutover schedule", { selector: ".ibsubj" });
@@ -2485,7 +2571,9 @@ describe("what the bar does to the mail", () => {
   });
 
   it("archives only the selected account when the inbox is account-scoped", async () => {
-    handler = mailHandler(json(200, { action: "archive", accountId: "work", changed: 1, skipped: 0, chains: [] }));
+    handler = mailHandler(
+      json(200, { action: "archive", accountId: "work", changed: 1, skipped: 0, chains: [] }),
+    );
     await mountApp("/?accountId=work&q=cutover");
     await ticksTwo();
 
@@ -2593,7 +2681,9 @@ describe("what the bar does to the mail", () => {
       action: "move",
       labels: ["Work"],
     });
-    expect((await screen.findByText("Moved 3 messages to Work.")).closest(".toasts")).not.toBeNull();
+    expect(
+      (await screen.findByText("Moved 3 messages to Work.")).closest(".toasts"),
+    ).not.toBeNull();
   });
 
   it("loads folders per account and names the selected mailbox in an all-accounts move", async () => {
@@ -2620,7 +2710,13 @@ describe("what the bar does to the mail", () => {
         });
       }
       if (p === "/v1/mail")
-        return json(200, { action: "move", labels: ["Projects"], changed: 1, skipped: 0, chains: [] });
+        return json(200, {
+          action: "move",
+          labels: ["Projects"],
+          changed: 1,
+          skipped: 0,
+          chains: [],
+        });
       return buildHandler(c);
     };
     await mountApp("/?q=cutover");
@@ -2630,9 +2726,13 @@ describe("what the bar does to the mail", () => {
     const folders = screen.getByLabelText("Move to a folder") as HTMLSelectElement;
     await waitFor(() => {
       expect([...new Set(labelAccounts)].sort()).toEqual(["personal", "work"]);
-      expect(folders.querySelector('optgroup[label="office@example.test"] option')?.textContent).toBe("Projects");
+      expect(
+        folders.querySelector('optgroup[label="office@example.test"] option')?.textContent,
+      ).toBe("Projects");
     });
-    const target = folders.querySelector('optgroup[label="office@example.test"] option')! as HTMLOptionElement;
+    const target = folders.querySelector(
+      'optgroup[label="office@example.test"] option',
+    )! as HTMLOptionElement;
     fireEvent.change(folders, { target: { value: target.value } });
 
     await waitFor(() => expect(mailCalls()).toHaveLength(1));

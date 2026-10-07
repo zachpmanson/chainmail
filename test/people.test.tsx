@@ -80,7 +80,14 @@ const handler_: Handler = (c) => {
   // The page also draws the merge plan and the colour rules; neither is what
   // these tests are about, but both are on the same screen.
   if (p === "/v1/ops/plan") {
-    return json(200, { people: 3, merges: [], refusals: [], candidates: [], twinsDeclined: [], trail: [] });
+    return json(200, {
+      people: 3,
+      merges: [],
+      refusals: [],
+      candidates: [],
+      twinsDeclined: [],
+      trail: [],
+    });
   }
   if (p === "/v1/ops/orgs") return json(200, { domains: [] });
   if (p === "/v1/settings") return json(200, {});
@@ -177,7 +184,9 @@ describe("the people editor", () => {
     await waitFor(() => expect(callsTo("POST", "/v1/people/12")).toHaveLength(1));
     // Only the name: a field left out is left alone, so a rename cannot clear
     // the addresses the corpus resolved for her.
-    expect(callsTo("POST", "/v1/people/12")[0]!.body).toBe(JSON.stringify({ displayName: "Ada Nwosu" }));
+    expect(callsTo("POST", "/v1/people/12")[0]!.body).toBe(
+      JSON.stringify({ displayName: "Ada Nwosu" }),
+    );
     // The screen shows the corpus's answer, refetched — not the box the reader
     // typed in.
     expect(await screen.findByText("Ada Nwosu")).toBeTruthy();
@@ -200,7 +209,11 @@ describe("the people editor", () => {
       JSON.stringify({ addIdentities: ["email:ben@loomworks.example"] }),
     );
 
-    click(within(row("Bo Halvorsen")).getByLabelText("Detach email:bo@fjordline.example from Bo Halvorsen"));
+    click(
+      within(row("Bo Halvorsen")).getByLabelText(
+        "Detach email:bo@fjordline.example from Bo Halvorsen",
+      ),
+    );
     await waitFor(() => expect(callsTo("POST", "/v1/people/19")).toHaveLength(1));
     expect(callsTo("POST", "/v1/people/19")[0]!.body).toBe(
       JSON.stringify({ removeIdentities: ["email:bo@fjordline.example"] }),

@@ -201,42 +201,44 @@ const replyPlan = (sent: boolean, html = true) => ({
 });
 
 /** The page's list, and the endpoints the pane reaches for around it. */
-const server = (
-  chain: () => Response,
-  send?: Handler,
-  settings: Record<string, unknown> = { mePersonId: ME },
-): Handler => (c) => {
-  const p = pathOf(c);
-  if (p === "/v1/search") {
-    return json(200, {
-      mode: "lexical",
-      chains: [
-        {
-          rootExtId: ROOT,
-          subject: "Loom cutover schedule",
-          first: "2026-03-02T09:15:00Z",
-          last: "2026-03-12T09:00:00Z",
-          sources: ["mail"],
-          entries: 2,
-          matched: 2,
-          people: 2,
-          attachments: 0,
-          score: 0.01,
-          unread: 0,
-          best: [entry({ extId: ROOT })],
-        },
-      ],
-    });
-  }
-  if (p.startsWith("/v1/chains/")) return chain();
-  if (p === "/v1/send") return send ? send(c) : json(500, { error: "no send handler" });
-  if (p === "/v1/labels") return json(200, { labels: [{ name: "INBOX", messages: 5 }] });
-  if (p === "/v1/stats") return json(200, {});
-  if (p === "/v1/settings") return json(200, settings);
-  if (p === "/v1/people") return json(200, { people: PEOPLE });
-  if (p === "/auth/status") return json(200, authStatus);
-  return json(500, { error: `unexpected call to ${c.method} ${p}` });
-};
+const server =
+  (
+    chain: () => Response,
+    send?: Handler,
+    settings: Record<string, unknown> = { mePersonId: ME },
+  ): Handler =>
+  (c) => {
+    const p = pathOf(c);
+    if (p === "/v1/search") {
+      return json(200, {
+        mode: "lexical",
+        chains: [
+          {
+            rootExtId: ROOT,
+            subject: "Loom cutover schedule",
+            first: "2026-03-02T09:15:00Z",
+            last: "2026-03-12T09:00:00Z",
+            sources: ["mail"],
+            entries: 2,
+            matched: 2,
+            people: 2,
+            attachments: 0,
+            score: 0.01,
+            unread: 0,
+            best: [entry({ extId: ROOT })],
+          },
+        ],
+      });
+    }
+    if (p.startsWith("/v1/chains/")) return chain();
+    if (p === "/v1/send") return send ? send(c) : json(500, { error: "no send handler" });
+    if (p === "/v1/labels") return json(200, { labels: [{ name: "INBOX", messages: 5 }] });
+    if (p === "/v1/stats") return json(200, {});
+    if (p === "/v1/settings") return json(200, settings);
+    if (p === "/v1/people") return json(200, { people: PEOPLE });
+    if (p === "/auth/status") return json(200, authStatus);
+    return json(500, { error: `unexpected call to ${c.method} ${p}` });
+  };
 
 const sends = () => calls.filter((c) => c.method === "POST" && pathOf(c) === "/v1/send");
 const chains = () => calls.filter((c) => pathOf(c).startsWith("/v1/chains/"));
@@ -302,9 +304,9 @@ const chips = (list: "to" | "cc") => {
   // test below is about what the fields do once they are open; the test above
   // asserts the collapsed state itself.
   revealRecipients();
-  return [
-    ...box()!.querySelectorAll<HTMLElement>(`.addrfield[data-list="${list}"] .addrname`),
-  ].map((c) => c.textContent!);
+  return [...box()!.querySelectorAll<HTMLElement>(`.addrfield[data-list="${list}"] .addrname`)].map(
+    (c) => c.textContent!,
+  );
 };
 /** The collapsed recipient line: the read-only summary and the press that opens
  *  the editors. Drawn until the reader asks to edit, which is the default the
@@ -362,11 +364,16 @@ async function previewWithAudience(call: Call, response: Response): Promise<Resp
   const setList = (field: "to" | "cc", recipientsField: "toRecipients" | "ccRecipients") => {
     const requested = request[field];
     if (!Array.isArray(requested)) return;
-    const previous = (body[recipientsField] as { name?: string; address: string }[] | undefined) ?? [];
+    const previous =
+      (body[recipientsField] as { name?: string; address: string }[] | undefined) ?? [];
     const known = new Map(previous.map((r) => [r.address.toLowerCase(), r]));
-    const recipients = (requested as string[]).map((address) => known.get(address.toLowerCase()) ?? { address });
+    const recipients = (requested as string[]).map(
+      (address) => known.get(address.toLowerCase()) ?? { address },
+    );
     body[recipientsField] = recipients;
-    body[field] = recipients.map((r) => r.name ? `${r.name} <${r.address}>` : r.address).join(", ");
+    body[field] = recipients
+      .map((r) => (r.name ? `${r.name} <${r.address}>` : r.address))
+      .join(", ");
   };
   setList("to", "toRecipients");
   setList("cc", "ccRecipients");
@@ -423,7 +430,9 @@ describe("answering a message from the pane", () => {
     // The anchor to the message being answered stays on the line while collapsed,
     // and the press that opens the editors is the line itself.
     expect(
-      within(box()!).getByRole("link", { name: /Jump to the message being replied to: Bo Halvorsen/ }),
+      within(box()!).getByRole("link", {
+        name: /Jump to the message being replied to: Bo Halvorsen/,
+      }),
     ).toBeTruthy();
 
     fireEvent.click(edit);
@@ -440,7 +449,9 @@ describe("answering a message from the pane", () => {
     expect(screen.getByLabelText("cc addresses")).toBeTruthy();
     const from = screen.getByLabelText("From") as HTMLSelectElement;
     expect(from.value).toBe("legacy");
-    expect(Array.from(from.options).map((option) => option.textContent)).toEqual(["Legacy (me@example.test)"]);
+    expect(Array.from(from.options).map((option) => option.textContent)).toEqual([
+      "Legacy (me@example.test)",
+    ]);
     expect(box()!.querySelector(".replyto")).toBeNull();
     expect(box()!.textContent).not.toContain("Replying to");
     const row = box()!.querySelector(".replyrecipients")!;
@@ -450,7 +461,9 @@ describe("answering a message from the pane", () => {
     expect(from.closest(".replyrecipients")).toBe(row);
     expect(row.querySelectorAll(".addrfield")).toHaveLength(2);
     expect(row.compareDocumentPosition(field()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    const target = within(box()!).getByRole("link", { name: /Jump to the message being replied to: Bo Halvorsen/ });
+    const target = within(box()!).getByRole("link", {
+      name: /Jump to the message being replied to: Bo Halvorsen/,
+    });
     expect(target.tagName).toBe("A");
     // A link, not a press: the name of the message answered, and no button's box
     // around it — nothing here changes anything, it only takes the reader there.
@@ -530,18 +543,21 @@ describe("answering a message from the pane", () => {
     // right-aligned row is the one nearest the reader's cursor, and the press
     // that sends is the one the plan exists to be checked before.
     const type = box()!.querySelector(".replyacts")!;
-    expect(within(type as HTMLElement).getAllByRole("button").map((b) => b.textContent)).toEqual([
-      "preview",
-    ]);
+    expect(
+      within(type as HTMLElement)
+        .getAllByRole("button")
+        .map((b) => b.textContent),
+    ).toEqual(["preview"]);
 
     fireEvent.change(field(), { target: { value: "The 14th works." } });
     press("preview");
     await waitFor(() => expect(box()!.querySelector(".replyplan")).toBeTruthy());
     const plan = box()!.querySelector(".replyacts")!;
-    expect(within(plan as HTMLElement).getAllByRole("button").map((b) => b.textContent)).toEqual([
-      "keep editing",
-      "send this reply",
-    ]);
+    expect(
+      within(plan as HTMLElement)
+        .getAllByRole("button")
+        .map((b) => b.textContent),
+    ).toEqual(["keep editing", "send this reply"]);
   });
 
   it("sends nothing on the first press, and shows what the second would send", async () => {
@@ -727,15 +743,19 @@ describe("answering a message from the pane", () => {
   });
 
   it("edits recipients before preview and sends the arranged Cc list", async () => {
-    await write("The 14th works.", () => json(200, replyPlan(false)), async () => {
-      await waitFor(() => expect(chips("cc")).toContain("Cy Okafor <cy@loomworks.example>"));
-      fireEvent.click(chipX("cc", "cy@loomworks.example"));
-      type("cc", "cy");
-      fireEvent.click(screen.getByRole("option", { name: /Cy Okafor/ }));
-      expect(chips("cc")).toContain("Cy Okafor <cy@loomworks.example>");
-      fireEvent.click(chipX("cc", "cy@loomworks.example"));
-      expect(chips("cc")).not.toContain("Cy Okafor <cy@loomworks.example>");
-    });
+    await write(
+      "The 14th works.",
+      () => json(200, replyPlan(false)),
+      async () => {
+        await waitFor(() => expect(chips("cc")).toContain("Cy Okafor <cy@loomworks.example>"));
+        fireEvent.click(chipX("cc", "cy@loomworks.example"));
+        type("cc", "cy");
+        fireEvent.click(screen.getByRole("option", { name: /Cy Okafor/ }));
+        expect(chips("cc")).toContain("Cy Okafor <cy@loomworks.example>");
+        fireEvent.click(chipX("cc", "cy@loomworks.example"));
+        expect(chips("cc")).not.toContain("Cy Okafor <cy@loomworks.example>");
+      },
+    );
 
     await waitFor(() => expect(sends()).toHaveLength(1));
     expect(sent(0)).toEqual({
@@ -760,18 +780,22 @@ describe("answering a message from the pane", () => {
   });
 
   it("moves an address between recipient lists by removing and re-adding it", async () => {
-    await write("The 14th works.", () => json(200, replyPlan(false)), async () => {
-      await waitFor(() => expect(chips("cc")).toContain("Cy Okafor <cy@loomworks.example>"));
-      fireEvent.click(chipX("cc", "cy@loomworks.example"));
-      type("to", "cy");
-      fireEvent.click(screen.getByRole("option", { name: /Cy Okafor/ }));
-      expect(chips("to")).toEqual([
-        "Bo Halvorsen <bo@fjordline.example>",
-        "Cy Okafor <cy@loomworks.example>",
-      ]);
-      expect(chips("cc")).toEqual(["Carl Nkemdirim <carl@example.net>"]);
-      expect(box()!.querySelectorAll(".addrmove")).toHaveLength(0);
-    });
+    await write(
+      "The 14th works.",
+      () => json(200, replyPlan(false)),
+      async () => {
+        await waitFor(() => expect(chips("cc")).toContain("Cy Okafor <cy@loomworks.example>"));
+        fireEvent.click(chipX("cc", "cy@loomworks.example"));
+        type("to", "cy");
+        fireEvent.click(screen.getByRole("option", { name: /Cy Okafor/ }));
+        expect(chips("to")).toEqual([
+          "Bo Halvorsen <bo@fjordline.example>",
+          "Cy Okafor <cy@loomworks.example>",
+        ]);
+        expect(chips("cc")).toEqual(["Carl Nkemdirim <carl@example.net>"]);
+        expect(box()!.querySelectorAll(".addrmove")).toHaveLength(0);
+      },
+    );
 
     await waitFor(() => expect(sends()).toHaveLength(1));
     expect(sent(0).to).toEqual(["bo@fjordline.example", "cy@loomworks.example"]);
@@ -813,19 +837,23 @@ describe("answering a message from the pane", () => {
   });
 
   it("lets the reader add a known or typed recipient before preview", async () => {
-    await write("The 14th works.", () => json(200, replyPlan(false)), async () => {
-      await waitFor(() => expect(chips("to")).toContain("Bo Halvorsen <bo@fjordline.example>"));
-      type("cc", "dana");
-      fireEvent.click(screen.getByRole("option", { name: /Dana Whitfield/ }));
-      type("to", "stranger@example.org");
-      fireEvent.keyDown(addressField("to"), { key: "Enter" });
-      expect(chips("to")).toEqual([
-        "Bo Halvorsen <bo@fjordline.example>",
-        "stranger@example.org",
-      ]);
-      expect(chips("cc")).toContain("Dana Whitfield <dana@loomworks.example>");
-      expect(addressField("to").value).toBe("");
-    });
+    await write(
+      "The 14th works.",
+      () => json(200, replyPlan(false)),
+      async () => {
+        await waitFor(() => expect(chips("to")).toContain("Bo Halvorsen <bo@fjordline.example>"));
+        type("cc", "dana");
+        fireEvent.click(screen.getByRole("option", { name: /Dana Whitfield/ }));
+        type("to", "stranger@example.org");
+        fireEvent.keyDown(addressField("to"), { key: "Enter" });
+        expect(chips("to")).toEqual([
+          "Bo Halvorsen <bo@fjordline.example>",
+          "stranger@example.org",
+        ]);
+        expect(chips("cc")).toContain("Dana Whitfield <dana@loomworks.example>");
+        expect(addressField("to").value).toBe("");
+      },
+    );
 
     await waitFor(() => expect(sends()).toHaveLength(1));
     expect(sent(0).to).toEqual(["bo@fjordline.example", "stranger@example.org"]);
@@ -1077,7 +1105,9 @@ describe("answering an older message from its own header", () => {
     };
     try {
       aimAt("Cy Devlin");
-      await waitFor(() => expect(scrolled.some((classes) => classes.split(/\s+/).includes("replybox"))).toBe(true));
+      await waitFor(() =>
+        expect(scrolled.some((classes) => classes.split(/\s+/).includes("replybox"))).toBe(true),
+      );
       expect(document.activeElement).toBe(field());
     } finally {
       Element.prototype.scrollIntoView = scrolledBefore;

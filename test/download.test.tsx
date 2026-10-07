@@ -55,22 +55,84 @@ const storedShot = {
   previewW: 640,
   previewH: 427,
 };
-const storedPdf = { name: "quote.pdf", kind: "PDF", size: "88 KB", gmailId: "18f0", blobSha: "b".repeat(64), open: "download" as const, view: "pdf" as const };
-const storedText = { name: "readings.csv", kind: "CSV", size: "18 KB", gmailId: "18f0", blobSha: "c".repeat(64), open: "popup" as const, view: "text" as const };
+const storedPdf = {
+  name: "quote.pdf",
+  kind: "PDF",
+  size: "88 KB",
+  gmailId: "18f0",
+  blobSha: "b".repeat(64),
+  open: "download" as const,
+  view: "pdf" as const,
+};
+const storedText = {
+  name: "readings.csv",
+  kind: "CSV",
+  size: "18 KB",
+  gmailId: "18f0",
+  blobSha: "c".repeat(64),
+  open: "popup" as const,
+  view: "text" as const,
+};
 /** The same wire shape, a file that is prose: `view: "text"` is one call for every
  *  textish type, and the bytes are what decide whether it is a table. */
-const storedLog = { name: "slurp.log", kind: "text", size: "22 KB", gmailId: "18f0", blobSha: "9".repeat(64), open: "popup" as const, view: "text" as const };
+const storedLog = {
+  name: "slurp.log",
+  kind: "text",
+  size: "22 KB",
+  gmailId: "18f0",
+  blobSha: "9".repeat(64),
+  open: "popup" as const,
+  view: "text" as const,
+};
 /** A tab-separated export, which the wire cannot tell from the CSV above. */
-const storedTsv = { name: "ledger.tsv", kind: "TSV", size: "4 KB", gmailId: "18f0", blobSha: "8".repeat(64), open: "popup" as const, view: "text" as const };
+const storedTsv = {
+  name: "ledger.tsv",
+  kind: "TSV",
+  size: "4 KB",
+  gmailId: "18f0",
+  blobSha: "8".repeat(64),
+  open: "popup" as const,
+  view: "text" as const,
+};
 /** A zip: bytes of ours, a download on click, and nothing that can be shown. */
-const storedZip = { name: "archive.zip", kind: "ZIP", size: "2.1 MB", gmailId: "18f0", blobSha: "e".repeat(64), open: "download" as const };
+const storedZip = {
+  name: "archive.zip",
+  kind: "ZIP",
+  size: "2.1 MB",
+  gmailId: "18f0",
+  blobSha: "e".repeat(64),
+  open: "download" as const,
+};
 /** A small picture: the bytes are here, but the builder embedded no preview. */
 const BARE = "d".repeat(64);
-const storedSmall = { name: "image001.png", kind: "image", size: "17 KB", gmailId: "18f0", blobSha: BARE, open: "popup" as const, view: "image" as const };
+const storedSmall = {
+  name: "image001.png",
+  kind: "image",
+  size: "17 KB",
+  gmailId: "18f0",
+  blobSha: BARE,
+  open: "popup" as const,
+  view: "image" as const,
+};
 /** A small picture as a page saved before `view` existed would carry it. */
-const storedSmallOld = { name: "image003.png", kind: "image", size: "9.4 KB", gmailId: "18f0", blobSha: "f".repeat(64), open: "popup" as const };
+const storedSmallOld = {
+  name: "image003.png",
+  kind: "image",
+  size: "9.4 KB",
+  gmailId: "18f0",
+  blobSha: "f".repeat(64),
+  open: "popup" as const,
+};
 /** A thumbnail from the Slack archive: the bytes are on disk but this host does not serve them. */
-const archivedShot = { name: "board.png", kind: "image", size: "41 KB", link: "https://chat.example/files/F001/board.png", preview: PIXEL, previewW: 320, previewH: 200 };
+const archivedShot = {
+  name: "board.png",
+  kind: "image",
+  size: "41 KB",
+  link: "https://chat.example/files/F001/board.png",
+  preview: PIXEL,
+  previewW: 320,
+  previewH: 200,
+};
 
 describe("where an attachment opens", () => {
   it("prefers the corpus to Gmail once the bytes are here", () => {
@@ -196,7 +258,9 @@ class NoopObserver {
   observe() {}
   unobserve() {}
   disconnect() {}
-  takeRecords() { return []; }
+  takeRecords() {
+    return [];
+  }
 }
 (globalThis as { IntersectionObserver?: unknown }).IntersectionObserver = NoopObserver;
 
@@ -209,13 +273,14 @@ Object.assign(URL, { createObjectURL: () => "blob:opened", revokeObjectURL: revo
  * worked, the text, the served type (which decides nothing on its own — see
  * `readTable` — but is read beside the name), and the bytes it turns into a blob.
  */
-const reply = (body: string, status = 200, type = "") => ({
-  ok: status < 400,
-  status,
-  text: async () => body,
-  blob: async () => new Blob([body]),
-  headers: new Headers(type ? { "content-type": type } : {}),
-}) as unknown as Response;
+const reply = (body: string, status = 200, type = "") =>
+  ({
+    ok: status < 400,
+    status,
+    text: async () => body,
+    blob: async () => new Blob([body]),
+    headers: new Headers(type ? { "content-type": type } : {}),
+  }) as unknown as Response;
 
 const fetched = vi.fn<(url: string) => Promise<Response>>();
 
@@ -228,7 +293,10 @@ const mount = (messages: Entry[], fetcher?: (url: string) => Promise<Response>) 
   const detach = attach(document);
   const chips = [...document.querySelectorAll<HTMLAnchorElement>(".att[data-pop]")];
   return {
-    detach: () => { detach(); vi.unstubAllGlobals(); },
+    detach: () => {
+      detach();
+      vi.unstubAllGlobals();
+    },
     chips,
     fetched,
     pop: () => document.querySelector<HTMLElement>(".pop"),
@@ -348,7 +416,9 @@ describe("opening a file over the page", () => {
 
 describe("a text file in the window", () => {
   it("reads the bytes in rather than framing them", () => {
-    const m = mount([entry({ attachments: [storedLog] })], () => Promise.resolve(reply("slurp: 412 messages\n")));
+    const m = mount([entry({ attachments: [storedLog] })], () =>
+      Promise.resolve(reply("slurp: 412 messages\n")),
+    );
     m.chips[0]!.click();
     return vi.waitFor(() => {
       expect(m.fetched).toHaveBeenCalledWith(`${MEDIA_BASE}/${storedLog.blobSha}`);
@@ -424,7 +494,8 @@ describe("a delimited file in the window", () => {
 
   it("draws a CSV as the table it is", () => {
     const m = mount([entry({ attachments: [storedText] })], () =>
-      Promise.resolve(reply(SHEET, 200, "text/csv")));
+      Promise.resolve(reply(SHEET, 200, "text/csv")),
+    );
     m.chips[0]!.click();
     return vi.waitFor(() => {
       const t = m.table()!;
@@ -453,7 +524,9 @@ describe("a delimited file in the window", () => {
       [storedLog, "account\tamount\n604241462\t1,204.00\n"],
     ] as const) {
       const type = att === storedLog ? "text/tab-separated-values" : "";
-      const m = mount([entry({ attachments: [att] })], () => Promise.resolve(reply(body, 200, type)));
+      const m = mount([entry({ attachments: [att] })], () =>
+        Promise.resolve(reply(body, 200, type)),
+      );
       m.chips[0]!.click();
       vi.waitFor(() => expect(m.table()).not.toBeNull());
       m.detach();
@@ -480,7 +553,9 @@ describe("a delimited file in the window", () => {
     const m = mount([entry({ attachments: [storedText] })], () => Promise.resolve(reply(evil)));
     m.chips[0]!.click();
     return vi.waitFor(() => {
-      expect(m.table()!.querySelector("tbody td")!.textContent).toBe("<img src=x onerror=alert(1)>");
+      expect(m.table()!.querySelector("tbody td")!.textContent).toBe(
+        "<img src=x onerror=alert(1)>",
+      );
       expect(m.grid()!.querySelector("img")).toBeNull();
       m.detach();
     });
@@ -543,7 +618,9 @@ describe("a PDF in the window", () => {
   it("frames the bytes as a blob of its own type", () => {
     // A frame handed the served URL renders nothing — the file is served as an
     // attachment — so the page makes its own blob, with a type it chose.
-    const m = mount([entry({ attachments: [storedPdf] })], () => Promise.resolve(reply("%PDF-1.7\n")));
+    const m = mount([entry({ attachments: [storedPdf] })], () =>
+      Promise.resolve(reply("%PDF-1.7\n")),
+    );
     m.chips[0]!.click();
     return vi.waitFor(() => {
       expect(m.fetched).toHaveBeenCalledWith(`${MEDIA_BASE}/${storedPdf.blobSha}`);
@@ -557,7 +634,9 @@ describe("a PDF in the window", () => {
   });
 
   it("lets the blob go when the window closes", () => {
-    const m = mount([entry({ attachments: [storedPdf] })], () => Promise.resolve(reply("%PDF-1.7\n")));
+    const m = mount([entry({ attachments: [storedPdf] })], () =>
+      Promise.resolve(reply("%PDF-1.7\n")),
+    );
     m.chips[0]!.click();
     return vi.waitFor(() => {
       expect(m.frame()!.hidden).toBe(false);
@@ -573,16 +652,20 @@ describe("a PDF in the window", () => {
     // Bytes arriving late must not paint over a window the reader closed, or the
     // next file they opened.
     let resolve: (r: Response) => void = () => {};
-    const pending = new Promise<Response>((r) => { resolve = r; });
+    const pending = new Promise<Response>((r) => {
+      resolve = r;
+    });
     const m = mount([entry({ attachments: [storedPdf] })], () => pending);
     m.chips[0]!.click();
     (m.pop()!.querySelector(".popx") as HTMLElement).click();
     resolve(reply("%PDF-1.7\n"));
-    return pending.then(() => new Promise((r) => setTimeout(r, 0))).then(() => {
-      expect(m.frame()!.hidden).toBe(true);
-      expect(m.frame()!.hasAttribute("src")).toBe(false);
-      m.detach();
-    });
+    return pending
+      .then(() => new Promise((r) => setTimeout(r, 0)))
+      .then(() => {
+        expect(m.frame()!.hidden).toBe(true);
+        expect(m.frame()!.hasAttribute("src")).toBe(false);
+        m.detach();
+      });
   });
 });
 
@@ -618,7 +701,12 @@ describe("getting the original out of the popover", () => {
     const close = pop.querySelector<HTMLElement>(".popx")!;
     const save = m.save()!;
     const tab = (shiftKey = false) => {
-      const ev = new KeyboardEvent("keydown", { key: "Tab", shiftKey, bubbles: true, cancelable: true });
+      const ev = new KeyboardEvent("keydown", {
+        key: "Tab",
+        shiftKey,
+        bubbles: true,
+        cancelable: true,
+      });
       pop.dispatchEvent(ev);
       return ev;
     };
@@ -638,7 +726,13 @@ describe("getting the original out of the popover", () => {
 
 describe("a file the corpus has refused", () => {
   /** A message whose one file was declined: the reason is recorded, not the answer. */
-  const skipped = { name: "walkthrough.mp4", kind: "MP4", size: "48 MB", gmailId: "18f0", skip: "too_large" } as const;
+  const skipped = {
+    name: "walkthrough.mp4",
+    kind: "MP4",
+    size: "48 MB",
+    gmailId: "18f0",
+    skip: "too_large",
+  } as const;
   /** The ordinary "not pulled yet" state: no bytes and no reason. */
   const waiting = { name: "quote.pdf", kind: "PDF", size: "88 KB", gmailId: "18f0" } as const;
   const extId = "mail:<roof@loomworks.example>";

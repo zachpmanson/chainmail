@@ -20,7 +20,7 @@ SINCE       ?= 2026-08-01
 ME          ?= $(CHAINMAIL_ME)
 export CHAINMAIL_CORPUS = $(CORPUS)
 
-.PHONY: help install test check slurp slurp-mail slurp-slack settle embed \
+.PHONY: help install test check format format-check slurp slurp-mail slurp-slack settle embed \
         backup page serve api doctor
 
 help:
@@ -36,7 +36,9 @@ help:
 	@printf '\nBuild\n'
 	@printf '  make install        build the corpus binary to %s\n' '$(BIN)'
 	@printf '  make test           go + frontend tests\n'
-	@printf '  make check          test, vet, gofmt, typecheck\n'
+	@printf '  make check          test, lint, formatting, vet, gofmt, typecheck\n'
+	@printf '  make format         format TypeScript/TSX\n'
+	@printf '  make format-check   check TypeScript/TSX formatting\n'
 	@printf '  make page Q=...     generate a spec and render it\n'
 	@printf '  make repage P=...   refresh that page and re-render it, marking what changed\n'
 	@printf '  make serve          vite dev server\n'
@@ -48,13 +50,22 @@ install:
 	go build -o $(SERVER) ./cmd/server
 
 test:
+	npm run build
 	go test ./...
-	npx vitest run
+	npm test
 
 check: test
+	npm run lint
+	npm run format:check
 	go vet ./...
 	@test -z "$$(gofmt -l internal cmd)" || { gofmt -l internal cmd; exit 1; }
 	npm run typecheck
+
+format:
+	npm run format
+
+format-check:
+	npm run format:check
 
 # A copy, not a snapshot: sqlite needs the -wal and -shm sidecars too, or the
 # copy will not open.

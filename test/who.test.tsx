@@ -5,7 +5,13 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import type { CorpusEntry } from "../src/lib/api";
 import { makeQueryClient } from "../src/lib/queryClient";
-import { addressesOf, receiptNames, senderTitle, usePersonAddresses, withAddress } from "../src/lib/who";
+import {
+  addressesOf,
+  receiptNames,
+  senderTitle,
+  usePersonAddresses,
+  withAddress,
+} from "../src/lib/who";
 
 /**
  * Where a name's address comes from: the two answers this app has, and what it
@@ -26,7 +32,12 @@ afterEach(() => {
 });
 
 const entry = (over: Partial<CorpusEntry>): CorpusEntry =>
-  ({ extId: "mail:<who-1@loomworks.example>", source: "mail", ts: "2026-03-02T09:15:00Z", ...over }) as CorpusEntry;
+  ({
+    extId: "mail:<who-1@loomworks.example>",
+    source: "mail",
+    ts: "2026-03-02T09:15:00Z",
+    ...over,
+  }) as CorpusEntry;
 
 describe("the addresses in a person's identities", () => {
   it("keeps the addresses, in order, and drops everything else the corpus keeps", () => {
@@ -50,8 +61,10 @@ describe("the addresses in a person's identities", () => {
 });
 
 describe("a name with the addresses behind it", () => {
-  it("reads as \"Name <address>\", every address when there are several", () => {
-    expect(withAddress("Ada Okoye", ["ada@loomworks.example"])).toBe("Ada Okoye <ada@loomworks.example>");
+  it('reads as "Name <address>", every address when there are several', () => {
+    expect(withAddress("Ada Okoye", ["ada@loomworks.example"])).toBe(
+      "Ada Okoye <ada@loomworks.example>",
+    );
     expect(withAddress("Ada Okoye", ["ada@loomworks.example", "a.okoye@example.net"])).toBe(
       "Ada Okoye <ada@loomworks.example, a.okoye@example.net>",
     );
@@ -67,12 +80,14 @@ describe("a name with the addresses behind it", () => {
 
 describe("what hovering the sender of a message says", () => {
   it("names the address the message came from", () => {
-    expect(senderTitle(entry({ author: "Lena Whitfield", fromEmail: "lane@whitfield.example" }))).toBe(
-      "Lena Whitfield <lane@whitfield.example>",
-    );
+    expect(
+      senderTitle(entry({ author: "Lena Whitfield", fromEmail: "lane@whitfield.example" })),
+    ).toBe("Lena Whitfield <lane@whitfield.example>");
     // An entry with no name is the address as it stands, and one with neither is the
     // name it has, which may be nothing at all.
-    expect(senderTitle(entry({ fromEmail: "lane@whitfield.example" }))).toBe("lane@whitfield.example");
+    expect(senderTitle(entry({ fromEmail: "lane@whitfield.example" }))).toBe(
+      "lane@whitfield.example",
+    );
     expect(senderTitle(entry({ author: "Lena Whitfield" }))).toBe("Lena Whitfield");
   });
 
@@ -81,11 +96,15 @@ describe("what hovering the sender of a message says", () => {
     // its own, and the corpus will not lend it one: naming the quoter's address as
     // the sender's would be a claim the evidence does not support, so the absence is
     // named and the address is labelled as theirs.
-    expect(senderTitle(entry({ author: "Ada Okoye", fromQuotedBy: "Bo Halvorsen <bo@fjordline.example>" }))).toBe(
-      "Ada Okoye (address unknown; quoted by Bo Halvorsen <bo@fjordline.example>)",
-    );
+    expect(
+      senderTitle(
+        entry({ author: "Ada Okoye", fromQuotedBy: "Bo Halvorsen <bo@fjordline.example>" }),
+      ),
+    ).toBe("Ada Okoye (address unknown; quoted by Bo Halvorsen <bo@fjordline.example>)");
     // Nothing to hang the parenthesis on when the line has no name either.
-    expect(senderTitle(entry({ fromQuotedBy: "Bo Halvorsen" }))).toBe("address unknown; quoted by Bo Halvorsen");
+    expect(senderTitle(entry({ fromQuotedBy: "Bo Halvorsen" }))).toBe(
+      "address unknown; quoted by Bo Halvorsen",
+    );
   });
 });
 
@@ -130,26 +149,40 @@ describe("the corpus's identity graph, read once", () => {
   }
 
   it("answers with the people whose addresses it holds, and only those", async () => {
-    vi.stubGlobal("fetch", async () =>
-      new Response(
-        JSON.stringify({
-          people: [
-            {
-              personId: 2,
-              displayName: "Cy Okafor",
-              identities: ["display_name:cy okafor", "email:cy@loomworks.example"],
-              sent: 3,
-              received: 9,
-            },
-            // A person the corpus knows only by a name: no address, so no key at all
-            // rather than a key holding nothing. One absent key is where "we have
-            // nothing for them" is said once.
-            { personId: 7, displayName: "Ada Okoye", identities: ["display_name:ada okoye"], sent: 1, received: 0 },
-            { personId: 9, displayName: "Bo Halvorsen", identities: ["email:bo@fjordline.example"], sent: 2, received: 3 },
-          ],
-        }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      ),
+    vi.stubGlobal(
+      "fetch",
+      async () =>
+        new Response(
+          JSON.stringify({
+            people: [
+              {
+                personId: 2,
+                displayName: "Cy Okafor",
+                identities: ["display_name:cy okafor", "email:cy@loomworks.example"],
+                sent: 3,
+                received: 9,
+              },
+              // A person the corpus knows only by a name: no address, so no key at all
+              // rather than a key holding nothing. One absent key is where "we have
+              // nothing for them" is said once.
+              {
+                personId: 7,
+                displayName: "Ada Okoye",
+                identities: ["display_name:ada okoye"],
+                sent: 1,
+                received: 0,
+              },
+              {
+                personId: 9,
+                displayName: "Bo Halvorsen",
+                identities: ["email:bo@fjordline.example"],
+                sent: 2,
+                received: 3,
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
     );
     const seen: Map<number, string[]> = new Map();
     mount((people) => {

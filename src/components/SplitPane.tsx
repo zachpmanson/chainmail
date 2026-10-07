@@ -63,6 +63,8 @@ export function SplitPane({
   // What the border was grabbed at, and what the list was drawn at then: a drag
   // reads both to move the line by the pointer's travel rather than to it.
   const grabbed = useRef<{ x: number; w: number } | null>(null);
+  // Measure after every commit because other layout state can change the actual width.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     setShown(drawn());
   });
@@ -152,7 +154,10 @@ export function SplitPane({
       // what the two columns are.
       style={width === null ? undefined : ({ "--listw": `${width}px` } as CSSProperties)}
     >
-      <div className="ibcol flex min-w-0 flex-col gap-[.8rem] pt-[.8rem] min-[60rem]:h-full min-[60rem]:min-h-0 min-[60rem]:pl-[.8rem]" ref={column}>
+      <div
+        className="ibcol flex min-w-0 flex-col gap-[.8rem] pt-[.8rem] min-[60rem]:h-full min-[60rem]:min-h-0 min-[60rem]:pl-[.8rem]"
+        ref={column}
+      >
         {list}
       </div>
 

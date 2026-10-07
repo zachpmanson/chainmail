@@ -95,8 +95,7 @@ export function ViewPage() {
   // null-check narrows `spec`, so the click snapshots it into a ref first.
   const specRef = useRef<Timeline | null>(null);
   const slurp = $api.useMutation("post", "/v1/slurp", {
-    onSuccess: (data) =>
-      console.log(data.report?.trim() || "slurp: nothing to report"),
+    onSuccess: (data) => console.log(data.report?.trim() || "slurp: nothing to report"),
     onError: (e) =>
       console.error(
         e instanceof ApiError && e.status === 403
@@ -174,8 +173,7 @@ export function ViewPage() {
     return (
       <div className="mx-auto max-w-[76rem] px-5 pt-7 pb-14">
         <p className="p-8 text-muted">
-          No saved page named <strong>{name}</strong> — build one from a{" "}
-          <Link to="/">search</Link>.
+          No saved page named <strong>{name}</strong> — build one from a <Link to="/">search</Link>.
         </p>
       </div>
     );
@@ -184,48 +182,49 @@ export function ViewPage() {
   return (
     <>
       {pullNote && (
-        <p className="pullnote mb-[.8rem] mt-0 border border-accent border-l-[3px] rounded-md bg-card px-[.85rem] py-[.55rem] text-[.85rem] text-fg" role="status">
+        <p
+          className="pullnote mb-[.8rem] mt-0 border border-accent border-l-[3px] rounded-md bg-card px-[.85rem] py-[.55rem] text-[.85rem] text-fg"
+          role="status"
+        >
           {pullNote}
         </p>
       )}
       <Rendered
-      spec={spec}
-      onRefresh={() => {
-        specRef.current = spec;
-        slurp.mutate({});
-      }}
-      onAccept={(ids) =>
-        refresh.mutate({ body: { spec, name, accept: ids } })
-      }
-      // Adding a thread by hand sends the search that found it as well, so the
-      // page records it: an accepted thread whose query the spec does not hold
-      // is one nothing can explain or re-find. The server dedupes it against
-      // what the spec already records, so re-adding from the same search is
-      // harmless. The modal searches hybrid, and says so in the note.
-      onAdd={(ids, query) =>
-        refresh.mutate({
-          body: {
-            spec,
-            name,
-            accept: ids,
-            queries: [{ q: query, note: "add-email search, mode=hybrid" }],
-          },
-        })
-      }
-      onPull={(extId) => {
-        specRef.current = spec;
-        setPulling(extId);
-        setPullNote(null);
-        pull.mutate({ body: { entry: extId, name } });
-      }}
-      pulling={pulling}
-      // The endpoint stored bytes come from. Named here and nowhere else,
-      // because this component is the app: the static export renders Timeline
-      // without it, and a shared page has no server to point at.
-      mediaBase={MEDIA_BASE}
-      report={report}
-      refreshing={slurp.isPending || refresh.isPending}
-    />
+        spec={spec}
+        onRefresh={() => {
+          specRef.current = spec;
+          slurp.mutate({});
+        }}
+        onAccept={(ids) => refresh.mutate({ body: { spec, name, accept: ids } })}
+        // Adding a thread by hand sends the search that found it as well, so the
+        // page records it: an accepted thread whose query the spec does not hold
+        // is one nothing can explain or re-find. The server dedupes it against
+        // what the spec already records, so re-adding from the same search is
+        // harmless. The modal searches hybrid, and says so in the note.
+        onAdd={(ids, query) =>
+          refresh.mutate({
+            body: {
+              spec,
+              name,
+              accept: ids,
+              queries: [{ q: query, note: "add-email search, mode=hybrid" }],
+            },
+          })
+        }
+        onPull={(extId) => {
+          specRef.current = spec;
+          setPulling(extId);
+          setPullNote(null);
+          pull.mutate({ body: { entry: extId, name } });
+        }}
+        pulling={pulling}
+        // The endpoint stored bytes come from. Named here and nowhere else,
+        // because this component is the app: the static export renders Timeline
+        // without it, and a shared page has no server to point at.
+        mediaBase={MEDIA_BASE}
+        report={report}
+        refreshing={slurp.isPending || refresh.isPending}
+      />
     </>
   );
 }

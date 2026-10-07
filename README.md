@@ -176,8 +176,11 @@ stated elsewhere and never allowed to invert a reply chain).
 ## Development
 
 ```bash
-nix develop        # go, node 22, npm, typescript-language-server
-make check         # go test + vet + gofmt, vitest, typecheck — everything
+nix develop             # go, node 22, npm, typescript-language-server
+make check              # tests, ESLint, Prettier check, go vet/gofmt, typecheck
+npm run format          # format TypeScript/TSX
+npm run format:check    # check formatting without changing files
+# CSS is excluded: source-level tests assert exact CSS declarations.
 npm run gen:types  # regenerate src/lib/spec.d.ts from the schema
 npm run gen:api    # regenerate src/lib/api.d.ts from openapi.json
 ```

@@ -25,13 +25,20 @@ export function Palette() {
   return (
     <div className="max-w-full overflow-x-auto">
       <table className="min-w-[36rem] border-collapse mt-[.55rem] text-[.76rem]">
-
         <thead>
           <tr>
-            <th className="border-b border-line pb-[.2rem] pr-[.9rem] text-left text-[.64rem] font-bold uppercase tracking-[.08em] text-muted last:pr-0">colour</th>
-            <th className="border-b border-line pb-[.2rem] pr-[.9rem] text-left text-[.64rem] font-bold uppercase tracking-[.08em] text-muted last:pr-0">light</th>
-            <th className="border-b border-line pb-[.2rem] pr-[.9rem] text-left text-[.64rem] font-bold uppercase tracking-[.08em] text-muted last:pr-0">dark</th>
-            <th className="border-b border-line pb-[.2rem] pr-[.9rem] text-left text-[.64rem] font-bold uppercase tracking-[.08em] text-muted last:pr-0">used for</th>
+            <th className="border-b border-line pb-[.2rem] pr-[.9rem] text-left text-[.64rem] font-bold uppercase tracking-[.08em] text-muted last:pr-0">
+              colour
+            </th>
+            <th className="border-b border-line pb-[.2rem] pr-[.9rem] text-left text-[.64rem] font-bold uppercase tracking-[.08em] text-muted last:pr-0">
+              light
+            </th>
+            <th className="border-b border-line pb-[.2rem] pr-[.9rem] text-left text-[.64rem] font-bold uppercase tracking-[.08em] text-muted last:pr-0">
+              dark
+            </th>
+            <th className="border-b border-line pb-[.2rem] pr-[.9rem] text-left text-[.64rem] font-bold uppercase tracking-[.08em] text-muted last:pr-0">
+              used for
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -46,7 +53,9 @@ export function Palette() {
               <td className="border-b border-line py-[.22rem] pr-[.9rem] align-middle whitespace-nowrap last:pr-0">
                 <Swatch value={palette?.dark[name]} />
               </td>
-              <td className="border-b border-line py-[.22rem] pr-[.9rem] align-middle whitespace-normal text-muted last:pr-0">{what}</td>
+              <td className="border-b border-line py-[.22rem] pr-[.9rem] align-middle whitespace-normal text-muted last:pr-0">
+                {what}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -64,7 +73,11 @@ export function Palette() {
 function Swatch({ value }: { value?: string }) {
   return (
     <>
-      <span className="mr-[.4rem] inline-block h-[.82rem] w-4 align-[-.09rem] rounded-[3px] border border-line" style={value ? { background: value } : undefined} aria-hidden="true" />
+      <span
+        className="mr-[.4rem] inline-block h-[.82rem] w-4 align-[-.09rem] rounded-[3px] border border-line"
+        style={value ? { background: value } : undefined}
+        aria-hidden="true"
+      />
       <span className="tabular-nums text-muted">{value ? value : "—"}</span>
     </>
   );

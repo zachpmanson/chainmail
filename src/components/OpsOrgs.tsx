@@ -15,7 +15,13 @@ type Draft = { domain: string; org: string | null };
 
 /** The consequence, in words, of the edit about to be saved. Nothing here is
  *  guessed: the counts come back from the resolver that will apply the rule. */
-function Consequence({ shift, draft }: { shift: { messages: number; people: number; ambiguous: number }; draft: Draft }) {
+function Consequence({
+  shift,
+  draft,
+}: {
+  shift: { messages: number; people: number; ambiguous: number };
+  draft: Draft;
+}) {
   const { messages, people, ambiguous } = shift;
   return (
     <p className="opmwarn">
@@ -25,8 +31,8 @@ function Consequence({ shift, draft }: { shift: { messages: number; people: numb
         </>
       ) : draft.org === "" ? (
         <>
-          <strong>{draft.domain}</strong> is not an organisation — its mail leaves
-          whatever grouping it is in and takes the unknown colour.
+          <strong>{draft.domain}</strong> is not an organisation — its mail leaves whatever grouping
+          it is in and takes the unknown colour.
         </>
       ) : (
         <>
@@ -53,7 +59,15 @@ function Consequence({ shift, draft }: { shift: { messages: number; people: numb
  *  naming an organisation, saving an empty label (this is nobody's), and dropping
  *  the rule — because a text field alone can only tell the first from the others
  *  if the reader knows what an empty box means. */
-function RuleRow({ d, busy, onPick }: { d: OrgRule; busy: boolean; onPick: (draft: Draft) => void }) {
+function RuleRow({
+  d,
+  busy,
+  onPick,
+}: {
+  d: OrgRule;
+  busy: boolean;
+  onPick: (draft: Draft) => void;
+}) {
   const [draft, setDraft] = useState<string | null>(null);
   const value = draft ?? d.org ?? "";
   const edited = draft !== null && draft !== (d.org ?? "");
@@ -64,7 +78,15 @@ function RuleRow({ d, busy, onPick }: { d: OrgRule; busy: boolean; onPick: (draf
     <article className="opmerge">
       <p className="opmrule mt-0 mb-[.4rem] text-[.68rem] font-bold uppercase tracking-[.05em] text-[var(--muted)]">
         <code>{d.domain}</code>
-        {d.stored ? <StatusBadge tone="success" className="opbad op-apply ml-2">yours</StatusBadge> : <StatusBadge tone="neutral" className="opbad op-ro">guessed</StatusBadge>}
+        {d.stored ? (
+          <StatusBadge tone="success" className="opbad op-apply ml-2">
+            yours
+          </StatusBadge>
+        ) : (
+          <StatusBadge tone="neutral" className="opbad op-ro">
+            guessed
+          </StatusBadge>
+        )}
       </p>
       <p className="my-[.15rem] text-[.84rem] leading-[1.35] [&_code]:text-[.74rem] [&_code]:[overflow-wrap:anywhere]">
         {mail} — drawn as{" "}
@@ -88,7 +110,8 @@ function RuleRow({ d, busy, onPick }: { d: OrgRule; busy: boolean; onPick: (draf
         <Button
           type="button"
           variant="subtle"
-          density="compact" className="opbtn"
+          density="compact"
+          className="opbtn"
           disabled={busy || !edited}
           onClick={() => {
             setDraft(null);
@@ -101,7 +124,8 @@ function RuleRow({ d, busy, onPick }: { d: OrgRule; busy: boolean; onPick: (draf
           <Button
             type="button"
             variant="subtle"
-            density="compact" className="opbtn"
+            density="compact"
+            className="opbtn"
             disabled={busy}
             onClick={() => {
               setDraft(null);
@@ -194,17 +218,23 @@ export function OpsOrgs() {
   return (
     <>
       <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">
-        A bubble is coloured by its sender's organisation. The corpus reads one
-        from the mail domain; where that reads wrong, write the name here — two
-        domains with one name are one organisation, and a domain you leave empty
-        is nobody's.
+        A bubble is coloured by its sender's organisation. The corpus reads one from the mail
+        domain; where that reads wrong, write the name here — two domains with one name are one
+        organisation, and a domain you leave empty is nobody's.
       </p>
       {error ? (
-        <p className="selfail mt-[.7rem] rounded-md border border-line border-l-[3px] border-l-red-700 bg-card px-[.7rem] py-2 text-[.82rem]" role="alert">
+        <p
+          className="selfail mt-[.7rem] rounded-md border border-line border-l-[3px] border-l-red-700 bg-card px-[.7rem] py-2 text-[.82rem]"
+          role="alert"
+        >
           {error}
         </p>
       ) : null}
-      {last ? <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">{last}. The list below is the current one.</p> : null}
+      {last ? (
+        <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">
+          {last}. The list below is the current one.
+        </p>
+      ) : null}
 
       {draft ? (
         <div className="mt-2 mb-[.15rem] rounded-md border border-line bg-quote px-[.6rem] py-2 text-[.76rem] leading-[1.5] text-fg">
@@ -213,10 +243,24 @@ export function OpsOrgs() {
             draft={draft}
           />
           <div className="opmact mt-[.55rem] flex items-center gap-2">
-            <Button type="button" variant="danger" density="compact" className="opbtn opbtn-after" disabled={busy || preview.isPending} onClick={apply}>
+            <Button
+              type="button"
+              variant="danger"
+              density="compact"
+              className="opbtn opbtn-after"
+              disabled={busy || preview.isPending}
+              onClick={apply}
+            >
               {draft.org === null ? "drop the rule" : "save this grouping"}
             </Button>
-            <Button type="button" variant="subtle" density="compact" className="opbtn" disabled={busy} onClick={() => setDraft(null)}>
+            <Button
+              type="button"
+              variant="subtle"
+              density="compact"
+              className="opbtn"
+              disabled={busy}
+              onClick={() => setDraft(null)}
+            >
               cancel
             </Button>
           </div>
@@ -224,16 +268,21 @@ export function OpsOrgs() {
       ) : null}
 
       {!data ? (
-        <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">{orgs.isPending ? "Reading the domains…" : "No domains."}</p>
+        <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">
+          {orgs.isPending ? "Reading the domains…" : "No domains."}
+        </p>
       ) : data.domains.length === 0 ? (
         <p className="my-[.35rem] mb-2 text-[.74rem] text-[var(--muted)]">
-          No mail has arrived with a domain of its own, so there is nothing to
-          colour yet — but a rule written below will apply when it does.
+          No mail has arrived with a domain of its own, so there is nothing to colour yet — but a
+          rule written below will apply when it does.
         </p>
       ) : (
         <ol className="mt-2 list-none p-0">
           {data.domains.map((d) => (
-            <li key={d.domain} className="oprow not-first:mt-[.45rem] rounded-[9px] border border-[var(--line)] bg-[var(--card)] px-[.7rem] py-[.55rem]">
+            <li
+              key={d.domain}
+              className="oprow not-first:mt-[.45rem] rounded-[9px] border border-[var(--line)] bg-[var(--card)] px-[.7rem] py-[.55rem]"
+            >
               <RuleRow d={d} busy={busy} onPick={pick} />
             </li>
           ))}
@@ -264,7 +313,13 @@ export function OpsOrgs() {
           aria-label="Organisation for that domain"
           onChange={(e) => setNewOrg(e.target.value)}
         />
-        <Button type="submit" variant="subtle" density="compact" className="opbtn" disabled={busy || newDomain.trim() === ""}>
+        <Button
+          type="submit"
+          variant="subtle"
+          density="compact"
+          className="opbtn"
+          disabled={busy || newDomain.trim() === ""}
+        >
           rule on this domain
         </Button>
       </form>

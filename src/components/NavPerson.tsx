@@ -231,7 +231,9 @@ export function NavPerson({
                       will be narrowed to, rather than finding out from the
                       address bar afterwards. */}
                   {row.address && row.address !== row.name ? (
-                    <span className="adr text-[.66rem] text-muted [overflow-wrap:anywhere]">{row.address}</span>
+                    <span className="adr text-[.66rem] text-muted [overflow-wrap:anywhere]">
+                      {row.address}
+                    </span>
                   ) : null}
                 </li>
               ))}

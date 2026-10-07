@@ -2,9 +2,23 @@ import type { Entry, Timeline } from "./spec";
 import { parseDate } from "./anchors";
 
 export const TZ_OFFSETS: Record<string, number> = {
-  AEST: 600, AEDT: 660, NZST: 720, NZDT: 780, AWST: 480, ACST: 570, ACDT: 630,
-  GMT: 0, UTC: 0, BST: 60, CET: 60, CEST: 120, IST: 330,
-  PST: -480, PDT: -420, EST: -300, EDT: -240,
+  AEST: 600,
+  AEDT: 660,
+  NZST: 720,
+  NZDT: 780,
+  AWST: 480,
+  ACST: 570,
+  ACDT: 630,
+  GMT: 0,
+  UTC: 0,
+  BST: 60,
+  CET: 60,
+  CEST: 120,
+  IST: 330,
+  PST: -480,
+  PDT: -420,
+  EST: -300,
+  EDT: -240,
 };
 
 /** Minutes east of UTC for a zone label, or null if unrecognised. */
@@ -73,7 +87,10 @@ export function zones(entries: Entry[]): Zones {
     let tz = e.tz;
     if (!hhmm && e.kind === "note") {
       const t = /(\d{1,2}):(\d{2})\s*([A-Z]{3,4})?/.exec(e.label ?? "");
-      if (t) { hhmm = `${t[1]}:${t[2]}`; tz = tz ?? t[3]; }
+      if (t) {
+        hhmm = `${t[1]}:${t[2]}`;
+        tz = tz ?? t[3];
+      }
     }
     const hm = hhmm.replace(/\D/g, "").slice(0, 4);
     const mins = hm.length === 4 ? Number(hm.slice(0, 2)) * 60 + Number(hm.slice(2)) : 12 * 60;
@@ -99,7 +116,7 @@ export function order(entries: Entry[], idOf: (e: Entry) => string): Entry[] {
     children.set(p, [...(children.get(p) ?? []), idOf(e)]);
   }
 
-  const cmp = (a: string, b: string) => (key.get(a)! - key.get(b)!) || a.localeCompare(b);
+  const cmp = (a: string, b: string) => key.get(a)! - key.get(b)! || a.localeCompare(b);
   const ready = [...(children.get(null) ?? [])].sort(cmp);
   const seen = new Set<string>();
   const out: Entry[] = [];
