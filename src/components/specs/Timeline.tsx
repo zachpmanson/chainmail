@@ -75,13 +75,17 @@ function EntryBlock({
     const start = row.isChainStart ? " chstart" : "";
     return (
       <div
-        className={`sys mx-auto my-[.7rem] max-w-[44rem] border border-dashed border-line rounded-[10px] bg-quote px-[.9rem] py-[.55rem] text-center${start}${mark === "new" ? " isnew" : ""}`}
+        className={`sys scroll-mt-6 mx-auto my-[.7rem] max-w-[44rem] border border-dashed border-line rounded-[10px] bg-quote px-[.9rem] py-[.55rem] text-center${start}${mark === "new" ? " isnew border-l-[3px_solid_var(--o1)]" : ""}`}
         id={row.id}
         data-ch={row.lane}
         style={grid}
       >
         <div className="sysday mb-[.15rem] text-[.68rem] tabular-nums text-muted">
-          <a className="pl" href={`#${row.id}`} title="Link to this note">
+          <a
+            className="pl rounded-[3px] text-inherit underline-offset-2 decoration-accent no-underline hover:text-accent hover:underline hover:decoration-dotted focus-visible:outline focus-visible:outline-[1.5px] focus-visible:outline-accent focus-visible:outline-offset-1"
+            href={`#${row.id}`}
+            title="Link to this note"
+          >
             {e.date}
           </a>
         </div>

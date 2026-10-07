@@ -30,7 +30,7 @@ export function OpsView() {
   // value opens the default tab instead of drawing none.
   const open: OpsTab = tabOf(tab);
   return (
-    <div className="wrap opswrap">
+    <div className="wrap opswrap mx-0 w-full max-w-none px-5 pt-7 pb-14">
       <div
         className="mt-2 mb-[.1rem] flex items-stretch gap-[.15rem] border-b border-line"
         role="tablist"

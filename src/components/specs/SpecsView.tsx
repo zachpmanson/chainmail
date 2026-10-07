@@ -17,7 +17,7 @@ export function SpecsView() {
   const list = $api.useQuery("get", "/v1/specs", {});
 
   return (
-    <div className="wrap statuswrap">
+    <div className="wrap statuswrap mx-0 w-full max-w-none px-5 pt-7 pb-14">
       {list.isError ? <InlineAlert>{errText(list.error)}</InlineAlert> : null}
 
       {list.isFetching && !list.data ? (

@@ -43,11 +43,6 @@
      search page all shrank to a centred column on a wide screen. The shell is a
      flex column only where a page has to fill the window: the workspaces,
      body.inbox and body.search, below. */
-  /* The document measure. A transcript is read, so it keeps a readable width on
-     a wide screen; column mode drops it (see body.chains — a workspace is laid
-     out, not read), and the app's own pages opt out below, because a list and a
-     reading pane are laid out too. */
-  .wrap { max-width:76rem; margin:0 auto; padding:1.75rem 1.25rem 3.5rem; }
   /* The shell fills the window. A cap here put the nav in the middle of a wide
      screen with a third of it empty to either side, on every page. */
   /* A row, so the corpus search can sit at its end: `margin-left:auto` is what
@@ -271,24 +266,6 @@
   @media (prefers-reduced-motion: reduce) {
     .navrefresh.busy .spinner, .origbtn.busy .spinner, .att.busy .spinner {
       animation:none; } }
-  /* The app's own pages are workspaces, not documents: an inbox is a list and a
-     reading pane, and both want the width the window has. Anything not named
-     here — a 404, a dropped spec — keeps the measure above.
-
-     `width:100%` and no auto margins, because `max-width:none` alone was not
-     enough. The inbox's shell is a flex column (it has to be, to cap the app at
-     the window), and a flex item with `margin:0 auto` is sized to its *content* —
-     so the width of this page depended on how long the longest subject line
-     happened to be. Measured at 3440px with a folder of eight short rows: the
-     page started 257px in and ended 257px short, and no amount of `max-width:
-     none` could say otherwise. The same rule broke four document pages (#125). */
-  .wrap.selwrap, .wrap.ibwrap, .wrap.statuswrap, .wrap.opswrap {
-    max-width:none; width:100%; margin-left:0; margin-right:0; }
-  /* And no vertical padding. A workspace fills the window, so space above and
-     below its panels is space the panels could have had — the nav above and the
-     page's own horizontal margin are the only gaps it needs. The reading pane's
-     last message now lands on the bottom edge, which is where a scroller ends. */
-  .wrap.ibwrap { padding-top:0; padding-bottom:0; }
   h1 { font-size:1.3rem; margin:0 0 .2rem; letter-spacing:-.01em; }
   .pan > summary::-webkit-details-marker { display:none; }
   .pan > summary::before { content:""; display:inline-block; width:0; height:0;
@@ -314,14 +291,6 @@
   .srcgrp[open] > summary::before { transform:rotate(90deg); }
   /* proposal evaluator: a dimmed backdrop keeps the page visible while a proposed
      chain is judged and accepted by root ext id (see refresh.go's Candidate). */
-  .proposals { position:fixed; inset:0; z-index:55; background:rgba(0,0,0,.45);
-    display:flex; align-items:center; justify-content:center; }
-  .sys.isnew { border-left:3px solid var(--o1); }
-  .av.o1{background:var(--o1);--ring:var(--o1)} .av.o2{background:var(--o2);--ring:var(--o2)}
-  .av.o3{background:var(--o3);--ring:var(--o3)} .av.o4{background:var(--o4);--ring:var(--o4)}
-  .av.o5{background:var(--o5);--ring:var(--o5)}
-  .av.pic { background-size:cover; background-position:center;
-    box-shadow:0 0 0 1.5px var(--ring,var(--muted)), 0 0 0 2.5px var(--bg); }
   /* The header is a disclosure, not a caption. The sender, the org, the clock
      and the reply the message answers are its summary — the things a page is
      scanned by — and the caret closes the line at its right edge, so it opens
@@ -341,8 +310,6 @@
      points at the edge of the box. Open, it turns a quarter clockwise to point down
      at the receipt that has just appeared under it, which is the rotation the shape
      itself asks for (a left triangle turned left by 90° is a down one). */
-  details.hdr > summary > .htail { display:inline-flex; align-items:baseline;
-    gap:.5rem; margin-left:auto; }
   details.hdr > summary > .htail::after { content:""; display:inline-block;
     width:0; height:0;
     border:.25em solid transparent; border-right-color:var(--muted);
@@ -350,7 +317,6 @@
   details.hdr > summary:hover > .htail::after { border-right-color:var(--accent); }
   details.hdr[open] > summary > .htail::after { transform:rotate(-90deg);
     border-right-color:var(--accent); }
-  details.hdr > summary:focus-visible { outline:1px solid var(--accent); outline-offset:2px; }
   /* The shadow host: layout only, and deliberately no colour. A rule in THIS
      stylesheet beats a :host rule written inside the shadow root, so a colour
      here would be a canvas the sender's own stylesheet could not correct — the
@@ -427,10 +393,6 @@
      of the transcript: a picture at its real size is often larger than the
      column it came from, and the reader needs to see that it is over the page
      and not in it. */
-  .pop { position:fixed; inset:0; z-index:55; display:flex; align-items:center;
-    justify-content:center; padding:1.5rem;
-    background:color-mix(in srgb, var(--bg) 92%, transparent);
-    backdrop-filter:blur(3px); }
   .pop[hidden] { display:none; }
   /* Room is left for the bar underneath, so the caption and the controls are not
      the first thing a tall picture pushes off the screen. Never scaled up: a
@@ -446,19 +408,6 @@
      against its heading, and that heading is the first thing to leave the screen.
      Monospace, so a column of amounts lines up on its digits. */
   .popgrid[hidden] { display:none; }
-  .poptable { border-collapse:collapse; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
-    font-size:.74rem; }
-  .poptable th, .poptable td { padding:.28rem .6rem; text-align:left; vertical-align:top;
-    border-right:1px solid var(--line); border-bottom:1px solid var(--line);
-    /* A cell can hold a paragraph — an address, a note column — and a row that
-       runs off the screen is worse than one that is two lines taller. The width
-       is a cap, not a target: a narrow column stays narrow. */
-    white-space:pre-wrap; max-width:26rem; overflow-wrap:anywhere; }
-  .poptable th { position:sticky; top:0; z-index:1; background:var(--card);
-    font-weight:650; color:var(--muted); }
-  .poptable td.num { text-align:right; font-variant-numeric:tabular-nums; }
-  .poptable tr:last-child th, .poptable tr:last-child td { border-bottom:0; }
-  .poptable th:last-child, .poptable td:last-child { border-right:0; }
   /* A framed document: the browser's own viewer, sized like a page. No sandbox
      attribute — the frame's content is a blob this page built with a type it
      chose (application/pdf), never the sender's claim about the bytes, and the
@@ -492,7 +441,6 @@
      the air between it and the subject above. Centring the items keeps the text
      beside the control rather than hung beneath it, and stops one control from
      setting the space above an entire row. */
-  .to { font-size:.66rem; color:var(--muted); }
   /* The message's own subject, and the ids it was found under, sharing the
      receipt's first line: the subject keeps the left and the ids are pushed to
      the right end of the same line. A subject is a sentence rather than a field
@@ -512,13 +460,6 @@
   /* `margin-left:auto` rather than the subject taking the slack: a long subject
      that wraps must not push the ids off the row, and the ids still end at the
      right edge when the subject is short. */
-  .hdet .hsub .src { margin-left:auto; }
-  .src a { color:inherit; text-decoration:none; border-bottom:1px dotted currentColor; }
-  .src a:hover { color:var(--accent); }
-  /* An id and its "msg" are one token to the reader, so the space between them is
-     not a break opportunity; the commas outside .sid are, and they are the only
-     place a many-host line may wrap. */
-  .src .sid { white-space:nowrap; }
   .sys ul { text-align:left; margin:.4rem 0 0; padding-left:1.1rem; }
   .sys li { font-size:.85rem; margin:.12rem 0; }
   .sys p { margin:.18rem 0; font-size:.86rem; text-align:left; }
@@ -527,15 +468,7 @@
   table { border-collapse:collapse; font-size:.78rem; min-width:24rem; }
   th,td { text-align:left; padding:.18rem .6rem .18rem 0; border-bottom:1px solid var(--line); }
   th { color:var(--muted); font-weight:600; }
-  .msg, .sys { scroll-margin-top:1.5rem; }
-  a.pl { color:inherit; text-decoration:none; text-underline-offset:2px;
-    text-decoration-color:var(--accent); border-radius:3px; }
-  a.pl:hover { color:var(--accent); text-decoration:underline dotted; }
-  a.pl:focus-visible { outline:1.5px solid var(--accent); outline-offset:1px; }
   .sys .par { margin-top:.3rem; }
-  a.xref { color:inherit; text-decoration:underline; text-decoration-style:dotted;
-    text-underline-offset:2px; text-decoration-color:var(--accent); }
-  a.xref:hover { color:var(--accent); text-decoration-style:solid; }
   @keyframes flash { from { box-shadow:0 0 0 3px var(--accent); }
                      to   { box-shadow:0 0 0 3px transparent; } }
   .msg:target .bub, .sys:target { animation:flash 1.4s ease-out 1;
@@ -548,41 +481,6 @@
      nothing is navigated to, and no anchor in the address names this message. */
   .msg.landed .bub { animation:flash 1.6s ease-out 1; border-color:var(--accent); }
   /* --- reply-tree minimap: sticky structural index of the reply graph --- */
-  .mini { position:fixed; top:0; right:0; bottom:0; width:max-content;
-    max-width:16.5rem; z-index:30;
-    background:var(--card); border-left:1px solid var(--line);
-    display:flex; flex-direction:column; }
-  .mini h3 { margin:0; padding:.55rem .7rem .4rem; font-size:.66rem; font-weight:700;
-    text-transform:uppercase; letter-spacing:.09em; color:var(--muted);
-    border-bottom:1px solid var(--line); display:flex; align-items:center; gap:.4rem; }
-  .mini h3 span.ct { margin-left:auto; font-weight:600; opacity:.75; }
-  .mini h3 .xsvg { display:inline-flex; align-items:center; padding:.05rem .18rem;
-    font:inherit; color:var(--muted); background:transparent;
-    border:1px solid transparent; border-radius:4px; cursor:pointer; }
-  .mini h3 .xsvg:hover { color:var(--accent); border-color:var(--line); background:var(--card); }
-  .mini .mbody { overflow:auto; padding:.45rem .3rem .8rem; flex:1 1 auto; }
-  .mini svg { display:block; }
-  .mini .lk { fill:none; stroke:var(--line); stroke-width:1.3; }
-  .mini .lk.fk { stroke:var(--o4); stroke-width:1.6; }
-  .mini .nd circle { stroke:var(--card); stroke-width:1.4; cursor:pointer; }
-  .mini .nd.o1 circle{fill:var(--o1)} .mini .nd.o2 circle{fill:var(--o2)}
-  .mini .nd.o3 circle{fill:var(--o3)} .mini .nd.o4 circle{fill:var(--o4)}
-  .mini .nd.o5 circle{fill:var(--o5)}
-  .mini .nd.qd circle { fill:var(--card); stroke-width:1.9; }
-  .mini .nd.o1.qd circle{stroke:var(--o1)} .mini .nd.o2.qd circle{stroke:var(--o2)}
-  .mini .nd.o3.qd circle{stroke:var(--o3)} .mini .nd.o4.qd circle{stroke:var(--o4)}
-  .mini .nd.o5.qd circle{stroke:var(--o5)}
-  .mini .nd.sysn rect { fill:var(--muted); stroke:var(--card); stroke-width:1.4;
-    cursor:pointer; }
-  /* a chain start has no parent by design; the cap distinguishes that from a
-     node whose parent edge is simply absent */
-  .mini .rtcap { stroke:var(--muted); stroke-width:1.6; opacity:.85; }
-  .mini .hit { fill:transparent; cursor:pointer; }
-  .mini .hit:hover { fill:var(--quote); }
-  /* the strip is the only pointer target, so the band below it still receives
-     hover when the cursor is directly over a dot or a connector */
-  .mini .nd, .mini .lk, .mini .rtcap { pointer-events:none; }
-  .mini .nd:hover circle, .mini .nd:hover rect { stroke:var(--fg); }
   /* the active message and its ancestry stay lit; everything else recedes */
   .mini.spy .nd { opacity:.3; }
   .mini.spy .nd.anc { opacity:.85; }
@@ -655,20 +553,6 @@
      motion is. */
   @media (prefers-reduced-motion: no-preference) {
     .ibread .stream .replies { transition:border-left-color .18s ease; } }
-  .mini .foot2 { border-top:1px solid var(--line); padding:.28rem .6rem .35rem;
-    font-size:.58rem; color:var(--muted); line-height:1.25;
-    display:flex; flex-direction:column; gap:.22rem; }
-  .mini .foot2 b { color:var(--fg); font-weight:600; }
-  .mini .foot2 .tally { display:flex; flex-direction:column; gap:.12rem; }
-  .mini .foot2 .tally div { white-space:nowrap; }
-  .mini .foot2 .legend { margin:0; display:flex; flex-direction:column; gap:.1rem; }
-  .mini .foot2 .legend div { display:flex; align-items:center; gap:.34rem; }
-  .mini .foot2 .legend svg.lg { width:.7em; height:.7em; flex:none; }
-  .mini .foot2 .legend dt { margin:0; color:var(--muted); }
-  .mini .vrow { display:flex; flex-direction:column; flex:1 1 auto; min-height:0; }
-  /* the horizontal strip is kept in the DOM (behaviour.js binds both sets of
-     nodes and links) but hidden until body.tree-h swaps it in */
-  .mini .hrow { display:none; }
   /* --- horizontal tree: a strip pinned to the bottom of the viewport --- */
   body.tree-h .mini {
     top:auto; bottom:0; left:0; right:0; width:auto; max-width:none; height:auto;
@@ -707,11 +591,9 @@
        --panel is only for the reserved-column layout, where the buttons clear
        the panel's left edge. */
     body.hasmap { padding-right:0; }
-    .mini { top:2.4rem; width:max-content; max-width:16.5rem;
-      background:color-mix(in srgb, var(--card) 86%, transparent); }
     #maptog { display:inline-block; }
   }
-  @media print { .mini { display:none; } body.hasmap { padding-right:0; } }
+  @media print { body.hasmap { padding-right:0; } }
   /* --- chain columns: one column per reply chain, grid row = chronological
      position, so reading down stays in time order while each chain keeps a lane --- */
   .colhd, .spine, .chsec { display:none; }
@@ -809,22 +691,6 @@
    the pane growing. */
 /* Recipient rows are display:contents so labels line up, fields take the middle
    track, and the message target reserves the trailing track. */
-/* The collapsed recipient line: who the reply reaches, read-only, and the one
-   press that opens the editors. It is styled as the message header's own
-   receipt line (.to) rather than as a field, because that is what it is before a
-   reader asks to change it — a summary of an audience, not a control they are
-   being asked to arrange. The whole line is the press, so the name under the
-   pointer colours the way every other live line in the pane does. */
-.replysummary { grid-column:1 / 3; display:flex; align-items:center; gap:.3rem; flex:1; min-width:0;
-  height:var(--addrrow); padding:0; border:0; background:none; text-align:left;
-  font:inherit; font-size:.74rem; color:var(--muted); cursor:pointer; overflow:hidden; }
-.replysummary:disabled { cursor:default; opacity:.55; }
-.replysummary:focus-visible { outline:1px solid var(--accent); outline-offset:2px;
-  border-radius:4px; }
-.replysummary .replynames { min-width:0; overflow:hidden;
-  text-overflow:ellipsis; white-space:nowrap; }
-.replysummary:hover .replynames { color:var(--fg); }
-.replynone { font-style:italic; }
 /* The plan: what will be sent, in the whole. The body is monospaced and
    pre-wrapped so that the quote is read as the lines that will be sent — the
    quote marks the server added are the thing being checked, and a proportional
@@ -843,19 +709,6 @@
   border-left:2px solid var(--line); color:var(--muted); }
 .replyhtml img { max-width:100%; height:auto; }
 .replyhtml table { min-width:0; max-width:100%; }
-/* The box's own buttons sit at the right end rather than the left. The box is
-   the last thing in the reading pane and its action is the last thing in the
-   box, so the eye that has finished reading the plan lands on the press that
-   takes it — and the primary press is the rightmost of them, which is the one
-   place a right-handed reader's cursor already is. */
-.replyacts { justify-content:flex-end; }
-/* The box's choices hold the other end of that row: what the reader decides about
-   the reply rather than about the words in it — who else is on it, and whether the
-   HTML part goes with the text — sits where a form's choices sit, under the field
-   at the left, in the reader's reading order, while what sends the reply stays
-   where the sending is. They are one row and one style because they are one kind
-   of thing: both ticks are on, and either can only take something off the reply. */
-.replytick:has(input:disabled) { opacity:.55; cursor:default; }
 
 /* --- what a write leaves to say --- */
 /* A refusal toast keeps the standard arrival treatment but needs no timeout. */

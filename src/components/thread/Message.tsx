@@ -790,7 +790,7 @@ export function Message(p: MessageProps) {
   const cls = [
     "msg",
     p.orgSlot,
-    "mb-2",
+    "mb-2 scroll-mt-6",
     p.me && "me",
     p.quoted && "q",
     p.chainStart && "chstart",
@@ -835,7 +835,7 @@ export function Message(p: MessageProps) {
             and the panels: the export stays readable without scripting, and
             find-in-page reaches the ids closed or open. */}
         <details className="hdr mb-[.14rem] px-[.1rem]">
-          <summary className="flex cursor-pointer flex-wrap items-baseline gap-[.3rem] list-none">
+          <summary className="flex cursor-pointer flex-wrap items-baseline gap-[.3rem] list-none focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent focus-visible:outline-offset-2">
             <Avatar name={p.sender ?? ""} orgSlot={p.orgSlot} pic={p.avatarClass} title={who} />
             <span className="nm text-[.83rem] font-[650]" title={who}>
               {p.sender}
@@ -857,7 +857,7 @@ export function Message(p: MessageProps) {
             {/* The line's right end, and always drawn even when the caller has
                 no reply to put in it: the caret lives inside this box, so an
                 empty tail still closes the line at the right edge. */}
-            <span className="htail">{p.reply}</span>
+            <span className="htail ml-auto inline-flex items-baseline gap-[.5rem]">{p.reply}</span>
           </summary>
           <div className="hdet mb-[.3rem] flex flex-wrap items-center gap-x-[.7rem] gap-y-[.2rem] px-[.1rem] pt-[.22rem]">
             {/* The subject, on its own line above the receipt's fields, and only

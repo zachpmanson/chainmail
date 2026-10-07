@@ -138,7 +138,7 @@ export function SelectView() {
   const reading: PreviewableThread | null = opened ? (picked ?? { rootExtId: opened }) : null;
 
   return (
-    <div className="wrap selwrap mx-0 w-full max-w-none min-[60rem]:flex min-[60rem]:flex-1 min-[60rem]:flex-col min-[60rem]:min-h-0 min-[60rem]:px-0 min-[60rem]:pt-0 min-[60rem]:pb-0">
+    <div className="wrap selwrap mx-0 w-full max-w-none px-0 pt-0 pb-0 min-[60rem]:flex min-[60rem]:flex-1 min-[60rem]:flex-col min-[60rem]:min-h-0 min-[60rem]:px-0 min-[60rem]:pt-0 min-[60rem]:pb-0">
       {results.isError ? <Failure error={results.error} /> : null}
       {results.isFetching ? (
         <p className="selnote mt-2 flex-[1_1_100%] text-[.78rem] text-muted">Searching…</p>

@@ -29,6 +29,9 @@ describe("minimap export button", () => {
     const btn = html.match(/<button[^>]*class="[^"]*xsvg[^"]*"[^>]*>/)?.[0];
     expect(btn).toBeTruthy();
     expect(btn).toContain('aria-label="Download this reply tree as an SVG file"');
+    expect(html).toContain('class="mini fixed');
+    expect(html).toContain('class="lk fill-none stroke-line stroke-[1.3] pointer-events-none');
+    expect(html).toContain("fill-org-");
     // it lives inside the tree panel, not anywhere else on the page
     expect(html.indexOf('id="mini"')).toBeLessThan(html.indexOf(btn!));
   });

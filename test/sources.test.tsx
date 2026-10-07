@@ -93,7 +93,7 @@ describe("the source line under a bubble", () => {
     // receipt and then open the line to reach the ids — which are the only reason
     // to open either.
     expect(rec).not.toContain("<details");
-    expect(rec).toContain('unspooled from <span class="sid">');
+    expect(rec).toContain('unspooled from <span class="sid whitespace-nowrap">');
     let at = -1;
     for (const h of H) {
       // named where it is, and in the thread's order: the commas outside .sid are
@@ -112,7 +112,7 @@ describe("the source line under a bubble", () => {
     expect(rec).not.toMatch(/\b1 msgs?\b/);
     expect(rec).not.toContain("<details");
     // no on-page message with this gmailId: the id is named, not shipped to Gmail
-    expect(rec).toContain(`unspooled from <span class="sid">msg ${H[0]}</span>`);
+    expect(rec).toContain(`unspooled from <span class="sid whitespace-nowrap">msg ${H[0]}</span>`);
     expect(rec).not.toContain("mail.google.com");
   });
 
@@ -128,7 +128,7 @@ describe("the source line under a bubble", () => {
     // the unspooled id links to the on-page anchor of the message it was lifted
     // out of, not out to Gmail
     expect(spoolFooter).toContain(
-      `unspooled from <span class="sid"><a href="#m-20260302-0915-ab" title="The message this was unspooled from, on this page">msg ${H[0]}</a></span>`,
+      `unspooled from <span class="sid whitespace-nowrap"><a class="border-b border-dotted border-current text-inherit no-underline hover:text-accent" href="#m-20260302-0915-ab" title="The message this was unspooled from, on this page">msg ${H[0]}</a></span>`,
     );
     expect(spoolFooter).not.toContain("mail.google.com");
     // the named message's own receipt still opens its mailbox copy
