@@ -150,7 +150,7 @@ describe("a thread drawn as a tree", () => {
   it("is indented by Tailwind utilities at every depth, with no cap", () => {
     // The indentation is on each recursive replies container, so depth remains
     // unbounded and each nesting level contributes the same step and line.
-    const component = readFileSync("src/components/ThreadMessages.tsx", "utf8");
+    const component = readFileSync("src/components/thread/ThreadMessages.tsx", "utf8");
     expect(component).toContain(
       'className="replies -mt-2 ml-[.3rem] border-l-2 border-line pt-2 pl-4"',
     );
@@ -158,7 +158,7 @@ describe("a thread drawn as a tree", () => {
   });
 
   it("hangs the reply line off its message without a gap", () => {
-    const component = readFileSync("src/components/ThreadMessages.tsx", "utf8");
+    const component = readFileSync("src/components/thread/ThreadMessages.tsx", "utf8");
     expect(component).toContain("-mt-2");
     expect(component).toContain("pt-2 pl-4");
   });

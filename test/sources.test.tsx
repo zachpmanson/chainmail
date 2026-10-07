@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Timeline } from "../src/components/Timeline";
+import { Timeline } from "../src/components/specs/Timeline";
 import { normalise } from "../src/lib/normalise";
 import { msgCount, provenance } from "../src/lib/sources";
 import type { Entry, Timeline as Spec } from "../src/lib/spec";

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { ReplyLink } from "../src/components/ReplyLink";
+import { ReplyLink } from "../src/components/thread/ReplyLink";
 
 /**
  * The mark both renderers draw for one message's parent: a built page resolves

@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { AddressField, type Address } from "../src/components/AddressField";
+import { AddressField, type Address } from "../src/components/compose/AddressField";
 
 /**
  * The address field on its own: what it offers, what it takes, and what it refuses.

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Timeline } from "../src/components/Timeline";
+import { Timeline } from "../src/components/specs/Timeline";
 import { MEDIA_BASE } from "../src/lib/attachments";
 import { normalise } from "../src/lib/normalise";
 import type { Entry, Timeline as Spec } from "../src/lib/spec";

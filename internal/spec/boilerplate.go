@@ -24,7 +24,7 @@ import (
 // be a second kind of noise, so the control is one quiet italic line — the
 // weight of an editorial aside, which is what it is — and the evidence for the
 // fold is in its title attribute, the way an inferred zone argues for itself in
-// Stamp (src/components/Timeline.tsx).
+// Stamp (src/components/specs/Timeline.tsx).
 //
 // The blocks a client marked itself are folded the same way, rather than
 // trimmed. There is one story about signatures on the page, and a reader who

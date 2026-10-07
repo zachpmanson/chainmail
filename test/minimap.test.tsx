@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Minimap, treeSvgString } from "../src/components/Minimap";
+import { Minimap, treeSvgString } from "../src/components/specs/Minimap";
 import { derive } from "../src/lib/derive";
 import { graphLanes } from "../src/lib/lanes";
 import { normalise } from "../src/lib/normalise";

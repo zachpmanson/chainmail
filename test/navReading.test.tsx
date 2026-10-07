@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
-import { NavReading } from "../src/components/NavReading";
+import { NavReading } from "../src/components/navigation/NavReading";
 import { makeQueryClient } from "../src/lib/queryClient";
 import { createChainmailRouter } from "../src/router";
 

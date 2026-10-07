@@ -13,7 +13,7 @@ import { dirname, resolve } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import Ajv from "ajv";
 import { compile } from "@tailwindcss/node";
-import { Timeline } from "../src/components/Timeline";
+import { Timeline } from "../src/components/specs/Timeline";
 import { normalise } from "../src/lib/normalise";
 import { diff, extractSpec, type Mark } from "../src/lib/diff";
 

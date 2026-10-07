@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Avatar } from "../src/components/Avatar";
-import { Checkbox, CheckboxRow } from "../src/components/Checkbox";
-import { DialogShell } from "../src/components/DialogShell";
-import { FormField } from "../src/components/FormField";
-import { InlineAlert } from "../src/components/InlineAlert";
-import { ThreadCounts } from "../src/components/ThreadRow";
-import { StatusBadge } from "../src/components/StatusBadge";
+import { Avatar } from "../src/components/thread/Avatar";
+import { Checkbox, CheckboxRow } from "../src/components/ui/Checkbox";
+import { DialogShell } from "../src/components/ui/DialogShell";
+import { FormField } from "../src/components/ui/FormField";
+import { InlineAlert } from "../src/components/ui/InlineAlert";
+import { ThreadCounts } from "../src/components/inbox/ThreadRow";
+import { StatusBadge } from "../src/components/ui/StatusBadge";
 
 describe("shared UI primitives", () => {
   it("keeps the shared avatar's image and initials variants", () => {

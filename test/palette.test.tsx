@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
-import { Palette } from "../src/components/Palette";
+import { Palette } from "../src/components/settings/Palette";
 import { PALETTE, readPalette } from "../src/lib/palette";
 
 /**
