@@ -122,7 +122,7 @@ export default function OpsOrgs() {
           {data.domains.map((d) => (
             <li
               key={d.domain}
-              className="not-first:mt-2 rounded-lg border border-line bg-card px-3 py-2"
+              className="rounded-lg border border-line bg-card px-3 py-2 not-first:mt-2"
             >
               <RuleRow d={d} busy={busy} onPick={pick} />
             </li>
@@ -139,7 +139,7 @@ export default function OpsOrgs() {
         }}
       >
         <TextInput
-          className="min-w-0 flex-[0_1_12rem] mr-0 px-1.5 py-1 text-xs"
+          className="mr-0 min-w-0 flex-[0_1_12rem] px-1.5 py-1 text-xs"
           value={newDomain}
           disabled={busy}
           placeholder="a domain with no mail yet, e.g. termina.io"
@@ -147,7 +147,7 @@ export default function OpsOrgs() {
           onChange={(e) => setNewDomain(e.target.value)}
         />
         <TextInput
-          className="min-w-0 flex-[0_1_12rem] mr-0 px-1.5 py-1 text-xs"
+          className="mr-0 min-w-0 flex-[0_1_12rem] px-1.5 py-1 text-xs"
           value={newOrg}
           disabled={busy}
           placeholder="the organisation, empty for none"

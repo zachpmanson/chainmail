@@ -93,7 +93,7 @@ export default function NavRefresh() {
           aria-hidden="true"
         />
       </IconButton>
-      {stageLabel && <span className="whitespace-nowrap text-xs">{stageLabel}</span>}
+      {stageLabel && <span className="text-xs whitespace-nowrap">{stageLabel}</span>}
     </span>
   );
 }

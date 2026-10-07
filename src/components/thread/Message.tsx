@@ -135,12 +135,12 @@ export default function Message({
       <div className="min-w-0">
         {/* A native <details>, so the export works without scripting and find-in-page reaches the ids. */}
         <details className="hdr mb-0.5 px-0.5">
-          <summary className="flex cursor-pointer flex-wrap items-baseline gap-1 list-none focus-visible:outline focus-visible:outline-accent focus-visible:outline-offset-2">
+          <summary className="flex cursor-pointer list-none flex-wrap items-baseline gap-1 focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-accent">
             <Avatar name={sender ?? ""} orgSlot={orgSlot} pic={avatarClass} title={who} />
             <span className="text-sm font-[650]" title={who}>
               {sender}
             </span>
-            <span className="text-(--orgc,var(--muted)) text-2xs font-[650] uppercase tracking-[.07em]">
+            <span className="text-2xs font-[650] tracking-[.07em] text-(--orgc,var(--muted)) uppercase">
               {org}
             </span>
             <Stamp id={id} stamp={stamp} />

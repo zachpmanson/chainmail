@@ -20,10 +20,10 @@ function CorpusStats({ stats }: { stats: Stats }) {
     <dl className="mt-0.5 grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-2">
       {rows.map(([term, definition]) => (
         <div className="min-w-0 rounded-lg border border-line bg-bg p-3" key={term}>
-          <dt className="wrap-break-word text-2xs font-bold uppercase tracking-[.07em] text-muted">
+          <dt className="text-2xs font-bold tracking-[.07em] wrap-break-word text-muted uppercase">
             {term}
           </dt>
-          <dd className="mt-1 wrap-break-word text-base font-semibold tabular-nums">
+          <dd className="mt-1 text-base font-semibold wrap-break-word tabular-nums">
             {definition}
           </dd>
         </div>

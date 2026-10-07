@@ -26,7 +26,7 @@ export default function SettingsAccounts() {
       ) : (
         <>
           {connected.length > 0 ? (
-            <ul className="mb-3 mt-0 list-none border-t border-line p-0">
+            <ul className="mt-0 mb-3 list-none border-t border-line p-0">
               {connected.map((account) => {
                 const label = account.email || account.displayName;
                 return (

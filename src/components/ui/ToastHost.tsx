@@ -7,20 +7,20 @@ export default function ToastHost() {
   if (toasts.length === 0) return null;
   return (
     <div
-      className="fixed right-[.9rem] bottom-[.9rem] z-80 flex max-w-[min(26rem,calc(100vw-1.8rem))] flex-col items-end gap-1.5 pointer-events-none"
+      className="pointer-events-none fixed right-[.9rem] bottom-[.9rem] z-80 flex max-w-[min(26rem,calc(100vw-1.8rem))] flex-col items-end gap-1.5"
       role="status"
       aria-live="polite"
     >
       {toasts.map((t) => (
         <div
           key={t.id}
-          className={`flex items-start gap-2 pointer-events-auto rounded-md border border-line border-l-3 bg-card p-2 pl-3 text-xs/snug text-fg shadow-[0_6px_20px_rgba(0,0,0,.22)] min-[60rem]:motion-safe:animate-toastin${t.kind === "fail" ? " border-red-700" : ""}`}
+          className={`pointer-events-auto flex items-start gap-2 rounded-md border border-l-3 border-line bg-card p-2 pl-3 text-xs/snug text-fg shadow-[0_6px_20px_rgba(0,0,0,.22)] min-[60rem]:motion-safe:animate-toastin${t.kind === "fail" ? " border-red-700" : ""}`}
         >
           <span className="flex-1">{t.text}</span>
           <Button
             type="button"
             variant="bare"
-            className="inline-flex size-5 shrink-0 items-center justify-center rounded-md px-0.5 text-sm font-semibold leading-none text-muted transition-colors hover:text-accent"
+            className="inline-flex size-5 shrink-0 items-center justify-center rounded-md px-0.5 text-sm leading-none font-semibold text-muted transition-colors hover:text-accent"
             onClick={() => dismissToast(t.id)}
             aria-label={`Dismiss: ${t.text}`}
             title="Dismiss"

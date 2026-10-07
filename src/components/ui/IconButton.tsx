@@ -11,7 +11,7 @@ export default function IconButton({
   | ({ href: string } & AnchorHTMLAttributes<HTMLAnchorElement>)
   | ({ href?: undefined } & ButtonHTMLAttributes<HTMLButtonElement>)) {
   const classes = cn(
-    "group/icon inline-flex shrink-0 cursor-pointer rounded-md border-0 bg-transparent p-0 no-underline disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+    "group/icon inline-flex shrink-0 cursor-pointer rounded-md border-0 bg-transparent p-0 no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed",
     className,
   );
   if (props.href !== undefined)

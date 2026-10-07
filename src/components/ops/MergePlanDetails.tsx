@@ -5,7 +5,7 @@ import { when } from "../../lib/ui/stamp";
 function OneTrail(t: OpsMergeRecord) {
   return (
     <li className="py-1 text-sm/normal">
-      <span className="text-xs tabular-nums text-muted">{when(t.mergedAt)}</span>
+      <span className="text-xs text-muted tabular-nums">{when(t.mergedAt)}</span>
       <code>#{t.keepId}</code> {t.keepName ?? ""} <span className="text-muted">←</span>{" "}
       <code>#{t.dropId}</code> {t.dropName ?? ""}
       {t.reason ? <span className="block text-xs text-muted">{t.reason}</span> : null}

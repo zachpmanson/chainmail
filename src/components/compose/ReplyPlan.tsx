@@ -19,11 +19,11 @@ export default function ReplyPlan({ plan }: { plan: SendResponse }) {
       </p>
       {plan.html ? (
         <div
-          className="replyhtml mt-1.5 max-h-88 overflow-auto wrap-anywhere rounded-md border border-line bg-bg p-2 text-sm/normal text-fg"
+          className="replyhtml mt-1.5 max-h-88 overflow-auto rounded-md border border-line bg-bg p-2 text-sm/normal wrap-anywhere text-fg"
           dangerouslySetInnerHTML={{ __html: plan.html }}
         />
       ) : (
-        <pre className="mt-1.5 max-h-88 overflow-auto wrap-anywhere whitespace-pre-wrap rounded-md border border-line bg-bg p-2 font-mono text-xs/normal text-fg">
+        <pre className="mt-1.5 max-h-88 overflow-auto rounded-md border border-line bg-bg p-2 font-mono text-xs/normal wrap-anywhere whitespace-pre-wrap text-fg">
           {plan.body}
         </pre>
       )}

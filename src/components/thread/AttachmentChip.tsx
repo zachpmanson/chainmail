@@ -42,7 +42,7 @@ export default function AttachmentChip({
   const label = (
     <>
       {thumb}
-      <span className="text-xs font-[650] font-mono">{a.name}</span>
+      <span className="font-mono text-xs font-[650]">{a.name}</span>
       <span className={`text-2xs text-muted${fetching && fetchable ? " text-fg" : ""}`}>
         {fetching && fetchable ? (
           /* An image, not a status: the chip has aria-busy and the pane owns the one live region. */
@@ -81,7 +81,7 @@ export default function AttachmentChip({
       className={[
         "inline-flex items-baseline gap-1.5 rounded-md border border-line bg-quote px-2 py-0.5 text-fg no-underline hover:border-accent",
         opens && "group/attachment items-center",
-        fetching && fetchable && "border-accent cursor-progress",
+        fetching && fetchable && "cursor-progress border-accent",
       ]
         .filter(Boolean)
         .join(" ")}

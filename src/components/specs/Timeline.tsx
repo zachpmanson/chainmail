@@ -135,11 +135,11 @@ export default function Timeline({
       <div className="wrap mx-auto max-w-[76rem] px-5 pt-7 pb-14">
         <header className="top mb-1 border-b border-line pb-3">
           <h1 className="m-0 mb-1 text-xl tracking-[-.01em]">
-            {v.hashed ? <span className="text-muted font-normal">#</span> : null}
+            {v.hashed ? <span className="font-normal text-muted">#</span> : null}
             {v.hashed ? v.title.slice(1) : v.title}
           </h1>
           <p
-            className="mb-2 text-muted text-sm"
+            className="mb-2 text-sm text-muted"
             dangerouslySetInnerHTML={html(s.subtitle ?? `${s.messages.length} messages.`)}
           />
           <Legend />
@@ -166,7 +166,7 @@ export default function Timeline({
         </div>
         {s.openItems?.length ? (
           <footer className="end mt-8 border-t border-line pt-4">
-            <h2 className="mb-2 mt-0 text-sm uppercase tracking-[.1em] text-muted">
+            <h2 className="mt-0 mb-2 text-sm tracking-[.1em] text-muted uppercase">
               {s.openItemsTitle ?? "Still open"}
             </h2>
             <ul className="m-0 pl-5">

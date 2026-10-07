@@ -182,7 +182,7 @@ export default function NavSearch() {
         {open ? (
           <span className="flex min-w-0 flex-[0_1_auto] flex-nowrap items-center gap-2 overflow-x-auto overflow-y-hidden">
             <label className="flex flex-none items-center gap-1">
-              <span className="text-2xs font-bold uppercase tracking-[.08em] text-muted">Mode</span>
+              <span className="text-2xs font-bold tracking-[.08em] text-muted uppercase">Mode</span>
               <SelectInput
                 className="min-h-0 rounded-md border border-line bg-bg px-1.5 py-0.5 text-xs text-fg"
                 value={shown.mode}
@@ -200,7 +200,7 @@ export default function NavSearch() {
               </SelectInput>
             </label>
             <label className="flex flex-none items-center gap-1">
-              <span className="text-2xs font-bold uppercase tracking-[.08em] text-muted">
+              <span className="text-2xs font-bold tracking-[.08em] text-muted uppercase">
                 Person
               </span>
               <NavPerson
@@ -214,7 +214,7 @@ export default function NavSearch() {
               />
             </label>
             <label className="flex flex-none items-center gap-1">
-              <span className="text-2xs font-bold uppercase tracking-[.08em] text-muted">
+              <span className="text-2xs font-bold tracking-[.08em] text-muted uppercase">
                 Gmail account
               </span>
               <SelectInput
@@ -238,11 +238,11 @@ export default function NavSearch() {
               </SelectInput>
             </label>
             <label className="flex flex-none items-center gap-1">
-              <span className="text-2xs font-bold uppercase tracking-[.08em] text-muted">
+              <span className="text-2xs font-bold tracking-[.08em] text-muted uppercase">
                 Since
               </span>
               <TextInput
-                className="w-[8.6rem] min-h-0 rounded-md border border-line bg-bg px-1.5 py-0.5 text-xs text-fg"
+                className="min-h-0 w-[8.6rem] rounded-md border border-line bg-bg px-1.5 py-0.5 text-xs text-fg"
                 type="date"
                 value={shown.since}
                 onChange={(ev) => {

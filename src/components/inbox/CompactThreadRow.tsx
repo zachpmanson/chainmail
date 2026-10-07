@@ -50,7 +50,7 @@ export default function CompactThreadRow({
       aside={
         <IconButton
           // opacity, not `invisible`, so it stays reachable by keyboard.
-          className="absolute top-1/2 right-8 z-1 -translate-y-1/2 pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:opacity-100"
+          className="pointer-events-none absolute top-1/2 right-8 z-1 -translate-y-1/2 opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:opacity-100"
           aria-label={`Archive ${subject}`}
           title="Archive"
           disabled={archive.isPending}
@@ -89,7 +89,7 @@ export default function CompactThreadRow({
           <span className="flex min-w-0 flex-wrap gap-2 text-xs text-muted">{meta}</span>
         ) : null}
       </span>
-      <span className="shrink-0 whitespace-nowrap text-xs tabular-nums text-muted group-hover:invisible">
+      <span className="shrink-0 text-xs whitespace-nowrap text-muted tabular-nums group-hover:invisible">
         {whenShort(last?.ts ?? thread.last)}
       </span>
     </ThreadRow>

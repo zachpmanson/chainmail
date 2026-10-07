@@ -7,7 +7,7 @@ export default function ReplyTarget({
 }) {
   return (
     <a
-      className="par ml-auto inline-flex h-7 items-center gap-1 whitespace-nowrap text-2xs text-muted no-underline hover:text-accent"
+      className="par ml-auto inline-flex h-7 items-center gap-1 text-2xs whitespace-nowrap text-muted no-underline hover:text-accent"
       href={`#${answerAnchor}`}
       aria-label={`Jump to the message being replied to: ${words.who || "the sender"}, ${words.when}`}
       title={`Jump to the message being replied to: ${words.whoTitle ?? words.who}, ${words.when}`}

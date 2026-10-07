@@ -34,11 +34,11 @@ export default function FullThreadRow({
     >
       <span className="flex items-baseline gap-3">
         <span
-          className={`min-w-0 flex-1 wrap-anywhere text-sm ${thread.unread > 0 ? "font-[750]" : "font-normal"}`}
+          className={`min-w-0 flex-1 text-sm wrap-anywhere ${thread.unread > 0 ? "font-[750]" : "font-normal"}`}
         >
           {last?.person || "unknown sender"}
         </span>
-        <span className="mr-6 shrink-0 whitespace-nowrap text-xs tabular-nums text-muted">
+        <span className="mr-6 shrink-0 text-xs whitespace-nowrap text-muted tabular-nums">
           {whenShort(last?.ts ?? thread.last)}
         </span>
       </span>

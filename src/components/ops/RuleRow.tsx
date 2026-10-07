@@ -24,7 +24,7 @@ export default function RuleRow({
   }`;
   return (
     <article>
-      <p className="mt-0 mb-1.5 text-2xs font-bold uppercase tracking-[.05em] text-muted">
+      <p className="mt-0 mb-1.5 text-2xs font-bold tracking-[.05em] text-muted uppercase">
         <code>{d.domain}</code>
         {d.stored ? (
           <StatusBadge tone="success" className="ml-2">
@@ -43,7 +43,7 @@ export default function RuleRow({
       </p>
       <p className="my-0.5 text-sm/snug [&_code]:text-xs [&_code]:wrap-anywhere">
         <TextInput
-          className="min-w-0 flex-[0_1_12rem] mr-2 px-1.5 py-1 text-xs"
+          className="mr-2 min-w-0 flex-[0_1_12rem] px-1.5 py-1 text-xs"
           value={value}
           disabled={busy}
           placeholder="no rule"

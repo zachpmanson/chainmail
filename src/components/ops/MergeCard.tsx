@@ -23,10 +23,10 @@ export default function MergeCard({
     (m.dropIdentities?.length ? ` · ${m.dropIdentities.join(", ")}` : "");
   return (
     <article>
-      <p className="mt-0 mb-1.5 text-2xs font-bold uppercase tracking-[.05em] text-muted">
+      <p className="mt-0 mb-1.5 text-2xs font-bold tracking-[.05em] text-muted uppercase">
         {m.applicable ? (
           <Checkbox
-            className="mr-2 align-middle cursor-pointer"
+            className="mr-2 cursor-pointer align-middle"
             checked={selected}
             disabled={busy}
             onChange={(e) => onSelect(e.target.checked)}

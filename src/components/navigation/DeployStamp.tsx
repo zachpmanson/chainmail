@@ -13,7 +13,7 @@ export default function DeployStamp() {
 
   return (
     <a
-      className="flex items-baseline gap-1.5 whitespace-nowrap text-xs text-muted no-underline hover:text-accent"
+      className="flex items-baseline gap-1.5 text-xs whitespace-nowrap text-muted no-underline hover:text-accent"
       href={`https://github.com/zachpmanson/chainmail/commit/${rev}`}
       title={`deployed ${when(startedAt)}`}
       target="_blank"

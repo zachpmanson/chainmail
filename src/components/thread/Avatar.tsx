@@ -27,7 +27,7 @@ export default function Avatar({
       title={title}
     >
       {pic ? null : (
-        <span className="text-[.62em] font-bold leading-none tracking-[.01em]">
+        <span className="text-[.62em] leading-none font-bold tracking-[.01em]">
           {initials(name)}
         </span>
       )}

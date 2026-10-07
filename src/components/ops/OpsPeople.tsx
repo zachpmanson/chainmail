@@ -70,7 +70,7 @@ export default function OpsPeople() {
       ) : null}
       <FormField className="my-2 mb-1 flex items-center gap-1.5 text-xs" label="Find a person">
         <TextInput
-          className="min-w-0 flex-[0_1_18rem] mr-0 px-1.5 py-1 text-xs"
+          className="mr-0 min-w-0 flex-[0_1_18rem] px-1.5 py-1 text-xs"
           value={q}
           placeholder="a name or an address"
           aria-label="Find a person"
@@ -92,7 +92,7 @@ export default function OpsPeople() {
           {shown.capped.map((p) => (
             <li
               key={p.personId}
-              className="not-first:mt-2 rounded-lg border border-line bg-card px-3 py-2"
+              className="rounded-lg border border-line bg-card px-3 py-2 not-first:mt-2"
             >
               <PersonRow
                 p={p}

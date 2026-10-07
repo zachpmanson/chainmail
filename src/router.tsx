@@ -120,11 +120,11 @@ function RootLayout() {
     <>
       {!popup ? (
         <>
-          <header className="sitehead max-w-none m-0 flex flex-wrap items-center border-b border-line px-5 pt-4 pb-3 text-sm text-muted">
-            <nav className="sitenav relative flex min-w-0 flex-1 flex-nowrap items-center overflow-x-auto overflow-y-hidden h-9">
+          <header className="sitehead m-0 flex max-w-none flex-wrap items-center border-b border-line px-5 pt-4 pb-3 text-sm text-muted">
+            <nav className="sitenav relative flex h-9 min-w-0 flex-1 flex-nowrap items-center overflow-x-auto overflow-y-hidden">
               <Link
                 to="/"
-                className="text-fg text-sm font-bold tracking-[-.01em] no-underline hover:text-accent"
+                className="text-sm font-bold tracking-[-.01em] text-fg no-underline hover:text-accent"
               >
                 chainmail
               </Link>

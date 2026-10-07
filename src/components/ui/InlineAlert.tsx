@@ -15,8 +15,8 @@ export default function InlineAlert({
     <p
       className={cn(
         compact
-          ? "mb-0 rounded-sm border-l-3 border-l-red-700 bg-bg px-3 py-2 text-xs/normal text-fg wrap-break-word"
-          : "rounded-md border border-line border-l-3 border-l-red-700 bg-card px-3 py-2 text-sm",
+          ? "mb-0 rounded-sm border-l-3 border-l-red-700 bg-bg px-3 py-2 text-xs/normal wrap-break-word text-fg"
+          : "rounded-md border border-l-3 border-line border-l-red-700 bg-card px-3 py-2 text-sm",
         className,
       )}
       role="alert"

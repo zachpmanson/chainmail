@@ -34,13 +34,13 @@ export default function ProposalsModal({
   return (
     <>
       <DialogShell label="Proposed chains">
-        <div className="flex items-center gap-2 border-b border-line py-2 px-3">
-          <b className="text-xs font-bold uppercase tracking-[.09em] text-muted">proposed</b>
+        <div className="flex items-center gap-2 border-b border-line px-3 py-2">
+          <b className="text-xs font-bold tracking-[.09em] text-muted uppercase">proposed</b>
           <span className="ml-auto text-xs text-muted">
             found by a query, not yet on the page — accept the ones that belong
           </span>
         </div>
-        <ul className="m-0 flex list-none flex-col gap-1.5 overflow-auto py-2 px-3">
+        <ul className="m-0 flex list-none flex-col gap-1.5 overflow-auto px-3 py-2">
           {proposals.map((p) => {
             const on = accepted.has(p.rootExtId);
             return (
@@ -56,8 +56,8 @@ export default function ProposalsModal({
                       checked={on}
                       onChange={() => toggle(p.rootExtId)}
                     />
-                    <span className="max-w-full wrap-break-word whitespace-normal font-(family-name:--serif) font-semibold">
-                      {p.subject ?? <em className="not-italic text-muted">no subject</em>}
+                    <span className="max-w-full font-(family-name:--serif) font-semibold wrap-break-word whitespace-normal">
+                      {p.subject ?? <em className="text-muted not-italic">no subject</em>}
                     </span>
                   </label>
                   <span className="mt-0.5 text-xs text-muted">
@@ -68,13 +68,13 @@ export default function ProposalsModal({
                         ? " · word match"
                         : ""}
                   </span>
-                  <code className="mt-0.5 max-w-full wrap-break-word text-2xs text-accent">
+                  <code className="mt-0.5 max-w-full text-2xs wrap-break-word text-accent">
                     {p.rootExtId}
                   </code>
                 </div>
                 <Button
                   type="button"
-                  className="mr-0 shrink-0 whitespace-nowrap px-2 py-1 text-xs font-semibold text-muted hover:border-accent hover:text-accent"
+                  className="mr-0 shrink-0 px-2 py-1 text-xs font-semibold whitespace-nowrap text-muted hover:border-accent hover:text-accent"
                   aria-haspopup="dialog"
                   onClick={() => setPreview(p)}
                 >
@@ -84,7 +84,7 @@ export default function ProposalsModal({
             );
           })}
         </ul>
-        <div className="flex justify-end gap-2 border-t border-line py-2 px-3">
+        <div className="flex justify-end gap-2 border-t border-line px-3 py-2">
           <Button
             type="button"
             disabled={refreshing || accepted.size === 0}

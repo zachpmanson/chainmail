@@ -69,7 +69,7 @@ export default function ActionBar({
   const body = (
     <>
       {chosen.length > 0 ? (
-        <div className="ibbuild flex min-w-0 items-center gap-2 h-9 overflow-x-auto overflow-y-hidden">
+        <div className="ibbuild flex h-9 min-w-0 items-center gap-2 overflow-x-auto overflow-y-hidden">
           <Button
             type="button"
             density="compact"
@@ -126,7 +126,7 @@ export default function ActionBar({
             }
           />
           <span className="ml-auto flex shrink-0 items-center">
-            <span className="text-xs tabular-nums text-muted">{chosen.length} selected</span>
+            <span className="text-xs text-muted tabular-nums">{chosen.length} selected</span>
           </span>
         </div>
       ) : null}
@@ -186,7 +186,7 @@ function BraidDialog({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2 border-b border-line px-3 py-2">
-          <b className="text-xs font-bold uppercase tracking-[.09em] text-muted">braid threads</b>
+          <b className="text-xs font-bold tracking-[.09em] text-muted uppercase">braid threads</b>
           <span className="ml-auto min-w-0 truncate text-xs text-muted">
             {count} thread{count === 1 ? "" : "s"} ticked
           </span>

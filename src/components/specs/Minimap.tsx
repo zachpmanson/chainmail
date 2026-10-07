@@ -93,7 +93,7 @@ export default function Minimap({ v }: { v: View }) {
           return (
             <rect
               key={`hit-${o}-${r.id}`}
-              className="fill-transparent cursor-pointer hover:fill-quote"
+              className="cursor-pointer fill-transparent hover:fill-quote"
               data-hit=""
               data-id={r.id}
               x={x2}
@@ -219,10 +219,10 @@ export default function Minimap({ v }: { v: View }) {
 
   return (
     <aside
-      className="mini fixed inset-y-0 right-0 z-30 flex w-max max-w-[16.5rem] flex-col border-l border-line bg-card print:hidden max-[1024px]:top-[2.4rem] max-[1024px]:bg-card/86"
+      className="mini fixed inset-y-0 right-0 z-30 flex w-max max-w-[16.5rem] flex-col border-l border-line bg-card max-[1024px]:top-[2.4rem] max-[1024px]:bg-card/86 print:hidden"
       id="mini"
     >
-      <h3 className="m-0 flex items-center gap-1.5 border-b border-line px-3 pt-2 pb-1.5 text-2xs font-bold uppercase tracking-[.09em] text-muted">
+      <h3 className="m-0 flex items-center gap-1.5 border-b border-line px-3 pt-2 pb-1.5 text-2xs font-bold tracking-[.09em] text-muted uppercase">
         Reply tree<span className="ml-auto font-semibold opacity-75">{v.rows.length}</span>
         <button
           type="button"

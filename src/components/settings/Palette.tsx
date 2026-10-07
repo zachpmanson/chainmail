@@ -9,19 +9,19 @@ export default function Palette() {
 
   return (
     <div className="max-w-full overflow-x-auto">
-      <table className="min-w-[36rem] border-collapse mt-2 text-xs">
+      <table className="mt-2 min-w-[36rem] border-collapse text-xs">
         <thead>
           <tr>
-            <th className="border-b border-line pb-1 pr-4 text-left text-2xs font-bold uppercase tracking-[.08em] text-muted last:pr-0">
+            <th className="border-b border-line pr-4 pb-1 text-left text-2xs font-bold tracking-[.08em] text-muted uppercase last:pr-0">
               colour
             </th>
-            <th className="border-b border-line pb-1 pr-4 text-left text-2xs font-bold uppercase tracking-[.08em] text-muted last:pr-0">
+            <th className="border-b border-line pr-4 pb-1 text-left text-2xs font-bold tracking-[.08em] text-muted uppercase last:pr-0">
               light
             </th>
-            <th className="border-b border-line pb-1 pr-4 text-left text-2xs font-bold uppercase tracking-[.08em] text-muted last:pr-0">
+            <th className="border-b border-line pr-4 pb-1 text-left text-2xs font-bold tracking-[.08em] text-muted uppercase last:pr-0">
               dark
             </th>
-            <th className="border-b border-line pb-1 pr-4 text-left text-2xs font-bold uppercase tracking-[.08em] text-muted last:pr-0">
+            <th className="border-b border-line pr-4 pb-1 text-left text-2xs font-bold tracking-[.08em] text-muted uppercase last:pr-0">
               used for
             </th>
           </tr>
@@ -53,11 +53,11 @@ function Swatch({ value }: { value?: string }) {
   return (
     <>
       <span
-        className="mr-1.5 inline-block h-[.82rem] w-4 align-[-.09rem] rounded-sm border border-line"
+        className="mr-1.5 inline-block h-[.82rem] w-4 rounded-sm border border-line align-[-.09rem]"
         style={value ? { background: value } : undefined}
         aria-hidden="true"
       />
-      <span className="tabular-nums text-muted">{value ? value : "—"}</span>
+      <span className="text-muted tabular-nums">{value ? value : "—"}</span>
     </>
   );
 }

@@ -174,7 +174,7 @@ export default function Inbox() {
   }, [paging, fetchNextPage]);
 
   return (
-    <div className="wrap mx-0 w-full max-w-none p-0 min-[60rem]:flex min-[60rem]:flex-auto min-[60rem]:flex-col min-[60rem]:min-h-0">
+    <div className="wrap mx-0 w-full max-w-none p-0 min-[60rem]:flex min-[60rem]:min-h-0 min-[60rem]:flex-auto min-[60rem]:flex-col">
       {inbox.isError && !inbox.data ? <Failure error={inbox.error} /> : null}
       {!inbox.isPending && !inbox.isError && rows.length === 0 ? (
         <p className="mt-2 flex-[1_1_100%] text-xs text-muted">
@@ -202,7 +202,7 @@ export default function Inbox() {
             <ThreadListScroll>
               {compact && rows.length > 0 ? <CompactListHeader /> : null}
               {rows.length > 0 ? (
-                <ul className="m-0 list-none divide-y divide-line overflow-hidden rounded-lg border border-line bg-card p-0 min-[60rem]:border-0 min-[60rem]:rounded-none min-[60rem]:bg-transparent">
+                <ul className="m-0 list-none divide-y divide-line overflow-hidden rounded-lg border border-line bg-card p-0 min-[60rem]:rounded-none min-[60rem]:border-0 min-[60rem]:bg-transparent">
                   {rows.map((c) => (
                     <Row
                       key={c.rootExtId}

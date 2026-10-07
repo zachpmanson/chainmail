@@ -32,7 +32,7 @@ export default function SpecsView() {
                 {s.title || s.name}
               </Link>
             </span>
-            <span className="flex-[1_1_12rem] wrap-break-word text-xs text-muted">
+            <span className="flex-[1_1_12rem] text-xs wrap-break-word text-muted">
               {when(s.savedAt)}
             </span>
           </li>

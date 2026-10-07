@@ -18,7 +18,7 @@ export default function Identity({
       <Button
         type="button"
         variant="bare"
-        className="inline-flex items-center justify-center rounded-sm border border-transparent px-1 text-sm font-semibold leading-none text-muted transition-colors hover:border-line hover:bg-quote hover:text-red-700 disabled:opacity-40"
+        className="inline-flex items-center justify-center rounded-sm border border-transparent px-1 text-sm leading-none font-semibold text-muted transition-colors hover:border-line hover:bg-quote hover:text-red-700 disabled:opacity-40"
         disabled={busy}
         title={`detach ${id}`}
         aria-label={`Detach ${id} from ${owner.displayName}`}

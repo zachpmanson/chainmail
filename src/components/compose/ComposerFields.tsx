@@ -69,7 +69,7 @@ export default function ComposerFields({
         ) : null}
       </div>
       <TextArea
-        className="block w-full rounded-md border border-line bg-bg p-2 text-sm/normal text-fg resize-y disabled:opacity-55"
+        className="block w-full resize-y rounded-md border border-line bg-bg p-2 text-sm/normal text-fg disabled:opacity-55"
         aria-label={mode.kind === "reply" ? "Your reply" : "Message"}
         placeholder={mode.kind === "reply" ? "Write your reply…" : "Write your message…"}
         required={mode.kind === "compose"}

@@ -53,13 +53,13 @@ export default function AddEmailsModal({
   return (
     <>
       <DialogShell label="Add another email" onBackdropClick={onClose}>
-        <div className="flex items-center gap-2 border-b border-line py-2 px-3">
-          <b className="text-xs font-bold uppercase tracking-[.09em] text-muted">add email</b>
+        <div className="flex items-center gap-2 border-b border-line px-3 py-2">
+          <b className="text-xs font-bold tracking-[.09em] text-muted uppercase">add email</b>
           <span className="ml-auto text-xs text-muted">
             search the corpus for a thread to add to this page
           </span>
         </div>
-        <form className="flex items-center gap-2 border-b border-line py-2 px-3" onSubmit={submit}>
+        <form className="flex items-center gap-2 border-b border-line px-3 py-2" onSubmit={submit}>
           <FormField
             className="flex min-w-0 flex-1 items-center gap-1.5 text-xs text-muted"
             label="Query"
@@ -94,7 +94,7 @@ export default function AddEmailsModal({
           <p className="mt-2 flex-[1_1_100%] text-xs text-muted">No thread matched.</p>
         ) : null}
         {chains.length > 0 ? (
-          <ul className="m-0 flex list-none flex-col gap-1.5 overflow-auto py-2 px-3">
+          <ul className="m-0 flex list-none flex-col gap-1.5 overflow-auto px-3 py-2">
             {chains.map((c) => (
               <FullThreadRow
                 key={c.rootExtId}
@@ -108,7 +108,7 @@ export default function AddEmailsModal({
             ))}
           </ul>
         ) : null}
-        <div className="flex justify-end gap-2 border-t border-line py-2 px-3">
+        <div className="flex justify-end gap-2 border-t border-line px-3 py-2">
           <Button
             type="button"
             disabled={chosen.length === 0}

@@ -94,7 +94,7 @@ export default function ThreadPane({
             >
               {backLabel}
             </Button>
-            <span className="min-w-0 wrap-break-word text-sm font-semibold">
+            <span className="min-w-0 text-sm font-semibold wrap-break-word">
               {thread.subject || "(no subject)"}
             </span>
             <span className="ml-auto flex items-center gap-2">

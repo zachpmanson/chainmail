@@ -58,7 +58,7 @@ export default function ParticipantsPanel({
 
   return (
     <details className="pan people mt-3 rounded-lg border border-line bg-card" open={open}>
-      <summary className="list-none cursor-pointer px-3 py-1.5 text-xs font-bold uppercase tracking-[.08em] text-muted hover:text-accent">
+      <summary className="cursor-pointer list-none px-3 py-1.5 text-xs font-bold tracking-[.08em] text-muted uppercase hover:text-accent">
         Participants ({cast.length})
       </summary>
       <div className="border-t border-line px-3 pt-0.5 pb-2">
@@ -66,7 +66,7 @@ export default function ParticipantsPanel({
           {groups.map((g) => (
             <div key={g.org || "other"} className="contents">
               <div
-                className={`${orgText[v.orgSlot(g.org || undefined)] ?? "text-muted"} col-span-full mt-2 mb-px text-2xs font-bold uppercase tracking-[.09em] first:mt-0.5`}
+                className={`${orgText[v.orgSlot(g.org || undefined)] ?? "text-muted"} col-span-full mt-2 mb-px text-2xs font-bold tracking-[.09em] uppercase first:mt-0.5`}
               >
                 {g.org || "Other"}
               </div>
@@ -90,7 +90,7 @@ export default function ParticipantsPanel({
                       </div>
                       {p.email ? (
                         <a
-                          className="font-mono text-2xs text-muted no-underline wrap-anywhere hover:text-accent hover:underline"
+                          className="font-mono text-2xs wrap-anywhere text-muted no-underline hover:text-accent hover:underline"
                           href={`mailto:${p.email}`}
                         >
                           {p.email}

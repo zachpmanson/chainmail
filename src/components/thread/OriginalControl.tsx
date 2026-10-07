@@ -37,7 +37,7 @@ export default function OriginalControl({
         )}
       </ReceiptIconButton>
       {state.at === "none" ? (
-        <span className="text-2xs italic text-muted" title={state.why}>
+        <span className="text-2xs text-muted italic" title={state.why}>
           nothing to show
         </span>
       ) : null}

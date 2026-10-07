@@ -19,7 +19,7 @@ export default function Body({ body, state }: { body: string; state: Original })
   if (!hasBody(body)) {
     return (
       <div key="read" className="bd overflow-x-auto">
-        <p className="m-0 text-sm italic text-muted">No body</p>
+        <p className="m-0 text-sm text-muted italic">No body</p>
       </div>
     );
   }

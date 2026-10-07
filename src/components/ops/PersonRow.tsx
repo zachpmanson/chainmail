@@ -47,7 +47,7 @@ export default function PersonRow({
         }}
       >
         <TextInput
-          className="min-w-0 flex-[0_1_16rem] mr-0 px-1.5 py-1 text-xs"
+          className="mr-0 min-w-0 flex-[0_1_16rem] px-1.5 py-1 text-xs"
           value={wanted}
           disabled={busy}
           aria-label={`Name for ${p.displayName}`}
@@ -86,7 +86,7 @@ export default function PersonRow({
         }}
       >
         <TextInput
-          className="min-w-0 flex-[0_1_12rem] mr-0 px-1.5 py-1 text-xs"
+          className="mr-0 min-w-0 flex-[0_1_12rem] px-1.5 py-1 text-xs"
           value={add}
           disabled={busy}
           placeholder="an address that is theirs, e.g. ada@loomworks.example"

@@ -36,7 +36,7 @@ export default function DiffPanel({
   if (!fresh.length && !revised.length) {
     return (
       <details className="pan mt-3 rounded-lg border border-line bg-card" open>
-        <summary className="list-none cursor-pointer px-3 py-1.5 text-xs font-bold uppercase tracking-[.08em] text-muted hover:text-accent">
+        <summary className="cursor-pointer list-none px-3 py-1.5 text-xs font-bold tracking-[.08em] text-muted uppercase hover:text-accent">
           Since last run
         </summary>
         <div className="border-t border-line px-3 pt-0.5 pb-2">
@@ -54,13 +54,13 @@ export default function DiffPanel({
 
   return (
     <details className="pan mt-3 rounded-lg border border-line bg-card" open>
-      <summary className="list-none cursor-pointer px-3 py-1.5 text-xs font-bold uppercase tracking-[.08em] text-muted hover:text-accent">
+      <summary className="cursor-pointer list-none px-3 py-1.5 text-xs font-bold tracking-[.08em] text-muted uppercase hover:text-accent">
         Since last run {"—"} {fresh.length} new, {revised.length} revised
       </summary>
       <div className="border-t border-line px-3 pt-0.5 pb-2">
         {fresh.length ? (
           <div className="srcgrp mt-2 first:mt-0.5">
-            <div className="mb-1 text-2xs font-bold uppercase tracking-[.09em] text-muted">
+            <div className="mb-1 text-2xs font-bold tracking-[.09em] text-muted uppercase">
               New since {prevLabel} ({fresh.length})
             </div>
             <ul className="m-0 list-disc pl-4">{list(fresh)}</ul>
@@ -68,7 +68,7 @@ export default function DiffPanel({
         ) : null}
         {revised.length ? (
           <div className="srcgrp mt-2 first:mt-0.5">
-            <div className="mb-1 text-2xs font-bold uppercase tracking-[.09em] text-muted">
+            <div className="mb-1 text-2xs font-bold tracking-[.09em] text-muted uppercase">
               Revised ({revised.length})
             </div>
             <ul className="m-0 list-disc pl-4">{list(revised)}</ul>

@@ -54,7 +54,7 @@ function FolderRows({
             onClick={() => pick(label.name)}
           >
             <span className="min-w-0 flex-1 truncate">{label.name}</span>
-            <span className="text-xs tabular-nums text-muted">{label.messages}</span>
+            <span className="text-xs text-muted tabular-nums">{label.messages}</span>
           </Button>
         );
       })}

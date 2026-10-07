@@ -19,7 +19,7 @@ export default function ComposePreview({ preview }: { preview: ComposeResponse }
       <dd className="m-0">{preview.subject}</dd>
       <dt className="font-bold">Plain-text message</dt>
       <dd className="m-0">
-        <pre className="m-0 whitespace-pre-wrap wrap-anywhere [font:inherit]">{preview.body}</pre>
+        <pre className="m-0 wrap-anywhere whitespace-pre-wrap [font:inherit]">{preview.body}</pre>
       </dd>
       <p className="col-span-full">Review the exact message above. Sending is irreversible.</p>
     </dl>

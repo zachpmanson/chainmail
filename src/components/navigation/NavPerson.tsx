@@ -129,7 +129,7 @@ export default function NavPerson({
         ? createPortal(
             <ul
               id={listId}
-              className="fixed z-60 m-0 max-h-60 list-none overflow-y-auto overflow-x-hidden rounded-md border border-line bg-card p-1 shadow-[0_8px_24px_rgba(0,0,0,.22)]"
+              className="fixed z-60 m-0 max-h-60 list-none overflow-x-hidden overflow-y-auto rounded-md border border-line bg-card p-1 shadow-[0_8px_24px_rgba(0,0,0,.22)]"
               role="listbox"
               aria-label="Who the search is narrowed to"
               style={{ left: at.left, top: at.top, width: at.width }}
@@ -140,14 +140,14 @@ export default function NavPerson({
                   id={`${listId}-${i}`}
                   role="option"
                   aria-selected={i === active}
-                  className={`flex flex-col gap-px rounded-md py-1 px-2 cursor-pointer${i === active ? " bg-mine" : ""}`}
+                  className={`flex flex-col gap-px rounded-md px-2 py-1 cursor-pointer${i === active ? " bg-mine" : ""}`}
                   onMouseDown={(ev) => ev.preventDefault()}
                   onMouseEnter={() => setActive(i)}
                   onClick={() => pick(row.value)}
                 >
                   <span className="text-xs wrap-anywhere">{row.name}</span>
                   {row.address && row.address !== row.name ? (
-                    <span className="text-2xs text-muted wrap-anywhere">{row.address}</span>
+                    <span className="text-2xs wrap-anywhere text-muted">{row.address}</span>
                   ) : null}
                 </li>
               ))}

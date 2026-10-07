@@ -34,7 +34,7 @@ function ServiceRow({ svc }: { svc: ServiceStatus }) {
       <span className={badge.className}>{badge.word}</span>
       <span className="min-w-32 text-sm font-semibold">{svc.label}</span>
       {svc.detail ? (
-        <span className="flex-[1_1_12rem] wrap-break-word text-xs text-muted">{svc.detail}</span>
+        <span className="flex-[1_1_12rem] text-xs wrap-break-word text-muted">{svc.detail}</span>
       ) : null}
     </li>
   );

@@ -99,7 +99,7 @@ export default function SettingsView() {
 
   return (
     <div className="wrap mx-auto flex w-[min(calc(100%-2rem),58rem)] max-w-[58rem] flex-col gap-4 px-0 py-5 max-[640px]:w-[calc(100%-.5rem)] max-[640px]:pt-3">
-      <header className="my-1 mb-1.5 mx-0.5">
+      <header className="mx-0.5 my-1 mb-1.5">
         <h1 className="m-0 text-2xl">Settings</h1>
       </header>
 
@@ -128,7 +128,7 @@ export default function SettingsView() {
             }
           >
             <SelectInput
-              className="min-w-56 max-w-full cursor-pointer rounded-md border border-line bg-bg px-2 py-1.5 text-xs disabled:cursor-default disabled:opacity-60 max-[640px]:min-w-[min(100%,14rem)]"
+              className="max-w-full min-w-56 cursor-pointer rounded-md border border-line bg-bg px-2 py-1.5 text-xs disabled:cursor-default disabled:opacity-60 max-[640px]:min-w-[min(100%,14rem)]"
               aria-label="How often to sweep the mailbox"
               value={every}
               disabled={busy || every === ""}
@@ -178,7 +178,7 @@ export default function SettingsView() {
             note={compact ? "One line per thread." : "Sender, subject, and preview."}
           >
             <SelectInput
-              className="min-w-56 max-w-full cursor-pointer rounded-md border border-line bg-bg px-2 py-1.5 text-xs disabled:cursor-default disabled:opacity-60 max-[640px]:min-w-[min(100%,14rem)]"
+              className="max-w-full min-w-56 cursor-pointer rounded-md border border-line bg-bg px-2 py-1.5 text-xs disabled:cursor-default disabled:opacity-60 max-[640px]:min-w-[min(100%,14rem)]"
               aria-label="Thread list layout"
               value={compact ? "compact" : "detailed"}
               onChange={(e) => setCompact(e.target.value === "compact")}
@@ -201,7 +201,7 @@ export default function SettingsView() {
             }
           >
             <SelectInput
-              className="min-w-56 max-w-96 cursor-pointer rounded-md border border-line bg-bg px-2 py-1.5 text-xs disabled:cursor-default disabled:opacity-60 max-[640px]:min-w-[min(100%,14rem)]"
+              className="max-w-96 min-w-56 cursor-pointer rounded-md border border-line bg-bg px-2 py-1.5 text-xs disabled:cursor-default disabled:opacity-60 max-[640px]:min-w-[min(100%,14rem)]"
               aria-label="Which person you are"
               value={me.value}
               disabled={busy || people.isPending}

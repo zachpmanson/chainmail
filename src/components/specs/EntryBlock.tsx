@@ -32,21 +32,21 @@ export default function EntryBlock({
   if (e.kind === "note") {
     return (
       <div
-        className={`sys scroll-mt-6 mx-auto my-3 max-w-[44rem] border border-dashed border-line rounded-lg bg-quote px-4 py-2 text-center target:animate-[flash_1.4s_ease-out_1] target:border-accent [&_.par]:mt-1${row.isChainStart ? " chstart" : ""}${mark === "new" ? "[border-left:3px_solid_var(--o1)]" : ""}`}
+        className={`sys mx-auto my-3 max-w-[44rem] scroll-mt-6 rounded-lg border border-dashed border-line bg-quote px-4 py-2 text-center target:animate-[flash_1.4s_ease-out_1] target:border-accent [&_.par]:mt-1${row.isChainStart ? " chstart" : ""}${mark === "new" ? "[border-left:3px_solid_var(--o1)]" : ""}`}
         id={row.id}
         data-ch={row.lane}
         style={grid}
       >
-        <div className="mb-0.5 text-2xs tabular-nums text-muted">
+        <div className="mb-0.5 text-2xs text-muted tabular-nums">
           <a
-            className="rounded-sm text-inherit underline-offset-2 decoration-accent no-underline hover:text-accent hover:underline hover:decoration-dotted focus-visible:outline-[1.5px] focus-visible:outline-accent focus-visible:outline-offset-1"
+            className="rounded-sm text-inherit no-underline decoration-accent underline-offset-2 hover:text-accent hover:underline hover:decoration-dotted focus-visible:outline-[1.5px] focus-visible:outline-offset-1 focus-visible:outline-accent"
             href={`#${row.id}`}
             title="Link to this note"
           >
             {e.date}
           </a>
         </div>
-        <div className="mb-1 text-xs font-bold uppercase tracking-[.08em] text-muted">
+        <div className="mb-1 text-xs font-bold tracking-[.08em] text-muted uppercase">
           {e.label}
         </div>
         <div className="bd" dangerouslySetInnerHTML={html(trimBody(e.body))} />

@@ -82,7 +82,7 @@ export default function SelectView() {
   const reading: PreviewableThread | null = opened ? (picked ?? { rootExtId: opened }) : null;
 
   return (
-    <div className="wrap mx-0 w-full max-w-none p-0 min-[60rem]:flex min-[60rem]:flex-auto min-[60rem]:flex-col min-[60rem]:min-h-0">
+    <div className="wrap mx-0 w-full max-w-none p-0 min-[60rem]:flex min-[60rem]:min-h-0 min-[60rem]:flex-auto min-[60rem]:flex-col">
       {results.isError ? <Failure error={results.error} /> : null}
       {results.isFetching ? (
         <p className="mt-2 flex-[1_1_100%] text-xs text-muted">Searching…</p>
@@ -101,7 +101,7 @@ export default function SelectView() {
                   <CompactModeToggle compact={compact} onChange={setCompact} />
                 </div>
                 {compact ? <CompactListHeader /> : null}
-                <ul className="m-0 list-none divide-y divide-line overflow-hidden rounded-lg border border-line bg-card p-0 min-[60rem]:border-0 min-[60rem]:rounded-none min-[60rem]:bg-transparent">
+                <ul className="m-0 list-none divide-y divide-line overflow-hidden rounded-lg border border-line bg-card p-0 min-[60rem]:rounded-none min-[60rem]:border-0 min-[60rem]:bg-transparent">
                   {chains.map((c) => (
                     <Row
                       key={c.rootExtId}

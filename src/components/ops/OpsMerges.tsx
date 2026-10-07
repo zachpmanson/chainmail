@@ -24,10 +24,10 @@ export default function OpsMerges() {
         </p>
       ) : null}
 
-      <h2 className="mt-4 mb-0.5 text-xs uppercase tracking-[.1em] text-muted">Merge plan</h2>
+      <h2 className="mt-4 mb-0.5 text-xs tracking-[.1em] text-muted uppercase">Merge plan</h2>
       {applicable.length > 0 ? (
         <div className="mt-2 flex items-center justify-between gap-2 rounded-lg border border-line bg-quote px-3 py-1.5">
-          <label className="flex items-center gap-2 text-xs text-fg cursor-pointer">
+          <label className="flex cursor-pointer items-center gap-2 text-xs text-fg">
             <Checkbox
               checked={allPicked}
               disabled={busy}
@@ -68,7 +68,7 @@ export default function OpsMerges() {
           {merges.map((m) => (
             <li
               key={m.dropId}
-              className="not-first:mt-2 rounded-lg border border-line bg-card px-3 py-2"
+              className="rounded-lg border border-line bg-card px-3 py-2 not-first:mt-2"
             >
               <MergeCard
                 m={m}

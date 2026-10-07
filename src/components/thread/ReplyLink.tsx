@@ -3,7 +3,7 @@ import type { ReplyTarget } from "../../lib/timeline/replyTarget";
 export default function ReplyLink({ parent }: { parent: ReplyTarget | null }) {
   if (!parent)
     return (
-      <span className="tstart rounded-sm border border-line px-1 text-2xs font-bold uppercase tracking-[.09em] text-muted">
+      <span className="tstart rounded-sm border border-line px-1 text-2xs font-bold tracking-[.09em] text-muted uppercase">
         thread start
       </span>
     );

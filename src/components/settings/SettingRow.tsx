@@ -24,7 +24,7 @@ export default function SettingRow({
         className={`flex min-w-56 flex-[.9] flex-col items-start gap-1 max-[640px]:min-w-0${valueClassName ? `${valueClassName}` : ""}`}
       >
         {children}
-        {note ? <p className="m-0 wrap-break-word text-xs/snug text-muted">{note}</p> : null}
+        {note ? <p className="m-0 text-xs/snug wrap-break-word text-muted">{note}</p> : null}
       </div>
     </div>
   );

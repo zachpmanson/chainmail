@@ -168,7 +168,7 @@ export default function AddressField({
 
   return (
     <span
-      className="relative inline-flex w-full min-w-0 min-h-7 max-w-full flex-wrap items-center gap-1 align-middle rounded-md border border-line bg-bg px-1 py-0.5 mx-0.5 focus-within:border-accent"
+      className="relative mx-0.5 inline-flex min-h-7 w-full max-w-full min-w-0 flex-wrap items-center gap-1 rounded-md border border-line bg-bg px-1 py-0.5 align-middle focus-within:border-accent"
       data-list={label}
     >
       {value.map((who) => (
@@ -207,7 +207,7 @@ export default function AddressField({
       />
       {showing ? (
         <span
-          className="absolute top-full left-0 z-20 mt-1 flex max-h-56 min-w-full max-w-96 flex-col overflow-auto rounded-md border border-line bg-card p-0.5 shadow-[0_6px_18px_rgba(0,0,0,.18)]"
+          className="absolute top-full left-0 z-20 mt-1 flex max-h-56 max-w-96 min-w-full flex-col overflow-auto rounded-md border border-line bg-card p-0.5 shadow-[0_6px_18px_rgba(0,0,0,.18)]"
           role="listbox"
           id={`${label}-suggestions`}
           aria-label={`${label} suggestions`}
@@ -216,7 +216,7 @@ export default function AddressField({
             <span
               key={addressKey(a.address)}
               id={`${label}-option-${i}`}
-              className={`flex items-baseline gap-1.5 rounded-sm py-1 px-1.5 text-xs cursor-pointer${i === active ? " bg-mine" : ""}`}
+              className={`flex items-baseline gap-1.5 rounded-sm px-1.5 py-1 text-xs cursor-pointer${i === active ? " bg-mine" : ""}`}
               role="option"
               aria-selected={i === active}
               // Keep focus on mousedown, or the blur closes the list before the click lands.
@@ -226,12 +226,12 @@ export default function AddressField({
             >
               <span className="wrap-anywhere">{a.name ?? a.address}</span>
               {a.name ? (
-                <span className="text-2xs text-muted wrap-anywhere">{a.address}</span>
+                <span className="text-2xs wrap-anywhere text-muted">{a.address}</span>
               ) : null}
             </span>
           ))}
           {rows.length === 0 ? (
-            <span className="text-muted cursor-default" aria-disabled="true">
+            <span className="cursor-default text-muted" aria-disabled="true">
               {typed === null && words !== ""
                 ? `${words} is not an address — an address has something@somewhere in it.`
                 : "No address matches."}
