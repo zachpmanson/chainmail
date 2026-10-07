@@ -1,11 +1,10 @@
-import type { QueryClient } from "@tanstack/react-query";
 import { useSearch } from "@tanstack/react-router";
 import { ArchiveBoxIcon, FolderIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { $api, ApiError } from "../lib/api";
 
 /**
- * The two mailbox verbs — their glyphs, what they leave to say, and what they make
- * stale — in one place, because two surfaces now reach for the same pair.
+ * The two mailbox verbs — their glyphs and what they leave to say — in one place,
+ * because two surfaces now reach for the same pair.
  *
  * The selection bar has them for the threads a reader has ticked (see ActionBar);
  * the reading pane has them for the thread that is open (see ThreadPane). They are
@@ -79,22 +78,6 @@ export function sentence(
           : `${skipped} entries have no mailbox copy and were left alone`
       }.`
     : `${what}.`;
-}
-
-/**
- * What a mail action makes stale, whichever surface ran it.
- *
- * The mail moved, so everything that counts or lists mail is out of date: the
- * list the reader is looking at, the folder counts, the corpus totals, and the
- * open thread's own labels. The list is the answer they are reading, so it is
- * re-asked rather than patched — a row that quietly disappeared would be the page
- * claiming a write it had not been told the result of.
- */
-export function staleAfterMail(qc: QueryClient): void {
-  void qc.invalidateQueries({ queryKey: ["get", "/v1/search"] });
-  void qc.invalidateQueries({ queryKey: ["get", "/v1/labels"] });
-  void qc.invalidateQueries({ queryKey: ["get", "/v1/stats"] });
-  void qc.invalidateQueries({ queryKey: ["get", "/v1/chains/{rootExtId}"] });
 }
 
 /**

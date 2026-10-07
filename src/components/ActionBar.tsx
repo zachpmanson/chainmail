@@ -3,10 +3,9 @@ import { Button, IconButton, TextInput } from "./controls";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSearch } from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
 import { $api } from "../lib/api";
+import { useMailAction } from "../lib/mailActions";
 import { useBuildPage } from "../lib/build";
-import { dropFromLists, putBackLists } from "../lib/lists";
 import { dismissToast, pushToast } from "../lib/toasts";
 import { Failure } from "./ThreadShared";
 import {
@@ -17,7 +16,6 @@ import {
   VERBS,
   refusal,
   sentence,
-  staleAfterMail,
 } from "./MailVerbs";
 
 /**
@@ -117,7 +115,6 @@ export function ActionBar({
   // person's mailboxes, so a page braided today marks the aliases the corpus knows
   // today rather than the ones the reader had written down.
   const settings = $api.useQuery("get", "/v1/settings", {});
-  const qc = useQueryClient();
   const accountId = useSearch({ from: "/" }).accountId;
   // The header's slot, or null on a page that has no header.
   const slot = buildBarSlot();
@@ -128,19 +125,16 @@ export function ActionBar({
   // mailbox left six rows sitting there under a sentence saying they had moved. A
   // refusal puts them back — and the sentence is written from the server's own
   // answer either way, so what is claimed afterwards is never what was assumed.
-  const act = $api.useMutation("post", "/v1/mail", {
-    onMutate: (v) => ({ was: dropFromLists(qc, v.body.chains) }),
+  const act = useMailAction({
     onSuccess: (res) => {
       say(sentence(res.action, res.labels, res.changed, res.skipped), "note");
       onDone();
-      staleAfterMail(qc);
     },
-    onError: (e: unknown, _v, ctx) => {
-      if (ctx) putBackLists(qc, ctx.was);
+    onError: (error, request) => {
       // Said in the same words the pane uses for the same write, and in the same
       // place: the server's own answer, in the corner. Nothing is filed as a report
       // of work that did happen — a refusal names the verb that did not run.
-      say(refusal(e, "-mail-write", VERBS[_v.body.action] ?? "That change"), "fail");
+      say(refusal(error, "-mail-write", VERBS[request.action] ?? "That change"), "fail");
     },
   });
 
