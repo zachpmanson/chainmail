@@ -70,8 +70,9 @@
   @media print { .bd details.sig .sigbd { display:block; } }
   /* Keep the sender's fixed-width markup inside the bubble. */
   .bd img { max-width:100%; height:auto; }
-  .bd table { min-width:0; max-width:100%; }
-  .bd td, .bd th { vertical-align:top; }
+  .bd table { min-width:0; max-width:100%; border-collapse:collapse; }
+  .bd table, .bd th, .bd td { border:1px solid black; }
+  .bd th, .bd td { padding:.2rem .5rem; vertical-align:top; }
   /* !important: these override the sender's inline style attributes. */
   body.plain .bd [style] { text-decoration:none !important; text-align:inherit !important;
     font-weight:inherit !important; font-style:inherit !important; }
