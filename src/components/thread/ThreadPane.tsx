@@ -1,4 +1,8 @@
-import { ArrowTopRightOnSquareIcon, QueueListIcon } from "@heroicons/react/24/outline";
+import {
+  ArrowTopRightOnSquareIcon,
+  Bars3BottomRightIcon,
+  Bars3Icon,
+} from "@heroicons/react/24/outline";
 import { flushSync } from "react-dom";
 import { useMailAction, useReadAction } from "../../lib/inbox/mailActions";
 import { useAccountId } from "../../lib/inbox/useAccountId";
@@ -123,7 +127,11 @@ export default function ThreadPane({
                 withTransition(document, () => flushSync(() => setTree(!tree)));
               }}
             >
-              <QueueListIcon aria-hidden="true" />
+              {tree ? (
+                <Bars3BottomRightIcon aria-hidden="true" />
+              ) : (
+                <Bars3Icon aria-hidden="true" />
+              )}
             </IconButton>
             <MoveFolder
               defaultFolder={moveDefault}
