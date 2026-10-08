@@ -207,17 +207,19 @@ func parseBlock(markup string) *html.Node {
 // while the same mention in the host's markup is rendered as a link whose
 // visible text is only the name. The mailto: address therefore contributes tokens
 // that exist in the needle but nowhere in the block, so a body opening on a
-// mention failed the head alignment: three of the first eight tokens were
-// mailto: address fragments that could never match. Remove the address and the
-// name counts the way it does in markup: "@Nella Forge", then the content.
+// mention can fail the head alignment. Some clients instead append a bare address
+// (`+Maia Bryan <maia@example.com>`); bareMentionAddress matches that form only
+// when it follows an @- or +-prefixed mention.
 var mailtoMention = regexp.MustCompile(`<mailto:[^>]+>`)
+var bareMentionAddress = regexp.MustCompile(`([@+][^<>\r\n]{1,80}?)\s*<[^<>\s@]+@[^<>\s@]+>`)
 
-// stripMailtoMentions drops an @mention's trailing mailto address from text
-// before it is tokenised as the recovery needle. The name itself stays: it is
-// real content that appears in both renditions. Only the address fragment, an
-// artifact of how the plain rendition writes a mention, is removed.
+// stripMailtoMentions drops an @mention's trailing address from text before it
+// is tokenised as the recovery needle. The name itself stays: it is real content
+// that appears in both renditions. Only the address fragment, an artifact of how
+// the plain rendition writes a mention, is removed.
 func stripMailtoMentions(text string) string {
-	return mailtoMention.ReplaceAllString(text, "")
+	text = mailtoMention.ReplaceAllString(text, "")
+	return bareMentionAddress.ReplaceAllString(text, "$1")
 }
 
 // inlineImages returns the filenames of the images a quoted message placed in

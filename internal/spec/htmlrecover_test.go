@@ -57,6 +57,33 @@ func TestAMailtoMentionOpeningStillRecoversTheTable(t *testing.T) {
 	}
 }
 
+func TestABareMentionAddressDoesNotBlockTableRecovery(t *testing.T) {
+	// Gmail's plain-text part can append the bare address to a pasted mention,
+	// even though its HTML link shows only the display name. The address tokens
+	// at the opening used to push head similarity below the recovery threshold.
+	host := `<div>Thanks.</div><div class="gmail_quote">` +
+		`<div class="gmail_attr">On Tue, 4 Aug 2026 at 13:26, Tosh Ellery wrote:</div>` +
+		`<blockquote><div>Hi <a href="mailto:alex@example.com">+Alex Example</a></div>` +
+		`<div>Here is the column mapping we agreed:</div>` +
+		`<table><tr><th>Original column</th><th>New column</th></tr>` +
+		`<tr><td>Site ref</td><td>NMI</td></tr>` +
+		`<tr><td>Read date</td><td>Meter read</td></tr></table>` +
+		`<div>Shout if the second column is wrong for the Fjordvik sites.</div></blockquote></div>`
+	r := &entryRow{
+		Source: "mail",
+		BodyText: "Hi +Alex Example <alex@example.com>\n" +
+			"Here is the column mapping we agreed:\n" +
+			"Original column\tNew column\n" +
+			"Site ref\tNMI\nRead date\tMeter read\n" +
+			"Shout if the second column is wrong for the Fjordvik sites.",
+		HostHTML: []string{host},
+	}
+	got := bodyHTML(r)
+	if !strings.Contains(got, "<table>") {
+		t.Fatalf("body = %q, want the table recovered despite the bare mention address", got)
+	}
+}
+
 func TestAQuotedEntryRecoversItsMarkupFromAHost(t *testing.T) {
 	// The point of the whole file: this entry has no markup of its own, and its
 	// table exists only inside the reply that quoted it.
