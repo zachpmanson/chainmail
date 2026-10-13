@@ -151,13 +151,14 @@ type corpusEntry struct {
 	// Absent means false, and false is also what an entry with no person to hold the
 	// answer gets — a message recovered from a quote has no sender to have decided
 	// anything about.
-	PreferOriginal bool          `json:"preferOriginal,omitempty"`
-	Container      string        `json:"container,omitempty"`
-	Permalink      string        `json:"permalink,omitempty"`
-	Parent         string        `json:"parent,omitempty"`
-	ParentRef      string        `json:"parentRef,omitempty"`
-	Sightings      []sighting    `json:"sightings,omitempty"`
-	Participants   []participant `json:"participants,omitempty"`
+	PreferOriginal    bool          `json:"preferOriginal,omitempty"`
+	PreferOriginalSet bool          `json:"preferOriginalSet,omitempty"`
+	Container         string        `json:"container,omitempty"`
+	Permalink         string        `json:"permalink,omitempty"`
+	Parent            string        `json:"parent,omitempty"`
+	ParentRef         string        `json:"parentRef,omitempty"`
+	Sightings         []sighting    `json:"sightings,omitempty"`
+	Participants      []participant `json:"participants,omitempty"`
 	// Attachments are the files this message carries, in the sender's order.
 	// Absent when it carries none, which is most mail: an empty list on every
 	// entry would be a paragraph of nothing in every response.
@@ -721,7 +722,7 @@ func toCorpusEntry(s corpus.Shown, r spec.Rendered) corpusEntry {
 		TZ: s.TZ, TZOffsetMinutes: s.TZOffset, Author: s.Author, Subject: s.Subject,
 		Body: s.Body, HTML: r.HTML, To: r.To, Mine: r.Mine, FromEmail: r.FromEmail,
 		Org: r.Org, QuotedBy: r.QuotedBy, Original: s.HasOriginal,
-		PersonID: s.PersonID, PreferOriginal: s.PreferOriginal,
+		PersonID: s.PersonID, PreferOriginal: s.PreferOriginal, PreferOriginalSet: s.PreferOriginalSet,
 		Container: s.Container,
 		Permalink: s.Permalink,
 		Parent:    s.Parent, ParentRef: s.ParentRef,

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { usePrefs } from "../prefs/usePrefs";
+import { defaultsToOriginal } from "./originalDefault";
 
 /** `asking` keeps the transcript's body on screen; `none` is the corpus saying this message has no original part. */
 export type Original =
@@ -12,7 +13,7 @@ export type Original =
 export function useOriginal(
   original: { extId: string; load: (extId: string) => Promise<string> } | undefined,
   fromEmail: string | undefined,
-  person: { id: number; preferOriginal: boolean } | undefined,
+  person: { id: number; preferOriginal: boolean | undefined } | undefined,
   onPreferOriginal: ((next: boolean) => void) | undefined,
 ) {
   // A recovered entry has no From header, so the local switch falls back to the message id.
@@ -23,13 +24,30 @@ export function useOriginal(
 
   // Locally, one sender's bubbles share the switch, so each follows it rather than owning it.
   const styled = usePrefs((s) => key !== "" && s.styledSenders.includes(key));
-  const toggleStyled = usePrefs((s) => s.toggleStyled);
-  const on = stored ? person.preferOriginal : styled;
+  const plain = usePrefs((s) => key !== "" && s.plainSenders.includes(key));
+  const setStyled = usePrefs((s) => s.setStyled);
+  const explicit = stored ? person.preferOriginal !== undefined : styled || plain;
+  const [automatic, setAutomatic] = useState(false);
+  const on = explicit ? (stored ? person.preferOriginal === true : styled) : automatic;
   const [state, setState] = useState<Original>({ at: "read" });
   const arrived = useRef<string | null>(null);
 
   useEffect(() => {
     if (!extId || !load) return;
+    if (!explicit) {
+      let live = true;
+      load(extId)
+        .then((html) => {
+          arrived.current = html;
+          if (live) setAutomatic(defaultsToOriginal(html));
+        })
+        .catch(() => {
+          if (live) setAutomatic(false);
+        });
+      return () => {
+        live = false;
+      };
+    }
     if (!on) {
       // Same object when unchanged, so switching off doesn't re-render every bubble already off.
       setState((s) => (s.at === "read" ? s : { at: "read" }));
@@ -60,9 +78,9 @@ export function useOriginal(
     return () => {
       live = false;
     };
-  }, [on, extId, load]);
+  }, [on, explicit, extId, load]);
 
-  const ask = () => (stored ? onPreferOriginal(!on) : toggleStyled(key));
+  const ask = () => (stored ? onPreferOriginal(!on) : setStyled(key, !on));
 
   return { on, state, ask };
 }

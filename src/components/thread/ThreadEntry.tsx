@@ -38,7 +38,10 @@ export default function ThreadEntry({ entry: e }: { entry: CorpusEntry }) {
               original: { extId: e.extId, load: fetchOriginal },
               // Without a person (quote-recovered entries) the switch falls back to browser storage.
               person: e.personId
-                ? { id: e.personId, preferOriginal: e.preferOriginal === true }
+                ? {
+                    id: e.personId,
+                    preferOriginal: e.preferOriginalSet ? e.preferOriginal === true : undefined,
+                  }
                 : undefined,
               onPreferOriginal: e.personId ? (next: boolean) => flip(e.personId!, next) : undefined,
             }

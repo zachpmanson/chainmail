@@ -61,7 +61,7 @@ export type MessageMedia = {
 export type MessageReading = {
   original: { extId: string; load: (extId: string) => Promise<string> };
   /** stored half of the switch; absent keeps it in browser storage */
-  person?: { id: number; preferOriginal: boolean };
+  person?: { id: number; preferOriginal: boolean | undefined };
   /** flips that preference; absent keeps the switch local */
   onPreferOriginal?: (next: boolean) => void;
 };

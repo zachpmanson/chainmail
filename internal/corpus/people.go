@@ -1071,7 +1071,7 @@ func UpdatePerson(s *Store, id int64, edit PersonEdit) (PersonSummary, error) {
 
 	if edit.PreferOriginal != nil {
 		if _, err := tx.Exec(
-			`update people set prefer_original = ? where id = ?`, boolInt(*edit.PreferOriginal), id); err != nil {
+			`update people set prefer_original = ?, prefer_original_set = 1 where id = ?`, boolInt(*edit.PreferOriginal), id); err != nil {
 			return PersonSummary{}, err
 		}
 	}

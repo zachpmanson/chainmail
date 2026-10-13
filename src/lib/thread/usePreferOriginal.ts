@@ -16,7 +16,7 @@ export function usePreferOriginal(): (personId: number, next: boolean) => void {
         old && {
           ...old,
           entries: old.entries.map((e) =>
-            e.personId === personId ? { ...e, preferOriginal: next } : e,
+            e.personId === personId ? { ...e, preferOriginal: next, preferOriginalSet: true } : e,
           ),
         },
     );

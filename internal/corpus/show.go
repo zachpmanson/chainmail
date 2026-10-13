@@ -35,7 +35,8 @@ type Shown struct {
 	// a second read to know what to draw; it is one boolean off a join this query
 	// already makes. False where there is no person to hold the answer, which is
 	// also what an entry whose sender the corpus cannot name gets.
-	PreferOriginal bool
+	PreferOriginal    bool
+	PreferOriginalSet bool
 	// TZOffset is minutes east of UTC as the source stated it, nil when it stated
 	// none. Carried alongside TZ because a label does not determine an offset, so
 	// a caller placing this entry's wall clock has nothing else to place it with.
@@ -125,7 +126,7 @@ func (s *Store) Show(extID string) (Shown, error) {
 		select e.id, e.ext_id, e.source, e.quoted, e.ts, e.tz, e.tz_offset,
 		       p.display_name, e.subject, e.body_text, e.container, e.permalink,
 		       par.ext_id, e.parent_ref, e.body_html is not null and e.body_html != '',
-		       coalesce(e.person_id, 0), coalesce(p.prefer_original, 0),
+		       coalesce(e.person_id, 0), coalesce(p.prefer_original, 0), coalesce(p.prefer_original_set, 0),
 		       coalesce(md.to_addr, ''), coalesce(md.cc_addr, '')
 		from entries e
 		left join people p on p.id = e.person_id
@@ -134,7 +135,7 @@ func (s *Store) Show(extID string) (Shown, error) {
 		where e.ext_id = ?`, extID).
 		Scan(&e.ID, &e.ExtID, &e.Source, &e.Quoted, &ts, &tz, &off,
 			&author, &subject, &body, &container, &permalink, &parent, &parentRef,
-			&e.HasOriginal, &e.PersonID, &e.PreferOriginal, &toHeader, &ccHeader)
+			&e.HasOriginal, &e.PersonID, &e.PreferOriginal, &e.PreferOriginalSet, &toHeader, &ccHeader)
 	if errors.Is(err, sql.ErrNoRows) {
 		return e, fmt.Errorf("%q: %w", extID, ErrNotFound)
 	}
