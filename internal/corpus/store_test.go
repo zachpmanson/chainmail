@@ -1,6 +1,8 @@
 package corpus
 
 import (
+	"database/sql"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -27,6 +29,57 @@ func TestOpenIsIdempotent(t *testing.T) {
 	// migrate() again on an already-migrated database must be a no-op
 	if err := s.migrate(); err != nil {
 		t.Fatalf("second migrate: %v", err)
+	}
+}
+
+func TestMigrateFromVersion19WithGmailAccountLabels(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "corpus.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, statement := range []string{
+		`create table schema_version(v integer primary key)`,
+		`insert into schema_version(v) values (19)`,
+		`create table people(id integer primary key, display_name text not null)`,
+		`create table gmail_accounts(id text primary key, email text, display_name text not null, created_at integer not null)`,
+		`create table gmail_account_labels(account_id text not null references gmail_accounts(id), name text not null, primary key(account_id, name))`,
+	} {
+		if _, err := db.Exec(statement); err != nil {
+			db.Close()
+			t.Fatalf("prepare version-19 database: %v", err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open existing version-19 database: %v", err)
+	}
+	defer s.Close()
+
+	var version int
+	if err := s.DB().QueryRow(`select max(v) from schema_version`).Scan(&version); err != nil {
+		t.Fatal(err)
+	}
+	if version != 20 {
+		t.Fatalf("schema version = %d, want 20", version)
+	}
+	var column int
+	if err := s.DB().QueryRow(`select count(*) from pragma_table_info('people') where name='prefer_original_set'`).Scan(&column); err != nil {
+		t.Fatal(err)
+	}
+	if column != 1 {
+		t.Fatal("migration 20 did not add people.prefer_original_set")
+	}
+	var labelsTable int
+	if err := s.DB().QueryRow(`select count(*) from sqlite_master where type='table' and name='gmail_account_labels'`).Scan(&labelsTable); err != nil {
+		t.Fatal(err)
+	}
+	if labelsTable != 1 {
+		t.Fatal("migration removed the existing gmail_account_labels table")
 	}
 }
 
