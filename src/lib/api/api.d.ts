@@ -801,8 +801,10 @@ export interface components {
              * @description The person the corpus resolved this entry's sender to, as an id from /v1/people. Absent where it resolved nobody, which is every entry recovered from somebody else's quote. `author` and `fromEmail` say what the corpus found; this says who it found them to be, and it is the handle a client needs for anything the reader decides about that person rather than about this message — POST /v1/people/{personId} is the write.
              */
             personId?: number;
-            /** @description Whether the reader reads this entry's sender as that sender wrote them: the state of the staged/original control the bubble offers, which is decided by the person above rather than by this message. Absent means false, and false is also what an entry with nobody to hold the answer gets. Set it with POST /v1/people/{personId}, where the answer is stored — one answer per person, so a sender's mail reads the same way on every device and in every thread. */
+            /** @description Whether the reader reads this entry's sender as that sender wrote them. */
             preferOriginal?: boolean;
+            /** @description Whether the reader explicitly chose a rendering preference for this sender; false means the automatic body heuristic applies. */
+            preferOriginalSet?: boolean;
             /** @description Mail thread id or Slack channel id. Absent when the source stated none. */
             container?: string;
             /** @description Opens the entry at its source. Absent when the source gave none. */

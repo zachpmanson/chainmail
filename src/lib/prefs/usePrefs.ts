@@ -15,6 +15,7 @@ type Saved = {
    * people.prefer_original is the store of record; this serves built pages and quote-recovered messages.
    */
   styledSenders: string[];
+  plainSenders: string[];
 };
 
 const COMPACT_KEY = "cm-compact";
@@ -22,6 +23,7 @@ const COMPACT_KEY = "cm-compact";
 const TREE_KEY = "cm-treeview";
 const LIST_KEY = "cm-list";
 const STYLED_KEY = "chainmail:styled-senders";
+const PLAIN_KEY = "chainmail:plain-senders";
 
 /** Persist's one blob, spread over the keys and formats the earlier hand-rolled storage used. */
 function legacyKeys(store: Storage): StateStorage {
@@ -33,6 +35,7 @@ function legacyKeys(store: Storage): StateStorage {
         tree: store.getItem(TREE_KEY) === "1",
         listWidth: Number.isFinite(width) ? clampListWidth(width, Number.POSITIVE_INFINITY) : null,
         styledSenders: senders(store.getItem(STYLED_KEY)),
+        plainSenders: senders(store.getItem(PLAIN_KEY)),
       };
       return JSON.stringify({ state, version: 0 });
     },
@@ -43,9 +46,11 @@ function legacyKeys(store: Storage): StateStorage {
       if (state.listWidth === null) store.removeItem(LIST_KEY);
       else store.setItem(LIST_KEY, String(state.listWidth));
       store.setItem(STYLED_KEY, JSON.stringify(state.styledSenders));
+      store.setItem(PLAIN_KEY, JSON.stringify(state.plainSenders));
     },
     removeItem: () => {
-      for (const key of [COMPACT_KEY, TREE_KEY, LIST_KEY, STYLED_KEY]) store.removeItem(key);
+      for (const key of [COMPACT_KEY, TREE_KEY, LIST_KEY, STYLED_KEY, PLAIN_KEY])
+        store.removeItem(key);
     },
   };
 }
@@ -68,7 +73,7 @@ export const usePrefs = create<
     setCompact: (compact: boolean) => void;
     setTree: (tree: boolean) => void;
     setListWidth: (px: number | null) => void;
-    toggleStyled: (sender: string) => void;
+    setStyled: (sender: string, next: boolean) => void;
   }
 >()(
   persist(
@@ -77,6 +82,7 @@ export const usePrefs = create<
       tree: false,
       listWidth: null,
       styledSenders: [],
+      plainSenders: [],
       setCompact: (compact) => set({ compact }),
       setTree: (tree) => set({ tree }),
       setListWidth: (px) => {
@@ -84,13 +90,15 @@ export const usePrefs = create<
           throw new Error(`list width ${px} is not a number`);
         set({ listWidth: px === null ? null : clampListWidth(px, Number.POSITIVE_INFINITY) });
       },
-      // A recovered entry with neither sender nor id has nothing to key the switch on.
-      toggleStyled: (sender) => {
+      setStyled: (sender, next) => {
         if (sender === "") return;
-        set(({ styledSenders }) => ({
-          styledSenders: styledSenders.includes(sender)
-            ? styledSenders.filter((s) => s !== sender)
-            : [...styledSenders, sender],
+        set(({ styledSenders, plainSenders }) => ({
+          styledSenders: next
+            ? [...new Set([...styledSenders, sender])]
+            : styledSenders.filter((s) => s !== sender),
+          plainSenders: next
+            ? plainSenders.filter((s) => s !== sender)
+            : [...new Set([...plainSenders, sender])],
         }));
       },
     }),
@@ -98,11 +106,12 @@ export const usePrefs = create<
       // Unused by legacyKeys, which keeps each preference under its own key.
       name: "cm-prefs",
       storage: createJSONStorage(() => legacyKeys(window.localStorage)),
-      partialize: ({ compact, tree, listWidth, styledSenders }): Saved => ({
+      partialize: ({ compact, tree, listWidth, styledSenders, plainSenders }): Saved => ({
         compact,
         tree,
         listWidth,
         styledSenders,
+        plainSenders,
       }),
     },
   ),

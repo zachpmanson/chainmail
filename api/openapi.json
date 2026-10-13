@@ -1687,7 +1687,11 @@
           },
           "preferOriginal": {
             "type": "boolean",
-            "description": "Whether the reader reads this entry's sender as that sender wrote them: the state of the staged/original control the bubble offers, which is decided by the person above rather than by this message. Absent means false, and false is also what an entry with nobody to hold the answer gets. Set it with POST /v1/people/{personId}, where the answer is stored — one answer per person, so a sender's mail reads the same way on every device and in every thread."
+            "description": "Whether the reader reads this entry's sender as that sender wrote them."
+          },
+          "preferOriginalSet": {
+            "type": "boolean",
+            "description": "Whether the reader explicitly chose a rendering preference for this sender; false means the automatic body heuristic applies."
           },
           "container": {
             "type": "string",
