@@ -528,11 +528,6 @@ var migrations = []string{
 	delete from cursors where source='mail';
 	`,
 
-	// 19: distinguish an unset sender style from an explicit plain-text choice.
-	`
-	alter table people add column prefer_original_set integer not null default 0;
-	`,
-
 	// 19: mailbox label lists are account-local, just like the labels on copies.
 	// Preserve the existing list as the legacy account's snapshot.
 	`
@@ -543,5 +538,10 @@ var migrations = []string{
 	);
 	insert into gmail_account_labels(account_id, name)
 	select 'legacy', name from mailbox_labels;
+	`,
+
+	// 20: distinguish an unset sender style from an explicit plain-text choice.
+	`
+	alter table people add column prefer_original_set integer not null default 0;
 	`,
 }
