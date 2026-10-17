@@ -16,7 +16,7 @@ describe("original HTML default", () => {
 
   it("combines image-and-links with styling", () => {
     const html =
-      '<div style="x"><p class="x">News</p><table><tr><td>A</td></tr></table><table><tr><td>B</td></tr></table><img src="x"><a href="a">A</a><a href="b">B</a></div>';
+      '<div style="x"><p class="x">News</p><table class="x"><tr><td>A</td></tr></table><table><tr><td>B</td></tr></table><img src="x"><a href="a">A</a><a href="b">B</a></div>';
     expect(originalHtmlScore(html)).toBe(4);
     expect(defaultsToOriginal(html)).toBe(true);
   });

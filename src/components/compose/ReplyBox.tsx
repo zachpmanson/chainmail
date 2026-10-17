@@ -1,11 +1,12 @@
-import { useEffect, useReducer, useRef } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { $api, type CorpusEntry, type SendResponse } from "../../lib/api/api";
 import { useAccountId } from "../../lib/inbox/useAccountId";
 import { staleAfterMail } from "../../lib/inbox/mailActions";
+import { errText } from "../../lib/ui/errText";
 import useOwnToast from "../../lib/ui/useOwnToast";
 import ComposerFields from "./ComposerFields";
-import type { Draft } from "./Draft";
+import { parseAddressHeader, type Draft } from "./Draft";
 import { refusal } from "../inbox/MailVerbs";
 import CheckboxRow from "../ui/CheckboxRow";
 import Button from "../ui/Button";
@@ -104,8 +105,26 @@ export default function ReplyBox({
   });
   const { connected } = useAccounts();
   const displayedAccountId = accountId || (connected.length === 1 ? (connected[0]?.id ?? "") : "");
+  const [draftId, setDraftId] = useState("");
+  const [draftSaveError, setDraftSaveError] = useState("");
+  const draftIdRef = useRef("");
+  const draftMessageIdRef = useRef("");
+  const saveGeneration = useRef(0);
+  const saveQueue = useRef(Promise.resolve());
+  const drafts = $api.useQuery(
+    "get",
+    "/v1/drafts",
+    {
+      params: { query: displayedAccountId ? { accountId: displayedAccountId } : {} },
+    },
+    { enabled: Boolean(displayedAccountId) },
+  );
+  const createDraft = $api.useMutation("post", "/v1/drafts");
+  const updateDraft = $api.useMutation("put", "/v1/drafts/{id}");
+  const deleteDraft = $api.useMutation("delete", "/v1/drafts/{id}");
   const recipients = useReplyRecipients(answer, all, routeAccountId);
   const { to, cc } = recipients;
+  const restoreRecipients = recipients.restore;
   const { busy, error, clearError, run } = useBusyTask();
   const send = $api.useMutation("post", "/v1/send");
   // The box isn't remounted between threads, so its toast goes when the thread changes.
@@ -123,7 +142,92 @@ export default function ReplyBox({
 
   useEffect(() => {
     dispatch({ type: "retarget", accountId: routeAccountId ?? "" });
+    saveGeneration.current++;
+    draftIdRef.current = "";
+    draftMessageIdRef.current = "";
+    setDraftId("");
   }, [answer.extId, routeAccountId]);
+
+  // Gmail associates a reply draft with its thread. Resume it automatically when
+  // the selected thread/account changes, rather than starting a second draft.
+  const matchingDraft = drafts.data?.find(
+    (item) => item.threadId && item.threadId === answer.container,
+  );
+  useEffect(() => {
+    if (!matchingDraft || matchingDraft.id === draftIdRef.current) return;
+    saveGeneration.current++;
+    draftIdRef.current = matchingDraft.id;
+    draftMessageIdRef.current = matchingDraft.messageId ?? "";
+    setDraftId(matchingDraft.id);
+    dispatch({ type: "words", own: matchingDraft.body ?? "" });
+    restoreRecipients(parseAddressHeader(matchingDraft.to), parseAddressHeader(matchingDraft.cc));
+    say("Resumed the Gmail draft for this thread.");
+  }, [matchingDraft, restoreRecipients, say]);
+
+  // Autosave to Gmail. Queue writes so an older request cannot land after a newer
+  // edit and replace it; a draft ID returned by create is reused by later saves.
+  useEffect(() => {
+    if (
+      !own.trim() ||
+      !displayedAccountId ||
+      !answer.extId ||
+      drafts.isPending ||
+      drafts.isError ||
+      step.kind !== "editing"
+    )
+      return;
+    const words = own;
+    const recipientsTo = to.map((r) => `${r.name ? `${r.name} ` : ""}<${r.address}>`);
+    const recipientsCc = cc.map((r) => `${r.name ? `${r.name} ` : ""}<${r.address}>`);
+    const generation = saveGeneration.current;
+    const subject = answer.subject?.startsWith("Re:")
+      ? answer.subject
+      : `Re: ${answer.subject ?? ""}`;
+    const timer = window.setTimeout(() => {
+      saveQueue.current = saveQueue.current
+        .catch(() => undefined)
+        .then(async () => {
+          if (generation !== saveGeneration.current) return;
+          const id = draftIdRef.current;
+          const body = {
+            accountId: displayedAccountId,
+            to: recipientsTo,
+            cc: recipientsCc,
+            subject,
+            body: words,
+            replyToEntry: answer.extId,
+            ...(id ? { expectedMessageId: draftMessageIdRef.current } : {}),
+          };
+          const saved = id
+            ? await updateDraft.mutateAsync({ params: { path: { id } }, body })
+            : await createDraft.mutateAsync({ body });
+          if (generation !== saveGeneration.current) return;
+          draftIdRef.current = saved.id;
+          draftMessageIdRef.current = saved.messageId ?? "";
+          setDraftId(saved.id);
+          setDraftSaveError("");
+          await queryClient.invalidateQueries({ queryKey: ["get", "/v1/drafts"] });
+        })
+        .catch((error) => {
+          console.error("Saving Gmail reply draft failed", error);
+          setDraftSaveError(errText(error));
+        });
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [
+    own,
+    to,
+    cc,
+    displayedAccountId,
+    step.kind,
+    answer.subject,
+    answer.extId,
+    drafts.isPending,
+    drafts.isError,
+    createDraft,
+    updateDraft,
+    queryClient,
+  ]);
 
   // A press on a message's answer control brings the box, which may be screens away, to the reader.
   useEffect(() => {
@@ -160,6 +264,7 @@ export default function ReplyBox({
     const { plan } = step;
     await run(
       async () => {
+        await saveQueue.current;
         await send.mutateAsync({
           body: {
             entry: answer.extId,
@@ -171,9 +276,28 @@ export default function ReplyBox({
             ...recipients.edited,
           },
         });
+        const savedDraftId = draftIdRef.current;
+        let draftCleanupFailed = false;
+        if (savedDraftId) {
+          try {
+            await deleteDraft.mutateAsync({
+              params: { path: { id: savedDraftId }, query: { accountId: plan.accountId } },
+            });
+          } catch (e) {
+            console.error("Removing the sent reply draft failed", e);
+            draftCleanupFailed = true;
+          }
+          draftIdRef.current = "";
+          draftMessageIdRef.current = "";
+          setDraftId("");
+        }
         dispatch({ type: "sent" });
         recipients.untouch();
-        say(`Answered ${words.who || "the sender"} — sent, and filed in the trail below.`);
+        say(
+          draftCleanupFailed
+            ? "Reply sent, but its Gmail draft could not be removed; delete that leftover draft in Gmail."
+            : `Answered ${words.who || "the sender"} — sent, and filed in the trail below.`,
+        );
       },
       (e) => {
         // The request may have reached Gmail even if its response did not; a retry could duplicate mail.
@@ -182,6 +306,24 @@ export default function ReplyBox({
       },
     );
     staleAfterMail(queryClient);
+  }
+
+  async function discardDraft() {
+    const id = draftIdRef.current;
+    if (!id || !window.confirm("Discard this Gmail reply draft?")) return;
+    await run(async () => {
+      await deleteDraft.mutateAsync({
+        params: { path: { id }, query: { accountId: displayedAccountId } },
+      });
+      saveGeneration.current++;
+      draftIdRef.current = "";
+      draftMessageIdRef.current = "";
+      setDraftId("");
+      setDraftSaveError("");
+      dispatch({ type: "words", own: "" });
+      recipients.untouch();
+      await queryClient.invalidateQueries({ queryKey: ["get", "/v1/drafts"] });
+    }, errText);
   }
 
   const errorAlert = error ? (
@@ -193,6 +335,8 @@ export default function ReplyBox({
 
   return (
     <div className="mt-4 mb-1 rounded-lg border border-line bg-card px-3 py-2" ref={host}>
+      {draftSaveError ? <InlineAlert>{draftSaveError}</InlineAlert> : null}
+      {draftId ? <p className="mb-1 text-2xs text-muted">Saved to Gmail</p> : null}
       <section aria-label="Reply">
         {step.kind === "reviewing" ? (
           <>
@@ -238,7 +382,13 @@ export default function ReplyBox({
                 <AccountSelect
                   value={displayedAccountId}
                   disabled={busy}
-                  onChange={(id) => dispatch({ type: "account", accountId: id })}
+                  onChange={(id) => {
+                    saveGeneration.current++;
+                    draftIdRef.current = "";
+                    draftMessageIdRef.current = "";
+                    setDraftId("");
+                    dispatch({ type: "account", accountId: id });
+                  }}
                 />
               }
               draft={draft}
@@ -272,6 +422,17 @@ export default function ReplyBox({
                   send html
                 </CheckboxRow>
               </div>
+              {draftId ? (
+                <Button
+                  variant="danger"
+                  density="compact"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void discardDraft()}
+                >
+                  Discard draft
+                </Button>
+              ) : null}
               <Button
                 variant="subtle"
                 density="compact"

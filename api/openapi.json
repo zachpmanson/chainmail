@@ -1046,7 +1046,9 @@
             "name": "accountId",
             "in": "path",
             "required": true,
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -1056,16 +1058,25 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["accountId", "disconnected"],
+                  "required": [
+                    "accountId",
+                    "disconnected"
+                  ],
                   "properties": {
-                    "accountId": { "type": "string" },
-                    "disconnected": { "type": "boolean" }
+                    "accountId": {
+                      "type": "string"
+                    },
+                    "disconnected": {
+                      "type": "boolean"
+                    }
                   }
                 }
               }
             }
           },
-          "404": { "description": "No Gmail account has that ID." }
+          "404": {
+            "description": "No Gmail account has that ID."
+          }
         }
       }
     },
@@ -1329,6 +1340,416 @@
           },
           "502": {
             "description": "Mailbox failure. The error distinguishes a definite non-send from an uncertain send; check Gmail before retrying uncertain outcomes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/drafts": {
+      "get": {
+        "summary": "List Gmail drafts",
+        "description": "Returns drafts currently held by Gmail. Gmail is the source of truth; list results are read fresh from the selected account.",
+        "operationId": "listDrafts",
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Gmail account to use; required when more than one account is connected."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Gmail drafts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DraftResponse"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed account selection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "More than one Gmail account is connected; specify accountId.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Gmail could not list or read the drafts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a Gmail draft",
+        "description": "Creates a Gmail-synced draft. Requires the server -draft-mail grant; does not send.",
+        "operationId": "createDraft",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created draft.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed draft content or recipients.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Draft writes are disabled without -draft-mail.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "More than one Gmail account is connected; specify accountId.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Gmail could not create the draft.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/drafts/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "accountId",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "string"
+          },
+          "description": "Gmail account to use; required when more than one account is connected."
+        }
+      ],
+      "get": {
+        "summary": "Read a Gmail draft",
+        "operationId": "getDraft",
+        "responses": {
+          "200": {
+            "description": "Current draft content from Gmail.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The draft no longer exists in Gmail.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "More than one Gmail account is connected; specify accountId.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Gmail could not read the draft.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Update a Gmail draft",
+        "description": "Updates the existing Gmail draft using expectedMessageId for optimistic conflict detection; a stale or externally deleted draft is not recreated. Requires -draft-mail.",
+        "operationId": "updateDraft",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated draft.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed draft content or recipients.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Draft writes are disabled without -draft-mail.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The draft no longer exists in Gmail and is not recreated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "More than one Gmail account is connected; specify accountId.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Gmail could not update the draft.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a Gmail draft",
+        "description": "Permanently removes a draft from Gmail. Requires -draft-mail.",
+        "operationId": "deleteDraft",
+        "responses": {
+          "200": {
+            "description": "Deleted draft.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftDeleteResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Draft writes are disabled without -draft-mail.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The draft no longer exists in Gmail.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "More than one Gmail account is connected; specify accountId.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Gmail could not delete the draft.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/drafts/{id}/send": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "summary": "Send a Gmail draft",
+        "description": "Sends the exact saved draft through Gmail. Requires -send-mail. On an uncertain result, check Gmail before retrying.",
+        "operationId": "sendDraft",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftAccountRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sent draft.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftSendResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sending is disabled without -send-mail.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The draft no longer exists in Gmail.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "More than one Gmail account is connected; specify accountId.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Gmail could not confirm the send. Check Gmail before retrying.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4082,6 +4503,153 @@
           "accountId": {
             "type": "string",
             "description": "Gmail account used to send the message."
+          }
+        }
+      },
+      "DraftAccountRequest": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DraftWrite": {
+        "type": "object",
+        "required": [
+          "to",
+          "subject",
+          "body"
+        ],
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "to": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "cc": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "subject": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "replyToEntry": {
+            "type": "string",
+            "description": "Corpus ext id of the Gmail message this draft answers."
+          },
+          "expectedMessageId": {
+            "type": "string",
+            "description": "Current Gmail message ID from the last read/save; required to update and detects external edits."
+          }
+        },
+        "additionalProperties": false
+      },
+      "Draft": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "messageId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "cc": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          }
+        }
+      },
+      "DraftResponse": {
+        "allOf": [
+          {
+            "type": "object",
+            "required": [
+              "accountId"
+            ],
+            "properties": {
+              "accountId": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "$ref": "#/components/schemas/Draft"
+          }
+        ]
+      },
+      "DraftDeleteResponse": {
+        "type": "object",
+        "required": [
+          "accountId",
+          "id",
+          "deleted"
+        ],
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "deleted": {
+            "type": "boolean"
+          }
+        }
+      },
+      "DraftSendResponse": {
+        "type": "object",
+        "required": [
+          "accountId",
+          "id",
+          "gmailId",
+          "sent"
+        ],
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "gmailId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "sent": {
+            "type": "boolean"
+          },
+          "filed": {
+            "type": "boolean"
           }
         }
       }

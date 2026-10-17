@@ -140,6 +140,17 @@ parts come from one call (`spec.ComposeReply`), from the same words and the same
 quoting it in the form that message was sent in; nothing is converted from the other. The
 preview shows the text part, which is the one that says what the message says.
 
+**Gmail drafts sync across clients.** Chainmail autosaves compose and reply text to Gmail,
+shows the account's saved drafts in the new-message composer, and automatically resumes a
+reply draft when its Gmail thread is opened. Gmail remains the source of truth; Chainmail
+keeps no draft database. Saving/updating/deleting drafts requires `-draft-mail`
+(`enableDraftMail` in the Nix module), off by default. Sending a saved draft still requires
+`-send-mail`. Both grants matter because this server is loopback-only with no authentication:
+anyone who can reach it can use an enabled draft-write endpoint. Draft send uses Gmail's
+saved content; confirmed sends are filed back into the corpus when possible. The existing
+OAuth grant already requests `https://mail.google.com/`, which includes draft operations, so
+this feature does not require a narrower-scope re-consent.
+
 An **`html`** field turns the second part off for one reply (absent means it goes, so an
 older client sends the message it always sent). A reader who knows their correspondent or a
 list wants the words alone can say so, and what they get is byte for byte the text part they

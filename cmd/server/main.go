@@ -82,6 +82,8 @@ func run(args []string) error {
 			"mail. A host that does not grant it answers 403. The credential is the mail "+
 			"grant this unit already reads; what changes is that the server may now move "+
 			"things in the mailbox.")
+	draftMail := fs.Bool("draft-mail", false,
+		"permit POST/PUT/DELETE /v1/drafts: create, update and delete Gmail drafts. Off by default; does not permit sending.")
 	sendMail := fs.Bool("send-mail", false,
 		"permit POST /v1/send: answer one message the corpus holds, and file the "+
 			"answer into the corpus. Off by default and its own switch — the third "+
@@ -158,6 +160,7 @@ func run(args []string) error {
 		markReadEnabled:       *markRead,
 		mailWriteEnabled:      *mailWrite,
 		sendMailEnabled:       *sendMail,
+		draftMailEnabled:      *draftMail,
 		openMailbox:           defaultMailbox(),
 		openMailboxForAccount: defaultMailboxForAccount,
 		specSlots:             make(chan struct{}, specConcurrency),
