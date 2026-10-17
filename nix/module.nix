@@ -213,6 +213,16 @@ in {
       '';
     };
 
+    enableDraftMail = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Permit Chainmail to create, update and delete Gmail drafts via the /v1/drafts API.
+        Drafts are saved in Gmail and shared with other Gmail clients; this does not
+        permit sending. Off by default and gated separately from -send-mail.
+      '';
+    };
+
     enableSendMail = lib.mkOption {
       type = lib.types.bool;
       default = false;
@@ -301,6 +311,7 @@ in {
           lib.optionalString cfg.enableMedia " -media" +
           lib.optionalString cfg.enableMarkRead " -mark-read" +
           lib.optionalString cfg.enableMailWrite " -mail-write" +
+          lib.optionalString cfg.enableDraftMail " -draft-mail" +
           lib.optionalString cfg.enableSendMail " -send-mail";
         User = cfg.user;
         Group = cfg.user;

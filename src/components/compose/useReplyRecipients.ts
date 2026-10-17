@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { $api, type CorpusEntry, type SendResponse } from "../../lib/api/api";
 import { addressesOf, usePersonAddresses } from "../../lib/message/who";
 import { addressKey, type Address } from "./AddressField";
@@ -65,6 +65,13 @@ export default function useReplyRecipients(answer: CorpusEntry, all: boolean, re
     if (!ccTouched) setCc(all ? defaults.cc : []);
   }, [all, ccTouched, defaults, toTouched]);
 
+  const restore = useCallback((nextTo: Address[], nextCc: Address[]) => {
+    setToTouched(true);
+    setCcTouched(true);
+    setTo(nextTo);
+    setCc(nextCc);
+  }, []);
+
   // Addresses on this message first, then everybody else the corpus knows.
   const suggestions = useMemo(() => {
     const out: Address[] = [];
@@ -104,6 +111,7 @@ export default function useReplyRecipients(answer: CorpusEntry, all: boolean, re
       setCcTouched(true);
       setCc(next);
     },
+    restore,
     /** Replace the corpus's estimates with the exact addresses the mailbox will use. */
     adopt: (plan: SendResponse) => {
       if (plan.toRecipients) setTo(plan.toRecipients);

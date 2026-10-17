@@ -144,7 +144,8 @@ type server struct {
 	// that cannot be undone or retried: a label can be put back by the same button
 	// and an archived thread is still in All Mail, while a message that has gone
 	// out is out.
-	sendMailEnabled bool
+	sendMailEnabled  bool
+	draftMailEnabled bool
 	// openMailbox opens the mailbox the writes go through, called once per
 	// request and only when the chain has something writable in it, so a chain of
 	// recovered text never needs a grant. Injected so the handlers are testable
@@ -201,6 +202,8 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("/v1/mail", post(s.mailAction))
 	mux.HandleFunc("/v1/send", post(s.sendReply))
 	mux.HandleFunc("/v1/compose", post(s.compose))
+	mux.HandleFunc("/v1/drafts", s.drafts)
+	mux.HandleFunc("/v1/drafts/", s.draft)
 	mux.HandleFunc("/v1/media/pull", post(s.mediaPull))
 	mux.HandleFunc("/v1/attachments/{sha}", get(s.attachment))
 	// One person at a time, for the ops screen's own editor: a write is the shape

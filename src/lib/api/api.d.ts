@@ -639,6 +639,82 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Gmail drafts
+         * @description Returns drafts currently held by Gmail. Gmail is the source of truth; list results are read fresh from the selected account.
+         */
+        get: operations["listDrafts"];
+        put?: never;
+        /**
+         * Create a Gmail draft
+         * @description Creates a Gmail-synced draft. Requires the server -draft-mail grant; does not send.
+         */
+        post: operations["createDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/drafts/{id}": {
+        parameters: {
+            query?: {
+                /** @description Gmail account to use; required when more than one account is connected. */
+                accountId?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Read a Gmail draft */
+        get: operations["getDraft"];
+        /**
+         * Update a Gmail draft
+         * @description Updates the existing Gmail draft using expectedMessageId for optimistic conflict detection; a stale or externally deleted draft is not recreated. Requires -draft-mail.
+         */
+        put: operations["updateDraft"];
+        post?: never;
+        /**
+         * Delete a Gmail draft
+         * @description Permanently removes a draft from Gmail. Requires -draft-mail.
+         */
+        delete: operations["deleteDraft"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/drafts/{id}/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send a Gmail draft
+         * @description Sends the exact saved draft through Gmail. Requires -send-mail. On an uncertain result, check Gmail before retrying.
+         */
+        post: operations["sendDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1851,6 +1927,46 @@ export interface components {
             /** @description Gmail account used to send the message. */
             accountId?: string;
         };
+        DraftAccountRequest: {
+            accountId?: string;
+        };
+        DraftWrite: {
+            accountId?: string;
+            id?: string;
+            to: string[];
+            cc?: string[];
+            subject: string;
+            body: string;
+            /** @description Corpus ext id of the Gmail message this draft answers. */
+            replyToEntry?: string;
+            /** @description Current Gmail message ID from the last read/save; required to update and detects external edits. */
+            expectedMessageId?: string;
+        };
+        Draft: {
+            id: string;
+            messageId?: string;
+            threadId?: string;
+            to?: string;
+            cc?: string;
+            subject?: string;
+            body?: string;
+        };
+        DraftResponse: {
+            accountId: string;
+        } & components["schemas"]["Draft"];
+        DraftDeleteResponse: {
+            accountId: string;
+            id: string;
+            deleted: boolean;
+        };
+        DraftSendResponse: {
+            accountId: string;
+            id: string;
+            gmailId: string;
+            threadId?: string;
+            sent: boolean;
+            filed?: boolean;
+        };
     };
     responses: never;
     parameters: never;
@@ -2975,6 +3091,365 @@ export interface operations {
                 };
             };
             /** @description Mailbox failure. The error distinguishes a definite non-send from an uncertain send; check Gmail before retrying uncertain outcomes. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listDrafts: {
+        parameters: {
+            query?: {
+                /** @description Gmail account to use; required when more than one account is connected. */
+                accountId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Gmail drafts. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftResponse"][];
+                };
+            };
+            /** @description Malformed account selection. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description More than one Gmail account is connected; specify accountId. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Gmail could not list or read the drafts. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftWrite"];
+            };
+        };
+        responses: {
+            /** @description Created draft. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftResponse"];
+                };
+            };
+            /** @description Malformed draft content or recipients. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Draft writes are disabled without -draft-mail. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description More than one Gmail account is connected; specify accountId. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Gmail could not create the draft. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getDraft: {
+        parameters: {
+            query?: {
+                /** @description Gmail account to use; required when more than one account is connected. */
+                accountId?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current draft content from Gmail. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftResponse"];
+                };
+            };
+            /** @description The draft no longer exists in Gmail. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description More than one Gmail account is connected; specify accountId. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Gmail could not read the draft. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateDraft: {
+        parameters: {
+            query?: {
+                /** @description Gmail account to use; required when more than one account is connected. */
+                accountId?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftWrite"];
+            };
+        };
+        responses: {
+            /** @description Updated draft. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftResponse"];
+                };
+            };
+            /** @description Malformed draft content or recipients. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Draft writes are disabled without -draft-mail. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The draft no longer exists in Gmail and is not recreated. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description More than one Gmail account is connected; specify accountId. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Gmail could not update the draft. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteDraft: {
+        parameters: {
+            query?: {
+                /** @description Gmail account to use; required when more than one account is connected. */
+                accountId?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted draft. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftDeleteResponse"];
+                };
+            };
+            /** @description Draft writes are disabled without -draft-mail. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The draft no longer exists in Gmail. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description More than one Gmail account is connected; specify accountId. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Gmail could not delete the draft. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    sendDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftAccountRequest"];
+            };
+        };
+        responses: {
+            /** @description Sent draft. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftSendResponse"];
+                };
+            };
+            /** @description Sending is disabled without -send-mail. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The draft no longer exists in Gmail. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description More than one Gmail account is connected; specify accountId. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Gmail could not confirm the send. Check Gmail before retrying. */
             502: {
                 headers: {
                     [name: string]: unknown;
