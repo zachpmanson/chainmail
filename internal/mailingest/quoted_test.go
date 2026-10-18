@@ -110,6 +110,59 @@ Sent from my car`
 	}
 }
 
+func TestGluedInlineHistoryDuplicatesCollapseOntoMailboxMessages(t *testing.T) {
+	s := openTest(t)
+	fern := "Fern Example <fern@example.test>"
+	zach := "Zach Example <zach@example.test>"
+	cases := []struct {
+		id, messageID, date, quoteDate, body string
+	}{
+		{"jun23", "<jun23@example.test>", "Tue, 23 Jun 2026 21:46:52 +1000", "Tue, 23 June 2026, 21:46", "in fairness, i could have guessed this email\n\nall further correspondence will thus forward be via email\n\nSent from my iPhone"},
+		{"jul2-2010", "<jul2-2010@example.test>", "Thu, 2 Jul 2026 20:10:14 +1000", "Thu, 2 July 2026, 20:10", "yeah lots of house viewings\ni saw! flemington far tho, im aiming richmond\nyou going sunday?\n\nSent from my iPhone"},
+		{"jul2-2029", "<jul2-2029@example.test>", "Thu, 2 Jul 2026 20:29:33 +1000", "Thu, 2 July 2026, 20:29", "on ur story loser\n\nsee ya there\n\nSent from my iPhone"},
+		{"jul2-2058", "<jul2-2058@example.test>", "Thu, 2 Jul 2026 20:58:12 +1000", "Thu, 2 July 2026, 20:58", "hahahah i need it from last week of july / first week august\n\nSent from my iPhone"},
+		{"jul7-2259", "<jul7-2259@example.test>", "Tue, 7 Jul 2026 22:59:05 +1000", "Tue, 7 July 2026, 22:59", "this may just be the furthest i’ve ever taken a bit and i have no plans to stop\n\nSent from my iPhone"},
+		{"jul12", "<jul12@example.test>", "Sun, 12 Jul 2026 19:07:47 +1000", "Sun, 12 July 2026, 19:08", "volley those balls man, good luck!\n\nSent from my balls"},
+	}
+	for _, tc := range cases {
+		base, err := Put(s, Message{
+			Envelope: Envelope{
+				ID: tc.id, MessageID: tc.messageID, ThreadID: "flattened-thread",
+				From: fern, Subject: "hello", Date: tc.date,
+			},
+			Body: tc.body + "On 1 Jun 2026, at 12:00, Zach Example <zach@example.test> wrote: old text",
+		})
+		if err != nil {
+			t.Fatalf("ingesting mailbox message %s: %v", tc.id, err)
+		}
+		host, err := Put(s, Message{
+			Envelope: Envelope{
+				ID: "host-" + tc.id, MessageID: "<host-" + tc.id + "@example.test>",
+				ThreadID: "flattened-thread", From: zach, To: fern, Subject: "Re: hello",
+				Date: "Mon, 20 Jul 2026 12:00:00 +1000", InReplyTo: tc.messageID,
+				References: []string{tc.messageID},
+			},
+			Body: "On " + tc.quoteDate + ", Fern Example <fern@example.test> wrote:\n> " +
+				strings.ReplaceAll(tc.body, "\n", "\n> "),
+		})
+		if err != nil {
+			t.Fatalf("ingesting host for %s: %v", tc.id, err)
+		}
+		var duplicate, sightings int
+		if err := s.DB().QueryRow(`select count(*) from entries where quoted = 1 and body_text like ?`,
+			"%"+strings.Fields(tc.body)[0]+"%").Scan(&duplicate); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.DB().QueryRow(`select count(*) from sightings where entry_id = ? and seen_in = ? and kind = 'quoted'`,
+			base.ID, host.ID).Scan(&sightings); err != nil {
+			t.Fatal(err)
+		}
+		if duplicate != 0 || sightings != 1 {
+			t.Errorf("%s: duplicate recovered entries=%d, mailbox sightings=%d; want no duplicate and one sighting", tc.id, duplicate, sightings)
+		}
+	}
+}
+
 func TestOutlookSenderWarningDoesNotSplitQuotedTwin(t *testing.T) {
 	s := openTest(t)
 	baseID := "<base@sample.test>"

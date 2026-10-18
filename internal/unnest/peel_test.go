@@ -108,6 +108,24 @@ func TestPeelSplitsDatedAttributionsFlattenedInline(t *testing.T) {
 	}
 }
 
+func TestPeelSplitsAttributionGluedToPreviousWord(t *testing.T) {
+	body := "volley those balls man, good luck!\u00a0Sent from my ballsOn 7 Jul 2026, at 22:59, " +
+		"Fern Example <fern@example.test> wrote:\ufeffthis may just be the furthest I’ve ever taken a bit."
+	blocks := Peel(body)
+	if len(blocks) != 2 {
+		t.Fatalf("got %d blocks, want the visible message and its glued quoted reply: %+v", len(blocks), blocks)
+	}
+	if blocks[0].Text != "volley those balls man, good luck! Sent from my balls" {
+		t.Errorf("visible text = %q", blocks[0].Text)
+	}
+	if blocks[1].Kind != KindAttribution || !strings.Contains(blocks[1].Sentinel, "Fern Example <fern@example.test>") {
+		t.Errorf("boundary = %+v, want Fern's attribution", blocks[1])
+	}
+	if blocks[1].Text != "this may just be the furthest I’ve ever taken a bit." {
+		t.Errorf("quoted text = %q", blocks[1].Text)
+	}
+}
+
 // A bare rule is Outlook chrome, not a boundary, unless a header block follows.
 // A 32-underscore run is a quote separator; a 60-underscore run is Teams
 // meeting-invite decoration mid-message, and splitting there fabricates an entry.
