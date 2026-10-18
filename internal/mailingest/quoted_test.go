@@ -25,16 +25,16 @@ func TestWarrantyJokeIsOneMessageAcrossTheFullReplyThread(t *testing.T) {
 	const (
 		fern = "Fern Example <fern@example.test>"
 		zach = "Zach Example <zach@example.test>"
-		july = `On 28 Jul 2026, at 18:33, Zach Example <zach@example.test> wrote:
-
-Yes that one. It's reminded me of how fun it is having an enemy.`
+		july = `On 28 Jul 2026, at 18:33, Zach Example <zach@example.test> wrote:` + "\ufeff" +
+			`Yes that one. It's reminded me of how fun it is having an enemy.`
 		warranty = `i’m contacting you about your cars extended warranty
 Sent from my car`
 	)
 	// The actual exchange is a reply chain: Fern's short 15 Sep message replies
 	// to Zach's 28 Jul message, is quoted in Zach's reply, then re-quoted in
-	// Fern's 30 Sep follow-up. Keep the reply edges and nesting, but anonymize
-	// the rest of their long-running conversation.
+	// Fern's 30 Sep follow-up. Gmail flattened the old history directly after
+	// Fern's signature without a newline, so this fixture preserves that boundary
+	// shape while anonymizing the rest of their long-running conversation.
 	messages := []Message{
 		{
 			Envelope: Envelope{
@@ -52,7 +52,7 @@ Sent from my car`
 				Date:      "Tue, 15 Sep 2026 20:40:20 +1000",
 				InReplyTo: "<zach-july@example.test>", References: []string{"<zach-july@example.test>"},
 			},
-			Body: warranty + "\n\n" + july,
+			Body: warranty + "\u00a0" + july,
 		},
 		{
 			Envelope: Envelope{
@@ -92,7 +92,10 @@ Sent from my car`
 		"mail:<fern-warranty@example.test>").Scan(&base); err != nil {
 		t.Fatal(err)
 	}
-	mailboxCopies = 1
+	if err := s.DB().QueryRow(`select count(*) from entries where ext_id = ?`,
+		"mail:<fern-warranty@example.test>").Scan(&mailboxCopies); err != nil {
+		t.Fatal(err)
+	}
 	if err := s.DB().QueryRow(`select count(*) from entries where quoted = 1 and body_text like ?`,
 		"%i’m contacting you about your cars extended warranty%Sent from my car%").Scan(&duplicateQuotes); err != nil {
 		t.Fatal(err)
@@ -101,8 +104,8 @@ Sent from my car`
 		base).Scan(&quoteSightings); err != nil {
 		t.Fatal(err)
 	}
-	if mailboxCopies != 1 || duplicateQuotes != 0 || quoteSightings != 1 {
-		t.Fatalf("mailbox copies=%d, duplicate recovered warranty quotes=%d, sightings on original=%d; want one mailbox message and one recovered sighting merged onto it",
+	if mailboxCopies != 1 || duplicateQuotes != 0 || quoteSightings != 2 {
+		t.Fatalf("mailbox copies=%d, duplicate recovered warranty quotes=%d, sightings on original=%d; want one mailbox message, no duplicate recovered quote, and sightings from both replies merged onto it",
 			mailboxCopies, duplicateQuotes, quoteSightings)
 	}
 }

@@ -63,10 +63,80 @@ func Normalise(body string) []Line {
 	for _, r := range raw {
 		text, depth := splitDepth(r)
 		text = reImagePlaceholder.ReplaceAllString(text, "")
-		text = strings.TrimRight(text, " \t")
-		out = append(out, Line{Text: text, Depth: depth, Raw: r})
+		for _, part := range splitInlineAttributions(text) {
+			part = strings.TrimPrefix(part, "\ufeff")
+			part = strings.TrimRight(part, " \t")
+			out = append(out, Line{Text: part, Depth: depth, Raw: r})
+		}
 	}
 	return out
+}
+
+// splitInlineAttributions restores attribution boundaries flattened into a
+// single physical line by HTML-to-text conversion. Only split a mid-line opener
+// when the existing attribution parser can recover both a dated instant and a
+// sender from its text through the closer; ordinary prose containing "On ..."
+// is otherwise left intact.
+func splitInlineAttributions(text string) []string {
+	var out []string
+	for cursor := 0; cursor < len(text); {
+		start, end, ok := inlineAttribution(text, cursor)
+		if !ok {
+			out = append(out, text[cursor:])
+			break
+		}
+		out = append(out, text[cursor:start], text[start:end])
+		cursor = end
+	}
+	if len(out) == 0 {
+		return []string{text}
+	}
+	return out
+}
+
+func inlineAttribution(text string, from int) (int, int, bool) {
+	lower := strings.ToLower(text)
+	for searchFrom := from; searchFrom < len(text); {
+		closeAt, end, ok := nextInlineCloser(lower, searchFrom)
+		if !ok {
+			return 0, 0, false
+		}
+		// The nearest plausible opener is the attribution for this closer. Trying
+		// from right to left prevents an earlier "On ..." in prose from absorbing
+		// a later, genuine attribution on the same flattened line.
+		for start := closeAt; start > from; start-- {
+			if !isInlineBoundary(text[start-1]) || !startsWithOpener(text[start:closeAt]) {
+				continue
+			}
+			a := ParseAttribution(text[start:end])
+			if !a.Sent.IsZero() && (a.Sender != "" || a.Address != "") {
+				return start, end, true
+			}
+		}
+		searchFrom = end
+	}
+	return 0, 0, false
+}
+
+func nextInlineCloser(lower string, from int) (int, int, bool) {
+	best := len(lower)
+	bestEnd := 0
+	for _, closer := range closers {
+		at := strings.Index(lower[from:], closer)
+		if at < 0 {
+			continue
+		}
+		at += from
+		if at < best {
+			best = at
+			bestEnd = at + len(closer)
+		}
+	}
+	return best, bestEnd, bestEnd != 0
+}
+
+func isInlineBoundary(r byte) bool {
+	return r == ' ' || r == '\t' || r == ',' || r == ';' || r == ':' || r == '>'
 }
 
 // unbold turns "*From:*" and "*From: *" into "From:" so one pattern covers all

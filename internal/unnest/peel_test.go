@@ -83,6 +83,31 @@ func TestPeelKeepsAFlatBodyWhole(t *testing.T) {
 	}
 }
 
+func TestPeelSplitsDatedAttributionsFlattenedInline(t *testing.T) {
+	body := "Warranty joke.\u00a0On 28 Jul 2026, at 18:33, Zach Example <zach@example.test> wrote:\ufeff" +
+		"Yes, I bought one.\u00a0On Tue, 15 Sep 2026 at 20:40, Fern Example <fern@example.test> wrote:" +
+		"I literally bought a car yesterday."
+	blocks := Peel(body)
+	if len(blocks) != 3 {
+		t.Fatalf("got %d blocks, want visible text and two inline quoted messages: %+v", len(blocks), blocks)
+	}
+	if blocks[0].Text != "Warranty joke." {
+		t.Errorf("visible text = %q", blocks[0].Text)
+	}
+	for i, want := range []struct{ sender, text string }{
+		{"Zach Example <zach@example.test>", "Yes, I bought one."},
+		{"Fern Example <fern@example.test>", "I literally bought a car yesterday."},
+	} {
+		b := blocks[i+1]
+		if b.Kind != KindAttribution || !strings.Contains(b.Sentinel, want.sender) {
+			t.Errorf("block %d boundary = %+v, want attribution for %s", i+1, b, want.sender)
+		}
+		if b.Text != want.text {
+			t.Errorf("block %d text = %q, want %q", i+1, b.Text, want.text)
+		}
+	}
+}
+
 // A bare rule is Outlook chrome, not a boundary, unless a header block follows.
 // A 32-underscore run is a quote separator; a 60-underscore run is Teams
 // meeting-invite decoration mid-message, and splitting there fabricates an entry.
