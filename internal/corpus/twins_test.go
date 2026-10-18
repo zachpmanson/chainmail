@@ -49,6 +49,88 @@ please delete it and tell us at once. Quarry Energy accepts no liability for
 any loss or damage arising from a virus transmitted with this message.`
 )
 
+func TestTwinsUseHTMLParagraphsAndIgnoreQuotedImagePlaceholder(t *testing.T) {
+	s, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	fern := person(t, s, "fern@example.test", "Fern Example")
+	zach := person(t, s, "zach@example.test", "Zach Example")
+
+	cases := []struct {
+		name, ext, plain, html, quoted string
+		mailAt, quoteAt                time.Time
+		attachment                     bool
+	}{
+		{
+			name: "June 23 split paragraphs", ext: "jun23-html",
+			plain:  "in fairness, i could have guessed this email all further correspondence will thus forward be via emailSent from my iPhoneOn 23 Jun 2026, at 21:02, Zach Example <zach@example.test> wrote: old text",
+			html:   `<div>in fairness, i could have guessed this email</div><div><br></div><div>all further correspondence will thus forward be via email</div><div><br><div>Sent from my iPhone</div></div>`,
+			quoted: "in fairness, i could have guessed this email\n\nall further correspondence will thus forward be via email\n\nSent from my iPhone",
+			mailAt: time.Date(2026, 6, 23, 11, 46, 52, 0, time.UTC), quoteAt: time.Date(2026, 6, 23, 21, 46, 0, 0, time.UTC),
+		},
+		{
+			name: "July 2 split words", ext: "jul2-html",
+			plain:  "on ur story losersee ya there Sent from my iPhoneOn 2 Jul 2026, at 20:26, Zach Example <zach@example.test> wrote: old text",
+			html:   `<div>on ur story loser</div><div><br></div><div>see ya there </div><div><br><div>Sent from my iPhone</div></div>`,
+			quoted: "on ur story loser\n\nsee ya there\n\nSent from my iPhone",
+			mailAt: time.Date(2026, 7, 2, 10, 29, 33, 0, time.UTC), quoteAt: time.Date(2026, 7, 2, 20, 29, 0, 0, time.UTC),
+		},
+		{
+			name: "July 7 image placeholder", ext: "jul7-image",
+			plain:  "just found this\r\n\r\nOn Thu, 2 July 2026, 20:58, Fern Example <fern@example.test> wrote: older message",
+			html:   `<div><div>just found this</div></div>`,
+			quoted: "just found this\n\n<1000019707.jpg>",
+			mailAt: time.Date(2026, 7, 7, 12, 35, 46, 0, time.UTC), quoteAt: time.Date(2026, 7, 7, 22, 35, 0, 0, time.UTC),
+			attachment: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			off := 600
+			entry := Entry{
+				Source: SourceMail, ExtID: "mail:<" + tc.ext + ">", TS: tc.mailAt,
+				TZ: "AEST", TZOffset: &off, PersonID: fern, Container: "thread-1",
+				Subject: "hello", BodyText: tc.plain, BodyHTML: tc.html,
+			}
+			var attachments []Attachment
+			if tc.attachment {
+				attachments = []Attachment{{Name: "1000019707.jpg", Mime: "image/jpeg"}}
+			}
+			base, err := s.Put(entry, &Mail{MessageID: "<" + tc.ext + ">"}, attachments)
+			if err != nil {
+				t.Fatal(err)
+			}
+			quotedHost := host(t, s, zach, "host-"+tc.ext, tc.mailAt.Add(24*time.Hour))
+			quote, created, err := s.PutQuoted(Entry{
+				Source: SourceMail, ExtID: "quote:" + tc.ext, TS: tc.quoteAt,
+				PersonID: fern, Container: "thread-1", BodyText: tc.quoted,
+			})
+			if err != nil || !created {
+				t.Fatalf("storing quote: created=%v, err=%v", created, err)
+			}
+			if err := s.Sight(quote, quotedHost, "quoted", "depth 1"); err != nil {
+				t.Fatal(err)
+			}
+			plan, err := CollapseTwins(s, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			found := false
+			for _, c := range plan.Collapse {
+				if c.Keep == base.ID && len(c.Drop) == 1 && c.Drop[0] == quote {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatalf("twin plan does not collapse %s onto its mailbox copy: %+v", tc.ext, plan.Declined)
+			}
+		})
+	}
+}
+
 func twinAt(t *testing.T, min string) time.Time {
 	t.Helper()
 	at, err := time.Parse("2006-01-02 15:04:05", min)

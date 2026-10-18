@@ -161,11 +161,12 @@ type DerivedRelation struct {
 // Holding both in one field is deliberate — the difference between them is the
 // whole measurement.
 type twinCopy struct {
-	id     int64
-	ext    string
-	quoted bool
-	wall   time.Time
-	words  []string
+	id       int64
+	ext      string
+	quoted   bool
+	wall     time.Time
+	words    []string
+	bodyHTML string
 	// subject is the stored, prefix-stripped thread subject. It is the one
 	// field a fetched message carries that an attribution-quote does not, which
 	// is what lets a short copy be vouched for (see sameSubjectWithMailbox).
@@ -339,7 +340,7 @@ func twinCopies(s *Store, person int64) ([]twinCopy, error) {
 	rows, err := s.db.Query(`
 		select e.id, e.ext_id, e.quoted, e.ts, coalesce(e.subject,''),
 		       coalesce(e.container,''),
-		       coalesce(e.body_text,''),
+		       coalesce(e.body_text,''), coalesce(e.body_html,''),
 		       (select count(*) from attachments a where a.entry_id = e.id)
 		from entries e
 		where e.person_id = ? and e.source = ?
@@ -353,12 +354,12 @@ func twinCopies(s *Store, person int64) ([]twinCopy, error) {
 		var c twinCopy
 		var ts int64
 		var body string
-		if err := rows.Scan(&c.id, &c.ext, &c.quoted, &ts, &c.subject, &c.container, &body, &c.atts); err != nil {
+		if err := rows.Scan(&c.id, &c.ext, &c.quoted, &ts, &c.subject, &c.container, &body, &c.bodyHTML, &c.atts); err != nil {
 			return nil, err
 		}
 		c.wall = time.Unix(ts, 0).UTC()
-		c.words = copyWords(body, c.quoted)
-		c.prose = proseWords(body, c.quoted)
+		c.words = copyWords(body, c.bodyHTML, c.quoted)
+		c.prose = proseWords(body, c.bodyHTML, c.quoted)
 		out = append(out, c)
 	}
 	return out, rows.Err()
@@ -375,11 +376,22 @@ func twinCopies(s *Store, person int64) ([]twinCopy, error) {
 // mistake a bare forward's first block for the sender's own — puts both sides at
 // the same scope, which is what makes the words a test of identity rather than of
 // containment.
-func copyWords(body string, quoted bool) []string {
+func copyWords(body, bodyHTML string, quoted bool) []string {
 	if quoted {
-		return textsim.Tokens(stripQuotedClientPreamble(body))
+		body = stripQuotedClientPreamble(body)
+		body = reTwinImagePlaceholder.ReplaceAllString(body, " ")
+		return textsim.Tokens(body)
 	}
-	return textsim.Tokens(ownWords(body))
+	return textsim.Tokens(ownWords(twinHTMLTextOrBody(body, bodyHTML)))
+}
+
+var reTwinImagePlaceholder = regexp.MustCompile(`(?i)<[^>\n]*\.(?:png|jpe?g|gif|bmp|webp)>`)
+
+func twinHTMLTextOrBody(body, bodyHTML string) string {
+	if bodyHTML != "" {
+		return twinHTMLText(bodyHTML)
+	}
+	return body
 }
 
 // Outlook may prepend this external-sender warning inside an otherwise intact
@@ -407,11 +419,12 @@ func stripQuotedClientPreamble(body string) string {
 // Not used by the identity gates, which are right to be tolerant of it: recall
 // and the ordered opening ask whether two copies are one message, and a link
 // rendered two ways does not make them two.
-func proseWords(body string, quoted bool) []string {
+func proseWords(body, bodyHTML string, quoted bool) []string {
 	if !quoted {
-		body = ownWords(body)
+		body = ownWords(twinHTMLTextOrBody(body, bodyHTML))
 	} else {
 		body = stripQuotedClientPreamble(body)
+		body = reTwinImagePlaceholder.ReplaceAllString(body, " ")
 	}
 	for _, re := range markupResidue {
 		body = re.ReplaceAllString(body, " ")
@@ -1067,7 +1080,7 @@ func nearbyCopies(s *Store, person int64, wall time.Time) ([]twinCopy, error) {
 	rows, err := s.db.Query(`
 		select e.id, e.ext_id, e.quoted, e.ts, coalesce(e.subject,''),
 		       coalesce(e.container,''),
-		       coalesce(e.body_text,''),
+		       coalesce(e.body_text,''), coalesce(e.body_html,''),
 		       (select count(*) from attachments a where a.entry_id = e.id)
 		from entries e
 		where e.person_id = ? and e.source = ? and e.ts between ? and ?
@@ -1082,12 +1095,12 @@ func nearbyCopies(s *Store, person int64, wall time.Time) ([]twinCopy, error) {
 		var o twinCopy
 		var ts int64
 		var body string
-		if err := rows.Scan(&o.id, &o.ext, &o.quoted, &ts, &o.subject, &o.container, &body, &o.atts); err != nil {
+		if err := rows.Scan(&o.id, &o.ext, &o.quoted, &ts, &o.subject, &o.container, &body, &o.bodyHTML, &o.atts); err != nil {
 			return nil, err
 		}
 		o.wall = time.Unix(ts, 0).UTC()
-		o.words = copyWords(body, o.quoted)
-		o.prose = proseWords(body, o.quoted)
+		o.words = copyWords(body, o.bodyHTML, o.quoted)
+		o.prose = proseWords(body, o.bodyHTML, o.quoted)
 		out = append(out, o)
 	}
 	if err := rows.Err(); err != nil {
@@ -1116,7 +1129,7 @@ func FindTwin(s *Store, person int64, wall time.Time, text, subject, container s
 	// No length pre-check: a short block can still be vouched for by a mailbox
 	// copy on the same thread, and twinnable applies the floor per pair.
 	c := twinCopy{quoted: true, wall: wall, subject: subject, container: container,
-		words: copyWords(text, true), prose: proseWords(text, true)}
+		words: copyWords(text, "", true), prose: proseWords(text, "", true)}
 	near, err := nearbyCopies(s, person, wall)
 	if err != nil {
 		return 0, false, fmt.Errorf("looking for a twin of a recovered block: %w", err)
@@ -1179,7 +1192,7 @@ func FindDerived(s *Store, person int64, wall time.Time, text, subject, containe
 		return DerivedMatch{}, false, nil
 	}
 	c := twinCopy{quoted: true, wall: wall, subject: subject, container: container,
-		words: copyWords(text, true), prose: proseWords(text, true)}
+		words: copyWords(text, "", true), prose: proseWords(text, "", true)}
 	near, err := nearbyCopies(s, person, wall)
 	if err != nil {
 		return DerivedMatch{}, false, fmt.Errorf("looking for the base of a modified block: %w", err)
