@@ -1244,14 +1244,6 @@ func TestShortCopyFromAnotherThreadIsStillDeclined(t *testing.T) {
 	}
 }
 
-// The real case that motivated the thread-tier: a short "I will look into this
-// this morning." whose quoting client dropped the Subject head from the
-// sentinel. The mailbox copy carries the subject and thread; the recovered
-// block carries no subject but does carry the thread it was unspooled out of
-// (quoted.go stores Container: host.Container). The subject voucher needs a
-// subject on both sides and cannot fire — the thread id is what keys them. At
-// ingest the block converges onto the mailbox copy instead of being stored as a
-// second entry.
 func TestShortCopyWithDroppedSubjectConvergesByThread(t *testing.T) {
 	s := open(t)
 	aria := person(t, s, "aria.meyer@acme.test", "Aria Meyer")
