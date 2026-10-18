@@ -105,7 +105,7 @@ func inlineAttribution(text string, from int) (int, int, bool) {
 		// from right to left prevents an earlier "On ..." in prose from absorbing
 		// a later, genuine attribution on the same flattened line.
 		for start := closeAt; start > from; start-- {
-			if !isInlineBoundary(text[start-1]) || !startsWithOpener(text[start:closeAt]) {
+			if !startsWithOpener(text[start:closeAt]) {
 				continue
 			}
 			a := ParseAttribution(text[start:end])
@@ -133,10 +133,6 @@ func nextInlineCloser(lower string, from int) (int, int, bool) {
 		}
 	}
 	return best, bestEnd, bestEnd != 0
-}
-
-func isInlineBoundary(r byte) bool {
-	return r == ' ' || r == '\t' || r == ',' || r == ';' || r == ':' || r == '>'
 }
 
 // unbold turns "*From:*" and "*From: *" into "From:" so one pattern covers all
