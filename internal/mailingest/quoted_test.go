@@ -20,6 +20,93 @@ func openTest(t *testing.T) *corpus.Store {
 	return s
 }
 
+func TestWarrantyJokeIsOneMessageAcrossTheFullReplyThread(t *testing.T) {
+	s := openTest(t)
+	const (
+		fern = "Fern Example <fern@example.test>"
+		zach = "Zach Example <zach@example.test>"
+		july = `On 28 Jul 2026, at 18:33, Zach Example <zach@example.test> wrote:
+
+Yes that one. It's reminded me of how fun it is having an enemy.`
+		warranty = `i’m contacting you about your cars extended warranty
+Sent from my car`
+	)
+	// The actual exchange is a reply chain: Fern's short 15 Sep message replies
+	// to Zach's 28 Jul message, is quoted in Zach's reply, then re-quoted in
+	// Fern's 30 Sep follow-up. Keep the reply edges and nesting, but anonymize
+	// the rest of their long-running conversation.
+	messages := []Message{
+		{
+			Envelope: Envelope{
+				ID: "zach-july", MessageID: "<zach-july@example.test>",
+				ThreadID: "hello-thread", From: zach, To: fern, Subject: "Re: hello",
+				Date: "Tue, 28 Jul 2026 18:33:41 +1000",
+			},
+			Body: "Yes that one. It's reminded me of how fun it is having an enemy. " +
+				"My last enemy got fired from work so I've had nothing to fight against until now.",
+		},
+		{
+			Envelope: Envelope{
+				ID: "fern-warranty", MessageID: "<fern-warranty@example.test>",
+				ThreadID: "hello-thread", From: fern, To: zach, Subject: "Re: hello",
+				Date:      "Tue, 15 Sep 2026 20:40:20 +1000",
+				InReplyTo: "<zach-july@example.test>", References: []string{"<zach-july@example.test>"},
+			},
+			Body: warranty + "\n\n" + july,
+		},
+		{
+			Envelope: Envelope{
+				ID: "zach-reply", MessageID: "<zach-reply@example.test>",
+				ThreadID: "hello-thread", From: zach, To: fern, Subject: "Re: hello",
+				Date:       "Tue, 15 Sep 2026 20:53:18 +1000",
+				InReplyTo:  "<fern-warranty@example.test>",
+				References: []string{"<zach-july@example.test>", "<fern-warranty@example.test>"},
+			},
+			Body: "I literally bought a car yesterday wtf\n\n" +
+				"On Tue, 15 Sept 2026, 20:40, Fern Example <fern@example.test> wrote:\n" +
+				"> i’m contacting you about your cars extended warranty\n>\n" +
+				"> Sent from my car\n>\n> " + strings.ReplaceAll(july, "\n", "\n> "),
+		},
+		{
+			Envelope: Envelope{
+				ID: "fern-later", MessageID: "<fern-later@example.test>",
+				ThreadID: "hello-thread", From: fern, To: zach, Subject: "Re: hello",
+				Date:       "Wed, 30 Sep 2026 20:21:53 +1000",
+				InReplyTo:  "<zach-reply@example.test>",
+				References: []string{"<zach-reply@example.test>"},
+			},
+			Body: "uh didn’t ask\u00a0Sent from my iPhoneOn 15 Sep 2026, at 20:53, Zach Example <zach@example.test> wrote:\ufeff" +
+				"I literally bought a car yesterday wtf\u00a0On Tue, 15 Sept 2026, 20:40 Fern Example, <fern@example.test> wrote:" +
+				"i’m contacting you about your cars extended warranty\u00a0Sent from my car\u00a0" + july,
+		},
+	}
+	for _, msg := range messages {
+		if _, err := Put(s, msg); err != nil {
+			t.Fatalf("ingesting %s: %v", msg.Envelope.ID, err)
+		}
+	}
+
+	var mailboxCopies, duplicateQuotes, quoteSightings int
+	var base int64
+	if err := s.DB().QueryRow(`select id from entries where ext_id = ?`,
+		"mail:<fern-warranty@example.test>").Scan(&base); err != nil {
+		t.Fatal(err)
+	}
+	mailboxCopies = 1
+	if err := s.DB().QueryRow(`select count(*) from entries where quoted = 1 and body_text like ?`,
+		"%i’m contacting you about your cars extended warranty%Sent from my car%").Scan(&duplicateQuotes); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DB().QueryRow(`select count(*) from sightings where entry_id = ? and kind = 'quoted'`,
+		base).Scan(&quoteSightings); err != nil {
+		t.Fatal(err)
+	}
+	if mailboxCopies != 1 || duplicateQuotes != 0 || quoteSightings != 1 {
+		t.Fatalf("mailbox copies=%d, duplicate recovered warranty quotes=%d, sightings on original=%d; want one mailbox message and one recovered sighting merged onto it",
+			mailboxCopies, duplicateQuotes, quoteSightings)
+	}
+}
+
 func TestOutlookSenderWarningDoesNotSplitQuotedTwin(t *testing.T) {
 	s := openTest(t)
 	baseID := "<base@sample.test>"
