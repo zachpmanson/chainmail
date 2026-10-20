@@ -3,8 +3,8 @@
 //
 // This is the in-process replacement for the subprocess seam in
 // internal/mailingest/docket.go. Same Mailbox surface, same envelope shapes —
-// only the transport differs: auth.TokenSource + mail.NewService open a live
-// REST client in this process instead of exec'ing `docket-work`.
+// only the transport differs: a guarded token source and OAuth2 transport open
+// a REST client in this process instead of exec'ing `docket-work`.
 package gmailclient
 
 import (
@@ -12,12 +12,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"golang.org/x/oauth2"
 	"google.golang.org/api/gmail/v1"
+	"google.golang.org/api/option"
 
 	"github.com/gofrs/flock"
 	"github.com/zachpmanson/docket/gmail/auth"
@@ -60,7 +62,7 @@ func NewForTokenPath(path string) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	svc, err := mail.NewService(ctx, src)
+	svc, err := newService(ctx, src)
 	if err != nil {
 		return nil, fmt.Errorf("building gmail service: %w", err)
 	}
@@ -69,6 +71,18 @@ func NewForTokenPath(path string) (*Client, error) {
 		return nil, fmt.Errorf("loading labels: %w", err)
 	}
 	return &Client{ctx: ctx, svc: svc, labels: labels}, nil
+}
+
+// newService avoids the token caches in Google's WithTokenSource path and
+// oauth2.NewClient: every request must consult the disk-authoritative source.
+func newService(ctx context.Context, src oauth2.TokenSource) (*gmail.Service, error) {
+	base := http.DefaultClient
+	if custom, ok := ctx.Value(oauth2.HTTPClient).(*http.Client); ok && custom != nil {
+		base = custom
+	}
+	client := *base
+	client.Transport = &oauth2.Transport{Source: src, Base: base.Transport}
+	return gmail.NewService(ctx, option.WithHTTPClient(&client))
 }
 
 // AccountTokenPath returns the credential path for a stable account ID. The
