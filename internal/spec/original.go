@@ -724,7 +724,7 @@ func cssStringEnd(css string, i, end int) int {
 	i++
 	for i < end {
 		if css[i] == '\\' {
-			i += 2
+			i = min(i+2, end)
 			continue
 		}
 		if css[i] == quote {
@@ -971,8 +971,14 @@ func isCSSIdentChar(c byte) bool {
 	return isCSSIdentStart(c) || c >= '0' && c <= '9'
 }
 
-// CSS is raw HTML text: decoded attribute values must not introduce a closing style tag.
-func styleText(css string) string { return strings.ReplaceAll(css, "<", `\3c `) }
+var reStyleClose = regexp.MustCompile(`(?i)</style`)
+
+// Escape raw-text terminators, not CSS's valid legacy <!-- comment delimiters.
+func styleText(css string) string {
+	return reStyleClose.ReplaceAllStringFunc(css, func(close string) string {
+		return `\3c ` + close[1:]
+	})
+}
 
 // writeNode serialises one node, and it exists because html.Render cannot be
 // used here: it escapes every text node, and a <style> element's text is CSS, not

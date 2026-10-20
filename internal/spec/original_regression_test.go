@@ -23,9 +23,17 @@ func TestOriginalStyleAttributesCannotCreateElements(t *testing.T) {
 	}
 }
 
+func TestOriginalKeepsLegacyStylesheetCommentWrappers(t *testing.T) {
+	got, ok := OriginalBody(`<style><!-- body{color:red} --></style><p>visible</p>`)
+	if !ok || !strings.Contains(got, `<!-- :host{color:red}`) || strings.Contains(got, `\3c !--`) {
+		t.Fatalf("legacy CSS wrapper stopped being a comment delimiter: %s", got)
+	}
+}
+
 func TestOriginalHandlesEscapedAndTruncatedSelectors(t *testing.T) {
 	for _, css := range []string{
 		`.foo\{color:red}`, `.foo\`, `.foo\{ {color:red}`, `.a\,b body {color:red}`,
+		`p[x="truncated\`, `p{content:"truncated\`,
 		`p:not( {color:red}`, `p:not(() {color:red}`, `[data-x="a\\"] {color:red}`,
 	} {
 		got, ok := OriginalBody(`<style>` + css + `</style><p>visible</p>`)
