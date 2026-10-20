@@ -655,11 +655,11 @@ func candidates(store *corpus.Store, prev spec.Spec, opts Options) ([]Candidate,
 			if have[c.Container] || seen[c.RootExtID] {
 				continue
 			}
-			seen[c.RootExtID] = true
 			sim, lexical, semantic := chainSignal(c)
 			if !proposalAdmit(lexical, semantic, sim, opts) {
 				continue
 			}
+			seen[c.RootExtID] = true
 			out = append(out, Candidate{
 				RootExtID:  c.RootExtID,
 				Subject:    c.Subject,

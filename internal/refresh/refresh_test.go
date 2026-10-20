@@ -774,6 +774,57 @@ func TestSemanticOnlyProposalBelowTheChainFloorIsWithheld(t *testing.T) {
 	}
 }
 
+func TestRejectedSemanticQueryDoesNotHideLaterLexicalProposal(t *testing.T) {
+	s := store(t)
+	other := msg("proposal", "The canal maintenance proposal is ready for a decision.",
+		subject("Maintenance plan"), inThread("canal-thread"))
+	put(t, s, other)
+	f := pinnedEmbedder(t, map[string][]float32{
+		"search_query: orchard":                   embed.Unit(8, 0, 1),
+		"search_query: canal":                     embed.Unit(8, 1, 1),
+		docTextOf("Maintenance plan", other.Body): embed.Mix(8, 0, 1, 0.8),
+	})
+	embedAll(t, s, f)
+	// The first query must retrieve this chain but fail proposal admission.
+	semantic, err := corpus.SemanticFor(context.Background(), f, "orchard", corpus.SemanticOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	chains, err := s.SearchChains(corpus.Query{Text: "orchard", Limit: 10, Semantic: semantic})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(chains) != 1 {
+		t.Fatalf("weak query must retrieve the fixture: %+v", chains)
+	}
+	opts := Options{Embed: f, Limit: 10}
+	sim, lexical, vector := chainSignal(chains[0])
+	if lexical || !vector || proposalAdmit(lexical, vector, sim, opts) {
+		t.Fatalf("fixture must be a rejected semantic-only hit: sim=%f lexical=%v semantic=%v", sim, lexical, vector)
+	}
+	for _, tc := range []struct {
+		name    string
+		queries []spec.Query
+	}{
+		{"weak first", []spec.Query{{Q: "orchard"}, {Q: "canal"}}},
+		{"lexical first", []spec.Query{{Q: "canal"}, {Q: "orchard"}}},
+		{"repeated lexical", []spec.Query{{Q: "orchard"}, {Q: "canal"}, {Q: "canal"}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, _, err := candidates(s, spec.Spec{Queries: tc.queries}, opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(got) != 1 {
+				t.Fatalf("proposals = %+v, want one lexical proposal regardless of query order", got)
+			}
+			if got[0].RootExtID != "mail:"+other.MessageID || got[0].Query != "canal" || !got[0].Lexical {
+				t.Fatalf("proposal lost its admitting query's evidence: %+v", got[0])
+			}
+		})
+	}
+}
+
 // And the lexical side of the dual regime: a chain the words find is a keyword
 // claim, offered even when its cosine sits nowhere near any floor. An explicit
 // high ProposalFloor (0.9) makes it obvious the raised bar still cannot hold it.
