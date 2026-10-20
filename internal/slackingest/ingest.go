@@ -13,7 +13,7 @@ type Result struct {
 	Seen     int
 	Created  int
 	Changed  int // existed with a different body: an edit slackdump has since seen
-	Skipped  int // already present, byte for byte
+	Skipped  int // body hash unchanged; metadata may still have refreshed
 	Resolved int64
 
 	// Users counts the accounts the archive knows about, WithoutEmail those
@@ -45,10 +45,8 @@ type Result struct {
 
 // Ingest converts every message in a slackdump archive into the corpus.
 //
-// Idempotent by construction: nothing is fetched, everything is keyed on
-// (channel, ts), and a message already present with the same body is skipped
-// without a write. Re-running over a grown archive costs one query per message
-// that is new.
+// Nothing is fetched, and entries are keyed on (channel, ts). Re-ingest refreshes
+// metadata and author participation even when the body hash is unchanged.
 func Ingest(store *corpus.Store, a *Archive) (Result, error) {
 	var r Result
 
@@ -202,22 +200,11 @@ func (in *ingester) put(m Message, r *Result) error {
 		r.Changed++
 	default:
 		r.Skipped++
-		// Nothing else to record: participation and the sighting were written when
-		// the entry was, and neither can change for a message that has not.
+		// PutSlack reconciled participation; the direct sighting already exists.
 		return nil
 	}
 
-	if err := in.store.Sight(res.ID, 0, "direct", ""); err != nil {
-		return err
-	}
-	// The author, and only the author. Channel membership is not participation:
-	// a post in a 71-member channel is not addressed to 71 people, and recording
-	// it as such would make "who was this sent to" meaningless for mail too,
-	// where the answer is a real, deliberate list.
-	if person != 0 {
-		return corpus.Participate(in.store, res.ID, person, corpus.RoleFrom)
-	}
-	return nil
+	return in.store.Sight(res.ID, 0, "direct", "")
 }
 
 // ExtID is the corpus identity of a Slack message. The channel is part of it

@@ -236,6 +236,61 @@ func TestEmaillessUserIsKeyedOnItsSlackUID(t *testing.T) {
 	}
 }
 
+func TestReIngestReconcilesAuthorWhenUIDOnlyProfileGainsEmail(t *testing.T) {
+	f := newFixture(t)
+	f.user("U100", "ada", "Ada Fenwick", "", "Pacific/Auckland", false)
+	f.channel(general, "general", false)
+	const ts = "1700000000.000100"
+	f.message(1, general, ts, "U100", "the meter audit is ready", nil)
+	s := store(t)
+	f.ingest(s)
+	id := entryID(t, s, ExtID(general, ts))
+	uidPerson, err := corpus.PersonByIdentity(s, corpus.KindSlackUID, "U100")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A later archive has an email for the same uid. This conflict still needs
+	// a human merge; recording the resolved author must not move the uid alias.
+	f.exec(`delete from S_USER where ID='U100'`)
+	f.user("U100", "ada", "Ada Fenwick", "ada@northwind.fed", "Pacific/Auckland", false)
+	for i := 0; i < 2; i++ {
+		r := f.ingest(s)
+		if r.Created != 0 || r.Changed != 0 || r.Skipped != 1 || r.IdentityConflicts != 1 {
+			t.Fatalf("profile-only re-ingest = %+v", r)
+		}
+		emailPerson, err := corpus.PersonByIdentity(s, corpus.KindEmail, "ada@northwind.fed")
+		if err != nil {
+			t.Fatal(err)
+		}
+		stillUIDPerson, err := corpus.PersonByIdentity(s, corpus.KindSlackUID, "U100")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if emailPerson == uidPerson || stillUIDPerson != uidPerson {
+			t.Fatalf("identity conflict was silently merged: original=%d uid=%d email=%d", uidPerson, stillUIDPerson, emailPerson)
+		}
+		var author, participant int64
+		var n int
+		if err := s.DB().QueryRow(`select person_id from entries where id=?`, id).Scan(&author); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.DB().QueryRow(`select count(*), coalesce(min(person_id),0) from participants
+			where entry_id=? and role='from'`, id).Scan(&n, &participant); err != nil {
+			t.Fatal(err)
+		}
+		if author != emailPerson || n != 1 || participant != author {
+			t.Fatalf("author/participation disagree: author=%d email=%d from_count=%d participant=%d", author, emailPerson, n, participant)
+		}
+		var merges int
+		if err := s.DB().QueryRow(`select count(*) from person_merges`).Scan(&merges); err != nil {
+			t.Fatal(err)
+		}
+		if merges != 0 {
+			t.Fatalf("profile-only re-ingest performed %d human identity merges", merges)
+		}
+	}
+}
+
 func TestIngestedSlackMessageIsSearchable(t *testing.T) {
 	f := newFixture(t)
 	f.people()

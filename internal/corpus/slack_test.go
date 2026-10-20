@@ -1,6 +1,7 @@
 package corpus
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -41,6 +42,98 @@ func TestPutSlackWritesDetailAndThenSkips(t *testing.T) {
 	}
 	if details != 1 {
 		t.Fatalf("%d slack_detail rows for one entry", details)
+	}
+}
+
+func TestPutSlackParticipationFollowsPersistedAuthor(t *testing.T) {
+	s := open(t)
+	first, err := Resolve(s, KindSlackUID, "U100", "Ada")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := Resolve(s, KindEmail, "ada@example.test", "Ada")
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, d := slackEntry("C1", "1.1", "", "unchanged text")
+	for _, tc := range []struct {
+		name           string
+		incoming, want int64
+	}{
+		{"unauthored", 0, 0},
+		{"author found", first, first},
+		{"author updated", second, second},
+		{"author omitted", 0, second},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e.PersonID = tc.incoming
+			res, err := s.PutSlack(e, d, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if res.Changed {
+				t.Fatalf("author-only update reported a body edit: %+v", res)
+			}
+			var author, participant int64
+			var n int
+			if err := s.DB().QueryRow(`select coalesce(person_id,0) from entries where id=?`, res.ID).Scan(&author); err != nil {
+				t.Fatal(err)
+			}
+			if err := s.DB().QueryRow(`select count(*), coalesce(min(person_id),0) from participants
+				where entry_id=? and role='from'`, res.ID).Scan(&n, &participant); err != nil {
+				t.Fatal(err)
+			}
+			wantCount := 1
+			if tc.want == 0 {
+				wantCount = 0
+			}
+			if author != tc.want || participant != tc.want || n != wantCount {
+				t.Fatalf("author=%d participant=%d count=%d, want person=%d count=%d", author, participant, n, tc.want, wantCount)
+			}
+		})
+	}
+}
+
+func TestPutSlackParticipationFailureRollsBackMetadata(t *testing.T) {
+	s := open(t)
+	first, err := Resolve(s, KindSlackUID, "U100", "Ada")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := Resolve(s, KindEmail, "ada@example.test", "Ada")
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, d := slackEntry("C1", "1.1", "", "unchanged text")
+	e.PersonID = first
+	res, err := s.PutSlack(e, d, []Attachment{{Name: "original.txt", SourceRef: "F1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Also models a row created before participation moved into PutSlack.
+	if err := Participate(s, res.ID, first, RoleFrom); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB().Exec(`create trigger reject_slack_participant before insert on participants
+		when new.role='from' begin select raise(abort, 'injected participant failure'); end`); err != nil {
+		t.Fatal(err)
+	}
+	e.PersonID = second
+	d.ReplyCount = 2
+	if _, err := s.PutSlack(e, d, []Attachment{{Name: "replacement.txt", SourceRef: "F2"}}); err == nil || !strings.Contains(err.Error(), "injected participant failure") {
+		t.Fatalf("want participation failure, got %v", err)
+	}
+	var author, participant int64
+	var replies int
+	var name string
+	if err := s.DB().QueryRow(`select e.person_id, sd.reply_count, a.name, p.person_id
+		from entries e join slack_detail sd on sd.entry_id=e.id
+		join attachments a on a.entry_id=e.id join participants p on p.entry_id=e.id
+		where e.id=? and p.role='from'`, res.ID).Scan(&author, &replies, &name, &participant); err != nil {
+		t.Fatal(err)
+	}
+	if author != first || participant != first || replies != 0 || name != "original.txt" {
+		t.Fatalf("partial commit: author=%d participant=%d replies=%d attachment=%q", author, participant, replies, name)
 	}
 }
 

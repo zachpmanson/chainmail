@@ -24,8 +24,8 @@ type Slack struct {
 	IsDM        bool
 }
 
-// PutSlack stores one Slack message: the entry, its slack_detail row and its
-// files, in one transaction.
+// PutSlack stores one Slack message: the entry, its slack_detail row, files and
+// author participation, in one transaction.
 //
 // Re-ingest refreshes metadata and files even when the body is unchanged:
 // replies and attachments can change independently of the text. Changed still
@@ -46,6 +46,15 @@ func (s *Store) PutSlack(e Entry, d Slack, atts []Attachment) (PutResult, error)
 	res, err := s.put(tx, e, nil, &d, atts, "")
 	if err != nil {
 		return res, err
+	}
+	// Slack participation is the author, not the channel membership. Read the
+	// persisted author: put retains it when this archive omits the identity.
+	if _, err := tx.Exec(`delete from participants where entry_id=? and role=?`, res.ID, RoleFrom); err != nil {
+		return res, fmt.Errorf("clearing Slack author participation for %s: %w", e.ExtID, err)
+	}
+	if _, err := tx.Exec(`insert into participants (entry_id, person_id, role)
+		select id, person_id, ? from entries where id=? and person_id is not null`, RoleFrom, res.ID); err != nil {
+		return res, fmt.Errorf("recording Slack author participation for %s: %w", e.ExtID, err)
 	}
 	return res, tx.Commit()
 }
