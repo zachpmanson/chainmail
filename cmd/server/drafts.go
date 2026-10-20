@@ -28,6 +28,7 @@ type draftRequest struct {
 	Subject           string   `json:"subject"`
 	Body              string   `json:"body"`
 	ReplyToEntry      string   `json:"replyToEntry,omitempty"`
+	ReplyAll          bool     `json:"replyAll,omitempty"`
 }
 
 type draftResponse struct {
@@ -212,11 +213,23 @@ func (s *server) saveDraft(w http.ResponseWriter, req draftRequest) {
 			fail(w, http.StatusBadRequest, errors.New("replyToEntry has no Gmail message in the selected account"))
 			return
 		}
+		// Nil lists belong to the mailbox, not to corpus header estimates. Resolve
+		// Reply-To and reply-all defaults before the draft makes them explicit.
+		plan, err := mb.Reply(replyToMessageID, gmailclient.ReplyBody{Text: req.Body}, gmailclient.ReplyOptions{All: req.ReplyAll, To: req.To, Cc: req.Cc})
+		if err != nil {
+			fail(w, http.StatusBadGateway, fmt.Errorf("preparing reply draft: %w", err))
+			return
+		}
+		req.To, req.Cc = []string{plan.To}, nil
+		if plan.Cc != "" {
+			req.Cc = []string{plan.Cc}
+		}
+		req.Subject = plan.Subject
 	}
 	d, err := mb.SaveDraft(gmailclient.Draft{ID: req.ID, MessageID: req.ExpectedMessageID, To: strings.Join(req.To, ", "), Cc: strings.Join(req.Cc, ", "), Subject: req.Subject, Body: req.Body}, replyToMessageID)
 	if err != nil {
 		status := http.StatusBadGateway
-		if gmailclient.IsConflict(err) {
+		if gmailclient.IsConflict(err) || errors.Is(err, gmailclient.ErrUnsupportedDraft) {
 			status = http.StatusConflict
 		}
 		if req.ID != "" && gmailclient.IsNotFound(err) {

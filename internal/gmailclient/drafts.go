@@ -18,6 +18,8 @@ import (
 
 var ErrDraftConflict = errors.New("Gmail draft changed outside Chainmail; reload before editing")
 
+var ErrUnsupportedDraft = errors.New("this draft contains headers or MIME content Chainmail cannot preserve; edit it in Gmail")
+
 // IsConflict reports an optimistic concurrency conflict caused by an external edit.
 func IsConflict(err error) bool { return errors.Is(err, ErrDraftConflict) }
 
@@ -142,6 +144,13 @@ func (c Client) SaveDraft(d Draft, replyToMessageID string) (Draft, error) {
 		if current.Message == nil || current.Message.Id != d.MessageID {
 			return Draft{}, ErrDraftConflict
 		}
+		currentRaw, decodeErr := base64.RawURLEncoding.DecodeString(current.Message.Raw)
+		if decodeErr != nil {
+			return Draft{}, fmt.Errorf("checking Gmail draft MIME: %w", decodeErr)
+		}
+		if err := checkDraftReplacement(currentRaw, raw); err != nil {
+			return Draft{}, err
+		}
 		container.Id = d.ID
 		saved, err = c.svc.Users.Drafts.Update("me", d.ID, container).Do()
 	}
@@ -181,6 +190,53 @@ func (c Client) SendDraft(id string) (string, string, error) {
 		return "", "", fmt.Errorf("Gmail accepted draft %q without returning a message", id)
 	}
 	return sent.Id, sent.ThreadId, nil
+}
+
+// Replacement is intentionally conservative: even a revision-matching draft may
+// contain attachments, Bcc, rich text, an alias, or other fields the editor omits.
+func checkDraftReplacement(current, replacement []byte) error {
+	old, err := mail.ReadMessage(bytes.NewReader(current))
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrUnsupportedDraft, err)
+	}
+	next, err := mail.ReadMessage(bytes.NewReader(replacement))
+	if err != nil {
+		return err
+	}
+	for name, values := range old.Header {
+		switch strings.ToLower(name) {
+		case "to", "cc", "subject", "mime-version", "content-type", "content-transfer-encoding":
+			if len(values) != 1 {
+				return ErrUnsupportedDraft
+			}
+		default:
+			if strings.Join(values, "\n") != strings.Join(next.Header[name], "\n") {
+				return ErrUnsupportedDraft
+			}
+		}
+	}
+	contentType := old.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "text/plain"
+	}
+	mediaType, params, err := mime.ParseMediaType(contentType)
+	if err != nil || mediaType != "text/plain" || len(params) > 1 {
+		return ErrUnsupportedDraft
+	}
+	if charset := strings.ToLower(params["charset"]); charset != "" && charset != "utf-8" && charset != "us-ascii" {
+		return ErrUnsupportedDraft
+	}
+	for name := range params {
+		if name != "charset" {
+			return ErrUnsupportedDraft
+		}
+	}
+	switch strings.ToLower(old.Header.Get("Content-Transfer-Encoding")) {
+	case "", "7bit", "8bit", "quoted-printable":
+		return nil
+	default:
+		return ErrUnsupportedDraft
+	}
 }
 
 func draftMIME(d Draft) ([]byte, error) {

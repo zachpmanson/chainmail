@@ -92,6 +92,16 @@ export default function useReplyRecipients(answer: CorpusEntry, all: boolean, re
     return out;
   }, [answer, people, roster.data]);
 
+  // Draft autosave uses these same optional overrides. Never persist corpus
+  // estimates as explicit choices: the server resolves untouched mailbox defaults.
+  const edited = useMemo(
+    () => ({
+      ...(toTouched ? { to: to.map((a) => a.address) } : {}),
+      ...(ccTouched ? { cc: cc.map((a) => a.address) } : {}),
+    }),
+    [toTouched, ccTouched, to, cc],
+  );
+
   return {
     to,
     cc,
@@ -99,10 +109,7 @@ export default function useReplyRecipients(answer: CorpusEntry, all: boolean, re
     mine,
     suggestions,
     // Edited lists go as bare addresses; the mailbox keeps names the message already carried.
-    edited: {
-      ...(toTouched ? { to: to.map((a) => a.address) } : {}),
-      ...(ccTouched ? { cc: cc.map((a) => a.address) } : {}),
-    },
+    edited,
     changeTo: (next: Address[]) => {
       setToTouched(true);
       setTo(next);

@@ -22,8 +22,9 @@ export function makeQueryClient(): QueryClient {
         refetchOnWindowFocus: false,
         staleTime: 5 * 60 * 1000,
       },
-      // Spec builds are rate-limited to two in flight; retry only on 429.
-      mutations: { retry, retryDelay },
+      // A lost response may follow a successful irreversible write (including send).
+      // Only known-safe operations may opt into retries.
+      mutations: { retry: false },
     },
   });
 }

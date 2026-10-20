@@ -4518,7 +4518,6 @@
       "DraftWrite": {
         "type": "object",
         "required": [
-          "to",
           "subject",
           "body"
         ],
@@ -4549,7 +4548,11 @@
           },
           "replyToEntry": {
             "type": "string",
-            "description": "Corpus ext id of the Gmail message this draft answers."
+            "description": "Corpus ext id of the Gmail message this draft answers. Omitted to/cc lists use authoritative mailbox defaults; explicit empty lists remain explicit."
+          },
+          "replyAll": {
+            "type": "boolean",
+            "description": "Use reply-all defaults for untouched lists when replyToEntry is supplied. Never sends mail."
           },
           "expectedMessageId": {
             "type": "string",

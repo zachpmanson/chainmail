@@ -1933,12 +1933,14 @@ export interface components {
         DraftWrite: {
             accountId?: string;
             id?: string;
-            to: string[];
+            to?: string[];
             cc?: string[];
             subject: string;
             body: string;
-            /** @description Corpus ext id of the Gmail message this draft answers. */
+            /** @description Corpus ext id of the Gmail message this draft answers. Omitted to/cc lists use authoritative mailbox defaults; explicit empty lists remain explicit. */
             replyToEntry?: string;
+            /** @description Use reply-all defaults for untouched lists when replyToEntry is supplied. Never sends mail. */
+            replyAll?: boolean;
             /** @description Current Gmail message ID from the last read/save; required to update and detects external edits. */
             expectedMessageId?: string;
         };

@@ -3,6 +3,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { $api, type ComposeResponse } from "../../lib/api/api";
 import { useAccountId } from "../../lib/inbox/useAccountId";
 import { errText } from "../../lib/ui/errText";
+import ReviewInput, { type ReviewedInput } from "../../lib/message/reviewedInput";
+import type { components } from "../../lib/api/api.d";
 import { addressWords } from "./AddressField";
 import Button from "../ui/Button";
 import InlineAlert from "../ui/InlineAlert";
@@ -14,9 +16,16 @@ import SelectInput from "../ui/SelectInput";
 import useAccounts from "./useAccounts";
 import useBusyTask from "./useBusyTask";
 
+type ComposeInput = Omit<components["schemas"]["ComposeRequest"], "confirm">;
+
 type Step =
   | { kind: "editing" }
-  | { kind: "reviewing"; preview: ComposeResponse; sendFailed: boolean }
+  | {
+      kind: "reviewing";
+      preview: ComposeResponse;
+      reviewed: ReviewedInput<ComposeInput>;
+      sendFailed: boolean;
+    }
   | { kind: "sent"; result: ComposeResponse };
 
 type State = { draft: Draft; accountId: string; step: Step };
@@ -24,7 +33,7 @@ type State = { draft: Draft; accountId: string; step: Step };
 type Action =
   | { type: "draft"; patch: Partial<Draft> }
   | { type: "account"; accountId: string }
-  | { type: "previewed"; preview: ComposeResponse }
+  | { type: "previewed"; preview: ComposeResponse; reviewed: ReviewedInput<ComposeInput> }
   | { type: "edit" }
   | { type: "sent"; result: ComposeResponse }
   | { type: "sendFailed" };
@@ -36,7 +45,15 @@ function reduce(state: State, action: Action): State {
     case "account":
       return { ...state, accountId: action.accountId, step: { kind: "editing" } };
     case "previewed":
-      return { ...state, step: { kind: "reviewing", preview: action.preview, sendFailed: false } };
+      return {
+        ...state,
+        step: {
+          kind: "reviewing",
+          preview: action.preview,
+          reviewed: action.reviewed,
+          sendFailed: false,
+        },
+      };
     case "edit":
       return { ...state, step: { kind: "editing" } };
     case "sent":
@@ -81,13 +98,23 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
   const to = draft.to.map(addressWords);
   const cc = draft.cc.map(addressWords);
   const sendFailed = step.kind === "reviewing" && step.sendFailed;
-  // Sending is only allowed for exactly what the reader reviewed.
-  const previewIsCurrent =
-    step.kind === "reviewing" &&
-    step.preview.to === to.join(", ") &&
-    step.preview.cc === (cc.length ? cc.join(", ") : undefined) &&
-    step.preview.subject === draft.subject &&
-    step.preview.body === draft.body;
+  const reviewInput = useRef(new ReviewInput<ComposeInput>()).current;
+  reviewInput.update({
+    to,
+    cc,
+    subject: draft.subject,
+    body: draft.body,
+    ...(displayedAccountId ? { accountId: displayedAccountId } : {}),
+  });
+  // Server headers may be canonicalised (for example RFC 2047 display names).
+  const previewIsCurrent = step.kind === "reviewing" && reviewInput.isCurrent(step.reviewed);
+  useEffect(
+    () => () => {
+      reviewInput.invalidate();
+      saveGeneration.current++;
+    },
+    [reviewInput],
+  );
 
   useEffect(() => {
     if (
@@ -95,6 +122,8 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
       !displayedAccountId ||
       drafts.isPending ||
       drafts.isError ||
+      draftSaveError ||
+      busy ||
       step.kind !== "editing"
     )
       return;
@@ -123,12 +152,17 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
         })
         .catch((e) => {
           console.error("Saving Gmail draft failed", e);
-          setDraftSaveError(errText(e));
+          if (generation !== saveGeneration.current) return;
+          setDraftSaveError(
+            `${errText(e)} Autosave stopped; check Gmail before resuming this draft.`,
+          );
         });
     }, 700);
     return () => window.clearTimeout(timer);
   }, [
     draft,
+    draftSaveError,
+    busy,
     to,
     cc,
     displayedAccountId,
@@ -144,10 +178,12 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
     const id = draftIdRef.current;
     if (!id || !window.confirm("Discard this Gmail draft?")) return;
     await run(async () => {
+      await saveQueue.current;
+      const generation = ++saveGeneration.current;
       await deleteDraft.mutateAsync({
         params: { path: { id }, query: { accountId: displayedAccountId } },
       });
-      saveGeneration.current++;
+      if (generation !== saveGeneration.current) return;
       draftIdRef.current = "";
       draftMessageIdRef.current = "";
       setDraftId("");
@@ -159,74 +195,66 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
 
   async function prepare(event: FormEvent) {
     event.preventDefault();
+    const reviewed = reviewInput.capture();
     await run(async () => {
-      const preview = await compose.mutateAsync({
-        body: {
-          to,
-          cc,
-          subject: draft.subject,
-          body: draft.body,
-          confirm: false,
-          ...(accountId ? { accountId } : {}),
-        },
-      });
-      dispatch({ type: "previewed", preview });
+      const preview = await compose.mutateAsync({ body: { ...reviewed.input, confirm: false } });
+      if (reviewInput.isCurrent(reviewed)) dispatch({ type: "previewed", preview, reviewed });
     }, errText);
   }
 
   async function send() {
     if (step.kind !== "reviewing" || !previewIsCurrent) return;
-    const { preview } = step;
+    const { preview, reviewed } = step;
+    const input = reviewed.input;
     await run(
       async () => {
+        await saveQueue.current;
+        saveGeneration.current++;
+        if (!reviewInput.isCurrent(reviewed)) return;
         let result: ComposeResponse;
         if (draftIdRef.current) {
-          await saveQueue.current;
           const id = draftIdRef.current;
           const account = preview.accountId ?? displayedAccountId;
           const updated = await updateDraft.mutateAsync({
             params: { path: { id } },
             body: {
+              ...input,
               accountId: account,
-              to,
-              cc,
-              subject: draft.subject,
-              body: draft.body,
               expectedMessageId: draftMessageIdRef.current,
             },
           });
           draftMessageIdRef.current = updated.messageId ?? "";
+          if (!reviewInput.isCurrent(reviewed)) return;
           const sent = await sendDraft.mutateAsync({
             params: { path: { id } },
             body: { accountId: account },
           });
           result = {
             accountId: account,
-            to: to.join(", "),
-            cc: cc.join(", "),
-            subject: draft.subject,
-            body: draft.body,
+            to: input.to.join(", "),
+            cc: input.cc?.join(", "),
+            subject: input.subject,
+            body: input.body,
             sent: sent.sent,
             gmailId: sent.gmailId,
             filed: sent.filed,
           };
-          draftIdRef.current = "";
-          draftMessageIdRef.current = "";
-          setDraftId("");
+          if (reviewInput.isCurrent(reviewed)) {
+            draftIdRef.current = "";
+            draftMessageIdRef.current = "";
+            setDraftId("");
+          }
           await queryClient.invalidateQueries({ queryKey: ["get", "/v1/drafts"] });
         } else {
           result = await compose.mutateAsync({
             body: {
-              to,
-              cc,
-              subject: draft.subject,
-              body: draft.body,
+              ...input,
               confirm: true,
               accountId: preview.accountId,
             },
           });
         }
-        dispatch({ type: "sent", result });
+        if (reviewInput.isCurrent(reviewed)) dispatch({ type: "sent", result });
       },
       (e) => {
         // The request may have reached Gmail even if its response did not; a retry could duplicate mail.
@@ -268,6 +296,7 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
                     type="button"
                     disabled={busy}
                     onClick={() => {
+                      reviewInput.invalidate();
                       dispatch({ type: "edit" });
                       clearError();
                     }}
@@ -301,6 +330,7 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
                     const selected = drafts.data?.find((item) => item.id === event.target.value);
                     if (!selected) return;
                     saveGeneration.current++;
+                    setDraftSaveError("");
                     draftIdRef.current = selected.id;
                     draftMessageIdRef.current = selected.messageId ?? "";
                     setDraftId(selected.id);
@@ -346,6 +376,7 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
               accountId={accountId}
               onAccount={(id) => {
                 saveGeneration.current++;
+                setDraftSaveError("");
                 draftIdRef.current = "";
                 draftMessageIdRef.current = "";
                 setDraftId("");

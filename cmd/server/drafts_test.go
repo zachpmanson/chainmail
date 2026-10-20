@@ -163,3 +163,73 @@ func TestDraftSendRequiresSendGrantAndFilesMessage(t *testing.T) {
 		t.Fatalf("sent = %v", fake.sent)
 	}
 }
+
+func TestReplyDraftPersistsMailboxDefaultsAndExplicitOverrides(t *testing.T) {
+	for _, tc := range []struct {
+		name, recipients string
+		all              bool
+		wantTo, wantCc   string
+	}{
+		{"untouched sender", "", false, "reply-target@example.test", ""},
+		{"untouched reply all", "", true, "reply-target@example.test", "team@example.test"},
+		{"explicit to", `,"to":["chosen@example.test"]`, true, "chosen@example.test", "team@example.test"},
+		{"explicit empty cc", `,"cc":[]`, true, "reply-target@example.test", ""},
+		{"explicit both", `,"to":["chosen@example.test"],"cc":["other@example.test"]`, false, "chosen@example.test", "other@example.test"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h, fake := draftsServer(t)
+			entries, err := h.store.ChainEntries(extAda1)
+			if err != nil || len(entries) == 0 {
+				t.Fatalf("entries = %v, %v", entries, err)
+			}
+			if err := h.store.PutGmailCopy(corpus.GmailCopy{AccountID: "legacy", GmailID: "gmail-parent", EntryID: entries[0].ID}); err != nil {
+				t.Fatal(err)
+			}
+			fake.to = map[string]string{"gmail-parent": "reply-target@example.test"}
+			fake.cc = map[string]string{"gmail-parent": "team@example.test"}
+			fake.subject = map[string]string{"gmail-parent": "Re: Authoritative subject"}
+			all := "false"
+			if tc.all {
+				all = "true"
+			}
+			res := h.do(t, "POST", "/v1/drafts", []byte(`{"subject":"Corpus estimate","body":"My words","replyToEntry":"`+extAda1+`","replyAll":`+all+tc.recipients+`}`))
+			if res.status != 200 {
+				t.Fatalf("save status %d: %s", res.status, res.body)
+			}
+			if len(fake.replies) != 1 || fake.replies[0].send || fake.replies[0].all != tc.all {
+				t.Fatalf("non-sending planner calls = %+v", fake.replies)
+			}
+			if len(fake.saved) != 1 || fake.saved[0].To != tc.wantTo || fake.saved[0].Cc != tc.wantCc || fake.saved[0].Subject != "Re: Authoritative subject" || fake.saved[0].Body != "My words" {
+				t.Fatalf("saved = %+v, want to=%q cc=%q", fake.saved, tc.wantTo, tc.wantCc)
+			}
+			if tc.recipients == "" && (fake.replies[0].to != nil || fake.replies[0].cc != nil) {
+				t.Fatalf("untouched lists became overrides: %+v", fake.replies[0])
+			}
+		})
+	}
+}
+
+func TestReplyDraftPlanningFailureDoesNotWrite(t *testing.T) {
+	h, fake := draftsServer(t)
+	entries, err := h.store.ChainEntries(extAda1)
+	if err != nil || len(entries) == 0 {
+		t.Fatalf("entries = %v, %v", entries, err)
+	}
+	if err := h.store.PutGmailCopy(corpus.GmailCopy{AccountID: "legacy", GmailID: "gmail-parent", EntryID: entries[0].ID}); err != nil {
+		t.Fatal(err)
+	}
+	fake.fail = map[string]error{"gmail-parent": errors.New("mailbox unavailable")}
+	res := h.do(t, "POST", "/v1/drafts", []byte(`{"subject":"","body":"Words","replyToEntry":"`+extAda1+`"}`))
+	if res.status != 502 || len(fake.saved) != 0 {
+		t.Fatalf("status %d: %s; writes=%v", res.status, res.body, fake.saved)
+	}
+}
+
+func TestDraftUnsupportedMIMEIsAnActionableConflict(t *testing.T) {
+	h, fake := draftsServer(t)
+	fake.saveErr = gmailclient.ErrUnsupportedDraft
+	res := h.do(t, "PUT", "/v1/drafts/d1", []byte(`{"to":[],"subject":"Changed","body":"Again","expectedMessageId":"message-1"}`))
+	if res.status != 409 || !strings.Contains(res.errText(t), "edit it in Gmail") {
+		t.Fatalf("status %d: %s", res.status, res.body)
+	}
+}
