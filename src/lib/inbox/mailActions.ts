@@ -7,7 +7,7 @@ import {
   type MarkReadResponse,
 } from "../api/api";
 import { invalidateChains, invalidateSearch } from "../api/queryKeys";
-import { dropFromLists, markInLists, putBackLists } from "./lists";
+import { dropFromLists, markInLists, putBackLists, type Was } from "./lists";
 
 /** Reconcile every view whose mail-derived data changes after a mailbox write. */
 export function staleAfterMail(queryClient: ReturnType<typeof useQueryClient>): void {
@@ -15,6 +15,30 @@ export function staleAfterMail(queryClient: ReturnType<typeof useQueryClient>): 
   void queryClient.invalidateQueries({ queryKey: ["get", "/v1/labels"] });
   void queryClient.invalidateQueries({ queryKey: ["get", "/v1/stats"] });
   void invalidateChains(queryClient);
+}
+
+const activeWrites = new WeakMap<ReturnType<typeof useQueryClient>, number>();
+
+/** Count lifecycle callbacks, not mutation statuses: several writes can settle in one turn. */
+export function mailWriteOptions<Variables>(
+  queryClient: ReturnType<typeof useQueryClient>,
+  patch: (variables: Variables) => Was,
+) {
+  return {
+    onMutate: (variables: Variables) => {
+      activeWrites.set(queryClient, (activeWrites.get(queryClient) ?? 0) + 1);
+      return { was: patch(variables) };
+    },
+    onSettled: () => {
+      const remaining = (activeWrites.get(queryClient) ?? 1) - 1;
+      if (remaining > 0) {
+        activeWrites.set(queryClient, remaining);
+      } else {
+        activeWrites.delete(queryClient);
+        staleAfterMail(queryClient);
+      }
+    },
+  };
 }
 
 /** Surface-owned feedback remains a caller concern; this hook owns shared cache/write behavior. */
@@ -27,10 +51,11 @@ export function useMailAction({
 } = {}) {
   const queryClient = useQueryClient();
   return $api.useMutation("post", "/v1/mail", {
-    onMutate: (variables) => ({ was: dropFromLists(queryClient, variables.body.chains) }),
+    ...mailWriteOptions(queryClient, (variables: { body: MailActionRequest }) =>
+      dropFromLists(queryClient, variables.body.chains),
+    ),
     onSuccess: (response, variables) => {
       onSuccess?.(response, variables.body);
-      staleAfterMail(queryClient);
     },
     onError: (error, variables, context) => {
       if (context) putBackLists(queryClient, context.was);
@@ -52,11 +77,10 @@ export function useReadAction({
 } = {}) {
   const queryClient = useQueryClient();
   return $api.useMutation("post", "/v1/read", {
-    onMutate: (variables) => ({
-      was: markInLists(queryClient, variables.body.chain, variables.body.unread),
-    }),
+    ...mailWriteOptions(queryClient, (variables: { body: MarkReadRequest }) =>
+      markInLists(queryClient, variables.body.chain, variables.body.unread),
+    ),
     onSuccess: (response, variables) => {
-      void invalidateSearch(queryClient);
       if (invalidateChain) void invalidateChains(queryClient);
       onSuccess?.(response, variables.body);
     },

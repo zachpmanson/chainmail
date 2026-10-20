@@ -7,8 +7,8 @@ import { searchKey } from "../api/queryKeys";
 // a page (`{chains}`) or as infinite-query pages (`{pages: [{chains}, …], pageParams}`).
 const LISTS = { queryKey: searchKey };
 
-/** What the caches held before a write touched them: enough to put every one back. */
-export type Was = [readonly unknown[], unknown][];
+/** Before/after pairs let rollback leave newer optimistic writes alone. */
+export type Was = [readonly unknown[], unknown, unknown][];
 
 /** An unreadable key yields no folder, which is the safe answer for dropFromLists. */
 function folderOf(key: readonly unknown[]): string {
@@ -69,9 +69,12 @@ function each(queryClient: QueryClient, patch: (data: unknown, folder: string) =
   void queryClient.cancelQueries(LISTS);
   const was: Was = [];
   for (const query of queryClient.getQueryCache().findAll(LISTS)) {
-    was.push([query.queryKey, query.state.data]);
-    const next = patch(query.state.data, folderOf(query.queryKey));
-    if (next !== query.state.data) queryClient.setQueryData(query.queryKey, next);
+    const before = query.state.data;
+    const next = patch(before, folderOf(query.queryKey));
+    if (next !== before) {
+      const after = queryClient.setQueryData(query.queryKey, next);
+      was.push([query.queryKey, before, after]);
+    }
   }
   return was;
 }
@@ -87,10 +90,12 @@ export function dropFromLists(queryClient: QueryClient, roots: string[]): Was {
   return each(queryClient, (data, folder) => (folder === "" ? data : without(data, gone)));
 }
 
-/** Put every list back as it was: what a refused write leaves behind. */
+/** Don't undo a newer write; the final re-read reconciles overlapping failures. */
 export function putBackLists(queryClient: QueryClient, was: Was): void {
-  for (const [key, data] of was) {
-    if (data !== undefined) queryClient.setQueryData(key, data);
+  for (const [key, before, after] of was) {
+    if (before !== undefined && queryClient.getQueryData(key) === after) {
+      queryClient.setQueryData(key, before);
+    }
   }
 }
 
