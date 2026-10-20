@@ -3,6 +3,9 @@ package spec
 import (
 	"strings"
 	"testing"
+
+	"golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 )
 
 func TestOriginalStyleAttributesCannotCreateElements(t *testing.T) {
@@ -14,11 +17,28 @@ func TestOriginalStyleAttributesCannotCreateElements(t *testing.T) {
 		if !ok || !strings.Contains(got, "visible") {
 			t.Fatalf("content disappeared: %s", got)
 		}
-		if strings.Contains(got, "<span") {
-			t.Fatalf("attribute escaped its stylesheet: %s", got)
+		doc, err := html.Parse(strings.NewReader(got))
+		if err != nil {
+			t.Fatal(err)
 		}
-		if strings.Count(got, "<style>") != strings.Count(got, "</style>") {
-			t.Fatalf("attribute changed stylesheet boundaries: %s", got)
+		styles := 0
+		var walk func(*html.Node)
+		walk = func(n *html.Node) {
+			if n.Type == html.ElementNode {
+				if n.DataAtom == atom.Span {
+					t.Fatalf("attribute escaped its stylesheet: %s", got)
+				}
+				if n.DataAtom == atom.Style {
+					styles++
+				}
+			}
+			for child := n.FirstChild; child != nil; child = child.NextSibling {
+				walk(child)
+			}
+		}
+		walk(doc)
+		if styles != 2 {
+			t.Fatalf("attribute changed stylesheet boundaries: styles=%d, %s", styles, got)
 		}
 	}
 }
