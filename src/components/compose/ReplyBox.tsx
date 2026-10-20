@@ -260,6 +260,8 @@ export default function ReplyBox({
         .catch((error) => {
           console.error("Saving Gmail reply draft failed", error);
           if (generation !== saveGeneration.current) return;
+          // Cancel work already queued behind this failed write, before React renders the error.
+          saveGeneration.current++;
           setDraftSaveError(
             `${errText(error)} Autosave stopped; check Gmail before resuming this draft.`,
           );
@@ -309,6 +311,7 @@ export default function ReplyBox({
   async function ship() {
     if (step.kind !== "reviewing" || !previewIsCurrent) return;
     const { plan, reviewed } = step;
+    let sending = false;
     await run(
       async () => {
         await saveQueue.current;
@@ -316,6 +319,31 @@ export default function ReplyBox({
         if (!reviewInput.isCurrent(reviewed)) return;
         const savedDraftId = draftIdRef.current;
         const generation = saveGeneration.current;
+        if (savedDraftId) {
+          // Sending a new reply and deleting its draft must not bypass the MIME/revision guard.
+          const updated = await updateDraft.mutateAsync({
+            params: { path: { id: savedDraftId } },
+            body: {
+              accountId: plan.accountId,
+              to: reviewed.input.to,
+              cc: reviewed.input.cc,
+              subject: "",
+              body: reviewed.input.body,
+              replyToEntry: reviewed.input.entry,
+              replyAll: reviewed.input.all,
+              expectedMessageId: draftMessageIdRef.current,
+            },
+          });
+          if (
+            !reviewInput.isCurrent(reviewed) ||
+            generation !== saveGeneration.current ||
+            savedDraftId !== draftIdRef.current
+          )
+            return;
+          draftMessageIdRef.current = updated.messageId ?? "";
+          setDraftSaveError("");
+        }
+        sending = true;
         await send.mutateAsync({
           body: { ...reviewed.input, confirm: true, accountId: plan.accountId },
         });
@@ -350,9 +378,11 @@ export default function ReplyBox({
         );
       },
       (e) => {
-        // The request may have reached Gmail even if its response did not; a retry could duplicate mail.
-        dispatch({ type: "sendFailed" });
-        return refusal(e, "-send-mail", "Sending the reply");
+        // Only a send attempt has an uncertain delivery outcome; preflight failures sent nothing.
+        if (sending) dispatch({ type: "sendFailed" });
+        return sending
+          ? refusal(e, "-send-mail", "Sending the reply")
+          : refusal(e, "-draft-mail", "Checking the Gmail reply draft");
       },
     );
     staleAfterMail(queryClient);
@@ -361,8 +391,10 @@ export default function ReplyBox({
   async function discardDraft() {
     const id = draftIdRef.current;
     if (!id || !window.confirm("Discard this Gmail reply draft?")) return;
+    const ownerGeneration = saveGeneration.current;
     await run(async () => {
       await saveQueue.current;
+      if (ownerGeneration !== saveGeneration.current || id !== draftIdRef.current) return;
       const generation = ++saveGeneration.current;
       await deleteDraft.mutateAsync({
         params: { path: { id }, query: { accountId: displayedAccountId } },

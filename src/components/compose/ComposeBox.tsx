@@ -153,6 +153,8 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
         .catch((e) => {
           console.error("Saving Gmail draft failed", e);
           if (generation !== saveGeneration.current) return;
+          // Cancel work already queued behind this failed write, before React renders the error.
+          saveGeneration.current++;
           setDraftSaveError(
             `${errText(e)} Autosave stopped; check Gmail before resuming this draft.`,
           );
@@ -177,8 +179,10 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
   async function discardDraft() {
     const id = draftIdRef.current;
     if (!id || !window.confirm("Discard this Gmail draft?")) return;
+    const ownerGeneration = saveGeneration.current;
     await run(async () => {
       await saveQueue.current;
+      if (ownerGeneration !== saveGeneration.current || id !== draftIdRef.current) return;
       const generation = ++saveGeneration.current;
       await deleteDraft.mutateAsync({
         params: { path: { id }, query: { accountId: displayedAccountId } },

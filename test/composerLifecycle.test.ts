@@ -36,10 +36,12 @@ vi.mock("../src/components/compose/ComposePreview", () => ({
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((yes) => {
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((yes, no) => {
     resolve = yes;
+    reject = no;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 const json = (data: unknown) =>
   new Response(JSON.stringify(data), {
@@ -102,6 +104,12 @@ const form = () =>
   root.root.findByType("compose-form" as never).props as ComponentProps<typeof ComposeForm>;
 function button(text: string) {
   return root.root.findAllByType("button").find((node) => node.children.join("") === text)!;
+}
+function visibleText() {
+  return root.root
+    .findAll((node) => typeof node.type === "string")
+    .flatMap((node) => node.children.filter((child) => typeof child === "string"))
+    .join(" ");
 }
 async function click(text: string) {
   expect(button(text).props.disabled).not.toBe(true);
@@ -194,6 +202,92 @@ it.each([true, false])(
   },
 );
 
+describe("queued autosave outcomes", () => {
+  async function edit(reply: boolean, body: string) {
+    if (reply) await typeReply(body);
+    else
+      await act(async () => {
+        form().onDraft({ to: [{ address: "to@example.test" }], body });
+      });
+  }
+
+  it.each([
+    [true, "network"],
+    [false, "network"],
+    [true, "502"],
+    [false, "502"],
+  ] as const)(
+    "cancels queued saves after a slow uncertain create (reply: %s, failure: %s)",
+    async (reply, failure) => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      const first = deferred<Response>();
+      let creates = 0;
+      const normal = handle;
+      handle = (req) => {
+        if (req.method === "POST" && new URL(req.url).pathname === "/v1/drafts") {
+          return ++creates === 1 ? first.promise : Promise.resolve(json(saved));
+        }
+        return normal(req);
+      };
+      await mount(reply);
+      await edit(reply, "First words");
+      await autosave();
+      expect(creates).toBe(1);
+      for (const body of ["Edited while create is pending", "Another queued edit"]) {
+        await edit(reply, body);
+        await autosave();
+        expect(creates).toBe(1);
+      }
+      await act(async () => {
+        if (failure === "network")
+          first.reject(new TypeError("Response lost after draft creation"));
+        else
+          first.resolve(
+            new Response(JSON.stringify({ error: "Unknown create outcome" }), {
+              status: 502,
+              headers: { "Content-Type": "application/json" },
+            }),
+          );
+      });
+      await settle();
+      await edit(reply, "An edit after failure must not restart autosave");
+      await autosave();
+      expect(creates).toBe(1);
+      expect(requests.filter((r) => r.method === "PUT")).toEqual([]);
+    },
+  );
+
+  it.each([true, false])(
+    "continues queued saves after a slow successful create (reply: %s)",
+    async (reply) => {
+      const first = deferred<Response>();
+      const normal = handle;
+      handle = (req) =>
+        req.method === "POST" && new URL(req.url).pathname === "/v1/drafts"
+          ? first.promise
+          : normal(req);
+      await mount(reply);
+      await edit(reply, "First words");
+      await autosave();
+      await edit(reply, "Newer queued words");
+      await autosave();
+      expect(requests.filter((r) => r.method === "PUT")).toEqual([]);
+      await act(async () => {
+        first.resolve(json(saved));
+      });
+      await settle();
+      expect(requests.filter((r) => r.method === "POST" && r.path === "/v1/drafts")).toHaveLength(
+        1,
+      );
+      expect(
+        requests
+          .filter((r) => r.method === "PUT")
+          .map((r) => ({ path: r.path, body: r.body.body, revision: r.body.expectedMessageId })),
+      ).toEqual([{ path: "/v1/drafts/d1", body: "Newer queued words", revision: "m1" }]);
+    },
+  );
+});
+
 describe("reply draft ownership", () => {
   it("does not hydrate over words typed before initial draft discovery", async () => {
     const list = deferred<Response>();
@@ -243,10 +337,53 @@ describe("reply draft ownership", () => {
       });
       await settle();
       expect(fields().draft.body).toBe("");
+      const completedRequests = requests.length;
       await typeReply("A genuinely new reply");
       await autosave();
-      expect(requests.some((r) => r.method === "PUT" && r.path === "/v1/drafts/d1")).toBe(false);
-      expect(requests.some((r) => r.method === "POST" && r.path === "/v1/drafts")).toBe(true);
+      const newRequests = requests.slice(completedRequests);
+      expect(newRequests.some((r) => r.method === "PUT" && r.path === "/v1/drafts/d1")).toBe(false);
+      expect(newRequests.some((r) => r.method === "POST" && r.path === "/v1/drafts")).toBe(true);
+    },
+  );
+
+  it.each([false, true])(
+    "keeps a discard waiting on autosave bound to its original owner (retarget: %s)",
+    async (retarget) => {
+      const put = deferred<Response>();
+      const normal = handle;
+      handle = (req) => {
+        const path = new URL(req.url).pathname;
+        if (path === "/v1/drafts" && req.method === "GET") return Promise.resolve(json([saved]));
+        if (req.method === "PUT") return put.promise;
+        return normal(req);
+      };
+      await mount();
+      await autosave();
+      expect(requests.filter((r) => r.method === "PUT")).toHaveLength(1);
+      await click("Discard draft");
+      if (retarget) {
+        await act(async () => {
+          root.update(
+            createElement(
+              QueryClientProvider,
+              { client },
+              createElement(ReplyBox, {
+                ...replyProps,
+                answer: { ...answer, extId: "B", container: "thread-2" },
+              }),
+            ),
+          );
+        });
+        await settle();
+      }
+      await act(async () => {
+        put.resolve(json({ ...saved, messageId: "m2" }));
+      });
+      await settle();
+      expect(fields().draft.body).toBe(retarget ? "OLD SAVED WORDS" : "");
+      expect(requests.filter((r) => r.method === "DELETE").map((r) => r.path)).toEqual(
+        retarget ? [] : ["/v1/drafts/d1"],
+      );
     },
   );
 
@@ -287,6 +424,108 @@ it("resumes canonical mailbox recipients without changing Reply-To to corpus Fro
   expect(requests.find((r) => r.path === "/v1/send")?.body.to).toEqual([
     "reply-target@example.test",
   ]);
+});
+
+describe("reply draft send safety", () => {
+  it.each([false, true])(
+    "refuses send and cleanup for an unsupported resumed draft (autosaved: %s)",
+    async (autosaved) => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      const normal = handle;
+      handle = (req) => {
+        const path = new URL(req.url).pathname;
+        if (path === "/v1/drafts" && req.method === "GET") return Promise.resolve(json([saved]));
+        if (req.method === "PUT")
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                error:
+                  "This draft contains headers or MIME content Chainmail cannot preserve; edit it in Gmail",
+              }),
+              { status: 409, headers: { "Content-Type": "application/json" } },
+            ),
+          );
+        return normal(req);
+      };
+      await mount();
+      if (autosaved) await autosave();
+      await click("preview");
+      await click("send this reply");
+      expect(requests.filter((r) => r.body.confirm === true)).toEqual([]);
+      expect(requests.filter((r) => r.method === "DELETE")).toEqual([]);
+      expect(visibleText()).toContain("edit it in Gmail");
+      expect(visibleText()).not.toContain("Check Gmail before attempting to send again.");
+    },
+  );
+
+  it("can send a supported draft after a recovered autosave error passes the authoritative preflight", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    let puts = 0;
+    const normal = handle;
+    handle = (req) => {
+      const path = new URL(req.url).pathname;
+      if (path === "/v1/drafts" && req.method === "GET") return Promise.resolve(json([saved]));
+      if (req.method === "PUT")
+        return Promise.resolve(
+          ++puts === 1
+            ? new Response(JSON.stringify({ error: "Temporary mailbox failure" }), {
+                status: 502,
+                headers: { "Content-Type": "application/json" },
+              })
+            : json({ ...saved, messageId: "m2" }),
+        );
+      return normal(req);
+    };
+    await mount();
+    await autosave();
+    expect(puts).toBe(1);
+    await click("preview");
+    await click("send this reply");
+    expect(puts).toBe(2);
+    expect(requests.filter((r) => r.body.confirm === true)).toHaveLength(1);
+    expect(requests.filter((r) => r.method === "DELETE")).toHaveLength(1);
+    expect(visibleText()).not.toContain("Temporary mailbox failure");
+    const preflight = requests.filter((r) => r.method === "PUT")[1]!;
+    expect(preflight.body).toMatchObject({
+      expectedMessageId: "m1",
+      replyToEntry: "A",
+      body: "OLD SAVED WORDS",
+    });
+  });
+});
+
+it("does not send or clean up if the reply owner changes during draft preflight", async () => {
+  const preflight = deferred<Response>();
+  const normal = handle;
+  handle = (req) => {
+    if (req.method === "GET" && new URL(req.url).pathname === "/v1/drafts")
+      return Promise.resolve(json([saved]));
+    if (req.method === "PUT") return preflight.promise;
+    return normal(req);
+  };
+  await mount();
+  await click("preview");
+  await click("send this reply");
+  expect(requests.filter((r) => r.method === "PUT")).toHaveLength(1);
+  await act(async () => {
+    root.update(
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(ReplyBox, {
+          ...replyProps,
+          answer: { ...answer, extId: "B", container: "thread-2" },
+        }),
+      ),
+    );
+  });
+  await settle();
+  await act(async () => {
+    preflight.resolve(json({ ...saved, messageId: "m2" }));
+  });
+  await settle();
+  expect(fields().draft.body).toBe("OLD SAVED WORDS");
+  expect(requests.filter((r) => r.body.confirm === true || r.method === "DELETE")).toEqual([]);
 });
 
 describe("immutable review requests", () => {
