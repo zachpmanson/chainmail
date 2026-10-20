@@ -1,4 +1,5 @@
 import { createElement } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChainHit } from "../src/lib/api/api";
@@ -8,6 +9,7 @@ import SelectView from "../src/components/inbox/SelectView";
 import ThreadPopup from "../src/components/thread/ThreadPopup";
 import ActionBar from "../src/components/inbox/ActionBar";
 import ThreadPane from "../src/components/thread/ThreadPane";
+import ComposeBox from "../src/components/compose/ComposeBox";
 
 const state = vi.hoisted(() => ({
   search: {} as SearchParams,
@@ -15,6 +17,8 @@ const state = vi.hoisted(() => ({
   defaults: { defaultFolder: "INBOX", defaultFolderAccountId: "work" },
   settingsPending: false,
   compact: false,
+  composing: false,
+  draftSave: vi.fn(),
   mail: vi.fn(),
   read: vi.fn(),
   labels: vi.fn(),
@@ -32,6 +36,7 @@ vi.mock("../src/lib/api/api", () => ({
     useQuery: (_method: string, path: string, init: unknown) => {
       if (path === "/v1/settings")
         return { data: state.defaults, isPending: state.settingsPending };
+      if (path === "/v1/drafts") return { data: [], isPending: false };
       if (path === "/auth/status")
         return { data: { accounts: ["work", "personal"].map((id) => ({ id, signedIn: true })) } };
       if (path === "/v1/labels") {
@@ -41,7 +46,7 @@ vi.mock("../src/lib/api/api", () => ({
       if (path === "/v1/search") return { data: { chains: state.rows } };
       return { data: { summary: { unread: 1 } } };
     },
-    useMutation: () => ({ mutate: vi.fn() }),
+    useMutation: () => ({ mutate: vi.fn(), mutateAsync: state.draftSave }),
   },
 }));
 vi.mock("../src/lib/inbox/useThreadList", () => ({
@@ -61,22 +66,25 @@ vi.mock("../src/lib/prefs/usePrefs", () => ({
 vi.mock("../src/lib/ui/useOwnToast", () => ({ default: () => vi.fn() }));
 vi.mock("../src/lib/ui/useLoadMore", () => ({ default: () => {} }));
 vi.mock("../src/components/compose/ComposeContext", () => ({
-  useCompose: () => ({ composing: false, closeCompose: vi.fn() }),
+  useCompose: () => ({ composing: state.composing, closeCompose: vi.fn() }),
 }));
-vi.mock("../src/components/compose/ComposeBox", () => ({ default: () => null }));
 vi.mock("../src/components/thread/ThreadMessages", () => ({ default: () => null }));
 
 const shared = { rootExtId: "S", subject: "Shared", unread: 1, entries: 1 } as ChainHit;
 const visible = { rootExtId: "T", subject: "Visible", unread: 1, entries: 1 } as ChainHit;
 let rendered: ReactTestRenderer | undefined;
+let client: QueryClient;
+function page(component: typeof Inbox) {
+  return createElement(QueryClientProvider, { client }, createElement(component));
+}
 function render(component = Inbox) {
   act(() => {
-    rendered = create(createElement(component));
+    rendered = create(page(component));
   });
 }
 function refresh(component = Inbox) {
   act(() => {
-    rendered!.update(createElement(component));
+    rendered!.update(page(component));
   });
 }
 function click(label: string) {
@@ -101,6 +109,9 @@ beforeEach(() => {
   state.defaults = { defaultFolder: "INBOX", defaultFolderAccountId: "work" };
   state.settingsPending = false;
   state.compact = false;
+  state.composing = false;
+  client = new QueryClient();
+  state.draftSave.mockResolvedValue({ id: "draft-1", messageId: "message-1" });
   vi.stubGlobal("document", {
     body: { classList: { add: vi.fn(), remove: vi.fn() } },
     addEventListener: vi.fn(),
@@ -114,6 +125,8 @@ afterEach(() => {
     rendered?.unmount();
   });
   rendered = undefined;
+  client.clear();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -314,4 +327,66 @@ describe("empty search results keep the explicitly opened reader", () => {
     expect(pane.props.thread.rootExtId).toBe("S");
     expect(pane.props.thread.subject).toBe("Shared");
   });
+});
+
+describe("scope changes keep the real compose editor mounted", () => {
+  it.each(["folder", "account", "question", "search account", "default resolution"])(
+    "preserves unsaved input across %s changes while clearing selection synchronously",
+    (kind) => {
+      vi.useFakeTimers();
+      vi.stubGlobal("window", { setTimeout, clearTimeout, confirm: () => true });
+      state.composing = true;
+      const Component = kind === "question" || kind === "search account" ? SelectView : Inbox;
+      state.search =
+        Component === SelectView
+          ? { accountId: "work", q: "first" }
+          : { accountId: "work", label: "INBOX" };
+      if (kind === "default resolution") {
+        state.search = {};
+        state.settingsPending = true;
+        state.defaults = { defaultFolder: "", defaultFolderAccountId: "" };
+      }
+      render(Component);
+      tick("Shared");
+      const editor = rendered!.root.findByType(ComposeBox);
+      const body = editor.findByType("textarea");
+      act(() => {
+        body.props.onChange({ target: { value: "NEW UNSAVED WORDS" } });
+        editor
+          .findByProps({ "aria-label": "Subject" })
+          .props.onChange({ target: { value: "Unsaved subject" } });
+        editor.findByProps({ "aria-label": "From" }).props.onChange({ target: { value: "work" } });
+      });
+      act(() => {
+        vi.advanceTimersByTime(200);
+      });
+      expect(state.draftSave).not.toHaveBeenCalled();
+      switch (kind) {
+        case "folder":
+          state.search = { accountId: "work", label: "Saved" };
+          break;
+        case "account":
+          state.search = { accountId: "personal", label: "INBOX" };
+          break;
+        case "question":
+          state.search = { accountId: "work", q: "second" };
+          break;
+        case "search account":
+          state.search = { accountId: "personal", q: "first" };
+          break;
+        case "default resolution":
+          state.settingsPending = false;
+          state.defaults = { defaultFolder: "INBOX", defaultFolderAccountId: "personal" };
+      }
+      refresh(Component);
+      expect(rendered!.root.findByType(ActionBar).props.chosen).toEqual([]);
+      const retainedEditor = rendered!.root.findByType(ComposeBox);
+      expect(retainedEditor.findByType("textarea").props.value).toBe("NEW UNSAVED WORDS");
+      expect(retainedEditor === editor).toBe(true);
+      expect(retainedEditor.findByType("textarea") === body).toBe(true);
+      expect(editor.findByProps({ "aria-label": "Subject" }).props.value).toBe("Unsaved subject");
+      expect(editor.findByProps({ "aria-label": "From" }).props.value).toBe("work");
+      expect(state.draftSave).not.toHaveBeenCalled();
+    },
+  );
 });

@@ -1,8 +1,9 @@
 import Button from "../ui/Button";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { usePrefs } from "../../lib/prefs/usePrefs";
 import { useEscapeToClear } from "../../lib/inbox/selection";
+import useScopedSelection from "../../lib/inbox/useScopedSelection";
 import useFolder from "../../lib/inbox/useFolder";
 import { MailboxScope } from "../../lib/inbox/useAccountId";
 import useThreadList from "../../lib/inbox/useThreadList";
@@ -25,19 +26,19 @@ export default function Inbox() {
   const folder = useFolder();
   return (
     <MailboxScope.Provider value={{ accountId: folder.accountId }}>
-      <FolderInbox key={JSON.stringify([folder.accountId ?? "", folder.label])} folder={folder} />
+      <FolderInbox folder={folder} />
     </MailboxScope.Provider>
   );
 }
 
-/** Selection and retained thread descriptions belong to this effective mailbox location. */
 function FolderInbox({ folder }: { folder: ReturnType<typeof useFolder> }) {
   const navigate = useNavigate();
   const { composing, closeCompose } = useCompose();
   const compact = usePrefs((s) => s.compact);
   const Row = compact ? CompactThreadRow : FullThreadRow;
-  const [chosen, setChosen] = useState<string[]>([]);
-  const clearChosen = useCallback(() => setChosen([]), []);
+  const { chosen, clearChosen, toggle } = useScopedSelection(
+    JSON.stringify([folder.accountId ?? "", folder.label]),
+  );
   useEscapeToClear(chosen.length > 0, clearChosen);
 
   useEffect(() => {
@@ -58,9 +59,6 @@ function FolderInbox({ folder }: { folder: ReturnType<typeof useFolder> }) {
     navigate({ to: "/", search: (prev) => ({ ...prev, open: root }) });
   };
   const closeChain = () => navigate({ to: "/", search: (prev) => ({ ...prev, open: undefined }) });
-
-  const toggle = (root: string) =>
-    setChosen((prev) => (prev.includes(root) ? prev.filter((r) => r !== root) : [...prev, root]));
 
   // The opened thread may not be on a loaded page; the pane fetches it by id.
   const onlyID: PreviewableThread = { rootExtId: opened ?? "" };

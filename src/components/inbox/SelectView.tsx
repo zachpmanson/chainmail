@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { $api, searchQuery, type SearchParams } from "../../lib/api/api";
 import { usePrefs } from "../../lib/prefs/usePrefs";
 import { useLastDescription } from "../../lib/inbox/lists";
 import { useEscapeToClear } from "../../lib/inbox/selection";
+import useScopedSelection from "../../lib/inbox/useScopedSelection";
 import ActionBar from "./ActionBar";
 import ThreadPane from "../thread/ThreadPane";
 import CompactThreadRow from "./CompactThreadRow";
@@ -19,19 +20,6 @@ import { useCompose } from "../compose/ComposeContext";
 import ThreadListScroll from "./ThreadListScroll";
 
 export default function SelectView() {
-  const { q, mode, person, since, accountId, label } = useSearch({ from: "/" });
-  const question = JSON.stringify([
-    q?.trim(),
-    mode ?? "hybrid",
-    person?.trim(),
-    since?.trim(),
-    accountId,
-    label,
-  ]);
-  return <SearchResults key={question} />;
-}
-
-function SearchResults() {
   const navigate = useNavigate();
   const { composing, closeCompose } = useCompose();
   const compact = usePrefs((s) => s.compact);
@@ -46,8 +34,9 @@ function SearchResults() {
   // A mode alone is not a question (see router.tsx).
   const asked: SearchParams | null =
     q || person || since ? { q, mode, person, since, accountId } : null;
-  const [chosen, setChosen] = useState<string[]>([]);
-  const clearChosen = useCallback(() => setChosen([]), []);
+  const { chosen, clearChosen, toggle } = useScopedSelection(
+    JSON.stringify([q, mode, person, since, accountId, urlSearch.label]),
+  );
   useEscapeToClear(chosen.length > 0, clearChosen);
 
   useEffect(() => {
@@ -71,9 +60,6 @@ function SearchResults() {
     { params: { query: asked ? searchQuery(asked) : {} } },
     { enabled: asked !== null },
   );
-
-  const toggle = (root: string) =>
-    setChosen((prev) => (prev.includes(root) ? prev.filter((r) => r !== root) : [...prev, root]));
 
   const chains = results.data?.chains ?? [];
 
