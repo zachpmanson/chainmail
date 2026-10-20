@@ -337,8 +337,7 @@ func TestBotMessagesAreFlaggedNotFiltered(t *testing.T) {
 	}
 }
 
-// A backfill of a full workspace runs for as long as it runs and is restarted
-// freely, so a second pass must cost nothing and change nothing.
+// A backfill can be restarted freely without duplicating rows or reporting edits.
 func TestReIngestCreatesNothing(t *testing.T) {
 	f := newFixture(t)
 	f.people()
@@ -375,6 +374,114 @@ func TestReIngestCreatesNothing(t *testing.T) {
 	}
 }
 
+func TestReIngestUpdatesSlackMetadataWithoutBodyChange(t *testing.T) {
+	f := newFixture(t)
+	f.people()
+	f.channel(general, "general", false)
+	const ts = "1700000000.000100"
+	f.message(1, general, ts, "U100", "see attached", map[string]any{
+		"files": []map[string]any{{"id": "F1", "name": "old.txt", "size": 1}},
+	})
+	s := store(t)
+	f.ingest(s)
+	ext := ExtID(general, ts)
+	id := entryID(t, s, ext)
+	f.message(2, general, ts, "U100", "see attached", map[string]any{
+		"thread_ts": ts, "reply_count": 1,
+		"files": []map[string]any{{"id": "F2", "name": "replacement.txt", "size": 2}},
+	})
+	f.message(2, general, "1700000100.000200", "U200", "reply", map[string]any{"thread_ts": ts})
+	r := f.ingest(s)
+	// Changed still counts body edits, not metadata-only refreshes.
+	if r.Created != 1 || r.Changed != 0 || r.Skipped != 1 || r.Resolved != 1 {
+		t.Fatalf("metadata-only pass = %+v", r)
+	}
+	if got := entryID(t, s, ext); got != id {
+		t.Fatalf("parent entry changed identity: %d -> %d", id, got)
+	}
+	var replies int
+	var threadTS string
+	if err := s.DB().QueryRow(`select reply_count, coalesce(thread_ts,'') from slack_detail where entry_id=?`,
+		id).Scan(&replies, &threadTS); err != nil {
+		t.Fatal(err)
+	}
+	if replies != 1 || threadTS != ts {
+		t.Fatalf("stale parent detail: reply_count=%d thread_ts=%q", replies, threadTS)
+	}
+	var name, ref string
+	var size int64
+	if err := s.DB().QueryRow(`select name, source_ref, size from attachments where entry_id=?`,
+		id).Scan(&name, &ref, &size); err != nil {
+		t.Fatal(err)
+	}
+	if name != "replacement.txt" || ref != "F2" || size != 2 {
+		t.Fatalf("stale attachment: name=%q ref=%q size=%d", name, ref, size)
+	}
+	// A later snapshot with no files must remove the old list too.
+	f.message(3, general, ts, "U100", "see attached", map[string]any{"thread_ts": ts, "reply_count": 1})
+	r = f.ingest(s)
+	if r.Created != 0 || r.Changed != 0 || r.Skipped != 2 {
+		t.Fatalf("file-removal pass = %+v", r)
+	}
+	var n int
+	if err := s.DB().QueryRow(`select count(*) from attachments where entry_id=?`, id).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("removed files still present: %d", n)
+	}
+}
+
+func TestMetadataOnlyReIngestPreservesSlackMediaLinks(t *testing.T) {
+	f := newFixture(t)
+	f.people()
+	f.channel(general, "general", false)
+	const ts = "1700000000.000100"
+	files := []map[string]any{
+		{"id": "F1", "name": "kept.txt", "size": 5},
+		{"id": "F2", "name": "skipped.txt", "size": 20},
+	}
+	f.message(1, general, ts, "U100", "see attached", map[string]any{"files": files})
+	s := store(t)
+	f.ingest(s)
+	ext := ExtID(general, ts)
+	data := []byte("filed")
+	sha := corpus.BlobSHA(data)
+	if err := s.PutBlob(corpus.Blob{Bytes: data, Mime: "text/plain", Source: corpus.SourceSlack}); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := s.LinkBlob(ext, "F1", sha); err != nil || n != 1 {
+		t.Fatalf("LinkBlob: n=%d err=%v", n, err)
+	}
+	if err := s.MarkMediaSkip(ext, "F2", "too large"); err != nil {
+		t.Fatal(err)
+	}
+	f.message(2, general, ts, "U100", "see attached", map[string]any{
+		"files": files, "thread_ts": ts, "reply_count": 1,
+	})
+	for i := 0; i < 2; i++ {
+		r := f.ingest(s)
+		if r.Created != 0 || r.Changed != 0 || r.Skipped != 1 {
+			t.Fatalf("metadata/identical pass = %+v", r)
+		}
+		var gotSHA, skip string
+		if err := s.DB().QueryRow(`select blob_sha from attachments where entry_id=? and source_ref='F1'`,
+			entryID(t, s, ext)).Scan(&gotSHA); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.DB().QueryRow(`select media_skip from attachments where entry_id=? and source_ref='F2'`,
+			entryID(t, s, ext)).Scan(&skip); err != nil {
+			t.Fatal(err)
+		}
+		if gotSHA != sha || skip != "too large" {
+			t.Fatalf("lost stored media links: sha=%q skip=%q", gotSHA, skip)
+		}
+	}
+	if b, err := s.Blob(sha); err != nil || string(b.Bytes) != string(data) {
+		t.Fatalf("lost stored bytes: blob=%+v err=%v", b, err)
+	}
+}
+
 type rowCounts struct {
 	Entries, Details, People, Participants, Sightings, Attachments int
 }
@@ -394,8 +501,7 @@ func counts(t *testing.T, s *corpus.Store) rowCounts {
 	return c
 }
 
-// An edited message is the one case where a re-ingest should write: the archive
-// now holds different text for a ts already in the corpus.
+// An edited body, unlike metadata-only changes, is reported as Changed.
 func TestReIngestOfEditedTextRewritesTheEntry(t *testing.T) {
 	f := newFixture(t)
 	f.people()

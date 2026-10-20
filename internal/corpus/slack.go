@@ -27,37 +27,15 @@ type Slack struct {
 // PutSlack stores one Slack message: the entry, its slack_detail row and its
 // files, in one transaction.
 //
-// Slack messages are treated as immutable. That is a decision, not an
-// oversight: the corpus is fed from a local slackdump archive, so re-ingest is
-// free and never re-hits the API, and an entry whose body hash still matches is
-// skipped outright rather than rewritten. The consequence is that an edited
-// message keeps the text it was archived with until slackdump sees the edit —
-// at which point the hash differs and this rewrites the row, which is why the
-// slow path stays. What there is no code for is *reporting* an edit, since
-// nothing downstream distinguishes a revised Slack message from a fresh one.
+// Re-ingest refreshes metadata and files even when the body is unchanged:
+// replies and attachments can change independently of the text. Changed still
+// reports only body edits; put preserves stored media links by source_ref.
 func (s *Store) PutSlack(e Entry, d Slack, atts []Attachment) (PutResult, error) {
 	if e.ExtID == "" {
 		return PutResult{}, errors.New("slack entry needs an ext_id")
 	}
 	if e.Source == "" {
 		e.Source = SourceSlack
-	}
-
-	// The skip is keyed on the detail row existing as well as the hash matching.
-	// Hash alone would let a run interrupted between the two writes stay broken
-	// forever, since the entry it would need to repair is the very thing that
-	// makes it look done.
-	var id int64
-	err := s.db.QueryRow(`
-		select e.id from entries e
-		join slack_detail sd on sd.entry_id = e.id
-		where e.source=? and e.ext_id=? and e.body_sha=?`,
-		e.Source, e.ExtID, BodySHA(e.BodyText, e.Subject)).Scan(&id)
-	switch {
-	case err == nil:
-		return PutResult{ID: id}, nil
-	case !errors.Is(err, sql.ErrNoRows):
-		return PutResult{}, fmt.Errorf("looking up %s: %w", e.ExtID, err)
 	}
 
 	tx, err := s.db.Begin()
