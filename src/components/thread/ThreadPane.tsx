@@ -102,7 +102,7 @@ export default function ThreadPane({
               <IconButton
                 aria-label="Open in new window"
                 title="Open in new window"
-                href={`/?open=${encodeURIComponent(thread.rootExtId)}&popup=1`}
+                href={`/?open=${encodeURIComponent(thread.rootExtId)}&popup=1${accountId ? `&accountId=${encodeURIComponent(accountId)}` : ""}`}
                 target="_blank"
                 rel="noopener"
                 onClick={(event) => {

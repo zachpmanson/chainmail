@@ -60,18 +60,18 @@ export default function MoveFolder({
   busy: boolean;
   onMove: (folder: string, accountId?: string) => void;
 }) {
-  const routeAccountId = useAccountId();
+  const scopedAccountId = useAccountId();
   const auth = $api.useQuery("get", "/auth/status", {});
   const accounts = (auth.data?.accounts ?? []).filter((account) => account.signedIn);
-  const accountId = routeAccountId || (accounts.length === 1 ? accounts[0]?.id : undefined);
-  const allAccounts = !routeAccountId && accounts.length > 1;
+  const accountId = scopedAccountId || (accounts.length === 1 ? accounts[0]?.id : undefined);
+  const allAccounts = !scopedAccountId && accounts.length > 1;
   const labels = $api.useQuery(
     "get",
     "/v1/labels",
     { params: { query: accountId ? { accountId } : {} } },
     {
       enabled:
-        Boolean(routeAccountId) || (!auth.isPending && !auth.isError && accounts.length <= 1),
+        Boolean(scopedAccountId) || (!auth.isPending && !auth.isError && accounts.length <= 1),
     },
   );
   const folders = (labels.data?.labels ?? [])

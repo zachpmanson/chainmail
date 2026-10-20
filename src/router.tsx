@@ -26,6 +26,7 @@ import NavSearch from "./components/navigation/NavSearch";
 import ComposeProvider from "./components/compose/ComposeProvider";
 import IconButton from "./components/ui/IconButton";
 import type { SearchMode } from "./lib/api/api";
+import { parseTextSearch } from "./lib/ui/searchParams";
 
 const Rendered = lazy(() => import("./components/specs/Rendered"));
 
@@ -61,8 +62,7 @@ function validateSearchParams(search: Record<string, unknown>): SearchParams {
     accountId: typeof search.accountId === "string" ? search.accountId : undefined,
     label: typeof search.label === "string" ? search.label : undefined,
     open: typeof search.open === "string" ? search.open : undefined,
-    // TanStack's default search parser JSON-decodes numeric values, so the
-    // URL `?popup=1` arrives as the number 1 rather than the string "1".
+    // Also accept the numeric popup flag from legacy parser/caller input.
     popup: search.popup === 1 ? "1" : typeof search.popup === "string" ? search.popup : undefined,
   };
 }
@@ -72,7 +72,6 @@ function RootLayout() {
   const [composing, setComposing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dropped, setDropped] = useState<Timeline | null>(null);
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
   const popup = useRouterState({
     select: (s) => {
       const popup = (s.location.search as Record<string, unknown>).popup;
@@ -113,7 +112,7 @@ function RootLayout() {
   if (dropped)
     return (
       <Suspense fallback={<Loading />}>
-        <Rendered spec={dropped} onBack={pathname === "/" ? () => setDropped(null) : undefined} />
+        <Rendered spec={dropped} onBack={() => setDropped(null)} />
       </Suspense>
     );
   return (
@@ -225,6 +224,7 @@ const routeTree = rootRoute.addChildren([
 /** The app's router, bound to the browser's history. */
 export const router = createRouter({
   routeTree,
+  parseSearch: parseTextSearch,
   defaultPreload: false,
   defaultPendingComponent: Loading,
 });

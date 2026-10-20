@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { $api, searchQuery, type SearchParams } from "../../lib/api/api";
 import { usePrefs } from "../../lib/prefs/usePrefs";
@@ -19,6 +19,19 @@ import { useCompose } from "../compose/ComposeContext";
 import ThreadListScroll from "./ThreadListScroll";
 
 export default function SelectView() {
+  const { q, mode, person, since, accountId, label } = useSearch({ from: "/" });
+  const question = JSON.stringify([
+    q?.trim(),
+    mode ?? "hybrid",
+    person?.trim(),
+    since?.trim(),
+    accountId,
+    label,
+  ]);
+  return <SearchResults key={question} />;
+}
+
+function SearchResults() {
   const navigate = useNavigate();
   const { composing, closeCompose } = useCompose();
   const compact = usePrefs((s) => s.compact);
@@ -36,15 +49,6 @@ export default function SelectView() {
   const [chosen, setChosen] = useState<string[]>([]);
   const clearChosen = useCallback(() => setChosen([]), []);
   useEscapeToClear(chosen.length > 0, clearChosen);
-  // A new question clears the ticks. Done here because the commit happens in the nav,
-  // which doesn't know about this selection.
-  const question = [q, mode, person, since, accountId].join("\u0000");
-  const lastQuestion = useRef(question);
-  useEffect(() => {
-    if (lastQuestion.current === question) return;
-    lastQuestion.current = question;
-    setChosen([]);
-  }, [question]);
 
   useEffect(() => {
     document.body.classList.add("search");
@@ -91,7 +95,7 @@ export default function SelectView() {
         <p className="mt-2 flex-[1_1_100%] text-xs text-muted">No thread matched.</p>
       ) : null}
 
-      {chains.length > 0 ? (
+      {chains.length > 0 || opened || composing ? (
         <>
           <SplitPane
             hasChoice={composing || Boolean(opened)}

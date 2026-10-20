@@ -4,6 +4,7 @@ import { newest } from "../../lib/inbox/newest";
 import { whenShort } from "../../lib/ui/stamp";
 import IconButton from "../ui/IconButton";
 import { useMailAction } from "../../lib/inbox/mailActions";
+import { useAccountId } from "../../lib/inbox/useAccountId";
 import ArchiveGlyph from "./ArchiveGlyph";
 import { refusal, sentence, VERBS } from "./MailVerbs";
 import useOwnToast from "../../lib/ui/useOwnToast";
@@ -26,6 +27,7 @@ export default function CompactThreadRow({
   onToggle: () => void;
   onOpen: () => void;
 }) {
+  const accountId = useAccountId();
   const last = newest(thread.best ?? []);
   const subject = subjectOf(thread);
   const sayArchive = useOwnToast();
@@ -51,7 +53,13 @@ export default function CompactThreadRow({
           title="Archive"
           disabled={archive.isPending}
           onClick={() =>
-            archive.mutate({ body: { chains: [thread.rootExtId], action: "archive" } })
+            archive.mutate({
+              body: {
+                chains: [thread.rootExtId],
+                action: "archive",
+                ...(accountId ? { accountId } : {}),
+              },
+            })
           }
         >
           <ArchiveGlyph />

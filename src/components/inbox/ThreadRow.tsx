@@ -2,6 +2,7 @@ import Checkbox from "../ui/Checkbox";
 import { type ReactNode } from "react";
 import { type ChainHit } from "../../lib/api/api";
 import { useReadAction } from "../../lib/inbox/mailActions";
+import { useAccountId } from "../../lib/inbox/useAccountId";
 
 /** Same floor refresh holds semantic-only proposals to (internal/refresh). */
 export const HIGHLIGHT_FLOOR = 0.8;
@@ -35,6 +36,7 @@ export default function ThreadRow({
   onToggle: () => void;
   onOpen: () => void;
 }) {
+  const accountId = useAccountId();
   const subject = subjectOf(thread);
   // Double-click toggles read optimistically (see lib/inbox/lists) and rolls back on refusal.
   // No toggle when the caller doesn't know the unread count: there's no state to invert.
@@ -71,7 +73,14 @@ export default function ThreadRow({
         onDoubleClick={
           flip === null || toggle.isPending
             ? undefined
-            : () => toggle.mutate({ body: { chain: thread.rootExtId, unread: flip } })
+            : () =>
+                toggle.mutate({
+                  body: {
+                    chain: thread.rootExtId,
+                    unread: flip,
+                    ...(accountId ? { accountId } : {}),
+                  },
+                })
         }
         aria-label={subject}
         aria-current={current ? "true" : undefined}

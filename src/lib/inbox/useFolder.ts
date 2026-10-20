@@ -1,12 +1,10 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { $api } from "../api/api";
-import { useAccountId } from "./useAccountId";
 
 /** The folder the inbox shows: the URL's, or the reader's default from settings. */
 export default function useFolder() {
   const navigate = useNavigate();
-  const urlLabel = useSearch({ from: "/" }).label;
-  const urlAccountId = useAccountId();
+  const { label: urlLabel, accountId: urlAccountId } = useSearch({ from: "/" });
   const settings = $api.useQuery("get", "/v1/settings", {});
   const save = $api.useMutation("post", "/v1/settings", {
     onSuccess: () => {

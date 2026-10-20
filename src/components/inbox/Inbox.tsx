@@ -4,6 +4,7 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { usePrefs } from "../../lib/prefs/usePrefs";
 import { useEscapeToClear } from "../../lib/inbox/selection";
 import useFolder from "../../lib/inbox/useFolder";
+import { MailboxScope } from "../../lib/inbox/useAccountId";
 import useThreadList from "../../lib/inbox/useThreadList";
 import useLoadMore from "../../lib/ui/useLoadMore";
 import ActionBar from "./ActionBar";
@@ -21,6 +22,16 @@ import FolderPicker from "./FolderPicker";
 import ThreadListScroll from "./ThreadListScroll";
 
 export default function Inbox() {
+  const folder = useFolder();
+  return (
+    <MailboxScope.Provider value={{ accountId: folder.accountId }}>
+      <FolderInbox key={JSON.stringify([folder.accountId ?? "", folder.label])} folder={folder} />
+    </MailboxScope.Provider>
+  );
+}
+
+/** Selection and retained thread descriptions belong to this effective mailbox location. */
+function FolderInbox({ folder }: { folder: ReturnType<typeof useFolder> }) {
   const navigate = useNavigate();
   const { composing, closeCompose } = useCompose();
   const compact = usePrefs((s) => s.compact);
@@ -36,7 +47,6 @@ export default function Inbox() {
 
   // Absent means nothing is open; the pane never fills itself with the top thread.
   const opened = useSearch({ from: "/" }).open;
-  const folder = useFolder();
   const { label } = folder;
   // Waits for settings so the default folder doesn't swap in after All mail.
   const { list: inbox, rows } = useThreadList(label, folder.accountId, folder.settled);
