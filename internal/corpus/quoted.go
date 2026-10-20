@@ -48,7 +48,7 @@ func (s *Store) PutQuoted(e Entry) (int64, bool, error) {
 		e.Source, e.ExtID, nz(e.Kind, "message"), e.TS.Unix(), nullStr(e.TZ), e.TZOffset,
 		nullInt64(e.PersonID), nullStr(e.Container), nullStr(e.ParentRef),
 		nullStr(e.Subject), nullStr(e.BodyText), nullStr(e.Permalink),
-		BodySHA(e.Subject, e.BodyText), boolInt(e.Derived), time.Now().Unix())
+		BodySHA(e.BodyText, e.Subject), boolInt(e.Derived), time.Now().Unix())
 	if err != nil {
 		return 0, false, err
 	}
@@ -129,15 +129,6 @@ func nullInt64(v int64) any {
 // Body text is replaced only when the new copy is longer, on the reasoning that
 // quoting elides rather than invents.
 func (s *Store) EnrichQuoted(id int64, e Entry) error {
-	var quoted int
-	if err := s.db.QueryRow(`select quoted from entries where id=?`, id).Scan(&quoted); err != nil {
-		return err
-	}
-	if quoted == 0 {
-		// A real message. Its own headers beat anything a forward said about it.
-		return nil
-	}
-
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
@@ -158,10 +149,14 @@ func (s *Store) enrich(tx *sql.Tx, id int64, e Entry) error {
 	// read BEFORE the update. Retracting with the new text would leave the old
 	// terms in the index permanently, matching text the entry no longer contains.
 	var oldSubject, oldBody string
+	var quoted int
 	if err := tx.QueryRow(
-		`select coalesce(subject,''), coalesce(body_text,'') from entries where id=?`,
-		id).Scan(&oldSubject, &oldBody); err != nil {
+		`select quoted, coalesce(subject,''), coalesce(body_text,'') from entries where id=?`,
+		id).Scan(&quoted, &oldSubject, &oldBody); err != nil {
 		return err
+	}
+	if quoted == 0 {
+		return nil
 	}
 	if _, err := tx.Exec(`
 		update entries set
@@ -173,6 +168,13 @@ func (s *Store) enrich(tx *sql.Tx, id int64, e Entry) error {
 		where id = ?`,
 		nullStr(e.Subject), nullStr(e.TZ), nullInt64(e.PersonID),
 		e.BodyText, e.BodyText, id); err != nil {
+		return err
+	}
+	var subject, body string
+	if err := tx.QueryRow(`select coalesce(subject,''), coalesce(body_text,'') from entries where id=?`, id).Scan(&subject, &body); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`update entries set body_sha=? where id=?`, BodySHA(body, subject), id); err != nil {
 		return err
 	}
 	return s.reindex(tx, id, false, oldSubject, oldBody)

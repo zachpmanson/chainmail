@@ -69,3 +69,76 @@ func TestUpgradeFromMigration19PreservesMailboxLabels(t *testing.T) {
 		t.Fatal("migration 20 did not add people.prefer_original_set")
 	}
 }
+
+func TestUpgradeFrom20RepairsPromotionAndDirectSightings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "corpus.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`create table schema_version(v integer primary key)`); err != nil {
+		t.Fatal(err)
+	}
+	for i, m := range migrations[:20] {
+		if _, err := db.Exec(m); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(`insert into schema_version values (?)`, i+1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := db.Exec(`
+ insert into entries(id,source,ext_id,kind,ts,body_text,body_sha,quoted,ingested_at)
+ values (1,'mail','mail:promote','message',1,'authoritative','hash',1,1),
+        (2,'mail','quote:remain','message',1,'quote only','hash',1,1),
+        (3,'mail','mail:old-detail','message',1,'legacy body','hash',1,1);
+ insert into gmail_copies(account_id,gmail_id,entry_id,labels) values ('legacy','g',1,'[]');
+ insert into mail_detail(entry_id,gmail_id) values (3,'old-g');
+ insert into sightings(entry_id,seen_in,kind,detail) values
+ (1,NULL,'mailbox','first'),(1,NULL,'mailbox','latest'),(1,NULL,'other','other'),(2,1,'quoted','nested');
+ `); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for id, want := range map[int]int{1: 0, 2: 1, 3: 0} {
+		var quoted int
+		if err := s.db.QueryRow(`select quoted from entries where id=?`, id).Scan(&quoted); err != nil {
+			t.Fatal(err)
+		}
+		if quoted != want {
+			t.Fatalf("entry %d quoted=%d want %d", id, quoted, want)
+		}
+	}
+	var detail string
+	if err := s.db.QueryRow(`select detail from sightings where entry_id=1 and seen_in is null and kind='mailbox'`).Scan(&detail); err != nil {
+		t.Fatal(err)
+	}
+	if detail != "latest" {
+		t.Fatalf("detail=%q", detail)
+	}
+	for range 3 {
+		if err := s.Sight(1, 0, "mailbox", "updated"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var count int
+	if err := s.db.QueryRow(`select count(*) from sightings`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 3 {
+		t.Fatalf("sightings=%d want three distinct facts", count)
+	}
+	if _, err := s.db.Exec(`insert into sightings(entry_id,kind) values (1,'mailbox')`); err == nil {
+		t.Fatal("direct sighting uniqueness not enforced")
+	}
+	if err := s.migrate(); err != nil {
+		t.Fatal(err)
+	}
+}

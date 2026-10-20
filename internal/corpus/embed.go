@@ -43,7 +43,8 @@ const (
 	// drops quoted history, rewrites URLs and frames the text for the model, so
 	// a change anywhere along that path changes every vector while leaving every
 	// body_sha identical. body_sha alone cannot see any of it.
-	prepVersion = 2
+	// Version 3 also rebuilds vectors/skips made before enrichment updated hashes.
+	prepVersion = 3
 
 	// minEmbedWords is the floor for embedding an entry at all. "thanks, will
 	// do" carries no topic, embeds to whatever direction those three tokens

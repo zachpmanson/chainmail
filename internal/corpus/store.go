@@ -85,17 +85,20 @@ type Store struct {
 // Open opens (creating if absent) a corpus at path and applies any pending
 // migrations. Pass ":memory:" for a throwaway.
 func Open(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", path)
+	separator := "?"
+	if strings.Contains(path, "?") {
+		separator = "&"
+	}
+	// PRAGMAs in the DSN are applied to every physical pooled connection.
+	db, err := sql.Open("sqlite", path+separator+"_pragma=foreign_keys(1)")
 	if err != nil {
 		return nil, fmt.Errorf("opening %s: %w", path, err)
 	}
 	// WAL suits the access pattern: one writer (the slurper), many readers.
 	// It is a no-op for :memory:, which is why the error is tolerated.
 	if _, err := db.Exec(`pragma journal_mode=wal`); err != nil && path != ":memory:" {
+		db.Close()
 		return nil, fmt.Errorf("enabling wal: %w", err)
-	}
-	if _, err := db.Exec(`pragma foreign_keys=on`); err != nil {
-		return nil, fmt.Errorf("enabling foreign keys: %w", err)
 	}
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
@@ -256,7 +259,7 @@ func (s *Store) put(tx *sql.Tx, e Entry, m *Mail, sd *Slack, atts []Attachment, 
 		  subject=excluded.subject, body_html=excluded.body_html,
 		  body_text=excluded.body_text, permalink=excluded.permalink,
 		  derived=coalesce(entries.derived, excluded.derived),
-		  body_sha=excluded.body_sha, ingested_at=excluded.ingested_at
+		  quoted=0, body_sha=excluded.body_sha, ingested_at=excluded.ingested_at
 		returning id`,
 		e.Source, e.ExtID, e.Kind, e.TS.UTC().Unix(), nullStr(e.TZ), nullInt(e.TZOffset),
 		personID, nullStr(e.Container), nullStr(e.ParentRef), nullStr(e.Subject),
@@ -384,7 +387,7 @@ func (s *Store) Sight(entryID, seenIn int64, kind, detail string) error {
 	}
 	_, err := s.db.Exec(`
 		insert into sightings (entry_id, seen_in, kind, detail) values (?,?,?,?)
-		on conflict(entry_id, seen_in, kind) do update set detail=excluded.detail`,
+		on conflict do update set detail=excluded.detail`,
 		entryID, in, kind, nullStr(detail))
 	return err
 }

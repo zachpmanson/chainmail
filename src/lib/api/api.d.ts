@@ -746,6 +746,8 @@ export interface components {
             chains?: components["schemas"]["ChainHit"][];
             /** @description Present when entries=true. */
             entries?: components["schemas"]["EntryHit"][];
+            /** @description Opaque continuation cursor for unranked chain browsing; absent at the end. Pass as cursor with the same filters. */
+            nextCursor?: string;
         };
         /** @description One candidate chain — the unit a caller selects for POST /v1/spec. */
         ChainHit: {
@@ -1997,7 +1999,7 @@ export interface operations {
                  */
                 since?: string;
                 /**
-                 * @description The inbox's cursor: only entries at or before this instant. A caller pages by passing the oldest row's `last`, which is why this is a timestamp and not a date — a day-granular cursor would repeat or drop a whole day's boundary. The instant is inclusive, so a chain ending in the cursor's own second is returned rather than skipped, at the cost of that chain appearing on two pages. A chain whose entries straddle the cursor appears again for the same reason and more often: `last` is the whole chain's newest message, not the newest inside the window, so a long thread can sit above a cursor its own older entries fall below. A paging caller therefore dedupes by rootExtId and stops when a page adds nothing it has not already shown.
+                 * @description Legacy inclusive entry-time upper bound. For chain pagination, use the opaque cursor returned as nextCursor instead.
                  * @example 2026-03-11T17:40:00Z
                  */
                 before?: string;
@@ -2014,6 +2016,8 @@ export interface operations {
                 limit?: number;
                 /** @description Return the matching entries instead of the chains they belong to. Changes which array of the response is populated. */
                 entries?: boolean;
+                /** @description Opaque server nextCursor for an unranked chain browse. Repeat the same filters; incompatible with q, entries=true or before. */
+                cursor?: string;
             };
             header?: never;
             path?: never;

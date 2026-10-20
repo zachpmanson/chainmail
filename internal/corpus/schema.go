@@ -544,4 +544,21 @@ var migrations = []string{
 	`
 	alter table people add column prefer_original_set integer not null default 0;
 	`,
+	// 21: a fetched mailbox copy is authoritative, even if its quote arrived first.
+	`
+	update entries set quoted=0 where quoted=1 and (
+	  exists (select 1 from gmail_copies gc where gc.entry_id=entries.id)
+	  or exists (select 1 from mail_detail md where md.entry_id=entries.id
+	             and coalesce(md.gmail_id,'') != '')
+	);
+	`,
+
+	// 22: NULL-host (direct) sightings must be idempotent too. Retain the latest
+	// detail, matching Sight's update semantics for non-NULL hosts.
+	`
+	delete from sightings where seen_in is null and rowid not in (
+	  select max(rowid) from sightings where seen_in is null group by entry_id, kind
+	);
+	create unique index sightings_direct on sightings(entry_id, kind) where seen_in is null;
+	`,
 }

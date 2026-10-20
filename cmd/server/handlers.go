@@ -639,13 +639,7 @@ func (s *server) search(w http.ResponseWriter, r *http.Request) {
 				fmt.Errorf("before %q: want an RFC 3339 timestamp", before))
 			return
 		}
-		// The cursor includes its own second. Two chains can end in the same one
-		// (a message and its twin, a pair of scheduled notifications), and a
-		// strictly-older bound would drop whichever of them the page did not
-		// reach — the failure that shows nothing at all, rather than the same
-		// thread twice. Entries are stamped to the second, so a half-open
-		// [., Until) one second later is exactly "ts <= before", and a caller
-		// paging on the last row's `last` loses nothing.
+		// Compatibility entry-time bound; new chain browsing uses cursor instead.
 		q.Until = t.Add(time.Second)
 	}
 	if person != "" {
@@ -653,6 +647,18 @@ func (s *server) search(w http.ResponseWriter, r *http.Request) {
 		// author-only filter, and they are often the point.
 		q.Involving = []string{person}
 	}
+	if raw := p.Get("cursor"); raw != "" {
+		if asEntries || strings.TrimSpace(text) != "" || before != "" {
+			fail(w, http.StatusBadRequest, fmt.Errorf("cursor requires a chain browse without q or before"))
+			return
+		}
+		q.After, err = corpus.ParseChainCursor(raw)
+		if err != nil {
+			fail(w, http.StatusBadRequest, err)
+			return
+		}
+	}
+
 	mode := p.Get("mode")
 	if mode == "" {
 		mode = modeLexical
@@ -677,10 +683,19 @@ func (s *server) search(w http.ResponseWriter, r *http.Request) {
 		}
 		out.Entries = &es
 	} else {
+		browse := strings.TrimSpace(text) == "" && sem == nil
+		if browse {
+			q.Limit = limit + 1
+		}
 		hits, err := s.store.SearchChains(q)
 		if err != nil {
 			fail(w, http.StatusInternalServerError, err)
 			return
+		}
+		if browse && len(hits) > limit {
+			hits = hits[:limit]
+			last := hits[len(hits)-1]
+			out.NextCursor = (corpus.ChainCursor{Last: last.Last, RootExtID: last.RootExtID}).String()
 		}
 		cs := make([]chainHit, 0, len(hits))
 		for _, h := range hits {

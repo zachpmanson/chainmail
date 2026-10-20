@@ -1202,6 +1202,9 @@ func FindDerived(s *Store, person int64, wall time.Time, text, subject, containe
 	// and annotates already refuses to merge such a block, so naming its base
 	// here is evidence, not a guess.
 	for _, o := range near {
+		if _, ok := twinnable(c, o); !ok {
+			continue
+		}
 		if why, yes := annotates(o, c); yes {
 			return DerivedMatch{Base: o.id, Why: why}, true, nil
 		}

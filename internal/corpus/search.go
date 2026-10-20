@@ -102,6 +102,9 @@ type Query struct {
 	Since time.Time
 	Until time.Time
 
+	// After continues a structural chain browse; it never filters entry timestamps.
+	After *ChainCursor
+
 	// People matches the *author* — entries.person_id — against an email
 	// address, a Slack uid or a display name; the caller does not have to say
 	// which. PersonIDs is the same filter when the caller already has ids, and
@@ -315,7 +318,16 @@ func (s *Store) SearchEntries(q Query) ([]EntryHit, error) {
 // can coalesce if it wants to; the ranking does not assume it.
 func (s *Store) SearchChains(q Query) ([]ChainHit, error) {
 	q = q.withDefaults()
-	fused, err := s.candidates(q)
+	var fused []candidate
+	var err error
+	if q.ranked() {
+		if q.After != nil {
+			return nil, fmt.Errorf("chain cursors require an unranked browse")
+		}
+		fused, err = s.candidates(q)
+	} else {
+		fused, err = s.browseCandidates(q)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -323,13 +335,20 @@ func (s *Store) SearchChains(q Query) ([]ChainHit, error) {
 		return nil, nil
 	}
 
-	ids := make([]int64, len(fused))
-	for i, c := range fused {
-		ids[i] = c.id
-	}
-	roots, err := s.rootsOf(ids)
-	if err != nil {
-		return nil, err
+	roots := map[int64]int64{}
+	if !q.ranked() {
+		for _, c := range fused {
+			roots[c.id] = c.root
+		}
+	} else {
+		ids := make([]int64, len(fused))
+		for i, c := range fused {
+			ids[i] = c.id
+		}
+		roots, err = s.rootsOf(ids)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Group candidates by root, keeping them in fused (descending score) order.
@@ -377,7 +396,7 @@ func (s *Store) SearchChains(q Query) ([]ChainHit, error) {
 	for i, sr := range scored {
 		rootIDs[i] = sr.root
 	}
-	meta, err := s.chainMeta(rootIDs)
+	meta, err := s.chainMetaForAccount(rootIDs, q.AccountID)
 	if err != nil {
 		return nil, err
 	}
@@ -474,6 +493,7 @@ func (s *Store) SearchChains(q Query) ([]ChainHit, error) {
 
 // candidate is a fused, un-hydrated hit.
 type candidate struct {
+	root       int64 // pre-resolved by chain browsing, which is not entry-capped
 	id         int64
 	score      float64
 	snippet    string
@@ -708,13 +728,9 @@ func (q Query) filters() (string, []any) {
 		preds = append(preds, p+")")
 	}
 	for _, l := range q.Labels {
-		// Legacy labels remain in mail_detail; current labels live on account-local
-		// copies as JSON arrays. Search is unified, so a logical entry matches when
-		// any connected copy carries the requested mailbox label.
-		preds = append(preds, `(instr(',' || md.labels || ',', ',' || ? || ',') > 0
-			or exists (select 1 from gmail_copies gc, json_each(case when json_valid(gc.labels) then gc.labels else '[]' end) gl
-				where gc.entry_id=e.id and gl.value=?))`)
-		args = append(args, l, l)
+		p, a := mailboxLabelSQL(q.AccountID, l)
+		preds = append(preds, p)
+		args = append(args, a...)
 	}
 	if q.HasAttachment != nil {
 		p := "exists (select 1 from attachments a where a.entry_id = e.id)"
@@ -731,6 +747,27 @@ func (q Query) filters() (string, []any) {
 		return "1", nil
 	}
 	return strings.Join(preds, " and "), args
+}
+
+// Copies are authoritative; mail_detail is only a fallback for unmigrated legacy
+// state. Older copy rows contain CSV, while current writers store JSON arrays.
+func mailboxLabelSQL(accountID, label string) (string, []any) {
+	scope := ""
+	var args []any
+	if accountID != "" {
+		scope = " and gc.account_id=?"
+		args = append(args, accountID)
+	}
+	array := `coalesce(json_type(case when json_valid(gc.labels) then gc.labels else 'null' end),'')='array'`
+	copySQL := `exists (select 1 from gmail_copies gc where gc.entry_id=e.id` + scope + `
+	  and (exists (select 1 from json_each(case when ` + array + ` then gc.labels else '[]' end) gl where gl.value=?)
+	       or (not (` + array + `) and instr(',' || gc.labels || ',', ',' || ? || ',') > 0)))`
+	args = append(args, label, label)
+	if accountID != "" && accountID != "legacy" {
+		return copySQL, args
+	}
+	return "(" + copySQL + ` or (not exists (select 1 from gmail_copies gc where gc.entry_id=e.id and gc.account_id='legacy')
+	  and instr(',' || md.labels || ',', ',' || ? || ',') > 0))`, append(args, label)
 }
 
 // notNoiseSQL renders "this entry is not noise" for a filter.
@@ -891,18 +928,20 @@ type chainMetaRow struct {
 // chainMeta walks each root's descendants so a chain can report its true size
 // and span, not just the part of it that matched.
 func (s *Store) chainMeta(roots []int64) (map[int64]chainMetaRow, error) {
+	return s.chainMetaForAccount(roots, "")
+}
+
+func (s *Store) chainMetaForAccount(roots []int64, accountID string) (map[int64]chainMetaRow, error) {
 	if len(roots) == 0 {
 		return map[int64]chainMetaRow{}, nil
 	}
 	ph, args := placeholders(roots)
+	unreadSQL, unreadArgs := mailboxLabelSQL(accountID, UnreadLabel)
 	// The unread count is a count of entries, not of rows: the participant join
 	// multiplies a chain's rows by its cast, so counting the join would report a
 	// message unread once per person on it. count(distinct ...) is what keeps the
-	// number the same as the entries it is counting. The label membership test is
-	// the one Query.Labels uses — instr against a delimited copy, because a label
-	// is user text and like would read % and _ in it as wildcards. It is bound as
-	// the query's last argument, after the depth cap — placeholders bind in the
-	// order they appear in the text, and this one is in the outer select.
+	// number the same as the entries it is counting. Label membership uses the
+	// same mailbox scope and compatibility fallback as Query.Labels.
 	//
 	// Attachments are joined and counted the same way, and for the same reason
 	// they have to be distinct twice over: the join multiplies by the cast *and*
@@ -925,16 +964,13 @@ func (s *Store) chainMeta(roots []int64) (map[int64]chainMetaRow, error) {
 		       group_concat(distinct e.source),
 		       count(distinct p.person_id),
 		       count(distinct a.rowid),
-		       count(distinct case when
-		         (instr(',' || md.labels || ',', ',' || ? || ',') > 0
-		          or exists (select 1 from gmail_copies gc, json_each(case when json_valid(gc.labels) then gc.labels else '[]' end) gl
-		                     where gc.entry_id=e.id and gl.value=?)) then d.id end)
+		       count(distinct case when `+unreadSQL+` then d.id end)
 		from down d join entries e on e.id = d.id
 		     left join participants p on p.entry_id = e.id
 		     left join mail_detail md on md.entry_id = e.id
 		     left join attachments a on a.entry_id = e.id
 		group by d.root`,
-		append(args, walkDepthCap, UnreadLabel, UnreadLabel)...)
+		append(append(args, walkDepthCap), unreadArgs...)...)
 	if err != nil {
 		return nil, fmt.Errorf("summarising chains: %w", err)
 	}

@@ -7,7 +7,7 @@ export default function useThreadList(
   accountId: string | undefined,
   enabled: boolean,
 ) {
-  // pageParamName injects the cursor as `before`.
+  // pageParamName injects the cursor as `cursor`.
   const list = $api.useInfiniteQuery(
     "get",
     "/v1/search",
@@ -18,7 +18,7 @@ export default function useThreadList(
     },
     {
       enabled,
-      pageParamName: "before",
+      pageParamName: "cursor",
       initialPageParam: "",
       getNextPageParam: nextCursor,
     },

@@ -17,7 +17,8 @@ import (
 // directions.
 
 type searchResponse struct {
-	Mode string `json:"mode"`
+	NextCursor string `json:"nextCursor,omitempty"`
+	Mode       string `json:"mode"`
 	// Exactly one of these is non-nil, decided by the `entries` parameter.
 	// Pointers, so that "nothing matched" is an empty array rather than a
 	// missing key — a client cannot tell an omitted key from an unsupported one.

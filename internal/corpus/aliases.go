@@ -19,14 +19,16 @@ func CanonicalAddress(s *Store, addr string) (string, string, error) {
 	}
 	local, domain := addr[:at], addr[at+1:]
 
-	var to string
-	err := s.db.QueryRow(
-		`select to_domain from domain_aliases where from_domain=?`, domain).Scan(&to)
-	switch {
-	case err == sql.ErrNoRows:
+	aliases, err := DomainAliases(s)
+	if err != nil {
+		return addr, "", err
+	}
+	to, err := terminalDomain(aliases, domain)
+	if err != nil {
+		return addr, "", err
+	}
+	if to == domain {
 		return addr, "", nil
-	case err != nil:
-		return addr, "", fmt.Errorf("looking up alias for %s: %w", domain, err)
 	}
 	return local + "@" + to, "domain-alias:" + domain, nil
 }
@@ -66,15 +68,31 @@ func AddDomainAlias(s *Store, from, to, note string) (AliasRepair, error) {
 	if err != nil {
 		return AliasRepair{}, err
 	}
-	if _, err := s.db.Exec(`
+	tx, err := s.db.Begin()
+	if err != nil {
+		return AliasRepair{}, err
+	}
+	defer tx.Rollback()
+	aliases, err := domainAliases(tx)
+	if err != nil {
+		return AliasRepair{}, err
+	}
+	aliases[from] = to
+	if _, err := terminalDomain(aliases, from); err != nil {
+		return AliasRepair{}, err
+	}
+	if _, err := tx.Exec(`
 		insert into domain_aliases (from_domain, to_domain, note, added_at) values (?,?,?,?)
 		on conflict(from_domain) do update set to_domain=excluded.to_domain, note=excluded.note`,
 		from, to, nullStr(note), time.Now().Unix()); err != nil {
 		return AliasRepair{}, fmt.Errorf("recording alias %s -> %s: %w", from, to, err)
 	}
+	if err := tx.Commit(); err != nil {
+		return AliasRepair{}, err
+	}
 
 	r := AliasRepair{From: from, To: to, Applied: true}
-	merges, refusals, err := planDomainAlias(s, from, to)
+	merges, refusals, err := planAliasChain(s, aliases, from)
 	if err != nil {
 		return r, err
 	}
@@ -114,13 +132,71 @@ func PreviewDomainAlias(s *Store, from, to string) (AliasRepair, error) {
 	if err != nil {
 		return AliasRepair{}, err
 	}
+	aliases, err := DomainAliases(s)
+	if err != nil {
+		return AliasRepair{}, err
+	}
+	aliases[from] = to
+	if _, err := terminalDomain(aliases, from); err != nil {
+		return AliasRepair{}, err
+	}
 	r := AliasRepair{From: from, To: to}
-	merges, refusals, err := planDomainAlias(s, from, to)
+	merges, refusals, err := planAliasChain(s, aliases, from)
 	if err != nil {
 		return r, err
 	}
 	r.Merged, r.Refused = len(merges), refusals
 	return r, nil
+}
+
+// terminalDomain refuses existing corrupt cycles as well as proposed ones.
+func terminalDomain(aliases map[string]string, domain string) (string, error) {
+	seen := map[string]bool{}
+	for aliases[domain] != "" {
+		if seen[domain] {
+			return "", fmt.Errorf("domain alias cycle at %s", domain)
+		}
+		seen[domain] = true
+		domain = aliases[domain]
+	}
+	return domain, nil
+}
+
+func planAliasChain(s *Store, aliases map[string]string, from string) ([]aliasMerge, []AliasRefusal, error) {
+	to, err := terminalDomain(aliases, from)
+	if err != nil {
+		return nil, nil, err
+	}
+	var domains []string
+	for domain := range aliases {
+		seen := map[string]bool{}
+		for d := domain; d != "" && !seen[d]; d = aliases[d] {
+			if d == from {
+				domains = append(domains, domain)
+				break
+			}
+			seen[d] = true
+		}
+	}
+	sort.Strings(domains)
+	var merges []aliasMerge
+	var refusals []AliasRefusal
+	seenPairs := map[[2]int64]bool{}
+	for _, domain := range domains {
+		m, r, err := planDomainAlias(s, domain, to)
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, pair := range m {
+			key := [2]int64{pair.keep, pair.drop}
+			if !seenPairs[key] {
+				merges = append(merges, pair)
+				seenPairs[key] = true
+			}
+		}
+		refusals = append(refusals, r...)
+	}
+	return merges, refusals, nil
 }
 
 func aliasDomains(from, to string) (string, string, error) {
@@ -238,7 +314,13 @@ func namesContradict(a, b string) string {
 
 // DomainAliases lists the configured aliases.
 func DomainAliases(s *Store) (map[string]string, error) {
-	rows, err := s.db.Query(`select from_domain, to_domain from domain_aliases order by from_domain`)
+	return domainAliases(s.db)
+}
+
+func domainAliases(q interface {
+	Query(string, ...any) (*sql.Rows, error)
+}) (map[string]string, error) {
+	rows, err := q.Query(`select from_domain, to_domain from domain_aliases order by from_domain`)
 	if err != nil {
 		return nil, err
 	}
