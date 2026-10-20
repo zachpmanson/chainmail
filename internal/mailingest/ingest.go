@@ -331,11 +331,14 @@ func PutForAccount(store *corpus.Store, accountID string, msg Message) (corpus.P
 	}
 	ts, tz, off := parseDate(msg.Date)
 
-	// A message with no Message-ID is unusual but legal; fall back to the Gmail
-	// id so the entry still has a stable natural key.
+	// Gmail IDs are account-local. Keep the original fallback for legacy imports,
+	// but scope new accounts' keys to avoid merging unrelated messages.
 	ext := msg.MessageID
 	if ext == "" {
 		ext = "gmail:" + msg.ID
+		if accountID != "legacy" {
+			ext = "gmail:" + url.QueryEscape(accountID) + ":" + msg.ID
+		}
 	}
 
 	person, err := resolveSender(store, msg.From)
