@@ -171,7 +171,7 @@ func hostCanvas(body *html.Node) string {
 	if len(decls) == 0 {
 		return ""
 	}
-	return "<style>:host{" + strings.Join(decls, "; ") + "}</style>"
+	return "<style>:host{" + styleText(strings.Join(decls, "; ")) + "}</style>"
 }
 
 // isColourValue accepts a value that can only be a colour: a hex literal or a
@@ -590,6 +590,10 @@ func rewriteRules(css string, i int, out *strings.Builder) int {
 		depth := 0
 		for i < end {
 			c := css[i]
+			if c == '\\' {
+				i = min(i+2, end)
+				continue
+			}
 			if c == '"' || c == '\'' {
 				i = cssStringEnd(css, i, end)
 				continue
@@ -657,6 +661,10 @@ func copyBlock(css string, i int, out *strings.Builder) int {
 	start := i
 	for i < end {
 		c := css[i]
+		if c == '\\' {
+			i = min(i+2, end)
+			continue
+		}
 		if c == '"' || c == '\'' {
 			i = cssStringEnd(css, i, end)
 			continue
@@ -762,6 +770,9 @@ func splitSelectors(sel string) []string {
 	start := 0
 	for i := 0; i < len(sel); {
 		switch sel[i] {
+		case '\\':
+			i = min(i+2, len(sel))
+			continue
 		case '"', '\'':
 			i = cssStringEnd(sel, i, len(sel))
 			continue
@@ -817,7 +828,14 @@ func rewriteSelector(sel string) string {
 			atType = false
 		case c == '(':
 			j := cssParenEnd(sel, i)
-			b.WriteString("(" + rewriteSelectorList(sel[i+1:j-1]) + ")")
+			end := j
+			if j > i && sel[j-1] == ')' {
+				end--
+			}
+			b.WriteString("(" + rewriteSelectorList(sel[i+1:end]))
+			if end < j {
+				b.WriteByte(')')
+			}
 			i = j
 			atType = false
 		case c == '.' || c == '#':
@@ -885,6 +903,10 @@ func collapseHostChain(sel string) string {
 // i, respecting a quoted value.
 func cssBracketEnd(sel string, i int) int {
 	for j := i + 1; j < len(sel); {
+		if sel[j] == '\\' {
+			j = min(j+2, len(sel))
+			continue
+		}
 		if sel[j] == '"' || sel[j] == '\'' {
 			j = cssStringEnd(sel, j, len(sel))
 			continue
@@ -903,6 +925,9 @@ func cssParenEnd(sel string, i int) int {
 	depth := 0
 	for j := i; j < len(sel); {
 		switch sel[j] {
+		case '\\':
+			j = min(j+2, len(sel))
+			continue
 		case '"', '\'':
 			j = cssStringEnd(sel, j, len(sel))
 			continue
@@ -926,7 +951,7 @@ func cssIdentLen(s string) int {
 	for i < len(s) {
 		c := s[i]
 		if c == '\\' {
-			i += 2
+			i = min(i+2, len(s))
 			continue
 		}
 		if isCSSIdentChar(c) {
@@ -946,6 +971,9 @@ func isCSSIdentChar(c byte) bool {
 	return isCSSIdentStart(c) || c >= '0' && c <= '9'
 }
 
+// CSS is raw HTML text: decoded attribute values must not introduce a closing style tag.
+func styleText(css string) string { return strings.ReplaceAll(css, "<", `\3c `) }
+
 // writeNode serialises one node, and it exists because html.Render cannot be
 // used here: it escapes every text node, and a <style> element's text is CSS, not
 // HTML. A ">" combinator would come back as "&gt;" and the stylesheet the whole
@@ -958,7 +986,7 @@ func writeNode(out *strings.Builder, n *html.Node) {
 	switch n.Type {
 	case html.TextNode:
 		if n.Parent != nil && n.Parent.DataAtom == atom.Style {
-			out.WriteString(n.Data)
+			out.WriteString(styleText(n.Data))
 			return
 		}
 		out.WriteString(stdhtml.EscapeString(n.Data))

@@ -2,85 +2,72 @@ import { useEffect, useRef, useState } from "react";
 import { usePrefs } from "../prefs/usePrefs";
 import { defaultsToOriginal } from "./originalDefault";
 
-/** `asking` keeps the transcript's body on screen; `none` is the corpus saying this message has no original part. */
+/** `asking` keeps the transcript's body on screen; `none` means no original is available. */
 export type Original =
   { at: "read" } | { at: "asking" } | { at: "sent"; html: string } | { at: "none"; why: string };
 
-/**
- * The sender's own HTML, swapped in for the transcript's rendering. The switch is per
- * sender: stored on the person where there is a corpus, else in the browser's prefs (lib/prefs/usePrefs).
- */
+type Source = { extId: string; load: (extId: string) => Promise<string> };
+const read: Original = { at: "read" };
+
+/** The display choice is per sender; fetched content belongs to one message and loader. */
 export function useOriginal(
-  original: { extId: string; load: (extId: string) => Promise<string> } | undefined,
+  original: Source | undefined,
   fromEmail: string | undefined,
   person: { id: number; preferOriginal: boolean | undefined } | undefined,
   onPreferOriginal: ((next: boolean) => void) | undefined,
 ) {
-  // A recovered entry has no From header, so the local switch falls back to the message id.
   const key = fromEmail || original?.extId || "";
   const extId = original?.extId;
   const load = original?.load;
   const stored = person !== undefined && onPreferOriginal !== undefined;
-
-  // Locally, one sender's bubbles share the switch, so each follows it rather than owning it.
   const styled = usePrefs((s) => key !== "" && s.styledSenders.includes(key));
   const plain = usePrefs((s) => key !== "" && s.plainSenders.includes(key));
   const setStyled = usePrefs((s) => s.setStyled);
   const explicit = stored ? person.preferOriginal !== undefined : styled || plain;
-  const [automatic, setAutomatic] = useState(false);
-  const on = explicit ? (stored ? person.preferOriginal === true : styled) : automatic;
-  const [state, setState] = useState<Original>({ at: "read" });
-  const arrived = useRef<string | null>(null);
+  const [automatic, setAutomatic] = useState<(Source & { on: boolean }) | null>(null);
+  const on = explicit
+    ? stored
+      ? person.preferOriginal === true
+      : styled
+    : Boolean(automatic && automatic.extId === extId && automatic.load === load && automatic.on);
+  const [result, setResult] = useState<(Source & { state: Original }) | null>(null);
+  const arrived = useRef<(Source & { html: string }) | null>(null);
 
   useEffect(() => {
-    if (!extId || !load) return;
-    if (!explicit) {
-      let live = true;
-      load(extId)
-        .then((html) => {
-          arrived.current = html;
-          if (live) setAutomatic(defaultsToOriginal(html));
-        })
-        .catch(() => {
-          if (live) setAutomatic(false);
-        });
-      return () => {
-        live = false;
-      };
-    }
-    if (!on) {
-      // Same object when unchanged, so switching off doesn't re-render every bubble already off.
-      setState((s) => (s.at === "read" ? s : { at: "read" }));
-      return;
-    }
-    if (arrived.current !== null) {
-      setState({ at: "sent", html: arrived.current });
-      return;
-    }
-    // A fetch landing after the switch went off must not swap the body back.
+    if (!extId || !load || (explicit && !on)) return;
     let live = true;
-    setState({ at: "asking" });
-    load(extId).then(
-      (html) => {
-        arrived.current = html;
-        if (live) setState({ at: "sent", html });
-      },
-      (err: unknown) => {
-        if (live) {
-          setState({
+    const show = (html: string) => {
+      if (!live) return;
+      arrived.current = { extId, load, html };
+      const selected = explicit ? on : defaultsToOriginal(html);
+      setAutomatic({ extId, load, on: selected });
+      setResult({ extId, load, state: selected ? { at: "sent", html } : read });
+    };
+    if (arrived.current?.extId === extId && arrived.current.load === load) {
+      show(arrived.current.html);
+    } else {
+      setResult({ extId, load, state: { at: "asking" } });
+      load(extId).then(show, (err: unknown) => {
+        if (!live) return;
+        setAutomatic({ extId, load, on: false });
+        setResult({
+          extId,
+          load,
+          state: {
             at: "none",
             why:
               err instanceof Error && err.message ? err.message : "the original is not available",
-          });
-        }
-      },
-    );
+          },
+        });
+      });
+    }
     return () => {
       live = false;
     };
   }, [on, explicit, extId, load]);
 
   const ask = () => (stored ? onPreferOriginal(!on) : setStyled(key, !on));
-
+  const state =
+    on && result && result.extId === extId && result.load === load ? result.state : read;
   return { on, state, ask };
 }

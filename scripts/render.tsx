@@ -11,6 +11,7 @@ import { compile } from "@tailwindcss/node";
 import Timeline from "../src/components/specs/Timeline";
 import { normalise } from "../src/lib/timeline/normalise";
 import { diff, extractSpec, type Mark } from "../src/lib/timeline/diff";
+import { escapeHtmlText } from "../src/lib/ui/html";
 
 const args = process.argv.slice(2);
 const flag = (name: string) => {
@@ -80,7 +81,7 @@ const behaviourClasses = readFileSync(resolve(root, "src/client/behaviour.ts"), 
 );
 const renderedCss = `${css}\n${tailwind.build([...utilityClasses, ...behaviourClasses])}`;
 const theme = spec.theme ?? "light";
-const title = (spec.title ?? "Timeline").replace(/^#+/, "");
+const title = escapeHtmlText((spec.title ?? "Timeline").replace(/^#+/, ""));
 
 // Embedded so a later --since pass reloads exact input instead of scraping HTML.
 const embedded = JSON.stringify(spec).replace(/<\//g, "<\\/");
