@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"mime"
 	"net/http"
 	"net/url"
 	"strings"
@@ -44,22 +45,15 @@ func (s *server) attachment(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusInternalServerError, err)
 		return
 	}
-	// The attachment row's MIME and name, not the blob's, because those are what
-	// the chip was labelled and judged with. Falls back to what the blob recorded
-	// when it was fetched, for bytes whose rows are gone.
-	name, mime, _ := s.store.BlobName(sha)
-	if mime == "" {
-		mime = blob.Mime
-	}
+	name, rowMIME, _ := s.store.BlobName(sha)
+	contentType := attachmentMIME(blob, rowMIME)
 	if name == "" {
 		name = sha
 	}
-	if mime == "" {
-		mime = "application/octet-stream"
-	}
 	h := w.Header()
-	h.Set("Content-Type", mime)
-	h.Set("Content-Disposition", contentDisposition(spec.Disposition(mime, name), name))
+	h.Set("Content-Type", contentType)
+	h.Set("Content-Disposition", contentDisposition(spec.Disposition(contentType, name), name))
+	h.Set("Content-Security-Policy", "sandbox; default-src 'none'")
 	// The stated type is the only type a browser may use, so a part that arrived
 	// mislabelled cannot become HTML in this origin on the strength of its bytes.
 	h.Set("X-Content-Type-Options", "nosniff")
@@ -72,6 +66,35 @@ func (s *server) attachment(w http.ResponseWriter, r *http.Request) {
 	// nothing), and the conditional requests the headers above then promise.
 	// Content-Type is already set, so its sniffing never runs.
 	http.ServeContent(w, r, name, blob.FetchedAt, bytes.NewReader(blob.Bytes))
+}
+
+// A digest has one response, not one per chip. Conflicting MIME claims must not
+// change a fetched PDF into framed markup (or turn arbitrary bytes into a PDF).
+func attachmentMIME(blob corpus.Blob, rowMIME string) string {
+	normalize := func(value string) string {
+		t, _, err := mime.ParseMediaType(value)
+		if err != nil {
+			return ""
+		}
+		return t
+	}
+	stored, row := normalize(blob.Mime), normalize(rowMIME)
+	if stored != "" && row != "" && stored != row {
+		return "application/octet-stream"
+	}
+	t := stored
+	if t == "" {
+		t = row
+	}
+	if t == "" || (t == "application/pdf" && !bytes.HasPrefix(blob.Bytes, []byte("%PDF-"))) {
+		return "application/octet-stream"
+	}
+	value := blob.Mime
+	if stored == "" {
+		value = rowMIME
+	}
+	_, params, _ := mime.ParseMediaType(value)
+	return mime.FormatMediaType(t, params)
 }
 
 // isDigest reports whether s has the shape of a blob digest: 64 hex characters,

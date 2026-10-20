@@ -16,7 +16,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
+	"io"
 	"strings"
 	"sync"
 	"time"
@@ -185,6 +185,19 @@ func Pull(ctx context.Context, opts Options, sc corpus.MediaScope) (Result, erro
 func pullOne(opts Options, w corpus.MediaWant, max int64) Item {
 	it := Item{ExtID: w.ExtID, Name: w.Name, Source: w.Source}
 
+	// Part references are entry-wide until attachments have per-account storage.
+	// Refuse rather than pair the last writer's part with another mailbox copy.
+	if w.Source == corpus.SourceMail {
+		if w.MailCopyCount > 1 {
+			it.Err = errors.New("mail attachment has multiple Gmail copies: pulling is disabled until per-account attachment storage is available; no mailbox was fetched or skip recorded")
+			return it
+		}
+		if w.GmailID == "" {
+			it.Err = fmt.Errorf("no Gmail message for account %q: select the account containing this message or re-ingest it; no skip recorded", w.AccountID)
+			return it
+		}
+	}
+
 	// Nothing to ask for. A quoted message recovered from someone's forward has
 	// no part of its own, and the honest record of that is a reason, not a retry
 	// on every pass.
@@ -202,15 +215,16 @@ func pullOne(opts Options, w corpus.MediaWant, max int64) Item {
 	var data []byte
 	switch w.Source {
 	case corpus.SourceSlack:
-		path, ok := uploads.Locate(opts.Uploads, w.SourceRef, w.Name)
-		if !ok {
+		file, err := uploads.Open(opts.Uploads, w.SourceRef, w.Name)
+		if err != nil {
 			return skip(opts, w, it, corpus.MediaSkipNoBytes)
 		}
 		// Measured on the file rather than trusted from the metadata: Slack states
 		// a size, and the file on disk is the authority on whether it is there at
 		// all. A dry run stops here — reading the bytes to find out what a decision
 		// already says would make inspecting a pull as expensive as running one.
-		fi, err := os.Stat(path)
+		defer file.Close()
+		fi, err := file.Stat()
 		if err != nil {
 			return skip(opts, w, it, corpus.MediaSkipNoBytes)
 		}
@@ -221,15 +235,16 @@ func pullOne(opts Options, w corpus.MediaWant, max int64) Item {
 		if opts.DryRun {
 			return it
 		}
-		b, err := os.ReadFile(path)
+		var reader io.Reader = file
+		if max > 0 && max < 1<<63-1 {
+			reader = io.LimitReader(file, max+1)
+		}
+		b, err := io.ReadAll(reader)
 		if err != nil {
 			return skip(opts, w, it, corpus.MediaSkipNoBytes)
 		}
 		data = b
 	case corpus.SourceMail:
-		if w.GmailID == "" {
-			return skip(opts, w, it, corpus.MediaSkipNoMessage)
-		}
 		if opts.Fetcher == nil {
 			// Only reachable on a dry run: a real pull always carries a transport,
 			// deferred or not. Reporting what the fetch would cost is the whole of
@@ -299,9 +314,8 @@ func skip(opts Options, w corpus.MediaWant, it Item, reason string) Item {
 
 // failed maps a transport error onto the reason it deserves — and records it,
 // because the classes that earn a reason are the ones that must stop the next
-// pass asking. Only a transient failure is left as a failure, and deliberately
-// unrecorded: writing "no bytes" for a mailbox that timed out would make a bad
-// minute into a permanent gap in the corpus.
+// pass asking. Missing mail parts are account-local too: until skip state is
+// per-account, they must not permanently suppress another mailbox's attachment.
 func failed(opts Options, w corpus.MediaWant, it Item, err error) Item {
 	switch {
 	case errors.Is(err, ErrTooLarge):
@@ -309,7 +323,8 @@ func failed(opts Options, w corpus.MediaWant, it Item, err error) Item {
 	case errors.Is(err, ErrUnavailable):
 		return skip(opts, w, it, corpus.MediaSkipUnavailable)
 	case errors.Is(err, ErrNoPart):
-		return skip(opts, w, it, corpus.MediaSkipNoPart)
+		it.Err = fmt.Errorf("mail part reference is stale for account %q: re-ingest this account before retrying; no skip recorded: %w", w.AccountID, err)
+		return it
 	}
 	it.Err = err
 	return it

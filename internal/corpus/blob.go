@@ -36,11 +36,12 @@ var ErrNoBlob = errors.New("no such blob")
 //     rather than truncating, and so do we: half a PNG is not a smaller PNG.
 //   - MediaSkipUnavailable — the part exists in the message and carries no
 //     content. Terminal for that part; the message around it is fine.
-//   - MediaSkipNoPart — the message no longer has that part id. The metadata is
-//     stale and re-reading the message is the fix, not a retry.
+//   - MediaSkipNoPart — legacy reason for a missing part. Current pulls leave
+//     this account-local failure unrecorded until skip state is per-account.
 //   - MediaSkipNoSourceRef — an attachment recovered from quoted text, or one the
 //     source never gave a handle for: there is nothing to ask for.
-//   - MediaSkipNoMessage — no Gmail message id, so not even a fetchable host.
+//   - MediaSkipNoMessage — legacy reason for a missing Gmail message. Current
+//     pulls report an account-selection error without recording a global skip.
 //   - MediaSkipNoBytes — the archive the bytes were expected in does not have
 //     them (a Slack upload the downloader skipped, or a pruned archive).
 const (
@@ -263,6 +264,10 @@ type MediaWant struct {
 	// GmailID is the message the part belongs to — mail only, and empty when the
 	// entry has no mail_detail row (a quoted message, a Slack post).
 	GmailID string
+	// MailCopyCount detects ambiguous part references: attachments are still
+	// entry-wide, not keyed by the mailbox copy that supplied them.
+	MailCopyCount int
+	AccountID     string
 	// Container is the mail thread id or Slack channel id, so a pull can report
 	// what it is working through.
 	Container string
@@ -273,7 +278,8 @@ type MediaWant struct {
 // deliberate pull exists to avoid, so callers set at least one field.
 type MediaScope struct {
 	// AccountID selects the mailbox copy for mail. Empty preserves the legacy
-	// account for compatibility with existing single-account callers.
+	// account for compatibility with existing single-account callers. Pulls must
+	// refuse multiple copies until attachment refs and skips are per-account.
 	AccountID string
 	// Entry is one entry's ext_id: the message whose chips the reader clicked.
 	Entry string
@@ -294,7 +300,8 @@ type MediaScope struct {
 func (s *Store) PendingMedia(sc MediaScope) ([]MediaWant, error) {
 	q := `
 		select e.id, e.ext_id, e.source, a.name, coalesce(a.mime,''), coalesce(a.size,0),
-		       coalesce(a.source_ref,''), coalesce(gc.gmail_id,''), coalesce(e.container,'')
+		       coalesce(a.source_ref,''), coalesce(gc.gmail_id,''), coalesce(e.container,''),
+		       (select count(*) from gmail_copies copies where copies.entry_id=e.id)
 		from attachments a
 		join entries e on e.id = a.entry_id
 		left join mail_detail m on m.entry_id = e.id
@@ -334,9 +341,10 @@ func (s *Store) PendingMedia(sc MediaScope) ([]MediaWant, error) {
 	for rows.Next() {
 		var w MediaWant
 		if err := rows.Scan(&w.EntryID, &w.ExtID, &w.Source, &w.Name, &w.Mime, &w.Size,
-			&w.SourceRef, &w.GmailID, &w.Container); err != nil {
+			&w.SourceRef, &w.GmailID, &w.Container, &w.MailCopyCount); err != nil {
 			return nil, err
 		}
+		w.AccountID = accountID
 		out = append(out, w)
 	}
 	return out, rows.Err()

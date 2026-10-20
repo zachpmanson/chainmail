@@ -99,7 +99,7 @@ function sniff(body: string): string | null {
     if (!rows.length) continue;
     const split = rows.filter((r) => r.length >= 2).length / rows.length;
     if (split < SPLIT_ENOUGH) continue;
-    const cols = Math.max(...rows.map((r) => r.length));
+    const cols = rows.reduce((width, row) => Math.max(width, row.length), 0);
     if (!best || split > best.score || (split === best.score && cols > best.cols))
       best = { delim, cols, score: split };
   }
@@ -115,7 +115,7 @@ export function readTable(body: string, name: string, type: string): Table | nul
   const rows = parseDelimited(body, delim).filter((r) => r.some((f) => f.trim() !== ""));
   if (rows.length < 2) return null; // a header and nothing under it is a line of text
 
-  const colCount = Math.max(...rows.map((r) => r.length));
+  const colCount = rows.reduce((width, row) => Math.max(width, row.length), 0);
   if (colCount < 2) return null; // one column is a list, and a list is text
 
   const shown = Math.min(colCount, MAX_COLS);

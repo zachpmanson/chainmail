@@ -1,3 +1,4 @@
+import { isPDFPreview } from "../lib/message/preview";
 import { readTable, type Table } from "../lib/message/tables";
 import { withTransition } from "../lib/thread/viewTransition";
 
@@ -476,8 +477,8 @@ function attachPopover(doc: Document, on: On): () => void {
       '<pre class="poptext m-0 max-h-[calc(100vh-6rem)] w-[min(72rem,92vw)] overflow-auto whitespace-pre rounded-md border border-line bg-card p-4 text-left font-mono text-[.78rem] leading-[1.5] text-fg tab-4" hidden></pre>' +
       // Separate from the `pre` so the table doesn't inherit `white-space:pre`.
       '<div class="popgrid max-h-[calc(100vh-6rem)] w-[min(72rem,92vw)] overflow-auto rounded-md border border-line bg-card text-left" hidden></div>' +
-      // Blob type comes from the served bytes, never the sender's claim; that makes framing safe.
-      '<iframe class="popframe h-[calc(100vh-6rem)] w-[min(72rem,92vw)] rounded-md border border-line bg-card" title="" hidden></iframe>' +
+      // A digest can have conflicting sender MIME labels; keep the frame isolated too.
+      '<iframe class="popframe h-[calc(100vh-6rem)] w-[min(72rem,92vw)] rounded-md border border-line bg-card" sandbox="" referrerpolicy="no-referrer" title="" hidden></iframe>' +
       '<div class="flex items-center gap-3">' +
       '<span class="truncate font-mono text-[.74rem] font-semibold text-muted" id="popcap"></span><span data-popnote class="whitespace-nowrap text-[.72rem] text-muted"></span>' +
       '<a class="popget cursor-pointer rounded-md border border-line bg-card px-2 py-0.5 font-[inherit] text-[.72rem] text-muted no-underline hover:border-accent hover:text-fg focus-visible:border-accent" download hidden>save</a>' +
@@ -610,9 +611,12 @@ function attachPopover(doc: Document, on: On): () => void {
         text.hidden = false;
         return;
       }
+      if (view !== "pdf") throw new Error("unsupported preview");
       const blob = await res.blob();
+      const prefix = new Uint8Array(await blob.slice(0, 5).arrayBuffer());
       if (mine !== opening) return;
-      blobURL = URL.createObjectURL(blob);
+      if (!isPDFPreview(blob.type, prefix)) throw new Error("not a PDF");
+      blobURL = URL.createObjectURL(new Blob([blob], { type: "application/pdf" }));
       frame.src = blobURL;
       frame.hidden = false;
     } catch {

@@ -62,3 +62,36 @@ func TestLocateWithoutARootOrAReference(t *testing.T) {
 		t.Error("located a file that is not there")
 	}
 }
+
+func TestLocateRejectsEscapesAndNonFiles(t *testing.T) {
+	root := t.TempDir()
+	uploads := filepath.Join(root, "uploads")
+	if err := os.Mkdir(uploads, 0700); err != nil {
+		t.Fatal(err)
+	}
+	outside := write(t, root, "private", "marker.txt")
+	write(t, uploads, "F001", "inside.txt")
+	if err := os.Symlink(filepath.Dir(outside), filepath.Join(uploads, "linked")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(uploads, "F001", "linked.txt")); err != nil {
+		t.Fatal(err)
+	}
+	for _, ref := range []string{"../private", filepath.Dir(outside), ".", "F001/../../private", `..\private`, "linked"} {
+		if path, ok := Locate(uploads, ref, "marker.txt"); ok {
+			t.Errorf("escaped with %q: %q", ref, path)
+		}
+	}
+	if path, ok := Locate(uploads, "F001", "linked.txt"); ok && path != filepath.Join(uploads, "F001", "inside.txt") {
+		t.Errorf("followed external file link: %q", path)
+	}
+	if err := os.Mkdir(filepath.Join(uploads, "empty"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(uploads, "empty", "marker.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if path, ok := Locate(uploads, "empty", "marker.txt"); ok {
+		t.Errorf("followed sole external link: %q", path)
+	}
+}

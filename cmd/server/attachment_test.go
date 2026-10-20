@@ -1,10 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/zachpmanson/chainmail/internal/corpus"
 )
@@ -184,4 +186,59 @@ func storeAs(t *testing.T, h *harness, name, mime string) string {
 		t.Fatalf("LinkBlob %s: %d rows, %v", name, n, err)
 	}
 	return sha
+}
+
+func TestAttachmentConflictingDigestTypesAreInert(t *testing.T) {
+	for _, types := range [][2]string{{"application/pdf", "text/html"}, {"text/html", "application/pdf"}} {
+		t.Run(types[0], func(t *testing.T) {
+			h := testServer(t)
+			data := []byte("inert shared digest marker")
+			sha := corpus.BlobSHA(data)
+			for i, typ := range types {
+				ext := fmt.Sprintf("mail:<digest-%d@synthetic.example>", i)
+				if _, err := h.store.Put(corpus.Entry{Source: "mail", ExtID: ext, BodyText: "fixture", TS: time.Unix(int64(1700000000+i), 0)}, nil, []corpus.Attachment{{Name: "fixture.pdf", Mime: typ, SourceRef: "1"}}); err != nil {
+					t.Fatal(err)
+				}
+				if err := h.store.PutBlob(corpus.Blob{Bytes: data, Mime: typ, Source: "mail"}); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := h.store.LinkBlob(ext, "1", sha); err != nil {
+					t.Fatal(err)
+				}
+			}
+			res := h.do(t, "GET", "/v1/attachments/"+sha, nil)
+			if res.status != http.StatusOK || res.header.Get("Content-Type") != "application/octet-stream" {
+				t.Fatalf("status=%d type=%q", res.status, res.header.Get("Content-Type"))
+			}
+			if !strings.HasPrefix(res.header.Get("Content-Disposition"), "attachment;") {
+				t.Fatalf("disposition=%q", res.header.Get("Content-Disposition"))
+			}
+			if res.header.Get("Content-Security-Policy") != "sandbox; default-src 'none'" {
+				t.Fatalf("missing attachment sandbox: %v", res.header)
+			}
+			if string(res.body) != string(data) {
+				t.Fatal("bytes changed")
+			}
+		})
+	}
+}
+
+func TestAttachmentMIMEKeepsValidatedCharset(t *testing.T) {
+	got := attachmentMIME(corpus.Blob{Bytes: []byte("fixture"), Mime: "text/plain; charset=iso-8859-1"}, "text/plain")
+	if got != "text/plain; charset=iso-8859-1" {
+		t.Fatalf("type=%q, lost charset", got)
+	}
+}
+
+func TestAttachmentPDFRequiresSignature(t *testing.T) {
+	for _, tc := range []struct{ data, want string }{
+		{"inert marker", "application/octet-stream"},
+		{"%PDF", "application/octet-stream"},
+		{"%PDF-1.7\nfixture", "application/pdf"},
+	} {
+		got := attachmentMIME(corpus.Blob{Bytes: []byte(tc.data), Mime: "application/pdf"}, "application/pdf")
+		if got != tc.want {
+			t.Errorf("type=%q want %q", got, tc.want)
+		}
+	}
 }

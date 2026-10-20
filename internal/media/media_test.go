@@ -237,9 +237,8 @@ func TestPullMapsTransportErrorsOntoRecordedReasons(t *testing.T) {
 	}{
 		{"too large", fmt.Errorf("part-1: %w", ErrTooLarge), corpus.MediaSkipTooLarge, false},
 		{"no content", fmt.Errorf("part-1: %w", ErrUnavailable), corpus.MediaSkipUnavailable, false},
-		// A part that moved is stale metadata, so it is recorded; the message has
-		// to be re-read, and re-asking would never work.
-		{"no such part", fmt.Errorf("part-1: %w", ErrNoPart), corpus.MediaSkipNoPart, false},
+		// A missing part is account-local; global attachment state cannot record it.
+		{"no such part", fmt.Errorf("part-1: %w", ErrNoPart), "", true},
 		// A timeout is not recorded: writing a reason for it would turn a bad
 		// minute into a permanent gap in the corpus.
 		{"network", errors.New("dial tcp: connection refused"), "", true},
@@ -260,6 +259,9 @@ func TestPullMapsTransportErrorsOntoRecordedReasons(t *testing.T) {
 			if c.fails {
 				if it.Err == nil || r.Failed != 1 {
 					t.Fatalf("want a retryable failure, got %+v", it)
+				}
+				if errors.Is(c.err, ErrNoPart) && (!errors.Is(it.Err, ErrNoPart) || !strings.Contains(it.Err.Error(), "re-ingest")) {
+					t.Fatalf("missing actionable stale-part error: %v", it.Err)
 				}
 			} else if it.Reason != c.reason {
 				t.Fatalf("reason: got %q, want %q", it.Reason, c.reason)
@@ -384,5 +386,137 @@ func TestPullStopsWhenTheContextIsCancelled(t *testing.T) {
 	cancel()
 	if _, err := Pull(ctx, opts(f), corpus.MediaScope{}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled pull: %v", err)
+	}
+}
+
+func TestPullDoesNotImportOutsideUploadRoot(t *testing.T) {
+	for _, link := range []bool{false, true} {
+		t.Run(fmt.Sprint("symlink=", link), func(t *testing.T) {
+			f := newFixture(t)
+			private := t.TempDir()
+			if err := os.WriteFile(filepath.Join(private, "marker.txt"), []byte("outside root marker"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			ref, err := filepath.Rel(f.uploads, private)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if link {
+				ref = "F001"
+				if err := os.Symlink(private, filepath.Join(f.uploads, ref)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			ext := "slack:C:boundary"
+			if _, err := f.store.PutSlack(corpus.Entry{Source: corpus.SourceSlack, ExtID: ext, TS: time.Now()}, corpus.Slack{}, []corpus.Attachment{{Name: "marker.txt", SourceRef: ref}}); err != nil {
+				t.Fatal(err)
+			}
+			r, err := Pull(context.Background(), opts(f), corpus.MediaScope{Entry: ext})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if r.Pulled != 0 || r.Skipped != 1 || r.Items[0].Reason != corpus.MediaSkipNoBytes {
+				t.Fatalf("result: %+v", r)
+			}
+			if _, err := f.store.Blob(corpus.BlobSHA([]byte("outside root marker"))); !errors.Is(err, corpus.ErrNoBlob) {
+				t.Fatalf("outside bytes filed: %v", err)
+			}
+		})
+	}
+}
+
+func TestPullRefusesAmbiguousOrUnmatchedMailboxCopies(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		accounts     []string
+		selected     string
+		dry, allowed bool
+	}{
+		{"two copies account A", []string{"A", "B"}, "A", false, false},
+		{"two copies account B", []string{"A", "B"}, "B", false, false},
+		{"two copies default account", []string{"A", "B"}, "", false, false},
+		{"two copies dry run", []string{"A", "B"}, "A", true, false},
+		{"unmatched account", []string{"B"}, "A", false, false},
+		{"unmatched default", []string{"B"}, "", false, false},
+		{"matched sole copy", []string{"B"}, "B", false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFixture(t)
+			ext := "mail:<shared@synthetic.example>"
+			for i, account := range tc.accounts {
+				if err := f.store.PutGmailAccount(corpus.GmailAccount{ID: account, DisplayName: account}); err != nil {
+					t.Fatal(err)
+				}
+				_, err := f.store.PutForAccount(account, corpus.Entry{Source: corpus.SourceMail, ExtID: ext, BodyText: "same message", TS: time.Now()}, &corpus.Mail{GmailID: "msg" + account}, []corpus.Attachment{{Name: "marker.txt", Mime: "text/plain", SourceRef: fmt.Sprint(i + 1)}})
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			ff := &fakeFetcher{data: map[string][]byte{"1": []byte("inside marker"), "2": []byte("inside marker")}}
+			o := opts(f)
+			o.Fetcher = ff
+			o.DryRun = tc.dry
+			r, err := Pull(context.Background(), o, corpus.MediaScope{Entry: ext, AccountID: tc.selected})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.allowed {
+				if ff.calls != 1 || r.Pulled != 1 || r.Failed != 0 {
+					t.Fatalf("sole matching copy refused: %+v calls=%d", r, ff.calls)
+				}
+				return
+			}
+			if ff.calls != 0 || r.Failed != 1 || r.Pulled != 0 || r.Skipped != 0 || len(r.Items) != 1 || r.Items[0].Err == nil {
+				t.Fatalf("result=%+v calls=%d", r, ff.calls)
+			}
+			want := "select the account"
+			if len(tc.accounts) > 1 {
+				want = "per-account attachment storage"
+			}
+			if !strings.Contains(r.Items[0].Err.Error(), want) {
+				t.Fatalf("error=%v, want %q", r.Items[0].Err, want)
+			}
+			for _, account := range tc.accounts {
+				pending, err := f.store.PendingMedia(corpus.MediaScope{Entry: ext, AccountID: account})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(pending) != 1 {
+					t.Fatalf("%s pending after refusal=%+v", account, pending)
+				}
+			}
+			tally, err := f.store.MediaStats()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tally.Blobs != 0 || tally.PulledRows != 0 || tally.SkippedRows != 0 {
+				t.Fatalf("refusal wrote media state: %+v", tally)
+			}
+		})
+	}
+}
+
+func TestPullMissingMailMessageDoesNotRecordGlobalSkip(t *testing.T) {
+	f := newFixture(t)
+	ext := "mail:<no-copy@synthetic.example>"
+	if _, err := f.store.Put(corpus.Entry{Source: corpus.SourceMail, ExtID: ext, BodyText: "fixture", TS: time.Now()}, nil, []corpus.Attachment{{Name: "marker.txt", SourceRef: "1"}}); err != nil {
+		t.Fatal(err)
+	}
+	ff := &fakeFetcher{}
+	o := opts(f)
+	o.Fetcher = ff
+	r, err := Pull(context.Background(), o, corpus.MediaScope{Entry: ext, AccountID: "A"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Failed != 1 || r.Skipped != 0 || ff.calls != 0 || !strings.Contains(r.Items[0].Err.Error(), "re-ingest") {
+		t.Fatalf("result=%+v calls=%d", r, ff.calls)
+	}
+	pending, err := f.store.PendingMedia(corpus.MediaScope{Entry: ext})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 1 {
+		t.Fatalf("no-message globally suppressed attachment: %+v", pending)
 	}
 }

@@ -1,51 +1,74 @@
 // Package uploads finds an archived attachment's bytes on disk.
 //
-// Slack's downloader writes every upload under a directory named by the file id,
-// and two callers need to walk that: the renderer, to thumbnail a picture it does
-// not hold in the corpus, and the media pull, to import the bytes so the renderer
-// stops needing a directory at all. The walk lives here rather than in either of
-// them, because two implementations of "which file is this attachment" drift in
-// exactly the case that matters — a name the archive sanitised on the way in.
+// Slack's downloader writes uploads under directories named by file id. The
+// archive may sanitise filenames, so a lone file is used when its name differs.
 package uploads
 
 import (
 	"os"
 	"path/filepath"
+	"strings"
 )
 
-// Locate returns the archived file for one attachment, given the upload root and
-// the source's own handle on it.
-//
-// slackdump keys a directory by file id and puts the upload inside it under its
-// own name, but the name in the corpus and the name on disk can disagree — the
-// archive sanitises it — so the directory is authoritative and a lone file inside
-// it is taken as the one. A second file leaves the answer ambiguous, and a wrong
-// guess would attach the wrong picture to a message, so it returns false.
-func Locate(root, sourceRef, name string) (string, bool) {
-	if root == "" || sourceRef == "" {
-		return "", false
+// Open opens a regular archived file without allowing references or symlinks to
+// escape the configured upload root. The caller owns the returned file.
+func Open(root, sourceRef, name string) (*os.File, error) {
+	if root == "" || sourceRef == "" || sourceRef == "." || sourceRef == ".." || strings.ContainsAny(sourceRef, `/\\`) || filepath.IsAbs(sourceRef) {
+		return nil, os.ErrNotExist
 	}
-	dir := filepath.Join(root, sourceRef)
-	ents, err := os.ReadDir(dir)
+	r, err := os.OpenRoot(root)
 	if err != nil {
-		return "", false
+		return nil, err
+	}
+	defer r.Close()
+	dir, err := r.Open(sourceRef)
+	if err != nil {
+		return nil, err
+	}
+	ents, err := dir.ReadDir(-1)
+	dir.Close()
+	if err != nil {
+		return nil, err
 	}
 	var files []string
 	for _, e := range ents {
-		if !e.IsDir() {
+		info, err := r.Stat(filepath.Join(sourceRef, e.Name()))
+		if err == nil && info.Mode().IsRegular() {
 			files = append(files, e.Name())
 		}
 	}
-	if len(files) == 0 {
-		return "", false
-	}
+	chosen := ""
 	for _, f := range files {
 		if f == name {
-			return filepath.Join(dir, f), true
+			chosen = f
+			break
 		}
 	}
-	if len(files) == 1 {
-		return filepath.Join(dir, files[0]), true
+	if chosen == "" && len(files) == 1 {
+		chosen = files[0]
 	}
-	return "", false
+	if chosen == "" {
+		return nil, os.ErrNotExist
+	}
+	file, err := r.Open(filepath.Join(sourceRef, chosen))
+	if err != nil {
+		return nil, err
+	}
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		file.Close()
+		return nil, os.ErrNotExist
+	}
+	return file, nil
+}
+
+// Locate returns the archived path for callers that need a filename. A second
+// candidate without an exact name match is ambiguous and is never guessed.
+func Locate(root, sourceRef, name string) (string, bool) {
+	f, err := Open(root, sourceRef, name)
+	if err != nil {
+		return "", false
+	}
+	defer f.Close()
+	return f.Name(), true
 }

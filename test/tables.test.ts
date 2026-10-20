@@ -70,6 +70,16 @@ describe("readTable", () => {
     expect(readTable("a,b\n1,2\n", "slurp.log", "")).toBeNull();
   });
 
+  it("handles cap-sized ragged data without spreading every row onto the stack", () => {
+    const body = "a,b\n".repeat(2048) + "a\n".repeat(126976);
+    expect(body.length).toBe(256 * 1024);
+    const table = readTable(body, "ragged.csv", "text/csv")!;
+    expect(table.header).toEqual(["a", "b"]);
+    expect(table.rows).toHaveLength(MAX_ROWS);
+    expect(table.colCount).toBe(2);
+    expect(table.rowCount).toBe(129023);
+  });
+
   it("caps what it shows and counts what it saw", () => {
     const line = Array.from({ length: 50 }, (_, i) => `c${i}`).join(",");
     const t = readTable(Array(701).fill(line).join("\n"), "wide.csv", "")!;
