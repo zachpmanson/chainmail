@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 // Open opens a regular archived file without allowing references or symlinks to
@@ -16,12 +17,14 @@ func Open(root, sourceRef, name string) (*os.File, error) {
 	if root == "" || sourceRef == "" || sourceRef == "." || sourceRef == ".." || strings.ContainsAny(sourceRef, `/\\`) || filepath.IsAbs(sourceRef) {
 		return nil, os.ErrNotExist
 	}
-	r, err := os.OpenRoot(root)
+	// A trailing separator requires a directory before OpenRoot's fstat.
+	r, err := os.OpenRoot(root + string(os.PathSeparator))
 	if err != nil {
 		return nil, err
 	}
 	defer r.Close()
-	dir, err := r.Open(sourceRef)
+	// OpenRoot also opens before checking the type; require a directory here.
+	dir, err := r.OpenFile(sourceRef, os.O_RDONLY|syscall.O_DIRECTORY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +53,12 @@ func Open(root, sourceRef, name string) (*os.File, error) {
 	if chosen == "" {
 		return nil, os.ErrNotExist
 	}
-	file, err := r.Open(filepath.Join(sourceRef, chosen))
+	return openRegular(r, filepath.Join(sourceRef, chosen))
+}
+
+func openRegular(r *os.Root, name string) (*os.File, error) {
+	// The candidate can become a FIFO after Stat; never wait for a writer.
+	file, err := r.OpenFile(name, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return nil, err
 	}

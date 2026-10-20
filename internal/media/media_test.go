@@ -138,6 +138,32 @@ func TestPullImportsASlackUploadWithNoMailboxInvolved(t *testing.T) {
 	}
 }
 
+func TestPullCapsSlackBytesRatherThanMetadata(t *testing.T) {
+	for _, data := range []string{"1234", "12345"} {
+		t.Run(fmt.Sprint(len(data)), func(t *testing.T) {
+			f := newFixture(t)
+			f.slackEntry(t, "slack:C1:limit", "F001", "marker.txt", []byte("x"), "text/plain")
+			if err := os.WriteFile(filepath.Join(f.uploads, "F001", "marker.txt"), []byte(data), 0600); err != nil {
+				t.Fatal(err)
+			}
+			o := opts(f)
+			o.MaxBytes = 4
+			r, err := Pull(context.Background(), o, corpus.MediaScope{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			blob, blobErr := f.store.Blob(corpus.BlobSHA([]byte(data)))
+			if len(data) > 4 {
+				if r.Pulled != 0 || r.Skipped != 1 || r.Items[0].Reason != corpus.MediaSkipTooLarge || !errors.Is(blobErr, corpus.ErrNoBlob) {
+					t.Fatalf("over cap: %+v, blob error: %v", r, blobErr)
+				}
+			} else if r.Pulled != 1 || r.Bytes != 4 || blobErr != nil || string(blob.Bytes) != data {
+				t.Fatalf("at cap: %+v, blob: %+v, error: %v", r, blob, blobErr)
+			}
+		})
+	}
+}
+
 func TestPullIsIdempotent(t *testing.T) {
 	f := newFixture(t)
 	f.slackEntry(t, "slack:C1:1.2", "F001", "shot.png", []byte("bytes"), "image/png")
