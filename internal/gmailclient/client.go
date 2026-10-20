@@ -114,7 +114,7 @@ func DisconnectAccount(accountID string) error {
 }
 
 // TokenSourceForPath loads and refreshes the Gmail token at path using the
-// docket provider settings. Refreshes are persisted with docket's flock guard.
+// docket provider settings. Refreshes re-read disk under the disconnect lock.
 func TokenSourceForPath(ctx context.Context, path string) (oauth2.TokenSource, error) {
 	cfg, err := auth.LoadConfig()
 	if err != nil {
@@ -136,7 +136,7 @@ func TokenSourceForPath(ctx context.Context, path string) (oauth2.TokenSource, e
 		Scopes:   cfg.Provider.Scopes,
 		Endpoint: oauth2.Endpoint{AuthURL: cfg.Provider.AuthURL, TokenURL: cfg.Provider.TokenURL},
 	}
-	return auth.NewPersistingTokenSource(oauthCfg.TokenSource(ctx, &tok), path), nil
+	return &accountTokenSource{ctx: ctx, config: oauthCfg, path: path}, nil
 }
 
 // WhoAmIForTokenPath asks Google which account a stored token belongs to.

@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -34,6 +35,7 @@ import (
 	"github.com/zachpmanson/chainmail/internal/status"
 
 	docketauth "github.com/zachpmanson/docket/gmail/auth"
+	"golang.org/x/oauth2"
 )
 
 // The built web client, embedded so one binary serves both the API and the UI.
@@ -171,6 +173,8 @@ type server struct {
 	// A process can host only one at a time by construction: starting another
 	// while one is pending replaces it (single admin, 10-minute consent
 	// window, and the callback verifies state before touching it).
+	loginMu        sync.Mutex
+	authMu         sync.Mutex // serializes account binding and credential activation
 	login          *docketauth.Pending
 	loginAccountID string
 	loginExpires   time.Time
@@ -252,7 +256,7 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("/auth/accounts/{accountId}/disconnect", post(s.disconnectAccount))
 	mux.HandleFunc("/auth/login", get(s.authLogin))
 	mux.HandleFunc("/", s.authCallbackOr(s.webRoot()))
-	return mux
+	return http.NewCrossOriginProtection().Handler(mux)
 }
 
 // webRoot serves the embedded web client alongside the API: the app shell at
@@ -448,9 +452,11 @@ func (s *server) authLogin(w http.ResponseWriter, r *http.Request) {
 			fmt.Errorf("starting authorization flow: %w", err))
 		return
 	}
+	s.loginMu.Lock()
 	s.login = pending
 	s.loginAccountID = accountID
 	s.loginExpires = time.Now().Add(loginWindow)
+	s.loginMu.Unlock()
 	w.Header().Set("Location", pending.AuthURL())
 	http.Error(w, "redirecting to Google…", http.StatusFound)
 }
@@ -464,12 +470,20 @@ func (s *server) authCallbackOr(fallback http.HandlerFunc) http.HandlerFunc {
 		q := r.URL.Query()
 		code := q.Get("code")
 		denied := q.Get("error")
-		pending := s.login
-		valid := pending != nil && q.Get("state") == pending.State &&
-			time.Now().Before(s.loginExpires)
-		if (code != "" || denied != "") && valid {
-			s.finishLogin(w, code, denied)
-			return
+		if r.Method == http.MethodGet && (code != "" || denied != "") {
+			s.loginMu.Lock()
+			pending, accountID := s.login, s.loginAccountID
+			valid := pending != nil && q.Get("state") == pending.State && time.Now().Before(s.loginExpires)
+			if valid {
+				s.login = nil
+				s.loginAccountID = ""
+				s.loginExpires = time.Time{}
+			}
+			s.loginMu.Unlock()
+			if valid {
+				s.finishLogin(w, r, pending, accountID, code, denied)
+				return
+			}
 		}
 		fallback(w, r)
 	}
@@ -478,16 +492,12 @@ func (s *server) authCallbackOr(fallback http.HandlerFunc) http.HandlerFunc {
 // finishLogin exchanges the code the consent page returned, persists the
 // token into the store the slurps read, and shows a done page. state was
 // already verified by authCallbackOr.
-func (s *server) finishLogin(w http.ResponseWriter, code string, denied string) {
-	pending := s.login
-	accountID := s.loginAccountID
-	s.login = nil
-	s.loginAccountID = ""
+func (s *server) finishLogin(w http.ResponseWriter, r *http.Request, pending *docketauth.Pending, accountID, code, denied string) {
 	if denied != "" {
 		http.Error(w, "authorization denied: "+denied, http.StatusBadRequest)
 		return
 	}
-	tok, err := docketauth.ExchangeCode(context.Background(), pending, code)
+	tok, err := docketauth.ExchangeCode(r.Context(), pending, code)
 	if err != nil {
 		fail(w, http.StatusInternalServerError,
 			fmt.Errorf("exchanging code: %w", err))
@@ -498,20 +508,42 @@ func (s *server) finishLogin(w http.ResponseWriter, code string, denied string) 
 		fail(w, http.StatusInternalServerError, err)
 		return
 	}
-	if err := docketauth.SaveToken(tok, path); err != nil {
-		fail(w, http.StatusInternalServerError,
-			fmt.Errorf("saving token: %w", err))
-		return
-	}
-	who, err := gmailclient.WhoAmIForTokenPath(context.Background(), path)
+	who, err := docketauth.WhoAmIFromToken(r.Context(), oauth2.StaticTokenSource(tok))
 	if err != nil {
 		fail(w, http.StatusBadGateway, fmt.Errorf("identifying Gmail account: %w", err))
 		return
+	}
+	if who == nil || strings.TrimSpace(who.Email) == "" {
+		fail(w, http.StatusBadGateway, errors.New("Gmail identity has no email"))
+		return
+	}
+	who.Email = strings.TrimSpace(who.Email)
+	// Bind identity and enforce uniqueness before making the token usable.
+	s.authMu.Lock()
+	defer s.authMu.Unlock()
+	accounts, err := s.store.GmailAccounts()
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	for _, account := range accounts {
+		if account.ID == accountID && account.Email != "" && !strings.EqualFold(account.Email, who.Email) {
+			fail(w, http.StatusConflict, fmt.Errorf("Gmail account %q belongs to a different email", accountID))
+			return
+		}
+		if account.ID != accountID && strings.EqualFold(account.Email, who.Email) {
+			fail(w, http.StatusConflict, fmt.Errorf("email already belongs to Gmail account %q", account.ID))
+			return
+		}
 	}
 	if err := s.store.PutGmailAccount(corpus.GmailAccount{
 		ID: accountID, Email: who.Email, DisplayName: who.Email,
 	}); err != nil {
 		fail(w, http.StatusConflict, fmt.Errorf("saving Gmail account: %w", err))
+		return
+	}
+	if err := gmailclient.SaveAccountToken(tok, path); err != nil {
+		fail(w, http.StatusInternalServerError, fmt.Errorf("saving token: %w", err))
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -2991,41 +3023,11 @@ func (s *server) setSettings(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, fmt.Errorf("reading the request body: %w", err))
 		return
 	}
-	if in.DefaultFolder != nil || in.DefaultFolderAccountID != nil {
-		folder, _, err := s.store.Setting(corpus.SettingDefaultFolder)
-		if err != nil {
-			fail(w, http.StatusInternalServerError, err)
-			return
-		}
-		accountID, _, err := s.store.Setting(corpus.SettingDefaultFolderAccountID)
-		if err != nil {
-			fail(w, http.StatusInternalServerError, err)
-			return
-		}
-		if in.DefaultFolder != nil {
-			folder = strings.TrimSpace(*in.DefaultFolder)
-			// A legacy folder-only write explicitly names an unscoped folder.
-			if in.DefaultFolderAccountID == nil {
-				accountID = ""
-			}
-		}
-		if in.DefaultFolderAccountID != nil {
-			accountID = strings.TrimSpace(*in.DefaultFolderAccountID)
-		}
-		if err := s.store.SetDefaultFolder(folder, accountID); err != nil {
-			fail(w, http.StatusInternalServerError, err)
-			return
-		}
+	update := corpus.SettingsUpdate{
+		DefaultFolder: in.DefaultFolder, DefaultFolderAccountID: in.DefaultFolderAccountID,
+		MePersonID: in.MePersonID,
 	}
 	if in.SlurpEvery != nil {
-		// An empty word clears the setting rather than being refused, the same
-		// way an emptied folder does: it means "stop choosing, sweep at the
-		// default", which is a state a reader can want and the one the corpus
-		// starts in. Anything else is validated rather than stored as sent: the
-		// cadence drives a walk of the whole mailbox, so a value the server
-		// cannot honour has to be refused where the caller can see why, not
-		// stored and silently defaulted. The canonical word is what is written,
-		// so the page's control finds the value among the ones it offers.
 		word := ""
 		if strings.TrimSpace(*in.SlurpEvery) != "" {
 			_, canonical, err := parseSlurpEvery(*in.SlurpEvery)
@@ -3035,22 +3037,15 @@ func (s *server) setSettings(w http.ResponseWriter, r *http.Request) {
 			}
 			word = canonical
 		}
-		if err := s.store.PutSetting(corpus.SettingSlurpEvery, word); err != nil {
-			fail(w, http.StatusInternalServerError, err)
-			return
-		}
+		update.SlurpEvery = &word
 	}
-	if in.MePersonID != nil {
-		// 0 is nobody, and it is not a person id: clearing needs no second field,
-		// and the caller who wants to stop being anyone says so with a zero.
-		if err := s.store.SetMePerson(*in.MePersonID); err != nil {
-			if errors.Is(err, corpus.ErrNoPerson) {
-				fail(w, http.StatusBadRequest, fmt.Errorf("mePersonId: %w", err))
-				return
-			}
-			fail(w, http.StatusInternalServerError, err)
+	if err := s.store.UpdateSettings(update); err != nil {
+		if errors.Is(err, corpus.ErrNoPerson) {
+			fail(w, http.StatusBadRequest, fmt.Errorf("mePersonId: %w", err))
 			return
 		}
+		fail(w, http.StatusInternalServerError, err)
+		return
 	}
 	// The settings as they now stand, so a caller sees what it stored rather than
 	// what it asked for.

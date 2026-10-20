@@ -151,36 +151,7 @@ func (s *Store) MeAddresses() ([]string, error) {
 // stale list left behind would be read again the moment the person was cleared,
 // resurrecting who the reader said they were a change ago.
 func (s *Store) SetMePerson(id int64) error {
-	value := ""
-	if id != 0 {
-		name, emails, err := personMailbox(s, id)
-		if err != nil {
-			return err
-		}
-		if len(emails) == 0 {
-			return fmt.Errorf("%w: %s is not known by any address, so nothing could be marked as theirs",
-				ErrNoPerson, name)
-		}
-		value = strconv.FormatInt(id, 10)
-	}
-	tx, err := s.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if _, err := tx.Exec(`delete from settings where key = ?`, SettingMe); err != nil {
-		return err
-	}
-	if value == "" {
-		if _, err := tx.Exec(`delete from settings where key = ?`, SettingMePerson); err != nil {
-			return err
-		}
-	} else if _, err := tx.Exec(`
-		insert into settings (key, value) values (?, ?)
-		on conflict(key) do update set value = excluded.value`, SettingMePerson, value); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return s.UpdateSettings(SettingsUpdate{MePersonID: &id})
 }
 
 // SplitAddresses reads addresses out of the one comma-separated form the reader
@@ -210,28 +181,7 @@ func SplitAddresses(v string) []string {
 // one preference: writing one without the other can make a folder name resolve
 // against every account instead of the account the reader chose.
 func (s *Store) SetDefaultFolder(folder, accountID string) error {
-	tx, err := s.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	for key, value := range map[string]string{
-		SettingDefaultFolder:          folder,
-		SettingDefaultFolderAccountID: accountID,
-	} {
-		if value == "" {
-			if _, err := tx.Exec(`delete from settings where key = ?`, key); err != nil {
-				return err
-			}
-			continue
-		}
-		if _, err := tx.Exec(`
-			insert into settings (key, value) values (?, ?)
-			on conflict(key) do update set value = excluded.value`, key, value); err != nil {
-			return err
-		}
-	}
-	return tx.Commit()
+	return s.UpdateSettings(SettingsUpdate{DefaultFolder: &folder, DefaultFolderAccountID: &accountID})
 }
 
 // PutSetting records a setting, replacing whatever was there. An empty value
@@ -247,4 +197,75 @@ func (s *Store) PutSetting(key, value string) error {
 		insert into settings (key, value) values (?, ?)
 		on conflict(key) do update set value = excluded.value`, key, value)
 	return err
+}
+
+// SettingsUpdate names only preferences to change. SlurpEvery is canonicalized
+// by the caller, which owns the scheduling policy.
+type SettingsUpdate struct {
+	DefaultFolder          *string
+	DefaultFolderAccountID *string
+	SlurpEvery             *string
+	MePersonID             *int64
+}
+
+// UpdateSettings validates and writes one request in a single transaction.
+func (s *Store) UpdateSettings(in SettingsUpdate) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	values := map[string]string{}
+	if in.MePersonID != nil {
+		value := ""
+		if id := *in.MePersonID; id != 0 {
+			var name string
+			var hasEmail bool
+			err := tx.QueryRow(`select display_name, exists(select 1 from identities where person_id=people.id and kind=?) from people where id=?`, KindEmail, id).Scan(&name, &hasEmail)
+			if err == sql.ErrNoRows {
+				return fmt.Errorf("%w: %d", ErrNoPerson, id)
+			}
+			if err != nil {
+				return err
+			}
+			if !hasEmail {
+				return fmt.Errorf("%w: %s is not known by any address, so nothing could be marked as theirs", ErrNoPerson, name)
+			}
+			value = strconv.FormatInt(id, 10)
+		}
+		values[SettingMePerson] = value
+		values[SettingMe] = ""
+	}
+	if in.DefaultFolder != nil || in.DefaultFolderAccountID != nil {
+		for _, key := range []string{SettingDefaultFolder, SettingDefaultFolderAccountID} {
+			var value string
+			if err := tx.QueryRow(`select value from settings where key=?`, key).Scan(&value); err != nil && err != sql.ErrNoRows {
+				return err
+			}
+			values[key] = value
+		}
+		if in.DefaultFolder != nil {
+			values[SettingDefaultFolder] = strings.TrimSpace(*in.DefaultFolder)
+			// A legacy folder-only write explicitly selects an unscoped folder.
+			if in.DefaultFolderAccountID == nil {
+				values[SettingDefaultFolderAccountID] = ""
+			}
+		}
+		if in.DefaultFolderAccountID != nil {
+			values[SettingDefaultFolderAccountID] = strings.TrimSpace(*in.DefaultFolderAccountID)
+		}
+	}
+	if in.SlurpEvery != nil {
+		values[SettingSlurpEvery] = *in.SlurpEvery
+	}
+	for key, value := range values {
+		if value == "" {
+			if _, err := tx.Exec(`delete from settings where key=?`, key); err != nil {
+				return err
+			}
+		} else if _, err := tx.Exec(`insert into settings(key,value) values (?,?) on conflict(key) do update set value=excluded.value`, key, value); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
