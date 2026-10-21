@@ -87,6 +87,11 @@ and fixes every stored label that disagrees with it.
 **Timeline** is one chronological column. **Columns** gives one lane per reply chain.
 The **reply tree** panel lights the ancestry of the entry you're reading.
 
+The original/simplified HTML default uses server-side structural evidence in the
+main authored content; saved reading preferences override it. See
+[Original HTML default](ORIGINAL-VIEW.md) for the rules, API contract and known
+conservative mismatches.
+
 **Replying starts as reply-all, and who it reaches is the reader's to say.** A thread in the
 reading pane ends with a reply box: one row of To and Cc autocomplete fields and a link to
 its target message, then the reader's own words. Hovering the link highlights that message.

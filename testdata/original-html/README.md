@@ -6,4 +6,9 @@ All original text/identities, resource destinations and opaque class/ID names ha
 
 Labels apply the owner's policy: human correspondence remains simplified (including signatures and coloured inline answers); designed invitations, document notifications and generated meeting notes use original. These examples do not authorize sender/service lists or fixture-specific classifier rules. Most labels are reviewer applications of that policy, not individually owner-reviewed examples.
 
+The strict Go evaluation and current genuine disagreements are documented in
+[Original HTML default](../../ORIGINAL-VIEW.md#limits-and-current-evaluation).
+Labels remain test outputs, not classifier inputs; the strict test currently fails
+on ten conservative false negatives rather than concealing or relabelling them.
+
 102 fixtures were exploratory; 17 more were checked after freezing the earlier prototype. Recurring templates occur in both sets, so this is not an independently held-out template-family benchmark or a mailbox-wide accuracy claim. Keep synthetic and markup-mutation counterexamples alongside this corpus to avoid merely fitting the samples.
