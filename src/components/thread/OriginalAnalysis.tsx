@@ -1,4 +1,4 @@
-import type { OriginalAnalysis as Analysis } from "../../lib/message/originalDefault";
+import type { OriginalAnalysis as Analysis } from "../../lib/message/original";
 
 export default function OriginalAnalysis({
   analysis,
@@ -23,7 +23,7 @@ export default function OriginalAnalysis({
       {explicit
         ? ` · saved ${on ? "original" : "stripped"} view (overrides score)`
         : analysis
-          ? ` · automatic ${analysis.defaultsToOriginal ? "original" : "stripped"} (≥3 pt for original)`
+          ? ` · automatic ${analysis.defaultsToOriginal ? "original" : "stripped"} (${analysis.uncertain ? "uncertain history" : "main layout + design evidence required"})`
           : ""}
     </span>
   );

@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { usePrefs } from "../prefs/usePrefs";
-import { analyseOriginal, type OriginalAnalysis } from "./originalDefault";
+import type { OriginalAnalysis, OriginalPayload } from "./original";
 
 /** `asking` keeps the transcript's body on screen; `none` means no original is available. */
 export type Original =
   { at: "read" } | { at: "asking" } | { at: "sent"; html: string } | { at: "none"; why: string };
 
-type Source = { extId: string; load: (extId: string) => Promise<string> };
+type Source = { extId: string; load: (extId: string) => Promise<OriginalPayload> };
 const read: Original = { at: "read" };
 
 /** The display choice is per sender; fetched content belongs to one message and loader. */
@@ -34,15 +34,15 @@ export function useOriginal(
   const [result, setResult] = useState<
     (Source & { state: Original; analysis?: OriginalAnalysis }) | null
   >(null);
-  const arrived = useRef<(Source & { html: string; analysis: OriginalAnalysis }) | null>(null);
+  const arrived = useRef<(Source & OriginalPayload) | null>(null);
 
   useEffect(() => {
     if (!extId || !load || (explicit && !on && !explain)) return;
     let live = true;
-    const show = (html: string, analysis: OriginalAnalysis) => {
+    const show = (html: string, analysis: OriginalAnalysis | undefined) => {
       if (!live) return;
       arrived.current = { extId, load, html, analysis };
-      const selected = explicit ? on : analysis.defaultsToOriginal;
+      const selected = explicit ? on : analysis?.defaultsToOriginal === true;
       setAutomatic({ extId, load, on: selected });
       setResult({ extId, load, analysis, state: selected ? { at: "sent", html } : read });
     };
@@ -51,8 +51,8 @@ export function useOriginal(
     } else {
       setResult({ extId, load, state: { at: "asking" } });
       load(extId).then(
-        (html) => {
-          if (live) show(html, analyseOriginal(html));
+        ({ html, analysis }) => {
+          if (live) show(html, analysis);
         },
         (err: unknown) => {
           if (!live) return;

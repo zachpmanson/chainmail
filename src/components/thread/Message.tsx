@@ -3,6 +3,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { receiptNames } from "../../lib/message/who";
 import type { MessageEmail } from "../../lib/message/email";
 import { useOriginal } from "../../lib/message/useOriginal";
+import type { OriginalPayload } from "../../lib/message/original";
 import StatusBadge from "../ui/StatusBadge";
 import Attachments from "./Attachments";
 import Avatar from "./Avatar";
@@ -60,7 +61,7 @@ export type MessageMedia = {
 
 /** The original-styling switch; absent unless the corpus holds the sender's own part and a server can fetch it. */
 export type MessageReading = {
-  original: { extId: string; load: (extId: string) => Promise<string> };
+  original: { extId: string; load: (extId: string) => Promise<OriginalPayload> };
   /** stored half of the switch; absent keeps it in browser storage */
   person?: { id: number; preferOriginal: boolean | undefined };
   /** flips that preference; absent keeps the switch local */
