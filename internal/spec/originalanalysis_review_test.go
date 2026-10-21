@@ -10,8 +10,13 @@ func TestOriginalAnalysisReviewRegressions(t *testing.T) {
 	for _, tc := range []struct{ name, raw string }{
 		{"pooled footer heading", `<div style="width:600px"><p>` + ordinary + `</p><footer><h3>Contact details</h3></footer></div>`},
 		{"pooled footer action", `<div style="width:600px"><p>` + ordinary + `</p><footer><a href="https://example.test/profile" style="display:block;padding:12px;background:#ddd">View profile</a></footer></div>`},
+		{"unmarked late modules", `<div style="width:600px;margin:0 auto"><p>` + ordinary + `</p><div><div style="padding:12px;background:#ddd">Profile information</div><div style="padding:12px;background:#eee">Contact information</div></div></div>`},
+		{"unmarked late columns", `<div style="width:600px;margin:0 auto"><p>` + ordinary + `</p><div style="display:flex"><span>Profile information</span><span>Contact information</span></div></div>`},
+		{"unmarked late graphic", `<div style="width:600px;margin:0 auto"><p>` + ordinary + `</p><img width="400" height="90" src="https://example.test/banner"></div>`},
 		{"unmarked late footer control", `<div style="width:600px;margin:0 auto"><p>` + ordinary + `</p><div><a href="https://example.test/profile" style="display:block;padding:12px;background:#ddd">View profile</a></div></div>`},
 		{"transparent decoration", `<div style="padding:24px;background:transparent"><p>Ordinary correspondence.</p><a href="https://example.test/profile" style="display:block;padding:12px;background:rgba(0,0,0,0)">View profile</a></div>`},
+		{"transparent border decoration", `<div style="padding:24px;border:1px solid transparent"><p>Ordinary correspondence.</p><a href="https://example.test/profile" style="display:block;padding:12px;border:1px solid transparent">View profile</a></div>`},
+		{"transparent alpha border", `<div style="padding:24px;border:1px solid rgba(0, 0, 0, 0)"><p>Ordinary correspondence.</p><a href="https://example.test/profile" style="display:block;padding:12px;border:1px solid #0000">View profile</a></div>`},
 		{"zero border decoration", `<div style="padding:24px;border:0px solid #ddd"><p>Ordinary correspondence.</p><a href="https://example.test/profile" style="display:block;padding:12px;border:0px solid #ddd">View profile</a></div>`},
 		{"empty flex", `<div style="width:600px"><p>` + ordinary + `</p><div style="display:flex"></div></div>`},
 		{"single item flex", `<div style="width:600px;display:flex"><p>` + ordinary + `</p></div>`},
@@ -29,6 +34,28 @@ func TestOriginalAnalysisReviewRegressions(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if a := AnalyseOriginal(tc.raw); a.DefaultsToOriginal {
 				t.Fatalf("expected simplified, got %+v", a)
+			}
+		})
+	}
+}
+
+func TestOriginalAnalysisGridTracks(t *testing.T) {
+	for _, tc := range []struct {
+		tracks   string
+		original bool
+	}{
+		{"minmax(0, 1fr)", false},
+		{"minmax(0,1fr)", false},
+		{"repeat(1, minmax(0, 1fr))", false},
+		{"[start] minmax(0, 1fr) [end]", false},
+		{"minmax(0, 1fr) minmax(0, 1fr)", true},
+		{"repeat(2, minmax(0, 1fr))", true},
+		{"repeat(auto-fit, minmax(0, 1fr))", false},
+	} {
+		t.Run(tc.tracks, func(t *testing.T) {
+			raw := `<div style="width:600px;display:grid;grid-template-columns:` + tc.tracks + `"><p>Ordinary opening paragraph.</p><p>Ordinary second paragraph.</p></div>`
+			if a := AnalyseOriginal(raw); a.DefaultsToOriginal != tc.original {
+				t.Fatalf("want original=%v; got %+v", tc.original, a)
 			}
 		})
 	}
@@ -112,6 +139,14 @@ func TestOriginalAnalysisResourceLimits(t *testing.T) {
 		if !a.Uncertain || a.DefaultsToOriginal || a.Score != 0 {
 			t.Fatalf("complexity limit must decline conservatively: %+v", a)
 		}
+	}
+}
+
+func BenchmarkOriginalAnalysisWideTable(b *testing.B) {
+	raw := `<table width="600"><tr>` + strings.Repeat(`<td>Ordinary text</td>`, 6000) + `</tr></table>`
+	b.SetBytes(int64(len(raw)))
+	for b.Loop() {
+		AnalyseOriginal(raw)
 	}
 }
 

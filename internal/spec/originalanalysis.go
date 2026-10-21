@@ -32,6 +32,7 @@ const analysisMaxWork = 100000
 type analysisNode struct {
 	style        map[string]string
 	telephone    bool
+	cells        int
 	font, column float64
 	background   string
 	padding      float64
@@ -79,6 +80,9 @@ func AnalyseOriginal(raw string) OriginalAnalysis {
 		}
 		tree.nodes[n] = &analysisNode{style: analysisStyle(n), telephone: n.DataAtom == atom.A && strings.HasPrefix(strings.ToLower(strings.TrimSpace(attr(n, "href"))), "tel:")}
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			if c.DataAtom == atom.Td || c.DataAtom == atom.Th {
+				tree.nodes[n].cells++
+			}
 			if !prepare(c, depth+1) {
 				return false
 			}
@@ -112,10 +116,10 @@ func AnalyseOriginal(raw string) OriginalAnalysis {
 			if tree.action(n) {
 				matches = append(matches, OriginalMatch{Rule: "designed action", Points: 1})
 			}
-			if tree.heading(n) || f.modules >= 2 || f.columns {
+			if tree.hierarchy(n) {
 				matches = append(matches, OriginalMatch{Rule: "visual hierarchy or modules", Points: 1})
 			}
-			if f.graphics > 0 {
+			if f.graphics > 0 && tree.primary(n, f.graphicAt) {
 				matches = append(matches, OriginalMatch{Rule: "prominent graphic", Points: 1})
 			}
 			if len(matches) >= 2 {
@@ -308,13 +312,7 @@ func (t *analysisTree) columnWidth(n *html.Node) float64 {
 		width = attr(n, "width")
 	}
 	if (n.DataAtom == atom.Td || n.DataAtom == atom.Th) && width == "" && n.Parent != nil {
-		cells := 0
-		for c := n.Parent.FirstChild; c != nil; c = c.NextSibling {
-			if c.DataAtom == atom.Td || c.DataAtom == atom.Th {
-				cells++
-			}
-		}
-		if cells > 1 {
+		if t.nodes[n.Parent].cells > 1 {
 			parent = 0
 		}
 	}
@@ -387,7 +385,7 @@ func cAttr(n *html.Node, key string) (string, bool) {
 
 type originalFacts struct {
 	words, contacts, images, graphics, actions, modules int
-	area, actionAt                                      float64
+	area, actionAt, structureAt, graphicAt              float64
 	columns, bound, painted                             bool
 	prefix, suffix, maxFlow                             int
 	breaks                                              bool
@@ -411,6 +409,12 @@ func (f *originalFacts) add(c originalFacts, evidence bool) {
 	f.bound = f.bound || c.bound
 	f.painted = f.painted || c.painted
 	if evidence {
+		if c.graphics > 0 && (f.graphics == 0 || c.graphicAt < f.graphicAt) {
+			f.graphicAt = c.graphicAt
+		}
+		if (c.modules > 0 || c.columns) && (f.modules == 0 && !f.columns || c.structureAt < f.structureAt) {
+			f.structureAt = c.structureAt
+		}
 		f.graphics += c.graphics
 		if c.actions > 0 && (f.actions == 0 || c.actionAt < f.actionAt) {
 			f.actionAt = c.actionAt
@@ -528,6 +532,7 @@ func (t *analysisTree) snapshot(root *html.Node) {
 				w, h := d.column, t.dimension(n, "height")
 				if w >= 320 && h >= 60 || w >= 250 && (h == 0 || h >= 100) || w >= 180 && h >= 150 {
 					f.graphics++
+					f.graphicAt = d.startArea
 				}
 			}
 			if n.DataAtom == atom.A {
@@ -540,15 +545,23 @@ func (t *analysisTree) snapshot(root *html.Node) {
 				}
 			}
 			f.painted = f.painted || t.painted(n) && f.maxFlow <= 12
-			horizontal := s["display"] == "flex" && s["flex-direction"] != "column" && s["flex-direction"] != "column-reverse" || s["display"] == "grid" && strings.Contains(s["grid-template-columns"], " ")
-			f.columns = f.columns || horizontal && items >= 2
+			horizontal := s["display"] == "flex" && s["flex-direction"] != "column" && s["flex-direction"] != "column-reverse" || s["display"] == "grid" && analysisGridTracks(s["grid-template-columns"]) >= 2
+			if horizontal && items >= 2 {
+				f.columns = true
+				f.structureAt = d.startArea
+			}
 			parentBG := "white"
 			if n.Parent != nil {
 				parentBG = t.nodes[n.Parent].background
 			}
 			panel := n.DataAtom == atom.Div || n.DataAtom == atom.Section || n.DataAtom == atom.Article || n.DataAtom == atom.Table
 			if panel && d.padding >= 12 && (bg != parentBG || analysisBorder(s["border"]) || analysisBorder(s["border-top"])) && f.words > 0 {
-				f.modules = max(1, f.modules)
+				if f.modules == 0 {
+					if !f.columns {
+						f.structureAt = d.startArea
+					}
+					f.modules = 1
+				}
 			}
 		}
 		d.facts = f
@@ -571,12 +584,79 @@ func (t *analysisTree) snapshot(root *html.Node) {
 	}
 }
 
+// Whitespace inside sizing functions separates arguments, not grid tracks.
+func analysisGridTracks(value string) int {
+	var count func(string, int) int
+	count = func(value string, depth int) int {
+		if depth > 8 || len(value) > 4096 {
+			return 0
+		}
+		var tracks []string
+		var token strings.Builder
+		paren, bracket := 0, 0
+		flush := func() {
+			if token.Len() > 0 {
+				tracks = append(tracks, token.String())
+				token.Reset()
+			}
+		}
+		for _, c := range value {
+			if c == '[' && paren == 0 {
+				bracket++
+			}
+			if bracket > 0 {
+				if c == ']' {
+					bracket--
+				}
+				continue
+			}
+			if (c == ' ' || c == '\t' || c == '\n') && paren == 0 {
+				flush()
+				continue
+			}
+			if c == '(' {
+				paren++
+			} else if c == ')' {
+				paren--
+				if paren < 0 {
+					return 0
+				}
+			}
+			token.WriteRune(c)
+		}
+		if paren != 0 || bracket != 0 {
+			return 0
+		}
+		flush()
+		total := 0
+		for _, track := range tracks {
+			if strings.HasPrefix(track, "repeat(") && strings.HasSuffix(track, ")") {
+				n, inner, ok := strings.Cut(track[7:len(track)-1], ",")
+				times, err := strconv.Atoi(strings.TrimSpace(n))
+				if !ok || err != nil || times <= 0 {
+					return 0
+				}
+				total += min(2, times) * count(inner, depth+1)
+			} else if track == "none" || track == "subgrid" || strings.HasPrefix(track, "var(") {
+				return 0
+			} else {
+				total++
+			}
+		}
+		return min(2, total)
+	}
+	return count(value, 0)
+}
+
 func analysisBackgroundValue(v string) string {
 	v = strings.ReplaceAll(strings.ToLower(v), " ", "")
-	if v == "" || v == "none" || v == "transparent" {
+	if v == "" || v == "none" || v == "transparent" || v == "inherit" || v == "initial" || v == "unset" {
 		return ""
 	}
-	if strings.HasPrefix(v, "rgba(") || strings.Contains(v, "/") {
+	if strings.HasPrefix(v, "#") && (len(v) == 5 && v[4] == '0' || len(v) == 9 && v[7:] == "00") {
+		return ""
+	}
+	if strings.HasPrefix(v, "rgba(") || strings.HasPrefix(v, "hsla(") || strings.Contains(v, "/") {
 		if at := strings.LastIndexAny(v, ",/"); at >= 0 && strings.HasSuffix(v, ")") && analysisZero(v[at+1:len(v)-1]) {
 			return ""
 		}
@@ -588,12 +668,20 @@ func analysisBackgroundValue(v string) string {
 }
 
 func analysisBorder(v string) bool {
-	if v == "" || strings.Contains(v, "none") || strings.Contains(v, "hidden") {
+	if v == "" || strings.Contains(v, "none") || strings.Contains(v, "hidden") || strings.Contains(v, "transparent") {
 		return false
 	}
 	for _, part := range strings.Fields(v) {
-		if analysisZero(part) {
+		if analysisZero(part) || strings.HasPrefix(part, "#") && analysisBackgroundValue(part) == "" {
 			return false
+		}
+	}
+	compact := strings.ReplaceAll(v, " ", "")
+	for _, function := range []string{"rgba(", "hsla(", "rgb(", "hsl("} {
+		if start := strings.Index(compact, function); start >= 0 {
+			if end := strings.IndexByte(compact[start:], ')'); end >= 0 && analysisBackgroundValue(compact[start:start+end+1]) == "" {
+				return false
+			}
 		}
 	}
 	return true
@@ -619,9 +707,18 @@ func (t *analysisTree) painted(n *html.Node) bool {
 
 // A tiny late control in a bare column is not evidence about the main prose.
 // A genuinely painted/padded enclosing card may put its primary action last.
-func (t *analysisTree) action(n *html.Node) bool {
+func (t *analysisTree) primary(n *html.Node, at float64) bool {
 	d := t.nodes[n]
-	return d.facts.actions > 0 && ((d.facts.actionAt-d.startArea)*2 <= d.facts.area || d.padding >= 16 && t.surface(n))
+	return (at-d.startArea)*2 <= d.facts.area || d.padding >= 16 && t.surface(n)
+}
+
+func (t *analysisTree) action(n *html.Node) bool {
+	return t.nodes[n].facts.actions > 0 && t.primary(n, t.nodes[n].facts.actionAt)
+}
+
+func (t *analysisTree) hierarchy(n *html.Node) bool {
+	d := t.nodes[n]
+	return t.heading(n) || (d.facts.modules >= 2 || d.facts.columns) && (d.facts.structureAt-d.startArea)*2 <= d.facts.area
 }
 
 func (t *analysisTree) heading(n *html.Node) bool {
@@ -750,8 +847,7 @@ func (t *analysisTree) alignedColumn(n *html.Node) ([]OriginalMatch, float64) {
 	width := max(t.dimension(panels[0], "width"), t.dimension(panels[0], "max-width"))
 	area := 0.0
 	actions, graphics := 0, 0
-	actionAt := math.Inf(1)
-	hierarchy := false
+	actionAt, hierarchyAt, graphicAt := math.Inf(1), math.Inf(1), math.Inf(1)
 	for _, p := range panels {
 		w := max(t.dimension(p, "width"), t.dimension(p, "max-width"))
 		if math.Abs(w-width) > 1 {
@@ -764,7 +860,15 @@ func (t *analysisTree) alignedColumn(n *html.Node) ([]OriginalMatch, float64) {
 			actionAt = min(actionAt, d.facts.actionAt)
 		}
 		graphics += d.facts.graphics
-		hierarchy = hierarchy || t.heading(p) || d.facts.modules >= 2 || d.facts.columns
+		if d.facts.graphics > 0 {
+			graphicAt = min(graphicAt, d.facts.graphicAt)
+		}
+		if t.heading(p) {
+			hierarchyAt = min(hierarchyAt, t.flowArea[t.nextHeading[d.start]])
+		}
+		if d.facts.modules >= 2 || d.facts.columns {
+			hierarchyAt = min(hierarchyAt, d.facts.structureAt)
+		}
 	}
 	if area*2 < t.nodes[n].facts.area {
 		return nil, 0
@@ -773,10 +877,10 @@ func (t *analysisTree) alignedColumn(n *html.Node) ([]OriginalMatch, float64) {
 	if actions > 0 && (actionAt-t.nodes[panels[0]].startArea)*2 <= area {
 		matches = append(matches, OriginalMatch{Rule: "designed action", Points: 1})
 	}
-	if hierarchy {
+	if (hierarchyAt-t.nodes[panels[0]].startArea)*2 <= area {
 		matches = append(matches, OriginalMatch{Rule: "visual hierarchy or modules", Points: 1})
 	}
-	if graphics > 0 {
+	if graphics > 0 && (graphicAt-t.nodes[panels[0]].startArea)*2 <= area {
 		matches = append(matches, OriginalMatch{Rule: "prominent graphic", Points: 1})
 	}
 	if len(matches) < 2 {
