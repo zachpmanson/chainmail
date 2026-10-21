@@ -1971,6 +1971,22 @@ export interface components {
             sent: boolean;
             filed?: boolean;
         };
+        /** @description HTML-only evidence in the main authored region. A coherent bounded/padded page plus at least one independent design family selects original; ambiguous unwrapped history blocks selection. No sender/context/fixture inputs. Unknown and CSS-only designs conservatively stay simplified. */
+        OriginalAnalysis: {
+            score: number;
+            matches: {
+                rule: string;
+                points: number;
+            }[];
+            defaultsToOriginal: boolean;
+            /** @description Unwrapped history cannot safely be separated from authored inline answers. */
+            uncertain: boolean;
+        };
+        OriginalResponse: {
+            /** @description Exactly the sanitized fragment returned by the default text/html response. */
+            html: string;
+            analysis: components["schemas"]["OriginalAnalysis"];
+        };
     };
     responses: never;
     parameters: never;
@@ -2476,7 +2492,10 @@ export interface operations {
     };
     getEntryOriginal: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Set to 1 for JSON containing the same sanitized HTML and a compact HTML-only structural analysis. Without it this route remains text/html. */
+                analysis?: "1";
+            };
             header?: never;
             path: {
                 /**
@@ -2489,13 +2508,14 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The entry's own html, as a fragment: its stylesheets first, then its content. Styled for a shadow root, so `html`, `body` and `:root` rules arrive rewritten as `:host` and no html, head or body element appears. */
+            /** @description The entry's own html, as a fragment: its stylesheets first, then its content. Styled for a shadow root, so `html`, `body` and `:root` rules arrive rewritten as `:host` and no html, head or body element appears. With analysis=1, returns JSON with exactly the same HTML plus its server-side structural receipt. Uncertain analysis never automatically selects original. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "text/html": string;
+                    "application/json": components["schemas"]["OriginalResponse"];
                 };
             };
             /** @description No entry carries that id, or it carries no showable html part of its own. Both carry the same JSON error shape as every other failure, so a caller meeting one here parses it the same way. */

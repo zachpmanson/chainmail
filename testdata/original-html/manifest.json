@@ -1,0 +1,597 @@
+[
+  {
+    "id": "thread-001-1",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-001-2",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-002-1",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-002-2",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-002-3",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-003-1",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-003-2",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-003-3",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-004-1",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-004-2",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-005-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-005-2",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-006-1",
+    "expected": "simplified",
+    "labelStatus": "owner-confirmed-category"
+  },
+  {
+    "id": "thread-006-2",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-006-3",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-007-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-007-2",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-008-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-008-2",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-009-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-009-2",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-010-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-010-2",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-011-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-011-2",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-011-3",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-012-1",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-012-2",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-012-3",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-013-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-013-2",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-014-1",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-014-2",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-015-1",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-015-2",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-016-1",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-016-2",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-017-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-017-2",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-018-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-018-2",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-019-1",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-019-2",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-019-3",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-020-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-020-2",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-021-1",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-021-2",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-021-3",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-023-1",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-023-2",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-024-1",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-024-2",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-024-3",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-025-1",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-025-2",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-025-3",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-026-1",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-026-2",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-027-1",
+    "expected": "original",
+    "labelStatus": "owner-confirmed-category"
+  },
+  {
+    "id": "thread-028-1",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-029-1",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-029-2",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-030-1",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-030-2",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-030-3",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-031-1",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-033-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-034-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-035-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-036-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-039-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-040-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-041-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-042-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-043-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-044-1",
+    "expected": "original",
+    "labelStatus": "owner-confirmed-category"
+  },
+  {
+    "id": "thread-045-1",
+    "expected": "original",
+    "labelStatus": "owner-confirmed-category"
+  },
+  {
+    "id": "thread-046-1",
+    "expected": "original",
+    "labelStatus": "owner-confirmed-category"
+  },
+  {
+    "id": "thread-047-1",
+    "expected": "original",
+    "labelStatus": "owner-confirmed-category"
+  },
+  {
+    "id": "thread-048-1",
+    "expected": "original",
+    "labelStatus": "owner-confirmed-category"
+  },
+  {
+    "id": "thread-049-1",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-050-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-051-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-052-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-053-1",
+    "expected": "original",
+    "labelStatus": "owner-confirmed-category"
+  },
+  {
+    "id": "thread-054-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-055-1",
+    "expected": "original",
+    "labelStatus": "owner-confirmed-category"
+  },
+  {
+    "id": "thread-056-1",
+    "expected": "original",
+    "labelStatus": "owner-confirmed-category"
+  },
+  {
+    "id": "thread-057-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-058-1",
+    "expected": "original",
+    "labelStatus": "owner-confirmed-category"
+  },
+  {
+    "id": "thread-059-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-061-1",
+    "expected": "original",
+    "labelStatus": "owner-confirmed-category"
+  },
+  {
+    "id": "thread-062-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-063-1",
+    "expected": "original",
+    "labelStatus": "owner-confirmed-category"
+  },
+  {
+    "id": "thread-064-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-065-1",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-066-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-067-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-068-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-069-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-070-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-101-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-102-1",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-103-1",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-104-1",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-105-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-106-1",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-107-1",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-108-1",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-109-1",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-110-1",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-111-1",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-112-1",
+    "expected": "simplified",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-113-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-114-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-115-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-116-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  },
+  {
+    "id": "thread-117-1",
+    "expected": "original",
+    "labelStatus": "provisional-reviewer-label-under-owner-policy"
+  }
+]

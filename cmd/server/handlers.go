@@ -2743,8 +2743,15 @@ func (s *server) original(w http.ResponseWriter, r *http.Request) {
 			"%s carries no text/html part of its own, so there is no original to show", extID))
 		return
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
+	if r.URL.Query().Get("analysis") == "1" {
+		send(w, http.StatusOK, struct {
+			HTML     string                `json:"html"`
+			Analysis spec.OriginalAnalysis `json:"analysis"`
+		}{HTML: body, Analysis: spec.AnalyseOriginal(raw)})
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if _, err := io.WriteString(w, body); err != nil {
 		// Nothing to do about a write that failed to a client that has gone: the
 		// status line and the content type are already out.

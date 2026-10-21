@@ -1,12 +1,17 @@
 import { ApiError } from "../api/api";
+import type { components } from "../api/api.d";
+
+export type OriginalAnalysis = components["schemas"]["OriginalAnalysis"];
+// Optional only for unavailable analysis from a legacy/incomplete response.
+export type OriginalPayload = { html: string; analysis?: OriginalAnalysis };
 
 // Not a security boundary: the server sanitises the html (spec.OriginalBody); a
 // shadow root encapsulates styles but does not sandbox script.
 
 // Cached per session as promises; rejections are evicted so a transient failure isn't sticky.
-const asked = new Map<string, Promise<string>>();
+const asked = new Map<string, Promise<OriginalPayload>>();
 
-export function fetchOriginal(extID: string): Promise<string> {
+export function fetchOriginal(extID: string): Promise<OriginalPayload> {
   const held = asked.get(extID);
   if (held) return held;
   const fetching = ask(extID);
@@ -15,10 +20,40 @@ export function fetchOriginal(extID: string): Promise<string> {
   return fetching;
 }
 
-async function ask(extID: string): Promise<string> {
-  const res = await fetch(`/v1/entries/${encodeURIComponent(extID)}/original`);
+async function ask(extID: string): Promise<OriginalPayload> {
+  const res = await fetch(`/v1/entries/${encodeURIComponent(extID)}/original?analysis=1`);
   if (!res.ok) throw new ApiError(res.status, await whyNot(res));
-  return res.text();
+  if (res.headers.get("Content-Type")?.startsWith("text/html")) return { html: await res.text() };
+  const payload: unknown = await res.json();
+  if (!record(payload) || typeof payload.html !== "string")
+    throw new Error("the original response has no HTML");
+  return { html: payload.html, analysis: receipt(payload.analysis) };
+}
+
+function record(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+// Do not fabricate a zero receipt or rescore the displayed HTML if analysis is
+// absent/malformed. Explicit original remains usable when its HTML is available.
+function receipt(value: unknown): OriginalAnalysis | undefined {
+  if (
+    !record(value) ||
+    !Number.isInteger(value.score) ||
+    (value.score as number) < 0 ||
+    typeof value.defaultsToOriginal !== "boolean" ||
+    typeof value.uncertain !== "boolean" ||
+    !Array.isArray(value.matches) ||
+    !value.matches.every(
+      (m: unknown) =>
+        record(m) &&
+        typeof m.rule === "string" &&
+        Number.isInteger(m.points) &&
+        (m.points as number) > 0,
+    )
+  )
+    return undefined;
+  return value as OriginalAnalysis;
 }
 
 // This route sits outside the generated client, so it mirrors the client's error-message extraction.

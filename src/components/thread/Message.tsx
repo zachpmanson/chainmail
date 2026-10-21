@@ -1,14 +1,16 @@
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { receiptNames } from "../../lib/message/who";
 import type { MessageEmail } from "../../lib/message/email";
 import { useOriginal } from "../../lib/message/useOriginal";
+import type { OriginalPayload } from "../../lib/message/original";
 import StatusBadge from "../ui/StatusBadge";
 import Attachments from "./Attachments";
 import Avatar from "./Avatar";
 import Body from "./Body";
 import CopyJson from "./CopyJson";
 import OriginalControl from "./OriginalControl";
+import OriginalAnalysis from "./OriginalAnalysis";
 import Stamp from "./Stamp";
 
 // The message-level variable colors both the org label and the bubble's decorative stripe.
@@ -59,7 +61,7 @@ export type MessageMedia = {
 
 /** The original-styling switch; absent unless the corpus holds the sender's own part and a server can fetch it. */
 export type MessageReading = {
-  original: { extId: string; load: (extId: string) => Promise<string> };
+  original: { extId: string; load: (extId: string) => Promise<OriginalPayload> };
   /** stored half of the switch; absent keeps it in browser storage */
   person?: { id: number; preferOriginal: boolean | undefined };
   /** flips that preference; absent keeps the switch local */
@@ -109,11 +111,13 @@ export default function Message({
   /** what the clip button copies as JSON; absent hides the button */
   copyJson?: unknown;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const styled = useOriginal(
     reading?.original,
     fromEmail,
     reading?.person,
     reading?.onPreferOriginal,
+    expanded,
   );
   const who = senderTitle ?? sender ?? "";
   return (
@@ -134,7 +138,10 @@ export default function Message({
     >
       <div className="min-w-0">
         {/* A native <details>, so the export works without scripting and find-in-page reaches the ids. */}
-        <details className="hdr mb-0.5 px-0.5">
+        <details
+          className="hdr mb-0.5 px-0.5"
+          onToggle={(event) => setExpanded(event.currentTarget.open)}
+        >
           <summary className="flex cursor-pointer list-none flex-wrap items-baseline gap-1 focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-accent">
             <Avatar name={sender ?? ""} orgSlot={orgSlot} pic={avatarClass} title={who} />
             <span className="text-sm font-[650]" title={who}>
@@ -179,6 +186,14 @@ export default function Message({
                 ) : null}
                 {copyJson !== undefined ? <CopyJson data={copyJson} /> : null}
               </span>
+            ) : null}
+            {reading !== undefined ? (
+              <OriginalAnalysis
+                analysis={styled.analysis}
+                pending={styled.analysisState === "asking" || styled.analysisState === undefined}
+                explicit={styled.explicit}
+                on={styled.on}
+              />
             ) : null}
           </div>
         </details>
