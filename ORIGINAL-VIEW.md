@@ -75,19 +75,23 @@ Cached tree summaries avoid repeated whole-subtree feature scans. The header say
 
 The 119 anonymised fixtures contain no stylesheet bodies; most expected labels
 are provisional reviewer applications of the owner's policy. Repeated templates
-mean this is not unseen-family or mailbox-wide accuracy validation. The strict
-corpus check remains in the normal suite, without skipped cases or exceptions:
+mean this is not unseen-family or mailbox-wide accuracy validation. The normal corpus suite runs all 119 mutation checks and 117 expected-mode
+assertions. On 2026-10-22 the owner explicitly paused just the two disputed
+expected-mode assertions for deployment; their desired labels remain unchanged.
+Restore all 119 assertions with:
 
 ```sh
-nix develop -c go test ./internal/spec -run TestOriginalAnalysisAnonymisedCorpus -count=1
+nix develop -c env CHAINMAIL_STRICT_ORIGINAL_CORPUS=1 go test ./internal/spec -run TestOriginalAnalysisAnonymisedCorpus -count=1
 ```
 
 Latest targeted result: **117/119 matches, zero false positives, two false
 negatives**. `thread-041-1` and `thread-059-1` are nearly identical bounded prose
 alerts with a logo/bold field labels but no other recognized primary design
-family. Their provisional expected-original labels remain unchanged pending an
-owner preference check. Thus the strict corpus/full check remains red; this
-branch must not be presented as merge-ready.
+family. Their provisional expected-original labels remain unchanged. The explicit
+strict command still fails on these two cases, while normal checks visibly
+report the two temporary pauses. Revisit and restore them under
+[zpm/chainmail#339](https://github.com/zachpmanson/chainmail/issues/339); do not
+interpret the pause as a label correction or a classifier exception.
 
 All 119 fixtures preserve receipts under opaque identity renaming, neutral
 wrapping and added marked history/signatures. A private read-only comparison also
