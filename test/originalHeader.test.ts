@@ -130,7 +130,7 @@ describe("expanded message header", () => {
       uncertain: true,
     });
     expect(explanation()).toBe(
-      "HTML 2 pt — main design (+2) · automatic stripped (uncertain history)",
+      "HTML 2 pt — main design (+2) · automatic stripped (analysis uncertain)",
     );
   });
 

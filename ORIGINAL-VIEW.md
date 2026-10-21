@@ -1,108 +1,98 @@
 # Original HTML default
 
-`internal/spec/originalanalysis.go` owns the one classifier. The browser uses its
-receipt for both automatic selection and the expanded-header explanation; it does
-not score the displayed HTML again. Sender/server or browser-saved preferences
-still override the automatic choice.
+`internal/spec/originalanalysis.go` owns the one HTML-only classifier. The browser
+uses its receipt for automatic selection and the expanded-header explanation;
+saved server/browser preferences still win. It never rescores the displayed HTML.
 
-## Analysis, not rewriting
+## Separate analysis
 
-Analysis parses a separate copy of the entry's own stored HTML. Neither the stored
-part nor `OriginalBody` changes. The ordinary original endpoint remains sanitized
-`text/html`; `?analysis=1` returns `{html, analysis}` with exactly the same fragment
-and `Cache-Control: no-cache`. No second HTML copy is sent for scoring. OpenAPI and
-the generated client types document this opt-in response.
+The stored part and `OriginalBody` rendering are unchanged. Ordinary GET remains
+sanitized `text/html`; `?analysis=1` returns `{html, analysis}` with exactly the
+same fragment and `Cache-Control: no-cache`. Analysis uses its own parsed tree,
+not the application-generated canvas styles.
 
 Before scoring:
 
-- Executable/dead content is pruned using the original-rendering policy. Inline
-  `display:none`, hidden visibility/attributes, zero opacity, tracker-sized images,
-  and zero-font text are ignored. Visible child font sizes inside zero-font layout
-  wrappers survive. Stylesheets are not interpreted or fetched.
-- Explicit quote containers are excluded using the existing backend boundary
-  recognition, including normalized client class tokens and Apple cite blocks.
-  Gmail signatures and existing `details.sig` folds are excluded. Removing one
-  container never cuts its following siblings. Unmarked pull quotes remain.
-- Header-only or unwrapped history uses shared `isBoundary`/`boundarySpans`
-  recognition, not another header vocabulary. It remains in the analysis tree
-  with `uncertain=true`, which blocks automatic original. This does not pretend to
-  distinguish historical text from later inline answers.
-- Compact contact/logo regions after earlier content are excluded by shape:
-  contact-link schemes, an image, no prominent graphic/action, at most 120 words,
-  and flows of at most 12 words. No names, sign-off phrases or generic footer IDs
-  participate. Only the region is removed, not a suffix. No corpus repeated-tail
-  lookup runs.
+- Ignore executable/dead content, inline hidden/zero-opacity content, explicit
+  zero-size/tracker images and zero-font text. Visible child font sizes inside
+  zero-font layout wrappers survive. Supported inline declarations honor
+  `!important` and numeric-zero spellings.
+- Reuse backend quote/header recognition. Explicit history containers, normalized
+  Gmail signatures and `details.sig` folds are excluded locally; later authored
+  siblings survive. Unmarked pull quotes remain. Ambiguous unwrapped history
+  stays intact and makes the automatic decision uncertain/simplified.
+- Exclude compact contact/logo regions after earlier content by logical flow,
+  contact-link schemes and small-image geometry, not names, sign-off phrases or
+  footer IDs. Paragraph/div/br equivalents agree; a later authored design is not
+  cut away. Telephone scheme facts are retained only on the private analysis
+  tree; the original-rendering URL policy is not relaxed.
 
-## Evidence
+## Independent evidence
 
-Each evidence family contributes one point, at most once in a candidate region:
+Each family contributes at most one point in a candidate primary region:
 
-1. **Page layout:** a fixed/max width of 320–1200 CSS pixels, or padding of at least
-   16 pixels plus a painted/bordered surface. A centered painted table can obtain
-   its column bound from a descendant cell/table.
-2. **Designed action:** an explicitly block/inline-block/inline-flex link with its
-   own painted/padded or rounded button geometry (including paint inside a link).
-   An ordinary inline reference does not inherit the whole page cell's styling.
-3. **Hierarchy/modules/columns:** semantic headings, short large-font blocks with
-   actual size contrast, multiple independent painted/padded modules, or explicit
-   CSS grid/flex columns. Uniform large body type and repeated nested wrappers do
-   not create independent evidence. Ordinary data cells are not modules.
-4. **Prominent graphic:** explicit image geometry (including a 400×90 banner), not
-   an image count, linked logo count or tracking pixel.
+1. **Main layout:** bounded/centered, padded, structured page geometry. A bare
+   width declaration alone is insufficient. Aligned, same-width centered sibling
+   panels can form one page column; disconnected partial regions cannot pool
+   their votes.
+2. **Designed action:** a block-like link with its own painted/padded or rounded
+   button geometry. It cannot inherit a whole page cell's paint. A tiny late
+   control in a bare text column does not describe the main prose.
+3. **Hierarchy/modules/columns:** short leading heading flows with relative type
+   contrast, independent painted/padded modules, or multiple visible content
+   items in a horizontal layout. Uniform large body text, empty flex/grid,
+   ordinary data cells and repeated nested wrappers do not qualify.
+4. **Prominent graphic:** explicit image geometry, including supported percentage
+   widths within an explicitly bounded column. Unknown intermediate constraints,
+   intrinsic image sizes and external CSS are not guessed. Small logos and
+   tracking pixels are not graphics votes.
 
-Original requires the page-layout family **and at least one other family in the
-same region**, with no uncertain history. Fully evidenced, non-overlapping regions
-must cover at least half of retained text words. Multiple authored designed
-sections can meet this coverage together, but partial votes from disconnected
-regions cannot be pooled. A receipt reports only retained main-region evidence;
-its score alone is not an unconditional selection rule.
+Original requires main layout **plus at least one independent family**, with no
+uncertainty. Fully evidenced, non-overlapping regions must cover half the retained
+estimated text area (words weighted by resolved font size squared, clamped to
+8–32 pixels), not half the raw word count. This prevents modest small-print
+footers from outweighing prominent main cards. Multiple complete authored regions
+can qualify together. The receipt's score is not an unconditional threshold:
+localization and uncertainty gates also apply.
 
 No tag-count points, p-tag percentage guard, opaque class/ID/URL identity,
-sender/service lists, semantic service categories, conversation state, fixture ID,
-label or external corpus is an input. Equivalent p/div/br correspondence and
-neutral wrappers do not manufacture design evidence. Inline colour, styling,
-nested tables and data tables alone are not independent design families.
+sender/service lists, semantic service categories, conversation state, fixture
+IDs, labels or external corpus are classifier inputs. Inline colours and nested
+or sibling data tables alone are neutral.
 
-## Limits and current evaluation
+## Limits and evaluation
 
-This is a conservative structural heuristic, not a browser renderer or an
-accuracy claim. External/class-based CSS, arbitrary CSS expressions, inherited
-visibility overrides and intrinsic image dimensions are not resolved. Explicit
-quote containers can themselves contain authored answers; HTML alone cannot
-recover that authorship. Unmarked signatures/contact regions are necessarily
-heuristic. The word-coverage gate can underweight a visually prominent short card
-when a long legal footer follows it. Unknown cases remain simplified; the manual
-original control remains available.
+This is a conservative structural estimate, not computed browser layout. Class
+stylesheets, arbitrary CSS expressions, inherited visibility overrides and
+intrinsic images remain limitations. HTML cannot reliably separate authored
+answers inside explicit historical containers or every unmarked signature. Very
+long secondary content can still overwhelm approximate visual coverage.
 
-The 119 anonymized fixtures have no stylesheet bodies and provisional labels.
-The strict test is intentionally **not skipped or relabelled**:
+Per-request input/node/cumulative-depth budgets bound analysis; exceeding them
+returns uncertain/simplified without affecting access to original rendering.
+Cached tree summaries avoid repeated whole-subtree feature scans. The header says
+“analysis uncertain” rather than claiming every uncertainty is quoted history.
+
+The 119 anonymised fixtures contain no stylesheet bodies; most expected labels
+are provisional reviewer applications of the owner's policy. Repeated templates
+mean this is not unseen-family or mailbox-wide accuracy validation. The strict
+corpus check remains in the normal suite, without skipped cases or exceptions:
 
 ```sh
 nix develop -c go test ./internal/spec -run TestOriginalAnalysisAnonymisedCorpus -count=1
 ```
 
-Current result: **109/119 matches, 0 false positives, 10 false negatives**. The
-following expected-original fixtures remain simplified:
+Latest targeted result: **117/119 matches, zero false positives, two false
+negatives**. `thread-041-1` and `thread-059-1` are nearly identical bounded prose
+alerts with a logo/bold field labels but no other recognized primary design
+family. Their provisional expected-original labels remain unchanged pending an
+owner preference check. Thus the strict corpus/full check remains red; this
+branch must not be presented as merge-ready.
 
-- `thread-011-1`: short designed card loses text coverage to its trailing text.
-- `thread-041-1`, `thread-059-1`: bounded prose notification with no independent
-  retained action, heading, modules, columns or prominent graphic.
-- `thread-044-1`, `thread-046-1`, `thread-056-1`, `thread-058-1`, `thread-061-1`,
-  `thread-063-1`: main designed card does not dominate the retained text; trailing
-  small-font material remains in the denominator.
-- `thread-052-1`: dominant prose section has a layout but not another independent
-  design family localized there.
-
-These are genuine disagreements, not exceptions in the classifier. All 119
-fixtures also retain identical receipts under opaque identity renaming, neutral
-wrapping and addition of marked history/signatures. Synthetic tests cover the
-three stress cases, independent-evidence negatives, hidden/tracker exclusion,
-flat div designs, main design after closed quotes/contact regions, and retained
-inline answers/pull quotes.
-
-`npm test` passes (280 tests plus one pre-existing expected failure). Original
-endpoint, classifier synthetic tests, lint, formatting, vet and typecheck pass.
-`make check` currently fails at the strict corpus test on the ten disagreements
-above; it must not be represented as a green full validation. No label changes
-or fixture-specific exceptions were made. Resolve these limitations in independent
-review before treating the branch as merge-ready.
+All 119 fixtures preserve receipts under opaque identity renaming, neutral
+wrapping and added marked history/signatures. A private read-only comparison also
+confirmed matching original-versus-anonymised decisions for all 119 inputs; no
+private originals or mapping are committed. Synthetic regressions include the
+three initial stress cases and the independent review's visibility, localization,
+flow, contact, column and resource-limit counterexamples. The original endpoint,
+manual overrides and unavailable/stale receipt behavior have separate tests.

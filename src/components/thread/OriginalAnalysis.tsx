@@ -23,7 +23,7 @@ export default function OriginalAnalysis({
       {explicit
         ? ` · saved ${on ? "original" : "stripped"} view (overrides score)`
         : analysis
-          ? ` · automatic ${analysis.defaultsToOriginal ? "original" : "stripped"} (${analysis.uncertain ? "uncertain history" : "main layout + design evidence required"})`
+          ? ` · automatic ${analysis.defaultsToOriginal ? "original" : "stripped"} (${analysis.uncertain ? "analysis uncertain" : "main layout + design evidence required"})`
           : ""}
     </span>
   );
