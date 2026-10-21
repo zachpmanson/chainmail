@@ -122,7 +122,11 @@ func TestAnalysisQuoteExtractionKeepsAuthoredSiblings(t *testing.T) {
 			t.Errorf("quote only: %+v", got)
 		}
 	}
-	for _, raw := range []string{`<div class="gmail_signature">` + designedOriginal + `</div>`, `<details class="sig">` + designedOriginal + `</details>`} {
+	for _, raw := range []string{
+		`<div class="gmail_signature">` + designedOriginal + `</div>`,
+		`<div class="extra x_GMAIL_SIGNATURE">` + designedOriginal + `</div>`,
+		`<details class="sig">` + designedOriginal + `</details>`,
+	} {
 		if got := AnalyseOriginal(raw); got.Score != 0 {
 			t.Errorf("signature only: %+v", got)
 		}
