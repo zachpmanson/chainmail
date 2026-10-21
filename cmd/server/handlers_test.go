@@ -462,6 +462,89 @@ func TestAnEntrysOwnHTMLKeepsItsStylesAndLosesItsScripts(t *testing.T) {
 	}
 }
 
+func TestOriginalAnalysisResponse(t *testing.T) {
+	srv := htmlServer(t)
+	path := entryPath("/v1/entries/", extHTML) + "/original"
+	plain := srv.do(t, "GET", path, nil)
+	analysed := srv.do(t, "GET", path+"?analysis=1", nil)
+	if analysed.status != 200 || analysed.header.Get("Content-Type") != "application/json; charset=utf-8" || analysed.header.Get("Cache-Control") != "no-cache" {
+		t.Fatalf("analysis response: %d %v %s", analysed.status, analysed.header, analysed.body)
+	}
+	loadAPI(t).assert(t, "OriginalResponse", analysed.body)
+	var result struct {
+		HTML     string                `json:"html"`
+		Analysis spec.OriginalAnalysis `json:"analysis"`
+	}
+	if err := json.Unmarshal(analysed.body, &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.HTML != string(plain.body) {
+		t.Fatal("analysis changed displayed HTML")
+	}
+	if !reflect.DeepEqual(result.Analysis, spec.AnalyseOriginal(htmlPart)) {
+		t.Fatal("endpoint did not analyse the raw stored part")
+	}
+	for _, bad := range []string{"<script", "onclick", "javascript:"} {
+		if strings.Contains(result.HTML, bad) {
+			t.Errorf("unsafe HTML: %s", bad)
+		}
+	}
+	for _, id := range []string{extNone, extPlain} {
+		path := entryPath("/v1/entries/", id) + "/original"
+		a, b := srv.do(t, "GET", path, nil), srv.do(t, "GET", path+"?analysis=1", nil)
+		if a.status != 404 || b.status != a.status || string(a.body) != string(b.body) {
+			t.Errorf("404 differs: %s / %s", a.body, b.body)
+		}
+	}
+	if res := srv.do(t, "POST", path+"?analysis=1", nil); res.status != 405 {
+		t.Errorf("POST analysis = %d", res.status)
+	}
+	if res := srv.do(t, "GET", path+"?analysis=0", nil); string(res.body) != string(plain.body) {
+		t.Error("non-opt-in changed HTML")
+	}
+}
+
+func TestOriginalAnalysisDoesNotCountAppCanvasOrRewriteDisplay(t *testing.T) {
+	srv := htmlServer(t)
+	person := putPerson(t, srv.store, "Test Author", "author@example.test")
+	for i, raw := range []string{
+		`<p>Hello</p>`,
+		`<table><tr><td>Ordinary data table with enough words but no independent page design at all.</td></tr></table>`,
+		`<p id="answer" style="color:red">Authored answer</p><div class="gmail_quote">Quoted history</div><div class="gmail_signature">Signature</div><p>Later answer</p><script>alert(1)</script>`,
+	} {
+		ext := fmt.Sprintf("mail:<analysis-%d@example.test>", i)
+		putMail(t, srv.store, mailFixture{ext: ext, ts: "2026-03-01T09:00:00+11:00", person: person, container: "analysis", subject: "Test", text: "Test", html: raw})
+		path := entryPath("/v1/entries/", ext) + "/original"
+		a, b := srv.do(t, "GET", path, nil), srv.do(t, "GET", path+"?analysis=1", nil)
+		if a.status != 200 || b.status != 200 {
+			t.Fatalf("status %d / %d: %s", a.status, b.status, b.body)
+		}
+		got := decode[struct {
+			HTML     string                `json:"html"`
+			Analysis spec.OriginalAnalysis `json:"analysis"`
+		}](t, b)
+		if got.HTML != string(a.body) {
+			t.Fatal("analysis rewrote original")
+		}
+		if got.Analysis.Score != 0 || got.Analysis.DefaultsToOriginal {
+			t.Fatalf("app presentation counted: %+v", got.Analysis)
+		}
+		if !strings.Contains(got.HTML, ":host") {
+			t.Fatal("missing app canvas")
+		}
+		if i == 2 {
+			for _, want := range []string{`id="answer"`, `color:red`, `class="gmail_quote"`, `class="gmail_signature"`, "Later answer"} {
+				if !strings.Contains(got.HTML, want) {
+					t.Errorf("display lost %s", want)
+				}
+			}
+			if strings.Contains(got.HTML, "<script") {
+				t.Fatal("unsafe original")
+			}
+		}
+	}
+}
+
 // Two different nothings, and a caller that has to tell them apart: the entry may
 // not exist, or it may exist with no html of its own (which is most mail, and is
 // also what an entry whose html reduces to nothing showable is). Both are 404s in
