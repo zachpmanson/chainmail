@@ -74,7 +74,8 @@ type Attachment struct {
 
 // Store is a corpus database.
 type Store struct {
-	db *sql.DB
+	db        *sql.DB
+	gmailSync sync.Map // per-account locks for in-memory stores
 
 	// bodies holds each mail body's reduction, keyed by entry id and guarded by
 	// bodiesMu. See reduced for why the cache key is the body itself.

@@ -58,6 +58,29 @@ make doctor                                # what is in it, and what is missing
 and mail is paged with a resumable cursor. `dedupe` is irreversible: `corpus dedupe -apply`
 after `make backup`.
 
+### Incremental Gmail sync
+
+Unbounded `corpus slurp -q in:anywhere` (including the server's full-mail sweep)
+uses Gmail History with the in-process Gmail backend. The first run captures a
+mailbox history ID, scans every page without a date frontier, then replays changes
+that arrived during the scan. Later runs read only IDs with message/label changes,
+including old messages archived or moved by Gmail/Docket. Labels are replaced even
+when message bodies are unchanged. No additional OAuth grant is requested: the
+existing `https://mail.google.com/` scope permits History reads.
+
+Checkpoints and sync locks are per account. An interrupted scan resumes its pages;
+an interrupted history replay starts again from the last fully committed ID.
+Expired history IDs trigger another complete scan and label reconciliation, not a
+date-limited top-up. Permanently deleted messages retain their corpus content but
+lose their mailbox labels. History state never authorizes purging stored content.
+
+Custom `-q`, `-since`, `-limit`, and legacy subprocess-backend runs keep the existing
+query cursor/frontier path and do not establish history checkpoints. A bounded run
+that intervenes in a bootstrap invalidates that pending bootstrap; the next full
+sync restarts safely. Each mail run reports list/history pages, full-message read
+attempts and elapsed time (the query backend may also fetch envelope metadata).
+The first full sync/recovery can be expensive; compare subsequent sweeps for savings.
+
 ## Running it
 
 ```bash

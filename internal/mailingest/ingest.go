@@ -1,6 +1,7 @@
 package mailingest
 
 import (
+	"errors"
 	"fmt"
 	"net/mail"
 	"net/url"
@@ -74,6 +75,10 @@ type Result struct {
 	// Pages is docket requests made, so a walk that paged can be told from one
 	// that took a single page.
 	Pages int
+	// Reads counts full-message requests; Elapsed includes scan/history work.
+	Reads   int
+	Elapsed time.Duration
+	History bool // used mailbox-wide history (including bootstrap/recovery)
 	// Resumed is true when this run continued a cursor left by an earlier one.
 	Resumed bool
 	// NextPage is the token a StopMax run left behind, and is what the stored
@@ -103,7 +108,28 @@ func Ingest(store *corpus.Store, c Mailbox, query string, b Bound) (Result, erro
 }
 
 // IngestForAccount scopes resumable progress and stored mailbox copies to one account.
-func IngestForAccount(store *corpus.Store, c Mailbox, query string, b Bound, accountID string) (Result, error) {
+func IngestForAccount(store *corpus.Store, c Mailbox, query string, b Bound, accountID string) (r Result, err error) {
+	start := time.Now()
+	defer func() { r.Elapsed = time.Since(start) }()
+	unlock, err := store.LockGmailSync(accountID)
+	if err != nil {
+		return r, err
+	}
+	defer unlock()
+	if h, ok := c.(HistoryMailbox); ok && query == "in:anywhere" && b.Max == 0 {
+		return ingestHistory(store, h, b, accountID)
+	}
+	if query == "in:anywhere" {
+		// A bounded/legacy walk can advance the same query cursor without
+		// recording bootstrap generations. Never resume that as a full sync.
+		if err := store.CancelGmailBootstrap(accountID); err != nil {
+			return r, err
+		}
+	}
+	return ingestScan(store, c, query, b, accountID, "")
+}
+
+func ingestScan(store *corpus.Store, c Mailbox, query string, b Bound, accountID, bootstrapID string) (Result, error) {
 	var r Result
 	if b.PageSize <= 0 {
 		b.PageSize = defaultPageSize
@@ -117,6 +143,10 @@ func IngestForAccount(store *corpus.Store, c Mailbox, query string, b Bound, acc
 	if cur.Exists && !cur.Complete && cur.Position != "" {
 		token = cur.Position
 		r.Resumed = true
+	}
+	// History bootstrap must revisit every copy, including old folder labels.
+	if bootstrapID != "" {
+		cur.Frontier = time.Time{}
 	}
 	var floor time.Time
 	if !cur.Frontier.IsZero() {
@@ -157,6 +187,7 @@ walk:
 				r.Stop = StopFrontier
 				break walk
 			}
+			r.Reads++
 			msg, err := c.Read(env.ID)
 			if err != nil {
 				// The cursor still names the page this envelope came from, so a
@@ -182,6 +213,16 @@ walk:
 				r.Created++
 			case res.Changed:
 				r.Changed++
+			}
+			if bootstrapID != "" {
+				if res.Skipped {
+					if err := store.ForgetGmailCopyLabels(accountID, env.ID); err != nil {
+						return r, err
+					}
+				}
+				if err := store.MarkGmailScanSeen(accountID, env.ID, bootstrapID); err != nil {
+					return r, err
+				}
 			}
 			if ts.After(newest) {
 				newest = ts
@@ -251,7 +292,18 @@ func IngestIDs(store *corpus.Store, c Mailbox, ids []string) (Result, error) {
 }
 
 // IngestIDsForAccount ingests explicit message IDs from one account.
-func IngestIDsForAccount(store *corpus.Store, c Mailbox, ids []string, accountID string) (Result, error) {
+func IngestIDsForAccount(store *corpus.Store, c Mailbox, ids []string, accountID string) (r Result, err error) {
+	start := time.Now()
+	defer func() { r.Elapsed = time.Since(start) }()
+	unlock, err := store.LockGmailSync(accountID)
+	if err != nil {
+		return Result{}, err
+	}
+	defer unlock()
+	return ingestIDs(store, c, ids, accountID, false)
+}
+
+func ingestIDs(store *corpus.Store, c Mailbox, ids []string, accountID string, history bool) (Result, error) {
 	// An explicit list is its own bound: there is no page after the last id, so
 	// the walk is complete by construction. No cursor either — a list of ids is
 	// not a container anything could later top up.
@@ -261,7 +313,14 @@ func IngestIDsForAccount(store *corpus.Store, c Mailbox, ids []string, accountID
 		if id == "" {
 			continue
 		}
+		r.Reads++
 		msg, err := c.Read(id)
+		if history && errors.Is(err, ErrMessageGone) {
+			if err := store.ForgetGmailCopyLabels(accountID, id); err != nil {
+				return r, err
+			}
+			continue
+		}
 		if err != nil {
 			return r, fmt.Errorf("reading %s: %w", id, err)
 		}
@@ -276,6 +335,11 @@ func IngestIDsForAccount(store *corpus.Store, c Mailbox, ids []string, accountID
 		switch {
 		case res.Skipped:
 			r.Drafts++
+			if history {
+				if err := store.ForgetGmailCopyLabels(accountID, id); err != nil {
+					return r, err
+				}
+			}
 		case res.Created:
 			r.Created++
 		case res.Changed:

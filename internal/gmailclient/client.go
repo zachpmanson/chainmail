@@ -189,6 +189,9 @@ func (c Client) Read(id string) (mailingest.Message, error) {
 		IncludeHTML: true,
 	})
 	if err != nil {
+		if gmailNotFound(err) {
+			return mailingest.Message{}, fmt.Errorf("%w: %w", mailingest.ErrMessageGone, err)
+		}
 		return mailingest.Message{}, err
 	}
 	return convertMessage(msg), nil
