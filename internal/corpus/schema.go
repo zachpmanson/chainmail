@@ -561,4 +561,15 @@ var migrations = []string{
 	);
 	create unique index sightings_direct on sightings(entry_id, kind) where seen_in is null;
 	`,
+
+	// 23: mailbox-wide history checkpoints, separate from query cursors. A
+	// bootstrap ID is captured before scanning and survives interrupted scans.
+	`
+	create table gmail_history (
+	  account_id text primary key references gmail_accounts(id),
+	  history_id text not null default '',
+	  bootstrap_id text not null default ''
+	);
+	alter table gmail_copies add column seen_history_id text not null default '';
+	`,
 }

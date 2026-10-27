@@ -511,9 +511,10 @@ func runWithMailbox(path string, o mailOpts, c mailingest.Mailbox) (mailingest.R
 	}
 	fmt.Printf("saw %d over %d page(s), created %d, changed %d, skipped %d draft(s), resolved %d parent edges, redrew %d from headers, linked %d quoted trail(s)\n",
 		r.Seen, r.Pages, r.Created, r.Changed, r.Drafts, r.Resolved, r.Reasserted, r.QuotedParents)
+	fmt.Printf("mail sync: %d list/history page(s), %d full read(s), elapsed %s, history=%t\n", r.Pages, r.Reads, r.Elapsed.Round(time.Millisecond), r.History)
 	switch r.Stop {
 	case mailingest.StopExhausted:
-		fmt.Println("complete: docket had no further page")
+		fmt.Println("complete: mailbox had no further page")
 	case mailingest.StopFrontier:
 		fmt.Println("complete: reached the frontier an earlier walk left, " +
 			"so the mail below it is already in")
