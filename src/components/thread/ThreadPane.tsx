@@ -128,9 +128,9 @@ export default function ThreadPane({
               }}
             >
               {tree ? (
-                <Bars3BottomRightIcon aria-hidden="true" />
-              ) : (
                 <Bars3Icon aria-hidden="true" />
+              ) : (
+                <Bars3BottomRightIcon aria-hidden="true" />
               )}
             </IconButton>
             <IconButton
