@@ -537,9 +537,10 @@ func (t *analysisTree) snapshot(root *html.Node) {
 			}
 			if n.DataAtom == atom.A {
 				href := strings.ToLower(strings.TrimSpace(attr(n, "href")))
+				blockLike := s["display"] == "inline-block" || s["display"] == "block" || s["display"] == "inline-flex"
 				if d.telephone || strings.HasPrefix(href, "mailto:") {
 					f.contacts++
-				} else if href != "" && (s["display"] == "inline-block" || s["display"] == "block" || s["display"] == "inline-flex") && (t.painted(n) || f.painted) {
+				} else if href != "" && (blockLike && (t.painted(n) || f.painted) || t.inlineControl(n, f)) {
 					f.actions++
 					f.actionAt = d.startArea
 				}
@@ -705,6 +706,135 @@ func (t *analysisTree) painted(n *html.Node) bool {
 	return t.surface(n) && (d.padding >= 6 || s["border-radius"] != "")
 }
 
+// Only simple colors supply new inline-control paint. Background shorthands
+// with other components or mixed longhands need a cascade we do not model.
+func analysisControlBackground(s map[string]string) bool {
+	bg := s["background-color"]
+	if shorthand, ok := s["background"]; ok {
+		for key := range s {
+			if strings.HasPrefix(key, "background-") {
+				return false
+			}
+		}
+		bg = shorthand
+	}
+	if strings.HasPrefix(bg, "#") {
+		if len(bg) != 4 && len(bg) != 5 && len(bg) != 7 && len(bg) != 9 {
+			return false
+		}
+		for _, c := range bg[1:] {
+			if !strings.ContainsRune("0123456789abcdef", c) {
+				return false
+			}
+		}
+		return analysisBackgroundValue(bg) != ""
+	}
+	switch bg {
+	case "black", "silver", "gray", "white", "maroon", "red", "purple", "fuchsia", "green", "lime", "olive", "yellow", "navy", "blue", "teal", "aqua", "orange", "rebeccapurple":
+		return true
+	}
+	return false
+}
+
+// CSS lengths, unlike HTML dimensions, cannot be positive unitless numbers.
+// em uses the resolved element font; root-relative and other units are declined.
+func analysisCSSLength(value string, font float64) (float64, bool) {
+	if strings.ContainsAny(value, " \t\n\r\f") {
+		return 0, false
+	}
+	n, unit, ok := analysisNumeric(value)
+	if !ok || n < 0 || strings.HasSuffix(strings.TrimSuffix(value, unit), ".") {
+		return 0, false
+	}
+	switch unit {
+	case "":
+		return 0, n == 0
+	case "px":
+		return n, true
+	case "pt":
+		return n * 4 / 3, true
+	case "em":
+		return n * font, true
+	}
+	return 0, false
+}
+
+func analysisPadding(s map[string]string, font float64) ([4]float64, bool) {
+	var padding [4]float64
+	value, shorthand := s["padding"]
+	values := strings.Fields(value)
+	if shorthand {
+		if len(values) < 1 || len(values) > 4 {
+			return padding, false
+		}
+		for i := range padding {
+			index := i
+			if len(values) == 1 {
+				index = 0
+			} else if len(values) == 2 {
+				index %= 2
+			} else if len(values) == 3 && i == 3 {
+				index = 1
+			}
+			var ok bool
+			padding[i], ok = analysisCSSLength(values[index], font)
+			if !ok {
+				return padding, false
+			}
+		}
+	}
+	for i, key := range []string{"padding-top", "padding-right", "padding-bottom", "padding-left"} {
+		if value, ok := s[key]; ok {
+			// analysisStyle does not resolve cross-property cascade order.
+			if shorthand {
+				return padding, false
+			}
+			var valid bool
+			padding[i], valid = analysisCSSLength(value, font)
+			if !valid {
+				return padding, false
+			}
+		}
+	}
+	for key := range s {
+		if strings.HasPrefix(key, "padding-") && key != "padding-top" && key != "padding-right" && key != "padding-bottom" && key != "padding-left" {
+			return padding, false
+		}
+	}
+	return padding, true
+}
+
+// Inline paint alone can be highlighted prose. Require a compact label and
+// generous padding on both axes, owned by the anchor rather than its cell.
+func (t *analysisTree) inlineControl(n *html.Node, f originalFacts) bool {
+	s := t.nodes[n].style
+	if s["display"] != "" && s["display"] != "inline" || f.words == 0 || f.words > 12 || f.images > 0 {
+		return false
+	}
+	paint := analysisControlBackground(s)
+	// A border needs its own visible line style; inherited paint and unresolved
+	// shorthand/longhand overrides cannot supply it.
+	border := analysisBorder(s["border"])
+	for key := range s {
+		if strings.HasPrefix(key, "border-") && !strings.HasSuffix(key, "radius") {
+			border = false
+		}
+	}
+	if border {
+		for _, value := range strings.Fields(s["border"]) {
+			switch value {
+			case "solid", "dashed", "dotted", "double", "groove", "ridge", "inset", "outset":
+				paint = true
+			}
+		}
+	}
+	if !paint {
+		return false
+	}
+	padding, ok := analysisPadding(s, t.nodes[n].font)
+	return ok && padding[0] >= 8 && padding[2] >= 8 && padding[1] >= 16 && padding[3] >= 16
+}
+
 // A tiny late control in a bare column is not evidence about the main prose.
 // A genuinely painted/padded enclosing card may put its primary action last.
 func (t *analysisTree) primary(n *html.Node, at float64) bool {
@@ -754,7 +884,170 @@ func (t *analysisTree) page(n *html.Node) bool {
 	surface := t.surface(n)
 	// A width declaration alone is not a main design. A leading typographic
 	// hierarchy can establish the structure of a minimally styled bounded page.
-	return bounded && (d.padding >= 12 || t.centered(n) || t.heading(n) || d.facts.columns || d.facts.modules >= 2) || d.padding >= 16 && surface || n.DataAtom == atom.Table && t.centered(n) && surface && d.facts.bound
+	return bounded && (d.padding >= 12 || t.centered(n) || t.heading(n) || d.facts.columns || d.facts.modules >= 2) || d.padding >= 16 && surface || n.DataAtom == atom.Table && t.centered(n) && surface && d.facts.bound || t.fluidPage(n)
+}
+
+// Blank display:block cells may sit inside anonymous table cells. Their own
+// width is usable only without extra horizontal sizing we cannot reconcile.
+func (t *analysisTree) fluidGutterWidth(n *html.Node) float64 {
+	d := t.nodes[n]
+	s := d.style
+	if display := s["display"]; display != "" && display != "table-cell" && display != "block" {
+		return 0
+	}
+	var w float64
+	if value, ok := s["width"]; ok {
+		var valid bool
+		w, valid = analysisCSSLength(value, d.font)
+		if !valid {
+			return 0
+		}
+	} else {
+		w = analysisNumber(attr(n, "width"))
+	}
+	if w < 12 || w > 48 {
+		return 0
+	}
+	for _, key := range []string{"min-width", "max-width"} {
+		if value, ok := s[key]; ok {
+			limit, valid := analysisCSSLength(value, d.font)
+			if !valid || key == "min-width" && limit > w || key == "max-width" && limit < w {
+				return 0
+			}
+		}
+	}
+	padding, ok := analysisPadding(s, d.font)
+	if !ok || padding[1] != 0 || padding[3] != 0 {
+		return 0
+	}
+	for key, value := range s {
+		if strings.Contains(key, "inline-size") || strings.HasPrefix(key, "border") && value != "none" && !analysisZero(value) {
+			return 0
+		}
+		if strings.HasPrefix(key, "margin") && !analysisZero(value) {
+			return 0
+		}
+	}
+	return w
+}
+
+// Repeated blank side cells can define a fluid page gutter without defining
+// any pixel width for its content or images. Only this table's own rows count.
+func (t *analysisTree) fluidPage(n *html.Node) bool {
+	if n.DataAtom != atom.Table {
+		return false
+	}
+	s := t.nodes[n].style
+	if display := s["display"]; display != "" && display != "table" && display != "inline-table" {
+		return false
+	}
+	if value := attr(n, "cellpadding"); value != "" && !analysisZero(value) {
+		return false
+	}
+	width := s["width"]
+	if width == "" {
+		width = attr(n, "width")
+	}
+	if size, unit, ok := analysisNumeric(width); !ok || unit != "%" || size != 100 {
+		return false
+	}
+	// Centering may belong to a single-content outer scaffold, never to an
+	// ancestor that also contains disconnected content beside this region.
+	centered := false
+	for p := n; p != nil; p = p.Parent {
+		if t.nodes[p].facts.area != t.nodes[n].facts.area || t.nodes[p].facts.images != t.nodes[n].facts.images {
+			break
+		}
+		if t.centered(p) {
+			centered = true
+			break
+		}
+	}
+	if !centered {
+		return false
+	}
+	rows, substantive := 0, false
+	gutter := 0.0
+	valid := true
+	checkRow := func(row *html.Node) {
+		if row.DataAtom != atom.Tr || !valid {
+			return
+		}
+		if display := t.nodes[row].style["display"]; display != "" && display != "table-row" {
+			valid = false
+			return
+		}
+		f := t.nodes[row].facts
+		empty := f.words == 0 && f.images == 0
+		var cells []*html.Node
+		columns := 0
+		for c := row.FirstChild; c != nil; c = c.NextSibling {
+			if c.Type == html.ElementNode {
+				span := 1
+				if value := attr(c, "colspan"); value != "" {
+					var err error
+					span, err = strconv.Atoi(value)
+					if err != nil || span < 1 || span > 3 || !empty && span != 1 {
+						valid = false
+						return
+					}
+				}
+				// Empty cells still occupy physical columns in following rows.
+				if c.DataAtom != atom.Td || attr(c, "rowspan") != "" && attr(c, "rowspan") != "1" {
+					valid = false
+					return
+				}
+				columns += span
+				cells = append(cells, c)
+			}
+		}
+		if empty && len(cells) == 0 {
+			return
+		}
+		if empty && len(cells) == 1 && columns == 3 {
+			display := t.nodes[cells[0]].style["display"]
+			valid = display == "" || display == "table-cell"
+			return // A full-width table-cell spacer preserves the grid.
+		}
+		if len(cells) != 3 || columns != 3 {
+			valid = false
+			return
+		}
+		if display := t.nodes[cells[1]].style["display"]; display != "" && display != "table-cell" {
+			valid = false
+			return
+		}
+		left, right := t.nodes[cells[0]].facts, t.nodes[cells[2]].facts
+		w := t.fluidGutterWidth(cells[0])
+		if left.words != 0 || right.words != 0 || left.images != 0 || right.images != 0 || w == 0 || w != t.fluidGutterWidth(cells[2]) || gutter != 0 && w != gutter {
+			valid = false
+			return
+		}
+		gutter = w
+		if !empty {
+			rows++
+			substantive = substantive || t.nodes[cells[1]].facts.words > 20
+		}
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		switch c.DataAtom {
+		case atom.Tr:
+			checkRow(c)
+		case atom.Tbody, atom.Thead, atom.Tfoot:
+			expected := map[atom.Atom]string{atom.Tbody: "table-row-group", atom.Thead: "table-header-group", atom.Tfoot: "table-footer-group"}
+			if display := t.nodes[c].style["display"]; display != "" && display != expected[c.DataAtom] {
+				return false
+			}
+			for row := c.FirstChild; row != nil; row = row.NextSibling {
+				checkRow(row)
+			}
+		case atom.Caption:
+			if t.nodes[c].facts.words > 0 || t.nodes[c].facts.images > 0 {
+				return false
+			}
+		}
+	}
+	return valid && rows >= 2 && substantive
 }
 
 func contactShape(f originalFacts) bool {

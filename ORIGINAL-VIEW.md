@@ -34,10 +34,18 @@ Each family contributes at most one point in a candidate primary region:
 1. **Main layout:** bounded/centered, padded, structured page geometry. A bare
    width declaration alone is insufficient. Aligned, same-width centered sibling
    panels can form one page column; disconnected partial regions cannot pool
-   their votes.
+   their votes. A centered 100%-width table can also establish layout through
+   repeated equal blank 12–48px side-cell gutters around a substantive central
+   column. All rows, including empty spacers, must preserve that grid: unresolved
+   rowspans, contradictory table/row displays or gutter sizing/padding decline
+   this added rule. Blank block-display gutters inside anonymous cells remain
+   supported. This uses geometry only, not headings/modules or guessed image bounds.
 2. **Designed action:** a block-like link with its own painted/padded or rounded
-   button geometry. It cannot inherit a whole page cell's paint. A tiny late
-   control in a bare text column does not describe the main prose.
+   button geometry, or a compact self-painted inline link with at least 8px
+   vertical and 16px horizontal padding. This inline rule validates local CSS
+   lengths (em uses the resolved font), rejects positive unitless padding and
+   declines mixed background/padding cascades or unsupported background shorthand.
+   It cannot inherit a whole page cell's paint. A tiny late control in a bare text column does not describe the main prose.
 3. **Hierarchy/modules/columns:** short leading heading flows with relative type
    contrast, independent painted/padded modules, or multiple visible content
    items in a horizontal layout. Uniform large body text, empty flex/grid,
@@ -95,8 +103,19 @@ interpret the pause as a label correction or a classifier exception.
 
 All 119 fixtures preserve receipts under opaque identity renaming, neutral
 wrapping and added marked history/signatures. A private read-only comparison also
-confirmed matching original-versus-anonymised decisions for all 119 inputs; no
-private originals or mapping are committed. Synthetic regressions include the
+confirmed matching endpoint-HTML-versus-anonymised decisions for all 119 inputs;
+these fixtures were collected from the sanitized `/original` endpoint, not raw
+stored `body_html`. That comparison does not establish raw-analyser-input parity.
+No private originals or mapping are committed. Synthetic regressions include the
 three initial stress cases and the independent review's visibility, localization,
 flow, contact, column and resource-limit counterexamples. The original endpoint,
 manual overrides and unavailable/stale receipt behavior have separate tests.
+
+Two additional owner-confirmed examples now pass through the generic fluid-gutter
+and inline-action rules, with receipts 3 and 2. The 119 existing corpus receipts
+remain unchanged. Their sanitized-endpoint provenance, exact added gates and
+synthetic counterexamples are recorded in
+[testdata/original-owner-examples/RULE-PROPOSALS.md](testdata/original-owner-examples/RULE-PROPOSALS.md).
+The simplified sanitizer also preserves safe `picture` fallback descendants while
+removing the wrapper, `source`/`srcset`, handlers and unsupported URLs; the original
+renderer is unchanged.
