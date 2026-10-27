@@ -1,5 +1,5 @@
 import Button from "../ui/Button";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { usePrefs } from "../../lib/prefs/usePrefs";
 import { useEscapeToClear } from "../../lib/inbox/selection";
@@ -90,7 +90,9 @@ function FolderInbox({ folder }: { folder: ReturnType<typeof useFolder> }) {
   // The sentinel isn't rendered after a failed page, or it would refire every render.
   const end = useRef<HTMLDivElement | null>(null);
   const paging = inbox.hasNextPage === true && inbox.isFetchNextPageError !== true;
-  useLoadMore(end, paging, inbox.fetchNextPage);
+  const { fetchNextPage } = inbox;
+  const readMore = useCallback(() => fetchNextPage({ cancelRefetch: false }), [fetchNextPage]);
+  useLoadMore(end, paging && !inbox.isFetching, readMore, inbox.data?.pages, inbox.dataUpdatedAt);
 
   return (
     <div className="wrap mx-0 w-full max-w-none p-0 min-[60rem]:flex min-[60rem]:min-h-0 min-[60rem]:flex-auto min-[60rem]:flex-col">
@@ -152,7 +154,8 @@ function FolderInbox({ folder }: { folder: ReturnType<typeof useFolder> }) {
                   <Button
                     type="button"
                     className="mx-auto mt-3 block rounded-full px-4 py-1.5 text-xs text-muted hover:border-accent hover:text-accent"
-                    onClick={() => inbox.fetchNextPage()}
+                    disabled={inbox.isFetching}
+                    onClick={readMore}
                   >
                     Try again
                   </Button>
