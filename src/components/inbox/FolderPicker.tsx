@@ -1,5 +1,5 @@
 import Button from "../ui/Button";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CheckIcon, ChevronDownIcon } from "@heroicons/react/24/outline";
 import { $api } from "../../lib/api/api";
 
@@ -92,10 +92,27 @@ export default function FolderPicker({
   const auth = $api.useQuery("get", "/auth/status", {});
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement | null>(null);
+  const menu = useRef<HTMLDivElement | null>(null);
+  const [menuTop, setMenuTop] = useState(0);
   const accounts = (auth.data?.accounts ?? []).filter((account) => account.signedIn);
   const currentAccount = accounts.find((account) => account.id === currentAccountId);
   const accountName = currentAccount?.email || currentAccount?.displayName || currentAccountId;
   const selectingDefault = mode === "default";
+
+  // The same picker can sit at different heights in the inbox and settings.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const measure = () => {
+      if (menu.current) setMenuTop(menu.current.getBoundingClientRect().top);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    window.addEventListener("scroll", measure, true);
+    return () => {
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("scroll", measure, true);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -144,7 +161,9 @@ export default function FolderPicker({
 
       {open ? (
         <div
-          className="absolute inset-x-0 top-[calc(100%+.25rem)] z-31 max-h-88 overflow-y-auto rounded-lg border border-line bg-card p-1 shadow-[0_8px_24px_rgba(0,0,0,.22)]"
+          ref={menu}
+          className="absolute inset-x-0 top-[calc(100%+.25rem)] z-31 box-border overflow-y-auto rounded-lg border border-line bg-card p-1 shadow-[0_8px_24px_rgba(0,0,0,.22)]"
+          style={{ maxHeight: `max(0px, calc(100dvh - ${menuTop}px - 2rem))` }}
           role="menu"
           aria-label="Folders"
         >
