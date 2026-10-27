@@ -30,7 +30,7 @@ func TestStatusShowsAnIngestInFlight(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		if _, err := srv.slurpOnce(context.Background(), srv.runSlurp); err != nil {
+		if _, err := srv.slurpOnce(context.Background(), "manual sweep", srv.runSlurp); err != nil {
 			t.Errorf("slurpOnce: %v", err)
 		}
 	}()

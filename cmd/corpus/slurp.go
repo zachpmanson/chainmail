@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/zachpmanson/chainmail/internal/corpus"
 	"github.com/zachpmanson/chainmail/internal/gmailclient"
@@ -125,6 +126,7 @@ type phaseResult struct {
 	Phase   slurpPhase
 	Outcome outcome
 	Note    string
+	Elapsed time.Duration
 }
 
 // errSlackdumpMissing distinguishes "no such program" from a program that ran
@@ -137,6 +139,7 @@ var errSlackdumpMissing = errors.New("slackdump is not on PATH")
 // and no second implementation of any phase — and a test can drive the sequence
 // without a mailbox, a Slack archive or an embedding daemon.
 type slurpDeps struct {
+	now          func() time.Time // nil uses the monotonic wall clock
 	refreshSlack func(dir string) error
 	ingestSlack  func(archive string) error
 	mailAccounts func() ([]string, error)
@@ -296,13 +299,29 @@ func runSlurp(w io.Writer, o slurpOpts, d slurpDeps) error {
 		}
 	}
 
+	now := d.now
+	if now == nil {
+		now = time.Now
+	}
+	started := now()
+	timing := func(phase, state string, elapsed time.Duration) {
+		// Metadata only: these lines can be streamed without mail/query content.
+		fmt.Fprintf(w, "slurp timing: phase=%s outcome=%s elapsed=%s\n",
+			phase, state, elapsed.Round(time.Millisecond))
+	}
+	timing("total", "started", 0)
 	var results []phaseResult
+	var phaseStarted time.Time
 	report := func(p slurpPhase, oc outcome, note string) {
-		results = append(results, phaseResult{Phase: p, Outcome: oc, Note: note})
+		elapsed := now().Sub(phaseStarted)
+		results = append(results, phaseResult{Phase: p, Outcome: oc, Note: note, Elapsed: elapsed})
+		timing(string(p), string(oc), elapsed)
 	}
 
 	for i, p := range sel {
 		fmt.Fprintf(w, "\n[%d/%d] %s\n", i+1, len(sel), p)
+		phaseStarted = now()
+		timing(string(p), "started", 0)
 		switch p {
 		case phaseSlack:
 			oc, note := slurpSlack(w, o, d)
@@ -412,9 +431,22 @@ func runSlurp(w io.Writer, o slurpOpts, d slurpDeps) error {
 	// failure is a real fault (the screen cannot tell its truth without the
 	// file), but a backend answering "needs auth" or "down" is not: that is a
 	// finding, recorded in the snapshot.
+	phaseStarted = now()
+	timing(string(phaseStatus), "started", 0)
 	oc, note := probeTail(w, d)
 	report(phaseStatus, oc, note)
-	return summarise(w, results)
+	err = summarise(w, results)
+	totalOutcome := outcomeDone
+	for _, r := range results {
+		if r.Outcome == outcomeIncomplete {
+			totalOutcome = outcomeIncomplete
+		}
+	}
+	if err != nil {
+		totalOutcome = outcomeFailed
+	}
+	timing("total", string(totalOutcome), now().Sub(started))
+	return err
 }
 
 // probeTail runs the status probe and carries its outcome. A write failure is
@@ -469,7 +501,8 @@ func summarise(w io.Writer, results []phaseResult) error {
 	fmt.Fprintln(w, "\nslurp")
 	var failed, skipped, incomplete []string
 	for _, r := range results {
-		fmt.Fprintf(w, "  %-7s %-10s %s\n", r.Phase, r.Outcome, r.Note)
+		fmt.Fprintf(w, "  %-7s %-10s %s (elapsed=%s)\n", r.Phase, r.Outcome, r.Note,
+			r.Elapsed.Round(time.Millisecond))
 		switch r.Outcome {
 		case outcomeFailed:
 			failed = append(failed, string(r.Phase))

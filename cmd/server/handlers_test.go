@@ -102,7 +102,7 @@ func TestSlurpRunsTheSiblingCLIWithThePipelinePhases(t *testing.T) {
 	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	out, err := defaultSlurp(manualPhases)(context.Background(), "/tmp/chainmail-test.db")
+	out, err := defaultSlurp(manualPhases, "manual sweep")(context.Background(), "/tmp/chainmail-test.db")
 	if err != nil {
 		t.Fatalf("running the sibling: %v (output %q)", err, out)
 	}

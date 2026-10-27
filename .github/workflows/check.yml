@@ -17,4 +17,4 @@ jobs:
       - uses: cachix/install-nix-action@v31
       - run: nix develop --command npm ci
       - run: nix develop --command make check
-      - run: nix build .#default --no-link
+      - run: nix build .#default --no-link --log-lines 1000
