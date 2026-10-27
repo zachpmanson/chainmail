@@ -19,6 +19,7 @@ import NotFound from "./components/NotFound";
 import { validateOpsTab } from "./lib/ops/opsTabs";
 import DeployStamp from "./components/navigation/DeployStamp";
 import ToastHost from "./components/ui/ToastHost";
+import NavUndo from "./components/navigation/NavUndo";
 import NavReading from "./components/navigation/NavReading";
 import NavRefresh from "./components/navigation/NavRefresh";
 import AutoRefresh from "./components/navigation/AutoRefresh";
@@ -138,6 +139,7 @@ function RootLayout() {
                 <DeployStamp />
                 <AutoRefresh />
                 <NavRefresh />
+                <NavUndo />
                 <IconButton aria-label="Compose" title="Compose" onClick={() => setComposing(true)}>
                   <PencilSquareIcon aria-hidden="true" />
                 </IconButton>
@@ -147,7 +149,9 @@ function RootLayout() {
             <div className="buildslot not-empty:grow not-empty:basis-full" />
           </header>
         </>
-      ) : null}
+      ) : (
+        <NavUndo />
+      )}
       <ComposeProvider composing={composing} closeCompose={() => setComposing(false)}>
         <Outlet />
       </ComposeProvider>

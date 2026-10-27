@@ -715,6 +715,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/mail/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore exact touched labels from a server-issued receipt.
+         * @description Serialized with read and mail writes. Uses the original account and message IDs, not current chain membership. Requires the original write grant. Preserves unrelated labels. Partial failures retain remaining work for retry. External Gmail clients can race preflight (no compare-and-swap).
+         */
+        post: operations["undoMail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1305,6 +1325,8 @@ export interface components {
              * @example mode "semantic": no embedding daemon reachable at http://localhost:11434: start it with `ollama serve`
              */
             error: string;
+            /** @description Receipt for confirmed writes preceding a partial failure; the failed message may have an unknown outcome. */
+            undoToken?: string;
         };
         /** @description A pair worth a human glance that nothing proved one way (the CLI's `corpus candidates`), with the command that would settle it. */
         OpsCandidate: {
@@ -1721,6 +1743,8 @@ export interface components {
             labels?: string[];
             /** @description Gmail account whose copies are targeted; required when the selected chains span multiple accounts. */
             accountId?: string;
+            /** @description Capture fresh touched-label state and return a session undo token. Refuses before writing if snapshot capture fails. */
+            undoable?: boolean;
         };
         /** @description What the write did: how many messages changed, how many entries have no mailbox copy, and the same counts per chain — because the reader ticked a set, and a total cannot tell them which thread stayed put. */
         MailActionResponse: {
@@ -1746,6 +1770,8 @@ export interface components {
             }[];
             /** @description Account whose Gmail copies were updated. */
             accountId?: string;
+            /** @description Opaque account/message-scoped receipt for changed messages. Absent for no-ops; expires after server restart or eviction (100 receipts). */
+            undoToken?: string;
         };
         /** @description A reply: which message is being answered, what the reader has to say, the audience the reply carries, whether the HTML part goes with the text, and whether this call is the preview or the send. `to` and `cc` name the audience, and `to`/`cc` are the one place an address enters this request from a keyboard: an address the answered message did not carry is accepted, because the reply box is a surface a reader types into. What bounds a send is not a set of permitted addresses but the switches in front of it — the loopback bind with no authentication, and the host having been started with `-send-mail` — plus the shape of the list, which is checked before the mailbox is asked. A request that names neither list sends the audience the mailbox assembled, minus the addresses belonging to this mailbox. */
         SendRequest: {
@@ -1853,6 +1879,8 @@ export interface components {
             unread: boolean;
             /** @description Gmail account whose copy in this chain is targeted; required when the chain has copies in multiple accounts. */
             accountId?: string;
+            /** @description Capture fresh touched-label state and return a session undo token. Refuses before writing if snapshot capture fails. */
+            undoable?: boolean;
         };
         /** @description What the write did: how many messages were marked, and how many entries of the chain have no mailbox copy to mark. The second number is not an error — a message recovered from somebody's quote is part of a chain and has no Gmail id — which is why a chain of nothing else answers 200 with marked 0. */
         MarkReadResponse: {
@@ -1866,6 +1894,8 @@ export interface components {
             skipped: number;
             /** @description Account whose Gmail copy was updated. */
             accountId?: string;
+            /** @description Opaque account/message-scoped receipt for changed messages. Absent for no-ops; expires after server restart or eviction (100 receipts). */
+            undoToken?: string;
         };
         /** @description One attachment's outcome within a pull. */
         MediaFile: {
@@ -3476,6 +3506,79 @@ export interface operations {
                 };
             };
             /** @description Gmail could not confirm the send. Check Gmail before retrying. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    undoMail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    token: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Receipt restored and consumed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        undone: boolean;
+                    };
+                };
+            };
+            /** @description Invalid request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Write grant disabled. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Receipt expired, a newer write overlaps it, or mail changed elsewhere. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Mirror update failed; retry. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Mailbox failure; remaining work retained. */
             502: {
                 headers: {
                     [name: string]: unknown;

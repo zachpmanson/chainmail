@@ -1784,6 +1784,102 @@
           }
         }
       }
+    },
+    "/v1/mail/undo": {
+      "post": {
+        "operationId": "undoMail",
+        "summary": "Restore exact touched labels from a server-issued receipt.",
+        "description": "Serialized with read and mail writes. Uses the original account and message IDs, not current chain membership. Requires the original write grant. Preserves unrelated labels. Partial failures retain remaining work for retry. External Gmail clients can race preflight (no compare-and-swap).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "token"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "token": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Receipt restored and consumed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "undone"
+                  ],
+                  "properties": {
+                    "undone": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Write grant disabled.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Receipt expired, a newer write overlaps it, or mail changed elsewhere.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Mirror update failed; retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Mailbox failure; remaining work retained.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3052,6 +3148,10 @@
             "type": "string",
             "description": "What went wrong, in the same words the CLI would use. Written to be shown to a person.",
             "example": "mode \"semantic\": no embedding daemon reachable at http://localhost:11434: start it with `ollama serve`"
+          },
+          "undoToken": {
+            "type": "string",
+            "description": "Receipt for confirmed writes preceding a partial failure; the failed message may have an unknown outcome."
           }
         }
       },
@@ -4066,6 +4166,10 @@
           "accountId": {
             "type": "string",
             "description": "Gmail account whose copies are targeted; required when the selected chains span multiple accounts."
+          },
+          "undoable": {
+            "type": "boolean",
+            "description": "Capture fresh touched-label state and return a session undo token. Refuses before writing if snapshot capture fails."
           }
         },
         "additionalProperties": false
@@ -4134,6 +4238,10 @@
           "accountId": {
             "type": "string",
             "description": "Account whose Gmail copies were updated."
+          },
+          "undoToken": {
+            "type": "string",
+            "description": "Opaque account/message-scoped receipt for changed messages. Absent for no-ops; expires after server restart or eviction (100 receipts)."
           }
         },
         "additionalProperties": false
@@ -4322,6 +4430,10 @@
           "accountId": {
             "type": "string",
             "description": "Gmail account whose copy in this chain is targeted; required when the chain has copies in multiple accounts."
+          },
+          "undoable": {
+            "type": "boolean",
+            "description": "Capture fresh touched-label state and return a session undo token. Refuses before writing if snapshot capture fails."
           }
         },
         "additionalProperties": false
@@ -4355,6 +4467,10 @@
           "accountId": {
             "type": "string",
             "description": "Account whose Gmail copy was updated."
+          },
+          "undoToken": {
+            "type": "string",
+            "description": "Opaque account/message-scoped receipt for changed messages. Absent for no-ops; expires after server restart or eviction (100 receipts)."
           }
         },
         "additionalProperties": false

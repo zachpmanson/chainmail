@@ -139,6 +139,11 @@ type server struct {
 	// mailbox, and the difference between this and -mark-read is which field of
 	// the message changes rather than how far the server reaches.
 	mailWriteEnabled bool
+	mailMu           sync.Mutex
+	mailUndos        map[string]*mailUndo
+	mailUndoOrder    []string
+	mailRevision     uint64
+	mailVersions     map[mailLabelKey]uint64
 	// sendMailEnabled is the -send-mail grant: whether POST /v1/send may answer a
 	// message in the mailbox. Off unless the host says so, for the same reason as
 	// the other two writers and with the same 403 — and it is the third grant
@@ -204,6 +209,7 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("/v1/refresh", post(s.refresh))
 	mux.HandleFunc("/v1/read", post(s.markRead))
 	mux.HandleFunc("/v1/mail", post(s.mailAction))
+	mux.HandleFunc("/v1/mail/undo", post(s.undoMail))
 	mux.HandleFunc("/v1/send", post(s.sendReply))
 	mux.HandleFunc("/v1/compose", post(s.compose))
 	mux.HandleFunc("/v1/drafts", s.drafts)
@@ -1330,6 +1336,8 @@ func recipientsIn(list []gmailclient.Recipient) []recipient {
 // the chain and has no Gmail id to change. A chain of nothing else answers
 // marked: 0, which is the truth about it.
 func (s *server) markRead(w http.ResponseWriter, r *http.Request) {
+	s.mailMu.Lock()
+	defer s.mailMu.Unlock()
 	if !s.markReadEnabled {
 		fail(w, http.StatusForbidden, fmt.Errorf(
 			"marking mail read is disabled: this server was started without -mark-read, so "+
@@ -1389,6 +1397,16 @@ func (s *server) markRead(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	touched := []string{"UNREAD"}
+	receipt := &mailUndo{AccountID: accountID, Read: true}
+	var before map[string][]string
+	if req.Undoable {
+		before, err = captureUndo(mb, [][]corpus.ChainEntry{entries}, accountID, touched)
+		if err != nil {
+			fail(w, 502, err)
+			return
+		}
+	}
 	out := markReadResponse{Chain: chain, AccountID: accountID, Unread: req.Unread}
 	for _, e := range entries {
 		copy, ok := copyForAccount(e, accountID)
@@ -1398,17 +1416,23 @@ func (s *server) markRead(w http.ResponseWriter, r *http.Request) {
 		}
 		labels, err := mb.SetUnread(copy.GmailID, req.Unread)
 		if err != nil {
+			s.bumpMailVersion(accountID, copy.GmailID, touched)
 			// The count already marked is in the error because a chain is more
 			// than one message: the caller has to know whether the chain is half
 			// changed, and the mailbox's own error says nothing about that.
-			fail(w, http.StatusBadGateway, fmt.Errorf(
-				"the mailbox refused %s: %w (%d of %d messages in this chain were changed before this)",
-				e.ExtID, err, out.Marked, markable))
+			s.undoFailure(w, http.StatusBadGateway, fmt.Errorf(
+				"the mailbox refused %s: %w (%d of %d messages in this chain were changed before this; the failed message may have changed, check Gmail)",
+				e.ExtID, err, out.Marked, markable), receipt)
 			return
 		}
+		if req.Undoable {
+			s.recordUndo(receipt, copy.GmailID, before[copy.GmailID], labels, touched)
+		} else {
+			s.bumpMailVersion(accountID, copy.GmailID, touched)
+		}
 		if err := s.store.SetGmailCopyLabels(accountID, copy.GmailID, labels); err != nil {
-			fail(w, http.StatusInternalServerError, fmt.Errorf(
-				"the mailbox changed %s but storing its labels failed: %w", e.ExtID, err))
+			s.undoFailure(w, http.StatusInternalServerError, fmt.Errorf(
+				"the mailbox changed %s but storing its labels failed: %w", e.ExtID, err), receipt)
 			return
 		}
 		out.Marked++
@@ -1417,6 +1441,7 @@ func (s *server) markRead(w http.ResponseWriter, r *http.Request) {
 	// Journaled like a media pull, and for the same reason: this changes the
 	// reader's real mailbox, so "did it run, and what did it say" has to be
 	// answerable from the host after the tab is gone.
+	out.UndoToken = s.saveUndo(receipt)
 	log.Printf("read: %s unread=%t marked=%d skipped=%d",
 		chain, req.Unread, out.Marked, out.Skipped)
 	send(w, http.StatusOK, out)
@@ -1447,6 +1472,8 @@ func (s *server) markRead(w http.ResponseWriter, r *http.Request) {
 // Messages with no mailbox copy — recovered from somebody's quote, or a Slack
 // post — are counted and reported, never failed, exactly as in /v1/read.
 func (s *server) mailAction(w http.ResponseWriter, r *http.Request) {
+	s.mailMu.Lock()
+	defer s.mailMu.Unlock()
 	if !s.mailWriteEnabled {
 		fail(w, http.StatusForbidden, fmt.Errorf(
 			"changing mail is disabled: this server was started without -mail-write, so "+
@@ -1531,10 +1558,21 @@ func (s *server) mailAction(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	touched := append(append([]string{}, add...), remove...)
+	receipt := &mailUndo{AccountID: accountID}
+	var before map[string][]string
+	if req.Undoable {
+		before, err = captureUndo(mb, trail, accountID, touched)
+		if err != nil {
+			fail(w, 502, err)
+			return
+		}
+	}
 	out := mailActionResponse{Action: req.Action, AccountID: accountID, Chains: make([]mailActionChain, 0, len(req.Chains))}
 	if action.needsLabels {
 		out.Labels = append([]string(nil), req.Labels...)
 	}
+	seen := map[string]bool{}
 	for i, entries := range trail {
 		row := mailActionChain{RootExtID: req.Chains[i]}
 		for _, e := range entries {
@@ -1544,20 +1582,30 @@ func (s *server) mailAction(w http.ResponseWriter, r *http.Request) {
 				out.Skipped++
 				continue
 			}
+			if req.Undoable && seen[copy.GmailID] {
+				continue
+			}
+			seen[copy.GmailID] = true
 			labels, err := mb.SetLabels(copy.GmailID, add, remove)
 			if err != nil {
+				s.bumpMailVersion(accountID, copy.GmailID, touched)
 				// The counts are in the error because a chain is more than one
 				// message, and because this call may be part way through several
 				// chains: "what has already changed" is the first thing the caller
 				// needs to know and the mailbox's error says nothing about it.
-				fail(w, http.StatusBadGateway, fmt.Errorf(
-					"the mailbox refused %s: %w (%d of %d messages changed before this, %d chains done)",
-					e.ExtID, err, out.Changed, writable, i))
+				s.undoFailure(w, http.StatusBadGateway, fmt.Errorf(
+					"the mailbox refused %s: %w (%d of %d messages changed before this, %d chains done; the failed message may have changed, check Gmail)",
+					e.ExtID, err, out.Changed, writable, i), receipt)
 				return
 			}
+			if req.Undoable {
+				s.recordUndo(receipt, copy.GmailID, before[copy.GmailID], labels, touched)
+			} else {
+				s.bumpMailVersion(accountID, copy.GmailID, touched)
+			}
 			if err := s.store.SetGmailCopyLabels(accountID, copy.GmailID, labels); err != nil {
-				fail(w, http.StatusInternalServerError, fmt.Errorf(
-					"the mailbox changed %s but storing its labels failed: %w", e.ExtID, err))
+				s.undoFailure(w, http.StatusInternalServerError, fmt.Errorf(
+					"the mailbox changed %s but storing its labels failed: %w", e.ExtID, err), receipt)
 				return
 			}
 			row.Changed++
@@ -1566,6 +1614,7 @@ func (s *server) mailAction(w http.ResponseWriter, r *http.Request) {
 		out.Chains = append(out.Chains, row)
 	}
 
+	out.UndoToken = s.saveUndo(receipt)
 	// Journaled like a media pull and a read-state write, and for the same reason:
 	// this changes the reader's real mailbox, so "did it run, and what did it say"
 	// has to be answerable from the host after the tab is gone. The labels are
@@ -1612,6 +1661,7 @@ var mailActions = map[string]mailActionSpec{
 // and — for a move — where. Labels are the mailbox's names, which is also what
 // /v1/labels serves, so a caller never has to know a folder id.
 type mailActionRequest struct {
+	Undoable  bool     `json:"undoable,omitempty"`
 	AccountID string   `json:"accountId,omitempty"`
 	Chains    []string `json:"chains"`
 	Action    string   `json:"action"`
@@ -1623,6 +1673,7 @@ type mailActionRequest struct {
 // copy. Per chain as well as in total because the reader ticked a set: a summary
 // that says 12 changed cannot tell them which of the four threads did not move.
 type mailActionResponse struct {
+	UndoToken string            `json:"undoToken,omitempty"`
 	Action    string            `json:"action"`
 	AccountID string            `json:"accountId,omitempty"`
 	Labels    []string          `json:"labels,omitempty"`
@@ -2071,6 +2122,7 @@ type recipient struct {
 // every mailbox message in it to be left in. No message list and no "mark all":
 // the chain IS the scope, and the store resolves it.
 type markReadRequest struct {
+	Undoable  bool   `json:"undoable,omitempty"`
 	AccountID string `json:"accountId,omitempty"`
 	Chain     string `json:"chain"`
 	Unread    bool   `json:"unread"`
@@ -2081,6 +2133,7 @@ type markReadRequest struct {
 // from an error on purpose — a chain with nothing markable in it is a complete
 // answer about a chain that is partly recovered text, not a failure.
 type markReadResponse struct {
+	UndoToken string `json:"undoToken,omitempty"`
 	Chain     string `json:"chain"`
 	AccountID string `json:"accountId,omitempty"`
 	Unread    bool   `json:"unread"`
