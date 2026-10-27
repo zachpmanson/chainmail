@@ -95,8 +95,10 @@ interpret the pause as a label correction or a classifier exception.
 
 All 119 fixtures preserve receipts under opaque identity renaming, neutral
 wrapping and added marked history/signatures. A private read-only comparison also
-confirmed matching original-versus-anonymised decisions for all 119 inputs; no
-private originals or mapping are committed. Synthetic regressions include the
+confirmed matching endpoint-HTML-versus-anonymised decisions for all 119 inputs;
+these fixtures were collected from the sanitized `/original` endpoint, not raw
+stored `body_html`. That comparison does not establish raw-analyser-input parity.
+No private originals or mapping are committed. Synthetic regressions include the
 three initial stress cases and the independent review's visibility, localization,
 flow, contact, column and resource-limit counterexamples. The original endpoint,
 manual overrides and unavailable/stale receipt behavior have separate tests.
