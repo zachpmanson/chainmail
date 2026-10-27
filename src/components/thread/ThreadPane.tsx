@@ -207,7 +207,8 @@ export default function ThreadPane({
                     cy="8"
                     r="6.4"
                     className={
-                      thread.unread > 0 ? "fill-current" : "fill-none stroke-current stroke-[1.6]"
+                      // 1/16 matches Heroicons' 1.5/24 stroke at the shared icon size.
+                      thread.unread > 0 ? "fill-current" : "fill-none stroke-current stroke-1"
                     }
                   />
                 </svg>

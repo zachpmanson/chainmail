@@ -21,6 +21,7 @@ const state = vi.hoisted(() => ({
   draftSave: vi.fn(),
   mail: vi.fn(),
   read: vi.fn(),
+  readPending: false,
   labels: vi.fn(),
   list: vi.fn(),
   navigate: vi.fn(),
@@ -56,7 +57,7 @@ vi.mock("../src/lib/inbox/useThreadList", () => ({
   },
 }));
 vi.mock("../src/lib/inbox/mailActions", () => ({
-  useReadAction: () => ({ mutate: state.read }),
+  useReadAction: () => ({ mutate: state.read, isPending: state.readPending }),
   useMailAction: () => ({ mutate: state.mail }),
 }));
 vi.mock("../src/lib/prefs/usePrefs", () => ({
@@ -110,6 +111,7 @@ beforeEach(() => {
   state.settingsPending = false;
   state.compact = false;
   state.composing = false;
+  state.readPending = false;
   client = new QueryClient();
   state.draftSave.mockResolvedValue({ id: "draft-1", messageId: "message-1" });
   vi.stubGlobal("document", {
@@ -175,6 +177,80 @@ describe("selection belongs to the effective mailbox location", () => {
     state.search = { q: "shared", accountId: "personal" };
     refresh(SelectView);
     expect(rendered!.root.findByType(ActionBar).props.chosen).toEqual([]);
+  });
+});
+
+describe("thread read toggle", () => {
+  it.each([0, 1, 3])("preserves the appearance and action for %i unread messages", (unread) => {
+    state.rows = [{ ...shared, unread }];
+    state.search = { open: "S" };
+    render();
+    const pane = rendered!.root.findByType(ThreadPane);
+    const button = pane
+      .findAllByType("button")
+      .find((node) => node.props["aria-label"] === (unread > 0 ? "Mark read" : "Mark unread"))!;
+    expect(button.props["aria-pressed"]).toBe(unread > 0);
+    expect(button.props.title).toBe(
+      unread > 0
+        ? "Unread in the mailbox — mark this thread read"
+        : "Read in the mailbox — mark this thread unread",
+    );
+    expect(button.props.type).toBe("button");
+    expect(button.props.disabled).toBe(false);
+    const svg = button.findByType("svg");
+    expect(svg.props).toMatchObject({
+      viewBox: "0 0 16 16",
+      "aria-hidden": "true",
+      focusable: "false",
+    });
+    const circle = svg.findByType("circle");
+    expect(circle.props).toMatchObject({ cx: "8", cy: "8", r: "6.4" });
+    // Both glyphs render at size-6: 1/16 and Heroicons' 1.5/24 are the same width.
+    expect(circle.props.className).toBe(
+      unread > 0 ? "fill-current" : "fill-none stroke-current stroke-1",
+    );
+    const archive = pane
+      .findAllByType("button")
+      .find((node) => node.props["aria-label"] === "Archive")!;
+    expect(archive.findByType("svg").props).toMatchObject({
+      viewBox: "0 0 24 24",
+      strokeWidth: 1.5,
+    });
+    act(() => button.props.onClick());
+    expect(state.read).toHaveBeenCalledExactlyOnceWith({
+      body: { chain: "S", unread: unread === 0, accountId: "work" },
+    });
+  });
+
+  it("stays disabled while a read mutation is pending", () => {
+    state.search = { open: "S" };
+    state.readPending = true;
+    render();
+    const pane = rendered!.root.findByType(ThreadPane);
+    expect(
+      pane.findAllByType("button").find((node) => node.props["aria-label"] === "Mark read")!.props
+        .disabled,
+    ).toBe(true);
+  });
+
+  it("omits the toggle when the thread's read state is unknown", () => {
+    act(() => {
+      rendered = create(
+        createElement(ThreadPane, {
+          thread: { rootExtId: "S" },
+          label: "Thread",
+          backLabel: "Close",
+          empty: "No thread",
+          onClose: vi.fn(),
+        }),
+      );
+    });
+    expect(rendered!.root.findAllByType("circle")).toHaveLength(0);
+    expect(
+      rendered!.root
+        .findAllByType("button")
+        .filter((node) => /^Mark (un)?read$/.test(node.props["aria-label"] ?? "")),
+    ).toHaveLength(0);
   });
 });
 
