@@ -212,7 +212,7 @@ func (s *server) nextSlurpAt() string {
 // It also brackets the run for the status route (beginSweep/endSweep), so a
 // reader can see the walk that is happening without standing at the button that
 // started it — the scheduled one has no button at all.
-func (s *server) slurpOnce(ctx context.Context, run func(context.Context, string) ([]byte, error)) ([]byte, error) {
+func (s *server) slurpOnce(ctx context.Context, source string, run func(context.Context, string) ([]byte, error)) (out []byte, err error) {
 	if run == nil {
 		return nil, errors.New("this server has no ingest to run")
 	}
@@ -220,11 +220,17 @@ func (s *server) slurpOnce(ctx context.Context, run func(context.Context, string
 		return nil, errSweepRunning
 	}
 	defer s.sweeping.Store(false)
+	started := time.Now()
+	log.Printf("%s timing: phase=total outcome=started elapsed=0s", source)
+	defer func() {
+		log.Printf("%s timing: phase=total outcome=%s elapsed=%s", source,
+			sweepOutcome(out, err), time.Since(started).Round(time.Millisecond))
+	}()
 	s.beginSweep(time.Now())
 	s.recordSlurp(time.Now())
 	runCtx, cancel := context.WithTimeout(ctx, s.slurpTimeout)
 	defer cancel()
-	out, err := run(runCtx, s.corpusPath)
+	out, err = run(runCtx, s.corpusPath)
 	s.endSweep(out, err)
 	if err != nil {
 		return out, err
@@ -390,7 +396,7 @@ func (s *server) sweepIfDue(ctx context.Context) {
 	if time.Now().Before(s.dueAt()) {
 		return
 	}
-	out, err := s.slurpOnce(ctx, s.runSweep)
+	out, err := s.slurpOnce(ctx, "scheduled sweep", s.runSweep)
 	if errors.Is(err, errSweepRunning) {
 		return
 	}

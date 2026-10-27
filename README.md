@@ -76,6 +76,16 @@ the endpoint answers 403 and both controls fall back to re-reading what the corp
 holds, which is what they were before; a press while a sweep is already running answers
 409, since the work is being done.
 
+**Refresh timings** appear as `slurp timing: phase=mail outcome=complete elapsed=12.345s`.
+Every selected phase and the final status probe emit a start and an elapsed outcome,
+including failures, incomplete walks and skips; the summary retains each duration.
+Manual and scheduled sweeps stream these metadata-only lines immediately to
+`journalctl -u chainmail -f`, labelled `manual sweep` or `scheduled sweep`, while
+preserving the full report returned by the button and logged at the end. A start
+without an outcome identifies the active phase if a subprocess is interrupted.
+The CLI's `phase=total` measures the ingest; the server's separate `timing: phase=total`
+also includes recording the sweep and warming the fold cache before returning.
+
 **Unread state is the mailbox's, not the corpus's.** A row carries how many of its
 messages Gmail still calls unread, and the reading pane's mark read / mark unread button
 changes that in the mailbox itself — so the reader's phone agrees with the page. The

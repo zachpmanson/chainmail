@@ -982,7 +982,7 @@ func (s *server) slurp(w http.ResponseWriter, r *http.Request) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	out, err := s.slurpOnce(ctx, s.runSlurp)
+	out, err := s.slurpOnce(ctx, "manual sweep", s.runSlurp)
 	if errors.Is(err, errSweepRunning) {
 		// Asked for while the schedule (or another press) was already walking the
 		// mailbox: the answer is that the work is being done, not that it failed.
@@ -1040,7 +1040,7 @@ const (
 	sweepPhases  = "mail,twins,repair,unread,embed"
 )
 
-func defaultSlurp(phases string) func(ctx context.Context, corpusPath string) ([]byte, error) {
+func defaultSlurp(phases, source string) func(ctx context.Context, corpusPath string) ([]byte, error) {
 	return func(ctx context.Context, corpusPath string) ([]byte, error) {
 		corpus, err := siblingBin("corpus")
 		if err != nil {
@@ -1049,7 +1049,12 @@ func defaultSlurp(phases string) func(ctx context.Context, corpusPath string) ([
 		args := []string{"slurp", "-q", "in:anywhere", "-only", phases}
 		cmd := exec.CommandContext(ctx, corpus, args...)
 		cmd.Env = append(os.Environ(), "CHAINMAIL_CORPUS="+corpusPath)
-		return cmd.CombinedOutput()
+		out := &slurpTimingWriter{source: source}
+		// The same writer keeps stdout/stderr ordered as CombinedOutput did.
+		// Only timing metadata is forwarded live; the full report is retained.
+		cmd.Stdout, cmd.Stderr = out, out
+		err = cmd.Run()
+		return out.transcript.Bytes(), err
 	}
 }
 

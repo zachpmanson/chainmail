@@ -152,8 +152,8 @@ func run(args []string) error {
 		statusPath:   status.FileName(*path),
 		slurpEnabled: *slurp,
 		slurpTimeout: *slurpTimeout,
-		runSlurp:     defaultSlurp(manualPhases),
-		runSweep:     defaultSlurp(sweepPhases),
+		runSlurp:     defaultSlurp(manualPhases, "manual sweep"),
+		runSweep:     defaultSlurp(sweepPhases, "scheduled sweep"),
 		mediaEnabled: *mediaPull,
 		runMediaPull: defaultMediaPull(store, *uploads),
 
