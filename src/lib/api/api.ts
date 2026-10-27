@@ -5,6 +5,7 @@ import type { components, paths } from "./api.d";
 /** Carries the server's own message, which is the actionable part. */
 export class ApiError extends Error {
   readonly status: number;
+  undoToken?: string;
   /** From Retry-After, in ms. Set only when the service said when to come back. */
   readonly retryAfterMs?: number;
   constructor(status: number, message: string, retryAfterMs?: number) {
@@ -52,17 +53,25 @@ const declineAsError: Middleware = {
     } catch {
       // Not JSON: the text stands as the message.
     }
-    throw new ApiError(
+    const error = new ApiError(
       response.status,
       messageOf(body, response.status, response.statusText),
       retryAfter(response),
     );
+    if (
+      body &&
+      typeof body === "object" &&
+      "undoToken" in body &&
+      typeof body.undoToken === "string"
+    )
+      error.undoToken = body.undoToken;
+    throw error;
   },
 };
 
 // Same origin: the dev server proxies /v1, so no CORS. fetch is looked up per
 // call so tests that replace the global are seen.
-const fetchClient = createFetchClient<paths>({
+export const fetchClient = createFetchClient<paths>({
   // Absolute, because outside a browser Request rejects a relative URL.
   baseUrl: typeof location === "undefined" ? "http://127.0.0.1/" : location.origin,
   fetch: (request) => globalThis.fetch(request),

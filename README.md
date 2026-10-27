@@ -86,6 +86,11 @@ without an outcome identifies the active phase if a subprocess is interrupted.
 The CLI's `phase=total` measures the ingest; the server's separate `timing: phase=total`
 also includes recording the sweep and warming the fold cache before returning.
 
+**Undo:** Ctrl+Z (⌘Z on macOS), or the navigation Undo arrow, reverses read/unread,
+archive, trash, move and compact/reply-tree layout choices in session order. Text fields
+keep native editing undo. See [Undo](docs/undo.md) for failure handling, lifetime and
+operations that cannot safely be reversed (including sends and draft lifecycle changes).
+
 **Unread state is the mailbox's, not the corpus's.** A row carries how many of its
 messages Gmail still calls unread, and the reading pane's mark read / mark unread button
 changes that in the mailbox itself — so the reader's phone agrees with the page. The

@@ -1,6 +1,7 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  $api,
+  ApiError,
+  fetchClient,
   type MailActionRequest,
   type MailActionResponse,
   type MarkReadRequest,
@@ -8,6 +9,49 @@ import {
 } from "../api/api";
 import { invalidateChains, invalidateSearch } from "../api/queryKeys";
 import { dropFromLists, markInLists, putBackLists, type Was } from "./lists";
+import { appUndo } from "../ui/undo";
+import { pushToast } from "../ui/toasts";
+
+function rememberMail(
+  token: string | undefined,
+  label: string,
+  queryClient: ReturnType<typeof useQueryClient>,
+) {
+  if (!token) return;
+  appUndo.remember({
+    label,
+    undo: async () => {
+      try {
+        await fetchClient.POST("/v1/mail/undo", { body: { token } });
+      } finally {
+        staleAfterMail(queryClient);
+      }
+    },
+  });
+}
+
+async function undoableMail<T extends { undoToken?: string }>(
+  action: () => Promise<T>,
+  label: string,
+  queryClient: ReturnType<typeof useQueryClient>,
+): Promise<T> {
+  return appUndo.perform(async () => {
+    try {
+      const response = await action();
+      rememberMail(response.undoToken, label, queryClient);
+      return response;
+    } catch (error) {
+      if (error instanceof ApiError && error.undoToken) {
+        rememberMail(error.undoToken, `partial ${label}`, queryClient);
+        pushToast(
+          "Some messages changed. Undo can restore confirmed changes only; check Gmail for the failed message.",
+          "fail",
+        );
+      }
+      throw error;
+    }
+  });
+}
 
 /** Reconcile every view whose mail-derived data changes after a mailbox write. */
 export function staleAfterMail(queryClient: ReturnType<typeof useQueryClient>): void {
@@ -50,7 +94,18 @@ export function useMailAction({
   onError?: (error: unknown, request: MailActionRequest) => void;
 } = {}) {
   const queryClient = useQueryClient();
-  return $api.useMutation("post", "/v1/mail", {
+  return useMutation({
+    mutationFn: (variables: { body: MailActionRequest }) =>
+      undoableMail(
+        async () => {
+          const { data } = await fetchClient.POST("/v1/mail", {
+            body: { ...variables.body, undoable: true },
+          });
+          return data!;
+        },
+        variables.body.action,
+        queryClient,
+      ),
     ...mailWriteOptions(queryClient, (variables: { body: MailActionRequest }) =>
       dropFromLists(queryClient, variables.body.chains),
     ),
@@ -76,7 +131,18 @@ export function useReadAction({
   onError?: (error: unknown, request: MarkReadRequest) => void;
 } = {}) {
   const queryClient = useQueryClient();
-  return $api.useMutation("post", "/v1/read", {
+  return useMutation({
+    mutationFn: (variables: { body: MarkReadRequest }) =>
+      undoableMail(
+        async () => {
+          const { data } = await fetchClient.POST("/v1/read", {
+            body: { ...variables.body, undoable: true },
+          });
+          return data!;
+        },
+        variables.body.unread ? "mark unread" : "mark read",
+        queryClient,
+      ),
     ...mailWriteOptions(queryClient, (variables: { body: MarkReadRequest }) =>
       markInLists(queryClient, variables.body.chain, variables.body.unread),
     ),
