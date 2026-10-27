@@ -95,18 +95,6 @@ export default function ActionBar({
           >
             <ArchiveGlyph />
           </IconButton>
-          <IconButton
-            aria-label="Delete"
-            title="Delete"
-            disabled={busy}
-            onClick={() =>
-              act.mutate({
-                body: { chains: chosen, action: "trash", ...(accountId ? { accountId } : {}) },
-              })
-            }
-          >
-            <TrashGlyph />
-          </IconButton>
           <MoveFolder
             defaultFolder={moveDefault}
             busy={busy}
@@ -121,6 +109,18 @@ export default function ActionBar({
               })
             }
           />
+          <IconButton
+            aria-label="Delete"
+            title="Delete"
+            disabled={busy}
+            onClick={() =>
+              act.mutate({
+                body: { chains: chosen, action: "trash", ...(accountId ? { accountId } : {}) },
+              })
+            }
+          >
+            <TrashGlyph />
+          </IconButton>
           <span className="ml-auto flex shrink-0 items-center">
             <span className="text-xs text-muted tabular-nums">{chosen.length} selected</span>
           </span>
