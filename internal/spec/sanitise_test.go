@@ -131,6 +131,37 @@ func TestCleanSenderMarkupSurvives(t *testing.T) {
 	}
 }
 
+func TestPictureFallbackIsSanitisedAndFlattened(t *testing.T) {
+	for _, tc := range []struct{ name, raw, want string }{
+		{"safe fallback", `<picture class="sender" onclick="alert(1)"><source srcset="https://example.test/large.png 2x"><img src="https://example.test/fallback.png" alt="Chart" width="300" height="120" srcset="https://example.test/other.png 2x" onerror="alert(1)"></picture>`, `<img src="https://example.test/fallback.png" alt="Chart" width="300" height="120"/>`},
+		{"data image", `<picture><source srcset="javascript:alert(1)"><img src="data:image/png;base64,AAAA" onload="alert(1)"></picture>`, `<img src="data:image/png;base64,AAAA"/>`},
+		{"unsupported fallback URLs", `<picture><source src="https://example.test/source.png"><img src="javascript:alert(1)"><img src="cid:part"><img src="/relative.png"><img src="data:text/html,attack"></picture>`, `<img/><img/><img/><img/>`},
+		{"sanitised descendants", `<picture data-private="gone"><custom-tag onclick="alert(1)"><a href="javascript:alert(1)">caption</a><img src="https://example.test/fallback.png"></custom-tag><script>alert(1)</script><svg><image href="https://example.test/svg.png"></image></svg></picture>`, `<a>caption</a><img src="https://example.test/fallback.png"/>`},
+		{"source only", `<picture><source srcset="https://example.test/large.png 2x"></picture>`, ``},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := sanitiseBody(tc.raw); got != tc.want {
+				t.Fatalf("sanitised = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestPictureFallbackSurvivesSimplifiedBody(t *testing.T) {
+	raw := `<p>A chart for the project.</p><picture onmouseover="alert(1)"><source srcset="https://example.test/large.png 2x"><img src="https://example.test/fallback.png" alt="Chart" width="300" onerror="alert(1)" srcset="https://example.test/other.png 2x"></picture>`
+	got := renderBodyHTML(raw)
+	for _, want := range []string{`src="https://example.test/fallback.png"`, `alt="Chart"`, `width="300"`, "A chart for the project."} {
+		if !strings.Contains(got, want) {
+			t.Errorf("body = %q, want %q", got, want)
+		}
+	}
+	for _, gone := range []string{"<picture", "<source", "srcset", "onerror", "onmouseover", "large.png", "other.png"} {
+		if strings.Contains(got, gone) {
+			t.Errorf("body = %q, want %q gone", got, gone)
+		}
+	}
+}
+
 // TestTheFoldAndTheGlossSurvive: <details class="sig">, <summary>, the
 // fold's <div class="sigbd"> and the editorial <p class="ed"> are the
 // generator's own markup, produced after stripChrome as the only classes a

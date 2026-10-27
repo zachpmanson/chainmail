@@ -19,8 +19,10 @@ func TestOriginalAnalysisOwnerExamples(t *testing.T) {
 			}
 			input := string(raw)
 			got := AnalyseOriginal(input)
-			if !got.DefaultsToOriginal {
-				t.Errorf("owner expects original rendering; got %+v", got)
+			t.Logf("receipt: %+v", got)
+			wantScore := map[string]int{"example-1": 3, "example-2": 2}[name]
+			if !got.DefaultsToOriginal || got.Uncertain || got.Score != wantScore {
+				t.Errorf("owner expects original rendering with score %d; got %+v", wantScore, got)
 			}
 			renamed := regexp.MustCompile(`\bc\d+\b`).ReplaceAllString(input, "opaque-renamed")
 			renamed = regexp.MustCompile(`\bid\d+\b`).ReplaceAllString(renamed, "opaque-id")

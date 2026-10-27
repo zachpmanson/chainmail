@@ -129,7 +129,6 @@ var droppedSubtree = map[atom.Atom]bool{
 	atom.Frame:    true,
 	atom.Frameset: true,
 	atom.Noframes: true,
-	atom.Picture:  true,
 	atom.Source:   true,
 	atom.Track:    true,
 	atom.Marquee:  true,
