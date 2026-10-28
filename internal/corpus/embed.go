@@ -391,8 +391,7 @@ func (s *Store) BackfillEmbeddings(ctx context.Context, e embed.Embedder, opt Ba
 
 type batchResult struct{ embedded, skipped int }
 
-func (s *Store) embedBatch(ctx context.Context, e embed.Embedder, sel string, selArgs []any, want int) (batchResult, error) {
-	var res batchResult
+func (s *Store) embedBatch(ctx context.Context, e embed.Embedder, sel string, selArgs []any, want int) (res batchResult, err error) {
 	args := append(append([]any{}, selArgs...), want)
 	rows, err := s.db.QueryContext(ctx, `
 		select e.id, e.source, coalesce(e.subject,''), coalesce(e.body_text,''), e.body_sha `+
@@ -453,15 +452,15 @@ func (s *Store) embedBatch(ctx context.Context, e embed.Embedder, sel string, se
 		}
 	}
 
-	tx, err := s.db.Begin()
+	writer, err := s.beginWriter(ctx, time.Duration(writerBusyMS)*time.Millisecond)
 	if err != nil {
 		return res, err
 	}
-	defer tx.Rollback()
+	defer func() { err = errors.Join(err, writer.close()) }()
 	next := 0
 	for _, j := range jobs {
 		if j.reason != "" {
-			if err := putEmbedding(tx, j.p.id, e.Model(), e.Dim(), j.p.bodySHA, nil, j.reason); err != nil {
+			if err := putEmbedding(ctx, writer.Conn, j.p.id, e.Model(), e.Dim(), j.p.bodySHA, nil, j.reason); err != nil {
 				return res, err
 			}
 			res.skipped++
@@ -473,23 +472,23 @@ func (s *Store) embedBatch(ctx context.Context, e embed.Embedder, sel string, se
 			return res, fmt.Errorf("%w: entry %d got a %d-wide vector from %s, expected %d",
 				embed.ErrDimMismatch, j.p.id, len(v), e.Model(), e.Dim())
 		}
-		if err := putEmbedding(tx, j.p.id, e.Model(), e.Dim(), j.p.bodySHA, v, ""); err != nil {
+		if err := putEmbedding(ctx, writer.Conn, j.p.id, e.Model(), e.Dim(), j.p.bodySHA, v, ""); err != nil {
 			return res, err
 		}
 		res.embedded++
 	}
-	if err := tx.Commit(); err != nil {
+	if err := writer.commit(ctx); err != nil {
 		return res, fmt.Errorf("committing %d embeddings: %w", res.embedded+res.skipped, err)
 	}
 	return res, nil
 }
 
-func putEmbedding(tx *sql.Tx, entryID int64, model string, dim int, bodySHA string, v []float32, reason string) error {
+func putEmbedding(ctx context.Context, conn *sql.Conn, entryID int64, model string, dim int, bodySHA string, v []float32, reason string) error {
 	var blob any
 	if v != nil {
 		blob = encodeVector(v)
 	}
-	_, err := tx.Exec(`
+	_, err := conn.ExecContext(ctx, `
 		insert into entry_embeddings
 		  (entry_id, model, dim, body_sha, prep, vec, skip, embedded_at)
 		values (?,?,?,?,?,?,?,?)

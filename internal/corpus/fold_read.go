@@ -20,7 +20,9 @@ func (s *Store) SelectedFolds(ctx context.Context, ids []int64, r boiler.Rules) 
 
 // WithFoldSnapshot loads selected folds and runs read inside the same clean
 // source snapshot. Refresh never upgrades a deferred read transaction. The
-// callback must not write, commit, or retain the transaction.
+// callback must not write, commit, or retain the transaction. ReadOnly selects a
+// deferred BEGIN instead of the Store's immediate writer mode; SQLite's driver
+// does not enforce it as a prohibition on writes.
 func (s *Store) WithFoldSnapshot(ctx context.Context, ids []int64, r boiler.Rules, read func(*sql.Tx, map[int64]boiler.Fold) error) error {
 	if len(ids) == 0 {
 		return nil
