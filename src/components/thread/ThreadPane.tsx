@@ -123,7 +123,8 @@ export default function ThreadPane({
               aria-label={treeLabel(tree)}
               title={treeLabel(tree)}
               onClick={() => {
-                withTransition(document, () => setTree(!tree, flushSync));
+                // flushSync puts the state in the DOM before the transition's second snapshot (see lib/thread/viewTransition).
+                withTransition(document, () => flushSync(() => setTree(!tree)));
               }}
             >
               {tree ? (

@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
 import { clampListWidth } from "./panelWidth";
-import { appUndo } from "../ui/undo";
 
 // Stored per browser, not on the server: a good list width depends on the screen.
 
@@ -72,45 +71,20 @@ function senders(held: string | null): string[] {
 export const usePrefs = create<
   Saved & {
     setCompact: (compact: boolean) => void;
-    /** The commit wrapper runs inside the undo FIFO, where the write actually happens. */
-    setTree: (tree: boolean, commit?: (write: () => void) => void) => Promise<void>;
+    setTree: (tree: boolean) => void;
     setListWidth: (px: number | null) => void;
     setStyled: (sender: string, next: boolean) => void;
   }
 >()(
   persist(
-    (set, get) => ({
+    (set) => ({
       compact: false,
       tree: false,
       listWidth: null,
       styledSenders: [],
       plainSenders: [],
-      setCompact: (compact) => {
-        void appUndo.perform(() => {
-          const before = get().compact;
-          if (before === compact) return;
-          set({ compact });
-          appUndo.remember({
-            label: "compact layout",
-            undo: () => {
-              set({ compact: before });
-            },
-          });
-        });
-      },
-      setTree: (tree, commit = (write) => write()) => {
-        return appUndo.perform(() => {
-          const before = get().tree;
-          if (before === tree) return;
-          commit(() => set({ tree }));
-          appUndo.remember({
-            label: "reply tree layout",
-            undo: () => {
-              set({ tree: before });
-            },
-          });
-        });
-      },
+      setCompact: (compact) => set({ compact }),
+      setTree: (tree) => set({ tree }),
       setListWidth: (px) => {
         if (px !== null && !Number.isFinite(px))
           throw new Error(`list width ${px} is not a number`);

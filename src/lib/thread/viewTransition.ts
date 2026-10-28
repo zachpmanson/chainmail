@@ -1,5 +1,5 @@
 // Words are named as well as bubbles, else the browser stretches each body as one image instead of re-flowing it.
-// React callers must flushSync the actual DOM write, even when `apply` queues it.
+// React callers must flushSync inside `apply` so the DOM updates before the second snapshot.
 
 // Marks spans already wrapped, so later passes don't re-wrap them. Left in place after the transition.
 const WORD = "data-vtword";
@@ -55,9 +55,9 @@ function collectWords(doc: Document, root: HTMLElement, out: HTMLElement[]) {
   }
 }
 
-export function withTransition(doc: Document, apply: () => void | Promise<void>) {
+export function withTransition(doc: Document, apply: () => void) {
   type WithVT = Document & {
-    startViewTransition?: (cb: () => void | Promise<void>) => { finished: Promise<void> };
+    startViewTransition?: (cb: () => void) => { finished: Promise<void> };
   };
   const d = doc as WithVT;
   const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -135,8 +135,8 @@ export function withTransition(doc: Document, apply: () => void | Promise<void>)
   nameBubbles();
   nameWords(true);
   nameAttachments(true);
-  d.startViewTransition(async () => {
-    await apply();
+  d.startViewTransition(() => {
+    apply();
     // `apply` can make React re-create the nodes, so name them again before the second snapshot.
     nameBubbles();
     nameWords(false);
