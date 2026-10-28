@@ -786,6 +786,7 @@ func toCorpusAttachment(a corpus.ShownAttachment) spec.Attachment {
 type statusResponse struct {
 	CheckedAt   string          `json:"checkedAt,omitempty"`
 	NextSlurpAt string          `json:"nextSlurpAt,omitempty"`
+	Embedding   embeddingStatus `json:"embedding"`
 	Sweep       sweepStatus     `json:"sweep"`
 	Services    []serviceStatus `json:"services"`
 }
@@ -797,10 +798,11 @@ type serviceStatus struct {
 	Detail string `json:"detail,omitempty"`
 }
 
-func toStatusResponse(s status.Snapshot, nextSlurpAt string, sweep sweepStatus) statusResponse {
+func toStatusResponse(s status.Snapshot, nextSlurpAt string, sweep sweepStatus, embedding embeddingStatus) statusResponse {
 	out := statusResponse{
 		NextSlurpAt: nextSlurpAt,
 		Sweep:       sweep,
+		Embedding:   embedding,
 		Services:    make([]serviceStatus, 0, len(s.Services)),
 	}
 	if s.CheckedAt != "" {

@@ -232,6 +232,8 @@ func (s *server) slurpOnce(ctx context.Context, source string, run func(context.
 	defer cancel()
 	out, err = run(runCtx, s.corpusPath)
 	s.endSweep(out, err)
+	// Even failed/incomplete attempts can have committed canonical rows.
+	s.embedding.enqueue()
 	if err != nil {
 		return out, err
 	}

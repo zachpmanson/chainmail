@@ -98,7 +98,7 @@ type server struct {
 	// kill a mailbox walk halfway through; a server shutdown still cancels it.
 	lifecycleCtx context.Context
 	// slurpTimeout bounds one ingest. A slurp walks the mail query, then twins,
-	// repair, dedupe (reported, never applied) and embed, so it takes minutes
+	// repair, dedupe (reported, never applied) and unread, so it takes minutes
 	// rather than seconds; the server-lifetime context cancels it on shutdown.
 	slurpTimeout time.Duration
 	// runSlurp is the mailbox-reaching operation, injected so the handler can be
@@ -119,7 +119,8 @@ type server struct {
 	// finish" — the question a page otherwise cannot ask, because a scheduled
 	// sweep runs with no press behind it and a corpus mid-rebuild reads as a
 	// threading bug rather than as work in progress. Served on GET /v1/status.
-	sweep sweepState
+	sweep     sweepState
+	embedding *embeddingWorker
 
 	// mediaEnabled enables POST /v1/media/pull: fetch the bytes behind one
 	// message's attachments, so the page can show a file instead of sending the
@@ -1042,8 +1043,8 @@ type slurpResponse struct {
 // CHAINMAIL_CORPUS pins the same database this process has open; being WAL, the
 // ingest writes beside the reader.
 const (
-	manualPhases = "mail,twins,repair,dedupe,unread,embed"
-	sweepPhases  = "mail,twins,repair,unread,embed"
+	manualPhases = "mail,twins,repair,dedupe,unread"
+	sweepPhases  = "mail,twins,repair,unread"
 )
 
 func defaultSlurp(phases, source string) func(ctx context.Context, corpusPath string) ([]byte, error) {
@@ -2939,7 +2940,7 @@ func (s *server) status(w http.ResponseWriter, r *http.Request) {
 	} else {
 		snap = status.Parse(blob)
 	}
-	send(w, http.StatusOK, toStatusResponse(snap, s.nextSlurpAt(), s.sweepStatus()))
+	send(w, http.StatusOK, toStatusResponse(snap, s.nextSlurpAt(), s.sweepStatus(), s.embedding.snapshot()))
 }
 
 // labels is the folder list the home page's button opens. It is the mailbox's
