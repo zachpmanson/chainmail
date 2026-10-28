@@ -1184,7 +1184,7 @@ func (t *analysisTree) alignedColumn(n *html.Node) ([]OriginalMatch, float64) {
 		}
 		d := t.nodes[c]
 		w := max(t.dimension(c, "width"), t.dimension(c, "max-width"))
-		if c != n && w >= 320 && w <= 1200 && t.panelCentered(c, n) && (d.facts.words > 0 || d.facts.images > 0) {
+		if c != n && (d.facts.words > 0 || d.facts.images > 0) && t.panelCentered(c, n) {
 			if !t.centered(c) {
 				// Skipping an unresolved panel could fabricate an equal-width majority.
 				for key := range d.style {
@@ -1194,8 +1194,10 @@ func (t *analysisTree) alignedColumn(n *html.Node) ([]OriginalMatch, float64) {
 					}
 				}
 			}
-			panels = append(panels, c)
-			return
+			if w >= 320 && w <= 1200 {
+				panels = append(panels, c)
+				return
+			}
 		}
 		for ch := c.FirstChild; ch != nil; ch = ch.NextSibling {
 			collect(ch)

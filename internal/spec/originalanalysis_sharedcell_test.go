@@ -26,6 +26,8 @@ func TestOriginalAnalysisSharedCellColumn(t *testing.T) {
 		{"unequal panel widths", wrap(strings.Replace(sections, `width="552"`, `width="480"`, 1)), false},
 		{"minimum panel width overrides geometry", wrap(strings.Replace(sections, `<table width=`, `<table style="min-width:700px" width=`, 1)), false},
 		{"logical panel sizing overrides geometry", wrap(strings.Replace(sections, `<table width=`, `<table style="inline-size:700px" width=`, 1)), false},
+		{"percentage width with minimum sizing conflict", wrap(strings.Replace(sections, `<table width=`, `<table style="width:100%;min-width:700px" width=`, 1)), false},
+		{"unresolved width with logical sizing conflict", wrap(strings.Replace(sections, `<table width=`, `<table style="width:calc(100% - 10px);inline-size:700px" width=`, 1)), false},
 		{"explicit panel left alignment", wrap(strings.ReplaceAll(sections, `<table width=`, `<table align="left" width=`)), false},
 		{"explicit panel right alignment", wrap(strings.ReplaceAll(sections, `<table width=`, `<table align="right" width=`)), false},
 		{"panel floating", wrap(strings.ReplaceAll(sections, `<table width=`, `<table style="float:left" width=`)), false},
