@@ -8,7 +8,7 @@ import (
 func TestOriginalAnalysisInlineControls(t *testing.T) {
 	for _, tc := range []struct {
 		name, style, label, href string
-		original                 bool
+		action                   bool
 	}{
 		{"implicit inline", "background:#176;padding:10px 28px;border-radius:6px", "Open project", "https://example.test/open", true},
 		{"explicit inline", "display:inline;background:#176;padding:8px 16px", "Open project", "https://example.test/open", true},
@@ -48,13 +48,23 @@ func TestOriginalAnalysisInlineControls(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			raw := `<table width="600"><tr><td style="padding:24px;background:#eef"><p>Here is the primary authored project message.</p><a href="` + tc.href + `" style="` + tc.style + `">` + tc.label + `</a></td></tr></table>`
-			a := AnalyseOriginal(raw)
-			wantScore := 1
-			if tc.original {
-				wantScore = 2
-			}
-			if a.DefaultsToOriginal != tc.original || a.Score != wantScore {
-				t.Fatalf("want original=%v score=%d; got %+v", tc.original, wantScore, a)
+			// Whole-table containment now supplies a second point even when the
+			// reference is not a control. Keep the independent action negatives.
+			for _, contained := range []bool{true, false} {
+				input := raw
+				wantScore := 1
+				if contained {
+					wantScore++
+				} else {
+					input += `<p style="font-size:8px">Outside.</p>`
+				}
+				if tc.action {
+					wantScore++
+				}
+				a := AnalyseOriginal(input)
+				if a.DefaultsToOriginal != (wantScore >= 2) || a.Score != wantScore || hasOriginalRule(a, "designed action") != tc.action || hasOriginalRule(a, "whole message in a table") != contained {
+					t.Fatalf("want contained=%v action=%v score=%d; got %+v", contained, tc.action, wantScore, a)
+				}
 			}
 		})
 	}
@@ -67,7 +77,7 @@ func TestOriginalAnalysisInlineControls(t *testing.T) {
 func TestOriginalAnalysisInlinePaddingUnits(t *testing.T) {
 	for _, tc := range []struct {
 		name, font, padding string
-		original            bool
+		action              bool
 	}{
 		{"inherited small em", "8px", "padding:.5em 1em", false},
 		{"inherited small em longhands", "8px", "padding-top:.5em;padding-bottom:.5em;padding-left:1em;padding-right:1em", false},
@@ -87,13 +97,23 @@ func TestOriginalAnalysisInlinePaddingUnits(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			raw := `<table width="600"><tr><td style="padding:24px;background:#eef;font-size:` + tc.font + `"><p>Here is the primary authored project message.</p><a href="https://example.test/open" style="background:#176;` + tc.padding + `">Open project</a></td></tr></table>`
-			a := AnalyseOriginal(raw)
-			wantScore := 1
-			if tc.original {
-				wantScore = 2
-			}
-			if a.DefaultsToOriginal != tc.original || a.Score != wantScore {
-				t.Fatalf("want original=%v score=%d; got %+v", tc.original, wantScore, a)
+			// Whole-table containment now supplies a second point even when the
+			// reference is not a control. Keep the independent action negatives.
+			for _, contained := range []bool{true, false} {
+				input := raw
+				wantScore := 1
+				if contained {
+					wantScore++
+				} else {
+					input += `<p style="font-size:8px">Outside.</p>`
+				}
+				if tc.action {
+					wantScore++
+				}
+				a := AnalyseOriginal(input)
+				if a.DefaultsToOriginal != (wantScore >= 2) || a.Score != wantScore || hasOriginalRule(a, "designed action") != tc.action || hasOriginalRule(a, "whole message in a table") != contained {
+					t.Fatalf("want contained=%v action=%v score=%d; got %+v", contained, tc.action, wantScore, a)
+				}
 			}
 		})
 	}
@@ -112,70 +132,70 @@ func TestOriginalAnalysisFluidGutters(t *testing.T) {
 	fluid := page(rows)
 	data := `<table><tr><th>Item</th><th>Total</th></tr><tr><td>One</td><td>12</td></tr></table>`
 	for _, tc := range []struct {
-		name, raw string
-		score     int
-		original  bool
+		name, raw                   string
+		score                       int
+		original, layout, contained bool
 	}{
-		{"heading independent of gutters", fluid, 2, true},
-		{"neutral wrappers", `<div><section>` + fluid + `</section></div>`, 2, true},
-		{"own centering", `<table width="100%" style="margin:0 auto">` + rows + `</table>`, 2, true},
-		{"CSS gutter widths", strings.ReplaceAll(fluid, `width="16"`, `style="width:16px"`), 2, true},
-		{"anonymous blank gutter cells", strings.ReplaceAll(fluid, `width="16"`, `width="16" style="display:block;width:16px"`), 2, true},
-		{"compatible gutter limits", strings.ReplaceAll(fluid, `width="16"`, `width="16" style="min-width:12px;max-width:48px;padding:0"`), 2, true},
-		{"full width empty spacers", page(`<tr><td colspan="3" height="20">&nbsp;</td></tr>` + rows + `<tr><td colspan="3"></td></tr>`), 2, true},
-		{"explicit table displays", strings.ReplaceAll(strings.ReplaceAll(fluid, `<table width="100%">`, `<table width="100%" style="display:table">`), `<tr>`, `<tr style="display:table-row">`), 2, true},
-		{"independent action", page(row(`<a href="https://example.test/open" style="background:#176;padding:10px 28px">Open project</a>`+prose) + row(prose)), 2, true},
-		{"independent modules", page(row(`<div style="padding:16px;border:1px solid #ddd">`+prose+`</div>`) + row(`<div style="padding:16px;border:1px solid #ddd">`+prose+`</div>`)), 2, true},
-		{"no independent family", page(row(prose) + row(prose)), 1, false},
-		{"unknown percentage image", page(row(`<img width="100%" height="90" src="https://example.test/banner">`) + row(prose)), 1, false},
-		{"full width tracker", page(row(`<img width="100%" height="1" src="https://example.test/pixel">`+prose) + row(prose)), 1, false},
-		{"heading cannot replace gutters", `<table width="100%" align="center"><tr><td>` + heading + prose + `</td></tr><tr><td>` + prose + `</td></tr></table>`, 0, false},
-		{"one guttered row", page(row(heading + prose)), 0, false},
-		{"empty repetitions", page(row(heading+prose) + row("&nbsp;") + row("")), 0, false},
-		{"not centered", strings.ReplaceAll(fluid, `align="center"`, ""), 0, false},
-		{"auto width alone", strings.ReplaceAll(fluid, `width="100%"`, `width="auto"`), 0, false},
-		{"oversize ceiling unchanged", `<table width="100%" align="center" style="max-width:1400px"><tr><td>` + heading + prose + `</td></tr></table>`, 0, false},
-		{"unequal gutters", strings.Replace(fluid, `width="16"`, `width="24"`, 1), 0, false},
-		{"nonrepeating gutters", page(row(heading+prose) + strings.ReplaceAll(row(prose), `width="16"`, `width="24"`)), 0, false},
-		{"percentage gutters", strings.ReplaceAll(fluid, `width="16"`, `width="16%"`), 0, false},
-		{"empty row spanning fourth column", page(`<tr><td rowspan="3" width="300"></td><td colspan="3"></td></tr>` + rows), 0, false},
-		{"empty row span to end", page(`<tr><td rowspan="0" width="300"></td><td colspan="3"></td></tr>` + rows), 0, false},
-		{"empty fourth column", page(`<tr><td colspan="4"></td></tr>` + rows), 0, false},
-		{"empty extra cell", page(`<tr><td></td><td></td><td></td><td width="300"></td></tr>` + rows), 0, false},
-		{"empty gutter size contradiction", page(strings.Replace(row(""), `width="16"`, `width="300"`, 1) + rows), 0, false},
-		{"gutter minimum contradicts width", strings.ReplaceAll(fluid, `width="16"`, `width="16" style="min-width:300px"`), 0, false},
-		{"anonymous gutter minimum contradicts width", strings.ReplaceAll(fluid, `width="16"`, `width="16" style="display:block;min-width:300px"`), 0, false},
-		{"gutter maximum contradicts width", strings.ReplaceAll(fluid, `width="16"`, `width="16" style="max-width:8px"`), 0, false},
-		{"unknown gutter minimum", strings.ReplaceAll(fluid, `width="16"`, `width="16" style="min-width:50%"`), 0, false},
-		{"CSS width overrides attribute", strings.ReplaceAll(fluid, `width="16"`, `width="16" style="width:300px"`), 0, false},
-		{"invalid CSS gutter width", strings.ReplaceAll(fluid, `width="16"`, `width="16" style="width:16"`), 0, false},
-		{"gutter shorthand padding", strings.ReplaceAll(fluid, `width="16"`, `width="16" style="padding:0 300px"`), 0, false},
-		{"gutter longhand padding", strings.ReplaceAll(fluid, `width="16"`, `width="16" style="padding-left:300px"`), 0, false},
-		{"anonymous gutter padding", strings.ReplaceAll(fluid, `width="16"`, `width="16" style="display:block;padding:0 300px"`), 0, false},
-		{"table cell padding", strings.Replace(fluid, `<table width="100%">`, `<table width="100%" cellpadding="300">`, 1), 0, false},
-		{"block table", strings.Replace(fluid, `<table width="100%">`, `<table width="100%" style="display:block">`, 1), 0, false},
-		{"grid table", strings.Replace(fluid, `<table width="100%">`, `<table width="100%" style="display:grid">`, 1), 0, false},
-		{"block rows", strings.ReplaceAll(fluid, `<tr>`, `<tr style="display:block">`), 0, false},
-		{"block empty spacer row", page(`<tr style="display:block"><td colspan="3"></td></tr>` + rows), 0, false},
-		{"block spanning spacer cell", page(`<tr><td colspan="3" style="display:block;width:300px"></td></tr>` + rows), 0, false},
-		{"block row group", strings.Replace(fluid, `<table width="100%">`, `<table width="100%"><tbody style="display:block">`, 1), 0, false},
-		{"block content cells", strings.ReplaceAll(fluid, `<td><p`, `<td style="display:block"><p`), 0, false},
-		{"tiny gutters", strings.ReplaceAll(fluid, `width="16"`, `width="1"`), 0, false},
-		{"populated side column", strings.Replace(fluid, "&nbsp;", "Sidebar content", 1), 0, false},
-		{"side image column", strings.Replace(fluid, "&nbsp;", `<img width="20" height="20" src="https://example.test/icon">`, 1), 0, false},
-		{"spanning content", strings.Replace(fluid, `<td><p`, `<td colspan="2"><p`, 1), 0, false},
-		{"extra unaligned content row", page(rows + `<tr><td colspan="3">Additional content</td></tr>`), 0, false},
-		{"unrelated centered ancestor", `<table align="center"><tr><td>Separate content</td><td><table width="100%">` + rows + `</table></td></tr></table>`, 0, false},
-		{"nested rows cannot pool", page(row(heading + prose + `<table>` + row(prose) + `</table>`)), 0, false},
-		{"centered correspondence with boxed aside", `<table align="center" width="100%"><tr><td>` + heading + prose + `<div style="padding:16px;border:1px solid #ddd">Short boxed aside.</div>` + prose + `</td></tr></table>`, 0, false},
-		{"single boxed aside", page(row(prose+`<div style="padding:16px;border:1px solid #ddd">Short boxed aside.</div>`) + row(prose)), 1, false},
-		{"ordinary data in gutters", page(row(data+prose) + row(data+prose)), 1, false},
-		{"disconnected heading and action", page(row(prose)+row(prose)) + heading + `<a href="https://example.test/open" style="background:#176;padding:10px 28px">Open project</a>`, 1, false},
-		{"small late fluid card", `<p>` + strings.Repeat("Ordinary correspondence. ", 300) + `</p>` + fluid, 0, false},
+		{"heading independent of gutters", fluid, 3, true, true, true},
+		{"neutral wrappers", `<div><section>` + fluid + `</section></div>`, 3, true, true, true},
+		{"own centering", `<table width="100%" style="margin:0 auto">` + rows + `</table>`, 3, true, true, true},
+		{"CSS gutter widths", strings.ReplaceAll(fluid, `width="16"`, `style="width:16px"`), 3, true, true, true},
+		{"anonymous blank gutter cells", strings.ReplaceAll(fluid, `width="16"`, `width="16" style="display:block;width:16px"`), 3, true, true, true},
+		{"compatible gutter limits", strings.ReplaceAll(fluid, `width="16"`, `width="16" style="min-width:12px;max-width:48px;padding:0"`), 3, true, true, true},
+		{"full width empty spacers", page(`<tr><td colspan="3" height="20">&nbsp;</td></tr>` + rows + `<tr><td colspan="3"></td></tr>`), 3, true, true, true},
+		{"explicit table displays", strings.ReplaceAll(strings.ReplaceAll(fluid, `<table width="100%">`, `<table width="100%" style="display:table">`), `<tr>`, `<tr style="display:table-row">`), 3, true, true, true},
+		{"independent action", page(row(`<a href="https://example.test/open" style="background:#176;padding:10px 28px">Open project</a>`+prose) + row(prose)), 3, true, true, true},
+		{"independent modules", page(row(`<div style="padding:16px;border:1px solid #ddd">`+prose+`</div>`) + row(`<div style="padding:16px;border:1px solid #ddd">`+prose+`</div>`)), 3, true, true, true},
+		{"no independent family", page(row(prose) + row(prose)), 2, true, true, true},
+		{"unknown percentage image", page(row(`<img width="100%" height="90" src="https://example.test/banner">`) + row(prose)), 2, true, true, true},
+		{"full width tracker", page(row(`<img width="100%" height="1" src="https://example.test/pixel">`+prose) + row(prose)), 2, true, true, true},
+		{"heading cannot replace gutters", `<table width="100%" align="center"><tr><td>` + heading + prose + `</td></tr><tr><td>` + prose + `</td></tr></table>`, 1, false, false, true},
+		{"one guttered row", page(row(heading + prose)), 1, false, false, true},
+		{"empty repetitions", page(row(heading+prose) + row("&nbsp;") + row("")), 1, false, false, true},
+		{"not centered", strings.ReplaceAll(fluid, `align="center"`, ""), 1, false, false, true},
+		{"auto width alone", strings.ReplaceAll(fluid, `width="100%"`, `width="auto"`), 1, false, false, true},
+		{"oversize ceiling unchanged", `<table width="100%" align="center" style="max-width:1400px"><tr><td>` + heading + prose + `</td></tr></table>`, 1, false, false, true},
+		{"unequal gutters", strings.Replace(fluid, `width="16"`, `width="24"`, 1), 1, false, false, true},
+		{"nonrepeating gutters", page(row(heading+prose) + strings.ReplaceAll(row(prose), `width="16"`, `width="24"`)), 1, false, false, true},
+		{"percentage gutters", strings.ReplaceAll(fluid, `width="16"`, `width="16%"`), 1, false, false, true},
+		{"empty row spanning fourth column", page(`<tr><td rowspan="3" width="300"></td><td colspan="3"></td></tr>` + rows), 1, false, false, true},
+		{"empty row span to end", page(`<tr><td rowspan="0" width="300"></td><td colspan="3"></td></tr>` + rows), 1, false, false, true},
+		{"empty fourth column", page(`<tr><td colspan="4"></td></tr>` + rows), 1, false, false, true},
+		{"empty extra cell", page(`<tr><td></td><td></td><td></td><td width="300"></td></tr>` + rows), 1, false, false, true},
+		{"empty gutter size contradiction", page(strings.Replace(row(""), `width="16"`, `width="300"`, 1) + rows), 1, false, false, true},
+		{"gutter minimum contradicts width", strings.ReplaceAll(fluid, `width="16"`, `width="16" style="min-width:300px"`), 1, false, false, true},
+		{"anonymous gutter minimum contradicts width", strings.ReplaceAll(fluid, `width="16"`, `width="16" style="display:block;min-width:300px"`), 1, false, false, true},
+		{"gutter maximum contradicts width", strings.ReplaceAll(fluid, `width="16"`, `width="16" style="max-width:8px"`), 1, false, false, true},
+		{"unknown gutter minimum", strings.ReplaceAll(fluid, `width="16"`, `width="16" style="min-width:50%"`), 1, false, false, true},
+		{"CSS width overrides attribute", strings.ReplaceAll(fluid, `width="16"`, `width="16" style="width:300px"`), 1, false, false, true},
+		{"invalid CSS gutter width", strings.ReplaceAll(fluid, `width="16"`, `width="16" style="width:16"`), 1, false, false, true},
+		{"gutter shorthand padding", strings.ReplaceAll(fluid, `width="16"`, `width="16" style="padding:0 300px"`), 1, false, false, true},
+		{"gutter longhand padding", strings.ReplaceAll(fluid, `width="16"`, `width="16" style="padding-left:300px"`), 1, false, false, true},
+		{"anonymous gutter padding", strings.ReplaceAll(fluid, `width="16"`, `width="16" style="display:block;padding:0 300px"`), 1, false, false, true},
+		{"table cell padding", strings.Replace(fluid, `<table width="100%">`, `<table width="100%" cellpadding="300">`, 1), 1, false, false, true},
+		{"block table", strings.Replace(fluid, `<table width="100%">`, `<table width="100%" style="display:block">`, 1), 1, false, false, true},
+		{"grid table", strings.Replace(fluid, `<table width="100%">`, `<table width="100%" style="display:grid">`, 1), 1, false, false, true},
+		{"block rows", strings.ReplaceAll(fluid, `<tr>`, `<tr style="display:block">`), 1, false, false, true},
+		{"block empty spacer row", page(`<tr style="display:block"><td colspan="3"></td></tr>` + rows), 1, false, false, true},
+		{"block spanning spacer cell", page(`<tr><td colspan="3" style="display:block;width:300px"></td></tr>` + rows), 1, false, false, true},
+		{"block row group", strings.Replace(fluid, `<table width="100%">`, `<table width="100%"><tbody style="display:block">`, 1), 1, false, false, true},
+		{"block content cells", strings.ReplaceAll(fluid, `<td><p`, `<td style="display:block"><p`), 1, false, false, true},
+		{"tiny gutters", strings.ReplaceAll(fluid, `width="16"`, `width="1"`), 1, false, false, true},
+		{"populated side column", strings.Replace(fluid, "&nbsp;", "Sidebar content", 1), 1, false, false, true},
+		{"side image column", strings.Replace(fluid, "&nbsp;", `<img width="20" height="20" src="https://example.test/icon">`, 1), 1, false, false, true},
+		{"spanning content", strings.Replace(fluid, `<td><p`, `<td colspan="2"><p`, 1), 1, false, false, true},
+		{"extra unaligned content row", page(rows + `<tr><td colspan="3">Additional content</td></tr>`), 1, false, false, true},
+		{"unrelated centered ancestor", `<table align="center"><tr><td>Separate content</td><td><table width="100%">` + rows + `</table></td></tr></table>`, 1, false, false, true},
+		{"nested rows cannot pool", page(row(heading + prose + `<table>` + row(prose) + `</table>`)), 1, false, false, true},
+		{"centered correspondence with boxed aside", `<table align="center" width="100%"><tr><td>` + heading + prose + `<div style="padding:16px;border:1px solid #ddd">Short boxed aside.</div>` + prose + `</td></tr></table>`, 1, false, false, true},
+		{"single boxed aside", page(row(prose+`<div style="padding:16px;border:1px solid #ddd">Short boxed aside.</div>`) + row(prose)), 2, true, true, true},
+		{"ordinary data in gutters", page(row(data+prose) + row(data+prose)), 2, true, true, true},
+		{"disconnected heading and action", page(row(prose)+row(prose)) + heading + `<a href="https://example.test/open" style="background:#176;padding:10px 28px">Open project</a>`, 1, false, true, false},
+		{"small late fluid card", `<p>` + strings.Repeat("Ordinary correspondence. ", 300) + `</p>` + fluid, 0, false, false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			a := AnalyseOriginal(tc.raw)
-			if a.DefaultsToOriginal != tc.original || a.Score != tc.score {
+			if a.DefaultsToOriginal != tc.original || a.Score != tc.score || hasOriginalRule(a, "bounded or padded main layout") != tc.layout || hasOriginalRule(a, "whole message in a table") != tc.contained {
 				t.Fatalf("want original=%v score=%d; got %+v", tc.original, tc.score, a)
 			}
 		})

@@ -1,10 +1,12 @@
 # Implemented structural rules
 
 The owner first requested anonymised failing tests, then authorized generic rule
-changes. Both owner-confirmed examples now pass, including the identity, neutral
-wrapper and marked-history/signature mutations. The original receipts were 0 and
-1; they are now 3 (layout, hierarchy, graphic) and 2 (layout, action). No identity
-exceptions, sender preferences or original-rendering changes were introduced.
+changes. All three examples now pass, including the identity, neutral wrapper
+and marked-history/signature mutations. The first two original receipts were 0
+and 1; they are now 4 (layout, hierarchy, graphic, table containment) and 3 (layout,
+action, table containment). The invented third example moves from 1 to 2 (layout,
+table containment). No identity exceptions, sender preferences or
+original-rendering changes were introduced.
 
 ## 1. Painted inline action links
 
@@ -89,20 +91,54 @@ block/grid table or block row/group/central-cell overrides, unrelated centered
 ancestors, nested-row pooling, ordinary data, a lone boxed aside, disconnected
 heading/action regions and a small late fluid card after long prose. Positive
 checks retain full-width empty spacers and anonymous blank block gutters. Separate tests show that a qualifying
-fluid scaffold without an independent family stays simplified and unknown-width
-images/tracking pixels do not supply that family.
+fluid scaffold without an independent family previously stayed simplified; the
+whole-table point below now combines with its layout point. Unknown-width images
+and tracking pixels still do not supply a graphic vote.
 
 A link around a painted descendant control remains outside the new inline rule;
 arbitrary paint propagation was not added to make example 1 pass.
 
+## 3. Whole visible message in one table
+
+For [#359](https://github.com/zachpmanson/chainmail/issues/359), add exactly one
+message-level point when a single retained table contains all authored words and
+all visible, nontracking images. Require some authored words; empty/image-only
+tables do not vote. Reuse the existing visibility, quote, signature and contact
+pruning before checking containment. Nested tables cannot duplicate the point.
+Visible text or images outside the table, even one word or a small logo, prevent
+it; disconnected sibling tables do not pool containment.
+
+This is additive evidence, not an unconditional original default. Bare data
+tables earn only one point and remain simplified. Existing layout, action,
+hierarchy, graphic, primary-position and weighted-coverage recognition is
+unchanged, as are the two-point threshold, uncertainty veto and resource caps.
+All-table padded correspondence can now reach two points without an action;
+this is an intentional policy consequence of the owner's requested point.
+
+The new synthetic example earns layout plus containment only. Its cell-painted
+link does not gain action recognition and its CSS-small logo does not gain
+prominent-graphic recognition. Existing inline-control negatives now assert
+absence of the action rule directly, both with and without outside prose.
+Fluid-gutter tests explicitly retain their positive/negative layout recognition.
+
+Policy-driven synthetic reclassifications are the non-action inline controls
+and invalid/insufficient inline-padding cases (layout + containment), five fluid
+cases (`no independent family`, `unknown percentage image`, `full width tracker`,
+`single boxed aside`, `ordinary data in gutters`), ordinary references inside a
+painted page cell, and the unknown-table-cell image case. The latter still has
+no graphic vote. Invalid fluid geometry remains one point/simplified. The server
+canvas test's bare sender table changes from score 0 to 1 but remains simplified;
+its exact receipt excludes any app-canvas evidence.
+
 ## Validation and limits
 
-All 119 existing corpus receipts remain byte-for-byte equal to the pre-change
-receipts, including the two previously owner-paused expectations. All corpus
-mutation checks and 117 active expected-mode assertions pass. Strict mode still
-reports only the same two paused false negatives; their labels and pause are
-unchanged. Focused synthetic regressions, the two owner examples and the full
-`internal/spec` suite pass.
+Of 119 existing corpus receipts, 48 gain exactly this one point: 29 move from
+3 to 4, 17 from 2 to 3, and the two owner-paused cases (`thread-041-1`,
+`thread-059-1`) move from 1 to 2. Only those two defaults change, to original.
+All prior matches and uncertainty flags are unchanged. All corpus mutation
+checks and 117 active expected-mode assertions pass. Strict mode passes all
+119 labels; their labels and pause code are unchanged. The three owner examples
+and the full `internal/spec` suite pass.
 
 These are conservative structural estimates, not computed browser geometry or
 unseen-template validation. The new fluid rule intentionally declines other

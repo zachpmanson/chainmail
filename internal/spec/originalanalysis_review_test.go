@@ -98,13 +98,18 @@ func TestOriginalAnalysisImageColumnGeometry(t *testing.T) {
 		{"percentage scaffold", `<div style="max-width:520px;margin:0 auto;padding:24px;background:#eee"><table width="100%"><tr><td><p>This primary message has a banner below the ordinary prose.</p><img style="width:100%;height:auto" src="https://example.test/banner"></td></tr></table></div>`, true},
 		{"unknown parent", `<div style="padding:24px;background:#eee"><p>The containing width is not known from this markup.</p><img style="width:100%;height:auto" src="https://example.test/banner"></div>`, false},
 		{"unknown intermediate", `<div style="width:520px;padding:24px;background:#eee"><div style="width:calc(100% - 300px)"><p>The intermediate geometry is not resolved.</p><img style="width:100%;height:auto" src="https://example.test/banner"></div></div>`, false},
-		{"unknown table cells", `<div style="width:520px;padding:24px;background:#eee"><table width="100%"><tr><td>First column</td><td><p>The second column has no explicit width.</p><img style="width:100%;height:auto" src="https://example.test/banner"></td></tr></table></div>`, false},
+		{"unknown table cells", `<div style="width:520px;padding:24px;background:#eee"><table width="100%"><tr><td>First column</td><td><p>The second column has no explicit width.</p><img style="width:100%;height:auto" src="https://example.test/banner"></td></tr></table></div>`, true},
 		{"maximum image width", `<div style="width:520px;padding:24px;background:#eee"><p>The image is an explicitly small logo, not a banner.</p><img style="width:100%;max-width:120px;height:90px" src="https://example.test/logo"></div>`, false},
 		{"zero width", `<div style="width:520px;padding:24px;background:#eee"><p>The zero-width image must not count.</p><img style="width:0%;height:90px" src="https://example.test/pixel"></div>`, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if a := AnalyseOriginal(tc.raw); a.DefaultsToOriginal != tc.original {
+			a := AnalyseOriginal(tc.raw)
+			if a.DefaultsToOriginal != tc.original {
 				t.Fatalf("want original=%v; got %+v", tc.original, a)
+			}
+			// Table containment changes the default, not unresolved image geometry.
+			if tc.name == "unknown table cells" && (a.Score != 2 || hasOriginalRule(a, "prominent graphic") || !hasOriginalRule(a, "whole message in a table")) {
+				t.Fatalf("unknown cells must not establish banner width: %+v", a)
 			}
 		})
 	}

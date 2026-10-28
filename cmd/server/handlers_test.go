@@ -526,8 +526,14 @@ func TestOriginalAnalysisDoesNotCountAppCanvasOrRewriteDisplay(t *testing.T) {
 		if got.HTML != string(a.body) {
 			t.Fatal("analysis rewrote original")
 		}
-		if got.Analysis.Score != 0 || got.Analysis.DefaultsToOriginal {
-			t.Fatalf("app presentation counted: %+v", got.Analysis)
+		want := spec.OriginalAnalysis{Matches: []spec.OriginalMatch{}}
+		if i == 1 {
+			// The sender's bare table earns one point, not the app's canvas.
+			want.Score = 1
+			want.Matches = []spec.OriginalMatch{{Rule: "whole message in a table", Points: 1}}
+		}
+		if !reflect.DeepEqual(got.Analysis, want) {
+			t.Fatalf("want only sender evidence %+v; got %+v", want, got.Analysis)
 		}
 		if !strings.Contains(got.HTML, ":host") {
 			t.Fatal("missing app canvas")
