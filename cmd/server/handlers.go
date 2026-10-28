@@ -1019,8 +1019,8 @@ type slurpResponse struct {
 // and returns the ingest transcript.
 //
 // It delegates to the sibling `corpus` binary rather than re-implementing the
-// phases: the ingest order, fail-closed threading check, dedupe-as-dry-run,
-// embed-skip reporting and connection-snapshot probe all live there, and the
+// phases: the ingest order, fail-closed threading check, dedupe-as-dry-run and
+// connection-snapshot probe all live there, and the
 // server shares none of that logic. The sibling ships beside this binary in the
 // same nix package (corpus lands next to chainmail-server in $out/bin).
 //

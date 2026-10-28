@@ -38,6 +38,38 @@ func awaitEmbed(t *testing.T, ch <-chan struct{}) {
 	}
 }
 
+func TestEmbeddingPublishesPendingBeforeInference(t *testing.T) {
+	s := embedStore(t)
+	put(t, s, msg{id: "initial-progress@example.test", body: "The synthetic ledger needs checking against the current schedule."})
+	ctx, cancel := context.WithCancel(context.Background())
+	p := &pausedEmbedder{Embedder: embed.NewFake(8), entered: make(chan struct{}, 1), release: make(chan struct{})}
+	progress := make(chan BackfillProgress, 2)
+	finished := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		defer close(finished)
+		_, err := s.BackfillEmbeddings(ctx, p, BackfillOptions{Progress: func(v BackfillProgress) { progress <- v }})
+		done <- err
+	}()
+	defer func() { cancel(); awaitEmbed(t, finished) }()
+	awaitEmbed(t, p.entered)
+	select {
+	case got := <-progress:
+		if got.Pending != 1 || got.Done != 0 || got.Embedded != 0 || got.Skipped != 0 {
+			t.Fatalf("initial progress = %+v, want 0/1 before inference", got)
+		}
+	default:
+		t.Fatal("pending baseline was not published before inference")
+	}
+	close(p.release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if got := <-progress; got.Pending != 1 || got.Done != 1 || got.Embedded != 1 {
+		t.Fatalf("committed progress = %+v, want 1/1", got)
+	}
+}
+
 func TestEmbeddingDiscardsChangedSourceAndContinuesPastAllStaleBatch(t *testing.T) {
 	for _, change := range []string{"body", "subject", "source", "delete"} {
 		t.Run(change, func(t *testing.T) {

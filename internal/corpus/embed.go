@@ -353,6 +353,9 @@ func (s *Store) BackfillEmbeddings(ctx context.Context, e embed.Embedder, opt Ba
 		return rep, fmt.Errorf("counting entries to embed: %w", err)
 	}
 
+	if opt.Progress != nil && rep.Pending > 0 {
+		opt.Progress(BackfillProgress{Pending: rep.Pending})
+	}
 	var after int64
 	for attempted := 0; attempted < rep.Pending; {
 		if err := ctx.Err(); err != nil {
