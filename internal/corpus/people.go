@@ -985,12 +985,19 @@ type PersonEdit struct {
 	// where it stands, and asking for false is the reader turning the reading
 	// style off.
 	PreferOriginal *bool
+	// ResetOriginalPreference clears the reader's answer so automatic rendering
+	// applies again. It cannot be combined with an explicit PreferOriginal.
+	ResetOriginalPreference bool
 }
 
 // ErrBadIdentity is an identity string that is not one: not "kind:value", an
 // unknown kind, or a value that normalises to nothing. It is the caller's own
 // mistake, which is why the API turns it into a 400 rather than a conflict.
 var ErrBadIdentity = errors.New("not an identity")
+
+// ErrConflictingOriginalPreference is an edit that both sets and clears the
+// reader's answer about how this person's mail is read.
+var ErrConflictingOriginalPreference = errors.New("resetOriginalPreference cannot be combined with preferOriginal")
 
 // opsRule marks an identity a human wrote on the ops screen, so a reader asking
 // why two people hold one address can tell a hand from a rule.
@@ -1022,6 +1029,9 @@ func (e *IdentityTakenError) Error() string {
 // opsRule — because the next person to ask why two people hold one address
 // should be able to see that a human said so.
 func UpdatePerson(s *Store, id int64, edit PersonEdit) (PersonSummary, error) {
+	if edit.ResetOriginalPreference && edit.PreferOriginal != nil {
+		return PersonSummary{}, ErrConflictingOriginalPreference
+	}
 	tx, err := s.db.Begin()
 	if err != nil {
 		return PersonSummary{}, err
@@ -1069,7 +1079,12 @@ func UpdatePerson(s *Store, id int64, edit PersonEdit) (PersonSummary, error) {
 		}
 	}
 
-	if edit.PreferOriginal != nil {
+	if edit.ResetOriginalPreference {
+		if _, err := tx.Exec(
+			`update people set prefer_original = 0, prefer_original_set = 0 where id = ?`, id); err != nil {
+			return PersonSummary{}, err
+		}
+	} else if edit.PreferOriginal != nil {
 		if _, err := tx.Exec(
 			`update people set prefer_original = ?, prefer_original_set = 1 where id = ?`, boolInt(*edit.PreferOriginal), id); err != nil {
 			return PersonSummary{}, err

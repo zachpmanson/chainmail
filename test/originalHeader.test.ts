@@ -48,7 +48,7 @@ async function render(
         reading: {
           original: { extId: "header", load },
           person: { id: 1, preferOriginal: explicit },
-          onPreferOriginal: vi.fn(),
+          onPreferOriginal: vi.fn(async () => {}),
         },
       }),
     );

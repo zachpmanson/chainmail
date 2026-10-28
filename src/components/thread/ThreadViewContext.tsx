@@ -2,6 +2,7 @@ import { createContext, useContext } from "react";
 import { useStore } from "zustand";
 import type { StoreApi } from "zustand/vanilla";
 import type { ThreadLookup } from "../../lib/thread/lookup";
+import type { ReadingPreference } from "../../lib/prefs/usePrefs";
 
 /** What every entry in a thread reads, so ThreadMessages needn't drill it through the forest. */
 export type ThreadView = {
@@ -9,7 +10,8 @@ export type ThreadView = {
   /** the message the reply box answers */
   answerExtId: string | undefined;
   aim: (extId: string) => void;
-  flip: (personId: number, next: boolean) => void;
+  flip: (personId: number, next: ReadingPreference) => Promise<void>;
+  readingPending: boolean;
   pulling: string | null;
   pull: (extId: string) => void;
   landed: string | null;

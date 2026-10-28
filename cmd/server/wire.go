@@ -255,6 +255,9 @@ type personEditRequest struct {
 	// the transcript's rendering again. A plain bool could not say the first, and
 	// an edit that only renamed somebody would silently switch the style off.
 	PreferOriginal *bool `json:"preferOriginal,omitempty"`
+	// ResetOriginalPreference restores automatic rendering; false is not an edit.
+	// An explicit PreferOriginal and a reset in the same request are refused.
+	ResetOriginalPreference bool `json:"resetOriginalPreference,omitempty"`
 }
 
 // personResponse answers a write with the person as it now stands, so the screen
