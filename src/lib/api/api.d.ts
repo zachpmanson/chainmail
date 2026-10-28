@@ -609,7 +609,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Edit one person: their name, or the identities attached to them.
+         * Edit one person's name, identities or reading preference.
          * @description The ops screen's own editor, and the corpus's only hand-made identity write. Fields left out are left alone. An identity another person already holds is refused with 409 naming them: moving an address between people is the same act as merging them, and the merge plan is where that act carries evidence. A rename writes the name and adds it as an identity; the spellings the corpus read from headers are kept, because a name is evidence too. There is deliberately no delete: a person is a thing the mail says, not a row a screen owns.
          */
         post: operations["editPerson"];
@@ -1924,8 +1924,10 @@ export interface components {
             addIdentities?: string[];
             /** @description Identities to detach, as "kind:value". Detaching the last one leaves a person known by name alone, which the corpus already tolerates: some participants are only ever a first name in someone else's quoted header. */
             removeIdentities?: string[];
-            /** @description The reading style for this person's mail: true for the sender's own rendering, false for the transcript's. Absent leaves the answer as it stands, which is the rule every other field here follows — a request that renamed somebody must not switch their reading style off by leaving it out. This is what the staged/original control on a message sends, and it is the only write in this API that is about how mail is read rather than about what the corpus holds. */
-            preferOriginal?: boolean;
+            /** @description The reading style for this person's mail: true for the sender's own rendering, false for the transcript's. Absent or null leaves the answer as it stands; false is an explicit preference, not a reset. Cannot be combined with resetOriginalPreference:true. */
+            preferOriginal?: boolean | null;
+            /** @description True clears this person's stored reading preference and restores automatic rendering (prefer_original=0, prefer_original_set=0). Idempotent. Absent, null or false does nothing; true counts as an edit on its own. Combining true with an explicit preferOriginal true or false returns 400 before any part of the edit is applied. Other fields can be edited in the same transaction. Verify via GET /v1/entries/{extId}: preferOriginal and preferOriginalSet are false or absent. */
+            resetOriginalPreference?: boolean | null;
         };
         /** @description One person, as the write left them. */
         PersonResponse: {
@@ -3098,7 +3100,7 @@ export interface operations {
                     "application/json": components["schemas"]["PersonResponse"];
                 };
             };
-            /** @description Malformed body, nothing to do, or an identity that is not kind:value. */
+            /** @description Malformed body, non-positive person id, nothing to do, an identity that is not kind:value, or resetOriginalPreference:true combined with an explicit preferOriginal true or false. No part of an invalid edit is applied. */
             400: {
                 headers: {
                     [name: string]: unknown;

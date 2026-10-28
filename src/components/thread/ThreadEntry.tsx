@@ -1,4 +1,5 @@
 import type { CorpusEntry } from "../../lib/api/api";
+import type { ReadingPreference } from "../../lib/prefs/usePrefs";
 import { MEDIA_BASE } from "../../lib/message/attachments";
 import { gmailIdOf, sourceLine } from "../../lib/message/sources";
 import { fetchOriginal } from "../../lib/message/original";
@@ -16,6 +17,7 @@ export default function ThreadEntry({ entry: e }: { entry: CorpusEntry }) {
   const answerExtId = useThreadView((v) => v.answerExtId);
   const aim = useThreadView((v) => v.aim);
   const flip = useThreadView((v) => v.flip);
+  const readingPending = useThreadView((v) => v.readingPending);
   const pulling = useThreadView((v) => v.pulling);
   const pull = useThreadView((v) => v.pull);
   const landed = useThreadView((v) => v.landed);
@@ -36,14 +38,17 @@ export default function ThreadEntry({ entry: e }: { entry: CorpusEntry }) {
         e.original
           ? {
               original: { extId: e.extId, load: fetchOriginal },
-              // Without a person (quote-recovered entries) the switch falls back to browser storage.
+              // Without a person (quote-recovered entries) the control falls back to browser storage.
               person: e.personId
                 ? {
                     id: e.personId,
                     preferOriginal: e.preferOriginalSet ? e.preferOriginal === true : undefined,
                   }
                 : undefined,
-              onPreferOriginal: e.personId ? (next: boolean) => flip(e.personId!, next) : undefined,
+              onPreferOriginal: e.personId
+                ? (next: ReadingPreference) => flip(e.personId!, next)
+                : undefined,
+              pending: e.personId ? readingPending : false,
             }
           : undefined
       }

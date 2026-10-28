@@ -38,7 +38,7 @@ export default function ThreadMessages({
     [entries, shown, parentOf, people],
   );
 
-  const flip = usePreferOriginal();
+  const { flip, pending: readingPending } = usePreferOriginal();
   const { pulling, pullNote, pull } = useMediaPull({ accountId });
   // Re-attach when entries change: `attach` only wires elements present at the time.
   useEffect(() => {
@@ -102,6 +102,7 @@ export default function ThreadMessages({
         answerExtId={answer?.extId}
         aim={aim}
         flip={flip}
+        readingPending={readingPending}
         pulling={pulling}
         pull={pull}
         landed={landed}

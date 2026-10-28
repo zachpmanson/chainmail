@@ -3286,7 +3286,7 @@ func send(w http.ResponseWriter, status int, body any) {
 // is the corpus, which the reader can already rebuild from the mailbox.
 func (s *server) editPerson(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("personId"), 10, 64)
-	if err != nil || id == 0 {
+	if err != nil || id <= 0 {
 		fail(w, http.StatusBadRequest, fmt.Errorf(
 			"personId %q: want the id of a person, e.g. /v1/people/12", r.PathValue("personId")))
 		return
@@ -3301,17 +3301,18 @@ func (s *server) editPerson(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.DisplayName == "" && len(req.AddIdentities) == 0 && len(req.RemoveIdentities) == 0 &&
-		req.PreferOriginal == nil {
+		req.PreferOriginal == nil && !req.ResetOriginalPreference {
 		fail(w, http.StatusBadRequest, errors.New(
 			"nothing to do: name at least one of displayName, addIdentities, removeIdentities, "+
-				"preferOriginal"))
+				"preferOriginal, resetOriginalPreference:true"))
 		return
 	}
 	person, err := corpus.UpdatePerson(s.store, id, corpus.PersonEdit{
-		DisplayName:    req.DisplayName,
-		Add:            req.AddIdentities,
-		Remove:         req.RemoveIdentities,
-		PreferOriginal: req.PreferOriginal,
+		DisplayName:             req.DisplayName,
+		Add:                     req.AddIdentities,
+		Remove:                  req.RemoveIdentities,
+		PreferOriginal:          req.PreferOriginal,
+		ResetOriginalPreference: req.ResetOriginalPreference,
 	})
 	switch {
 	case errors.Is(err, corpus.ErrNoPerson):
@@ -3325,9 +3326,8 @@ func (s *server) editPerson(w http.ResponseWriter, r *http.Request) {
 			fail(w, http.StatusConflict, err)
 			return
 		}
-		// A malformed identity is the caller's own mistake, and the only other
-		// error the corpus reports from here.
-		if errors.Is(err, corpus.ErrBadIdentity) {
+		// Malformed identities and conflicting reading preferences are caller errors.
+		if errors.Is(err, corpus.ErrBadIdentity) || errors.Is(err, corpus.ErrConflictingOriginalPreference) {
 			fail(w, http.StatusBadRequest, err)
 			return
 		}

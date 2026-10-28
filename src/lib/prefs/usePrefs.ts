@@ -4,6 +4,9 @@ import { clampListWidth } from "./panelWidth";
 
 // Stored per browser, not on the server: a good list width depends on the screen.
 
+/** Undefined restores automatic rendering rather than forcing either variant. */
+export type ReadingPreference = boolean | undefined;
+
 type Saved = {
   compact: boolean;
   /** Reply-tree layout in the thread pane. */
@@ -73,7 +76,7 @@ export const usePrefs = create<
     setCompact: (compact: boolean) => void;
     setTree: (tree: boolean) => void;
     setListWidth: (px: number | null) => void;
-    setStyled: (sender: string, next: boolean) => void;
+    setStyled: (sender: string, next: ReadingPreference) => void;
   }
 >()(
   persist(
@@ -93,12 +96,14 @@ export const usePrefs = create<
       setStyled: (sender, next) => {
         if (sender === "") return;
         set(({ styledSenders, plainSenders }) => ({
-          styledSenders: next
-            ? [...new Set([...styledSenders, sender])]
-            : styledSenders.filter((s) => s !== sender),
-          plainSenders: next
-            ? plainSenders.filter((s) => s !== sender)
-            : [...new Set([...plainSenders, sender])],
+          styledSenders:
+            next === true
+              ? [...new Set([...styledSenders, sender])]
+              : styledSenders.filter((s) => s !== sender),
+          plainSenders:
+            next === false
+              ? [...new Set([...plainSenders, sender])]
+              : plainSenders.filter((s) => s !== sender),
         }));
       },
     }),

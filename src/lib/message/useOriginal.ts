@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { usePrefs } from "../prefs/usePrefs";
+import { usePrefs, type ReadingPreference } from "../prefs/usePrefs";
 import type { OriginalAnalysis, OriginalPayload } from "./original";
 
 /** `asking` keeps the transcript's body on screen; `none` means no original is available. */
@@ -13,8 +13,8 @@ const read: Original = { at: "read" };
 export function useOriginal(
   original: Source | undefined,
   fromEmail: string | undefined,
-  person: { id: number; preferOriginal: boolean | undefined } | undefined,
-  onPreferOriginal: ((next: boolean) => void) | undefined,
+  person: { id: number; preferOriginal: ReadingPreference } | undefined,
+  onPreferOriginal: ((next: ReadingPreference) => Promise<void>) | undefined,
   explain = false,
 ) {
   const key = fromEmail || original?.extId || "";
@@ -24,27 +24,28 @@ export function useOriginal(
   const styled = usePrefs((s) => key !== "" && s.styledSenders.includes(key));
   const plain = usePrefs((s) => key !== "" && s.plainSenders.includes(key));
   const setStyled = usePrefs((s) => s.setStyled);
-  const explicit = stored ? person.preferOriginal !== undefined : styled || plain;
-  const [automatic, setAutomatic] = useState<(Source & { on: boolean }) | null>(null);
-  const on = explicit
-    ? stored
-      ? person.preferOriginal === true
-      : styled
-    : Boolean(automatic && automatic.extId === extId && automatic.load === load && automatic.on);
+  const preference: ReadingPreference = stored
+    ? person.preferOriginal
+    : styled
+      ? true
+      : plain
+        ? false
+        : undefined;
+  const explicit = preference !== undefined;
   const [result, setResult] = useState<
     (Source & { state: Original; analysis?: OriginalAnalysis }) | null
   >(null);
   const arrived = useRef<(Source & OriginalPayload) | null>(null);
+  const current = result && result.extId === extId && result.load === load ? result : null;
+  const on = preference ?? current?.analysis?.defaultsToOriginal === true;
 
   useEffect(() => {
-    if (!extId || !load || (explicit && !on && !explain)) return;
+    if (!extId || !load || (preference === false && !explain)) return;
     let live = true;
     const show = (html: string, analysis: OriginalAnalysis | undefined) => {
       if (!live) return;
       arrived.current = { extId, load, html, analysis };
-      const selected = explicit ? on : analysis?.defaultsToOriginal === true;
-      setAutomatic({ extId, load, on: selected });
-      setResult({ extId, load, analysis, state: selected ? { at: "sent", html } : read });
+      setResult({ extId, load, analysis, state: { at: "sent", html } });
     };
     if (arrived.current?.extId === extId && arrived.current.load === load) {
       show(arrived.current.html, arrived.current.analysis);
@@ -56,7 +57,6 @@ export function useOriginal(
         },
         (err: unknown) => {
           if (!live) return;
-          setAutomatic({ extId, load, on: false });
           setResult({
             extId,
             load,
@@ -72,17 +72,29 @@ export function useOriginal(
     return () => {
       live = false;
     };
-  }, [on, explicit, extId, load, explain]);
+  }, [preference, extId, load, explain]);
 
-  const ask = () => (stored ? onPreferOriginal(!on) : setStyled(key, !on));
-  const current = result && result.extId === extId && result.load === load ? result : null;
+  const choose = (next: ReadingPreference) => {
+    if (stored) {
+      void onPreferOriginal(next).then(
+        () => {
+          if (next === undefined) setStyled(key, undefined);
+        },
+        // The server hook restores the saved choice and reports the error.
+        () => {},
+      );
+    } else {
+      setStyled(key, next);
+    }
+  };
   const state = on && current ? current.state : read;
   return {
     on,
     state,
-    ask,
+    preference,
+    choose,
     explicit,
     analysis: current?.analysis,
-    analysisState: current?.state.at,
+    analysisState: current?.state.at === "sent" && !on ? "read" : current?.state.at,
   };
 }
