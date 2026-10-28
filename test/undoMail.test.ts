@@ -33,55 +33,94 @@ afterEach(() => {
   clearToasts();
 });
 
-it("records mailbox receipts across hooks, preserves request scope, and undoes via tokens", async () => {
-  const calls: { url: string; body: unknown }[] = [];
-  vi.stubGlobal("fetch", async (request: Request) => {
-    const body = await request.json();
-    calls.push({ url: new URL(request.url).pathname, body });
-    const token = calls.length === 1 ? "archive-work" : "read-personal";
-    return new Response(
-      JSON.stringify({
-        action: "archive",
-        changed: 1,
-        marked: 1,
-        chains: [],
-        undoToken: token,
-        undone: true,
-      }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    );
-  });
-  const hooks = await mount();
-  try {
-    await act(async () => {
-      await hooks
-        .mail()
-        .mutateAsync({ body: { chains: ["mail:a"], action: "archive", accountId: "work" } });
+it.each(["archive", "move", "trash"] as const)(
+  "undoes %s but not read-state changes",
+  async (action) => {
+    const calls: { url: string; body: unknown }[] = [];
+    vi.stubGlobal("fetch", async (request: Request) => {
+      const body = await request.json();
+      calls.push({ url: new URL(request.url).pathname, body });
+      const token = calls.length === 1 ? `${action}-work` : "read-personal";
+      return new Response(
+        JSON.stringify({
+          action,
+          changed: 1,
+          marked: 1,
+          chains: [],
+          undoToken: token,
+          undone: true,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
     });
-    await act(async () => {
-      await hooks
-        .read()
-        .mutateAsync({ body: { chain: "mail:b", unread: false, accountId: "personal" } });
+    const hooks = await mount();
+    const body = {
+      chains: ["mail:a"],
+      action,
+      accountId: "work",
+      ...(action === "move" ? { labels: ["Projects"] } : {}),
+    };
+    try {
+      await act(async () => {
+        await hooks.mail().mutateAsync({ body });
+      });
+      await act(async () => {
+        await hooks
+          .read()
+          .mutateAsync({ body: { chain: "mail:b", unread: false, accountId: "personal" } });
+      });
+      expect(appUndo.getSnapshot().label).toBe(action);
+      await appUndo.undo();
+      expect(await appUndo.undo()).toBeUndefined();
+      expect(calls).toEqual([
+        {
+          url: "/v1/mail",
+          body: { ...body, undoable: true },
+        },
+        {
+          url: "/v1/read",
+          body: { chain: "mail:b", unread: false, accountId: "personal", undoable: false },
+        },
+        { url: "/v1/mail/undo", body: { token: `${action}-work` } },
+      ]);
+      expect(appUndo.getSnapshot().label).toBe("");
+    } finally {
+      hooks.close();
+    }
+  },
+);
+
+it.each([false, true])(
+  "changes unread=%s without waiting for mailbox undo work",
+  async (unread) => {
+    let sent: unknown;
+    vi.stubGlobal("fetch", async (request: Request) => {
+      sent = await request.json();
+      return new Response(JSON.stringify({ marked: 1, undoToken: "must-not-be-recorded" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
     });
-    await appUndo.undo();
-    await appUndo.undo();
-    expect(calls).toEqual([
-      {
-        url: "/v1/mail",
-        body: { chains: ["mail:a"], action: "archive", accountId: "work", undoable: true },
-      },
-      {
-        url: "/v1/read",
-        body: { chain: "mail:b", unread: false, accountId: "personal", undoable: true },
-      },
-      { url: "/v1/mail/undo", body: { token: "read-personal" } },
-      { url: "/v1/mail/undo", body: { token: "archive-work" } },
-    ]);
-    expect(appUndo.getSnapshot().label).toBe("");
-  } finally {
-    hooks.close();
-  }
-});
+    const hooks = await mount();
+    let release!: () => void;
+    const held = appUndo.perform(() => new Promise<void>((resolve) => (release = resolve)));
+    await Promise.resolve();
+    try {
+      await act(async () => {
+        await hooks.read().mutateAsync({
+          body: { chain: "mail:b", unread, accountId: "personal", undoable: true },
+        });
+      });
+      expect(sent).toEqual({ chain: "mail:b", unread, accountId: "personal", undoable: false });
+      expect(appUndo.getSnapshot()).toEqual({ label: "", pending: true });
+    } finally {
+      release();
+      await held;
+      hooks.close();
+    }
+    expect(await appUndo.undo()).toBeUndefined();
+  },
+);
 
 it("keeps partial-write receipts from API errors and never records an unconfirmed failure", async () => {
   let count = 0;
