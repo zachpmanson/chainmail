@@ -72,7 +72,8 @@ function senders(held: string | null): string[] {
 export const usePrefs = create<
   Saved & {
     setCompact: (compact: boolean) => void;
-    setTree: (tree: boolean) => void;
+    /** The commit wrapper runs inside the undo FIFO, where the write actually happens. */
+    setTree: (tree: boolean, commit?: (write: () => void) => void) => Promise<void>;
     setListWidth: (px: number | null) => void;
     setStyled: (sender: string, next: boolean) => void;
   }
@@ -97,11 +98,11 @@ export const usePrefs = create<
           });
         });
       },
-      setTree: (tree) => {
-        void appUndo.perform(() => {
+      setTree: (tree, commit = (write) => write()) => {
+        return appUndo.perform(() => {
           const before = get().tree;
           if (before === tree) return;
-          set({ tree });
+          commit(() => set({ tree }));
           appUndo.remember({
             label: "reply tree layout",
             undo: () => {
