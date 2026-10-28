@@ -2,18 +2,20 @@ name: check
 
 on:
   pull_request:
-  push:
-    branches: [master]
+    types: [opened, synchronize, reopened, closed]
 
 permissions:
   contents: read
 
 jobs:
   check:
+    if: ${{ github.event.action != 'closed' || github.event.pull_request.merged == true }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.action == 'closed' && github.event.pull_request.merge_commit_sha || github.sha }}
       - uses: cachix/install-nix-action@v31
       - run: nix develop --command npm ci
       - run: nix develop --command make check
