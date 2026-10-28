@@ -1102,6 +1102,38 @@ func (t *analysisTree) contacts(n *html.Node, earlier bool) {
 	}
 }
 
+// Legacy table alignment can belong to the immediate cell instead of each
+// stacked table. Decline horizontal cells and overrides rather than inheriting
+// arbitrary ancestor text alignment as block geometry.
+func (t *analysisTree) panelCentered(n *html.Node) bool {
+	if t.centered(n) {
+		return true
+	}
+	if n.DataAtom != atom.Table || attr(n, "align") != "" || n.Parent == nil || n.Parent.DataAtom != atom.Td {
+		return false
+	}
+	s := t.nodes[n].style
+	if s["display"] != "" && s["display"] != "table" || s["float"] != "" && s["float"] != "none" || s["position"] != "" && s["position"] != "static" {
+		return false
+	}
+	for key := range s {
+		if strings.HasPrefix(key, "margin") {
+			return false
+		}
+	}
+	cell := n.Parent
+	cs := t.nodes[cell].style
+	if !strings.EqualFold(attr(cell, "align"), "center") || cs["text-align"] != "" || cs["display"] != "" && cs["display"] != "table-cell" {
+		return false
+	}
+	for _, key := range []string{"rowspan", "colspan"} {
+		if v := attr(cell, key); v != "" && v != "1" {
+			return false
+		}
+	}
+	return cell.Parent != nil && cell.Parent.DataAtom == atom.Tr && t.nodes[cell.Parent].cells == 1
+}
+
 func (t *analysisTree) alignedColumn(n *html.Node) ([]OriginalMatch, float64) {
 	// Only maximal bounded panels participate: no nested wrapper vote inflation.
 	var panels []*html.Node
@@ -1112,7 +1144,7 @@ func (t *analysisTree) alignedColumn(n *html.Node) ([]OriginalMatch, float64) {
 		}
 		d := t.nodes[c]
 		w := max(t.dimension(c, "width"), t.dimension(c, "max-width"))
-		if c != n && w >= 320 && w <= 1200 && t.centered(c) && (d.facts.words > 0 || d.facts.images > 0) {
+		if c != n && w >= 320 && w <= 1200 && t.panelCentered(c) && (d.facts.words > 0 || d.facts.images > 0) {
 			panels = append(panels, c)
 			return
 		}
