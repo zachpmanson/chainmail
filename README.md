@@ -81,6 +81,12 @@ sync restarts safely. Each mail run reports list/history pages, full-message rea
 attempts and elapsed time (the query backend may also fetch envelope metadata).
 The first full sync/recovery can be expensive; compare subsequent sweeps for savings.
 
+Server manual and scheduled refreshes rely on History for read/unread label changes;
+they do not run a separate full unread-set scan. For explicit audit/repair, run
+`corpus unread`: it compares Gmail's complete unread set with the local mirror.
+Standalone CLI `corpus slurp` keeps its existing unread phase; custom/bounded CLI
+scans are unchanged.
+
 ### Background semantic indexing
 
 Server-triggered refreshes finish after mail ingestion/reconciliation and fold
@@ -113,7 +119,7 @@ Search, tick the chains that belong, build a page from them. Without the server,
 on disk still renders: `corpus spec -q "…" -o spec.json && npm run render -- spec.json -o page.html`.
 
 **Saying "now" fetches first.** The nav's ↻ and the saved page's own refresh button both
-start with `POST /v1/slurp` — the same ingest the hourly sweep runs — and only then ask the
+start with `POST /v1/slurp` — the server's mailbox-ingest pipeline — and only then ask the
 corpus again (the nav) or re-derive the page (the page's button). Fetch, then read: a
 re-read of a corpus the fetch has not written to is the same page twice. Without `-slurp`
 the endpoint answers 403 and both controls fall back to re-reading what the corpus already
@@ -139,9 +145,10 @@ operations that cannot safely be reversed (including sends and draft lifecycle c
 messages Gmail still calls unread, and the reading pane's mark read / mark unread button
 changes that in the mailbox itself — so the reader's phone agrees with the page. The
 server needs `-mark-read` to be allowed to write (`enableMarkRead` in the nix module);
-without it the button says so and changes nothing. The corpus's own copy of the label is
-corrected by the `unread` phase of `corpus slurp`, which reads the mailbox's unread set
-and fixes every stored label that disagrees with it.
+without it the button says so and changes nothing. Normal server refreshes update the
+local label mirror through Gmail History. The explicit `corpus unread` audit (also
+retained in standalone CLI `corpus slurp`) compares the complete unread set and
+repairs differences; it is not part of routine server refreshes.
 
 **Timeline** is one chronological column. **Columns** gives one lane per reply chain.
 The **reply tree** panel lights the ancestry of the entry you're reading.

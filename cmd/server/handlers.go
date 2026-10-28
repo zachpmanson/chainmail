@@ -97,9 +97,9 @@ type server struct {
 	// server process, not the HTTP connection. A reader leaving the page must not
 	// kill a mailbox walk halfway through; a server shutdown still cancels it.
 	lifecycleCtx context.Context
-	// slurpTimeout bounds one ingest. A slurp walks the mail query, then twins,
-	// repair, dedupe (reported, never applied) and unread, so it takes minutes
-	// rather than seconds; the server-lifetime context cancels it on shutdown.
+	// slurpTimeout bounds one ingest. History synchronizes mail and labels, then
+	// twins, repair and optional dry-run dedupe settle the corpus. The
+	// server-lifetime context cancels it on shutdown.
 	slurpTimeout time.Duration
 	// runSlurp is the mailbox-reaching operation, injected so the handler can be
 	// tested without a mailbox. The real one delegates to the sibling `corpus`
@@ -1036,15 +1036,15 @@ type slurpResponse struct {
 // button gets — the dedupe plan is part of what they asked to see, and it stays
 // a dry run either way (see cmd/corpus/slurp.go) — and `sweepPhases` is the same
 // pipeline without it, since a plan printed into the journal of a sweep nobody
-// is watching is work nobody reads. Both include unread, which is the phase that
-// makes a scheduled sweep worth having: it fixes the badges a phone has moved on
-// from, and the person most likely to notice is the one looking at that row.
+// is watching is work nobody reads. Both use unbounded in:anywhere History sync,
+// which reconciles labels including UNREAD. The full unread-set audit remains
+// available through the CLI, not on every server refresh.
 //
 // CHAINMAIL_CORPUS pins the same database this process has open; being WAL, the
 // ingest writes beside the reader.
 const (
-	manualPhases = "mail,twins,repair,dedupe,unread"
-	sweepPhases  = "mail,twins,repair,unread"
+	manualPhases = "mail,twins,repair,dedupe"
+	sweepPhases  = "mail,twins,repair"
 )
 
 func defaultSlurp(phases, source string) func(ctx context.Context, corpusPath string) ([]byte, error) {
