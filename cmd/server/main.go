@@ -202,11 +202,15 @@ func run(args []string) error {
 	// before the store is closed under it.
 	sweeps, stopSweeps := context.WithCancel(context.Background())
 	srv.lifecycleCtx = sweeps
-	defer stopSweeps()
-	go srv.sweepLoop(sweeps)
+	srv.startEmbedding(sweeps)
+	// Cancel and join background users before the deferred store.Close, on every exit.
+	sweepDone := make(chan struct{})
+	go func() { defer close(sweepDone); srv.sweepLoop(sweeps) }()
+	defer func() { stopSweeps(); srv.embedding.stop(); <-sweepDone }()
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(stop)
 	errs := make(chan error, 1)
 	go func() { errs <- h.Serve(ln) }()
 	select {

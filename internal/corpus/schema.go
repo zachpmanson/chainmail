@@ -635,4 +635,9 @@ create trigger fold_sightings_insert after insert on sightings
  and exists(select 1 from entries where id=new.entry_id and source='mail')
  and (select count(*) from sightings where entry_id=new.entry_id and kind='direct')=1 on conflict do nothing;
  end;`,
+	// 25: source changes alter preparation even when text is unchanged.
+	`create trigger embedding_source_update after update of source on entries
+     when old.source is not new.source begin
+       delete from entry_embeddings where entry_id=new.id;
+     end;`,
 }

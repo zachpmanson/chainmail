@@ -332,12 +332,11 @@ type BackfillReport struct {
 
 // BackfillEmbeddings embeds every entry that has no current vector.
 //
-// Resumable by construction rather than by bookkeeping: what needs doing is
-// re-derived from the corpus each batch, so there is no cursor to persist and
-// no way for a crash to leave a claimed-but-unembedded range. Each batch is one
-// transaction, and entries are taken in id order so two runs see the same work
-// in the same sequence — a run interrupted at entry 900 resumes at 901, and a
-// run interrupted mid-commit redoes that batch and no other.
+// Resumable by construction: eligibility is re-derived from the corpus, with
+// no persisted cursor or claimed range. Within a pass, advance by selected ID,
+// not committed count: stale inference must not spin or hide later stable rows.
+// Changed rows behind that frontier are retried on the next pass. Each batch
+// commits atomically, without holding the writer during inference.
 func (s *Store) BackfillEmbeddings(ctx context.Context, e embed.Embedder, opt BackfillOptions) (BackfillReport, error) {
 	rep := BackfillReport{Model: e.Model(), Dim: e.Dim()}
 	if rep.Model == "" || rep.Dim <= 0 {
@@ -354,27 +353,32 @@ func (s *Store) BackfillEmbeddings(ctx context.Context, e embed.Embedder, opt Ba
 		return rep, fmt.Errorf("counting entries to embed: %w", err)
 	}
 
-	for rep.Embedded+rep.Skipped < rep.Pending {
+	if opt.Progress != nil && rep.Pending > 0 {
+		opt.Progress(BackfillProgress{Pending: rep.Pending})
+	}
+	var after int64
+	for attempted := 0; attempted < rep.Pending; {
 		if err := ctx.Err(); err != nil {
 			return rep, err
 		}
-		want := batch
+		want := min(batch, rep.Pending-attempted)
 		if opt.Limit > 0 {
-			left := opt.Limit - (rep.Embedded + rep.Skipped)
+			left := opt.Limit - attempted
 			if left <= 0 {
 				break
 			}
 			want = min(want, left)
 		}
-		batchDone, err := s.embedBatch(ctx, e, sel, selArgs, want)
+		batchDone, err := s.embedBatch(ctx, e, sel, selArgs, after, want)
 		if err != nil {
 			return rep, err
 		}
-		if batchDone.embedded+batchDone.skipped == 0 {
-			// Nothing left, or nothing progressing. Either way, looping again
-			// would spin: the selection is the same query it was a moment ago.
+		if batchDone.selected == 0 {
+			// The pass has reached the end of its snapshot frontier.
 			break
 		}
+		after = batchDone.lastID
+		attempted += batchDone.selected
 		rep.Embedded += batchDone.embedded
 		rep.Skipped += batchDone.skipped
 		if opt.Progress != nil {
@@ -389,13 +393,16 @@ func (s *Store) BackfillEmbeddings(ctx context.Context, e embed.Embedder, opt Ba
 	return rep, nil
 }
 
-type batchResult struct{ embedded, skipped int }
+type batchResult struct {
+	embedded, skipped, selected int
+	lastID                      int64
+}
 
-func (s *Store) embedBatch(ctx context.Context, e embed.Embedder, sel string, selArgs []any, want int) (res batchResult, err error) {
-	args := append(append([]any{}, selArgs...), want)
+func (s *Store) embedBatch(ctx context.Context, e embed.Embedder, sel string, selArgs []any, after int64, want int) (res batchResult, err error) {
+	args := append(append([]any{}, selArgs...), after, want)
 	rows, err := s.db.QueryContext(ctx, `
 		select e.id, e.source, coalesce(e.subject,''), coalesce(e.body_text,''), e.body_sha `+
-		sel+`
+		sel+` and e.id > ?
 		order by e.id
 		limit ?`, args...)
 	if err != nil {
@@ -417,6 +424,9 @@ func (s *Store) embedBatch(ctx context.Context, e embed.Embedder, sel string, se
 	if len(pend) == 0 {
 		return res, nil
 	}
+
+	res.selected = len(pend)
+	res.lastID = pend[len(pend)-1].id
 
 	// Prepare first, so the model is only asked about entries that will keep a
 	// vector. A skipped entry still gets a row: without one, every future run
@@ -459,23 +469,26 @@ func (s *Store) embedBatch(ctx context.Context, e embed.Embedder, sel string, se
 	defer func() { err = errors.Join(err, writer.close()) }()
 	next := 0
 	for _, j := range jobs {
-		if j.reason != "" {
-			if err := putEmbedding(ctx, writer.Conn, j.p.id, e.Model(), e.Dim(), j.p.bodySHA, nil, j.reason); err != nil {
-				return res, err
+		var v []float32
+		if j.reason == "" {
+			v = vecs[next]
+			next++
+			if len(v) != e.Dim() {
+				return res, fmt.Errorf("%w: entry %d got a %d-wide vector from %s, expected %d",
+					embed.ErrDimMismatch, j.p.id, len(v), e.Model(), e.Dim())
 			}
-			res.skipped++
-			continue
 		}
-		v := vecs[next]
-		next++
-		if len(v) != e.Dim() {
-			return res, fmt.Errorf("%w: entry %d got a %d-wide vector from %s, expected %d",
-				embed.ErrDimMismatch, j.p.id, len(v), e.Model(), e.Dim())
-		}
-		if err := putEmbedding(ctx, writer.Conn, j.p.id, e.Model(), e.Dim(), j.p.bodySHA, v, ""); err != nil {
+		written, err := putEmbedding(ctx, writer.Conn, j.p, e.Model(), e.Dim(), v, j.reason)
+		if err != nil {
 			return res, err
 		}
-		res.embedded++
+		if written {
+			if j.reason != "" {
+				res.skipped++
+			} else {
+				res.embedded++
+			}
+		}
 	}
 	if err := writer.commit(ctx); err != nil {
 		return res, fmt.Errorf("committing %d embeddings: %w", res.embedded+res.skipped, err)
@@ -483,23 +496,33 @@ func (s *Store) embedBatch(ctx context.Context, e embed.Embedder, sel string, se
 	return res, nil
 }
 
-func putEmbedding(ctx context.Context, conn *sql.Conn, entryID int64, model string, dim int, bodySHA string, v []float32, reason string) error {
+func putEmbedding(ctx context.Context, conn *sql.Conn, p pendingEmbed, model string, dim int, v []float32, reason string) (bool, error) {
 	var blob any
 	if v != nil {
 		blob = encodeVector(v)
 	}
-	_, err := conn.ExecContext(ctx, `
+	// Snapshot publication and conflict arbitration share the immediate writer.
+	// A deleted/changed source or an already-current winner is a discard, not a
+	// batch failure. Older preparation cannot overwrite a newer CLI writer.
+	result, err := conn.ExecContext(ctx, `
 		insert into entry_embeddings
 		  (entry_id, model, dim, body_sha, prep, vec, skip, embedded_at)
-		values (?,?,?,?,?,?,?,?)
+		select id, ?, ?, body_sha, ?, ?, ?, ? from entries
+		where id=? and body_sha=? and source=?
+		  and coalesce(subject,'')=? and coalesce(body_text,'')=?
 		on conflict(entry_id, model) do update set
 		  dim=excluded.dim, body_sha=excluded.body_sha, prep=excluded.prep,
-		  vec=excluded.vec, skip=excluded.skip, embedded_at=excluded.embedded_at`,
-		entryID, model, dim, bodySHA, prepVersion, blob, nullStr(reason), time.Now().Unix())
+		  vec=excluded.vec, skip=excluded.skip, embedded_at=excluded.embedded_at
+		where entry_embeddings.prep <= excluded.prep and
+		  (entry_embeddings.body_sha <> excluded.body_sha or entry_embeddings.prep <> excluded.prep
+		   or entry_embeddings.dim <> excluded.dim)`,
+		model, dim, prepVersion, blob, nullStr(reason), time.Now().Unix(),
+		p.id, p.bodySHA, p.source, p.subject, p.body)
 	if err != nil {
-		return fmt.Errorf("storing embedding for entry %d: %w", entryID, err)
+		return false, fmt.Errorf("storing embedding for entry %d: %w", p.id, err)
 	}
-	return nil
+	n, err := result.RowsAffected()
+	return n > 0, err
 }
 
 // Embedding returns one entry's stored vector for a model, or nil if it has
@@ -619,8 +642,8 @@ func (s *Store) semanticRank(q Query, sem SemanticQuery, where string, args []an
 		join entries e on e.id = v.entry_id
 		left join mail_detail md on md.entry_id = e.id
 		left join slack_detail sd on sd.entry_id = e.id
-		where v.model = ? and v.dim = ? and v.vec is not null and ` + where
-	callArgs := append([]any{sem.Model, dim}, args...)
+		where v.model = ? and v.dim = ? and v.prep = ? and v.body_sha = e.body_sha and v.vec is not null and ` + where
+	callArgs := append([]any{sem.Model, dim, prepVersion}, args...)
 	rows, err := s.db.Query(stmt, callArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("scanning embeddings: %w", err)

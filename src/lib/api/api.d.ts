@@ -41,9 +41,9 @@ export interface paths {
         put?: never;
         /**
          * Reach the work mailbox and ingest it.
-         * @description Runs `corpus slurp` against the corpus — reading the work mailbox through the mail credential this unit already holds — so a subsequent /v1/refresh can build over mail that arrived since the last ingest. The phases are the ones the chainmail-slurp unit runs (mail, twins, repair, dedupe as a dry run, embed), and the ingest's own transcript is returned.
+         * @description Runs `corpus slurp` against the corpus using this unit’s existing mail credential (mail, twins, repair, dedupe as a dry run, unread reconciliation). Returns the ingest transcript after reconciliation; lexical search is available immediately. A separate coalescing background embedding pass catches semantic search up, independently of this response and its outcome. Even a partial or failed ingest queues a pass.
          *
-         *     Opt-in and off by default: a server started without -slurp answers 403, keeping the surface read-most and never touching the mailbox.
+         *     Opt-in and off by default: a server started without -slurp answers 403 and does not run background embedding.
          */
         post: operations["slurp"];
         delete?: never;
@@ -1152,6 +1152,7 @@ export interface components {
             sweep: components["schemas"]["SweepStatus"];
             /** @description Every backend, in the screen's order. */
             services: components["schemas"]["ServiceStatus"][];
+            embedding: components["schemas"]["EmbeddingStatus"];
         };
         /** @description The ingest as a reader can see it: one run at a time, and how the last one ended. Not persisted — a restart forgets the last outcome, because the corpus itself shows what a finished run left and the fact worth carrying across a restart is whether one is running now. */
         SweepStatus: {
@@ -2016,6 +2017,26 @@ export interface components {
             /** @description Exactly the sanitized fragment returned by the default text/html response. */
             html: string;
             analysis: components["schemas"]["OriginalAnalysis"];
+        };
+        /** @description Process-local background indexing, independent of ingest and the embed service probe. Pending is the initial pass baseline, done counts committed work only; concurrent changes may leave work for a later pass. Disabled without -slurp. Startup and completed ingest attempts queue work; requests coalesce into one follow-up. State and errors are not persisted. */
+        EmbeddingStatus: {
+            enabled: boolean;
+            running: boolean;
+            queued: boolean;
+            model?: string;
+            dim: number;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            finishedAt?: string;
+            /** @enum {string} */
+            outcome?: "complete" | "failed" | "skipped" | "cancelled";
+            /** @description Last pass error, limited to 512 characters. */
+            error?: string;
+            done: number;
+            pending: number;
+            embedded: number;
+            skipped: number;
         };
     };
     responses: never;
