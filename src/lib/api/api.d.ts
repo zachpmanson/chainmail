@@ -41,7 +41,7 @@ export interface paths {
         put?: never;
         /**
          * Reach the work mailbox and ingest it.
-         * @description Runs `corpus slurp` against the corpus using this unit’s existing mail credential (mail, twins, repair, dedupe as a dry run, unread reconciliation). Returns the ingest transcript after reconciliation; lexical search is available immediately. A separate coalescing background embedding pass catches semantic search up, independently of this response and its outcome. Even a partial or failed ingest queues a pass.
+         * @description Runs `corpus slurp` against the corpus using this unit’s existing mail credential (mail, twins, repair and dedupe as a dry run). Gmail History synchronizes message labels, including read/unread state; the full unread-set audit is not part of this refresh. Returns the ingest transcript after fold warming; lexical search is available immediately. A separate coalescing background embedding pass catches semantic search up, independently of this response and its outcome. Even a partial or failed ingest queues a pass.
          *
          *     Opt-in and off by default: a server started without -slurp answers 403 and does not run background embedding.
          */

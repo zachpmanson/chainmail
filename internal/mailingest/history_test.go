@@ -342,6 +342,59 @@ func TestBoundedAndCustomQueriesDoNotEstablishOrUseHistory(t *testing.T) {
 	}
 }
 
+func TestHistoryKeepsUnreadBadgesCurrentWithoutFullAudit(t *testing.T) {
+	for _, account := range []string{"legacy", "other"} {
+		t.Run(account, func(t *testing.T) {
+			s, f := store(t), newHistoryBox()
+			if err := s.PutGmailAccount(corpus.GmailAccount{ID: "other", DisplayName: "Other"}); err != nil {
+				t.Fatal(err)
+			}
+			for _, a := range []string{"legacy", "other"} {
+				checkpoint(t, s, a)
+				seedMail(t, s, a, "same")
+			}
+			for i, unread := range []bool{false, true} {
+				m := msg("same", "alice@example.com", "bob@example.com", "")
+				m.Labels = []string{"INBOX", "Old folder"}
+				if unread {
+					m.Labels = append(m.Labels, "UNREAD")
+				}
+				f.messages[m.ID] = m
+				end := fmt.Sprint(110 + i*10)
+				f.history = func(string, string) (HistoryPage, error) {
+					return HistoryPage{ID: end, Changed: []string{m.ID}}, nil
+				}
+				r, err := IngestForAccount(s, f, "in:anywhere", Bound{}, account)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !r.History || r.Reads != 1 || r.Changed != 0 || f.searches != 0 {
+					t.Fatalf("label-only History update did unexpected work: %+v, searches=%d", r, f.searches)
+				}
+				if got := copyLabels(t, s, account, m.ID); !reflect.DeepEqual(got, m.Labels) {
+					t.Fatalf("updated labels = %v, want %v", got, m.Labels)
+				}
+				for _, a := range []string{"legacy", "other"} {
+					hits, err := s.SearchChains(corpus.Query{AccountID: a})
+					want := 1
+					if a == account && !unread {
+						want = 0
+					}
+					if err != nil || len(hits) != 1 || hits[0].Unread != want {
+						t.Fatalf("account %s unread badge: hits=%+v err=%v, want %d", a, hits, err, want)
+					}
+				}
+				historyState(t, s, account, end, "")
+			}
+			f.history = func(string, string) (HistoryPage, error) { return HistoryPage{ID: "130"}, nil }
+			r, err := IngestForAccount(s, f, "in:anywhere", Bound{}, account)
+			if err != nil || r.Reads != 0 || !r.History || f.searches != 0 {
+				t.Fatalf("unchanged History sync = %+v, %v; searches=%d", r, err, f.searches)
+			}
+		})
+	}
+}
+
 func TestHistoryAccountsDoNotShareIDsCheckpointsOrLabels(t *testing.T) {
 	s := store(t)
 	if err := s.PutGmailAccount(corpus.GmailAccount{ID: "other", DisplayName: "Other"}); err != nil {

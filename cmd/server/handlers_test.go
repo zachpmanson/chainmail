@@ -86,10 +86,23 @@ func TestSlurpFailureIsBadGatewayWithTheError(t *testing.T) {
 	}
 }
 
-// What the server passes the CLI is a contract, so it is pinned against a real
-// sibling: the phases a human's button is allowed to run, and no transport flag
-// at all. The ingest and the server are one package reading one credential, so a
-// -bin docket shim here would name access this unit has no reason to want.
+// History already reconciles labels; a full unread-set scan is explicit repair,
+// not a mandatory phase for either kind of server refresh.
+func TestServerRefreshUsesHistoryInsteadOfFullUnreadAudit(t *testing.T) {
+	for _, tc := range []struct {
+		name, phases, want string
+	}{
+		{"manual", manualPhases, "mail,twins,repair,dedupe"},
+		{"scheduled", sweepPhases, "mail,twins,repair"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.phases != tc.want {
+				t.Fatalf("server phases = %q, want %q: History supplies unread changes; full audit stays CLI-only", tc.phases, tc.want)
+			}
+		})
+	}
+}
+
 func TestSlurpRunsTheSiblingCLIWithThePipelinePhases(t *testing.T) {
 	dir := t.TempDir()
 	record := filepath.Join(dir, "args")
