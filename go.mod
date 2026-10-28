@@ -5,7 +5,7 @@ go 1.26.4
 require (
 	github.com/gofrs/flock v0.13.0
 	github.com/yuin/goldmark v1.7.13
-	github.com/zachpmanson/docket/gmail v0.0.0-20260923093746-e88473af7d71
+	github.com/zachpmanson/docket/gmail v0.0.0-20261028111617-a9102963acb4
 	golang.org/x/net v0.57.0
 	golang.org/x/oauth2 v0.36.0
 	google.golang.org/api v0.293.0

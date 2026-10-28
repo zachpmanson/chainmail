@@ -49,8 +49,8 @@ github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
 github.com/yuin/goldmark v1.7.13 h1:GPddIs617DnBLFFVJFgpo1aBfe/4xcvMc3SB5t/D0pA=
 github.com/yuin/goldmark v1.7.13/go.mod h1:ip/1k0VRfGynBgxOz0yCqHrbZXhcjxyuS66Brc7iBKg=
-github.com/zachpmanson/docket/gmail v0.0.0-20260923093746-e88473af7d71 h1:jRVj2V+BNk0CaQz4rOcq5xgdVciNtq2fzV/6iVPpktk=
-github.com/zachpmanson/docket/gmail v0.0.0-20260923093746-e88473af7d71/go.mod h1:+8GYJATXSYNZKunN/I6mFs/SFMI7nkQtNRpBmDk+Hcg=
+github.com/zachpmanson/docket/gmail v0.0.0-20261028111617-a9102963acb4 h1:IfB/YvtJbUaSCFhlBDPXHWD0QP5Bwz1GFwFztQfxpoI=
+github.com/zachpmanson/docket/gmail v0.0.0-20261028111617-a9102963acb4/go.mod h1:+8GYJATXSYNZKunN/I6mFs/SFMI7nkQtNRpBmDk+Hcg=
 go.opentelemetry.io/auto/sdk v1.2.1 h1:jXsnJ4Lmnqd11kwkBV2LgLoFMZKizbCi5fNZ/ipaZ64=
 go.opentelemetry.io/auto/sdk v1.2.1/go.mod h1:KRTj+aOaElaLi+wW1kO/DZRXwkF4C5xPbEe3ZiIhN7Y=
 go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0 h1:OyrsyzuttWTSur2qN/Lm0m2a8yqyIjUVBZcxFPuXq2o=
