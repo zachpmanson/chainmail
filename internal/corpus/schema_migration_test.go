@@ -142,3 +142,47 @@ func TestUpgradeFrom20RepairsPromotionAndDirectSightings(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestMigration24SeedsOnlyUninitializedIndex(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "migration24.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec(`create table schema_version(v integer primary key)`); err != nil {
+		t.Fatal(err)
+	}
+	for i, m := range migrations[:23] {
+		if _, err = db.Exec(m); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = db.Exec(`insert into schema_version values(?)`, i+1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err = db.Exec(`insert into entries(source,ext_id,ts,ingested_at,body_sha,body_text) values('mail','synthetic',0,0,'test','Opening
+Regards,
+Synthetic')`); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	var ready, members, source, queued int
+	if err = s.db.QueryRow(`select ready,(select count(*) from fold_members),(select count(*) from entries),(select count(*) from fold_dirty_entries) from fold_state`).Scan(&ready, &members, &source, &queued); err != nil {
+		t.Fatal(err)
+	}
+	if ready != 0 || members != 0 || source != 1 || queued != 0 {
+		t.Fatalf("migration backfilled or lost data: %d %d %d %d", ready, members, source, queued)
+	}
+	first, err := s.WarmFolds()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !first.Rebuilt || first.Bodies != 1 {
+		t.Fatalf("lazy initialization: %+v", first)
+	}
+}

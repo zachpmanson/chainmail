@@ -1,6 +1,7 @@
 package spec
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -160,7 +161,20 @@ func load(store *corpus.Store, ids []int64) ([]*entryRow, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	db := store.DB()
+	var out []*entryRow
+	err := store.WithFoldSnapshot(context.Background(), ids, boiler.Default(), func(tx *sql.Tx, folds map[int64]boiler.Fold) error {
+		var err error
+		out, err = loadSnapshot(tx, ids, folds)
+		return err
+	})
+	return out, err
+}
+
+type loadQuery interface {
+	Query(string, ...any) (*sql.Rows, error)
+}
+
+func loadSnapshot(db loadQuery, ids []int64, folds map[int64]boiler.Fold) ([]*entryRow, error) {
 	ph, args := placeholders(ids)
 	rows, err := db.Query(`
 		select e.id, coalesce(e.parent_id, 0), coalesce(e.parent_ref, ''), e.kind,
@@ -210,34 +224,10 @@ func load(store *corpus.Store, ids []int64) ([]*entryRow, error) {
 	if err := loadHostHTML(db, out); err != nil {
 		return nil, err
 	}
-	if err := loadFolds(store, out); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-// loadFolds attaches each entry's boilerplate block.
-//
-// The evidence is every message by the senders on this page, and every message
-// from the domains they were sent from — whole groups, not the selection, because
-// a six-entry page and a sixty-entry page have to fold the same block. The
-// argument for scoping it there rather than over the corpus, and for why the two
-// agree, is at corpus.BoilerplateFor; what it buys is the difference between a
-// rendered chain costing ~30 ms and costing a pass over every mail body in the
-// corpus — 1.8 s of a 1.83 s request, measured before this change.
-func loadFolds(store *corpus.Store, rows []*entryRow) error {
-	ids := make([]int64, 0, len(rows))
-	for _, r := range rows {
-		ids = append(ids, r.ID)
-	}
-	folds, err := store.BoilerplateFor(ids)
-	if err != nil {
-		return err
-	}
-	for _, r := range rows {
+	for _, r := range out {
 		r.Fold = folds[r.ID]
 	}
-	return nil
+	return out, nil
 }
 
 // loadHostHTML fetches the markup of the messages each unspooled entry was found
@@ -247,7 +237,7 @@ func loadFolds(store *corpus.Store, rows []*entryRow) error {
 //
 // Nothing is loaded for an entry the mailbox itself holds: see bodyHTML for why
 // its own part, or its own text, is the authority on how it was written.
-func loadHostHTML(db *sql.DB, rows []*entryRow) error {
+func loadHostHTML(db loadQuery, rows []*entryRow) error {
 	want := map[int64]bool{}
 	for _, r := range rows {
 		if r.BodyHTML != "" || r.Direct {
@@ -292,7 +282,7 @@ func loadHostHTML(db *sql.DB, rows []*entryRow) error {
 	return nil
 }
 
-func loadSightings(db *sql.DB, ph string, args []any, byID map[int64]*entryRow) error {
+func loadSightings(db loadQuery, ph string, args []any, byID map[int64]*entryRow) error {
 	rows, err := db.Query(`
 		select entry_id, kind, coalesce(seen_in, 0) from sightings
 		where entry_id in (`+ph+`)
@@ -322,7 +312,7 @@ func loadSightings(db *sql.DB, ph string, args []any, byID map[int64]*entryRow) 
 	return rows.Err()
 }
 
-func loadAttachments(db *sql.DB, ph string, args []any, byID map[int64]*entryRow) error {
+func loadAttachments(db loadQuery, ph string, args []any, byID map[int64]*entryRow) error {
 	rows, err := db.Query(`
 		select entry_id, name, coalesce(mime, ''), coalesce(size, 0),
 		       coalesce(permalink, ''), coalesce(source_ref, ''), coalesce(blob_sha, ''),

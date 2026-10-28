@@ -572,4 +572,67 @@ var migrations = []string{
 	);
 	alter table gmail_copies add column seen_history_id text not null default '';
 	`,
+
+	// 24: durable normalized suffix contributions and precise source invalidation.
+	`
+ create table fold_state (
+ id integer primary key check(id=1), ready integer not null default 0,
+ exact_version integer not null default 0, direct_version integer not null default 0,
+ normalize_version integer not null default 0, fingerprint_version integer not null default 0,
+ window integer not null default 0, generation integer not null default 0,
+ aliases_dirty integer not null default 0);
+ insert into fold_state(id) values(1);
+ create table fold_dirty_entries(entry_id integer primary key);
+ create table fold_dirty_people(person_id integer primary key);
+ -- No source FKs: deleted sources must retain their published subtraction data.
+ create table fold_members(entry_id integer primary key, exact_digest blob not null,
+ direct integer not null, person_id integer not null, raw_domain text not null,
+ domain text not null, ok integer not null, line_count integer not null);
+ create index fold_members_person on fold_members(person_id);
+ create index fold_members_raw_domain on fold_members(raw_domain);
+ create table fold_tails(entry_id integer not null references fold_members(entry_id) on delete cascade,
+ n integer not null, fp blob not null, primary key(entry_id,n));
+ create table fold_counts(kind integer not null, group_key text not null, fp blob not null,
+ count integer not null check(count>0), senders integer not null check(senders>0),
+ primary key(kind,group_key,fp));
+ create table fold_sender_refs(domain text not null, fp blob not null, person_id integer not null,
+ refs integer not null check(refs>0), primary key(domain,fp,person_id));
+ create index identities_person_kind on identities(person_id,kind);
+ create trigger fold_entries_insert after insert on entries when new.source='mail' begin
+ insert into fold_dirty_entries values(new.id) on conflict do nothing; end;
+ create trigger fold_entries_delete after delete on entries when old.source='mail' begin
+ insert into fold_dirty_entries values(old.id) on conflict do nothing; end;
+ create trigger fold_entries_update after update of source,body_text,person_id on entries
+ when (old.source='mail' or new.source='mail') and
+ (old.source is not new.source or old.body_text is not new.body_text or old.person_id is not new.person_id) begin
+ insert into fold_dirty_entries values(old.id) on conflict do nothing;
+ insert into fold_dirty_entries values(new.id) on conflict do nothing; end;
+create trigger fold_mail_detail_insert after insert on mail_detail  begin insert into fold_dirty_entries values(new.entry_id) on conflict do nothing; end;
+create trigger fold_mail_detail_delete after delete on mail_detail  begin insert into fold_dirty_entries values(old.entry_id) on conflict do nothing; end;
+create trigger fold_mail_detail_update after update of entry_id,from_addr on mail_detail when old.entry_id is not new.entry_id or old.from_addr is not new.from_addr begin insert into fold_dirty_entries values(old.entry_id) on conflict do nothing;
+insert into fold_dirty_entries values(new.entry_id) on conflict do nothing; end;
+create trigger fold_identities_insert after insert on identities  begin insert into fold_dirty_people select new.person_id where new.kind='email' on conflict do nothing; end;
+create trigger fold_identities_delete after delete on identities  begin insert into fold_dirty_people select old.person_id where old.kind='email' on conflict do nothing; end;
+create trigger fold_identities_update after update of person_id,kind,value on identities when old.person_id is not new.person_id or old.kind is not new.kind or old.value is not new.value begin insert into fold_dirty_people select old.person_id where old.kind='email' on conflict do nothing;
+insert into fold_dirty_people select new.person_id where new.kind='email' on conflict do nothing; end;
+create trigger fold_domain_aliases_insert after insert on domain_aliases  begin update fold_state set aliases_dirty=1 where id=1; end;
+create trigger fold_domain_aliases_delete after delete on domain_aliases  begin update fold_state set aliases_dirty=1 where id=1; end;
+create trigger fold_domain_aliases_update after update of from_domain,to_domain on domain_aliases when old.from_domain is not new.from_domain or old.to_domain is not new.to_domain begin update fold_state set aliases_dirty=1 where id=1; end;
+create trigger fold_sightings_insert after insert on sightings
+ when new.kind='direct' and exists(select 1 from entries where id=new.entry_id and source='mail')
+ and (select count(*) from sightings where entry_id=new.entry_id and kind='direct')=1 begin
+ insert into fold_dirty_entries values(new.entry_id) on conflict do nothing; end;
+ create trigger fold_sightings_delete after delete on sightings
+ when old.kind='direct' and exists(select 1 from entries where id=old.entry_id and source='mail')
+ and not exists(select 1 from sightings where entry_id=old.entry_id and kind='direct') begin
+ insert into fold_dirty_entries values(old.entry_id) on conflict do nothing; end;
+ create trigger fold_sightings_update after update of entry_id,kind on sightings
+ when old.entry_id is not new.entry_id or old.kind is not new.kind begin
+ insert into fold_dirty_entries select old.entry_id where old.kind='direct'
+ and exists(select 1 from entries where id=old.entry_id and source='mail')
+ and not exists(select 1 from sightings where entry_id=old.entry_id and kind='direct') on conflict do nothing;
+ insert into fold_dirty_entries select new.entry_id where new.kind='direct'
+ and exists(select 1 from entries where id=new.entry_id and source='mail')
+ and (select count(*) from sightings where entry_id=new.entry_id and kind='direct')=1 on conflict do nothing;
+ end;`,
 }

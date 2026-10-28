@@ -274,8 +274,15 @@ func TestWarmingReducesEveryBodyInTheCorpus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("warming: %v", err)
 	}
-	if got := cached(s); got != bodies {
-		t.Errorf("after warming the cache holds %d bodies, want all %d", got, bodies)
+	var members int
+	if err := s.DB().QueryRow("select count(*) from fold_members").Scan(&members); err != nil {
+		t.Fatal(err)
+	}
+	if members != bodies {
+		t.Errorf("published %d members, want %d", members, bodies)
+	}
+	if got := cached(s); got != 0 {
+		t.Errorf("durable warm populated legacy RAM cache: %d", got)
 	}
 	if w.Bodies == 0 || w.Lines == 0 {
 		t.Errorf("warm reported %d bodies and %d lines, want both counted", w.Bodies, w.Lines)
@@ -317,7 +324,7 @@ func TestWarmingChangesNothingButTheCost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("warming twice: %v", err)
 	}
-	if again.Bodies != w.Bodies || again.Lines != w.Lines {
+	if w.Bodies == 0 || again.Bodies != 0 || again.Lines != 0 || again.Memberships != 0 || again.Generation != w.Generation {
 		t.Errorf("second warm reported %d bodies / %d lines, first %d / %d",
 			again.Bodies, again.Lines, w.Bodies, w.Lines)
 	}

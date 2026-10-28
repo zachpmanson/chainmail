@@ -4,14 +4,13 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/zachpmanson/chainmail/internal/boiler"
 )
 
-// BoilerplateFor finds the appended block at the end of each of these messages,
-// and the evidence for it: a sender's signature, an organisation's
-// confidentiality notice.
+// BoilerplateFor is the compatibility/oracle scope-map API. Production readers
+// use SelectedFolds or WithFoldSnapshot. It finds a sender's signature or an
+// organisation's confidentiality notice, including incidental scoped entries.
 //
 // Derived on each call rather than stored in a column. The detection is a fold
 // over every message a person ever sent, so one new mail can lengthen a block or
@@ -128,8 +127,8 @@ func (s *Store) foldScope(ids []int64) (foldScope, error) {
 }
 
 // MailBodies reads every mail body in the corpus, reduced to the lines it shows,
-// ready for boiler.Detect. It is the whole-corpus read: `corpus sigs` wants every
-// group at once, and a caller rendering a selection wants BoilerplateFor.
+// ready for boiler.Detect. It is the whole-corpus reference read used by
+// `corpus sigs`; production rendering uses the durable index instead.
 //
 // The reduction is boiler's own, not a second copy of it: a tail counted here
 // and folded in internal/spec has to be measured the same way at both ends. What
@@ -146,52 +145,6 @@ func (s *Store) foldScope(ids []int64) (foldScope, error) {
 // not boilerplate and should not be folded as if it were.
 func (s *Store) MailBodies() ([]boiler.Message, error) {
 	return s.mailBodies(foldScope{all: true})
-}
-
-// FoldWarm is what warming the fold cost: the bodies the pass kept, the lines
-// they reduced to, and how long it took. It is reported so a start can say what
-// it spent, which is the only way anyone notices this getting slower.
-type FoldWarm struct {
-	Bodies int
-	Lines  int
-	Took   time.Duration
-}
-
-// WarmFolds reduces every body in the corpus, so that no reader pays for it.
-//
-// The reduction cache is per-process and keyed on the body, which is what makes
-// it correct and what makes it empty at every start. A cold cache was the first
-// request's whole cost: measured on the live corpus, one 29-entry chain answered
-// in 1.802 s cold against 0.399 s warm, and the fold is ~1.0-1.2 s of that
-// (PR #107 measured 1.379 s cold against 0.323 s warm for the same
-// eleven-message chain, whose senders are at the two domains most of the corpus
-// is at, so its scope is nearly the corpus). Warming is that same pass run once
-// with nobody waiting on the answer — at boot, and again when an ingest has
-// changed the corpus.
-//
-// Deliberately not a stored verdict. A verdict is evidence about groups, and
-// evidence goes quietly stale the moment mail lands; the reduction is a pure
-// function of one body's text and its provenance, so a warm cache cannot be
-// wrong about anything — a rewritten body is a different key and is reduced
-// again. See reduced.
-//
-// What is not warmed is the host documents a recovered entry is mined from.
-// There are thousands of them and one costs tens of milliseconds to parse, so a
-// whole-corpus warm would take minutes; they are parsed once per host per request
-// instead, which is what hostBlocks in internal/spec is for. Warming therefore
-// leaves the first request with the host parses it actually needs (~0.4 s for a
-// 29-entry chain) rather than the whole fold on top.
-func (s *Store) WarmFolds() (FoldWarm, error) {
-	started := time.Now()
-	msgs, err := s.MailBodies()
-	if err != nil {
-		return FoldWarm{}, err
-	}
-	w := FoldWarm{Bodies: len(msgs), Took: time.Since(started)}
-	for _, m := range msgs {
-		w.Lines += len(m.Lines)
-	}
-	return w, nil
 }
 
 // mailBodies is MailBodies over a scope, and the scope is what makes it cheap:

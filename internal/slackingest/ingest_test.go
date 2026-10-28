@@ -766,3 +766,41 @@ func TestOnlyTheAuthorParticipates(t *testing.T) {
 		t.Fatalf("participants %v, want exactly one 'from'", roles)
 	}
 }
+
+func TestSlackIngestDoesNotQueueFoldEntries(t *testing.T) {
+	f := newFixture(t)
+	f.people()
+	f.channel(general, "general", false)
+	f.message(1, general, "1700000000.000100", "U100", "Synthetic Slack post", nil)
+	s := store(t)
+	if _, err := s.WarmFolds(); err != nil {
+		t.Fatal(err)
+	}
+	f.ingest(s)
+	var entries int
+	if err := s.DB().QueryRow(`select count(*) from fold_dirty_entries`).Scan(&entries); err != nil {
+		t.Fatal(err)
+	}
+	if entries != 0 {
+		t.Fatalf("Slack ingest queued %d mail fold entries", entries)
+	}
+	// New email identities can legitimately dirty fallback metadata. Consume it
+	// before asserting that repeated ingestion and Slack-only edits are no-ops.
+	warm, err := s.WarmFolds()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if warm.Bodies != 0 || warm.Memberships != 0 || warm.Pending != 0 {
+		t.Fatalf("Slack normalized mail: %+v", warm)
+	}
+	f.ingest(s)
+	f.message(2, general, "1700000000.000100", "U100", "Edited synthetic Slack post", nil)
+	f.ingest(s)
+	after, err := s.WarmFolds()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Bodies != 0 || after.Memberships != 0 || after.Pending != 0 || after.Generation != warm.Generation {
+		t.Fatalf("Slack edit/reingest dirtied folds: %+v", after)
+	}
+}

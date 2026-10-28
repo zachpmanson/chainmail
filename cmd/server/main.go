@@ -192,10 +192,8 @@ func run(args []string) error {
 	}
 	fmt.Fprintf(os.Stderr, "server: %s on http://%s\n", *path, ln.Addr())
 
-	// The fold cache is per-process and empty at every start. The socket is bound
-	// and nothing is being served yet, so this is the one moment the work can be
-	// done without a request waiting on it — and the request that would have paid
-	// is a person opening a thread. See warmFolds.
+	// Publish initial or pending durable fold-index work before serving requests.
+	// A clean restart needs no normalization. See warmFolds.
 	srv.warmFolds()
 
 	// The sweep schedule runs for as long as the process does: the cadence is a
