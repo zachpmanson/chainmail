@@ -43,6 +43,8 @@ Regression coverage in `internal/corpus/writer_test.go` gates actual fold
 publication using a test-only SQLite function and connection-local trigger, then
 runs actual mail, Slack, unread, quoted-enrichment and embedding producers. It
 also demonstrates stale snapshot 517, deadline cancellation without late writes,
-in-flight embedding rollback, per-connection policy and restoration/reuse. The
-existing fold concurrency, trigger and restart tests cover coherent snapshots,
+in-flight embedding rollback, per-connection policy and restoration/reuse.
+`writer_restore_test.go` injects a cleanup PRAGMA failure against real SQLite
+and verifies physical connection disposal and subsequent writes. The existing
+fold concurrency, trigger and restart tests cover coherent snapshots,
 raw writers, mixed versions and process death during publication.
