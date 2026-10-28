@@ -152,10 +152,31 @@ func AnalyseOriginal(raw string) OriginalAnalysis {
 	}
 	if best != nil {
 		result.Matches = best
-		result.Score = len(best)
 	}
+	if tree.wholeMessageTable(body, tree.nodes[body].facts) {
+		result.Matches = append(result.Matches, OriginalMatch{Rule: "whole message in a table", Points: 1})
+	}
+	result.Score = len(result.Matches)
 	result.DefaultsToOriginal = result.Score >= 2 && !result.Uncertain
 	return result
+}
+
+// One retained table must contain all visible authored text and images. This is
+// a single message-level vote, independent of table nesting or page recognition.
+func (t *analysisTree) wholeMessageTable(n *html.Node, total originalFacts) bool {
+	if total.words == 0 {
+		return false
+	}
+	f := t.nodes[n].facts
+	if n.DataAtom == atom.Table && f.words == total.words && f.images == total.images {
+		return true
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if t.wholeMessageTable(c, total) {
+			return true
+		}
+	}
+	return false
 }
 
 // Remove explicit quote subtrees only, not cutFrom's suffix: authored siblings
