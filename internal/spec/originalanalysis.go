@@ -1105,7 +1105,7 @@ func (t *analysisTree) contacts(n *html.Node, earlier bool) {
 // Legacy table alignment can belong to the immediate cell instead of each
 // stacked table. Decline horizontal cells and overrides rather than inheriting
 // arbitrary ancestor text alignment as block geometry.
-func (t *analysisTree) panelCentered(n *html.Node) bool {
+func (t *analysisTree) panelCentered(n, root *html.Node) bool {
 	if t.centered(n) {
 		return true
 	}
@@ -1131,12 +1131,52 @@ func (t *analysisTree) panelCentered(n *html.Node) bool {
 			return false
 		}
 	}
-	return cell.Parent != nil && cell.Parent.DataAtom == atom.Tr && t.nodes[cell.Parent].cells == 1
+	if cell.Parent == nil || cell.Parent.DataAtom != atom.Tr {
+		return false
+	}
+	// All inferred panels must share vertical scaffolding up to their common
+	// collector, not merely sit in individually centered nested cells.
+	reachedRoot, enclosedTable := false, false
+	for p := cell; p != nil; p = p.Parent {
+		ps := t.nodes[p].style
+		if ps["float"] != "" && ps["float"] != "none" || ps["position"] != "" && ps["position"] != "static" {
+			return false
+		}
+		display := ps["display"]
+		expected := "block"
+		switch p.DataAtom {
+		case atom.Table:
+			enclosedTable = true
+			expected = "table"
+		case atom.Tbody:
+			expected = "table-row-group"
+		case atom.Thead:
+			expected = "table-header-group"
+		case atom.Tfoot:
+			expected = "table-footer-group"
+		case atom.Tr:
+			if t.nodes[p].cells != 1 {
+				return false
+			}
+			expected = "table-row"
+		case atom.Td, atom.Th:
+			expected = "table-cell"
+		}
+		if display != "" && display != expected {
+			return false
+		}
+		reachedRoot = reachedRoot || p == root
+		if reachedRoot && enclosedTable {
+			return true
+		}
+	}
+	return false
 }
 
 func (t *analysisTree) alignedColumn(n *html.Node) ([]OriginalMatch, float64) {
 	// Only maximal bounded panels participate: no nested wrapper vote inflation.
 	var panels []*html.Node
+	invalid := false
 	var collect func(*html.Node)
 	collect = func(c *html.Node) {
 		if c.DataAtom == atom.Footer {
@@ -1144,7 +1184,16 @@ func (t *analysisTree) alignedColumn(n *html.Node) ([]OriginalMatch, float64) {
 		}
 		d := t.nodes[c]
 		w := max(t.dimension(c, "width"), t.dimension(c, "max-width"))
-		if c != n && w >= 320 && w <= 1200 && t.panelCentered(c) && (d.facts.words > 0 || d.facts.images > 0) {
+		if c != n && w >= 320 && w <= 1200 && t.panelCentered(c, n) && (d.facts.words > 0 || d.facts.images > 0) {
+			if !t.centered(c) {
+				// Skipping an unresolved panel could fabricate an equal-width majority.
+				for key := range d.style {
+					if key == "min-width" || strings.Contains(key, "inline-size") {
+						invalid = true
+						return
+					}
+				}
+			}
 			panels = append(panels, c)
 			return
 		}
@@ -1166,7 +1215,7 @@ func (t *analysisTree) alignedColumn(n *html.Node) ([]OriginalMatch, float64) {
 		return nil, 0
 	}
 	collect(n)
-	if len(panels) < 2 {
+	if invalid || len(panels) < 2 {
 		return nil, 0
 	}
 	width := max(t.dimension(panels[0], "width"), t.dimension(panels[0], "max-width"))
