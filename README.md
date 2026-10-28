@@ -81,6 +81,27 @@ sync restarts safely. Each mail run reports list/history pages, full-message rea
 attempts and elapsed time (the query backend may also fetch envelope metadata).
 The first full sync/recovery can be expensive; compare subsequent sweeps for savings.
 
+### Background semantic indexing
+
+Server-triggered refreshes finish after mail ingestion/reconciliation and fold
+warming; they no longer wait for embedding. With `-slurp` enabled, one background
+worker indexes pending vectors at startup and after ingest attempts. Repeated
+requests coalesce into one queued follow-up. CLI `corpus slurp` and `corpus embed`
+remain synchronous.
+
+`GET /v1/status` reports indexing separately in `embedding`, including queued/running
+state, committed progress, outcome and bounded errors; the navigation shows this
+independently of ingest status. New mail is immediately available to lexical search.
+Semantic results catch up as indexing finishes; stale vectors are excluded.
+Embedding does not disable refresh, and its failure does not fail a completed ingest.
+The daemon's connectivity status remains distinct from this worker's progress.
+
+A job is bounded to 30 minutes and tied to server lifetime, not the HTTP request.
+Shutdown cancels and joins it before closing the store. Committed batches survive
+interruption; the next ingest or enabled-server restart retries pending work.
+There is no separate retry timer. Progress uses the pass's initial pending count,
+not a guarantee that concurrently arriving mail has already been indexed.
+
 ## Running it
 
 ```bash
@@ -133,9 +154,9 @@ conservative mismatches.
 **Replying starts as reply-all, and who it reaches is the reader's to say.** A thread in the
 reading pane ends with a reply box: one row of To and Cc autocomplete fields and a link to
 its target message, then the reader's own words. Hovering the link highlights that message.
-Pressing *preview* sends
+Pressing _preview_ sends
 nothing — the server composes the reply and returns it as a plan, and the reader sees the
-whole message and its actual recipients before anything leaves. Pressing *send* sends that.
+whole message and its actual recipients before anything leaves. Pressing _send_ sends that.
 The audience starts from the message being answered — the newest message in the thread Gmail
 holds, its sender in `To`, its original `To` and `Cc` in `Cc`. The two compose-screen address
 fields let the reader add, remove or move recipients before preview; autocomplete offers the
@@ -144,7 +165,7 @@ Untouched lists remain the mailbox's default, so its Reply-To and account-alias 
 stays authoritative. The two things a field refuses are the reader's own address and an
 address already on the reply, in either list.
 
-The one thing the reply-all tick decides about the *starting* audience is whether the
+The one thing the reply-all tick decides about the _starting_ audience is whether the
 message's other people come with it: it is on by default, and clearing it answers the sender
 alone. Adding anybody back is the compose fields' business, not the tick's.
 
@@ -224,7 +245,7 @@ own. `make repage P=page.html` runs the loop.
 Input is a **timeline spec**: JSON conforming to `schema/timeline.schema.json`. A
 collector produces it; chainmail only renders. The two load-bearing fields are
 `parent` (what each entry replies to — drives ordering, lanes, the reply tree) and
-`tz` (ordering is by *absolute* time; a missing zone is inferred from what that sender
+`tz` (ordering is by _absolute_ time; a missing zone is inferred from what that sender
 stated elsewhere and never allowed to invert a reply chain).
 
 ## Development

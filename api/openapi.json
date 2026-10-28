@@ -171,7 +171,7 @@
     "/v1/slurp": {
       "post": {
         "summary": "Reach the work mailbox and ingest it.",
-        "description": "Runs `corpus slurp` against the corpus — reading the work mailbox through the mail credential this unit already holds — so a subsequent /v1/refresh can build over mail that arrived since the last ingest. The phases are the ones the chainmail-slurp unit runs (mail, twins, repair, dedupe as a dry run, embed), and the ingest's own transcript is returned.\n\nOpt-in and off by default: a server started without -slurp answers 403, keeping the surface read-most and never touching the mailbox.",
+        "description": "Runs `corpus slurp` against the corpus using this unit’s existing mail credential (mail, twins, repair, dedupe as a dry run, unread reconciliation). Returns the ingest transcript after reconciliation; lexical search is available immediately. A separate coalescing background embedding pass catches semantic search up, independently of this response and its outcome. Even a partial or failed ingest queues a pass.\n\nOpt-in and off by default: a server started without -slurp answers 403 and does not run background embedding.",
         "operationId": "slurp",
         "responses": {
           "200": {
@@ -2760,7 +2760,8 @@
         "description": "The connection snapshot the operator's probe wrote. checkedAt is omitted until some probe has run; services is always the full known set, so a missing snapshot reads as unchecked rather than empty. sweep is what this process knows about the ingest itself.",
         "required": [
           "services",
-          "sweep"
+          "sweep",
+          "embedding"
         ],
         "additionalProperties": false,
         "properties": {
@@ -2783,6 +2784,9 @@
             "items": {
               "$ref": "#/components/schemas/ServiceStatus"
             }
+          },
+          "embedding": {
+            "$ref": "#/components/schemas/EmbeddingStatus"
           }
         }
       },
@@ -4855,6 +4859,71 @@
           },
           "analysis": {
             "$ref": "#/components/schemas/OriginalAnalysis"
+          }
+        }
+      },
+      "EmbeddingStatus": {
+        "type": "object",
+        "description": "Process-local background indexing, independent of ingest and the embed service probe. Pending is the initial pass baseline, done counts committed work only; concurrent changes may leave work for a later pass. Disabled without -slurp. Startup and completed ingest attempts queue work; requests coalesce into one follow-up. State and errors are not persisted.",
+        "additionalProperties": false,
+        "required": [
+          "enabled",
+          "running",
+          "queued",
+          "dim",
+          "done",
+          "pending",
+          "embedded",
+          "skipped"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "running": {
+            "type": "boolean"
+          },
+          "queued": {
+            "type": "boolean"
+          },
+          "model": {
+            "type": "string"
+          },
+          "dim": {
+            "type": "integer"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finishedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "failed",
+              "skipped",
+              "cancelled"
+            ]
+          },
+          "error": {
+            "type": "string",
+            "description": "Last pass error, limited to 512 characters."
+          },
+          "done": {
+            "type": "integer"
+          },
+          "pending": {
+            "type": "integer"
+          },
+          "embedded": {
+            "type": "integer"
+          },
+          "skipped": {
+            "type": "integer"
           }
         }
       }
