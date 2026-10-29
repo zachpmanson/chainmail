@@ -180,6 +180,7 @@ type twinCopy struct {
 	// prose is words again with the markup residue removed: what the positional
 	// test needs, and what the identity gates must not use. See proseWords.
 	prose []string
+	links quoteLinks
 	atts  int
 }
 
@@ -360,6 +361,7 @@ func twinCopies(s *Store, person int64) ([]twinCopy, error) {
 		c.wall = time.Unix(ts, 0).UTC()
 		c.words = copyWords(body, c.bodyHTML, c.quoted)
 		c.prose = proseWords(body, c.bodyHTML, c.quoted)
+		c.links = copyLinks(body, c.bodyHTML, c.quoted)
 		out = append(out, c)
 	}
 	return out, rows.Err()
@@ -497,7 +499,7 @@ func groupTwins(copies []twinCopy) ([][]twinCopy, []TwinDecline) {
 			// A short copy is only paired with a mailbox copy that can vouch for it
 			// by subject or by sharing its thread; every other pairing still meets
 			// the floor in twinnable, where the refusal names the offset.
-			if short && !shortVouched(copies[i], copies[j]) {
+			if short && !shortVouched(copies[i], copies[j]) && !vouchedQuoteLinks(copies[i], copies[j]) {
 				continue
 			}
 			why, ok := twinnable(copies[i], copies[j])
@@ -557,6 +559,12 @@ func twinnable(a, b twinCopy) (string, bool) {
 	off, ok := twinOffset(a, b)
 	if !ok {
 		return "", false
+	}
+	if replacedQuoteLinks(a, b) {
+		if vouchedQuoteLinks(a, b) {
+			return "", true
+		}
+		return "a short link replacement lacks a mailbox/thread witness", false
 	}
 	// The length floor is per pair, and a fetched mailbox copy can vouch for a
 	// short one: where the pair shares a thread subject, the words being alike
@@ -786,6 +794,12 @@ func resolveTwins(g []twinCopy) (TwinCollapse, []TwinDecline, string, bool) {
 // single run counts: scattered insertions of a word each are what a renderer
 // produces, and summing them would read a renumbered list as a paragraph.
 func annotates(keep, drop twinCopy) (string, bool) {
+	if replacedQuoteLinks(keep, drop) {
+		why := fmt.Sprintf("a quoted link destination differs from entry %d; both destinations must be retained", keep.id)
+		// A mailbox copy establishes direction. URL length/id cannot tell which
+		// recovered-only variant was the original, so keep both without a claim.
+		return why, !keep.quoted && drop.quoted
+	}
 	d := textsim.Divergences(keep.prose, drop.prose)
 	if !d.Measured {
 		// Too long to align — a machine-generated report rather than anything a
@@ -1101,6 +1115,7 @@ func nearbyCopies(s *Store, person int64, wall time.Time) ([]twinCopy, error) {
 		o.wall = time.Unix(ts, 0).UTC()
 		o.words = copyWords(body, o.bodyHTML, o.quoted)
 		o.prose = proseWords(body, o.bodyHTML, o.quoted)
+		o.links = copyLinks(body, o.bodyHTML, o.quoted)
 		out = append(out, o)
 	}
 	if err := rows.Err(); err != nil {
@@ -1129,41 +1144,19 @@ func FindTwin(s *Store, person int64, wall time.Time, text, subject, container s
 	// No length pre-check: a short block can still be vouched for by a mailbox
 	// copy on the same thread, and twinnable applies the floor per pair.
 	c := twinCopy{quoted: true, wall: wall, subject: subject, container: container,
-		words: copyWords(text, "", true), prose: proseWords(text, "", true)}
+		words: copyWords(text, "", true), prose: proseWords(text, "", true), links: copyLinks(text, "", true)}
 	near, err := nearbyCopies(s, person, wall)
 	if err != nil {
 		return 0, false, fmt.Errorf("looking for a twin of a recovered block: %w", err)
 	}
-	var mailbox, all []int64
-	for _, o := range near {
-		if _, ok := twinnable(c, o); !ok {
-			continue
-		}
-		// Converging here would store nothing but a sighting, so an inline answer
-		// in this block would never reach the corpus at all — the same loss the
-		// repair pass declines, one ingest earlier. The block becomes its own
-		// entry instead, which is what the caller does with a refusal.
-		if why, _ := annotates(o, c); why != "" {
-			continue
-		}
-		all = append(all, o.id)
-		if !o.quoted {
-			mailbox = append(mailbox, o.id)
-		}
+	base, ok := uniqueCopyBase(c, near)
+	if !ok {
+		return 0, false, nil
 	}
-	// The mailbox copy is the one to converge on when there is exactly one, for
-	// the reasons resolveTwins gives. Two of them, or several recovered copies
-	// with none, is the ambiguous case: the block is stored as its own entry and
-	// left for the repair pass, which reports what it will not decide instead of
-	// deciding it here, one block at a time, with no view of the group.
-	switch {
-	case len(mailbox) == 1:
-		return mailbox[0], true, nil
-	case len(mailbox) == 0 && len(all) == 1:
-		return all[0], true, nil
+	if why, _ := annotates(base, c); why != "" {
+		return 0, false, nil
 	}
-
-	return 0, false, nil
+	return base.id, true, nil
 }
 
 // DerivedMatch reports that a recovered block is recognisably a MODIFIED copy of
@@ -1192,22 +1185,37 @@ func FindDerived(s *Store, person int64, wall time.Time, text, subject, containe
 		return DerivedMatch{}, false, nil
 	}
 	c := twinCopy{quoted: true, wall: wall, subject: subject, container: container,
-		words: copyWords(text, "", true), prose: proseWords(text, "", true)}
+		words: copyWords(text, "", true), prose: proseWords(text, "", true), links: copyLinks(text, "", true)}
 	near, err := nearbyCopies(s, person, wall)
 	if err != nil {
 		return DerivedMatch{}, false, fmt.Errorf("looking for the base of a modified block: %w", err)
 	}
-	// The quoter answered WHERE the base's own text runs straight through: the
-	// divergence is verifiably an interior insertion. That is a modified copy,
-	// and annotates already refuses to merge such a block, so naming its base
-	// here is evidence, not a guess.
+	if base, ok := uniqueCopyBase(c, near); ok {
+		if why, yes := annotates(base, c); yes {
+			return DerivedMatch{Base: base.id, Why: why}, true, nil
+		}
+	}
+	return DerivedMatch{}, false, nil
+}
+
+// Count all identity candidates BEFORE deciding whether they are edited. Otherwise
+// a clean candidate can win just because a conflicting mailbox copy was edited.
+func uniqueCopyBase(c twinCopy, near []twinCopy) (twinCopy, bool) {
+	var all, mailbox []twinCopy
 	for _, o := range near {
 		if _, ok := twinnable(c, o); !ok {
 			continue
 		}
-		if why, yes := annotates(o, c); yes {
-			return DerivedMatch{Base: o.id, Why: why}, true, nil
+		all = append(all, o)
+		if !o.quoted {
+			mailbox = append(mailbox, o)
 		}
 	}
-	return DerivedMatch{}, false, nil
+	if len(mailbox) == 1 {
+		return mailbox[0], true
+	}
+	if len(mailbox) == 0 && len(all) == 1 {
+		return all[0], true
+	}
+	return twinCopy{}, false
 }

@@ -1,0 +1,16 @@
+[
+  {
+    "name": "short-sheet-link",
+    "subject": "Northwind x Quarry Inventory Pilot",
+    "original": "Here is a sheet containing all the Northwind sites that we have.\r\n\r\nhttps://docs.example.test/spreadsheets/d/fictional-sheet-one/edit?usp=sharing\r\n\r\n",
+    "quoted": "Here is a sheet containing all the Northwind sites that we have.\n\n\nhttps://security.example.test/l/fictional-rewritten-link-one_opaque-token-with-many-parts",
+    "offsetMinutes": 720
+  },
+  {
+    "name": "sheet-link-before-signoff",
+    "subject": "Northwind x Quarry Inventory Pilot",
+    "original": "Hi Mira and Ellis,\r\n\r\nThe sheet below is the list of Northwind sites that we do not have member numbers for. If you could populate that before the next inventory file on Dec 4 that would greatly appreciated. These were not in the shared data sheet we have shared before.\r\n\r\nhttps://docs.example.test/spreadsheets/d/fictional-sheet-two/edit?usp=sharing\r\n\r\nThanks,\r\nRowan\r\n\r\n",
+    "quoted": "Hi Mira and Ellis,\n\nThe sheet below is the list of Northwind sites that we do not have member numbers for. If you could populate that before the next inventory file on Dec 4 that would greatly appreciated. These were not in the shared data sheet we have shared before.\n\nhttps://security.example.test/l/fictional-rewritten-link-two_opaque-token-with-many-parts\n\nThanks,\nRowan",
+    "offsetMinutes": 780
+  }
+]
