@@ -98,15 +98,15 @@ type server struct {
 	// kill a mailbox walk halfway through; a server shutdown still cancels it.
 	lifecycleCtx context.Context
 	// slurpTimeout bounds one ingest. History synchronizes mail and labels, then
-	// twins, repair and optional dry-run dedupe settle the corpus. The
-	// server-lifetime context cancels it on shutdown.
+	// twins and repair settle the corpus. The server-lifetime context cancels it
+	// on shutdown.
 	slurpTimeout time.Duration
 	// runSlurp is the mailbox-reaching operation, injected so the handler can be
 	// tested without a mailbox. The real one delegates to the sibling `corpus`
 	// binary (see defaultSlurp), so every phase and its ordering stays there.
 	runSlurp func(ctx context.Context, corpusPath string) ([]byte, error)
-	// runSweep is the same operation on the schedule's terms: the same pipeline
-	// without dedupe, because a plan nobody is watching is work nobody reads.
+	// runSweep is the scheduled form of the same mail/twins/repair pipeline.
+	// Neither caller generates a dedupe plan; that belongs to explicit review.
 	// Nil when this host has nothing to sweep with, which leaves the loop idle.
 	runSweep func(ctx context.Context, corpusPath string) ([]byte, error)
 	// sweeping is the one-ingest-at-a-time latch, shared by POST /v1/slurp and
@@ -1019,9 +1019,8 @@ type slurpResponse struct {
 // and returns the ingest transcript.
 //
 // It delegates to the sibling `corpus` binary rather than re-implementing the
-// phases: the ingest order, fail-closed threading check, dedupe-as-dry-run and
-// connection-snapshot probe all live there, and the
-// server shares none of that logic. The sibling ships beside this binary in the
+// phases: the ingest order, fail-closed threading check and connection-snapshot
+// probe all live there, and the server shares none of that logic. The sibling ships beside this binary in the
 // same nix package (corpus lands next to chainmail-server in $out/bin).
 //
 // Mail reaches the mailbox the way every other ingest on this host does — the
@@ -1031,20 +1030,16 @@ type slurpResponse struct {
 // the server did not already have, and `-backend` needs no spelling out because
 // the ingest and the server are one package with one default.
 //
-// Which phases run is the caller's choice, in one list, because the two callers
-// differ by exactly one phase: `manualPhases` is what a person pressing the
-// button gets — the dedupe plan is part of what they asked to see, and it stays
-// a dry run either way (see cmd/corpus/slurp.go) — and `sweepPhases` is the same
-// pipeline without it, since a plan printed into the journal of a sweep nobody
-// is watching is work nobody reads. Both use unbounded in:anywhere History sync,
-// which reconciles labels including UNREAD. The full unread-set audit remains
-// available through the CLI, not on every server refresh.
+// Manual and scheduled callers share unbounded in:anywhere History sync and
+// corpus settling. History reconciles labels including UNREAD; full unread
+// audits remain CLI repair. Dedupe plans remain explicit CLI/Ops review, not
+// work every refresh must await. Neither is replaced by a background task.
 //
 // CHAINMAIL_CORPUS pins the same database this process has open; being WAL, the
 // ingest writes beside the reader.
 const (
-	manualPhases = "mail,twins,repair,dedupe"
-	sweepPhases  = "mail,twins,repair"
+	manualPhases = "mail,twins,repair"
+	sweepPhases  = manualPhases
 )
 
 func defaultSlurp(phases, source string) func(ctx context.Context, corpusPath string) ([]byte, error) {

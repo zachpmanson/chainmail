@@ -86,18 +86,18 @@ func TestSlurpFailureIsBadGatewayWithTheError(t *testing.T) {
 	}
 }
 
-// History already reconciles labels; a full unread-set scan is explicit repair,
-// not a mandatory phase for either kind of server refresh.
-func TestServerRefreshUsesHistoryInsteadOfFullUnreadAudit(t *testing.T) {
+// Routine refresh ingests and settles mail; unread audits and dedupe plans
+// belong to explicit repair/review rather than either server refresh path.
+func TestServerRefreshUsesOnlyMailAndSettlingPhases(t *testing.T) {
 	for _, tc := range []struct {
 		name, phases, want string
 	}{
-		{"manual", manualPhases, "mail,twins,repair,dedupe"},
+		{"manual", manualPhases, "mail,twins,repair"},
 		{"scheduled", sweepPhases, "mail,twins,repair"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if tc.phases != tc.want {
-				t.Fatalf("server phases = %q, want %q: History supplies unread changes; full audit stays CLI-only", tc.phases, tc.want)
+				t.Fatalf("server phases = %q, want %q: History supplies labels; audits and merge plans stay explicit", tc.phases, tc.want)
 			}
 		})
 	}

@@ -87,6 +87,11 @@ they do not run a separate full unread-set scan. For explicit audit/repair, run
 Standalone CLI `corpus slurp` keeps its existing unread phase; custom/bounded CLI
 scans are unchanged.
 
+Both server refresh paths run mail, twins and repair, without generating a dedupe
+plan. Review identity merge proposals explicitly in Ops or with `corpus dedupe`;
+standalone CLI slurp still reports its existing dry-run plan. No merge behavior
+or twins/repair behavior is changed by excluding the plan from refresh.
+
 ### Background semantic indexing
 
 Server-triggered refreshes finish after mail ingestion/reconciliation and fold
