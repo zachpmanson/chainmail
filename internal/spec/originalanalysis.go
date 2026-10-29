@@ -156,6 +156,9 @@ func AnalyseOriginal(raw string) OriginalAnalysis {
 	if tree.wholeMessageTable(body, tree.nodes[body].facts) {
 		result.Matches = append(result.Matches, OriginalMatch{Rule: "whole message in a table", Points: 1})
 	}
+	if tree.complexNestedTable(body) {
+		result.Matches = append(result.Matches, OriginalMatch{Rule: "complex nested table layout", Points: 1})
+	}
 	result.Score = len(result.Matches)
 	result.DefaultsToOriginal = result.Score >= 2 && !result.Uncertain
 	return result
