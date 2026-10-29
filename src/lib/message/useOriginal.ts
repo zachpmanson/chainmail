@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { usePrefs, type ReadingPreference } from "../prefs/usePrefs";
 import type { OriginalAnalysis, OriginalPayload } from "./original";
 
-/** `asking` keeps the transcript's body on screen; `none` means no original is available. */
+/** `asking` waits for a rendering decision; `none` means no original is available. */
 export type Original =
   { at: "read" } | { at: "asking" } | { at: "sent"; html: string } | { at: "none"; why: string };
 
 type Source = { extId: string; load: (extId: string) => Promise<OriginalPayload> };
 const read: Original = { at: "read" };
+const asking: Original = { at: "asking" };
 
 /** The display choice is per sender; fetched content belongs to one message and loader. */
 export function useOriginal(
@@ -87,7 +88,10 @@ export function useOriginal(
       setStyled(key, next);
     }
   };
-  const state = on && current ? current.state : read;
+  // Even a cached promise resolves after the first render; don't paint a provisional body.
+  const pending =
+    extId && load && preference !== false && (!current || current.state.at === "asking");
+  const state = pending ? asking : on && current ? current.state : read;
   return {
     on,
     state,
