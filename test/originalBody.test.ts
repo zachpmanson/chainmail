@@ -90,6 +90,21 @@ afterEach(async () => {
 });
 
 describe("message body rendering decision", () => {
+  it("uses the existing motion-safe spinner style with a screen-reader loading label", () => {
+    const pending = deferred();
+    render(reading(() => pending.promise));
+    expect(snapshot()).toEqual(loading);
+    const icon = body().querySelector("svg")!;
+    expect(icon.getAttribute("class")).toContain("motion-safe:animate-spin");
+    expect(icon.getAttribute("aria-hidden")).toBe("true");
+    expect(body().querySelector(".sr-only")?.textContent).toBe("Loading message…");
+    expect(
+      [...body().childNodes].filter(
+        (node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim(),
+      ),
+    ).toHaveLength(0);
+  });
+
   it.each([true, false])("waits from the first paint for Default to resolve to %s", async (on) => {
     const pending = deferred();
     render(reading(() => pending.promise));
