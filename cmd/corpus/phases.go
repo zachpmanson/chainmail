@@ -193,6 +193,10 @@ func runRepair(path string) error {
 		fmt.Printf("  %d recovered %s no host body accounts for — left alone\n",
 			n, plural(n, "message", "messages"))
 	}
+	if n := len(qr.Ambiguous); n > 0 {
+		fmt.Printf("  %d recovered %s have conflicting host versions — left alone\n",
+			n, plural(n, "message", "messages"))
+	}
 
 	r, err := corpus.RepairMailtoIdentities(s)
 	if err != nil {

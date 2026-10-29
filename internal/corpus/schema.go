@@ -640,4 +640,11 @@ create trigger fold_sightings_insert after insert on sightings
      when old.source is not new.source begin
        delete from entry_embeddings where entry_id=new.id;
      end;`,
+	// 26: per-sighting quote repair could retract stale values repeatedly,
+	// corrupting both external-content indexes. Rebuild derived search data
+	// once; source entries, preferences, folds and vectors are not rewritten.
+	`insert into entries_fts(entries_fts) values('delete-all');
+     insert into entries_fts(entries_fts, rank) values('rebuild', 0);
+     insert into entries_ident(entries_ident) values('delete-all');
+     insert into entries_ident(entries_ident, rank) values('rebuild', 0);`,
 }

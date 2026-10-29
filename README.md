@@ -92,6 +92,21 @@ plan. Review identity merge proposals explicitly in Ops or with `corpus dedupe`;
 standalone CLI slurp still reports its existing dry-run plan. No merge behavior
 or twins/repair behavior is changed by excluding the plan from refresh.
 
+### Quote-body repair
+
+Repair groups all host sightings of a recovered message before writing it. A
+single host or multiple exactly agreeing hosts can repair old parser output;
+divergent variants are reported and left unchanged rather than choosing the
+longest, most frequent or last-seen copy. Missing hosts are not deletion evidence.
+Each actual repair updates the body, canonical quote hash and both search indexes
+once; unchanged bodies do not dirty folds or invalidate vectors. Single-host
+parser-upgrade repairs still run even without new Gmail messages.
+
+Schema migration26 rebuilds both derived search indexes once, repairing stale
+index retractions from the old per-sighting loop. It does not rewrite source
+entries, preferences, folds or vectors. This is not an incremental repair cache;
+the host scan remains, and ambiguous source text is preserved for review.
+
 ### Background semantic indexing
 
 Server-triggered refreshes finish after mail ingestion/reconciliation and fold

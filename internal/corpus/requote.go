@@ -1,6 +1,7 @@
 package corpus
 
 import (
+	"database/sql"
 	"fmt"
 
 	"github.com/zachpmanson/chainmail/internal/unnest"
@@ -43,14 +44,19 @@ type QuotedRepair struct {
 	// Fixed is entries whose stored body was rewritten — the damage a parser fix
 	// leaves behind, and the only thing this pass changes.
 	Fixed int
-	// Missing is quoted entries no block in their host accounts for. Not an
+	// Missing is quoted entries no eligible host accounts for. Not an
 	// error, and never resolved: the host's text may have been truncated, and an
 	// entry deleted on that evidence would lose a message nothing else holds.
 	Missing []string
+	// Ambiguous is entries whose hosts recover different texts for the same
+	// identity. Preserve the stored body rather than guess which copy is true.
+	Ambiguous []string
 }
 
 // RepairQuotedBodies re-derives the entries recovered from quoted text out of
-// the host bodies they came from, and rewrites the ones that disagree.
+// the host bodies they came from. It repairs each entry once only when all
+// recoverable hosts agree on the text; differing variants are reported and left
+// unchanged, not selected by length, popularity or arrival order.
 //
 // This is the same division as RepairMailtoIdentities and RepairPlusAddresses: a
 // parse fix changes what extraction says, and cannot change what extraction has
@@ -95,21 +101,10 @@ func RepairQuotedBodies(s *Store) (QuotedRepair, error) {
 		return rep, err
 	}
 
-	// One pass is provably enough: a host is always a mailbox entry, because
-	// extraction runs over mailbox bodies and records the host it found each block
-	// inside (mailingest.ExtractQuoted). A quoted entry is never a host, so no
-	// candidate's source text changes while the pass is walking them.
-	fixed, hosts, err := repeelPass(s, cands)
-	if err != nil {
-		return rep, err
-	}
-	rep.Hosts, rep.Fixed = hosts, fixed
-	for _, c := range cands {
-		if c.missing {
-			rep.Missing = append(rep.Missing, c.ext)
-		}
-	}
-	return rep, nil
+	// A quote can occur in several hosts. Resolve their evidence together before
+	// writing: per-sighting comparisons against the loaded body can oscillate
+	// between versions and retract the same old FTS tokens more than once.
+	return repeelPass(s, cands)
 }
 
 // quotedCandidate is one stored quoted entry and the host it was found in.
@@ -120,13 +115,13 @@ type quotedCandidate struct {
 	body     string
 	host     int64
 	hostBody string
-	// missing is set by a pass when the host no longer accounts for the entry.
-	missing bool
 }
 
-// repeelPass rewrites every candidate whose host body now says something else,
-// peeling each host once.
-func repeelPass(s *Store, cands []quotedCandidate) (fixed, hosts int, err error) {
+// repeelPass peels each host once and proposes at most one write per entry.
+// Missing hosts abstain. Divergent texts are not votes: forwards can truncate or
+// annotate a message, so neither length, majority nor host order proves truth.
+func repeelPass(s *Store, cands []quotedCandidate) (QuotedRepair, error) {
+	var rep QuotedRepair
 	byHost := map[int64]map[string]string{}
 	for _, c := range cands {
 		if _, ok := byHost[c.host]; !ok {
@@ -135,42 +130,87 @@ func repeelPass(s *Store, cands []quotedCandidate) (fixed, hosts int, err error)
 				texts[r.Key] = r.Block.Text
 			}
 			byHost[c.host] = texts
-			hosts++
+			rep.Hosts++
 		}
 	}
-	for i := range cands {
-		c := &cands[i]
-		text, ok := byHost[c.host][c.ext]
-		if !ok {
-			c.missing = true
-			continue
-		}
-		c.missing = false
-		if text == c.body {
-			continue
-		}
-		if err := rewriteQuotedBody(s, c.id, c.subject, c.body, text); err != nil {
-			return fixed, hosts, err
-		}
-		fixed++
+	type evidence struct {
+		candidate quotedCandidate
+		texts     map[string]struct{}
 	}
-	return fixed, hosts, nil
+	byEntry := map[int64]*evidence{}
+	var order []int64
+	for _, c := range cands {
+		e := byEntry[c.id]
+		if e == nil {
+			e = &evidence{candidate: c, texts: map[string]struct{}{}}
+			byEntry[c.id] = e
+			order = append(order, c.id)
+		}
+		if text, ok := byHost[c.host][c.ext]; ok {
+			e.texts[text] = struct{}{}
+		}
+	}
+	for _, id := range order {
+		e := byEntry[id]
+		c := e.candidate
+		switch len(e.texts) {
+		case 0:
+			rep.Missing = append(rep.Missing, c.ext)
+			continue
+		case 1:
+			// All hosts that account for this identity agree exactly.
+		default:
+			rep.Ambiguous = append(rep.Ambiguous, c.ext)
+			continue
+		}
+		for text := range e.texts {
+			if text == c.body {
+				continue
+			}
+			changed, err := rewriteQuotedBody(s, c.id, c.subject, c.body, text)
+			if err != nil {
+				return rep, err
+			}
+			if changed {
+				rep.Fixed++
+			}
+		}
+	}
+	return rep, nil
 }
 
-// rewriteQuotedBody stores a re-derived body with its hash — which is what tells
-// the embedder the vector is stale — and its search entries.
-func rewriteQuotedBody(s *Store, id int64, subject, oldBody, body string) error {
+// rewriteQuotedBody serializes a conditional source update and both FTS writes.
+// Read the actual indexed values under the writer transaction, never retract
+// with a stale sighting snapshot. An intervening source change is retried by a
+// later repair; a mailbox copy is never rewritten. Hash-only changes are not a
+// repair: preserve existing hashes/vectors when the body already agrees.
+func rewriteQuotedBody(s *Store, id int64, subject, oldBody, body string) (bool, error) {
 	tx, err := s.db.Begin()
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer tx.Rollback()
+	var quoted int
+	var source, actualSubject, actualBody string
+	if err := tx.QueryRow(`select source, quoted, coalesce(subject,''), coalesce(body_text,'') from entries where id=?`,
+		id).Scan(&source, &quoted, &actualSubject, &actualBody); err != nil {
+		if err == sql.ErrNoRows {
+			return false, nil
+		}
+		return false, err
+	}
+	if source != SourceMail || quoted == 0 || actualBody == body || actualSubject != subject || actualBody != oldBody {
+		return false, nil
+	}
 	if _, err := tx.Exec(`update entries set body_text=?, body_sha=? where id=?`,
-		body, BodySHA(subject, body), id); err != nil {
-		return fmt.Errorf("rewriting the body of entry %d: %w", id, err)
+		body, BodySHA(body, actualSubject), id); err != nil {
+		return false, fmt.Errorf("rewriting the body of entry %d: %w", id, err)
 	}
-	if err := s.reindex(tx, id, false, subject, oldBody); err != nil {
-		return err
+	if err := s.reindex(tx, id, false, actualSubject, actualBody); err != nil {
+		return false, err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return false, err
+	}
+	return true, nil
 }
