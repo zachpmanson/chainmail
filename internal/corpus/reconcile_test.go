@@ -142,7 +142,7 @@ func TestReconcileDurabilityVersionsAndCheckpointCAS(t *testing.T) {
 		t.Fatal("old rules accepted")
 	}
 	checkpoint(t, s)
-	if _, err := s.db.Exec(`update reconcile_state set rules_version=2`); err != nil {
+	if _, err := s.db.Exec(`update reconcile_state set rules_version=?`, reconciliationVersion+1); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.ReconciliationState(); err == nil {

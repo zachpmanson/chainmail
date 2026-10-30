@@ -8,6 +8,8 @@ package unnest
 import (
 	"regexp"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Line is one physical line with its quote depth measured and stripped.
@@ -105,7 +107,7 @@ func inlineAttribution(text string, from int) (int, int, bool) {
 		// from right to left prevents an earlier "On ..." in prose from absorbing
 		// a later, genuine attribution on the same flattened line.
 		for start := closeAt; start > from; start-- {
-			if !startsWithOpener(text[start:closeAt]) {
+			if !startsWithOpener(text[start:closeAt]) || !inlineOpenerBoundary(text, start) {
 				continue
 			}
 			a := ParseAttribution(text[start:end])
@@ -116,6 +118,28 @@ func inlineAttribution(text string, from int) (int, int, bool) {
 		searchFrom = end
 	}
 	return 0, 0, false
+}
+
+// A suffix such as the "on" in "Mon" is not an opener. Keep the narrow
+// lower-to-title-case seam produced by flattened HTML ("replyOn ...").
+func inlineOpenerBoundary(text string, start int) bool {
+	if !utf8.RuneStart(text[start]) {
+		return false
+	}
+	previous, _ := utf8.DecodeLastRuneInString(text[:start])
+	if !unicode.IsLetter(previous) && !unicode.IsNumber(previous) && !unicode.IsMark(previous) && previous != '_' {
+		return true
+	}
+	// Decomposed letters have the same glued seam as their composed form.
+	before := text[:start]
+	for unicode.IsMark(previous) {
+		_, size := utf8.DecodeLastRuneInString(before)
+		before = before[:len(before)-size]
+		previous, _ = utf8.DecodeLastRuneInString(before)
+	}
+	first, size := utf8.DecodeRuneInString(text[start:])
+	next, _ := utf8.DecodeRuneInString(text[start+size:])
+	return unicode.IsLower(previous) && unicode.IsUpper(first) && !unicode.IsUpper(next)
 }
 
 func nextInlineCloser(lower string, from int) (int, int, bool) {

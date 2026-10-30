@@ -62,6 +62,43 @@ func TestSlurpDurableCleanGateAndRestart(t *testing.T) {
 	}
 }
 
+func TestSlurpQuoteParserUpgradeInvalidatesOldCheckpoint(t *testing.T) {
+	path, s := gateStore(t)
+	if _, err := s.DB().Exec(`insert into people(display_name) values('Ada Example')`); err != nil {
+		t.Fatal(err)
+	}
+	// Version 1 covered these exact source rows before the opener-boundary fix.
+	if _, err := s.DB().Exec(`update reconcile_state set covered_revision=source_revision, rules_version=1, covered_version=1, ready=1`); err != nil {
+		t.Fatal(err)
+	}
+	before, err := s.ReconciliationState()
+	if err != nil || before.Source != before.Covered || !before.Ready || before.Clean() {
+		t.Fatal("old parser checkpoint must require catch-up", before, err)
+	}
+	o := slurpOpts{only: []string{"twins", "repair"}}
+	d := defaultSlurpDeps(path, o)
+	twins, repair := 0, 0
+	fullTwins, fullRepair := d.twins, d.repair
+	d.twins = func(apply bool) error { twins++; return fullTwins(apply) }
+	d.repair = func() error { repair++; return fullRepair() }
+	d.status = func() error { return nil }
+	var output strings.Builder
+	if err := runSlurp(&output, o, d); err != nil {
+		t.Fatal(err)
+	}
+	after, err := s.ReconciliationState()
+	if err != nil || !after.Clean() || after.Source != before.Source || after.Rules <= before.Rules || twins != 1 || repair != 1 {
+		t.Fatal("upgrade did not run and verify the full pair", after, twins, repair, err)
+	}
+	output.Reset()
+	if err := runSlurp(&output, o, d); err != nil {
+		t.Fatal(err)
+	}
+	if twins != 1 || repair != 1 || !strings.Contains(output.String(), "people=0 bodies=0") || !strings.Contains(output.String(), "hosts=0") {
+		t.Fatal("verified upgraded corpus did not skip cleanly", twins, repair, output.String())
+	}
+}
+
 func TestSlurpConcurrentMaintenanceInputsStayPending(t *testing.T) {
 	for _, where := range []string{"clean-read", "clean-status", "checkpoint-status"} {
 		t.Run(where, func(t *testing.T) {
