@@ -2,7 +2,8 @@ import FormField from "../ui/FormField";
 import IconButton from "../ui/IconButton";
 import Button from "../ui/Button";
 import TextInput from "../ui/TextInput";
-import { useEffect, useState } from "react";
+import { useRef, useState } from "react";
+import DialogShell from "../ui/DialogShell";
 import { createPortal } from "react-dom";
 import { $api } from "../../lib/api/api";
 import { useAccountId } from "../../lib/inbox/useAccountId";
@@ -161,76 +162,63 @@ function BraidDialog({
   onBraid: () => void;
   onClose: () => void;
 }) {
-  useEffect(() => {
-    const onKey = (ev: KeyboardEvent) => {
-      if (ev.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  const fields = useRef<HTMLDivElement>(null);
 
   return (
-    <div
-      className="fixed inset-0 z-55 flex items-center justify-center bg-black/45"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Braid threads"
-      onClick={onClose}
+    <DialogShell
+      label="Braid threads"
+      panelClassName="max-h-[82vh] max-w-[min(46rem,94vw)]"
+      onClose={onClose}
+      initialFocus={() => fields.current?.querySelector("input") ?? true}
     >
-      <div
-        className="flex max-h-[82vh] max-w-[min(46rem,94vw)] flex-col rounded-lg border border-line bg-card shadow-[0_8px_40px_rgba(0,0,0,.35)]"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-2 border-b border-line px-3 py-2">
-          <b className="text-xs font-bold tracking-[.09em] text-muted uppercase">braid threads</b>
-          <span className="ml-auto min-w-0 truncate text-xs text-muted">
-            {count} thread{count === 1 ? "" : "s"} ticked
-          </span>
-          <Button
-            type="button"
-            density="compact"
-            className="bg-bg px-2 py-1 text-xs text-muted hover:border-accent hover:text-accent"
-            onClick={onClose}
-          >
-            Close
-          </Button>
-        </div>
-        <div className="m-3 mb-1 flex flex-wrap items-end gap-2">
-          <FormField
-            className="flex flex-[1_1_18rem] flex-col gap-1"
-            label="Page title"
-            labelClassName="text-2xs font-bold uppercase tracking-[.09em] text-muted"
-          >
-            <TextInput
-              className="w-full px-2 py-1 text-sm"
-              autoFocus
-              value={title}
-              onChange={(e) => onTitle(e.target.value)}
-              placeholder="optional"
-            />
-          </FormField>
-          <Button
-            type="button"
-            variant="subtle"
-            density="compact"
-            className="px-3 py-1 text-xs"
-            disabled={busy}
-            onClick={onBraid}
-          >
-            {busy ? "Braiding…" : "Braid"}
-          </Button>
-        </div>
-        <p className="mx-3 my-2 flex-[1_1_100%] text-xs text-muted">
-          Left empty, the page is titled with the earliest thread's subject.
-        </p>
-        {busy ? (
-          <p className="mx-3 my-2 flex-[1_1_100%] text-xs text-muted" role="status">
-            Recovering HTML and detecting boilerplate across {count} thread
-            {count === 1 ? "" : "s"}. This takes a few seconds.
-          </p>
-        ) : null}
-        {error ? <Failure error={error} className="mx-3 mt-2 mb-3" /> : null}
+      <div className="flex items-center gap-2 border-b border-line px-3 py-2">
+        <b className="text-xs font-bold tracking-[.09em] text-muted uppercase">braid threads</b>
+        <span className="ml-auto min-w-0 truncate text-xs text-muted">
+          {count} thread{count === 1 ? "" : "s"} ticked
+        </span>
+        <Button
+          type="button"
+          density="compact"
+          className="bg-bg px-2 py-1 text-xs text-muted hover:border-accent hover:text-accent"
+          onClick={onClose}
+        >
+          Close
+        </Button>
       </div>
-    </div>
+      <div ref={fields} className="m-3 mb-1 flex flex-wrap items-end gap-2">
+        <FormField
+          className="flex flex-[1_1_18rem] flex-col gap-1"
+          label="Page title"
+          labelClassName="text-2xs font-bold uppercase tracking-[.09em] text-muted"
+        >
+          <TextInput
+            className="w-full px-2 py-1 text-sm"
+            value={title}
+            onChange={(e) => onTitle(e.target.value)}
+            placeholder="optional"
+          />
+        </FormField>
+        <Button
+          type="button"
+          variant="subtle"
+          density="compact"
+          className="px-3 py-1 text-xs"
+          disabled={busy}
+          onClick={onBraid}
+        >
+          {busy ? "Braiding…" : "Braid"}
+        </Button>
+      </div>
+      <p className="mx-3 my-2 flex-[1_1_100%] text-xs text-muted">
+        Left empty, the page is titled with the earliest thread's subject.
+      </p>
+      {busy ? (
+        <p className="mx-3 my-2 flex-[1_1_100%] text-xs text-muted" role="status">
+          Recovering HTML and detecting boilerplate across {count} thread
+          {count === 1 ? "" : "s"}. This takes a few seconds.
+        </p>
+      ) : null}
+      {error ? <Failure error={error} className="mx-3 mt-2 mb-3" /> : null}
+    </DialogShell>
   );
 }

@@ -9,6 +9,8 @@ export default function DialogShell({
   onClose,
   dismissOnBackdrop = true,
   closeDisabled = false,
+  fullScreen = false,
+  initialFocus,
 }: {
   label: string;
   children: ReactNode;
@@ -16,6 +18,8 @@ export default function DialogShell({
   onClose: () => void;
   dismissOnBackdrop?: boolean;
   closeDisabled?: boolean;
+  fullScreen?: boolean;
+  initialFocus?: Dialog.Popup.Props["initialFocus"];
 }) {
   return (
     <Dialog.Root
@@ -30,12 +34,21 @@ export default function DialogShell({
     >
       <Dialog.Portal>
         <Dialog.Backdrop forceRender className="fixed inset-0 z-55 bg-black/45" />
-        <Dialog.Viewport className="fixed inset-0 z-55 flex items-center justify-center">
+        <Dialog.Viewport
+          className={cn(
+            "fixed inset-0 flex items-center justify-center",
+            fullScreen ? "z-60" : "z-55",
+          )}
+        >
           <Dialog.Popup
             aria-modal="true"
             aria-label={label}
+            initialFocus={initialFocus}
             className={cn(
-              "flex max-h-[70vh] max-w-[44rem] flex-col rounded-lg border border-line bg-card shadow-[0_8px_40px_rgba(0,0,0,.35)]",
+              "flex flex-col",
+              fullScreen
+                ? "size-full bg-bg"
+                : "max-h-[70vh] max-w-[44rem] rounded-lg border border-line bg-card shadow-[0_8px_40px_rgba(0,0,0,.35)]",
               panelClassName,
             )}
           >
