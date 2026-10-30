@@ -40,7 +40,18 @@ func TestQuoteRepairMigrationRebuildsBothIndexesWithoutChangingSource(t *testing
 			t.Fatalf("fixture must have an inconsistent %s index", table)
 		}
 	}
-	if _, err := s.DB().Exec(`delete from schema_version where v=26`); err != nil {
+	if _, err := s.DB().Exec(`delete from schema_version where v>=26`); err != nil {
+		t.Fatal(err)
+	}
+	// Remove the later migration too, modelling a real contiguous v25 schema.
+	for _, in := range []string{"entries", "mail_detail", "sightings", "attachments", "people", "identities", "participants", "domain_aliases"} {
+		for _, op := range []string{"insert", "update", "delete"} {
+			if _, err := s.DB().Exec("drop trigger reconcile_" + in + "_" + op); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if _, err := s.DB().Exec("drop table reconcile_state"); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Close(); err != nil {
@@ -61,7 +72,7 @@ func TestQuoteRepairMigrationRebuildsBothIndexesWithoutChangingSource(t *testing
 		}
 	}
 	var version int
-	if err := s.DB().QueryRow(`select max(v) from schema_version`).Scan(&version); err != nil || version != 26 {
+	if err := s.DB().QueryRow(`select max(v) from schema_version`).Scan(&version); err != nil || version != len(migrations) {
 		t.Fatalf("schema version=%d, err=%v", version, err)
 	}
 }

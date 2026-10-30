@@ -3003,6 +3003,22 @@
         ],
         "additionalProperties": false,
         "properties": {
+          "maintenancePending": {
+            "type": "boolean",
+            "description": "Full twins and repair verification remains pending; independent of page/content nothingNew."
+          },
+          "maintenanceSkipped": {
+            "type": "boolean",
+            "description": "A durable full-maintenance checkpoint allowed the legacy prepass to skip scanning."
+          },
+          "twinsBodiesScanned": {
+            "type": "integer",
+            "description": "Mail bodies loaded by the twins prepass; absent when zero."
+          },
+          "quoteHostsScanned": {
+            "type": "integer",
+            "description": "Hosts peeled by quote repair; absent when zero."
+          },
           "entriesBefore": {
             "type": "integer",
             "description": "Messages on the page when the refresh started."

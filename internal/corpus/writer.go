@@ -19,6 +19,7 @@ const writerBusyMS = 30_000
 // Once acquired, WAL has no competing writer; cancellation can interrupt work.
 type contextWriter struct {
 	*sql.Conn
+	ctx          context.Context
 	priorTimeout int
 	active       bool
 }
@@ -28,7 +29,7 @@ func (s *Store) beginWriter(ctx context.Context, budget time.Duration) (*context
 	if err != nil {
 		return nil, err
 	}
-	w := &contextWriter{Conn: conn}
+	w := &contextWriter{Conn: conn, ctx: ctx}
 	if err = conn.QueryRowContext(ctx, "pragma busy_timeout").Scan(&w.priorTimeout); err != nil {
 		return nil, errors.Join(err, w.discard())
 	}
@@ -61,6 +62,18 @@ func (s *Store) beginWriter(ctx context.Context, budget time.Duration) (*context
 		case <-timer.C:
 		}
 	}
+}
+
+func (w *contextWriter) Query(query string, args ...any) (*sql.Rows, error) {
+	return w.QueryContext(w.ctx, query, args...)
+}
+
+func (w *contextWriter) QueryRow(query string, args ...any) *sql.Row {
+	return w.QueryRowContext(w.ctx, query, args...)
+}
+
+func (w *contextWriter) Exec(query string, args ...any) (sql.Result, error) {
+	return w.ExecContext(w.ctx, query, args...)
 }
 
 func (w *contextWriter) commit(ctx context.Context) error {

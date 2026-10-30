@@ -1,8 +1,9 @@
 package corpus
 
 import (
+	"context"
 	"database/sql"
-	"fmt"
+	"errors"
 	"sort"
 	"time"
 )
@@ -84,6 +85,40 @@ type GraphRepair struct {
 // Every entry has one parent, so the rings are disjoint and each needs exactly
 // one sever.
 func (s *Store) RepairGraph() (GraphRepair, error) {
+	for attempt := 0; attempt < 3; attempt++ {
+		tx, err := s.db.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
+		if err != nil {
+			return GraphRepair{}, err
+		}
+		state, err := readReconcileState(tx)
+		var rep GraphRepair
+		if err == nil {
+			rep, err = planGraph(tx)
+		}
+		tx.Rollback()
+		if err != nil || rep.Edges == 0 {
+			return rep, err
+		}
+		_, err = s.guardedReconcileWrite(context.Background(), &state.Source, func(w corpusWriter) error {
+			return applyGraphPlan(w, rep)
+		})
+		if !errors.Is(err, ErrReconcileConflict) {
+			return rep, err
+		}
+	}
+	return GraphRepair{}, ErrReconcileConflict
+}
+
+func applyGraphPlan(w corpusWriter, rep GraphRepair) error {
+	for _, e := range rep.Severed {
+		if _, err := w.Exec("update entries set parent_id=null where id=? and parent_id=?", e.Child, e.Parent); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func planGraph(q corpusQuery) (GraphRepair, error) {
 	var rep GraphRepair
 
 	type node struct {
@@ -91,7 +126,7 @@ func (s *Store) RepairGraph() (GraphRepair, error) {
 		ts     time.Time
 		ext    string
 	}
-	rows, err := s.db.Query(
+	rows, err := q.Query(
 		`select id, coalesce(parent_id,0), ts, ext_id from entries`)
 	if err != nil {
 		return rep, err
@@ -106,6 +141,10 @@ func (s *Store) RepairGraph() (GraphRepair, error) {
 			return rep, err
 		}
 		nodes[id] = node{parent: parent, ts: time.Unix(ts, 0), ext: ext}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return rep, err
 	}
 	if err := rows.Close(); err != nil {
 		return rep, err
@@ -187,16 +226,5 @@ func (s *Store) RepairGraph() (GraphRepair, error) {
 	sort.Slice(rep.Severed, func(i, j int) bool {
 		return rep.Severed[i].Child < rep.Severed[j].Child
 	})
-	tx, err := s.db.Begin()
-	if err != nil {
-		return rep, err
-	}
-	defer tx.Rollback()
-	for _, e := range rep.Severed {
-		if _, err := tx.Exec(
-			`update entries set parent_id = null where id = ?`, e.Child); err != nil {
-			return rep, fmt.Errorf("severing %s -> %s: %w", e.ChildExt, e.ParentExt, err)
-		}
-	}
-	return rep, tx.Commit()
+	return rep, nil
 }

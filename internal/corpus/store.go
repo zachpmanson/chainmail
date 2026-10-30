@@ -339,7 +339,7 @@ func (s *Store) put(tx *sql.Tx, e Entry, m *Mail, sd *Slack, atts []Attachment, 
 // reindex refreshes both FTS tables for one entry. External-content tables are
 // not updated automatically, so this must follow every write — and a delete must
 // pass the OLD column values, since FTS5 has no copy of the text to look up.
-func (s *Store) reindex(tx *sql.Tx, id int64, created bool, oldSubject, oldBody string) error {
+func (s *Store) reindex(tx corpusWriter, id int64, created bool, oldSubject, oldBody string) error {
 	if !created {
 		if _, err := tx.Exec(
 			`insert into entries_fts(entries_fts, rowid, subject, body_text) values ('delete', ?, ?, ?)`,

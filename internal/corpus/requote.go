@@ -1,6 +1,7 @@
 package corpus
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 
@@ -76,7 +77,16 @@ type QuotedRepair struct {
 // so one its host no longer accounts for is reported and left alone.
 func RepairQuotedBodies(s *Store) (QuotedRepair, error) {
 	var rep QuotedRepair
-	rows, err := s.db.Query(`
+	tx, err := s.db.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return rep, err
+	}
+	defer tx.Rollback()
+	state, err := readReconcileState(tx)
+	if err != nil {
+		return rep, err
+	}
+	rows, err := tx.Query(`
 		select g.seen_in, e.id, e.ext_id, coalesce(e.subject,''),
 		       coalesce(e.body_text,''), coalesce(h.body_text,'')
 		from sightings g
@@ -104,7 +114,9 @@ func RepairQuotedBodies(s *Store) (QuotedRepair, error) {
 	// A quote can occur in several hosts. Resolve their evidence together before
 	// writing: per-sighting comparisons against the loaded body can oscillate
 	// between versions and retract the same old FTS tokens more than once.
-	return repeelPass(s, cands)
+	rows.Close()
+	tx.Rollback()
+	return repeelPassAt(s, cands, &state.Source)
 }
 
 // quotedCandidate is one stored quoted entry and the host it was found in.
@@ -120,7 +132,7 @@ type quotedCandidate struct {
 // repeelPass peels each host once and proposes at most one write per entry.
 // Missing hosts abstain. Divergent texts are not votes: forwards can truncate or
 // annotate a message, so neither length, majority nor host order proves truth.
-func repeelPass(s *Store, cands []quotedCandidate) (QuotedRepair, error) {
+func repeelPassAt(s *Store, cands []quotedCandidate, expected *int64) (QuotedRepair, error) {
 	var rep QuotedRepair
 	byHost := map[int64]map[string]string{}
 	for _, c := range cands {
@@ -167,7 +179,13 @@ func repeelPass(s *Store, cands []quotedCandidate) (QuotedRepair, error) {
 			if text == c.body {
 				continue
 			}
-			changed, err := rewriteQuotedBody(s, c.id, c.subject, c.body, text)
+			var changed bool
+			var err error
+			_, err = s.guardedReconcileWrite(context.Background(), expected, func(w corpusWriter) error {
+				var e error
+				changed, e = rewriteQuotedBodyIn(s, w, c.id, c.subject, c.body, text)
+				return e
+			})
 			if err != nil {
 				return rep, err
 			}
@@ -190,6 +208,14 @@ func rewriteQuotedBody(s *Store, id int64, subject, oldBody, body string) (bool,
 		return false, err
 	}
 	defer tx.Rollback()
+	changed, err := rewriteQuotedBodyIn(s, tx, id, subject, oldBody, body)
+	if err != nil {
+		return false, err
+	}
+	return changed, tx.Commit()
+}
+
+func rewriteQuotedBodyIn(s *Store, tx corpusWriter, id int64, subject, oldBody, body string) (bool, error) {
 	var quoted int
 	var source, actualSubject, actualBody string
 	if err := tx.QueryRow(`select source, quoted, coalesce(subject,''), coalesce(body_text,'') from entries where id=?`,
@@ -207,9 +233,6 @@ func rewriteQuotedBody(s *Store, id int64, subject, oldBody, body string) (bool,
 		return false, fmt.Errorf("rewriting the body of entry %d: %w", id, err)
 	}
 	if err := s.reindex(tx, id, false, actualSubject, actualBody); err != nil {
-		return false, err
-	}
-	if err := tx.Commit(); err != nil {
 		return false, err
 	}
 	return true, nil

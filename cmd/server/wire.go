@@ -625,15 +625,19 @@ type refreshResponse struct {
 // change to the page's record, and says why a refresh that only recorded a
 // search is not a nothing-new one.
 type refreshReport struct {
-	EntriesBefore   int               `json:"entriesBefore"`
-	EntriesAfter    int               `json:"entriesAfter"`
-	TwinsCollapsed  int               `json:"twinsCollapsed,omitempty"`
-	QueriesRecorded []string          `json:"queriesRecorded,omitempty"`
-	ChainsAdded     []chainGrowth     `json:"chainsAdded,omitempty"`
-	ChainsGrown     []chainGrowth     `json:"chainsGrown,omitempty"`
-	ChainsProposed  []candidateReport `json:"chainsProposed,omitempty"`
-	ChainsUnranked  []string          `json:"chainsUnranked,omitempty"`
-	NothingNew      bool              `json:"nothingNew"`
+	MaintenancePending bool              `json:"maintenancePending,omitempty"`
+	MaintenanceSkipped bool              `json:"maintenanceSkipped,omitempty"`
+	TwinsBodiesScanned int               `json:"twinsBodiesScanned,omitempty"`
+	QuoteHostsScanned  int               `json:"quoteHostsScanned,omitempty"`
+	EntriesBefore      int               `json:"entriesBefore"`
+	EntriesAfter       int               `json:"entriesAfter"`
+	TwinsCollapsed     int               `json:"twinsCollapsed,omitempty"`
+	QueriesRecorded    []string          `json:"queriesRecorded,omitempty"`
+	ChainsAdded        []chainGrowth     `json:"chainsAdded,omitempty"`
+	ChainsGrown        []chainGrowth     `json:"chainsGrown,omitempty"`
+	ChainsProposed     []candidateReport `json:"chainsProposed,omitempty"`
+	ChainsUnranked     []string          `json:"chainsUnranked,omitempty"`
+	NothingNew         bool              `json:"nothingNew"`
 }
 
 // growthReport is one chain whose membership changed. before is absent when
@@ -694,6 +698,7 @@ func toPeopleResponse(ps []corpus.PersonSummary) peopleResponse {
 
 func toRefreshReport(r refresh.Report) refreshReport {
 	out := refreshReport{
+		MaintenancePending: r.MaintenancePending, MaintenanceSkipped: r.MaintenanceSkipped, TwinsBodiesScanned: r.TwinsBodiesScanned, QuoteHostsScanned: r.QuoteHostsScanned,
 		EntriesBefore:   r.EntriesBefore,
 		EntriesAfter:    r.EntriesAfter,
 		TwinsCollapsed:  r.TwinsCollapsed,

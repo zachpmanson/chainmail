@@ -1257,6 +1257,14 @@ export interface components {
         };
         /** @description What moved between the previous run and this one. A chain is in exactly one list: added (new to the page), grown (was there and gained entries), proposed (found but not accepted) or unranked (kept, but its query no longer finds it). queriesRecorded is not a chain but a change to the page's record. */
         RefreshReport: {
+            /** @description Full twins and repair verification remains pending; independent of page/content nothingNew. */
+            maintenancePending?: boolean;
+            /** @description A durable full-maintenance checkpoint allowed the legacy prepass to skip scanning. */
+            maintenanceSkipped?: boolean;
+            /** @description Mail bodies loaded by the twins prepass; absent when zero. */
+            twinsBodiesScanned?: number;
+            /** @description Hosts peeled by quote repair; absent when zero. */
+            quoteHostsScanned?: number;
             /** @description Messages on the page when the refresh started. */
             entriesBefore: number;
             /** @description Messages on the page after the refresh. */

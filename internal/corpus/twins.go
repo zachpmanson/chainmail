@@ -1,7 +1,9 @@
 package corpus
 
 import (
+	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"math"
 	"regexp"
@@ -121,9 +123,11 @@ type TwinDecline struct {
 
 // TwinPlan is what CollapseTwins decided, and whether it carried it out.
 type TwinPlan struct {
-	Collapse []TwinCollapse
-	Declined []TwinDecline
-	Applied  bool
+	PeopleScanned, BodiesScanned, Comparisons, Retries int
+	WriterWait                                         time.Duration
+	Collapse                                           []TwinCollapse
+	Declined                                           []TwinDecline
+	Applied                                            bool
 	// Removed is how many entries the plan deletes: what a before-and-after entry
 	// count should differ by.
 	Removed int
@@ -194,17 +198,94 @@ type twinCopy struct {
 // is also what makes a triplicate converge — three copies of one message are one
 // group with two entries dropped, whatever order the pairs are considered in.
 func CollapseTwins(s *Store, apply bool) (TwinPlan, error) {
+	return CollapseTwinsContext(context.Background(), s, apply)
+}
+
+// Planning holds only a WAL read snapshot. Each short apply validates that no
+// outside writer changed any input; committed prefixes are never replayed.
+func CollapseTwinsContext(ctx context.Context, s *Store, apply bool) (TwinPlan, error) {
+	var total TwinPlan
+	for attempt := 0; attempt < 3; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return total, err
+		}
+		tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+		if err != nil {
+			return total, err
+		}
+		state, err := readReconcileState(tx)
+		var plan TwinPlan
+		if err == nil {
+			plan, err = planTwins(tx)
+		}
+		tx.Rollback()
+		total.PeopleScanned += plan.PeopleScanned
+		total.BodiesScanned += plan.BodiesScanned
+		total.Comparisons += plan.Comparisons
+		if err != nil {
+			return total, err
+		}
+		if err := ctx.Err(); err != nil {
+			return total, err
+		}
+		if !apply {
+			return plan, nil
+		}
+		total.Applied = true
+		total.Declined, total.Annotated = plan.Declined, plan.Annotated
+		expected := state.Source
+		for _, c := range plan.Collapse {
+			var wait time.Duration
+			wait, err = s.guardedReconcileWrite(ctx, &expected, func(w corpusWriter) error { return collapseGroup(w, s, c) })
+			total.WriterWait += wait
+			if err != nil {
+				break
+			}
+			total.Collapse = append(total.Collapse, c)
+			total.Removed += len(c.Drop)
+			total.Measured += len(c.Offsets)
+			if c.Mailbox {
+				total.WithMailbox++
+			} else {
+				total.QuotedOnly++
+			}
+		}
+		if err == nil {
+			for _, d := range plan.Derived {
+				var wait time.Duration
+				wait, err = s.guardedReconcileWrite(ctx, &expected, func(w corpusWriter) error { return persistDerived(w, d.Copy, d.Base) })
+				total.WriterWait += wait
+				if err != nil {
+					break
+				}
+				total.Derived = append(total.Derived, d)
+			}
+		}
+		if !errors.Is(err, ErrReconcileConflict) {
+			if err == nil {
+				err = ctx.Err()
+			}
+			return total, err
+		}
+		total.Retries++
+	}
+	return total, ErrReconcileConflict
+}
+
+func planTwins(q corpusQuery) (TwinPlan, error) {
 	var plan TwinPlan
-	people, err := peopleWithQuotedEntries(s)
+	people, err := peopleWithQuotedEntries(q)
 	if err != nil {
 		return plan, err
 	}
 	for _, person := range people {
-		copies, err := twinCopies(s, person)
+		copies, err := twinCopies(q, person)
 		if err != nil {
 			return plan, err
 		}
-		groups, declined := groupTwins(copies)
+		plan.PeopleScanned++
+		plan.BodiesScanned += len(copies)
+		groups, declined := groupTwinsCount(copies, &plan.Comparisons)
 		plan.Declined = append(plan.Declined, declined...)
 		for _, g := range groups {
 			c, kept, why, ok := resolveTwins(g)
@@ -238,7 +319,7 @@ func CollapseTwins(s *Store, apply bool) (TwinPlan, error) {
 				continue
 			}
 			for _, drop := range c.Drop {
-				off, ok, err := measureOffset(s, c.Keep, drop)
+				off, ok, err := measureOffset(q, c.Keep, drop)
 				if err != nil {
 					return plan, err
 				}
@@ -265,20 +346,6 @@ func CollapseTwins(s *Store, apply bool) (TwinPlan, error) {
 	sort.Slice(plan.Derived, func(i, j int) bool {
 		return plan.Derived[i].Copy < plan.Derived[j].Copy
 	})
-	if !apply {
-		return plan, nil
-	}
-	plan.Applied = true
-	for _, c := range plan.Collapse {
-		if err := collapseGroup(s, c); err != nil {
-			return plan, fmt.Errorf("collapsing into %s: %w", c.KeepExt, err)
-		}
-	}
-	for _, d := range plan.Derived {
-		if err := persistDerived(s, d.Copy, d.Base); err != nil {
-			return plan, err
-		}
-	}
 	return plan, nil
 }
 
@@ -288,30 +355,30 @@ func CollapseTwins(s *Store, apply bool) (TwinPlan, error) {
 // message line (the twin gates), annotates refused the collapse because the
 // quoter answered inside, and the survivor is the base it modified. Writing it
 // here lets the renderer draw the edit inline instead of a floating duplicate.
-func persistDerived(s *Store, copy, base int64) error {
+func persistDerived(w corpusWriter, copy, base int64) error {
 	// The modified copy can sit inside a reply whose own edge points back at the
 	// base (the reply-back pattern that also rings absorb's adopt), so the
 	// parent edge is checked before it is written: refused, the entry is still
 	// marked derived — the renderer still reads it as an edit — but keeps the
 	// parent it had, which cannot be a ring.
-	bad, err := closesCycle(s.db, copy, base)
+	bad, err := closesCycle(w, copy, base)
 	if err != nil {
 		return fmt.Errorf("checking %d against %d: %w", copy, base, err)
 	}
 	if bad {
-		if _, err := s.db.Exec(`update entries set derived = 1 where id = ?`, copy); err != nil {
+		if _, err := w.Exec(`update entries set derived = 1 where id = ?`, copy); err != nil {
 			return fmt.Errorf("marking %d a modified copy of %d: %w", copy, base, err)
 		}
 		return nil
 	}
-	if _, err := s.db.Exec(`update entries set derived = 1, parent_id = ? where id = ?`, base, copy); err != nil {
+	if _, err := w.Exec(`update entries set derived = 1, parent_id = ? where id = ?`, base, copy); err != nil {
 		return fmt.Errorf("marking %d a modified copy of %d: %w", copy, base, err)
 	}
 	return nil
 }
 
-func peopleWithQuotedEntries(s *Store) ([]int64, error) {
-	rows, err := s.db.Query(`
+func peopleWithQuotedEntries(q corpusQuery) ([]int64, error) {
+	rows, err := q.Query(`
 		select distinct person_id from entries
 		where quoted = 1 and person_id is not null and source = ?
 		order by person_id`, SourceMail)
@@ -337,8 +404,8 @@ func peopleWithQuotedEntries(s *Store) ([]int64, error) {
 // the same attribution. Two people are two messages however alike the words are.
 // Grouping by person is also what keeps this a windowed sweep rather than a
 // 31,000-entry cross join.
-func twinCopies(s *Store, person int64) ([]twinCopy, error) {
-	rows, err := s.db.Query(`
+func twinCopies(q corpusQuery, person int64) ([]twinCopy, error) {
+	rows, err := q.Query(`
 		select e.id, e.ext_id, e.quoted, e.ts, coalesce(e.subject,''),
 		       coalesce(e.container,''),
 		       coalesce(e.body_text,''), coalesce(e.body_html,''),
@@ -459,6 +526,10 @@ var markupResidue = []*regexp.Regexp{
 // against it: "shares the words but not the opening" from a candidate that
 // cleared the clock says more than "nothing was near it".
 func groupTwins(copies []twinCopy) ([][]twinCopy, []TwinDecline) {
+	return groupTwinsCount(copies, nil)
+}
+
+func groupTwinsCount(copies []twinCopy, comparisons *int) ([][]twinCopy, []TwinDecline) {
 	parent := make([]int, len(copies))
 	for i := range parent {
 		parent[i] = i
@@ -501,6 +572,9 @@ func groupTwins(copies []twinCopy) ([][]twinCopy, []TwinDecline) {
 			// the floor in twinnable, where the refusal names the offset.
 			if short && !shortVouched(copies[i], copies[j]) && !vouchedQuoteLinks(copies[i], copies[j]) {
 				continue
+			}
+			if comparisons != nil {
+				*comparisons++
 			}
 			why, ok := twinnable(copies[i], copies[j])
 			if !ok {
@@ -829,12 +903,7 @@ func annotates(keep, drop twinCopy) (string, bool) {
 // was seen, a participant is somebody it was routed to, and a reply edge is one
 // message answering another. Losing an edge would sever a chain at exactly the
 // point the duplicate made hard to read.
-func collapseGroup(s *Store, c TwinCollapse) error {
-	tx, err := s.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
+func collapseGroup(tx corpusWriter, s *Store, c TwinCollapse) error {
 	for _, drop := range c.Drop {
 		if err := absorb(tx, s, c.Keep, drop); err != nil {
 			return err
@@ -845,11 +914,11 @@ func collapseGroup(s *Store, c TwinCollapse) error {
 			return err
 		}
 	}
-	return tx.Commit()
+	return nil
 }
 
 // absorb moves one dropped copy's evidence onto the survivor and deletes it.
-func absorb(tx *sql.Tx, s *Store, keep, drop int64) error {
+func absorb(tx corpusWriter, s *Store, keep, drop int64) error {
 	// The survivor may already hold a sighting or a participation the dropped copy
 	// also holds, and both are keyed on the entry — so repoint what does not
 	// collide and clear what does, as a person merge does.
@@ -1016,10 +1085,10 @@ func absorb(tx *sql.Tx, s *Store, keep, drop int64) error {
 // hosts mean several clients rendered this message and the store keeps one clock
 // without saying whose, so the offset is real and its owner is not known — and a
 // measurement filed against the wrong person is worse than one not filed at all.
-func measureOffset(s *Store, keep, drop int64) (RenderOffset, bool, error) {
+func measureOffset(q corpusQuery, keep, drop int64) (RenderOffset, bool, error) {
 	var keepQuoted int
 	var keepTS, dropTS int64
-	if err := s.db.QueryRow(`select quoted, ts from entries where id=?`, keep).
+	if err := q.QueryRow(`select quoted, ts from entries where id=?`, keep).
 		Scan(&keepQuoted, &keepTS); err != nil {
 		return RenderOffset{}, false, err
 	}
@@ -1027,10 +1096,10 @@ func measureOffset(s *Store, keep, drop int64) (RenderOffset, bool, error) {
 		// No mailbox copy in this group, so there is no true instant to subtract.
 		return RenderOffset{}, false, nil
 	}
-	if err := s.db.QueryRow(`select ts from entries where id=?`, drop).Scan(&dropTS); err != nil {
+	if err := q.QueryRow(`select ts from entries where id=?`, drop).Scan(&dropTS); err != nil {
 		return RenderOffset{}, false, err
 	}
-	rows, err := s.db.Query(`
+	rows, err := q.Query(`
 		select h.id, coalesce(h.person_id,0), h.ts from sightings g
 		join entries h on h.id = g.seen_in
 		where g.entry_id = ? and g.kind = 'quoted'`, drop)
@@ -1058,7 +1127,7 @@ func measureOffset(s *Store, keep, drop int64) (RenderOffset, bool, error) {
 	return hosts[0], true, nil
 }
 
-func recordOffset(tx *sql.Tx, o RenderOffset) error {
+func recordOffset(tx corpusWriter, o RenderOffset) error {
 	if _, err := tx.Exec(`
 		insert into render_offsets (person_id, entry_id, at, off, measured_from, measured_at)
 		values (?,?,?,?,?,?)

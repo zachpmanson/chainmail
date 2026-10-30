@@ -179,7 +179,14 @@ func runRepair(path string) error {
 	// and rewrites nothing — and for the header-fold case it is the difference
 	// between a duplicate the twin sweep can collapse and one it declines every
 	// time (zpm/chainmail#146).
+	phaseAt := time.Now()
+	phaseTiming := func(name string) {
+		fmt.Printf("repair timing: phase=%s elapsed=%s\n", name, time.Since(phaseAt).Round(time.Millisecond))
+		phaseAt = time.Now()
+	}
 	qr, err := corpus.RepairQuotedBodies(s)
+	phaseTiming("quotes")
+	fmt.Printf("repair work: hosts=%d rewritten=%d\n", qr.Hosts, qr.Fixed)
 	if err != nil {
 		return err
 	}
@@ -199,6 +206,7 @@ func runRepair(path string) error {
 	}
 
 	r, err := corpus.RepairMailtoIdentities(s)
+	phaseTiming("mailto")
 	if err != nil {
 		return err
 	}
@@ -223,6 +231,7 @@ func runRepair(path string) error {
 	// half of them keeps a corpus that is still split. `dedupe` is the one that
 	// weighs evidence, which is why that one waits for -apply.
 	pr, err := corpus.RepairPlusAddresses(s)
+	phaseTiming("plus")
 	if err != nil {
 		return err
 	}
@@ -239,6 +248,7 @@ func runRepair(path string) error {
 	// the people it reunifies are the targets this one matches names against,
 	// and the tagged pass before both, so those targets are one person each.
 	tr, err := corpus.RepairTruncatedNames(s)
+	phaseTiming("names")
 	if err != nil {
 		return err
 	}
@@ -264,6 +274,7 @@ func runRepair(path string) error {
 	// guesses, and an operator who runs half of the phase keeps a graph that is
 	// still wrong. A healthy graph reports zero; that is the pass being cheap.
 	gr, err := s.RepairGraph()
+	phaseTiming("graph")
 	if err != nil {
 		return fmt.Errorf("repairing the reply graph: %w", err)
 	}
@@ -299,6 +310,7 @@ func runRepair(path string) error {
 		fmt.Printf("repair-graph: linked %d quoted %s onto the forwards that carry them\n",
 			int(n), plural(int(n), "trail", "trails"))
 	}
+	phaseTiming("headers-and-dangling")
 	return nil
 }
 
@@ -357,7 +369,10 @@ func runTwins(path string, apply, declined bool) error {
 		return err
 	}
 	defer s.Close()
-	plan, err := corpus.CollapseTwins(s, apply)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	plan, err := corpus.CollapseTwinsContext(ctx, s, apply)
+	fmt.Printf("twins work: people=%d bodies=%d comparisons=%d retries=%d writer_wait=%s\n", plan.PeopleScanned, plan.BodiesScanned, plan.Comparisons, plan.Retries, plan.WriterWait.Round(time.Millisecond))
 	if err != nil {
 		return err
 	}

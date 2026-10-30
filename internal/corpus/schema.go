@@ -647,4 +647,6 @@ create trigger fold_sightings_insert after insert on sightings
      insert into entries_fts(entries_fts, rank) values('rebuild', 0);
      insert into entries_ident(entries_ident) values('delete-all');
      insert into entries_ident(entries_ident, rank) values('rebuild', 0);`,
+	// 27: durable relevant-change gate; no corpus scan during Open.
+	reconcileMigration(),
 }
