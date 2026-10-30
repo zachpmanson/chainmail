@@ -164,9 +164,12 @@ it("rearms after an unchanged background refetch consumes the intersection", asy
   act(() => {
     root.render(createElement(QueryClientProvider, { client }, createElement(PagedList)));
   });
-  await settle();
+  // Query notifications can settle after the first timer turn under concurrent test load.
+  await vi.waitFor(async () => {
+    await settle();
+    expect(observations.at(-1)).toBeDefined();
+  });
   const first = observations.at(-1)!;
-  expect(first).toBeDefined();
   const data = client.getQueryCache().getAll()[0]!.state.data;
   await act(async () => {
     const refetch = client.refetchQueries();

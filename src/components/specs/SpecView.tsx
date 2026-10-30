@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Timeline as Spec } from "../../lib/timeline/spec";
 import Button from "../ui/Button";
+import DialogShell from "../ui/DialogShell";
 
 /** Abbreviates base64 avatars for display only; Copy still yields the full spec. */
 function abbreviate(_key: string, value: unknown) {
@@ -13,6 +14,7 @@ function abbreviate(_key: string, value: unknown) {
 
 export default function SpecView({ spec, onClose }: { spec: Spec; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
+  const content = useRef<HTMLPreElement>(null);
   const shown = JSON.stringify(spec, abbreviate, 2);
   const full = JSON.stringify(spec, null, 2);
 
@@ -30,10 +32,12 @@ export default function SpecView({ spec, onClose }: { spec: Spec; onClose: () =>
   const notes = spec.messages.filter((m) => m.kind === "note").length;
 
   return (
-    <div
-      className="fixed inset-0 z-60 flex flex-col bg-bg"
-      role="dialog"
-      aria-label="Timeline spec as JSON"
+    <DialogShell
+      label="Timeline spec as JSON"
+      fullScreen
+      onClose={onClose}
+      dismissOnBackdrop={false}
+      initialFocus={content}
     >
       <div className="flex items-center gap-2 border-b border-line bg-card px-3 py-2">
         <b className="text-xs font-bold tracking-[.09em] text-muted uppercase">spec</b>
@@ -49,11 +53,12 @@ export default function SpecView({ spec, onClose }: { spec: Spec; onClose: () =>
         </Button>
       </div>
       <pre
+        ref={content}
         className="m-0 flex-1 overflow-auto px-4 pt-4 pb-8 font-mono text-xs/normal whitespace-pre tab-2 text-fg"
         tabIndex={0}
       >
         {shown}
       </pre>
-    </div>
+    </DialogShell>
   );
 }
