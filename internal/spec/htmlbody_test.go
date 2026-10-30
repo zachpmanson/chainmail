@@ -81,6 +81,25 @@ func TestGmailQuoteIsPeeled(t *testing.T) {
 	}
 }
 
+func TestStandaloneMondayAttributionIsPeeled(t *testing.T) {
+	part := `<p>Own reply.</p><p>On Mon 12 Oct 2026 22:27 +0000, Ada Example &lt;ada@example.com&gt; wrote:</p>` +
+		`<blockquote class="gmail_quote">Old message.</blockquote>`
+	if got := renderMarkup(part, mailBody); got != "<p>Own reply.</p>" {
+		t.Fatalf("body = %q, want only own reply", got)
+	}
+}
+
+func TestOpenerSuffixProseAndPullQuoteArePreserved(t *testing.T) {
+	part := `<p>Notes on carton 12 Oct 2026 22:27 +0000, Ada Example &lt;ada@example.com&gt; wrote:</p>` +
+		`<blockquote>A synthetic pull-quote.</blockquote><p>Own conclusion.</p>`
+	got := renderMarkup(part, mailBody)
+	for _, want := range []string{"Notes on carton", "A synthetic pull-quote.", "Own conclusion."} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("body = %q, lost %q", got, want)
+		}
+	}
+}
+
 func TestAppleCiteQuoteIsPeeled(t *testing.T) {
 	// Apple Mail names nothing but type="cite", and puts the attribution in a
 	// bare div above it.
