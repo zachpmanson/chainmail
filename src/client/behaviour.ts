@@ -504,6 +504,8 @@ function attachPopover(doc: Document, on: On): () => void {
       // A framed PDF swallows Escape and Tab, so Close and the backdrop are its way out.
       if (k.key === "Escape") {
         k.preventDefault();
+        // The lightbox owns this Escape, not a containing React dialog.
+        k.stopPropagation();
         close();
         return;
       }
