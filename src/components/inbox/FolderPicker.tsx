@@ -1,7 +1,14 @@
-import Button from "../ui/Button";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Menu } from "@base-ui/react/menu";
 import { CheckIcon, ChevronDownIcon } from "@heroicons/react/24/outline";
 import { $api } from "../../lib/api/api";
+import { cn } from "../../lib/ui/cn";
+import { buttonClasses } from "../ui/styles";
+
+const menuItemClasses = buttonClasses(
+  "menu",
+  "normal",
+  "w-full justify-start gap-2 rounded-md px-2 py-1 text-left text-xs font-normal aria-current:font-semibold data-highlighted:bg-mine",
+);
 
 function FolderRows({
   accountId,
@@ -31,31 +38,26 @@ function FolderRows({
           The folder list could not be read.
         </p>
       ) : null}
-      <Button
-        type="button"
-        role="menuitem"
-        variant="menu"
-        className={`w-full justify-start gap-2 rounded-md px-2 py-1 text-left text-xs font-normal aria-current:font-semibold ${accountId ? "pl-4" : ""}`}
+      <Menu.Item
+        className={cn(menuItemClasses, accountId && "pl-4")}
         aria-current={selectedAccount && !current ? "true" : undefined}
         onClick={() => pick("")}
       >
         All mail
-      </Button>
+      </Menu.Item>
       {labels.map((label) => {
         const selected = selectedAccount && label.name === current;
         return (
-          <Button
+          <Menu.Item
             key={label.name}
-            type="button"
-            role="menuitem"
+            label={label.name}
             aria-current={selected ? "true" : undefined}
-            variant="menu"
-            className={`w-full justify-start gap-2 rounded-md px-2 py-1 text-left text-xs font-normal aria-current:font-semibold ${accountId ? "pl-4" : ""}`}
+            className={cn(menuItemClasses, accountId && "pl-4")}
             onClick={() => pick(label.name)}
           >
             <span className="min-w-0 flex-1 truncate">{label.name}</span>
             <span className="text-xs text-muted tabular-nums">{label.messages}</span>
-          </Button>
+          </Menu.Item>
         );
       })}
       {!folders.isPending && !folders.isError && labels.length === 0 ? (
@@ -90,146 +92,112 @@ export default function FolderPicker({
   onDefault?: (on: boolean) => void;
 }) {
   const auth = $api.useQuery("get", "/auth/status", {});
-  const [open, setOpen] = useState(false);
-  const box = useRef<HTMLDivElement | null>(null);
-  const menu = useRef<HTMLDivElement | null>(null);
-  const [menuTop, setMenuTop] = useState(0);
   const accounts = (auth.data?.accounts ?? []).filter((account) => account.signedIn);
   const currentAccount = accounts.find((account) => account.id === currentAccountId);
   const accountName = currentAccount?.email || currentAccount?.displayName || currentAccountId;
   const selectingDefault = mode === "default";
 
-  // The same picker can sit at different heights in the inbox and settings.
-  useLayoutEffect(() => {
-    if (!open) return;
-    const measure = () => {
-      if (menu.current) setMenuTop(menu.current.getBoundingClientRect().top);
-    };
-    measure();
-    window.addEventListener("resize", measure);
-    window.addEventListener("scroll", measure, true);
-    return () => {
-      window.removeEventListener("resize", measure);
-      window.removeEventListener("scroll", measure, true);
-    };
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const away = (ev: MouseEvent) => {
-      if (box.current && !box.current.contains(ev.target as Node)) setOpen(false);
-    };
-    const esc = (ev: KeyboardEvent) => {
-      if (ev.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", away);
-    document.addEventListener("keydown", esc);
-    return () => {
-      document.removeEventListener("mousedown", away);
-      document.removeEventListener("keydown", esc);
-    };
-  }, [open]);
-
-  const pick = (name: string, accountId?: string) => {
-    setOpen(false);
-    onPick(name, accountId);
-  };
-
   return (
-    <div className="relative z-30 m-0" data-folders ref={box}>
-      <Button
-        type="button"
-        variant="secondary"
-        className="w-full justify-start gap-1.5 px-2 py-1.5 text-left text-xs font-semibold hover:border-muted"
-        aria-label={ariaLabel}
-        aria-haspopup="menu"
-        disabled={disabled}
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-      >
-        <span className="min-w-0 flex-1 truncate">
-          <span className="font-bold">{current || "All mail"}</span>
-          {currentAccountId ? (
-            <>
-              {" "}
-              <span className="font-normal text-muted">({accountName})</span>
-            </>
-          ) : null}
-        </span>
-        <ChevronDownIcon className="size-3 shrink-0 text-muted" aria-hidden="true" />
-      </Button>
-
-      {open ? (
-        <div
-          ref={menu}
-          className="absolute inset-x-0 top-[calc(100%+.25rem)] z-31 box-border overflow-y-auto rounded-lg border border-line bg-card p-1 shadow-[0_8px_24px_rgba(0,0,0,.22)]"
-          style={{ maxHeight: `max(0px, calc(100dvh - ${menuTop}px - 2rem))` }}
-          role="menu"
-          aria-label="Folders"
+    <Menu.Root modal={false} disabled={disabled}>
+      <div className="relative z-30 m-0" data-folders>
+        <Menu.Trigger
+          className={buttonClasses(
+            "secondary",
+            "normal",
+            "w-full justify-start gap-1.5 px-2 py-1.5 text-left text-xs font-semibold hover:border-muted",
+          )}
+          aria-label={ariaLabel}
+          disabled={disabled}
         >
-          {!selectingDefault ? (
-            <Button
-              type="button"
-              role="menuitemcheckbox"
-              aria-checked={isDefault}
-              variant="menu"
-              className="w-full justify-start gap-2 rounded-md px-2 py-1 text-left text-xs font-normal"
-              onClick={() => onDefault?.(!isDefault)}
-            >
-              <span className="min-w-0 flex-1 truncate">
-                Open {current || "All mail"}
-                {currentAccountId && accountName ? ` (${accountName})` : ""} by default
-              </span>
-              <span
-                className="flex-[0_0_.8rem] text-right font-bold text-accent"
-                aria-hidden="true"
-              >
-                {isDefault ? <CheckIcon /> : null}
-              </span>
-            </Button>
-          ) : null}
-          <Button
-            type="button"
-            role="menuitem"
-            variant="menu"
-            className="w-full justify-start gap-2 rounded-md px-2 py-1 text-left text-xs font-normal aria-current:font-semibold"
-            aria-current={!currentAccountId && !current ? "true" : undefined}
-            onClick={() => pick("")}
+          <span className="min-w-0 flex-1 truncate">
+            <span className="font-bold">{current || "All mail"}</span>
+            {currentAccountId ? (
+              <>
+                {" "}
+                <span className="font-normal text-muted">({accountName})</span>
+              </>
+            ) : null}
+          </span>
+          <ChevronDownIcon className="size-3 shrink-0 text-muted" aria-hidden="true" />
+        </Menu.Trigger>
+      </div>
+
+      <Menu.Portal>
+        {/* Stay below either trigger, without locking page scroll or flipping above it. */}
+        <Menu.Positioner
+          side="bottom"
+          align="start"
+          sideOffset={4}
+          positionMethod="fixed"
+          collisionPadding={0}
+          collisionAvoidance={{ side: "none", align: "shift", fallbackAxisSide: "none" }}
+          className="z-31"
+        >
+          <Menu.Popup
+            data-folders
+            className="box-border w-(--anchor-width) overflow-y-auto rounded-lg border border-line bg-card p-1 shadow-[0_8px_24px_rgba(0,0,0,.22)]"
+            style={{ maxHeight: "max(0px, calc(var(--available-height) - 2rem))" }}
+            aria-label="Folders"
           >
-            All accounts · All mail
-          </Button>
-          {auth.isPending ? (
-            <p className="mx-2 my-1.5 text-xs/snug text-muted">Reading connected accounts…</p>
-          ) : null}
-          {auth.isError ? (
-            <p className="mx-2 my-1.5 text-xs/snug text-muted" role="alert">
-              Connected accounts could not be read.
-            </p>
-          ) : null}
-          {accounts.length === 0 && !auth.isPending && !auth.isError ? (
-            <FolderRows current={current} onPick={pick} />
-          ) : null}
-          {accounts.map((account, index) => {
-            const name = account.email || account.displayName;
-            return (
-              <div
-                className={index ? "mt-1 border-t border-line pt-1" : ""}
-                role="group"
-                aria-label={name}
-                key={account.id}
+            {!selectingDefault ? (
+              <Menu.CheckboxItem
+                checked={isDefault}
+                closeOnClick={false}
+                className={menuItemClasses}
+                onCheckedChange={(checked) => onDefault?.(checked)}
               >
-                <div className="truncate px-2 pt-1 pb-0.5 text-xs font-bold text-muted">{name}</div>
-                <FolderRows
-                  accountId={account.id}
-                  currentAccountId={currentAccountId}
-                  current={current}
-                  onPick={pick}
-                />
-              </div>
-            );
-          })}
-        </div>
-      ) : null}
-    </div>
+                <span className="min-w-0 flex-1 truncate">
+                  Open {current || "All mail"}
+                  {currentAccountId && accountName ? ` (${accountName})` : ""} by default
+                </span>
+                <span
+                  className="flex-[0_0_.8rem] text-right font-bold text-accent"
+                  aria-hidden="true"
+                >
+                  {isDefault ? <CheckIcon /> : null}
+                </span>
+              </Menu.CheckboxItem>
+            ) : null}
+            <Menu.Item
+              className={menuItemClasses}
+              aria-current={!currentAccountId && !current ? "true" : undefined}
+              onClick={() => onPick("")}
+            >
+              All accounts · All mail
+            </Menu.Item>
+            {auth.isPending ? (
+              <p className="mx-2 my-1.5 text-xs/snug text-muted">Reading connected accounts…</p>
+            ) : null}
+            {auth.isError ? (
+              <p className="mx-2 my-1.5 text-xs/snug text-muted" role="alert">
+                Connected accounts could not be read.
+              </p>
+            ) : null}
+            {accounts.length === 0 && !auth.isPending && !auth.isError ? (
+              <FolderRows current={current} onPick={onPick} />
+            ) : null}
+            {accounts.map((account, index) => {
+              const name = account.email || account.displayName;
+              return (
+                <Menu.Group
+                  className={index ? "mt-1 border-t border-line pt-1" : ""}
+                  key={account.id}
+                >
+                  <Menu.GroupLabel className="truncate px-2 pt-1 pb-0.5 text-xs font-bold text-muted">
+                    {name}
+                  </Menu.GroupLabel>
+                  <FolderRows
+                    accountId={account.id}
+                    currentAccountId={currentAccountId}
+                    current={current}
+                    onPick={onPick}
+                  />
+                </Menu.Group>
+              );
+            })}
+          </Menu.Popup>
+        </Menu.Positioner>
+      </Menu.Portal>
+    </Menu.Root>
   );
 }
