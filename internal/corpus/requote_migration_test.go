@@ -43,7 +43,31 @@ func TestQuoteRepairMigrationRebuildsBothIndexesWithoutChangingSource(t *testing
 	if _, err := s.DB().Exec(`delete from schema_version where v>=26`); err != nil {
 		t.Fatal(err)
 	}
-	// Remove the later migration too, modelling a real contiguous v25 schema.
+	// Remove later migrations too, modelling a real contiguous v25 schema.
+	rows, err := s.DB().Query(`select name from sqlite_master where type='trigger' and name like 'twins_%'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var triggers []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			t.Fatal(err)
+		}
+		triggers = append(triggers, name)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	rows.Close()
+	for _, name := range triggers {
+		if _, err := s.DB().Exec(`drop trigger ` + name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.DB().Exec(`drop table twins_work_state; drop table twins_dirty_people; drop index sightings_seen_in`); err != nil {
+		t.Fatal(err)
+	}
 	for _, in := range []string{"entries", "mail_detail", "sightings", "attachments", "people", "identities", "participants", "domain_aliases"} {
 		for _, op := range []string{"insert", "update", "delete"} {
 			if _, err := s.DB().Exec("drop trigger reconcile_" + in + "_" + op); err != nil {

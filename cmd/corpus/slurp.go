@@ -140,13 +140,14 @@ var errSlackdumpMissing = errors.New("slackdump is not on PATH")
 // and no second implementation of any phase — and a test can drive the sequence
 // without a mailbox, a Slack archive or an embedding daemon.
 type slurpDeps struct {
-	reconciliationState      func() (corpus.ReconcileState, error)
+	maintenanceState         func() (corpus.MaintenanceState, error)
 	checkpointReconciliation func(corpus.ReconcileState) (bool, error)
 	now                      func() time.Time // nil uses the monotonic wall clock
 	refreshSlack             func(dir string) error
 	ingestSlack              func(archive string) error
 	mailAccounts             func() ([]string, error)
 	ingestMail               func(o mailOpts) (mailingest.Result, error)
+	pendingTwins             func() error
 	twins                    func(apply bool) error
 	repair                   func() error
 	dedupe                   func(apply bool) error
@@ -165,14 +166,15 @@ func defaultSlurpDeps(path string, o slurpOpts) slurpDeps {
 	eo := embedOpts{model: o.embedModel, url: o.embedURL, timeout: defaultEmbedTimeout,
 		dim: o.embedDim}
 	return slurpDeps{
-		reconciliationState: func() (corpus.ReconcileState, error) {
+		maintenanceState: func() (corpus.MaintenanceState, error) {
 			s, err := corpus.Open(path)
 			if err != nil {
-				return corpus.ReconcileState{}, err
+				return corpus.MaintenanceState{}, err
 			}
 			defer s.Close()
-			return s.ReconciliationState()
+			return s.MaintenanceState()
 		},
+		pendingTwins: func() error { return runPendingTwins(path) },
 		checkpointReconciliation: func(start corpus.ReconcileState) (bool, error) {
 			s, err := corpus.Open(path)
 			if err != nil {
@@ -344,7 +346,7 @@ func runSlurp(w io.Writer, o slurpOpts, d slurpDeps) error {
 		hasTwins = hasTwins || p == phaseTwins
 		hasRepair = hasRepair || p == phaseRepair
 	}
-	pair = hasTwins && hasRepair && d.reconciliationState != nil && d.checkpointReconciliation != nil
+	pair = hasTwins && hasRepair && d.maintenanceState != nil && d.checkpointReconciliation != nil
 	for i, p := range sel {
 		fmt.Fprintf(w, "\n[%d/%d] %s\n", i+1, len(sel), p)
 		phaseStarted = now()
@@ -396,19 +398,25 @@ func runSlurp(w io.Writer, o slurpOpts, d slurpDeps) error {
 
 		case phaseTwins:
 			if pair {
-				reconcileStart, reconcileErr = d.reconciliationState()
+				var state corpus.MaintenanceState
+				state, reconcileErr = d.maintenanceState()
+				reconcileStart = state.Source
 				if reconcileErr != nil {
 					report(p, outcomeFailed, reconcileErr.Error())
 					continue
 				}
-				current = reconcileStart.Clean()
+				current = state.Clean()
 				fmt.Fprintf(w, "reconcile: source=%d covered=%d rules=%d covered_rules=%d current=%t\n", reconcileStart.Source, reconcileStart.Covered, reconcileStart.Rules, reconcileStart.CoveredRules, current)
 				if current {
 					report(p, outcomeDone, "current, not rescanned (people=0 bodies=0)")
 					continue
 				}
 			}
-			if err := d.twins(true); err != nil {
+			run := func() error { return d.twins(true) }
+			if pair && d.pendingTwins != nil {
+				run = d.pendingTwins
+			}
+			if err := run(); err != nil {
 				report(p, outcomeFailed, err.Error())
 				continue
 			}
@@ -498,7 +506,7 @@ func runSlurp(w io.Writer, o slurpOpts, d slurpDeps) error {
 	if pair {
 		// The skip/checkpoint can precede a relevant write, including in the tail.
 		// Amend an existing outcome without adding phases or changing their timing.
-		state, stateErr := d.reconciliationState()
+		state, stateErr := d.maintenanceState()
 		repairIndex, pendingIndex := -1, -1
 		for i, r := range results {
 			if r.Phase != phaseTwins && r.Phase != phaseRepair {

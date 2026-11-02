@@ -26,10 +26,23 @@ func reconcileState(t *testing.T, s *Store) ReconcileState {
 
 func checkpoint(t *testing.T, s *Store) {
 	t.Helper()
-	ok, err := s.CheckpointReconciliation(context.Background(), reconcileState(t, s))
-	if err != nil || !ok {
-		t.Fatalf("checkpoint: %v %v", ok, err)
+	for i := 0; i < 3; i++ {
+		start := reconcileState(t, s)
+		if _, err := ReconcileTwinsContext(context.Background(), s); err != nil {
+			t.Fatal(err)
+		}
+		if err := fullReconcileRound(s); err != nil {
+			t.Fatal(err)
+		}
+		ok, err := s.CheckpointReconciliation(context.Background(), start)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ok {
+			return
+		}
 	}
+	t.Fatal("complete coordinated coverage did not settle")
 }
 
 func TestReconcileEffectiveMutationMatrix(t *testing.T) {
@@ -39,7 +52,7 @@ func TestReconcileEffectiveMutationMatrix(t *testing.T) {
 	at := time.Unix(1700000000, 0)
 	a := mailbox(t, s, p, "source", askBody, at)
 	h := host(t, s, q, "host", at.Add(time.Hour))
-	quote := recovered(t, s, p, "copy", askQuoted, at.Add(10*time.Hour), h)
+	quote := recovered(t, s, p, "copy", "An unrelated invented quote with no matching mailbox evidence.", at.Add(10*time.Hour), h)
 	if _, err := s.db.Exec("insert into gmail_copies(account_id,gmail_id,entry_id) values('legacy','synthetic-copy',?)", a); err != nil {
 		t.Fatal(err)
 	}
@@ -417,6 +430,9 @@ func TestReconcileFullOnePassAndStableStateParity(t *testing.T) {
 		}
 		before := reconcileState(t, gated)
 		if !before.Clean() {
+			if _, err := ReconcileTwinsContext(context.Background(), gated); err != nil {
+				t.Fatal(err)
+			}
 			if err := fullReconcileRound(gated); err != nil {
 				t.Fatal(err)
 			}
@@ -463,6 +479,9 @@ func BenchmarkReconcileClean(b *testing.B) {
 				}
 			}
 			if err := tx.Commit(); err != nil {
+				b.Fatal(err)
+			}
+			if _, err := ReconcileTwinsContext(context.Background(), s); err != nil {
 				b.Fatal(err)
 			}
 			r, err := s.ReconciliationState()
@@ -655,7 +674,7 @@ func TestReconcileMetadataOnlyPutAndForcedFull(t *testing.T) {
 		t.Fatal("put changed logical entry")
 	}
 	twinFixture(t, s)
-	checkpoint(t, s)
+	start := reconcileState(t, s)
 	before := reconciliationSnapshot(t, s)
 	plan, err := CollapseTwins(s, false)
 	if err != nil || plan.PeopleScanned == 0 || plan.BodiesScanned == 0 || len(plan.Collapse) == 0 {
@@ -664,7 +683,7 @@ func TestReconcileMetadataOnlyPutAndForcedFull(t *testing.T) {
 	if !reflect.DeepEqual(before, reconciliationSnapshot(t, s)) {
 		t.Fatal("dry run changed source")
 	}
-	if !reconcileState(t, s).Clean() {
+	if reconcileState(t, s) != start {
 		t.Fatal("dry run consumed or invalidated checkpoint")
 	}
 }

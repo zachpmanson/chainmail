@@ -123,6 +123,8 @@ type TwinDecline struct {
 
 // TwinPlan is what CollapseTwins decided, and whether it carried it out.
 type TwinPlan struct {
+	Mode, Fallback                                     string
+	CapturedAuthors, ProcessedAuthors, PendingAuthors  int
 	PeopleScanned, BodiesScanned, Comparisons, Retries int
 	WriterWait                                         time.Duration
 	Collapse                                           []TwinCollapse
@@ -204,7 +206,17 @@ func CollapseTwins(s *Store, apply bool) (TwinPlan, error) {
 // Planning holds only a WAL read snapshot. Each short apply validates that no
 // outside writer changed any input; committed prefixes are never replayed.
 func CollapseTwinsContext(ctx context.Context, s *Store, apply bool) (TwinPlan, error) {
-	var total TwinPlan
+	return collapseTwinsContext(ctx, s, apply, s.guardedReconcileWrite)
+}
+
+type twinWrite func(context.Context, *int64, func(corpusWriter) error) (time.Duration, error)
+
+func collapseTwinsContext(ctx context.Context, s *Store, apply bool, write twinWrite) (TwinPlan, error) {
+	return runTwinsContext(ctx, s, apply, false, write)
+}
+
+func runTwinsContext(ctx context.Context, s *Store, apply, pending bool, write twinWrite) (TwinPlan, error) {
+	total := TwinPlan{Mode: "full", Fallback: "forced"}
 	for attempt := 0; attempt < 3; attempt++ {
 		if err := ctx.Err(); err != nil {
 			return total, err
@@ -215,8 +227,28 @@ func CollapseTwinsContext(ctx context.Context, s *Store, apply bool) (TwinPlan, 
 		}
 		state, err := readReconcileState(tx)
 		var plan TwinPlan
+		var work twinWork
+		full := true
 		if err == nil {
-			plan, err = planTwins(tx)
+			if pending {
+				work, err = captureTwinWork(tx)
+				if err == nil {
+					plan, full, err = planPendingTwins(tx, work)
+					total.Mode, total.Fallback = plan.Mode, plan.Fallback
+					total.CapturedAuthors = len(work.tokens)
+					total.ProcessedAuthors = plan.PeopleScanned
+				}
+			} else {
+				// Full is never skipped by work state, but cannot overwrite newer rules.
+				_, err = readTwinsWorkMetadata(tx)
+				if errors.Is(err, sql.ErrNoRows) {
+					err = nil
+				}
+				if err == nil {
+					plan, err = planTwins(tx)
+				}
+				plan.Mode, plan.Fallback = "full", "forced"
+			}
 		}
 		tx.Rollback()
 		total.PeopleScanned += plan.PeopleScanned
@@ -236,7 +268,7 @@ func CollapseTwinsContext(ctx context.Context, s *Store, apply bool) (TwinPlan, 
 		expected := state.Source
 		for _, c := range plan.Collapse {
 			var wait time.Duration
-			wait, err = s.guardedReconcileWrite(ctx, &expected, func(w corpusWriter) error { return collapseGroup(w, s, c) })
+			wait, err = write(ctx, &expected, func(w corpusWriter) error { return collapseGroup(w, s, c) })
 			total.WriterWait += wait
 			if err != nil {
 				break
@@ -253,12 +285,22 @@ func CollapseTwinsContext(ctx context.Context, s *Store, apply bool) (TwinPlan, 
 		if err == nil {
 			for _, d := range plan.Derived {
 				var wait time.Duration
-				wait, err = s.guardedReconcileWrite(ctx, &expected, func(w corpusWriter) error { return persistDerived(w, d.Copy, d.Base) })
+				wait, err = write(ctx, &expected, func(w corpusWriter) error { return persistDerived(w, d.Copy, d.Base) })
 				total.WriterWait += wait
 				if err != nil {
 					break
 				}
 				total.Derived = append(total.Derived, d)
+			}
+		}
+		if err == nil && pending {
+			wait, ackErr := write(ctx, &expected, func(w corpusWriter) error { return work.acknowledge(w, full) })
+			total.WriterWait += wait
+			err = ackErr
+			if err == nil {
+				remaining, readErr := s.TwinsWorkState()
+				total.PendingAuthors = remaining.PendingAuthors
+				err = readErr
 			}
 		}
 		if !errors.Is(err, ErrReconcileConflict) {
@@ -273,12 +315,34 @@ func CollapseTwinsContext(ctx context.Context, s *Store, apply bool) (TwinPlan, 
 }
 
 func planTwins(q corpusQuery) (TwinPlan, error) {
-	var plan TwinPlan
 	people, err := peopleWithQuotedEntries(q)
 	if err != nil {
-		return plan, err
+		return TwinPlan{}, err
 	}
-	for _, person := range people {
+	return planQuotedTwinsPeople(q, people, true)
+}
+
+func planTwinsPeople(q corpusQuery, people []int64) (TwinPlan, error) {
+	return planQuotedTwinsPeople(q, people, false)
+}
+
+func planQuotedTwinsPeople(q corpusQuery, people []int64, quotedKnown bool) (TwinPlan, error) {
+	var plan TwinPlan
+	people = append([]int64(nil), people...)
+	sort.Slice(people, func(i, j int) bool { return people[i] < people[j] })
+	for i, person := range people {
+		if i > 0 && people[i-1] == person {
+			continue
+		}
+		if !quotedKnown {
+			var quoted bool
+			if err := q.QueryRow(`select exists(select 1 from entries where person_id=? and source=? and quoted=1)`, person, SourceMail).Scan(&quoted); err != nil {
+				return plan, err
+			}
+			if !quoted {
+				continue
+			}
+		}
 		copies, err := twinCopies(q, person)
 		if err != nil {
 			return plan, err
@@ -337,6 +401,11 @@ func planTwins(q corpusQuery) (TwinPlan, error) {
 			}
 		}
 	}
+	sortTwinPlan(&plan)
+	return plan, nil
+}
+
+func sortTwinPlan(plan *TwinPlan) {
 	sort.Slice(plan.Collapse, func(i, j int) bool {
 		return plan.Collapse[i].Keep < plan.Collapse[j].Keep
 	})
@@ -346,7 +415,6 @@ func planTwins(q corpusQuery) (TwinPlan, error) {
 	sort.Slice(plan.Derived, func(i, j int) bool {
 		return plan.Derived[i].Copy < plan.Derived[j].Copy
 	})
-	return plan, nil
 }
 
 // persistDerived records that one entry is a MODIFIED copy of another, the

@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/zachpmanson/chainmail/internal/corpus"
 	"github.com/zachpmanson/chainmail/internal/mailingest"
@@ -27,8 +29,8 @@ func TestSlurpDurableCleanGateAndRestart(t *testing.T) {
 	o := slurpOpts{only: []string{"twins", "repair"}}
 	d := defaultSlurpDeps(path, o)
 	twins, repair := 0, 0
-	fullTwins, fullRepair := d.twins, d.repair
-	d.twins = func(apply bool) error { twins++; return fullTwins(apply) }
+	fullTwins, fullRepair := d.pendingTwins, d.repair
+	d.pendingTwins = func() error { twins++; return fullTwins() }
 	d.repair = func() error { repair++; return fullRepair() }
 	d.status = func() error { return nil }
 	var output strings.Builder
@@ -78,8 +80,8 @@ func TestSlurpQuoteParserUpgradeInvalidatesOldCheckpoint(t *testing.T) {
 	o := slurpOpts{only: []string{"twins", "repair"}}
 	d := defaultSlurpDeps(path, o)
 	twins, repair := 0, 0
-	fullTwins, fullRepair := d.twins, d.repair
-	d.twins = func(apply bool) error { twins++; return fullTwins(apply) }
+	fullTwins, fullRepair := d.pendingTwins, d.repair
+	d.pendingTwins = func() error { twins++; return fullTwins() }
 	d.repair = func() error { repair++; return fullRepair() }
 	d.status = func() error { return nil }
 	var output strings.Builder
@@ -109,6 +111,9 @@ func TestSlurpConcurrentMaintenanceInputsStayPending(t *testing.T) {
 			}
 			defer other.Close()
 			if where != "checkpoint-status" {
+				if _, err := corpus.ReconcileTwinsContext(context.Background(), s); err != nil {
+					t.Fatal(err)
+				}
 				state, err := s.ReconciliationState()
 				if err != nil {
 					t.Fatal(err)
@@ -120,8 +125,8 @@ func TestSlurpConcurrentMaintenanceInputsStayPending(t *testing.T) {
 			o := slurpOpts{only: []string{"twins", "repair"}}
 			d := defaultSlurpDeps(path, o)
 			twins, repair, reads := 0, 0, 0
-			fullTwins, fullRepair := d.twins, d.repair
-			d.twins = func(apply bool) error { twins++; return fullTwins(apply) }
+			fullTwins, fullRepair := d.pendingTwins, d.repair
+			d.pendingTwins = func() error { twins++; return fullTwins() }
 			d.repair = func() error { repair++; return fullRepair() }
 			mutated, statusDone := false, false
 			mutate := func() error {
@@ -132,8 +137,8 @@ func TestSlurpConcurrentMaintenanceInputsStayPending(t *testing.T) {
 				_, err := other.DB().Exec(`insert into people(display_name) values('Concurrent synthetic identity')`)
 				return err
 			}
-			d.reconciliationState = func() (corpus.ReconcileState, error) {
-				state, err := s.ReconciliationState()
+			d.maintenanceState = func() (corpus.MaintenanceState, error) {
+				state, err := s.MaintenanceState()
 				reads++
 				if reads == 1 && where == "clean-read" && err == nil {
 					if !state.Clean() {
@@ -192,6 +197,9 @@ func TestSlurpFinalReconciliationStateReadFailure(t *testing.T) {
 			o := slurpOpts{only: []string{"twins", "repair"}}
 			d := defaultSlurpDeps(path, o)
 			if which == "clean" {
+				if _, err := corpus.ReconcileTwinsContext(context.Background(), s); err != nil {
+					t.Fatal(err)
+				}
 				state, err := s.ReconciliationState()
 				if err != nil {
 					t.Fatal(err)
@@ -211,12 +219,12 @@ func TestSlurpFinalReconciliationStateReadFailure(t *testing.T) {
 			statusDone := false
 			d.status = func() error { statusDone = true; return nil }
 			reads := 0
-			d.reconciliationState = func() (corpus.ReconcileState, error) {
+			d.maintenanceState = func() (corpus.MaintenanceState, error) {
 				reads++
 				if statusDone {
-					return corpus.ReconcileState{}, errors.New("synthetic final read failure")
+					return corpus.MaintenanceState{}, errors.New("synthetic final read failure")
 				}
-				return s.ReconciliationState()
+				return s.MaintenanceState()
 			}
 			var output strings.Builder
 			if err := runSlurp(&output, o, d); err == nil {
@@ -241,7 +249,8 @@ func TestSlurpRepairCreatedWorkAndCheckpointRaceStayPending(t *testing.T) {
 			d := defaultSlurpDeps(path, o)
 			d.status = func() error { return nil }
 			twins, repair := 0, 0
-			d.twins = func(bool) error { twins++; return nil }
+			pending := d.pendingTwins
+			d.pendingTwins = func() error { twins++; return pending() }
 			d.repair = func() error {
 				repair++
 				if where == "repair" && repair == 1 {
@@ -303,6 +312,7 @@ func TestSlurpPartialAndFailedMaintenanceCannotCheckpoint(t *testing.T) {
 				}
 				return nil
 			}
+			d.pendingTwins = func() error { return d.twins(true) }
 			d.repair = func() error {
 				if which == "repair-fail" {
 					return errors.New("synthetic repair failure")
@@ -310,14 +320,14 @@ func TestSlurpPartialAndFailedMaintenanceCannotCheckpoint(t *testing.T) {
 				return nil
 			}
 			if which == "state-fail" {
-				d.reconciliationState = func() (corpus.ReconcileState, error) {
-					return corpus.ReconcileState{}, errors.New("synthetic unsupported version")
+				d.maintenanceState = func() (corpus.MaintenanceState, error) {
+					return corpus.MaintenanceState{}, errors.New("synthetic unsupported version")
 				}
 			}
 			if which == "twins-only" || which == "repair-only" {
-				d.reconciliationState = func() (corpus.ReconcileState, error) {
+				d.maintenanceState = func() (corpus.MaintenanceState, error) {
 					t.Fatal("partial selection read pair state")
-					return corpus.ReconcileState{}, nil
+					return corpus.MaintenanceState{}, nil
 				}
 			}
 			ackCalls := 0
@@ -337,6 +347,9 @@ func TestSlurpPartialAndFailedMaintenanceCannotCheckpoint(t *testing.T) {
 
 func TestSlurpLabelOnlyAndFailedIngestUseDurableState(t *testing.T) {
 	path, s := gateStore(t)
+	if _, err := corpus.ReconcileTwinsContext(context.Background(), s); err != nil {
+		t.Fatal(err)
+	}
 	state, err := s.ReconciliationState()
 	if err != nil {
 		t.Fatal(err)
@@ -348,7 +361,7 @@ func TestSlurpLabelOnlyAndFailedIngestUseDurableState(t *testing.T) {
 	r := &recorder{mail: covered}
 	d := r.deps()
 	real := defaultSlurpDeps(path, o)
-	d.reconciliationState = real.reconciliationState
+	d.maintenanceState = real.maintenanceState
 	d.checkpointReconciliation = real.checkpointReconciliation
 	var output strings.Builder
 	if err := runSlurp(&output, o, d); err != nil {
@@ -375,5 +388,280 @@ func TestSlurpLabelOnlyAndFailedIngestUseDurableState(t *testing.T) {
 	calls := strings.Join(r.calls, ",")
 	if !strings.Contains(calls, "twins,repair") {
 		t.Fatal("committed work bypassed after ingest failure", calls)
+	}
+}
+
+func TestSlurpPairCheckpointCannotSkipPendingTwins(t *testing.T) {
+	path, s := gateStore(t)
+	p, err := corpus.Resolve(s, corpus.KindEmail, "pending-pair@example.test", "Synthetic pending author")
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := time.Unix(1700000000, 0)
+	if _, err := s.Put(corpus.Entry{Source: corpus.SourceMail, ExtID: "pending-mail", PersonID: p, TS: at, BodyText: strings.Repeat("Independent invented body for pending duplicate evidence. ", 10)}, &corpus.Mail{MessageID: "pending-mail"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.PutQuoted(corpus.Entry{Source: corpus.SourceMail, ExtID: "pending-quote", PersonID: p, TS: at.Add(time.Hour), BodyText: strings.Repeat("Independent invented body for pending duplicate evidence. ", 10)}); err != nil {
+		t.Fatal(err)
+	}
+	// Strict checkpoint must refuse to certify unconsumed work.
+	start, err := s.ReconciliationState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := s.CheckpointReconciliation(context.Background(), start); err != nil || ok {
+		t.Fatal(ok, err)
+	}
+	o := slurpOpts{only: []string{"twins", "repair"}}
+	d := defaultSlurpDeps(path, o)
+	d.status = func() error { return nil }
+	called := 0
+	pending := d.pendingTwins
+	d.pendingTwins = func() error { called++; return pending() }
+	var output strings.Builder
+	if err := runSlurp(&output, o, d); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := s.DB().QueryRow(`select count(*) from entries`).Scan(&count); err != nil || count != 1 || called != 1 {
+		t.Fatalf("pending twins skipped count=%d called=%d %v", count, called, err)
+	}
+	if !strings.Contains(output.String(), "incomplete") {
+		t.Fatal("self invalidation falsely certified", output.String())
+	}
+	if err := runSlurp(&output, o, d); err != nil {
+		t.Fatal(err)
+	}
+	source, err := s.ReconciliationState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	work, err := s.TwinsWorkState()
+	if err != nil || !work.Clean() || !source.Clean() {
+		t.Fatal("verification did not settle both states", source, work, err)
+	}
+}
+
+func TestSlurpTwinsWorkReadFailureIsNotComplete(t *testing.T) {
+	for _, tail := range []bool{false, true} {
+		t.Run(fmt.Sprint(tail), func(t *testing.T) {
+			path, _ := gateStore(t)
+			o := slurpOpts{only: []string{"twins", "repair"}}
+			d := defaultSlurpDeps(path, o)
+			statusDone := false
+			d.status = func() error { statusDone = true; return nil }
+			state := d.maintenanceState
+			d.maintenanceState = func() (corpus.MaintenanceState, error) {
+				if !tail || statusDone {
+					return corpus.MaintenanceState{}, errors.New("invented twins state read failure")
+				}
+				return state()
+			}
+			var output strings.Builder
+			if err := runSlurp(&output, o, d); err == nil || !strings.Contains(output.String(), "invented twins state read failure") {
+				t.Fatal("work-state failure hidden", err, output.String())
+			}
+		})
+	}
+}
+
+func TestSlurpFailedProducerCommittedTwinWorkUsesCoordinator(t *testing.T) {
+	path, s := gateStore(t)
+	o := slurpOpts{since: "2026-01-01", only: []string{"mail", "twins", "repair"}}
+	d := defaultSlurpDeps(path, o)
+	d.status = func() error { return nil }
+	d.mailAccounts = func() ([]string, error) { return []string{"synthetic"}, nil }
+	d.ingestMail = func(mailOpts) (mailingest.Result, error) {
+		p, err := corpus.Resolve(s, corpus.KindEmail, "partial-author@example.test", "Synthetic partial author")
+		if err != nil {
+			return mailingest.Result{}, err
+		}
+		_, _, err = s.PutQuoted(corpus.Entry{Source: corpus.SourceMail, ExtID: "partial-committed-quote", PersonID: p, TS: time.Unix(1700000000, 0), BodyText: "Independent committed synthetic quote from an interrupted ingest."})
+		if err != nil {
+			return mailingest.Result{}, err
+		}
+		return mailingest.Result{}, errors.New("invented producer interruption after commit")
+	}
+	called := 0
+	pending := d.pendingTwins
+	d.pendingTwins = func() error { called++; return pending() }
+	var output strings.Builder
+	if err := runSlurp(&output, o, d); err == nil || !strings.Contains(output.String(), "invented producer interruption after commit") {
+		t.Fatal("partial producer failure hidden", err, output.String())
+	}
+	work, err := s.TwinsWorkState()
+	if err != nil || !work.Clean() || called != 1 {
+		t.Fatal("committed work bypassed", work, called, err)
+	}
+}
+
+func TestSlurpTornDualStateNeverReportsComplete(t *testing.T) {
+	path, s := gateStore(t)
+	if _, err := corpus.ReconcileTwinsContext(context.Background(), s); err != nil {
+		t.Fatal(err)
+	}
+	start, err := s.ReconciliationState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := s.CheckpointReconciliation(context.Background(), start); err != nil || !ok {
+		t.Fatal(ok, err)
+	}
+	other, err := corpus.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Close()
+	o := slurpOpts{only: []string{"twins", "repair"}}
+	d := defaultSlurpDeps(path, o)
+	tail := false
+	d.status = func() error {
+		tail = true
+		_, err := other.DB().Exec(`update twins_work_state set work_revision=work_revision+1,full_revision=work_revision+1`)
+		return err
+	}
+	read := d.maintenanceState
+	d.maintenanceState = func() (corpus.MaintenanceState, error) {
+		state, err := read()
+		if err == nil && tail {
+			if _, err = other.DB().Exec(`insert into people(display_name) values('Identity-only concurrent edit')`); err == nil {
+				_, err = corpus.ReconcileTwinsContext(context.Background(), other)
+			}
+		}
+		return state, err
+	}
+	var out strings.Builder
+	if err := runSlurp(&out, o, d); err != nil {
+		t.Fatal(err)
+	}
+	source, err := s.ReconciliationState()
+	if err != nil || source.Clean() {
+		t.Fatal(source, err)
+	}
+	work, err := s.TwinsWorkState()
+	if err != nil || !work.Clean() {
+		t.Fatal(work, err)
+	}
+	if !strings.Contains(out.String(), "phase=total outcome=INCOMPLETE") {
+		t.Fatal("torn reads reported complete", out.String())
+	}
+	for _, phase := range []string{"twins", "repair", "status"} {
+		if strings.Count(out.String(), "slurp timing: phase="+phase+" outcome=started") != 1 || strings.Count(out.String(), "slurp timing: phase="+phase+" outcome=") != 2 {
+			t.Fatal("duplicated or missing phase timing", out.String())
+		}
+	}
+	d.maintenanceState = read
+	d.status = func() error { return nil }
+	out.Reset()
+	if err := runSlurp(&out, o, d); err != nil {
+		t.Fatal(err)
+	}
+	final, err := s.MaintenanceState()
+	if err != nil || !final.Clean() {
+		t.Fatal(final, err)
+	}
+}
+
+func TestSlurpWorkOnlyCheckpointGapStaysPending(t *testing.T) {
+	path, s := gateStore(t)
+	o := slurpOpts{only: []string{"twins", "repair"}}
+	d := defaultSlurpDeps(path, o)
+	d.status = func() error { return nil }
+	ack := d.checkpointReconciliation
+	d.checkpointReconciliation = func(start corpus.ReconcileState) (bool, error) {
+		state, err := s.MaintenanceState()
+		if err != nil || !state.Twins.Clean() {
+			t.Fatal(state, err)
+		}
+		if _, err := s.DB().Exec(`update twins_work_state set work_revision=work_revision+1,full_revision=work_revision+1`); err != nil {
+			t.Fatal(err)
+		}
+		return ack(start)
+	}
+	var out strings.Builder
+	if err := runSlurp(&out, o, d); err != nil {
+		t.Fatal(err)
+	}
+	state, err := s.MaintenanceState()
+	if err != nil || state.Source.Clean() || !state.Twins.Full.Valid {
+		t.Fatal(state, err)
+	}
+	if !strings.Contains(out.String(), "3 phases: 2 complete, 1 incomplete, 0 skipped, 0 failed") {
+		t.Fatal(out.String())
+	}
+	d.checkpointReconciliation = ack
+	if err := runSlurp(&out, o, d); err != nil {
+		t.Fatal(err)
+	}
+	state, err = s.MaintenanceState()
+	if err != nil || !state.Clean() {
+		t.Fatal(state, err)
+	}
+}
+
+func TestSlurpInputsAfterCombinedSnapshotBelongToNextReport(t *testing.T) {
+	path, s := gateStore(t)
+	o := slurpOpts{only: []string{"twins", "repair"}}
+	d := defaultSlurpDeps(path, o)
+	d.status = func() error { return nil }
+	var out strings.Builder
+	if err := runSlurp(&out, o, d); err != nil {
+		t.Fatal(err)
+	}
+	read, reads := d.maintenanceState, 0
+	d.maintenanceState = func() (corpus.MaintenanceState, error) {
+		state, err := read()
+		reads++
+		if reads == 2 && err == nil {
+			_, err = s.DB().Exec(`insert into people(display_name) values('Next report author'); insert into entries(source,ext_id,person_id,ts,body_text,body_sha,ingested_at) values('mail','next-report',last_insert_rowid(),0,'After snapshot evidence','synthetic',0)`)
+		}
+		return state, err
+	}
+	out.Reset()
+	if err := runSlurp(&out, o, d); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out.String(), "outcome=INCOMPLETE") {
+		t.Fatal("post-snapshot input changed captured report", out.String())
+	}
+	next, err := s.MaintenanceState()
+	if err != nil || next.Source.Clean() || next.Twins.Clean() {
+		t.Fatal(next, err)
+	}
+	d.maintenanceState = read
+	if err := runSlurp(&out, o, d); err != nil {
+		t.Fatal(err)
+	}
+	next, err = s.MaintenanceState()
+	if err != nil || !next.Clean() {
+		t.Fatal(next, err)
+	}
+}
+
+func TestSlurpCleanSourceDoesNotSkipWorkOnlyEpoch(t *testing.T) {
+	path, s := gateStore(t)
+	o := slurpOpts{only: []string{"twins", "repair"}}
+	d := defaultSlurpDeps(path, o)
+	d.status = func() error { return nil }
+	var out strings.Builder
+	if err := runSlurp(&out, o, d); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB().Exec(`update twins_work_state set work_revision=work_revision+1,full_revision=work_revision+1`); err != nil {
+		t.Fatal(err)
+	}
+	before, err := s.MaintenanceState()
+	if err != nil || !before.Source.Clean() || before.Twins.Clean() {
+		t.Fatal(before, err)
+	}
+	calls := 0
+	pending := d.pendingTwins
+	d.pendingTwins = func() error { calls++; return pending() }
+	if err := runSlurp(&out, o, d); err != nil {
+		t.Fatal(err)
+	}
+	after, err := s.MaintenanceState()
+	if err != nil || !after.Clean() || calls != 1 || after.Source != before.Source {
+		t.Fatal(after, calls, err)
 	}
 }

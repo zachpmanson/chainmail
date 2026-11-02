@@ -380,6 +380,23 @@ func runTwins(path string, apply, declined bool) error {
 	return nil
 }
 
+func runPendingTwins(path string) error {
+	s, err := corpus.Open(path)
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	plan, err := corpus.ReconcileTwinsContext(ctx, s)
+	fmt.Printf("twins work: mode=%s fallback=%s captured=%d processed=%d pending=%d people=%d bodies=%d comparisons=%d retries=%d writer_wait=%s\n", plan.Mode, plan.Fallback, plan.CapturedAuthors, plan.ProcessedAuthors, plan.PendingAuthors, plan.PeopleScanned, plan.BodiesScanned, plan.Comparisons, plan.Retries, plan.WriterWait.Round(time.Millisecond))
+	if err != nil {
+		return err
+	}
+	printTwins(plan, false)
+	return nil
+}
+
 // runDedupe merges the duplicate identities three rules can prove, and only when
 // apply says to. Every caller that is not a human at a prompt passes false: the
 // merges weigh evidence and cannot be undone, since person_merges records that a
@@ -552,7 +569,7 @@ func runWithMailbox(path string, o mailOpts, c mailingest.Mailbox) (mailingest.R
 			"warning: %d bodies came back truncated — quoted history was lost\n", r.Truncated)
 	}
 	if o.twins {
-		plan, err := corpus.CollapseTwins(s, true)
+		plan, err := corpus.ReconcileTwinsContext(context.Background(), s)
 		if err != nil {
 			return r, fmt.Errorf("after the walk, collapsing twins: %w", err)
 		}

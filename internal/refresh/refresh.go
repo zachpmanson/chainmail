@@ -304,6 +304,10 @@ func (r Report) NothingNew() bool {
 
 // Run performs both passes and regenerates the spec.
 func Run(store *corpus.Store, mb Mailbox, prev spec.Spec, opts Options) (Report, spec.Spec, error) {
+	return runWithMaintenanceState(store, mb, prev, opts, store.MaintenanceState)
+}
+
+func runWithMaintenanceState(store *corpus.Store, mb Mailbox, prev spec.Spec, opts Options, maintenanceState func() (corpus.MaintenanceState, error)) (Report, spec.Spec, error) {
 	rep := Report{Fetched: opts.Fetch}
 	opts = opts.merge(prev)
 
@@ -329,22 +333,23 @@ func Run(store *corpus.Store, mb Mailbox, prev spec.Spec, opts Options) (Report,
 	// given: an entry stored before a parser fix carries the old parser's body,
 	// and for the header-fold case that meant a duplicate the sweep was built to
 	// collapse declined every time. See corpus.RepairQuotedBodies.
-	state, err := store.ReconciliationState()
+	state, err := maintenanceState()
 	if err != nil {
 		return rep, spec.Spec{}, err
 	}
 	// This legacy quote -> twins path may consume a full pair's checkpoint but
 	// cannot certify it: identity and graph repair are not part of this pipeline.
 	rep.MaintenanceSkipped = state.Clean()
-	if !state.Clean() {
+	if !state.Source.Clean() {
 		qr, err := corpus.RepairQuotedBodies(store)
 		if err != nil {
 			return rep, spec.Spec{}, fmt.Errorf("re-deriving the quoted entries: %w", err)
 		}
 		rep.QuotedRefixed = qr.Fixed
 		rep.QuoteHostsScanned = qr.Hosts
-
-		plan, err := corpus.CollapseTwins(store, true)
+	}
+	if !rep.MaintenanceSkipped {
+		plan, err := corpus.ReconcileTwinsContext(context.Background(), store)
 		if err != nil {
 			return rep, spec.Spec{}, fmt.Errorf("collapsing stored twins: %w", err)
 		}
@@ -449,12 +454,12 @@ func Run(store *corpus.Store, mb Mailbox, prev spec.Spec, opts Options) (Report,
 	next.OpenItemsTitle = prev.OpenItemsTitle
 
 	rep.fill(prev, next)
-	state, err = store.ReconciliationState()
+	state, err = maintenanceState()
 	if err != nil {
 		return rep, spec.Spec{}, err
 	}
 	rep.MaintenancePending = !state.Clean()
-	rep.ReconcileSource, rep.ReconcileCovered = state.Source, state.Covered
+	rep.ReconcileSource, rep.ReconcileCovered = state.Source.Source, state.Source.Covered
 	return rep, next, nil
 }
 

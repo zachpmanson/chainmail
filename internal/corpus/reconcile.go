@@ -10,7 +10,7 @@ import (
 )
 
 // Bump when matching, quote parsing, or repair rules change. Catch-up is lazy.
-const reconciliationVersion = 2
+const reconciliationVersion = 3
 
 var ErrReconcileConflict = errors.New("reconciliation inputs changed; work remains pending")
 
@@ -56,6 +56,45 @@ func (s *Store) ReconciliationState() (ReconcileState, error) {
 	return r, err
 }
 
+// MaintenanceState reports both coverage domains from one WAL snapshot.
+type MaintenanceState struct {
+	Source ReconcileState
+	Twins  TwinsWorkState
+}
+
+func (r MaintenanceState) Clean() bool { return r.Source.Clean() && r.Twins.Clean() }
+
+func readMaintenanceState(q corpusQuery) (MaintenanceState, error) {
+	var r MaintenanceState
+	var err error
+	r.Source, err = readReconcileState(q)
+	if err == nil {
+		r.Twins, err = readTwinsWork(q)
+	}
+	return r, err
+}
+
+func (s *Store) MaintenanceState() (MaintenanceState, error) {
+	for attempt := 0; ; attempt++ {
+		tx, err := s.db.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
+		if err != nil {
+			return MaintenanceState{}, err
+		}
+		state, err := readMaintenanceState(tx)
+		tx.Rollback()
+		if !errors.Is(err, sql.ErrNoRows) || attempt > 0 {
+			return state, err
+		}
+		// Initialization writes must not upgrade the read snapshot into a writer.
+		if _, err := s.ReconciliationState(); err != nil {
+			return state, err
+		}
+		if _, err := s.TwinsWorkState(); err != nil {
+			return state, err
+		}
+	}
+}
+
 // CheckpointReconciliation must only follow a successful complete pair. Source
 // writes by maintenance itself remain invalidating, just like outside writes.
 func (s *Store) CheckpointReconciliation(ctx context.Context, start ReconcileState) (bool, error) {
@@ -68,7 +107,11 @@ func (s *Store) CheckpointReconciliation(ctx context.Context, start ReconcileSta
 	if err != nil {
 		return false, err
 	}
-	if current.Source != start.Source || current.Rules != start.Rules {
+	work, err := readTwinsWork(w)
+	if err != nil {
+		return false, err
+	}
+	if !work.Clean() || current.Source != start.Source || current.Rules != start.Rules {
 		return false, nil
 	}
 	res, err := w.ExecContext(ctx, `update reconcile_state set ready=1, covered_revision=?, rules_version=?, covered_version=? where id=1 and source_revision=? and rules_version=?`, start.Source, reconciliationVersion, reconciliationVersion, start.Source, start.Rules)
