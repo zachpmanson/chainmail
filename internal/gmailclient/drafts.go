@@ -262,9 +262,31 @@ func checkDraftReplacement(current, replacement []byte) error {
 
 // Report stable categories/header names, never MIME, addresses or header values.
 func draftRefusal(reason string, headers ...string) error {
-	sort.Strings(headers)
-	if len(headers) != 0 {
-		return fmt.Errorf("%w [reason=%s; headers=%s]", ErrUnsupportedDraft, reason, strings.Join(headers, ","))
+	// net/mail accepts unusual field names, including names containing secrets.
+	// Emit only these fixed labels; even valid custom names remain private.
+	standard := map[string]string{
+		"to": "To", "cc": "Cc", "bcc": "Bcc", "subject": "Subject",
+		"from": "From", "sender": "Sender", "reply-to": "Reply-To",
+		"date": "Date", "message-id": "Message-Id", "in-reply-to": "In-Reply-To",
+		"references": "References", "mime-version": "Mime-Version",
+		"content-type": "Content-Type", "content-transfer-encoding": "Content-Transfer-Encoding",
+		"content-disposition": "Content-Disposition",
+	}
+	seen := map[string]bool{}
+	var labels []string
+	for _, name := range headers {
+		label, ok := standard[strings.ToLower(name)]
+		if !ok {
+			label = "other_header"
+		}
+		if !seen[label] {
+			seen[label] = true
+			labels = append(labels, label)
+		}
+	}
+	sort.Strings(labels)
+	if len(labels) != 0 {
+		return fmt.Errorf("%w [reason=%s; headers=%s]", ErrUnsupportedDraft, reason, strings.Join(labels, ","))
 	}
 	return fmt.Errorf("%w [reason=%s]", ErrUnsupportedDraft, reason)
 }

@@ -16,6 +16,11 @@ func TestDraftReplacementDiagnosticsRemainSafeAndActionable(t *testing.T) {
 	}{
 		{"immutable headers", "From: private@example.test\r\nDate: Mon, 02 Nov 2026 10:00:00 +1100\r\nMessage-ID: <private-message@example.test>\r\nContent-Type: text/plain; charset=UTF-8\r\n", "header_missing_or_changed", "headers=Date,From,Message-Id"},
 		{"duplicate editable header", "To: private@example.test\r\nTo: other-private@example.test\r\nContent-Type: text/plain\r\n", "duplicate_header", "headers=To"},
+		{"address in header name", "private@example.test: value\r\nContent-Type: text/plain\r\n", "header_missing_or_changed", "headers=other_header"},
+		{"identifier in custom header name", "X-Private-Token-Abcd: value\r\nContent-Type: text/plain\r\n", "header_missing_or_changed", "headers=other_header"},
+		{"address in malformed sender name", "From private@example.test: hidden\r\nContent-Type: text/plain\r\n", "header_missing_or_changed", "headers=other_header"},
+		{"bearer in malformed header name", "Authorization Bearer private-token: hidden\r\nContent-Type: text/plain\r\n", "header_missing_or_changed", "headers=other_header"},
+		{"mixed names are sorted and redacted once", "From: private@example.test\r\nDate: Mon, 02 Nov 2026 10:00:00 +1100\r\nX-Private-Token-Abcd: value\r\nAuthorization Bearer private-token: hidden\r\nContent-Type: text/plain\r\n", "header_missing_or_changed", "headers=Date,From,other_header"},
 		{"html", "Content-Type: text/html; charset=UTF-8\r\n", "media_type", ""},
 		{"charset", "Content-Type: text/plain; charset=iso-8859-1\r\n", "charset", ""},
 		{"extra parameter", "Content-Type: text/plain; charset=UTF-8; format=flowed\r\n", "mime_parameter", ""},
@@ -32,7 +37,7 @@ func TestDraftReplacementDiagnosticsRemainSafeAndActionable(t *testing.T) {
 				if tc.names != "" && !strings.Contains(err.Error(), tc.names) {
 					t.Fatalf("missing stable sorted header names: %v", err)
 				}
-				for _, private := range []string{"private@example.test", "other-private@example.test", "private-message@example.test", "PRIVATE SUBJECT", "PRIVATE BODY", "private malformed header"} {
+				for _, private := range []string{"private@example.test", "other-private@example.test", "private-message@example.test", "PRIVATE SUBJECT", "PRIVATE BODY", "private malformed header", "X-Private-Token-Abcd", "private-token"} {
 					if strings.Contains(err.Error(), private) {
 						t.Fatalf("diagnostic exposed a private value: %v", err)
 					}
