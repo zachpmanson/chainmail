@@ -5,6 +5,8 @@ import {
   lazyRouteComponent,
   Link,
   Outlet,
+  useNavigate,
+  useRouter,
   useRouterState,
   useSearch,
 } from "@tanstack/react-router";
@@ -28,6 +30,7 @@ import ComposeProvider from "./components/compose/ComposeProvider";
 import IconButton from "./components/ui/IconButton";
 import type { SearchMode } from "./lib/api/api";
 import { parseTextSearch } from "./lib/ui/searchParams";
+import { COMPOSE_OPEN, openThread, safeComposeOrigin } from "./lib/ui/openSelection";
 
 const Rendered = lazy(() => import("./components/specs/Rendered"));
 
@@ -70,13 +73,36 @@ function validateSearchParams(search: Record<string, unknown>): SearchParams {
 
 /** The full screen is the app shell; this root owns the legacy way in. */
 function RootLayout() {
-  const [composing, setComposing] = useState(false);
+  const navigate = useNavigate();
+  const router = useRouter();
+  const location = useRouterState({ select: (s) => s.location });
+  const composing = location.pathname === "/" && location.search.open === COMPOSE_OPEN;
+  const openCompose = () => {
+    // Search blur can navigate before this click renders; buildLocation includes pending navigation.
+    const current = router.buildLocation({ search: true, hash: true, state: true });
+    const search = current.pathname === "/" ? validateSearchParams(current.search) : undefined;
+    if (search?.open === COMPOSE_OPEN) return;
+    navigate({
+      to: "/",
+      search: {
+        ...search,
+        open: COMPOSE_OPEN,
+        popup: undefined,
+      },
+      state: { composeOrigin: safeComposeOrigin(current.href) },
+    });
+  };
+  const closeCompose = () => {
+    const origin = safeComposeOrigin(location.state.composeOrigin);
+    if (origin) navigate({ href: origin });
+    else navigate({ to: "/", search: (prev) => ({ ...prev, open: undefined, popup: undefined }) });
+  };
   const [error, setError] = useState<string | null>(null);
   const [dropped, setDropped] = useState<Timeline | null>(null);
   const popup = useRouterState({
     select: (s) => {
       const popup = (s.location.search as Record<string, unknown>).popup;
-      return popup === "1" || popup === 1;
+      return s.location.search.open !== COMPOSE_OPEN && (popup === "1" || popup === 1);
     },
   });
 
@@ -140,7 +166,7 @@ function RootLayout() {
                 <AutoRefresh />
                 <NavRefresh />
                 <NavUndo />
-                <IconButton aria-label="Compose" title="Compose" onClick={() => setComposing(true)}>
+                <IconButton aria-label="Compose" title="Compose" onClick={openCompose}>
                   <PencilSquareIcon aria-hidden="true" />
                 </IconButton>
                 <NavSearch />
@@ -152,7 +178,7 @@ function RootLayout() {
       ) : (
         <NavUndo />
       )}
-      <ComposeProvider composing={composing} closeCompose={() => setComposing(false)}>
+      <ComposeProvider composing={composing} closeCompose={closeCompose}>
         <Outlet />
       </ComposeProvider>
       <ToastHost />
@@ -169,9 +195,10 @@ const rootRoute = createRootRoute({
 /** With q, person or since it's the selection stage; otherwise the inbox. */
 function Home() {
   const urlSearch = useSearch({ from: "/" });
-  if (urlSearch.popup === "1") {
-    return urlSearch.open ? (
-      <ThreadPopup rootExtId={urlSearch.open} />
+  const thread = openThread(urlSearch.open);
+  if (urlSearch.popup === "1" && urlSearch.open !== COMPOSE_OPEN) {
+    return thread ? (
+      <ThreadPopup rootExtId={thread} />
     ) : (
       <main>
         <p>No thread was specified.</p>
@@ -236,5 +263,8 @@ export const router = createRouter({
 declare module "@tanstack/react-router" {
   interface Register {
     router: typeof router;
+  }
+  interface HistoryState {
+    composeOrigin?: string;
   }
 }
