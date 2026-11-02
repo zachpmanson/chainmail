@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { $api, type CorpusEntry, type SendResponse } from "../../lib/api/api";
 import { useAccountId } from "../../lib/inbox/useAccountId";
@@ -124,6 +124,8 @@ export default function ReplyBox({
   const displayedAccountId = accountId || (connected.length === 1 ? (connected[0]?.id ?? "") : "");
   const [draftId, setDraftId] = useState("");
   const [draftSaveError, setDraftSaveError] = useState("");
+  const [acknowledgedSave, setAcknowledgedSave] = useState("");
+  const acknowledgedSaveRef = useRef("");
   const draftIdRef = useRef("");
   const draftMessageIdRef = useRef("");
   const saveGeneration = useRef(0);
@@ -148,6 +150,24 @@ export default function ReplyBox({
   const send = $api.useMutation("post", "/v1/send");
   // The box isn't remounted between threads, so its toast goes when the thread changes.
   const say = useOwnToast(thread.rootExtId);
+  const draftInput = useMemo(
+    () => ({
+      accountId: displayedAccountId,
+      ...recipients.edited,
+      replyAll: all,
+      subject: answer.subject?.startsWith("Re:") ? answer.subject : `Re: ${answer.subject ?? ""}`,
+      body: own,
+      replyToEntry: answer.extId,
+    }),
+    [displayedAccountId, recipients.edited, all, answer.subject, own, answer.extId],
+  );
+  const draftInputKey = JSON.stringify(draftInput);
+  const draftIsSaved =
+    Boolean(draftId) &&
+    !createDraft.isPending &&
+    !updateDraft.isPending &&
+    !draftSaveError &&
+    acknowledgedSave === JSON.stringify([saveGeneration.current, draftId, draftInputKey]);
   const sendFailed = step.kind === "reviewing" && step.sendFailed;
   const reviewInput = useRef(new ReviewInput<ReplyInput>()).current;
   reviewInput.update({
@@ -227,25 +247,22 @@ export default function ReplyBox({
       step.kind !== "editing"
     )
       return;
-    const words = own;
-    const edited = recipients.edited;
     const generation = saveGeneration.current;
-    const subject = answer.subject?.startsWith("Re:")
-      ? answer.subject
-      : `Re: ${answer.subject ?? ""}`;
+    if (
+      acknowledgedSaveRef.current ===
+      JSON.stringify([generation, draftIdRef.current, draftInputKey])
+    )
+      return;
     const timer = window.setTimeout(() => {
       saveQueue.current = saveQueue.current
         .catch(() => undefined)
         .then(async () => {
           if (generation !== saveGeneration.current) return;
           const id = draftIdRef.current;
+          if (acknowledgedSaveRef.current === JSON.stringify([generation, id, draftInputKey]))
+            return;
           const body = {
-            accountId: displayedAccountId,
-            ...edited,
-            replyAll: all,
-            subject,
-            body: words,
-            replyToEntry: answer.extId,
+            ...draftInput,
             ...(id ? { expectedMessageId: draftMessageIdRef.current } : {}),
           };
           const saved = id
@@ -254,6 +271,10 @@ export default function ReplyBox({
           if (generation !== saveGeneration.current) return;
           draftIdRef.current = saved.id;
           draftMessageIdRef.current = saved.messageId ?? "";
+          // A provider-normalised response must not acknowledge newer editor input.
+          const acknowledgement = JSON.stringify([generation, saved.id, draftInputKey]);
+          acknowledgedSaveRef.current = acknowledgement;
+          setAcknowledgedSave(acknowledgement);
           setDraftId(saved.id);
           setDraftSaveError("");
           await queryClient.invalidateQueries({ queryKey: ["get", "/v1/drafts"] });
@@ -273,12 +294,11 @@ export default function ReplyBox({
     own,
     draftSaveError,
     busy,
-    recipients.edited,
-    all,
+    draftInput,
+    draftInputKey,
     displayedAccountId,
     draftConflict,
     step.kind,
-    answer.subject,
     answer.extId,
     drafts.isPending,
     drafts.isError,
@@ -447,7 +467,7 @@ export default function ReplyBox({
           </Button>
         </InlineAlert>
       ) : null}
-      {draftId ? <p className="mb-1 text-2xs text-muted">Saved to Gmail</p> : null}
+      {draftIsSaved ? <p className="mb-1 text-2xs text-muted">Saved to Gmail</p> : null}
       <section aria-label="Reply">
         {step.kind === "reviewing" ? (
           <>

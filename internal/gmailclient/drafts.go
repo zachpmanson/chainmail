@@ -121,7 +121,25 @@ func (c Client) SaveDraft(d Draft, replyToMessageID string) (Draft, error) {
 	if err != nil {
 		return Draft{}, err
 	}
-	message := &gmail.Message{Raw: base64.RawURLEncoding.EncodeToString(raw)}
+	var current *gmail.Draft
+	var currentRaw []byte
+	if d.ID != "" {
+		if d.MessageID == "" {
+			return Draft{}, ErrDraftConflict
+		}
+		current, err = c.svc.Users.Drafts.Get("me", d.ID).Format("raw").Do()
+		if err != nil {
+			return Draft{}, fmt.Errorf("checking Gmail draft before update: %w", err)
+		}
+		if current.Message == nil || current.Message.Id != d.MessageID {
+			return Draft{}, ErrDraftConflict
+		}
+		currentRaw, err = decodeDraftRaw(current.Message.Raw)
+		if err != nil {
+			return Draft{}, fmt.Errorf("checking Gmail draft MIME: %w", err)
+		}
+	}
+	message := &gmail.Message{}
 	if replyToMessageID != "" {
 		parent, err := c.svc.Users.Messages.Get("me", replyToMessageID).Format("metadata").MetadataHeaders("Message-ID", "References").Do()
 		if err != nil {
@@ -136,32 +154,27 @@ func (c Client) SaveDraft(d Draft, replyToMessageID string) (Draft, error) {
 			raw = addHeader(raw, "In-Reply-To", id)
 			refs := strings.TrimSpace(headers["references"] + " " + id)
 			raw = addHeader(raw, "References", refs)
-			message.Raw = base64.RawURLEncoding.EncodeToString(raw)
 		}
 	}
-	container := &gmail.Draft{Message: message}
+	if current != nil {
+		if replyToMessageID != "" && current.Message.ThreadId != "" && current.Message.ThreadId != message.ThreadId {
+			return Draft{}, draftRefusal("thread_mismatch")
+		}
+		raw, err = c.preserveDraftMetadata(currentRaw, raw)
+		if err != nil {
+			return Draft{}, err
+		}
+		// Guard the actual bytes to PUT, after all metadata/parent construction.
+		if err := checkDraftReplacement(currentRaw, raw); err != nil {
+			return Draft{}, err
+		}
+	}
+	message.Raw = base64.RawURLEncoding.EncodeToString(raw)
+	container := &gmail.Draft{Id: d.ID, Message: message}
 	var saved *gmail.Draft
 	if d.ID == "" {
 		saved, err = c.svc.Users.Drafts.Create("me", container).Do()
 	} else {
-		if d.MessageID == "" {
-			return Draft{}, ErrDraftConflict
-		}
-		current, getErr := c.svc.Users.Drafts.Get("me", d.ID).Format("raw").Do()
-		if getErr != nil {
-			return Draft{}, fmt.Errorf("checking Gmail draft before update: %w", getErr)
-		}
-		if current.Message == nil || current.Message.Id != d.MessageID {
-			return Draft{}, ErrDraftConflict
-		}
-		currentRaw, decodeErr := decodeDraftRaw(current.Message.Raw)
-		if decodeErr != nil {
-			return Draft{}, fmt.Errorf("checking Gmail draft MIME: %w", decodeErr)
-		}
-		if err := checkDraftReplacement(currentRaw, raw); err != nil {
-			return Draft{}, err
-		}
-		container.Id = d.ID
 		saved, err = c.svc.Users.Drafts.Update("me", d.ID, container).Do()
 	}
 	if err != nil {
@@ -222,7 +235,8 @@ func checkDraftReplacement(current, replacement []byte) error {
 				duplicates = append(duplicates, name)
 			}
 		default:
-			if strings.Join(values, "\n") != strings.Join(next.Header[name], "\n") {
+			nextValues, present := next.Header[name]
+			if !present || strings.Join(values, "\n") != strings.Join(nextValues, "\n") {
 				changed = append(changed, name)
 			}
 		}
@@ -267,7 +281,7 @@ func draftRefusal(reason string, headers ...string) error {
 	standard := map[string]string{
 		"to": "To", "cc": "Cc", "bcc": "Bcc", "subject": "Subject",
 		"from": "From", "sender": "Sender", "reply-to": "Reply-To",
-		"date": "Date", "message-id": "Message-Id", "in-reply-to": "In-Reply-To",
+		"date": "Date", "message-id": "Message-Id", "received": "Received", "in-reply-to": "In-Reply-To",
 		"references": "References", "mime-version": "Mime-Version",
 		"content-type": "Content-Type", "content-transfer-encoding": "Content-Transfer-Encoding",
 		"content-disposition": "Content-Disposition",

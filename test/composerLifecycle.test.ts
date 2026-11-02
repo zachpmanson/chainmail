@@ -241,6 +241,236 @@ it.each([true, false])(
   },
 );
 
+const draftWrites = () =>
+  requests.filter(
+    (r) =>
+      (r.method === "POST" && r.path === "/v1/drafts") ||
+      (r.method === "PUT" && r.path.startsWith("/v1/drafts/")),
+  );
+async function editWords(reply: boolean, body: string) {
+  if (reply) await typeReply(body);
+  else
+    await act(async () => {
+      form().onDraft({ to: [{ address: "to@example.test" }], body });
+    });
+}
+
+describe("acknowledged autosave input", () => {
+  it.each([true, false])(
+    "does not show an old acknowledgement while different input is still being written (reply: %s)",
+    async (reply) => {
+      await mount(reply);
+      await editWords(reply, "Payload A");
+      await autosave();
+      expect(visibleText()).toContain("Saved to Gmail");
+      const pending = deferred<Response>();
+      const normal = handle;
+      handle = (req) => (req.method === "PUT" ? pending.promise : normal(req));
+      await editWords(reply, "Payload B");
+      await autosave();
+      expect(draftWrites()).toHaveLength(2);
+      await editWords(reply, "Payload A");
+      expect(visibleText()).not.toContain("Saved to Gmail");
+      handle = normal;
+      await act(async () => pending.resolve(json({ ...saved, messageId: "revision-B" })));
+      await settle();
+      expect(visibleText()).not.toContain("Saved to Gmail");
+      await autosave();
+      expect(draftWrites().map((request) => [request.method, request.body.body])).toEqual([
+        ["POST", "Payload A"],
+        ["PUT", "Payload B"],
+        ["PUT", "Payload A"],
+      ]);
+      expect(draftWrites()[2]!.body.expectedMessageId).toBe("revision-B");
+      expect(visibleText()).toContain("Saved to Gmail");
+    },
+  );
+
+  it.each([true, false])(
+    "stays idle after acknowledgement and writes exactly once for a new edit (reply: %s)",
+    async (reply) => {
+      await mount(reply);
+      await editWords(reply, "Stable idle fixture words");
+      await autosave();
+      expect(draftWrites()).toHaveLength(1);
+      expect(visibleText()).toContain("Saved to Gmail");
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(6_000);
+        await client.invalidateQueries({ queryKey: ["get", "/v1/drafts"] });
+      });
+      await settle();
+      await editWords(reply, "Stable idle fixture words");
+      await autosave();
+      expect(draftWrites()).toHaveLength(1);
+      await editWords(reply, "One genuine edit");
+      expect(visibleText()).not.toContain("Saved to Gmail");
+      await autosave();
+      expect(draftWrites().map((r) => [r.method, r.body.body])).toEqual([
+        ["POST", "Stable idle fixture words"],
+        ["PUT", "One genuine edit"],
+      ]);
+      expect(visibleText()).toContain("Saved to Gmail");
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(6_000);
+      });
+      await settle();
+      expect(draftWrites()).toHaveLength(2);
+    },
+  );
+
+  it.each([
+    [true, "POST"],
+    [false, "POST"],
+    [true, "PUT"],
+    [false, "PUT"],
+  ] as const)(
+    "skips duplicate input queued behind a slow successful save (reply: %s, method: %s)",
+    async (reply, method) => {
+      await mount(reply);
+      if (method === "PUT") {
+        await editWords(reply, "Initial words");
+        await autosave();
+      }
+      const pending = deferred<Response>();
+      const normal = handle;
+      handle = (req) => (req.method === method ? pending.promise : normal(req));
+      await editWords(reply, "Same pending words");
+      await autosave();
+      const count = draftWrites().length;
+      for (let i = 0; i < 2; i++) {
+        await editWords(reply, "Same pending words");
+        await autosave();
+      }
+      expect(draftWrites()).toHaveLength(count);
+      await act(async () => {
+        pending.resolve(json({ ...saved, messageId: "m2" }));
+      });
+      await settle();
+      expect(draftWrites()).toHaveLength(count);
+      expect(visibleText()).toContain("Saved to Gmail");
+    },
+  );
+
+  it.each([
+    [true, "POST"],
+    [false, "POST"],
+    [true, "PUT"],
+    [false, "PUT"],
+  ] as const)(
+    "does not label newer input Saved when an older save is acknowledged (reply: %s, method: %s)",
+    async (reply, method) => {
+      await mount(reply);
+      if (method === "PUT") {
+        await editWords(reply, "Initial words");
+        await autosave();
+      }
+      const pending = deferred<Response>();
+      const normal = handle;
+      let writes = 0;
+      handle = (req) => (req.method === method && ++writes === 1 ? pending.promise : normal(req));
+      await editWords(reply, "Older in-flight words");
+      await autosave();
+      const count = draftWrites().length;
+      await editWords(reply, "Newer unsaved words");
+      await act(async () => {
+        pending.resolve(json(saved));
+      });
+      await settle();
+      expect(draftWrites()).toHaveLength(count);
+      expect(visibleText()).not.toContain("Saved to Gmail");
+      expect(reply ? fields().draft.body : form().draft.body).toBe("Newer unsaved words");
+      await autosave();
+      expect(draftWrites()).toHaveLength(count + 1);
+      expect(draftWrites()[count]!.body.body).toBe("Newer unsaved words");
+      expect(visibleText()).toContain("Saved to Gmail");
+    },
+  );
+
+  it.each([true, false])(
+    "saves identical words again after discard resets the draft owner (reply: %s)",
+    async (reply) => {
+      await mount(reply);
+      await editWords(reply, "Identical words in a new draft");
+      await autosave();
+      await click("Discard draft");
+      expect(visibleText()).not.toContain("Saved to Gmail");
+      const normal = handle;
+      handle = (req) =>
+        req.method === "POST" && new URL(req.url).pathname === "/v1/drafts"
+          ? Promise.resolve(json({ ...saved, id: "d2", messageId: "m2" }))
+          : normal(req);
+      await editWords(reply, "Identical words in a new draft");
+      await autosave();
+      expect(draftWrites().map((r) => r.method)).toEqual(["POST", "POST"]);
+      expect(visibleText()).toContain("Saved to Gmail");
+    },
+  );
+
+  it.each([true, false])(
+    "does not reuse an acknowledgement across reply targets or sending accounts (reply: %s)",
+    async (reply) => {
+      await mount(reply);
+      await editWords(reply, "Words that stay when scope changes");
+      await autosave();
+      if (reply) {
+        await act(async () => {
+          root.update(
+            createElement(
+              QueryClientProvider,
+              { client },
+              createElement(ReplyBox, {
+                ...replyProps,
+                answer: { ...answer, extId: "B", container: "thread-2" },
+              }),
+            ),
+          );
+        });
+        await settle();
+      } else {
+        await act(async () => {
+          form().onAccount("other-account");
+        });
+        await settle();
+      }
+      expect(visibleText()).not.toContain("Saved to Gmail");
+      await autosave();
+      expect(draftWrites()).toHaveLength(2);
+      expect(draftWrites()[1]!.method).toBe("POST");
+      expect(draftWrites()[1]!.body).toMatchObject({
+        body: "Words that stay when scope changes",
+        ...(reply ? { replyToEntry: "B" } : { accountId: "other-account" }),
+      });
+    },
+  );
+
+  it("does not reuse a compose acknowledgement for another selected draft with identical content", async () => {
+    const original = {
+      ...saved,
+      threadId: "",
+      to: "to@example.test",
+      subject: "Same subject",
+      body: "Same words",
+    };
+    const normal = handle;
+    handle = (req) =>
+      req.method === "GET" && new URL(req.url).pathname === "/v1/drafts"
+        ? Promise.resolve(json([original, { ...original, id: "d2", messageId: "m2" }]))
+        : req.method === "PUT"
+          ? Promise.resolve(json({ ...original, id: new URL(req.url).pathname.split("/").at(-1) }))
+          : normal(req);
+    await mount(false);
+    for (const id of ["d1", "d2"]) {
+      await act(async () => {
+        root.root.findByType("select").props.onChange({ target: { value: id } });
+      });
+      expect(visibleText()).not.toContain("Saved to Gmail");
+      await autosave();
+      expect(visibleText()).toContain("Saved to Gmail");
+    }
+    expect(draftWrites().map((r) => r.path)).toEqual(["/v1/drafts/d1", "/v1/drafts/d2"]);
+  });
+});
+
 describe("queued autosave outcomes", () => {
   async function edit(reply: boolean, body: string) {
     if (reply) await typeReply(body);

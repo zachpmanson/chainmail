@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { $api, type ComposeResponse } from "../../lib/api/api";
 import { useAccountId } from "../../lib/inbox/useAccountId";
@@ -83,6 +83,8 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
   const { busy, error, clearError, run } = useBusyTask();
   const [draftId, setDraftId] = useState("");
   const [draftSaveError, setDraftSaveError] = useState("");
+  const [acknowledgedSave, setAcknowledgedSave] = useState("");
+  const acknowledgedSaveRef = useRef("");
   const draftIdRef = useRef("");
   const draftMessageIdRef = useRef("");
   const saveGeneration = useRef(0);
@@ -96,8 +98,24 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
     },
     { enabled: Boolean(displayedAccountId) },
   );
-  const to = draft.to.map(addressWords);
-  const cc = draft.cc.map(addressWords);
+  const draftInput = useMemo(
+    () => ({
+      accountId: displayedAccountId,
+      to: draft.to.map(addressWords),
+      cc: draft.cc.map(addressWords),
+      subject: draft.subject,
+      body: draft.body,
+    }),
+    [displayedAccountId, draft],
+  );
+  const { to, cc } = draftInput;
+  const draftInputKey = JSON.stringify(draftInput);
+  const draftIsSaved =
+    Boolean(draftId) &&
+    !createDraft.isPending &&
+    !updateDraft.isPending &&
+    !draftSaveError &&
+    acknowledgedSave === JSON.stringify([saveGeneration.current, draftId, draftInputKey]);
   const sendFailed = step.kind === "reviewing" && step.sendFailed;
   const reviewInput = useRef(new ReviewInput<ComposeInput>()).current;
   reviewInput.update({
@@ -128,17 +146,22 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
       step.kind !== "editing"
     )
       return;
-    const content = { to, cc, subject: draft.subject, body: draft.body };
     const generation = saveGeneration.current;
+    if (
+      acknowledgedSaveRef.current ===
+      JSON.stringify([generation, draftIdRef.current, draftInputKey])
+    )
+      return;
     const timer = window.setTimeout(() => {
       saveQueue.current = saveQueue.current
         .catch(() => undefined)
         .then(async () => {
           if (generation !== saveGeneration.current) return;
           const id = draftIdRef.current;
+          if (acknowledgedSaveRef.current === JSON.stringify([generation, id, draftInputKey]))
+            return;
           const body = {
-            accountId: displayedAccountId,
-            ...content,
+            ...draftInput,
             ...(id ? { expectedMessageId: draftMessageIdRef.current } : {}),
           };
           const saved = id
@@ -147,6 +170,10 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
           if (generation !== saveGeneration.current) return;
           draftIdRef.current = saved.id;
           draftMessageIdRef.current = saved.messageId ?? "";
+          // A provider-normalised response must not acknowledge newer editor input.
+          const acknowledgement = JSON.stringify([generation, saved.id, draftInputKey]);
+          acknowledgedSaveRef.current = acknowledgement;
+          setAcknowledgedSave(acknowledgement);
           setDraftId(saved.id);
           setDraftSaveError("");
           await queryClient.invalidateQueries({ queryKey: ["get", "/v1/drafts"] });
@@ -166,8 +193,8 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
     draft,
     draftSaveError,
     busy,
-    to,
-    cc,
+    draftInput,
+    draftInputKey,
     displayedAccountId,
     drafts.isPending,
     drafts.isError,
@@ -370,7 +397,7 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
             ) : null}
             {draftId ? (
               <div className="mb-1 flex items-center justify-between">
-                <p className="text-2xs text-muted">Saved to Gmail</p>
+                {draftIsSaved ? <p className="text-2xs text-muted">Saved to Gmail</p> : null}
                 <Button
                   variant="danger"
                   density="compact"

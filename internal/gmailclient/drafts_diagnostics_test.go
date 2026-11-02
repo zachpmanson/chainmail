@@ -15,6 +15,8 @@ func TestDraftReplacementDiagnosticsRemainSafeAndActionable(t *testing.T) {
 		name, headers, reason, names string
 	}{
 		{"immutable headers", "From: private@example.test\r\nDate: Mon, 02 Nov 2026 10:00:00 +1100\r\nMessage-ID: <private-message@example.test>\r\nContent-Type: text/plain; charset=UTF-8\r\n", "header_missing_or_changed", "headers=Date,From,Message-Id"},
+		{"trace label", "Received: private@example.test private-token\r\nContent-Type: text/plain\r\n", "header_missing_or_changed", "headers=Received"},
+		{"empty unknown", "X-Private-Token-Abcd:\r\nContent-Type: text/plain\r\n", "header_missing_or_changed", "headers=other_header"},
 		{"duplicate editable header", "To: private@example.test\r\nTo: other-private@example.test\r\nContent-Type: text/plain\r\n", "duplicate_header", "headers=To"},
 		{"address in header name", "private@example.test: value\r\nContent-Type: text/plain\r\n", "header_missing_or_changed", "headers=other_header"},
 		{"identifier in custom header name", "X-Private-Token-Abcd: value\r\nContent-Type: text/plain\r\n", "header_missing_or_changed", "headers=other_header"},
