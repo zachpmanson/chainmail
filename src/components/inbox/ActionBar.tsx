@@ -84,18 +84,6 @@ export default function ActionBar({
           >
             Braid Threads
           </Button>
-          <IconButton
-            aria-label="Archive"
-            title="Archive"
-            disabled={busy}
-            onClick={() =>
-              act.mutate({
-                body: { chains: chosen, action: "archive", ...(accountId ? { accountId } : {}) },
-              })
-            }
-          >
-            <ArchiveGlyph />
-          </IconButton>
           <MoveFolder
             defaultFolder={moveDefault}
             busy={busy}
@@ -110,6 +98,18 @@ export default function ActionBar({
               })
             }
           />
+          <IconButton
+            aria-label="Archive"
+            title="Archive"
+            disabled={busy}
+            onClick={() =>
+              act.mutate({
+                body: { chains: chosen, action: "archive", ...(accountId ? { accountId } : {}) },
+              })
+            }
+          >
+            <ArchiveGlyph />
+          </IconButton>
           <IconButton
             aria-label="Delete"
             title="Delete"
