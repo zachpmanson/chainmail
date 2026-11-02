@@ -6,6 +6,7 @@ import { staleAfterMail } from "../../lib/inbox/mailActions";
 import { errText } from "../../lib/ui/errText";
 import useOwnToast from "../../lib/ui/useOwnToast";
 import ComposerFields from "./ComposerFields";
+import DraftReadError from "./DraftReadError";
 import { parseAddressHeader, type Draft } from "./Draft";
 import { refusal } from "../inbox/MailVerbs";
 import CheckboxRow from "../ui/CheckboxRow";
@@ -421,6 +422,13 @@ export default function ReplyBox({
 
   return (
     <div className="mt-4 mb-1 rounded-lg border border-line bg-card px-3 py-2" ref={host}>
+      {drafts.isError ? (
+        <DraftReadError
+          error={drafts.error}
+          retrying={drafts.isFetching}
+          onRetry={() => void drafts.refetch()}
+        />
+      ) : null}
       {draftSaveError ? <InlineAlert>{draftSaveError}</InlineAlert> : null}
       {draftConflict && !ownership.canHydrate() ? (
         <InlineAlert>

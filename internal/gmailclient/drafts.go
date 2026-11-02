@@ -76,6 +76,15 @@ func (c Client) ListDrafts() ([]Draft, error) {
 	return nil, fmt.Errorf("Gmail draft listing exceeded 100 pages")
 }
 
+// Gmail returns base64url with or without padding; neither form changes the MIME.
+func decodeDraftRaw(encoded string) ([]byte, error) {
+	raw, err := base64.RawURLEncoding.DecodeString(encoded)
+	if err == nil {
+		return raw, nil
+	}
+	return base64.URLEncoding.DecodeString(encoded)
+}
+
 // GetDraft reads the latest saved content from Gmail. A deleted or stale draft
 // is reported as an error instead of being reconstructed from client state.
 func (c Client) GetDraft(id string) (Draft, error) {
@@ -89,7 +98,7 @@ func (c Client) GetDraft(id string) (Draft, error) {
 	if got.Message == nil {
 		return Draft{}, fmt.Errorf("Gmail draft %q has no message", id)
 	}
-	raw, err := base64.RawURLEncoding.DecodeString(got.Message.Raw)
+	raw, err := decodeDraftRaw(got.Message.Raw)
 	if err != nil {
 		return Draft{}, fmt.Errorf("decoding Gmail draft %q: %w", id, err)
 	}
@@ -144,7 +153,7 @@ func (c Client) SaveDraft(d Draft, replyToMessageID string) (Draft, error) {
 		if current.Message == nil || current.Message.Id != d.MessageID {
 			return Draft{}, ErrDraftConflict
 		}
-		currentRaw, decodeErr := base64.RawURLEncoding.DecodeString(current.Message.Raw)
+		currentRaw, decodeErr := decodeDraftRaw(current.Message.Raw)
 		if decodeErr != nil {
 			return Draft{}, fmt.Errorf("checking Gmail draft MIME: %w", decodeErr)
 		}

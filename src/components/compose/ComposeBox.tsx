@@ -10,6 +10,7 @@ import Button from "../ui/Button";
 import InlineAlert from "../ui/InlineAlert";
 import ComposeDone from "./ComposeDone";
 import ComposeForm from "./ComposeForm";
+import DraftReadError from "./DraftReadError";
 import ComposePreview from "./ComposePreview";
 import { emptyDraft, parseAddressHeader, type Draft } from "./Draft";
 import SelectInput from "../ui/SelectInput";
@@ -323,6 +324,13 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
         ) : (
           <>
             {errorAlert}
+            {drafts.isError ? (
+              <DraftReadError
+                error={drafts.error}
+                retrying={drafts.isFetching}
+                onRetry={() => void drafts.refetch()}
+              />
+            ) : null}
             {draftSaveError ? <InlineAlert>{draftSaveError}</InlineAlert> : null}
             {drafts.data?.length ? (
               <label className="mb-2 flex items-center gap-2 text-xs text-muted">

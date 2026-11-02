@@ -171,6 +171,45 @@ afterEach(async () => {
 });
 
 it.each([true, false])(
+  "shows draft-list failure, preserves typed text, and resumes autosave after a safe retry (reply: %s)",
+  async (reply) => {
+    client.setDefaultOptions({ queries: { retry: false } });
+    const normal = handle;
+    let unavailable = true;
+    handle = async (req) => {
+      if (req.method === "GET" && new URL(req.url).pathname === "/v1/drafts" && unavailable)
+        return new Response(JSON.stringify({ error: "Draft decoding failed" }), {
+          status: 502,
+          headers: { "Content-Type": "application/json" },
+        });
+      return normal(req);
+    };
+    await mount(reply);
+    if (reply) await typeReply("Keep these unsaved words");
+    else
+      await act(async () => {
+        form().onDraft({ body: "Keep these unsaved words" });
+      });
+    await autosave();
+    expect(visibleText()).toContain("Autosave is paused");
+    expect(visibleText()).toContain("Copy your text before leaving");
+    expect(visibleText()).toContain("Draft decoding failed");
+    expect(requests.filter((request) => request.method !== "GET")).toEqual([]);
+    expect(reply ? fields().draft.body : form().draft.body).toBe("Keep these unsaved words");
+    unavailable = false;
+    await click("Retry draft check");
+    expect(visibleText()).not.toContain("Autosave is paused");
+    expect(reply ? fields().draft.body : form().draft.body).toBe("Keep these unsaved words");
+    await autosave();
+    const writes = requests.filter(
+      (request) => request.method === "POST" && request.path === "/v1/drafts",
+    );
+    expect(writes).toHaveLength(1);
+    expect(writes[0]!.body.body).toBe("Keep these unsaved words");
+  },
+);
+
+it.each([true, false])(
   "does not replay an uncertain draft creation through autosave (reply: %s)",
   async (reply) => {
     vi.spyOn(console, "error").mockImplementation(() => {});
