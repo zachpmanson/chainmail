@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChainHit } from "../src/lib/api/api";
 import type { SearchParams } from "../src/router";
 import Inbox from "../src/components/inbox/Inbox";
+import FolderPicker from "../src/components/inbox/FolderPicker";
 import SelectView from "../src/components/inbox/SelectView";
 import ThreadPopup from "../src/components/thread/ThreadPopup";
 import ActionBar from "../src/components/inbox/ActionBar";
@@ -25,6 +26,7 @@ const state = vi.hoisted(() => ({
   labels: vi.fn(),
   list: vi.fn(),
   navigate: vi.fn(),
+  mutations: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -47,7 +49,10 @@ vi.mock("../src/lib/api/api", () => ({
       if (path === "/v1/search") return { data: { chains: state.rows } };
       return { data: { summary: { unread: 1 } } };
     },
-    useMutation: () => ({ mutate: vi.fn(), mutateAsync: state.draftSave }),
+    useMutation: (method: string, path: string) => {
+      state.mutations(method, path);
+      return { mutate: vi.fn(), mutateAsync: state.draftSave };
+    },
   },
 }));
 vi.mock("../src/lib/inbox/useThreadList", () => ({
@@ -133,6 +138,18 @@ afterEach(() => {
 });
 
 describe("selection belongs to the effective mailbox location", () => {
+  it("navigates to the picked account's Inbox without a default-setting mutation", () => {
+    state.search = { label: "Saved", accountId: "work" };
+    render();
+    const picker = rendered!.root.findByType(FolderPicker);
+    expect(picker.props).not.toHaveProperty("onDefault");
+    expect(state.mutations.mock.calls.some(([, path]) => path === "/v1/settings")).toBe(false);
+    act(() => picker.props.onPick("INBOX", "personal"));
+    const navigation = state.navigate.mock.calls.at(-1)![0];
+    expect(navigation.to).toBe("/");
+    expect(navigation.search(state.search)).toEqual({ label: "INBOX", accountId: "personal" });
+  });
+
   it("does not trash a hidden shared copy after switching accounts", () => {
     state.search = { accountId: "work", label: "INBOX" };
     render();

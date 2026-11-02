@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, createElement as h, useState, type ComponentProps } from "react";
+import { act, createElement as h, type ComponentProps } from "react";
 import { beforeEach, expect, it, vi } from "vitest";
 import FolderPicker from "../src/components/inbox/FolderPicker";
 import { domHarness, focus, key, pick, settle } from "./domHarness";
@@ -91,6 +91,7 @@ it("groups only signed-in accounts, retains account-specific current markers and
   expect(document.querySelectorAll('[role="group"]')).toHaveLength(2);
   expect(document.body.textContent).not.toContain("offline@example.test");
   expect(state.queries).not.toContain("offline");
+  expect(items().some((item) => item.textContent?.includes("offline"))).toBe(false);
   const personal = items(group("reader@example.test"));
   const work = items(group("Work"));
   expect(personal[1]!.textContent).toBe("Archive12");
@@ -121,39 +122,79 @@ it.each(["all", "personal", "work"])(
   },
 );
 
-it("toggles the inbox default checkbox with pointer and Space without selecting or closing", async () => {
-  const onDefault = vi.fn();
-  const onPick = vi.fn();
-  function Harness() {
-    const [isDefault, setDefault] = useState(false);
-    return h(FolderPicker, {
-      current: "Archive",
-      currentAccountId: "work",
-      isDefault,
-      onPick,
-      onDefault: (checked) => {
-        onDefault(checked);
-        setDefault(checked);
-      },
-    });
-  }
-  const host = await render(h(Harness));
-  await pick(host.querySelector("button")!);
-  const checkbox = document.querySelector<HTMLElement>('[role="menuitemcheckbox"]')!;
-  expect(checkbox.textContent).toContain("Open Archive (Work) by default");
-  expect(checkbox.getAttribute("aria-checked")).toBe("false");
-  await pick(checkbox);
-  expect(checkbox.getAttribute("aria-checked")).toBe("true");
-  expect(checkbox.querySelector("svg")).not.toBeNull();
-  expect(menu()).not.toBeNull();
-  await pressKey(checkbox, " ");
-  expect(checkbox.getAttribute("aria-checked")).toBe("false");
-  expect(onDefault.mock.calls).toEqual([[true], [false]]);
-  expect(onPick).not.toHaveBeenCalled();
-  expect(menu()).not.toBeNull();
+it("removes the default-setting action from the main-page picker", async () => {
+  const { trigger } = await mount({ current: "Archive", currentAccountId: "work" });
+  await pick(trigger);
+  expect(document.querySelector('[role="menuitemcheckbox"]')).toBeNull();
+  expect(menu()?.textContent).not.toContain("by default");
+  expect(items()[0]!.textContent).toBe("All accounts · All mail");
 });
 
-it("hides the checkbox in default mode and preserves its accessible settings label", async () => {
+it.each(["personal", "work"])(
+  "puts the %s Inbox shortcut before all account folders and navigates within that account",
+  async (accountId) => {
+    const name = accountId === "personal" ? "reader@example.test" : "Work";
+    const { trigger, onPick } = await mount({ current: "INBOX", currentAccountId: accountId });
+    await pick(trigger);
+    expect(
+      items()
+        .slice(0, 3)
+        .map((item) => item.textContent),
+    ).toEqual(["All accounts · All mail", "Inbox (reader@example.test)", "Inbox (Work)"]);
+    const shortcut = items()[accountId === "personal" ? 1 : 2]!;
+    expect(shortcut.textContent).toBe(`Inbox (${name})`);
+    expect(shortcut.getAttribute("aria-current")).toBe("true");
+    const otherShortcut = items()[accountId === "personal" ? 2 : 1]!;
+    expect(otherShortcut.hasAttribute("aria-current")).toBe(false);
+    await pick(shortcut);
+    expect(onPick).toHaveBeenCalledExactlyOnceWith("INBOX", accountId);
+    expect(menu()).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  },
+);
+
+it("keeps Inbox shortcuts available before folder queries settle or when the inbox is empty", async () => {
+  state.folders.personal = { isPending: true };
+  state.folders.work = { data: { labels: [] } };
+  const { trigger, onPick } = await mount();
+  await pick(trigger);
+  await focus(trigger);
+  await key(trigger, "ArrowDown");
+  await key(document.activeElement as HTMLElement, "ArrowDown");
+  expect(document.activeElement?.textContent).toBe("Inbox (reader@example.test)");
+  await pressKey(document.activeElement as HTMLElement, "Enter");
+  expect(onPick).toHaveBeenCalledExactlyOnceWith("INBOX", "personal");
+});
+
+it.each(["inbox", "default"] as const)(
+  "retains the full %s-mode folder lists and counts with a single current Inbox marker",
+  async (mode) => {
+    state.folders.personal = { data: { labels: [{ name: "INBOX", messages: 19 }] } };
+    const { trigger, onPick } = await mount({
+      mode,
+      current: "INBOX",
+      currentAccountId: "personal",
+    });
+    await pick(trigger);
+    const inbox = items(group("reader@example.test"))[1]!;
+    expect(inbox.textContent).toBe("INBOX19");
+    expect(inbox.hasAttribute("aria-current")).toBe(mode === "default");
+    expect(document.querySelectorAll('[aria-current="true"]')).toHaveLength(1);
+    await pick(inbox);
+    expect(onPick).toHaveBeenCalledExactlyOnceWith("INBOX", "personal");
+  },
+);
+
+it("identifies an account by its ID if its email and display name are empty", async () => {
+  state.auth = { data: { accounts: [{ id: "unnamed", signedIn: true }] } };
+  const { trigger, onPick } = await mount();
+  await pick(trigger);
+  expect(items()[1]!.textContent).toBe("Inbox (unnamed)");
+  await pick(items()[1]!);
+  expect(onPick).toHaveBeenCalledExactlyOnceWith("INBOX", "unnamed");
+});
+
+it("keeps the settings picker account-grouped without inbox shortcuts and preserves its accessible label", async () => {
   const { trigger, onPick } = await mount({
     mode: "default",
     ariaLabel: "Which folder the home page opens in",
@@ -161,6 +202,8 @@ it("hides the checkbox in default mode and preserves its accessible settings lab
   expect(trigger.getAttribute("aria-label")).toBe("Which folder the home page opens in");
   await pick(trigger);
   expect(document.querySelector('[role="menuitemcheckbox"]')).toBeNull();
+  expect(items().map((item) => item.textContent)).not.toContain("Inbox (reader@example.test)");
+  expect(items().map((item) => item.textContent)).not.toContain("Inbox (Work)");
   await pick(items(group("reader@example.test"))[1]!);
   expect(onPick).toHaveBeenCalledExactlyOnceWith("Archive", "personal");
   expect(menu()).toBeNull();
@@ -300,6 +343,7 @@ it("uses unscoped folders when no account is signed in and keeps the fallback cu
   await pick(trigger);
   expect(document.querySelector('[role="group"]')).toBeNull();
   expect(state.queries).toContain("");
+  expect(items().some((item) => item.textContent?.startsWith("Inbox ("))).toBe(false);
   const legacy = items().at(-1)!;
   expect(legacy.getAttribute("aria-current")).toBe("true");
   await pick(legacy);

@@ -116,9 +116,7 @@ function FolderInbox({ folder }: { folder: ReturnType<typeof useFolder> }) {
             <FolderPicker
               current={label}
               currentAccountId={folder.accountId}
-              isDefault={folder.isDefault}
               onPick={folder.pick}
-              onDefault={folder.makeDefault}
             />
             <ThreadListScroll>
               {compact && rows.length > 0 ? <CompactListHeader /> : null}

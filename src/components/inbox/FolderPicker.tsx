@@ -1,5 +1,5 @@
 import { Menu } from "@base-ui/react/menu";
-import { CheckIcon, ChevronDownIcon } from "@heroicons/react/24/outline";
+import { ChevronDownIcon } from "@heroicons/react/24/outline";
 import { $api } from "../../lib/api/api";
 import { cn } from "../../lib/ui/cn";
 import { buttonClasses } from "../ui/styles";
@@ -14,18 +14,20 @@ function FolderRows({
   accountId,
   currentAccountId,
   current,
+  markCurrent = true,
   onPick,
 }: {
   accountId?: string;
   currentAccountId?: string;
   current: string;
+  markCurrent?: boolean;
   onPick: (name: string, accountId?: string) => void;
 }) {
   const folders = $api.useQuery("get", "/v1/labels", {
     params: { query: accountId ? { accountId } : {} },
   });
   const labels = folders.data?.labels ?? [];
-  const selectedAccount = accountId === currentAccountId;
+  const selectedAccount = markCurrent && accountId === currentAccountId;
   const pick = (name: string) => onPick(name, accountId);
 
   return (
@@ -74,22 +76,18 @@ function FolderRows({
 export default function FolderPicker({
   current,
   currentAccountId,
-  isDefault = false,
   mode = "inbox",
   ariaLabel,
   disabled = false,
   onPick,
-  onDefault,
 }: {
   /** The folder shown in the list or selected as the home default. */
   current: string;
   currentAccountId?: string;
-  isDefault?: boolean;
   mode?: "inbox" | "default";
   ariaLabel?: string;
   disabled?: boolean;
   onPick: (name: string, accountId?: string) => void;
-  onDefault?: (on: boolean) => void;
 }) {
   const auth = $api.useQuery("get", "/auth/status", {});
   const accounts = (auth.data?.accounts ?? []).filter((account) => account.signedIn);
@@ -139,25 +137,6 @@ export default function FolderPicker({
             style={{ maxHeight: "max(0px, calc(var(--available-height) - 2rem))" }}
             aria-label="Folders"
           >
-            {!selectingDefault ? (
-              <Menu.CheckboxItem
-                checked={isDefault}
-                closeOnClick={false}
-                className={menuItemClasses}
-                onCheckedChange={(checked) => onDefault?.(checked)}
-              >
-                <span className="min-w-0 flex-1 truncate">
-                  Open {current || "All mail"}
-                  {currentAccountId && accountName ? ` (${accountName})` : ""} by default
-                </span>
-                <span
-                  className="flex-[0_0_.8rem] text-right font-bold text-accent"
-                  aria-hidden="true"
-                >
-                  {isDefault ? <CheckIcon /> : null}
-                </span>
-              </Menu.CheckboxItem>
-            ) : null}
             <Menu.Item
               className={menuItemClasses}
               aria-current={!currentAccountId && !current ? "true" : undefined}
@@ -165,6 +144,25 @@ export default function FolderPicker({
             >
               All accounts · All mail
             </Menu.Item>
+            {/* Inbox exists even before the cached account label list has loaded. */}
+            {!selectingDefault
+              ? accounts.map((account) => {
+                  const name = account.email || account.displayName || account.id;
+                  return (
+                    <Menu.Item
+                      key={account.id}
+                      label={`Inbox (${name})`}
+                      className={menuItemClasses}
+                      aria-current={
+                        current === "INBOX" && currentAccountId === account.id ? "true" : undefined
+                      }
+                      onClick={() => onPick("INBOX", account.id)}
+                    >
+                      <span className="min-w-0 flex-1 truncate">Inbox ({name})</span>
+                    </Menu.Item>
+                  );
+                })
+              : null}
             {auth.isPending ? (
               <p className="mx-2 my-1.5 text-xs/snug text-muted">Reading connected accounts…</p>
             ) : null}
@@ -177,10 +175,10 @@ export default function FolderPicker({
               <FolderRows current={current} onPick={onPick} />
             ) : null}
             {accounts.map((account, index) => {
-              const name = account.email || account.displayName;
+              const name = account.email || account.displayName || account.id;
               return (
                 <Menu.Group
-                  className={index ? "mt-1 border-t border-line pt-1" : ""}
+                  className={index || !selectingDefault ? "mt-1 border-t border-line pt-1" : ""}
                   key={account.id}
                 >
                   <Menu.GroupLabel className="truncate px-2 pt-1 pb-0.5 text-xs font-bold text-muted">
@@ -190,6 +188,7 @@ export default function FolderPicker({
                     accountId={account.id}
                     currentAccountId={currentAccountId}
                     current={current}
+                    markCurrent={selectingDefault || current !== "INBOX"}
                     onPick={onPick}
                   />
                 </Menu.Group>
