@@ -1997,7 +1997,22 @@ export interface components {
             body?: string;
         };
         DraftResponse: {
+            /** @description Stable application account ID, not email; scopes Gmail draft and message IDs. */
             accountId: string;
+            /**
+             * @description Navigation only; does not assert MIME editability or sender compatibility. No reply headers means compose even with Gmail threadId. Unresolved drafts remain visible.
+             * @enum {string}
+             */
+            kind: "compose" | "reply" | "unresolved";
+            /**
+             * @description compose iff kind compose; resolved iff kind reply. All other values mean kind unresolved with no navigation handles. lookup-unavailable explicitly indicates corpus lookup failure, not missing mail; successful Gmail writes still succeed.
+             * @enum {string}
+             */
+            resolution: "compose" | "resolved" | "missing-explicit-parent" | "malformed-parent" | "missing-parent" | "ambiguous-parent" | "unresolved-root" | "lookup-unavailable";
+            /** @description Exact account-qualified unique parent corpus ext ID. Present only for kind reply / resolution resolved, together with rootId. Never a Gmail ID or raw RFC Message-ID. */
+            replyToEntry?: string;
+            /** @description Current stored corpus graph root ext ID for replyToEntry. Present only for resolved reply. Root can retain unresolved external parent_ref. Never Gmail threadId. */
+            rootId?: string;
         } & components["schemas"]["Draft"];
         DraftDeleteResponse: {
             accountId: string;

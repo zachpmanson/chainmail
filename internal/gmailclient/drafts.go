@@ -34,13 +34,14 @@ func IsNotFound(err error) bool {
 // Draft is a Gmail-owned draft. IDs are mailbox-local; AccountID is supplied by
 // the server that selected the credential used for this call.
 type Draft struct {
-	ID        string `json:"id"`
-	MessageID string `json:"messageId,omitempty"`
-	ThreadID  string `json:"threadId,omitempty"`
-	To        string `json:"to,omitempty"`
-	Cc        string `json:"cc,omitempty"`
-	Subject   string `json:"subject,omitempty"`
-	Body      string `json:"body,omitempty"`
+	ReplyHeaders ReplyHeaders `json:"-"`
+	ID           string       `json:"id"`
+	MessageID    string       `json:"messageId,omitempty"`
+	ThreadID     string       `json:"threadId,omitempty"`
+	To           string       `json:"to,omitempty"`
+	Cc           string       `json:"cc,omitempty"`
+	Subject      string       `json:"subject,omitempty"`
+	Body         string       `json:"body,omitempty"`
 }
 
 // ListDrafts lists drafts in Gmail and fetches each full message so callers can
@@ -169,6 +170,13 @@ func (c Client) SaveDraft(d Draft, replyToMessageID string) (Draft, error) {
 			return Draft{}, err
 		}
 	}
+	// Extract only navigation evidence from the final bytes, before mutation.
+	// Never reparse editable content or perform a post-write provider read.
+	finalMessage, err := mail.ReadMessage(bytes.NewReader(raw))
+	if err != nil {
+		return Draft{}, fmt.Errorf("reading outgoing draft headers: %w", err)
+	}
+	d.ReplyHeaders = replyHeaders(finalMessage.Header)
 	message.Raw = base64.RawURLEncoding.EncodeToString(raw)
 	container := &gmail.Draft{Id: d.ID, Message: message}
 	var saved *gmail.Draft
@@ -337,6 +345,7 @@ func parseDraft(raw []byte) (Draft, error) {
 		return Draft{}, err
 	}
 	var d Draft
+	d.ReplyHeaders = replyHeaders(msg.Header)
 	d.To, d.Cc = msg.Header.Get("To"), msg.Header.Get("Cc")
 	d.Subject, err = new(mime.WordDecoder).DecodeHeader(msg.Header.Get("Subject"))
 	if err != nil {
