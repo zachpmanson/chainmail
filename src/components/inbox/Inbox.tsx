@@ -21,6 +21,7 @@ import ComposeBox from "../compose/ComposeBox";
 import { useCompose } from "../compose/ComposeContext";
 import FolderPicker from "./FolderPicker";
 import ThreadListScroll from "./ThreadListScroll";
+import { openThread } from "../../lib/ui/openSelection";
 
 export default function Inbox() {
   const folder = useFolder();
@@ -47,16 +48,15 @@ function FolderInbox({ folder }: { folder: ReturnType<typeof useFolder> }) {
   }, []);
 
   // Absent means nothing is open; the pane never fills itself with the top thread.
-  const opened = useSearch({ from: "/" }).open;
+  const opened = openThread(useSearch({ from: "/" }).open);
   const { label } = folder;
   // Waits for settings so the default folder doesn't swap in after All mail.
   const { list: inbox, rows } = useThreadList(label, folder.accountId, folder.settled);
 
   // Choosing a thread dismisses compose, or the thread would open hidden beneath it.
   const openChain = (root: string) => {
-    closeCompose();
     if (root === opened) return;
-    navigate({ to: "/", search: (prev) => ({ ...prev, open: root }) });
+    navigate({ to: "/", search: (prev) => ({ ...prev, open: root, popup: undefined }) });
   };
   const closeChain = () => navigate({ to: "/", search: (prev) => ({ ...prev, open: undefined }) });
 

@@ -1,10 +1,11 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { $api } from "../api/api";
+import { COMPOSE_OPEN } from "../ui/openSelection";
 
 /** The folder the inbox shows: the URL's, or the reader's default from settings. */
 export default function useFolder() {
   const navigate = useNavigate();
-  const { label: urlLabel, accountId: urlAccountId } = useSearch({ from: "/" });
+  const { label: urlLabel, accountId: urlAccountId, open } = useSearch({ from: "/" });
   const settings = $api.useQuery("get", "/v1/settings", {});
 
   // "" in the URL is All mail chosen on purpose; only undefined falls back to the default.
@@ -25,6 +26,7 @@ export default function useFolder() {
       navigate({
         to: "/",
         search: (prev) => ({ ...prev, label: name, accountId: pickedAccountId }),
+        state: (prev) => (open === COMPOSE_OPEN ? { composeOrigin: prev.composeOrigin } : {}),
       }),
   };
 }
