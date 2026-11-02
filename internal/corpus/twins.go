@@ -204,6 +204,12 @@ func CollapseTwins(s *Store, apply bool) (TwinPlan, error) {
 // Planning holds only a WAL read snapshot. Each short apply validates that no
 // outside writer changed any input; committed prefixes are never replayed.
 func CollapseTwinsContext(ctx context.Context, s *Store, apply bool) (TwinPlan, error) {
+	return collapseTwinsContext(ctx, s, apply, s.guardedReconcileWrite, s.guardedReconcileWrite)
+}
+
+type twinWrite func(context.Context, *int64, func(corpusWriter) error) (time.Duration, error)
+
+func collapseTwinsContext(ctx context.Context, s *Store, apply bool, write, publish twinWrite) (TwinPlan, error) {
 	var total TwinPlan
 	for attempt := 0; attempt < 3; attempt++ {
 		if err := ctx.Err(); err != nil {
@@ -215,8 +221,12 @@ func CollapseTwinsContext(ctx context.Context, s *Store, apply bool) (TwinPlan, 
 		}
 		state, err := readReconcileState(tx)
 		var plan TwinPlan
+		var cache *twinBodyCache
+		if apply {
+			cache = new(twinBodyCache)
+		}
 		if err == nil {
-			plan, err = planTwins(tx)
+			plan, err = planTwinsCached(tx, cache)
 		}
 		tx.Rollback()
 		total.PeopleScanned += plan.PeopleScanned
@@ -234,9 +244,14 @@ func CollapseTwinsContext(ctx context.Context, s *Store, apply bool) (TwinPlan, 
 		total.Applied = true
 		total.Declined, total.Annotated = plan.Declined, plan.Annotated
 		expected := state.Source
+		wait, err := publishTwinBodies(ctx, cache.pending, expected, publish)
+		total.WriterWait += wait
 		for _, c := range plan.Collapse {
+			if err != nil {
+				break
+			}
 			var wait time.Duration
-			wait, err = s.guardedReconcileWrite(ctx, &expected, func(w corpusWriter) error { return collapseGroup(w, s, c) })
+			wait, err = write(ctx, &expected, func(w corpusWriter) error { return collapseGroup(w, s, c) })
 			total.WriterWait += wait
 			if err != nil {
 				break
@@ -253,7 +268,7 @@ func CollapseTwinsContext(ctx context.Context, s *Store, apply bool) (TwinPlan, 
 		if err == nil {
 			for _, d := range plan.Derived {
 				var wait time.Duration
-				wait, err = s.guardedReconcileWrite(ctx, &expected, func(w corpusWriter) error { return persistDerived(w, d.Copy, d.Base) })
+				wait, err = write(ctx, &expected, func(w corpusWriter) error { return persistDerived(w, d.Copy, d.Base) })
 				total.WriterWait += wait
 				if err != nil {
 					break
@@ -273,13 +288,17 @@ func CollapseTwinsContext(ctx context.Context, s *Store, apply bool) (TwinPlan, 
 }
 
 func planTwins(q corpusQuery) (TwinPlan, error) {
+	return planTwinsCached(q, nil)
+}
+
+func planTwinsCached(q corpusQuery, cache *twinBodyCache) (TwinPlan, error) {
 	var plan TwinPlan
 	people, err := peopleWithQuotedEntries(q)
 	if err != nil {
 		return plan, err
 	}
 	for _, person := range people {
-		copies, err := twinCopies(q, person)
+		copies, err := twinCopiesCached(q, person, cache)
 		if err != nil {
 			return plan, err
 		}
@@ -405,12 +424,23 @@ func peopleWithQuotedEntries(q corpusQuery) ([]int64, error) {
 // Grouping by person is also what keeps this a windowed sweep rather than a
 // 31,000-entry cross join.
 func twinCopies(q corpusQuery, person int64) ([]twinCopy, error) {
+	return twinCopiesCached(q, person, nil)
+}
+
+func twinCopiesCached(q corpusQuery, person int64, cache *twinBodyCache) ([]twinCopy, error) {
+	columns, join := "", ""
+	if cache != nil {
+		columns = fmt.Sprintf(`, case when typeof(b.format_version)='integer' then b.format_version end,
+		       case when typeof(b.input_digest)='blob' and length(b.input_digest)=32 then b.input_digest end,
+		       case when typeof(b.payload)='blob' and length(b.payload)<=%d then b.payload end`, twinBodyMaxPayload)
+		join = ` left join twins_body_cache b on b.entry_id=e.id`
+	}
 	rows, err := q.Query(`
 		select e.id, e.ext_id, e.quoted, e.ts, coalesce(e.subject,''),
 		       coalesce(e.container,''),
 		       coalesce(e.body_text,''), coalesce(e.body_html,''),
-		       (select count(*) from attachments a where a.entry_id = e.id)
-		from entries e
+		       (select count(*) from attachments a where a.entry_id = e.id), e.source`+columns+`
+		from entries e`+join+`
 		where e.person_id = ? and e.source = ?
 		order by e.ts, e.id`, person, SourceMail)
 	if err != nil {
@@ -421,17 +451,31 @@ func twinCopies(q corpusQuery, person int64) ([]twinCopy, error) {
 	for rows.Next() {
 		var c twinCopy
 		var ts int64
-		var body string
-		if err := rows.Scan(&c.id, &c.ext, &c.quoted, &ts, &c.subject, &c.container, &body, &c.bodyHTML, &c.atts); err != nil {
+		var body, source string
+		var version sql.NullInt64
+		var digest, payload []byte
+		dest := []any{&c.id, &c.ext, &c.quoted, &ts, &c.subject, &c.container, &body, &c.bodyHTML, &c.atts, &source}
+		if cache != nil {
+			dest = append(dest, &version, &digest, &payload)
+		}
+		if err := rows.Scan(dest...); err != nil {
 			return nil, err
 		}
 		c.wall = time.Unix(ts, 0).UTC()
-		c.words = copyWords(body, c.bodyHTML, c.quoted)
-		c.prose = proseWords(body, c.bodyHTML, c.quoted)
-		c.links = copyLinks(body, c.bodyHTML, c.quoted)
+		if cache == nil {
+			reduceTwinBody(&c, body)
+		} else {
+			cache.reduce(&c, body, source, version.Int64, digest, payload)
+		}
 		out = append(out, c)
 	}
 	return out, rows.Err()
+}
+
+func reduceTwinBody(c *twinCopy, body string) {
+	c.words = copyWords(body, c.bodyHTML, c.quoted)
+	c.prose = proseWords(body, c.bodyHTML, c.quoted)
+	c.links = copyLinks(body, c.bodyHTML, c.quoted)
 }
 
 // copyWords is the tokens of what the sender wrote themselves, with the history
