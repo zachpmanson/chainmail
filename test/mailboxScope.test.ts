@@ -1,11 +1,12 @@
 import { createElement } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, create, type ReactTestRenderer } from "react-test-renderer";
+import { act, create, type ReactTestInstance, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChainHit } from "../src/lib/api/api";
 import type { SearchParams } from "../src/router";
 import Inbox from "../src/components/inbox/Inbox";
 import FolderPicker from "../src/components/inbox/FolderPicker";
+import IconFrame from "../src/components/ui/IconFrame";
 import SelectView from "../src/components/inbox/SelectView";
 import ThreadPopup from "../src/components/thread/ThreadPopup";
 import ActionBar from "../src/components/inbox/ActionBar";
@@ -101,6 +102,15 @@ function click(label: string) {
       .find((node) => node.props["aria-label"] === label)!
       .props.onClick();
   });
+}
+function mailControlOrder(root: ReactTestInstance) {
+  return root
+    .findAll(
+      (node) =>
+        (node.type === "button" || node.type === "select") &&
+        ["Move to a folder", "Archive", "Delete"].includes(node.props["aria-label"]),
+    )
+    .map((node) => node.props["aria-label"]);
 }
 function tick(subject: string) {
   act(() => {
@@ -271,6 +281,39 @@ describe("thread read toggle", () => {
   });
 });
 
+describe("thread checkbox icon sizing", () => {
+  it.each([false, true])(
+    "uses the shared icon frame in compact=%s without opening or marking the thread",
+    (compact) => {
+      state.compact = compact;
+      render();
+      const row = rendered!.root.findByType("li");
+      const label = row.findByType("label");
+      expect(label.findAllByType(IconFrame)).toHaveLength(1);
+      expect(label.props.className.split(" ")).toContain("flex");
+      const input = label.findByType("input");
+      expect(input.props.type).toBe("checkbox");
+      expect(input.props.className.split(" ")).toContain("size-6");
+      expect(input.props.checked).toBe(false);
+      act(() => input.props.onChange());
+      expect(rendered!.root.findByType(ActionBar).props.chosen).toEqual(["S"]);
+      expect(state.navigate).not.toHaveBeenCalled();
+      expect(state.read).not.toHaveBeenCalled();
+      expect(state.mail).not.toHaveBeenCalled();
+      if (!compact) {
+        const dates = row
+          .findAllByType("span")
+          .filter(
+            (node) =>
+              node.props.className?.includes("tabular-nums") &&
+              node.props.className?.split(" ").includes("mr-8"),
+          );
+        expect(dates).toHaveLength(1);
+      }
+    },
+  );
+});
+
 describe("all write surfaces use the displayed account", () => {
   it.each(["default", "explicit", "search"])(
     "scopes row, bulk, pane and move actions from %s",
@@ -306,6 +349,16 @@ describe("all write surfaces use the displayed account", () => {
         body: { chains: ["S"], action: "archive", accountId: "work" },
       });
       tick("Shared");
+      expect(mailControlOrder(rendered!.root.findByType(ActionBar))).toEqual([
+        "Move to a folder",
+        "Archive",
+        "Delete",
+      ]);
+      expect(mailControlOrder(rendered!.root.findByType(ThreadPane))).toEqual([
+        "Move to a folder",
+        "Archive",
+        "Delete",
+      ]);
       for (const [label, action] of [
         ["Archive", "archive"],
         ["Delete", "trash"],
@@ -381,6 +434,11 @@ describe("all write surfaces use the displayed account", () => {
     act(() => {
       rendered = create(createElement(ThreadPopup, { rootExtId: "S" }));
     });
+    expect(mailControlOrder(rendered!.root.findByType(ThreadPane))).toEqual([
+      "Move to a folder",
+      "Archive",
+      "Delete",
+    ]);
     act(() => {
       rendered!.root
         .findAllByType("button")

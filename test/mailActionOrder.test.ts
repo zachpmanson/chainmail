@@ -30,7 +30,7 @@ vi.mock("../src/lib/api/api", () => ({
 vi.mock("../src/components/thread/ThreadMessages", () => ({ default: () => null }));
 
 let root: ReactTestRenderer;
-const order = ["Archive", "Move to a folder", "Delete"];
+const order = ["Move to a folder", "Archive", "Delete"];
 beforeEach(() => {
   mail.isPending = false;
   mail.mutate.mockClear();
@@ -69,15 +69,15 @@ it.each([false, true])("orders shared actions consistently (pane: %s)", (pane) =
   expect(
     controls.map((node) => (node.type === "select" ? node.parent?.props.title : node.props.title)),
   ).toEqual(order);
-  expect(controls.map((node) => node.type)).toEqual(["button", "select", "button"]);
-  expect(controls[1]!.props.value).toBe("INBOX");
+  expect(controls.map((node) => node.type)).toEqual(["select", "button", "button"]);
+  expect(controls[0]!.props.value).toBe("INBOX");
   const chains = pane ? ["root"] : ["root", "second"];
-  act(() => controls[0]!.props.onClick());
-  act(() => controls[1]!.props.onChange({ target: { value: "Saved" } }));
+  act(() => controls[0]!.props.onChange({ target: { value: "Saved" } }));
+  act(() => controls[1]!.props.onClick());
   act(() => controls[2]!.props.onClick());
   expect(mail.mutate.mock.calls).toEqual([
-    [{ body: { chains, action: "archive", accountId: "acct" } }],
     [{ body: { chains, action: "move", labels: ["Saved"], accountId: "acct" } }],
+    [{ body: { chains, action: "archive", accountId: "acct" } }],
     [{ body: { chains, action: "trash", accountId: "acct" } }],
   ]);
 });

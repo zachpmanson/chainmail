@@ -38,7 +38,7 @@ export default function FullThreadRow({
         >
           {last?.person || "unknown sender"}
         </span>
-        <span className="mr-6 shrink-0 text-xs whitespace-nowrap text-muted tabular-nums">
+        <span className="mr-8 shrink-0 text-xs whitespace-nowrap text-muted tabular-nums">
           {whenShort(last?.ts ?? thread.last)}
         </span>
       </span>

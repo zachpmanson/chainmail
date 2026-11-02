@@ -133,6 +133,20 @@ export default function ThreadPane({
                 <Bars3BottomRightIcon aria-hidden="true" />
               )}
             </IconButton>
+            <MoveFolder
+              defaultFolder={moveDefault}
+              busy={act.isPending}
+              onMove={(to, targetAccountId) =>
+                act.mutate({
+                  body: {
+                    chains: [thread.rootExtId],
+                    action: "move",
+                    labels: [to],
+                    ...(targetAccountId ? { accountId: targetAccountId } : {}),
+                  },
+                })
+              }
+            />
             <IconButton
               aria-label="Archive"
               title="Archive"
@@ -149,20 +163,6 @@ export default function ThreadPane({
             >
               <ArchiveGlyph />
             </IconButton>
-            <MoveFolder
-              defaultFolder={moveDefault}
-              busy={act.isPending}
-              onMove={(to, targetAccountId) =>
-                act.mutate({
-                  body: {
-                    chains: [thread.rootExtId],
-                    action: "move",
-                    labels: [to],
-                    ...(targetAccountId ? { accountId: targetAccountId } : {}),
-                  },
-                })
-              }
-            />
             <IconButton
               aria-label="Delete"
               title="Delete"
