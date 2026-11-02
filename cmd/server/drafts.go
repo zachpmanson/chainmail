@@ -32,8 +32,37 @@ type draftRequest struct {
 }
 
 type draftResponse struct {
-	AccountID string `json:"accountId"`
+	AccountID    string `json:"accountId"`
+	Kind         string `json:"kind"`
+	Resolution   string `json:"resolution"`
+	ReplyToEntry string `json:"replyToEntry,omitempty"`
+	RootID       string `json:"rootId,omitempty"`
 	gmailclient.Draft
+}
+
+// Navigation enrichment must not turn successful Gmail writes into failures.
+func (s *server) draftResponse(accountID string, d gmailclient.Draft) draftResponse {
+	out := draftResponse{AccountID: accountID, Draft: d, Kind: "unresolved"}
+	parent, resolution := d.ReplyHeaders.Parent()
+	out.Resolution = resolution
+	if resolution == "compose" {
+		out.Kind = "compose"
+		return out
+	}
+	if resolution != "candidate" {
+		return out
+	}
+	nav, err := s.store.ResolveDraftParent(accountID, parent)
+	if err != nil {
+		// Static output only: no SQL, header values or provider error data.
+		out.Resolution = "lookup-unavailable"
+		return out
+	}
+	out.Resolution = nav.Resolution
+	if nav.Resolution == "resolved" {
+		out.Kind, out.ReplyToEntry, out.RootID = "reply", nav.ReplyToEntry, nav.RootID
+	}
+	return out
 }
 
 // drafts serves the mailbox's current draft list or creates a Gmail draft.
@@ -56,7 +85,7 @@ func (s *server) drafts(w http.ResponseWriter, r *http.Request) {
 		}
 		out := make([]draftResponse, 0, len(drafts))
 		for _, d := range drafts {
-			out = append(out, draftResponse{AccountID: accountID, Draft: d})
+			out = append(out, s.draftResponse(accountID, d))
 		}
 		send(w, http.StatusOK, out)
 		return
@@ -140,7 +169,7 @@ func (s *server) draft(w http.ResponseWriter, r *http.Request) {
 			fail(w, gmailDraftErrorStatus(err), fmt.Errorf("reading draft: %w", err))
 			return
 		}
-		send(w, http.StatusOK, draftResponse{AccountID: accountID, Draft: d})
+		send(w, http.StatusOK, s.draftResponse(accountID, d))
 	case http.MethodPut:
 		if !s.draftMailEnabled {
 			fail(w, http.StatusForbidden, errors.New("saving Gmail drafts is disabled: restart with -draft-mail to enable draft writes"))
@@ -242,7 +271,7 @@ func (s *server) saveDraft(w http.ResponseWriter, req draftRequest) {
 		fail(w, status, fmt.Errorf("saving Gmail draft: %w [operation=%s; reply_parent=%t]", err, operation, req.ReplyToEntry != ""))
 		return
 	}
-	send(w, http.StatusOK, draftResponse{AccountID: accountID, Draft: d})
+	send(w, http.StatusOK, s.draftResponse(accountID, d))
 }
 
 func gmailDraftErrorStatus(err error) int {
