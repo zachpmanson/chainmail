@@ -1,3 +1,5 @@
+import type { SavedDraft } from "../src/lib/ui/draftSelection";
+import type { DraftCoordinator } from "../src/components/compose/DraftSelectionContext";
 import { createElement, type ComponentProps } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
@@ -9,6 +11,11 @@ import ComposerFields from "../src/components/compose/ComposerFields";
 import { makeQueryClient } from "../src/lib/api/queryClient";
 import type { CorpusEntry } from "../src/lib/api/api";
 
+const selectionFixture = vi.hoisted(() => ({ current: null as DraftCoordinator | null }));
+vi.mock("../src/components/compose/DraftSelectionContext", async (original) => ({
+  ...(await original<typeof import("../src/components/compose/DraftSelectionContext")>()),
+  useDraftCoordinator: () => selectionFixture.current,
+}));
 vi.mock("../src/lib/inbox/useAccountId", () => ({ useAccountId: () => "acct" }));
 vi.mock("../src/components/compose/useAccounts", () => ({
   default: () => ({ connected: [{ id: "acct", email: "me@example.test" }] }),
@@ -49,6 +56,10 @@ const json = (data: unknown) =>
   });
 const saved = {
   accountId: "acct",
+  kind: "reply" as const,
+  resolution: "resolved" as const,
+  rootId: "root",
+  replyToEntry: "A",
   id: "d1",
   messageId: "m1",
   threadId: "thread-1",
@@ -98,6 +109,25 @@ async function mount(reply = true) {
   });
   await settle();
 }
+function selectFixture(draft: SavedDraft = saved, epoch = 1) {
+  const retired = new Set<string>();
+  selectionFixture.current = {
+    selection: { epoch, active: true, accountId: draft.accountId, id: draft.id, draft },
+    editor: { current: undefined },
+    approve: () => true,
+    select: () => {},
+    detach: () => true,
+    isRetired: (account, id) => retired.has(JSON.stringify([account, id])),
+    retire: (account, id) => {
+      retired.add(JSON.stringify([account, id]));
+      selectionFixture.current!.selection = { epoch: epoch + 1, active: false };
+    },
+  };
+}
+async function mountSelected() {
+  selectFixture();
+  await mount();
+}
 const fields = () =>
   root.root.findByType("composer-fields" as never).props as ComponentProps<typeof ComposerFields>;
 const form = () =>
@@ -132,6 +162,7 @@ async function autosave() {
 }
 
 beforeEach(() => {
+  selectionFixture.current = null;
   vi.useFakeTimers();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal("window", { setTimeout, clearTimeout, confirm: () => true });
@@ -443,31 +474,33 @@ describe("acknowledged autosave input", () => {
     },
   );
 
-  it("does not reuse a compose acknowledgement for another selected draft with identical content", async () => {
+  it("acknowledges each explicitly selected compose snapshot without writing on open", async () => {
     const original = {
       ...saved,
-      threadId: "",
+      kind: "compose" as const,
+      resolution: "compose" as const,
       to: "to@example.test",
       subject: "Same subject",
       body: "Same words",
     };
-    const normal = handle;
-    handle = (req) =>
-      req.method === "GET" && new URL(req.url).pathname === "/v1/drafts"
-        ? Promise.resolve(json([original, { ...original, id: "d2", messageId: "m2" }]))
-        : req.method === "PUT"
-          ? Promise.resolve(json({ ...original, id: new URL(req.url).pathname.split("/").at(-1) }))
-          : normal(req);
+    selectFixture(original);
     await mount(false);
-    for (const id of ["d1", "d2"]) {
-      await act(async () => {
-        root.root.findByType("select").props.onChange({ target: { value: id } });
-      });
-      expect(visibleText()).not.toContain("Saved to Gmail");
-      await autosave();
-      expect(visibleText()).toContain("Saved to Gmail");
-    }
-    expect(draftWrites().map((r) => r.path)).toEqual(["/v1/drafts/d1", "/v1/drafts/d2"]);
+    await autosave();
+    expect(form().draft.body).toBe("Same words");
+    expect(draftWrites()).toEqual([]);
+    selectFixture({ ...original, id: "d2", messageId: "m2" }, 2);
+    await act(async () => {
+      form().onDraft({});
+    });
+    await settle();
+    await autosave();
+    expect(draftWrites()).toEqual([]);
+    await act(async () => {
+      form().onDraft({ body: "A real edit" });
+    });
+    await autosave();
+    expect(draftWrites().map((r) => r.path)).toEqual(["/v1/drafts/d2"]);
+    expect(draftWrites()[0]!.body.expectedMessageId).toBe("m2");
   });
 });
 
@@ -557,8 +590,23 @@ describe("queued autosave outcomes", () => {
   );
 });
 
+it.each([true, false])(
+  "list arrival never prefills an unselected editor (reply: %s)",
+  async (reply) => {
+    const normal = handle;
+    handle = (req) =>
+      req.method === "GET" && new URL(req.url).pathname === "/v1/drafts"
+        ? Promise.resolve(json([saved]))
+        : normal(req);
+    await mount(reply);
+    expect(reply ? fields().draft.body : form().draft.body).toBe("");
+    await autosave();
+    expect(draftWrites()).toEqual([]);
+  },
+);
+
 describe("reply draft ownership", () => {
-  it("does not hydrate over words typed before initial draft discovery", async () => {
+  it("does not hydrate or pause new words when saved drafts are discovered", async () => {
     const list = deferred<Response>();
     const normal = handle;
     handle = (req) =>
@@ -573,11 +621,9 @@ describe("reply draft ownership", () => {
     await settle();
     expect(fields().draft.body).toBe("NEW UNSAVED WORDS");
     await autosave();
-    expect(requests.filter((r) => r.path.startsWith("/v1/drafts") && r.method !== "GET")).toEqual(
-      [],
-    );
-    await click("Resume saved draft");
-    expect(fields().draft.body).toBe("OLD SAVED WORDS");
+    expect(draftWrites()).toHaveLength(1);
+    expect(draftWrites()[0]!.method).toBe("POST");
+    expect(fields().draft.body).toBe("NEW UNSAVED WORDS");
   });
 
   it.each(["discard", "send"])(
@@ -592,7 +638,7 @@ describe("reply draft ownership", () => {
             ? Promise.resolve(json([saved]))
             : refresh.promise
           : normal(req);
-      await mount();
+      await mountSelected();
       expect(fields().draft.body).toBe("OLD SAVED WORDS");
       if (action === "discard") await click("Discard draft");
       else {
@@ -626,7 +672,8 @@ describe("reply draft ownership", () => {
         if (req.method === "PUT") return put.promise;
         return normal(req);
       };
-      await mount();
+      await mountSelected();
+      await typeReply("Edited saved words");
       await autosave();
       expect(requests.filter((r) => r.method === "PUT")).toHaveLength(1);
       await click("Discard draft");
@@ -649,7 +696,7 @@ describe("reply draft ownership", () => {
         put.resolve(json({ ...saved, messageId: "m2" }));
       });
       await settle();
-      expect(fields().draft.body).toBe(retarget ? "OLD SAVED WORDS" : "");
+      expect(fields().draft.body).toBe(retarget ? "Edited saved words" : "");
       expect(requests.filter((r) => r.method === "DELETE").map((r) => r.path)).toEqual(
         retarget ? [] : ["/v1/drafts/d1"],
       );
@@ -687,7 +734,7 @@ it("resumes canonical mailbox recipients without changing Reply-To to corpus Fro
     req.method === "GET" && new URL(req.url).pathname === "/v1/drafts"
       ? Promise.resolve(json([saved]))
       : normal(req);
-  await mount();
+  await mountSelected();
   expect(fields().draft.to.map((r) => r.address)).toEqual(["reply-target@example.test"]);
   await click("preview");
   expect(requests.find((r) => r.path === "/v1/send")?.body.to).toEqual([
@@ -716,8 +763,11 @@ describe("reply draft send safety", () => {
           );
         return normal(req);
       };
-      await mount();
-      if (autosaved) await autosave();
+      await mountSelected();
+      if (autosaved) {
+        await typeReply("Edited saved words");
+        await autosave();
+      }
       await click("preview");
       await click("send this reply");
       expect(requests.filter((r) => r.body.confirm === true)).toEqual([]);
@@ -745,7 +795,8 @@ describe("reply draft send safety", () => {
         );
       return normal(req);
     };
-    await mount();
+    await mountSelected();
+    await typeReply("OLD SAVED WORDS edited");
     await autosave();
     expect(puts).toBe(1);
     await click("preview");
@@ -758,7 +809,7 @@ describe("reply draft send safety", () => {
     expect(preflight.body).toMatchObject({
       expectedMessageId: "m1",
       replyToEntry: "A",
-      body: "OLD SAVED WORDS",
+      body: "OLD SAVED WORDS edited",
     });
   });
 });
@@ -772,7 +823,7 @@ it("does not send or clean up if the reply owner changes during draft preflight"
     if (req.method === "PUT") return preflight.promise;
     return normal(req);
   };
-  await mount();
+  await mountSelected();
   await click("preview");
   await click("send this reply");
   expect(requests.filter((r) => r.method === "PUT")).toHaveLength(1);
@@ -838,7 +889,7 @@ describe("immutable review requests", () => {
       if (path === "/v1/send" && (await req.clone().json()).confirm) return sent.promise;
       return normal(req);
     };
-    await mount();
+    await mountSelected();
     await click("preview");
     await click("send this reply");
     await act(async () => {
@@ -947,4 +998,38 @@ describe("immutable review requests", () => {
     await settle();
     expect(button("Confirm and send")).toBeUndefined();
   });
+});
+
+it("opens a selected reply once without PUT, including explicit empty recipients, then writes the next recipient edit", async () => {
+  selectFixture({ ...saved, to: "", cc: "", body: "" });
+  await mount();
+  expect(fields().draft.to).toEqual([]);
+  expect(fields().draft.cc).toEqual([]);
+  await autosave();
+  expect(draftWrites()).toEqual([]);
+  await act(async () => fields().onDraft({ cc: [{ address: "cc@example.test" }] }));
+  await autosave();
+  expect(draftWrites()).toHaveLength(1);
+  expect(draftWrites()[0]).toMatchObject({
+    method: "PUT",
+    path: "/v1/drafts/d1",
+    body: { to: [], cc: ["cc@example.test"], body: "", replyToEntry: "A", expectedMessageId: "m1" },
+  });
+  expect(draftWrites()[0]!.body).not.toHaveProperty("kind");
+  expect(draftWrites()[0]!.body).not.toHaveProperty("resolution");
+});
+
+it("does not rehydrate newer words from same-epoch detail refetches", async () => {
+  await mountSelected();
+  await typeReply("New local words");
+  selectionFixture.current!.selection.draft = {
+    ...saved,
+    body: "Stale refetch words",
+    messageId: "stale-revision",
+  };
+  await act(async () => fields().onDraft({ body: "Newest words" }));
+  await settle();
+  expect(fields().draft.body).toBe("Newest words");
+  await autosave();
+  expect(draftWrites()[0]!.body).toMatchObject({ body: "Newest words", expectedMessageId: "m1" });
 });

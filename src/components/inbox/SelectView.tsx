@@ -48,10 +48,14 @@ export default function SelectView() {
   const opened = openThread(useSearch({ from: "/" }).open);
   // Choosing a candidate dismisses compose, or the thread would open hidden beneath it.
   const openChain = (root: string) => {
-    if (root === opened) return;
-    navigate({ to: "/", search: (prev) => ({ ...prev, open: root, popup: undefined }) });
+    if (root === opened && !urlSearch.draft) return;
+    navigate({
+      to: "/",
+      search: (prev) => ({ ...prev, open: root, draft: undefined, popup: undefined }),
+    });
   };
-  const closeChain = () => navigate({ to: "/", search: (prev) => ({ ...prev, open: undefined }) });
+  const closeChain = () =>
+    navigate({ to: "/", search: (prev) => ({ ...prev, open: undefined, draft: undefined }) });
 
   // The idle init is never sent; it only gives the disabled query a key.
   const results = $api.useQuery(

@@ -68,6 +68,7 @@ export default function NavSearch() {
     },
   });
 
+  const selectedDraft = useRouterState({ select: (s) => s.location.search.draft });
   const composeOrigin = useRouterState({ select: (s) => s.location.state.composeOrigin });
   const openThread = useRouterState({
     select: (s): string | undefined => {
@@ -109,6 +110,9 @@ export default function NavSearch() {
         ...(four.person ? { person: four.person } : {}),
         ...(four.since ? { since: four.since } : {}),
         ...(four.accountId ? { accountId: four.accountId } : {}),
+        ...(four.accountId === asked.accountId && (openThread === COMPOSE_OPEN || !asks(four))
+          ? { draft: selectedDraft }
+          : {}),
         // Compose stays visible across search edits; a new question clears only real threads.
         ...(openThread === COMPOSE_OPEN || (!asks(four) && openThread !== undefined)
           ? { open: openThread }

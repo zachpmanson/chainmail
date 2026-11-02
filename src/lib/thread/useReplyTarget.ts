@@ -7,6 +7,8 @@ import { gmailIdOf } from "../message/sources";
 export function useReplyTarget(
   threadId: string,
   shown: CorpusEntry[],
+  exact?: { entries: CorpusEntry[]; parent: string },
+  entries: CorpusEntry[] = shown,
 ): {
   answer: CorpusEntry | undefined;
   all: boolean;
@@ -17,6 +19,7 @@ export function useReplyTarget(
   // Kept as an ext id because entries are re-read after a send; an id that no longer
   // resolves falls back to the default.
   const [answering, setAnswering] = useState<string | null>(null);
+  const [retained, setRetained] = useState<{ threadId: string; parent: string }>();
   const [all, setAll] = useState(true);
   // A count, not a flag: re-pressing on the already-answered message must still register.
   const [aimed, setAimed] = useState(0);
@@ -24,6 +27,7 @@ export function useReplyTarget(
   // Reset the reply target on thread change without remounting, so the draft survives.
   useEffect(() => {
     setAnswering(null);
+    setRetained(undefined);
     setAll(true);
   }, [threadId]);
 
@@ -33,11 +37,34 @@ export function useReplyTarget(
   // Re-check answerability: re-reads can drop an entry's mailbox copy.
   const chosen = shown.find((e) => e.extId === answering && gmailIdOf(e) !== undefined);
 
+  const exactAnswer = exact?.entries.find(
+    (e) => e.extId === exact.parent && gmailIdOf(e) !== undefined,
+  );
+  const exactParent = exactAnswer?.extId;
+  // Detaching a sender identity is not a new Answer press. Keep even hoisted parents.
+  useEffect(() => {
+    if (exactParent) setRetained({ threadId, parent: exactParent });
+  }, [threadId, exactParent]);
+  const retainedAnswer =
+    retained?.threadId === threadId
+      ? entries.find((e) => e.extId === retained.parent && gmailIdOf(e) !== undefined)
+      : undefined;
   const aim = (extId: string) => {
+    setRetained(undefined);
     setAnswering(extId);
     setAll(true);
     setAimed((n) => n + 1);
   };
 
-  return { answer: chosen ?? newestAnswer, all, setAll, aimed, aim };
+  return {
+    answer: exact
+      ? exactAnswer
+      : retained?.threadId === threadId
+        ? retainedAnswer
+        : (chosen ?? newestAnswer),
+    all,
+    setAll,
+    aimed,
+    aim,
+  };
 }

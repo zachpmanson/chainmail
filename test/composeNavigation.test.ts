@@ -1,3 +1,5 @@
+import { QueryClientProvider } from "@tanstack/react-query";
+import { makeQueryClient } from "../src/lib/api/queryClient";
 // @vitest-environment jsdom
 import { act, createElement as h, type ReactNode } from "react";
 import { createMemoryHistory, createRouter, RouterProvider } from "@tanstack/react-router";
@@ -144,7 +146,9 @@ async function mount(url: string, state?: { composeOrigin: string }) {
   if (state) history.replace(url, state);
   const subject = createRouter({ ...router.options, history });
   await subject.load();
-  const host = await render(h(RouterProvider, { router: subject }));
+  const host = await render(
+    h(QueryClientProvider, { client: makeQueryClient() }, h(RouterProvider, { router: subject })),
+  );
   return { subject, history, host };
 }
 function control(host: HTMLElement, selector: string) {

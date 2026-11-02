@@ -25,7 +25,12 @@ export default function useFolder() {
     pick: (name: string, pickedAccountId?: string) =>
       navigate({
         to: "/",
-        search: (prev) => ({ ...prev, label: name, accountId: pickedAccountId }),
+        search: (prev) => ({
+          ...prev,
+          label: name,
+          accountId: pickedAccountId,
+          draft: prev.accountId === pickedAccountId ? prev.draft : undefined,
+        }),
         state: (prev) => (open === COMPOSE_OPEN ? { composeOrigin: prev.composeOrigin } : {}),
       }),
   };

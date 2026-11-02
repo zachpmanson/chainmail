@@ -50,6 +50,7 @@ export interface SearchParams {
   accountId?: string;
   label?: string;
   open?: string;
+  draft?: string;
   /** Render a focused thread-only page intended for a script-sized popup. */
   popup?: string;
 }
@@ -65,6 +66,8 @@ function validateSearchParams(search: Record<string, unknown>): SearchParams {
     since: typeof search.since === "string" ? search.since : undefined,
     accountId: typeof search.accountId === "string" ? search.accountId : undefined,
     label: typeof search.label === "string" ? search.label : undefined,
+    draft:
+      typeof search.draft === "string" ? search.draft : search.draft === undefined ? undefined : "",
     open: typeof search.open === "string" ? search.open : undefined,
     // Also accept the numeric popup flag from legacy parser/caller input.
     popup: search.popup === 1 ? "1" : typeof search.popup === "string" ? search.popup : undefined,
@@ -87,6 +90,7 @@ function RootLayout() {
       search: {
         ...search,
         open: COMPOSE_OPEN,
+        draft: undefined,
         popup: undefined,
       },
       state: { composeOrigin: safeComposeOrigin(current.href) },
@@ -95,7 +99,11 @@ function RootLayout() {
   const closeCompose = () => {
     const origin = safeComposeOrigin(location.state.composeOrigin);
     if (origin) navigate({ href: origin });
-    else navigate({ to: "/", search: (prev) => ({ ...prev, open: undefined, popup: undefined }) });
+    else
+      navigate({
+        to: "/",
+        search: (prev) => ({ ...prev, open: undefined, draft: undefined, popup: undefined }),
+      });
   };
   const [error, setError] = useState<string | null>(null);
   const [dropped, setDropped] = useState<Timeline | null>(null);

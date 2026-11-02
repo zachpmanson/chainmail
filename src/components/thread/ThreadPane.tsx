@@ -1,3 +1,4 @@
+import { useDraftCoordinator } from "../compose/DraftSelectionContext";
 import {
   ArrowTopRightOnSquareIcon,
   Bars3BottomRightIcon,
@@ -45,6 +46,7 @@ export default function ThreadPane({
   className?: string;
 }) {
   const accountId = useAccountId();
+  const selected = useDraftCoordinator()?.selection;
 
   const tree = usePrefs((s) => s.tree);
   const setTree = usePrefs((s) => s.setTree);
@@ -102,7 +104,7 @@ export default function ThreadPane({
               <IconButton
                 aria-label="Open in new window"
                 title="Open in new window"
-                href={`/?open=${encodeURIComponent(thread.rootExtId)}&popup=1${accountId ? `&accountId=${encodeURIComponent(accountId)}` : ""}`}
+                href={`/?open=${encodeURIComponent(thread.rootExtId)}&popup=1${selected?.draft?.kind === "reply" && selected.draft.rootId === thread.rootExtId && selected.id ? `&draft=${encodeURIComponent(selected.id)}` : ""}${accountId ? `&accountId=${encodeURIComponent(accountId)}` : ""}`}
                 target="_blank"
                 rel="noopener"
                 onClick={(event) => {

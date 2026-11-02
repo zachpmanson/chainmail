@@ -1,3 +1,6 @@
+import DraftCards from "./DraftCards";
+import useSelectedDraft from "./useSelectedDraft";
+import { draftIdentity } from "../../lib/ui/draftSelection";
 import { useEffect, useMemo, useReducer, useRef, useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { $api, type ComposeResponse } from "../../lib/api/api";
@@ -13,7 +16,7 @@ import ComposeForm from "./ComposeForm";
 import DraftReadError from "./DraftReadError";
 import ComposePreview from "./ComposePreview";
 import { emptyDraft, parseAddressHeader, type Draft } from "./Draft";
-import SelectInput from "../ui/SelectInput";
+
 import useAccounts from "./useAccounts";
 import useBusyTask from "./useBusyTask";
 
@@ -80,7 +83,7 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
     accountId: routeAccountId ?? "",
     step: { kind: "editing" },
   });
-  const { busy, error, clearError, run } = useBusyTask();
+  const { busy, busyRef, operationRevision, error, clearError, run } = useBusyTask();
   const [draftId, setDraftId] = useState("");
   const [draftSaveError, setDraftSaveError] = useState("");
   const [acknowledgedSave, setAcknowledgedSave] = useState("");
@@ -89,6 +92,8 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
   const draftMessageIdRef = useRef("");
   const saveGeneration = useRef(0);
   const saveQueue = useRef(Promise.resolve());
+  const pendingWrites = useRef(0);
+  const writeRevision = useRef(0);
   const displayedAccountId = accountId || (connected.length === 1 ? (connected[0]?.id ?? "") : "");
   const drafts = $api.useQuery(
     "get",
@@ -135,10 +140,85 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
     [reviewInput],
   );
 
+  const selected = useSelectedDraft({
+    kind: "compose",
+    account: displayedAccountId,
+    id: draftId,
+    snapshot: () => ({
+      kind: "compose",
+      destination: "compose",
+
+      revision: JSON.stringify([
+        draftInputKey,
+        step.kind,
+        draftSaveError,
+        sendFailed,
+        operationRevision.current,
+        writeRevision.current,
+      ]),
+      owner: draftIdRef.current ? draftIdentity(displayedAccountId, draftIdRef.current) : undefined,
+      busy:
+        busyRef.current ||
+        pendingWrites.current > 0 ||
+        createDraft.isPending ||
+        updateDraft.isPending ||
+        deleteDraft.isPending,
+      dirty:
+        step.kind !== "sent" &&
+        Boolean(
+          draft.subject ||
+          draft.body ||
+          draft.to.length ||
+          draft.cc.length ||
+          draftSaveError ||
+          sendFailed,
+        ),
+      invalidate: () => {
+        saveGeneration.current++;
+        reviewInput.invalidate();
+      },
+    }),
+    hydrate: (saved) => {
+      saveGeneration.current++;
+      reviewInput.invalidate();
+      dispatch({ type: "edit" });
+      setDraftSaveError("");
+      draftIdRef.current = saved.id;
+      draftMessageIdRef.current = saved.messageId ?? "";
+      setDraftId(saved.id);
+      const to = parseAddressHeader(saved.to);
+      const cc = parseAddressHeader(saved.cc);
+      dispatch({ type: "account", accountId: saved.accountId });
+      dispatch({
+        type: "draft",
+        patch: { to, cc, subject: saved.subject ?? "", body: saved.body ?? "" },
+      });
+      const input = {
+        accountId: saved.accountId,
+        to: to.map(addressWords),
+        cc: cc.map(addressWords),
+        subject: saved.subject ?? "",
+        body: saved.body ?? "",
+      };
+      const acknowledgement = JSON.stringify([
+        saveGeneration.current,
+        saved.id,
+        JSON.stringify(input),
+      ]);
+      acknowledgedSaveRef.current = acknowledgement;
+      setAcknowledgedSave(acknowledgement);
+    },
+  });
+
   useEffect(() => {
     if (
-      (!draft.subject.trim() && !draft.body.trim() && !draft.to.length && !draft.cc.length) ||
+      (!draft.subject.trim() &&
+        !draft.body.trim() &&
+        !draft.to.length &&
+        !draft.cc.length &&
+        !draftIdRef.current) ||
       !displayedAccountId ||
+      selected.blocked ||
       drafts.isPending ||
       drafts.isError ||
       draftSaveError ||
@@ -153,6 +233,8 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
     )
       return;
     const timer = window.setTimeout(() => {
+      writeRevision.current++;
+      pendingWrites.current++;
       saveQueue.current = saveQueue.current
         .catch(() => undefined)
         .then(async () => {
@@ -186,11 +268,15 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
           setDraftSaveError(
             `${errText(e)} Autosave stopped; check Gmail before resuming this draft.`,
           );
+        })
+        .finally(() => {
+          pendingWrites.current--;
         });
     }, 700);
     return () => window.clearTimeout(timer);
   }, [
     draft,
+    selected.blocked,
     draftSaveError,
     busy,
     draftInput,
@@ -215,6 +301,7 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
       await deleteDraft.mutateAsync({
         params: { path: { id }, query: { accountId: displayedAccountId } },
       });
+      selected.coordinator?.retire(displayedAccountId, id);
       if (generation !== saveGeneration.current) return;
       draftIdRef.current = "";
       draftMessageIdRef.current = "";
@@ -227,6 +314,7 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
 
   async function prepare(event: FormEvent) {
     event.preventDefault();
+    if (selected.blocked) return;
     const reviewed = reviewInput.capture();
     await run(async () => {
       const preview = await compose.mutateAsync({ body: { ...reviewed.input, confirm: false } });
@@ -235,7 +323,7 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
   }
 
   async function send() {
-    if (step.kind !== "reviewing" || !previewIsCurrent) return;
+    if (selected.blocked || step.kind !== "reviewing" || !previewIsCurrent) return;
     const { preview, reviewed } = step;
     const input = reviewed.input;
     await run(
@@ -271,6 +359,7 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
             gmailId: sent.gmailId,
             filed: sent.filed,
           };
+          selected.coordinator?.retire(account, id);
           if (reviewInput.isCurrent(reviewed)) {
             draftIdRef.current = "";
             draftMessageIdRef.current = "";
@@ -339,7 +428,7 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
                     variant="danger"
                     density="compact"
                     type="button"
-                    disabled={busy || !previewIsCurrent}
+                    disabled={busy || selected.blocked || !previewIsCurrent}
                     onClick={() => void send()}
                   >
                     {busy ? "Sending…" : "Confirm and send"}
@@ -359,42 +448,6 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
               />
             ) : null}
             {draftSaveError ? <InlineAlert>{draftSaveError}</InlineAlert> : null}
-            {drafts.data?.length ? (
-              <label className="mb-2 flex items-center gap-2 text-xs text-muted">
-                Resume Gmail draft
-                <SelectInput
-                  value=""
-                  disabled={busy}
-                  onChange={(event) => {
-                    const selected = drafts.data?.find((item) => item.id === event.target.value);
-                    if (!selected) return;
-                    saveGeneration.current++;
-                    setDraftSaveError("");
-                    draftIdRef.current = selected.id;
-                    draftMessageIdRef.current = selected.messageId ?? "";
-                    setDraftId(selected.id);
-                    if (selected.accountId !== accountId)
-                      dispatch({ type: "account", accountId: selected.accountId });
-                    dispatch({
-                      type: "draft",
-                      patch: {
-                        to: parseAddressHeader(selected.to),
-                        cc: parseAddressHeader(selected.cc),
-                        subject: selected.subject ?? "",
-                        body: selected.body ?? "",
-                      },
-                    });
-                  }}
-                >
-                  <option value="">Choose a draft…</option>
-                  {drafts.data.map((item) => (
-                    <option key={`${item.accountId}:${item.id}`} value={item.id}>
-                      {item.subject || item.body?.slice(0, 70) || "Untitled draft"}
-                    </option>
-                  ))}
-                </SelectInput>
-              </label>
-            ) : null}
             {draftId ? (
               <div className="mb-1 flex items-center justify-between">
                 {draftIsSaved ? <p className="text-2xs text-muted">Saved to Gmail</p> : null}
@@ -411,9 +464,15 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
             ) : null}
             <ComposeForm
               draft={draft}
-              onDraft={(patch) => dispatch({ type: "draft", patch })}
+              onDraft={(patch) => {
+                selected.edit();
+                dispatch({ type: "draft", patch });
+              }}
               accountId={accountId}
               onAccount={(id) => {
+                if (selected.coordinator && !selected.coordinator.detach(id)) return;
+                selected.edit();
+                reviewInput.invalidate();
                 saveGeneration.current++;
                 setDraftSaveError("");
                 draftIdRef.current = "";
@@ -428,6 +487,22 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
           </>
         )}
       </div>
+      {selected.replacement ? (
+        <InlineAlert>
+          New input arrived while the selected draft was loading.{" "}
+          <Button type="button" density="compact" onClick={selected.replace}>
+            Replace with selected draft
+          </Button>
+        </InlineAlert>
+      ) : null}
+      <DraftCards
+        drafts={(drafts.data ?? []).filter(
+          (item) => !selected.coordinator?.isRetired(item.accountId, item.id),
+        )}
+        loading={drafts.isPending}
+        selected={selected.coordinator?.selection.id}
+        onSelect={(item) => selected.coordinator?.select(item)}
+      />
     </aside>
   );
 }
