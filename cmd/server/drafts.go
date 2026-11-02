@@ -235,7 +235,11 @@ func (s *server) saveDraft(w http.ResponseWriter, req draftRequest) {
 		if req.ID != "" && gmailclient.IsNotFound(err) {
 			status = http.StatusNotFound
 		}
-		fail(w, status, fmt.Errorf("saving Gmail draft: %w", err))
+		operation := "create"
+		if req.ID != "" {
+			operation = "update"
+		}
+		fail(w, status, fmt.Errorf("saving Gmail draft: %w [operation=%s; reply_parent=%t]", err, operation, req.ReplyToEntry != ""))
 		return
 	}
 	send(w, http.StatusOK, draftResponse{AccountID: accountID, Draft: d})

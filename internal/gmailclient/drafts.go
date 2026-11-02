@@ -10,6 +10,7 @@ import (
 	"mime/multipart"
 	"mime/quotedprintable"
 	"net/mail"
+	"sort"
 	"strings"
 
 	"google.golang.org/api/gmail/v1"
@@ -206,46 +207,66 @@ func (c Client) SendDraft(id string) (string, string, error) {
 func checkDraftReplacement(current, replacement []byte) error {
 	old, err := mail.ReadMessage(bytes.NewReader(current))
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrUnsupportedDraft, err)
+		// Parser errors can quote a private header line; report only the category.
+		return draftRefusal("malformed_message")
 	}
 	next, err := mail.ReadMessage(bytes.NewReader(replacement))
 	if err != nil {
 		return err
 	}
+	var duplicates, changed []string
 	for name, values := range old.Header {
 		switch strings.ToLower(name) {
 		case "to", "cc", "subject", "mime-version", "content-type", "content-transfer-encoding":
 			if len(values) != 1 {
-				return ErrUnsupportedDraft
+				duplicates = append(duplicates, name)
 			}
 		default:
 			if strings.Join(values, "\n") != strings.Join(next.Header[name], "\n") {
-				return ErrUnsupportedDraft
+				changed = append(changed, name)
 			}
 		}
+	}
+	if len(duplicates) != 0 {
+		return draftRefusal("duplicate_header", duplicates...)
+	}
+	if len(changed) != 0 {
+		return draftRefusal("header_missing_or_changed", changed...)
 	}
 	contentType := old.Header.Get("Content-Type")
 	if contentType == "" {
 		contentType = "text/plain"
 	}
 	mediaType, params, err := mime.ParseMediaType(contentType)
-	if err != nil || mediaType != "text/plain" || len(params) > 1 {
-		return ErrUnsupportedDraft
+	if err != nil || mediaType != "text/plain" {
+		return draftRefusal("media_type")
+	}
+	if len(params) > 1 {
+		return draftRefusal("mime_parameter")
 	}
 	if charset := strings.ToLower(params["charset"]); charset != "" && charset != "utf-8" && charset != "us-ascii" {
-		return ErrUnsupportedDraft
+		return draftRefusal("charset")
 	}
 	for name := range params {
 		if name != "charset" {
-			return ErrUnsupportedDraft
+			return draftRefusal("mime_parameter")
 		}
 	}
 	switch strings.ToLower(old.Header.Get("Content-Transfer-Encoding")) {
 	case "", "7bit", "8bit", "quoted-printable":
 		return nil
 	default:
-		return ErrUnsupportedDraft
+		return draftRefusal("transfer_encoding")
 	}
+}
+
+// Report stable categories/header names, never MIME, addresses or header values.
+func draftRefusal(reason string, headers ...string) error {
+	sort.Strings(headers)
+	if len(headers) != 0 {
+		return fmt.Errorf("%w [reason=%s; headers=%s]", ErrUnsupportedDraft, reason, strings.Join(headers, ","))
+	}
+	return fmt.Errorf("%w [reason=%s]", ErrUnsupportedDraft, reason)
 }
 
 func draftMIME(d Draft) ([]byte, error) {

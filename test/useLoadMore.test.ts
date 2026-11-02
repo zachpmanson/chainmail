@@ -203,7 +203,11 @@ it("fills a short list serially, preserves opaque cursors, pauses on error and e
   });
   expect(observations).toHaveLength(0); // Initial request is still pending.
   finish!(page(["a"], "opaque-1"));
-  await settle();
+  // Wait for the enabled observer, not an assumed query-notification timer turn.
+  await vi.waitFor(async () => {
+    await settle();
+    expect(observations.at(-1)).toBeDefined();
+  });
   intersect(); // Visible sentinel in a short list needs no scroll event.
   intersect();
   expect(urls).toHaveLength(2);
