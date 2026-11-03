@@ -51,7 +51,7 @@ func TestQuoteRepairMigrationRebuildsBothIndexesWithoutChangingSource(t *testing
 			}
 		}
 	}
-	if _, err := s.DB().Exec("drop table reconcile_state"); err != nil {
+	if _, err := s.DB().Exec("drop table reconcile_state; drop table twins_body_cache"); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Close(); err != nil {
