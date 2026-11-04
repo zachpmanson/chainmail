@@ -415,8 +415,10 @@ it("keeps recurrence controls in one row and names the actual interval unit", as
   await select(repeat(), "once");
   expect(row.children).toHaveLength(1);
 });
-it("shows configured calendar details only in Settings, not the Hassles header", async () => {
+it("omits the visible page heading and keeps configured calendar details only in Settings", async () => {
   await choose();
+  expect(document.querySelector("main")?.getAttribute("aria-label")).toBe("Hassles");
+  expect(document.querySelector("main h1")).toBeNull();
   expect(document.body.textContent).not.toContain(fixtureLocation.calendarId);
   expect(document.body.textContent).not.toContain("Reminder calendar settings");
   expect(document.querySelector('a[href="/settings#hassles-heading"]')).toBeNull();

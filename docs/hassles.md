@@ -14,7 +14,8 @@ that all its VEVENT resources are tasks. No primary-calendar default, all-calend
 scan, or account fallback is used. Only that atomic location preference is saved
 in corpus settings. Changing selection never moves/deletes existing events.
 Task content, recurrence and notification state remain exclusively in Calendar.
-Configured calendar details and its settings link stay in Settings, not the Hassles header.
+The Hassles screen has no visible page heading; its main landmark remains accessibly named.
+Configured calendar details and its settings link stay in Settings, not the Hassles view.
 
 ## Behavior and limits
 
