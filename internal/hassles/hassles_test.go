@@ -160,13 +160,13 @@ func TestSchedulesValidationAndInventoryDates(t *testing.T) {
 	s.Interval = 1
 	s.Start = "2020-01-01T08:30"
 	c, _ := NewCalendar(testID, s, now)
-	if !strings.Contains(inventory(t, caldav.CalendarObject{Path: "/old", ETag: `"1"`, Data: c})[0].Reminder, "Overdue") {
-		t.Fatal("lost overdue one-off")
+	if inventory(t, caldav.CalendarObject{Path: "/old", ETag: `"1"`, Data: c})[0].Timing.State != "past" {
+		t.Fatal("lost past one-off")
 	}
 	s.Cadence = "daily"
 	s.Until = "2020-02-01T08:30"
 	c, _ = NewCalendar(testID, s, now)
-	if !strings.Contains(inventory(t, caldav.CalendarObject{Path: "/old", ETag: `"1"`, Data: c})[0].Reminder, "No future") {
+	if inventory(t, caldav.CalendarObject{Path: "/old", ETag: `"1"`, Data: c})[0].Timing.State != "past" {
 		t.Fatal("lost exhausted series")
 	}
 	s.Start = "2099-01-01T08:30"
@@ -270,9 +270,9 @@ func TestImportedScheduleRestrictionAndOwnershipAreIndependent(t *testing.T) {
 	o := object(t, "/imported.ics")
 	e := o.Data.Events()[0]
 	e.Props.SetText("DESCRIPTION", "Human notes only")
-	e.Props.SetText("RRULE", "FREQ=DAILY;COUNT=3")
+	e.Props.Get("RRULE").Value = "FREQ=DAILY;COUNT=3"
 	task := inventory(t, o)[0]
-	if task.Writable || task.Schedule != nil || !strings.Contains(task.Reminder, "unavailable") {
+	if task.Writable || task.Schedule != nil || task.Timing.State != "upcoming" {
 		t.Fatalf("unsafe import %+v", task)
 	}
 	f := &fakeBackend{objects: []caldav.CalendarObject{o}}
@@ -288,7 +288,7 @@ func TestImportedScheduleRestrictionAndOwnershipAreIndependent(t *testing.T) {
 	e.Props.SetDateTime("DTSTART", old)
 	e.Props.SetDateTime("DTEND", old.Add(time.Hour))
 	task = inventory(t, o)[0]
-	if !task.Writable || task.Schedule != nil || !strings.Contains(task.Reminder, "Overdue") {
+	if !task.Writable || task.Schedule != nil || task.Timing.State != "past" {
 		t.Fatalf("legacy visibility %+v", task)
 	}
 }

@@ -2186,6 +2186,7 @@ export interface components {
             writable: boolean;
             restriction: string;
             schedule: components["schemas"]["HassleSchedule"] | null;
+            timing: components["schemas"]["HassleTiming"];
         };
         HassleInventory: {
             tasks: components["schemas"]["HassleTask"][];
@@ -2207,6 +2208,23 @@ export interface components {
         HassleResult: {
             removed: number;
             message: string;
+        };
+        /** @description Read-only recurrence classification, independent of mutation/edit eligibility. Unknown schedules remain visible in Upcoming; next/last are known occurrences, not DTSTART guesses. */
+        HassleTiming: {
+            /** @enum {string} */
+            state: "upcoming" | "past" | "unknown";
+            /**
+             * Format: date-time
+             * @description Earliest known occurrence at or after inventory time; null if unavailable.
+             */
+            next: string | null;
+            /**
+             * Format: date-time
+             * @description Most recent known occurrence before inventory time; may be partial when note is set.
+             */
+            last: string | null;
+            /** @description Nonempty when some resource timing is unsupported or incomplete. */
+            note: string;
         };
     };
     responses: never;

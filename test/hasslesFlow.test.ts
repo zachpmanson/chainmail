@@ -97,22 +97,32 @@ async function choose() {
   );
   await waitReady("Add hassle");
 }
+function addForm() {
+  return document.querySelector('section[aria-label="Add hassle"]')!;
+}
 async function add(title: string) {
   await waitReady("Add hassle");
-  await click(button("Add hassle"));
-  const dialog = document.querySelector('[role="dialog"]')!;
-  const inputs = dialog.querySelectorAll("input");
+  const inputs = addForm().querySelectorAll("input");
   await type(inputs[0]!, title);
   await type(inputs[1]!, "2027-01-01T08:30");
-  await click(button("Save reminder"));
+  await click(button("Add hassle"));
 }
-it("runs selection → create → list → edit → Done and Delete through typed HTTP and Base UI dialogs", async () => {
+it("keeps Add hassle inline above the list through create, edit, Done and Delete", async () => {
   expect(document.body.textContent).toContain("dedicated reminder calendar");
   await choose();
   expect(document.body.textContent).toContain("No hassles");
-  await click(button("Add hassle"));
-  const title = document.querySelector<HTMLInputElement>('[role="dialog"] input')!;
-  expect(document.activeElement).toBe(title);
+  expect(addForm()).not.toBeNull();
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(
+    addForm().compareDocumentPosition(document.querySelector('[role="tablist"]')!) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  await add("Offline bill");
+  expect(document.body.textContent).toContain("Offline bill");
+  expect(addForm().querySelector("input")!.value).toBe("");
+  await type(addForm().querySelector("input")!, "Unsaved next hassle");
+  await click(button("Edit"));
+  expect(document.activeElement).toBe(document.querySelector('[role="dialog"] input'));
   await act(async () =>
     document.activeElement!.dispatchEvent(
       new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
@@ -120,12 +130,12 @@ it("runs selection → create → list → edit → Done and Delete through type
   );
   await settle();
   expect(document.querySelector('[role="dialog"]')).toBeNull();
-  await add("Offline bill");
-  expect(document.body.textContent).toContain("Offline bill");
+  expect(addForm().querySelector("input")!.value).toBe("Unsaved next hassle");
   await click(button("Edit"));
   await type(document.querySelector('[role="dialog"] input')!, "Edited bill");
   await click(button("Save reminder"));
   expect(document.body.textContent).toContain("Edited bill");
+  expect(addForm().querySelector("input")!.value).toBe("Unsaved next hassle");
   await click(button("Done"));
   await click(button("Remove all reminders"));
   expect(document.body.textContent).toContain("No hassles");
@@ -160,12 +170,20 @@ it("keeps an uncertain create UUID for explicit retry and displays permission er
     .filter((r) => r.method === "POST" && r.path.endsWith("/v1/hassles"))
     .at(-1)!.body as { id: string };
   fixture.handle("/__hassles_fixture", "POST", { mode: "normal" });
-  await click(button("Save reminder"));
+  expect(addForm().querySelector("input")!.value).toBe("Permission test");
+  await click(button("Add hassle"));
   const last = fixture.requests
     .filter((r) => r.method === "POST" && r.path.endsWith("/v1/hassles"))
     .at(-1)!.body as { id: string };
   expect(last.id).toBe(first.id);
   expect(document.body.textContent).toContain("Permission test");
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(addForm().querySelector("input")!.value).toBe("");
+  await add("Another task");
+  const next = fixture.requests
+    .filter((r) => r.method === "POST" && r.path.endsWith("/v1/hassles"))
+    .at(-1)!.body as { id: string };
+  expect(next.id).not.toBe(first.id);
 });
 it("does not expose Calendar access while the feature grant is disabled", async () => {
   fixture.handle("/__hassles_fixture", "POST", { mode: "disabled" });
@@ -211,8 +229,7 @@ it("discards an open editor and late old-location inventory after a selection sw
 });
 it("offers Repeat until Done / Date and time and clears the timestamp when Done is chosen", async () => {
   await choose();
-  await click(button("Add hassle"));
-  let dialog = document.querySelector('[role="dialog"]')!;
+  let dialog = addForm();
   await type(dialog.querySelectorAll("input")[0]!, "Repeat end test");
   await type(dialog.querySelectorAll("input")[1]!, "2027-01-01T08:30");
   await select(dialog.querySelectorAll("select")[0]!, "daily");
@@ -222,7 +239,7 @@ it("offers Repeat until Done / Date and time and clears the timestamp when Done 
     dialog.querySelectorAll<HTMLInputElement>('input[type="datetime-local"]')[1]!,
     "2027-02-01T08:30",
   );
-  await click(button("Save reminder"));
+  await click(button("Add hassle"));
   await click(button("Edit"));
   dialog = document.querySelector('[role="dialog"]')!;
   expect(dialog.querySelectorAll("select")[1]!.value).toBe("date");
@@ -236,4 +253,88 @@ it("offers Repeat until Done / Date and time and clears the timestamp when Done 
     .filter((r) => r.method === "POST" && r.path.endsWith("/v1/hassles"))
     .at(-1)!.body as { schedule: { until: string } };
   expect(edit.schedule.until).toBe("");
+});
+it("defaults to daily until Done and keeps the create draft/UUID through accessible tabs", async () => {
+  await choose();
+  expect(addForm().querySelectorAll("select")[0]!.value).toBe("daily");
+  expect(addForm().querySelectorAll("select")[1]!.value).toBe("done");
+  fixture.handle("/__hassles_fixture", "POST", { mode: "read-only" });
+  await add("Keep across tabs");
+  const first = fixture.requests
+    .filter((r) => r.method === "POST" && r.path.endsWith("/v1/hassles"))
+    .at(-1)!.body as { id: string };
+  await click(button("Past"));
+  expect(button("Past").getAttribute("aria-selected")).toBe("true");
+  expect(document.querySelector('[role="tabpanel"]')!.getAttribute("aria-labelledby")).toBe(
+    button("Past").id,
+  );
+  expect(document.body.textContent).toContain("Last 30 days");
+  expect(addForm().querySelector("input")!.value).toBe("Keep across tabs");
+  await click(button("Upcoming"));
+  fixture.handle("/__hassles_fixture", "POST", { mode: "normal" });
+  await click(button("Add hassle"));
+  const retry = fixture.requests
+    .filter((r) => r.method === "POST" && r.path.endsWith("/v1/hassles"))
+    .at(-1)!.body as { id: string; schedule: { cadence: string; until: string } };
+  expect(retry.id).toBe(first.id);
+  expect(retry.schedule.cadence).toBe("daily");
+  expect(retry.schedule.until).toBe("");
+  expect(document.body.textContent).toContain("Keep across tabs");
+});
+it("separates ended reminders from ongoing/unknown schedules and shares Melbourne day headers", async () => {
+  await choose();
+  const recent = new Date(Date.now() - 3600000).toISOString();
+  const sample = {
+    revision: "1",
+    resources: 1,
+    writable: false,
+    schedule: null,
+    restriction: "Imported timezone definition: schedule editing unavailable",
+    reminder: "Display only",
+  };
+  fixture.handle("/__hassles_fixture", "POST", {
+    tasks: [
+      {
+        ...sample,
+        id: "a",
+        title: "Later daily",
+        timing: { state: "upcoming", next: "2027-01-01T02:00:00Z", last: recent, note: "" },
+      },
+      {
+        ...sample,
+        id: "b",
+        title: "Earlier daily",
+        timing: { state: "upcoming", next: "2027-01-01T01:00:00Z", last: recent, note: "" },
+      },
+      {
+        ...sample,
+        id: "c",
+        title: "Ended once",
+        timing: { state: "past", next: null, last: recent, note: "" },
+      },
+      {
+        ...sample,
+        id: "d",
+        title: "Unknown imported",
+        timing: { state: "unknown", next: null, last: null, note: "Unsupported schedule" },
+      },
+    ],
+  });
+  await click(button("Refresh reminders"));
+  const panel = document.querySelector('[role="tabpanel"]')!;
+  expect([...panel.querySelectorAll("h3")].map((el) => el.textContent)).toEqual([
+    "Earlier daily",
+    "Later daily",
+    "Unknown imported",
+  ]);
+  expect([...panel.querySelectorAll("h2")].map((el) => el.textContent)).toEqual([
+    "Fri, 1 Jan 2027",
+    "Date unavailable · view in calendar",
+  ]);
+  expect(panel.textContent).not.toContain("Ended once");
+  await click(button("Past"));
+  expect(
+    [...document.querySelectorAll('[role="tabpanel"] h3')].map((el) => el.textContent),
+  ).toEqual(["Ended once"]);
+  expect(document.body.textContent).not.toContain("Overdue");
 });

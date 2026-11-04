@@ -31,7 +31,7 @@ export function defaultSchedule(now = new Date()): HassleSchedule {
     next.setUTCDate(next.getUTCDate() + 1);
     date = next.toISOString().slice(0, 10);
   }
-  return { title: "", start: `${date}T08:30`, timeZone, cadence: "once", interval: 1, until: "" };
+  return { title: "", start: `${date}T08:30`, timeZone, cadence: "daily", interval: 1, until: "" };
 }
 
 /** Explicit Melbourne conversion: neither transport nor validation uses browser timezone. */

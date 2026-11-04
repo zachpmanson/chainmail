@@ -5492,6 +5492,9 @@
                 "type": "null"
               }
             ]
+          },
+          "timing": {
+            "$ref": "#/components/schemas/HassleTiming"
           }
         },
         "required": [
@@ -5502,7 +5505,8 @@
           "resources",
           "writable",
           "restriction",
-          "schedule"
+          "schedule",
+          "timing"
         ]
       },
       "HassleInventory": {
@@ -5587,6 +5591,47 @@
         "required": [
           "removed",
           "message"
+        ]
+      },
+      "HassleTiming": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Read-only recurrence classification, independent of mutation/edit eligibility. Unknown schedules remain visible in Upcoming; next/last are known occurrences, not DTSTART guesses.",
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "upcoming",
+              "past",
+              "unknown"
+            ]
+          },
+          "next": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Earliest known occurrence at or after inventory time; null if unavailable."
+          },
+          "last": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Most recent known occurrence before inventory time; may be partial when note is set."
+          },
+          "note": {
+            "type": "string",
+            "description": "Nonempty when some resource timing is unsupported or incomplete."
+          }
+        },
+        "required": [
+          "state",
+          "next",
+          "last",
+          "note"
         ]
       }
     }

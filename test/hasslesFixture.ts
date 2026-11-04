@@ -1,3 +1,4 @@
+import { wallInstant } from "../src/lib/hassles/forms";
 import type { components } from "../src/lib/api/api.d";
 
 type Location = components["schemas"]["HassleLocation"];
@@ -29,6 +30,7 @@ export function hasslesFixture() {
         tasks = [];
         mode = "normal";
       }
+      if (Array.isArray(input?.tasks)) tasks = input.tasks as Task[];
       return ok({ mode });
     }
     if (url.pathname === "/auth/status")
@@ -78,6 +80,12 @@ export function hasslesFixture() {
             writable: true,
             restriction: "",
             schedule: mutation.schedule,
+            timing: {
+              state: "upcoming",
+              next: new Date(wallInstant(mutation.schedule.start)!).toISOString(),
+              last: null,
+              note: "",
+            },
           });
       } else {
         const task = tasks.find((t) => t.id === mutation.id);
@@ -85,6 +93,8 @@ export function hasslesFixture() {
         if (mutation.action === "edit" && mutation.schedule) {
           task.title = mutation.schedule.title;
           task.schedule = mutation.schedule;
+          task.timing.next = new Date(wallInstant(mutation.schedule.start)!).toISOString();
+          task.reminder = `${mutation.schedule.start} Australia/Melbourne · ${mutation.schedule.cadence}`;
           task.revision = String(++revision);
         } else tasks = tasks.filter((t) => t.id !== mutation.id);
       }

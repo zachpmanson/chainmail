@@ -39,9 +39,9 @@ type Task struct {
 	Writable    bool      `json:"writable"`
 	Restriction string    `json:"restriction"`
 	Schedule    *Schedule `json:"schedule"`
+	Timing      Timing    `json:"timing"`
 	members     []caldav.CalendarObject
 	active      bool
-	reminders   []string
 }
 
 func Inventory(objects []caldav.CalendarObject, now time.Time) ([]Task, error) {
@@ -130,15 +130,9 @@ func Inventory(objects []caldav.CalendarObject, now time.Time) ([]Task, error) {
 			t = &Task{ID: id, Title: title, Writable: true, Reminder: "Imported schedule — view in calendar", members: []caldav.CalendarObject{}}
 			groups[id] = t
 		}
-		resourceReminders := []string{}
-		for _, e := range events {
-			status, _ := e.Props.Text("STATUS")
-			if strings.ToUpper(status) != "CANCELLED" {
-				resourceReminders = append(resourceReminders, eventReminder(e, now))
-			}
+		if active {
+			t.Timing = mergeTiming(t.Timing, resourceTiming(events, now))
 		}
-		t.reminders = append(t.reminders, resourceReminders...)
-		t.Reminder = strings.Join(t.reminders, "; ")
 		t.members = append(t.members, o)
 		t.active = t.active || active
 		if !owned {
@@ -186,8 +180,8 @@ func Inventory(objects []caldav.CalendarObject, now time.Time) ([]Task, error) {
 			if t.Restriction == "" {
 				t.Restriction = "Multiple resources: schedule editing unavailable; Done/Delete removes the whole group"
 			}
-			t.Reminder = strings.Join(t.reminders, "; ")
 		}
+		t.Reminder = timingReminder(t.Timing)
 		if t.active {
 			out = append(out, *t)
 		}

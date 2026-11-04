@@ -6,8 +6,9 @@ import Button from "../ui/Button";
 import DialogShell from "../ui/DialogShell";
 import InlineAlert from "../ui/InlineAlert";
 import HassleForm from "./HassleForm";
+import HassleList from "./HassleList";
 
-type Editor = { id: string; task?: HassleTask };
+type Editor = { id: string; task: HassleTask };
 export default function HassleInventory({
   location,
   disabled,
@@ -21,6 +22,7 @@ export default function HassleInventory({
     { params: { query: location } },
     { retry: false, staleTime: 0 },
   );
+  const [createId, setCreateId] = useState(() => crypto.randomUUID());
   const [editor, setEditor] = useState<Editor | null>(null);
   const [removing, setRemoving] = useState<{ task: HassleTask; action: "done" | "delete" } | null>(
     null,
@@ -28,7 +30,8 @@ export default function HassleInventory({
   const [notice, setNotice] = useState("");
   const write = $api.useMutation("post", "/v1/hassles", {
     retry: false,
-    onSuccess: (result) => {
+    onSuccess: (result, variables) => {
+      if (variables.body.action === "create") setCreateId(crypto.randomUUID());
       setEditor(null);
       setRemoving(null);
       setNotice(result.message);
@@ -40,16 +43,17 @@ export default function HassleInventory({
   const busy = disabled || write.isPending || inventory.isFetching || inventory.isError;
   return (
     <section aria-label="Hassle inventory" className="flex flex-col gap-3">
+      <HassleForm
+        key={createId}
+        busy={busy}
+        error={
+          write.isError && write.variables?.body.action === "create" ? errText(write.error) : ""
+        }
+        onSave={(schedule) =>
+          write.mutate({ body: { location, action: "create", id: createId, schedule } })
+        }
+      />
       <div className="flex flex-wrap gap-2">
-        <Button
-          disabled={busy}
-          onClick={() => {
-            write.reset();
-            setEditor({ id: crypto.randomUUID() });
-          }}
-        >
-          Add hassle
-        </Button>
         <Button
           disabled={disabled || write.isPending || inventory.isFetching}
           onClick={() => {
@@ -65,75 +69,49 @@ export default function HassleInventory({
         Notifications and recurrence belong to your calendar, not an app scheduler.
       </p>
       {inventory.isError ? <InlineAlert>{errText(inventory.error)}</InlineAlert> : null}
-      {write.isError && !editor ? <InlineAlert>{errText(write.error)}</InlineAlert> : null}
+      {write.isError && !editor && write.variables?.body.action !== "create" ? (
+        <InlineAlert>{errText(write.error)}</InlineAlert>
+      ) : null}
       <p role="status" className="m-0 text-sm">
         {inventory.isFetching ? "Reading reminders…" : notice}
       </p>
-      {inventory.data?.tasks.length === 0 ? <p>No hassles in this calendar.</p> : null}
-      <ul className="m-0 flex list-none flex-col gap-3 p-0">
-        {inventory.data?.tasks.map((task) => (
-          <li
-            key={task.id}
-            className="flex flex-wrap items-center gap-3 rounded-md border border-line p-4"
-          >
-            <div className="min-w-0 flex-1 wrap-break-word">
-              <h2 className="m-0 text-base">{task.title}</h2>
-              <p className="my-1 text-sm text-muted">{task.reminder}</p>
-              {task.restriction ? (
-                <p className="my-1 text-xs text-muted">{task.restriction}</p>
-              ) : null}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                disabled={busy || !task.writable || !task.schedule}
-                onClick={() => {
-                  write.reset();
-                  setEditor({ id: task.id, task });
-                }}
-              >
-                Edit
-              </Button>
-              <Button
-                disabled={busy || !task.writable}
-                onClick={() => {
-                  write.reset();
-                  setRemoving({ task, action: "done" });
-                }}
-              >
-                Done
-              </Button>
-              <Button
-                variant="danger"
-                disabled={busy || !task.writable}
-                onClick={() => {
-                  write.reset();
-                  setRemoving({ task, action: "delete" });
-                }}
-              >
-                Delete
-              </Button>
-            </div>
-          </li>
-        ))}
-      </ul>
+      <HassleList
+        tasks={inventory.data?.tasks ?? []}
+        busy={busy}
+        onEdit={(task) => {
+          write.reset();
+          setEditor({ id: task.id, task });
+        }}
+        onRemove={(task, action) => {
+          write.reset();
+          setRemoving({ task, action });
+        }}
+      />
       {editor ? (
-        <HassleForm
-          initial={editor.task?.schedule ?? undefined}
-          busy={disabled || write.isPending || inventory.isFetching}
-          error={write.isError ? errText(write.error) : ""}
+        <DialogShell
+          label="Edit hassle"
           onClose={() => setEditor(null)}
-          onSave={(schedule) =>
-            write.mutate({
-              body: {
-                location,
-                action: editor.task ? "edit" : "create",
-                id: editor.id,
-                revision: editor.task?.revision,
-                schedule,
-              },
-            })
-          }
-        />
+          closeDisabled={write.isPending}
+          panelClassName="w-[min(34rem,95vw)] overflow-y-auto p-5"
+        >
+          <HassleForm
+            initial={editor.task.schedule ?? undefined}
+            busy={disabled || write.isPending || inventory.isFetching}
+            error={write.isError ? errText(write.error) : ""}
+            onClose={() => setEditor(null)}
+            onSave={(schedule) =>
+              write.mutate({
+                body: {
+                  location,
+                  action: "edit",
+                  id: editor.id,
+                  revision: editor.task.revision,
+                  schedule,
+                },
+              })
+            }
+          />
+        </DialogShell>
       ) : null}
       {removing ? (
         <DialogShell

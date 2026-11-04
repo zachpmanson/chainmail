@@ -17,10 +17,19 @@ Task content, recurrence and notification state remain exclusively in Calendar.
 
 ## Behavior and limits
 
-- All raw VEVENT masters are read without a time window, including overdue one-offs,
+- All raw VEVENT masters are read without a time window, including past one-offs,
   exhausted series and distant reminders. No occurrence duplication or background
   scheduler. Canceled events are hidden, retained as members of an otherwise-active
   logical task where appropriate.
+- The Add form stays above accessible **Upcoming / Past** tabs; switching tabs or
+  editing/removing another task preserves its draft and retry UUID. Only a successful
+  create or a selected-location change resets it. Edit and removal still use dialogs.
+- Upcoming shows groups with future reminders, including recurring series whose first
+  reminder was long ago. Past is explicitly the **last 30 days** of ended reminders,
+  not completion history. Each group appears once, ordered by earliest next reminder
+  (Upcoming) or most recent last reminder (Past), under Melbourne-date day headers.
+  Unsupported/incomplete schedules stay visible in Upcoming, undated when no next
+  occurrence is known; they are never inferred to be ended from their original start.
 - One `[hassle:v1 task=<UUID>]` description marker groups resources within the selected
   calendar. Untagged/ambiguous resources stand alone, never grouped by title. UUIDs
   do not grant ownership: every master must have docket's `[docket]` marker.
@@ -30,7 +39,8 @@ Task content, recurrence and notification state remain exclusively in Calendar.
   or Google behavior has been live-tested. Calendar/phone notification settings still
   determine delivery.
 - Melbourne wall time is explicit in the form, transport and TZID. Default is the
-  next 08:30 there, independent of browser timezone. DST gaps **and ambiguous overlaps**
+  next 08:30 there, **daily until Done**, independent of browser timezone.
+  Defaults apply only to new drafts, never to existing Calendar events. DST gaps **and ambiguous overlaps**
   are rejected. Supported input dates: 1970–2100; intervals: 1–999.
 - Once, daily, weekdays, weekly, monthly and yearly are supported. Weekdays means
   Monday–Friday every week (interval 1); the first reminder must be a weekday. Monthly/yearly skip nonexistent dates.
@@ -41,9 +51,21 @@ Task content, recurrence and notification state remain exclusively in Calendar.
   exceptions, RDATE/EXDATE/COUNT or other complex rules, all-day/floating/other-zone
   events, embedded timezone definitions and multi-resource groups remain visible,
   with edit restrictions explained. Unknown calendar/event fields, human description,
-  markers and alarms are preserved on supported edits. Unsupported next-reminder
-  calculations are labeled unavailable rather than guessed. Recurrence scans stop
-  after 10,000 iterations. Resource inventory is bounded to 2,000 resources, 1 MiB
+  markers and alarms are preserved on supported edits.
+- Read-only timing is independent of edit restrictions, including embedded VTIMEZONE.
+  Known IANA TZIDs, daily/weekly/monthly/yearly RRULEs (including COUNT/UNTIL,
+  INTERVAL, WKST and weekly bare-weekday BYDAY), RDATE and EXDATE are read.
+  Other BY* filters are classified unknown before iteration: impossible combinations
+  can make the recurrence library scan to year 9999 inside one iterator call.
+  Detached exceptions, floating/all-day/unknown-zone times, high-frequency or exotic
+  rules and scans beyond 10,000 generated occurrences remain honestly unavailable.
+  Recurrence dates are limited to 10,000 per property family.
+  The API exposes `timing.state` (`upcoming`, `past`, `unknown`), nullable RFC3339
+  `timing.next`/`timing.last`, and `timing.note`. A multi-resource group uses the
+  earliest known future occurrence; without a future occurrence it is Past only
+  when every active resource is understood. A note flags incomplete timing, so
+  a known occurrence is not mistaken for a complete schedule.
+  Resource inventory is bounded to 2,000 resources, 1 MiB
   parsed resource data and 16 MiB responses; requests have bounded timeouts.
 - Done and Delete remove **all** members permanently; there is no completion history.
   Group revisions and server-side rereads detect stale membership/data; PUT/DELETE
@@ -59,7 +81,7 @@ Task content, recurrence and notification state remain exclusively in Calendar.
 Automated flow, real typed fetch/query layer and Base UI dialogs:
 
 ```sh
-nix develop --command bash -c 'npm test -- --run test/hasslesForms.test.ts test/hasslesFlow.test.ts'
+nix develop --command bash -c 'npm test -- --run test/hasslesForms.test.ts test/hasslesGroups.test.ts test/hasslesFlow.test.ts'
 ```
 
 Browser smoke harness, using only an in-memory **test fixture**, not the real server:
@@ -71,7 +93,7 @@ nix develop --command bash -c 'npm run build && npx --no-install tsx scripts/has
 Open <http://127.0.0.1:8877/hassles>. Follow its Settings link. In the Hassles
 settings section select Offline account → Offline reminders → acknowledge dedicated
 overlay → Use calendar, then return to Hassles using navigation. Add a title/date, repeat interval
-and end; save; inspect the title-sorted list; edit; Done and confirm. Add another and Delete.
+and end; save; inspect chronological day groups; switch Upcoming/Past; edit; Done and confirm. Add another and Delete.
 Check Hourly is disabled. Tab/Shift-Tab through controls; verify dialog initial
 focus, Escape to cancel, focus return and trapped tab order. Repeat at 375px and
 wide desktop widths: controls should wrap, labels stay visible and dialogs scroll.

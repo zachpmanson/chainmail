@@ -3,14 +3,12 @@ package hassles
 
 import (
 	"errors"
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
 	_ "time/tzdata"
 
 	"github.com/emersion/go-ical"
-	"github.com/teambition/rrule-go"
 )
 
 const Zone = "Australia/Melbourne"
@@ -152,79 +150,4 @@ func readSchedule(e ical.Event) (*Schedule, string) {
 		return nil, "Unsupported imported schedule: " + err.Error()
 	}
 	return s, ""
-}
-
-func reminder(s *Schedule, now time.Time) string {
-	start, rule, err := s.Validate()
-	if err != nil {
-		return "Invalid schedule"
-	}
-	if rule == "" {
-		if start.Before(now) {
-			return "Overdue · " + start.Format("2 Jan 2006 15:04 MST")
-		}
-		return start.Format("2 Jan 2006 15:04 MST")
-	}
-	opt, err := rrule.StrToROption(rule)
-	if err != nil {
-		return "Invalid recurrence"
-	}
-	opt.Dtstart = start
-	r, err := rrule.NewRRule(*opt)
-	if err != nil {
-		return "Invalid recurrence"
-	}
-	next := r.Iterator()
-	for i := 0; i < 10000; i++ {
-		t, ok := next()
-		if !ok {
-			return "No future reminders · " + s.Cadence
-		}
-		if !t.Before(now) {
-			repeat := fmt.Sprintf("every %d %s", s.Interval, map[string]string{"daily": "days", "weekly": "weeks", "monthly": "months", "yearly": "years"}[s.Cadence])
-			if s.Cadence == "weekdays" {
-				repeat = "weekdays"
-			}
-			return fmt.Sprintf("%s · %s", t.Format("2 Jan 2006 15:04 MST"), repeat)
-		}
-	}
-	return "Next reminder unavailable (bounded recurrence scan) · " + s.Cadence
-}
-
-func eventReminder(e ical.Event, now time.Time) string {
-	if len(e.Props["RRULE"])+len(e.Props["RDATE"])+len(e.Props["EXDATE"])+len(e.Props["RECURRENCE-ID"]) == 0 {
-		p := e.Props.Get("DTSTART")
-		if p == nil {
-			return "Imported event has no reminder start"
-		}
-		start, err := p.DateTime(nil)
-		if err != nil {
-			return "Imported event has an unsupported reminder time"
-		}
-		if p.Params.Get("TZID") == "" && len(p.Value) == 15 {
-			return "Imported floating reminder time: " + p.Value + " (timezone unknown)"
-		}
-		prefix := ""
-		if start.Before(now) {
-			prefix = "Overdue · "
-		}
-		return prefix + start.Format("2 Jan 2006 15:04 MST")
-	}
-	// Duration affects edit safety, not the reminder's recurrence set.
-	copy := ical.NewEvent()
-	for name, props := range e.Props {
-		copy.Props[name] = props
-	}
-	start, err := e.DateTimeStart(nil)
-	if err == nil {
-		copy.Props.Del("DURATION")
-		copy.Props.SetDateTime("DTEND", start.Add(5*time.Minute))
-		if title, _ := copy.Props.Text("SUMMARY"); title == "" {
-			copy.Props.SetText("SUMMARY", "(untitled reminder)")
-		}
-		if schedule, _ := readSchedule(*copy); schedule != nil {
-			return reminder(schedule, now)
-		}
-	}
-	return "Imported recurrence/exception schedule · next reminder unavailable; view in calendar"
 }

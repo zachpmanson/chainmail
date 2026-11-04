@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { defaultSchedule, validateSchedule, type HassleSchedule } from "../../lib/hassles/forms";
 import Button from "../ui/Button";
-import DialogShell from "../ui/DialogShell";
 import FormField from "../ui/FormField";
 import InlineAlert from "../ui/InlineAlert";
 import SelectInput from "../ui/SelectInput";
@@ -18,18 +17,16 @@ export default function HassleForm({
   busy: boolean;
   error: string;
   onSave: (schedule: HassleSchedule) => void;
-  onClose: () => void;
+  onClose?: () => void;
 }) {
   const [schedule, setSchedule] = useState(initial ?? defaultSchedule);
   const [validation, setValidation] = useState("");
   const [endMode, setEndMode] = useState(initial?.until ? "date" : "done");
   const change = (patch: Partial<HassleSchedule>) => setSchedule((s) => ({ ...s, ...patch }));
   return (
-    <DialogShell
-      label={initial ? "Edit hassle" : "Add hassle"}
-      onClose={onClose}
-      closeDisabled={busy}
-      panelClassName="w-[min(34rem,95vw)] overflow-y-auto p-5"
+    <section
+      aria-label={initial ? "Edit hassle" : "Add hassle"}
+      className="rounded-md border border-line p-4"
     >
       <h2 className="mt-0 text-lg">{initial ? "Edit hassle" : "Add hassle"}</h2>
       <form
@@ -133,14 +130,16 @@ export default function HassleForm({
         </p>
         {validation || error ? <InlineAlert>{validation || error}</InlineAlert> : null}
         <div className="flex justify-end gap-2">
-          <Button type="button" disabled={busy} onClick={onClose}>
-            Cancel
-          </Button>
+          {onClose ? (
+            <Button type="button" disabled={busy} onClick={onClose}>
+              Cancel
+            </Button>
+          ) : null}
           <Button type="submit" variant="primary" disabled={busy}>
-            {busy ? "Saving…" : "Save reminder"}
+            {busy ? "Saving…" : initial ? "Save reminder" : "Add hassle"}
           </Button>
         </div>
       </form>
-    </DialogShell>
+    </section>
   );
 }
