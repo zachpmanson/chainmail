@@ -27,8 +27,8 @@ export default function HassleForm({
   onClose?: () => void;
 }) {
   const [schedule, setSchedule] = useState(initial ?? defaultSchedule);
-  const [startPreset, setStartPreset] = useState<ReminderStartPreset | "custom">(() =>
-    !initial && schedule.start === reminderStart("tomorrow") ? "tomorrow" : "custom",
+  const [startPreset, setStartPreset] = useState<ReminderStartPreset | "custom">(
+    initial ? "custom" : "hour",
   );
   const [validation, setValidation] = useState("");
   const [endMode, setEndMode] = useState(initial?.until ? "date" : "done");

@@ -31,7 +31,7 @@ Configured calendar details and its settings link stay in Settings, not the Hass
   All wall times are Melbourne; passed afternoon/evening times roll to tomorrow.
   In an hour adds 60 elapsed minutes at selection, rounded down to the minute.
   Selection fixes the payload for retries; existing schedules open as Custom.
-  The default remains the next 08:30 (Custom if today, Tomorrow morning otherwise).
+  New hassles default to In an hour, with no custom picker shown.
   Ambiguous or nonexistent daylight-saving times still require a different choice.
 - The global refresh on Hassles reloads reminder settings, then only the selected
   calendar inventory. It does not fetch mail or invalidate unrelated mail queries;
@@ -50,8 +50,8 @@ Configured calendar details and its settings link stay in Settings, not the Hass
   transparent/free, no attendees, and a DISPLAY alarm at the start. No phone delivery
   or Google behavior has been live-tested. Calendar/phone notification settings still
   determine delivery.
-- Melbourne wall time is explicit in the form, transport and TZID. Default is the
-  next 08:30 there, **daily until Done**, independent of browser timezone.
+- Melbourne wall time is explicit in the form, transport and TZID. New reminders start
+  an hour from draft creation and repeat **daily until Done**, independent of browser timezone.
   Defaults apply only to new drafts, never to existing Calendar events. DST gaps **and ambiguous overlaps**
   are rejected. Supported input dates: 1970–2100; intervals: 1–999.
 - Once, daily, weekdays, weekly, monthly and yearly are supported. Weekdays means

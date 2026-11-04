@@ -8,12 +8,15 @@ import {
 } from "../src/lib/hassles/forms";
 
 describe("Hassle form identity and Melbourne times", () => {
-  it("defaults to the next Melbourne 08:30 independent of browser timezone", () => {
+  it("defaults to an hour from now in Melbourne, recurring daily until Done", () => {
     expect(defaultSchedule().cadence).toBe("daily");
     expect(defaultSchedule().until).toBe("");
-    expect(defaultSchedule(new Date("2026-11-03T20:00:00Z")).start).toBe("2026-11-04T08:30");
-    expect(defaultSchedule(new Date("2026-11-03T22:00:00Z")).start).toBe("2026-11-05T08:30");
-    expect(defaultSchedule(new Date("2026-12-31T23:00:00Z")).start).toBe("2027-01-02T08:30");
+    expect(defaultSchedule(new Date("2026-11-03T20:00:00Z")).start).toBe("2026-11-04T08:00");
+    expect(defaultSchedule(new Date("2026-11-03T22:00:00Z")).start).toBe("2026-11-04T10:00");
+    expect(defaultSchedule(new Date("2026-12-31T23:00:00Z")).start).toBe("2027-01-01T11:00");
+    const spring = new Date("2026-10-03T15:30:00Z");
+    expect(defaultSchedule(spring).start).toBe("2026-10-04T03:30");
+    expect(wallInstant(defaultSchedule(spring).start)).toBe(spring.getTime() + 3600000);
   });
   it("resolves presets in Melbourne, rolling passed afternoon/evening to tomorrow", () => {
     const now = new Date("2026-11-04T01:15:45Z"); // 12:15 Melbourne

@@ -46,14 +46,14 @@ export function reminderStart(preset: ReminderStartPreset, now = new Date()): st
 }
 
 export function defaultSchedule(now = new Date()): HassleSchedule {
-  const local = wall(now);
-  let date = local.slice(0, 10);
-  if (local.slice(11) >= "08:30") {
-    const next = new Date(`${date}T12:00:00Z`);
-    next.setUTCDate(next.getUTCDate() + 1);
-    date = next.toISOString().slice(0, 10);
-  }
-  return { title: "", start: `${date}T08:30`, timeZone, cadence: "daily", interval: 1, until: "" };
+  return {
+    title: "",
+    start: reminderStart("hour", now),
+    timeZone,
+    cadence: "daily",
+    interval: 1,
+    until: "",
+  };
 }
 
 /** Explicit Melbourne conversion: neither transport nor validation uses browser timezone. */

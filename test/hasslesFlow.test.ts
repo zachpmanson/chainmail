@@ -441,11 +441,11 @@ it("uses placeholder-only title and presets, revealing the picker only for Custo
     "Tomorrow morning",
     "Custom",
   ]);
-  expect(firstReminder().value).toBe("tomorrow");
+  expect(firstReminder().value).toBe("hour");
   expect(addForm().querySelector('input[type="datetime-local"]')).toBeNull();
   await type(titleInput(), "Custom time");
   await select(firstReminder(), "custom");
-  expect(customStart().value).toBe("2026-11-05T08:30");
+  expect(customStart().value).toBe("2026-11-04T13:15");
   await type(customStart(), "2027-02-03T09:45");
   await click(button("Add hassle"));
   const create = fixture.requests
@@ -457,11 +457,22 @@ it("uses placeholder-only title and presets, revealing the picker only for Custo
   expect(firstReminder(dialog).value).toBe("custom");
   expect(customStart(dialog).value).toBe(create.schedule.start);
 });
-it("keeps today's next 08:30 as truthful Custom before Melbourne morning", async () => {
+it("defaults to In an hour before morning too, without showing a custom picker", async () => {
   vi.setSystemTime(new Date("2026-11-03T20:00:00Z"));
   await choose();
-  expect(firstReminder().value).toBe("custom");
-  expect(customStart().value).toBe("2026-11-04T08:30");
+  expect(firstReminder().value).toBe("hour");
+  expect(addForm().querySelector('input[type="datetime-local"]')).toBeNull();
+  await type(titleInput(), "Default hour");
+  await click(button("Add hassle"));
+  const create = fixture.requests
+    .filter((r) => r.method === "POST" && r.path.endsWith("/v1/hassles"))
+    .at(-1)!.body as { schedule: { start: string } };
+  expect(create.schedule.start).toBe("2026-11-04T08:00");
+  expect(firstReminder().value).toBe("hour");
+  await click(button("Edit"));
+  const dialog = document.querySelector('[role="dialog"]')!;
+  expect(firstReminder(dialog).value).toBe("custom");
+  expect(customStart(dialog).value).toBe(create.schedule.start);
 });
 it("resolves presets at selection and keeps that payload and UUID on uncertain retry", async () => {
   await choose();
