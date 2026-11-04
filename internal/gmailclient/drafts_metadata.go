@@ -134,13 +134,14 @@ func (c Client) verifyDraftSender(value string) error {
 		// Provider errors can contain private response data.
 		return draftRefusal("sender_identity_unverified", "From")
 	}
-	settings, err := c.svc.Users.Settings.SendAs.List("me").Fields("sendAs(sendAsEmail,displayName,isPrimary,isDefault)").Context(c.ctx).Do()
+	settings, err := c.svc.Users.Settings.SendAs.List("me").Fields("sendAs(sendAsEmail,isPrimary,isDefault)").Context(c.ctx).Do()
 	if err != nil || settings == nil {
 		return draftRefusal("sender_identity_unverified", "From")
 	}
-	// No alternate sender may exist in the observed settings. This verifies a
-	// snapshot, not provider behavior on a later send omitting From or an atomic
-	// guarantee against external settings changes.
+	// No alternate sender may exist in the observed settings. The draft's
+	// presentation is preserved verbatim, not compared with current settings.
+	// This verifies an address snapshot, not a later send's provider behavior
+	// or an atomic guarantee against external settings changes.
 	if len(settings.SendAs) != 1 || settings.SendAs[0] == nil {
 		return draftRefusal("sender_identity_unverified", "From")
 	}
@@ -156,10 +157,6 @@ func (c Client) verifyDraftSender(value string) error {
 		return draftRefusal("sender_profile_mismatch", "From")
 	case !strings.EqualFold(from.Address, profile.EmailAddress):
 		return draftRefusal("sender_address_mismatch", "From")
-	case from.Name != sender.DisplayName && sender.DisplayName == "":
-		return draftRefusal("sender_display_name_unconfigured", "From")
-	case from.Name != sender.DisplayName:
-		return draftRefusal("sender_display_name_mismatch", "From")
 	}
 	return nil
 }

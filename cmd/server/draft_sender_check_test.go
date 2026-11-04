@@ -28,7 +28,7 @@ func TestDraftSenderCheckIsReadOnly(t *testing.T) {
 		status int
 	}{
 		{name: "supported", status: 200},
-		{name: "refusal", err: fmt.Errorf("%w [reason=sender_display_name_unconfigured; headers=From]", gmailclient.ErrUnsupportedDraft), status: 409},
+		{name: "refusal", err: fmt.Errorf("%w [reason=sender_address_mismatch; headers=From]", gmailclient.ErrUnsupportedDraft), status: 409},
 		{name: "deleted", err: &googleapi.Error{Code: 404}, status: 404},
 		{name: "provider error", err: errors.New("synthetic failure"), status: 502},
 	} {
@@ -50,7 +50,7 @@ func TestDraftSenderCheckIsReadOnly(t *testing.T) {
 			if tc.err == nil && !strings.Contains(string(res.body), `"senderCompatible":true`) {
 				t.Fatalf("response: %s", res.body)
 			}
-			if tc.name == "refusal" && !strings.Contains(res.errText(t), "sender_display_name_unconfigured") {
+			if tc.name == "refusal" && !strings.Contains(res.errText(t), "sender_address_mismatch") {
 				t.Fatalf("response: %s", res.body)
 			}
 			for _, method := range []string{"POST", "PUT", "DELETE"} {

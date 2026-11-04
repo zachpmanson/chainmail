@@ -1,6 +1,7 @@
 package gmailclient
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -196,8 +197,11 @@ func TestDraftSenderSnapshotGate(t *testing.T) {
 		}},
 		{name: "primary not default", change: func(f *metadataFixture) { f.sendAs[0].IsDefault = false }},
 		{name: "default not primary", change: func(f *metadataFixture) { f.sendAs[0].IsPrimary = false }},
-		{name: "name mismatch", from: "From: Different Presentation <owner@example.test>"},
-		{name: "missing name", from: "From: owner@example.test"},
+		{name: "historical presentation preserved", from: "From: Different Presentation <owner@example.test>", accepted: true},
+		{name: "missing name preserved", from: "From: owner@example.test", accepted: true},
+		{name: "empty configured name with named draft", change: func(f *metadataFixture) { f.sendAs[0].DisplayName = "" }, accepted: true},
+		{name: "renamed sender settings", change: func(f *metadataFixture) { f.sendAs[0].DisplayName = "New Name" }, accepted: true},
+		{name: "encoded Unicode historical presentation", from: "From: =?UTF-8?Q?Historical_=C3=96wner?=\r\n\t<owner@example.test>", accepted: true},
 		{name: "extra nondefault alias", change: func(f *metadataFixture) {
 			f.sendAs = append(f.sendAs, &gmail.SendAs{SendAsEmail: "alias@example.test"})
 		}},
@@ -227,6 +231,18 @@ func TestDraftSenderSnapshotGate(t *testing.T) {
 			if tc.accepted {
 				if err != nil || f.writes != 1 {
 					t.Fatalf("save: %v, writes=%d", err, f.writes)
+				}
+				updated, err := decodeDraftRaw(f.update.Message.Raw)
+				if err != nil {
+					t.Fatal(err)
+				}
+				originalFrom, err := draftMetadataBlocks([]byte(raw))
+				if err != nil {
+					t.Fatal(err)
+				}
+				updatedFrom, err := draftMetadataBlocks(updated)
+				if err != nil || !bytes.Equal(originalFrom, updatedFrom) {
+					t.Fatal("saved From metadata differs from the original raw block")
 				}
 			} else {
 				assertMetadataRefusal(t, err, f)

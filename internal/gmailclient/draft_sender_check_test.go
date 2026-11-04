@@ -23,8 +23,8 @@ func TestReadOnlyDraftSenderDiagnosis(t *testing.T) {
 			f.profile.EmailAddress = "other@example.test"
 			f.sendAs[0].SendAsEmail = "other@example.test"
 		}},
-		{name: "different configured name", reason: "sender_display_name_mismatch", change: func(f *metadataFixture) { f.sendAs[0].DisplayName = "Different Presentation" }},
-		{name: "empty configured name", reason: "sender_display_name_unconfigured", change: func(f *metadataFixture) { f.sendAs[0].DisplayName = "" }},
+		{name: "different configured name", change: func(f *metadataFixture) { f.sendAs[0].DisplayName = "Different Presentation" }},
+		{name: "empty configured name", change: func(f *metadataFixture) { f.sendAs[0].DisplayName = "" }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f, c := newMetadataFixture(t, base64.RawURLEncoding.EncodeToString([]byte(raw)))

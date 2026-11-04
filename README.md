@@ -244,10 +244,12 @@ this feature does not require a narrower-scope re-consent.
 
 For a sender refusal, `GET /v1/drafts/{id}/sender-check?accountId=…` runs the same
 metadata/sender checks without saving or sending. Refusals identify fixed categories
-such as `sender_not_default`, `sender_address_mismatch`, or
-`sender_display_name_unconfigured`, never header values. This is only a snapshot,
-not a full MIME compatibility check or assurance that a later save/send will succeed.
-Ordinary draft reads do not fetch sender settings.
+such as `sender_not_default` or `sender_address_mismatch`, never header values.
+Existing `From` presentation is preserved verbatim; it need not match the current
+settings display name. Sender addresses still must match the authenticated account's
+sole primary/default identity. This is only a snapshot, not a full MIME compatibility
+check or assurance that a later save/send will succeed. Ordinary draft reads do not
+fetch sender settings.
 
 An **`html`** field turns the second part off for one reply (absent means it goes, so an
 older client sends the message it always sent). A reader who knows their correspondent or a
