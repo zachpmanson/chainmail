@@ -1,3 +1,5 @@
+import type { SavedDraft } from "../src/lib/ui/draftSelection";
+import type { DraftCoordinator } from "../src/components/compose/DraftSelectionContext";
 import { createElement, type ComponentProps } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
@@ -9,6 +11,11 @@ import ComposerFields from "../src/components/compose/ComposerFields";
 import { makeQueryClient } from "../src/lib/api/queryClient";
 import type { CorpusEntry } from "../src/lib/api/api";
 
+const selectionFixture = vi.hoisted(() => ({ current: null as DraftCoordinator | null }));
+vi.mock("../src/components/compose/DraftSelectionContext", async (original) => ({
+  ...(await original<typeof import("../src/components/compose/DraftSelectionContext")>()),
+  useDraftCoordinator: () => selectionFixture.current,
+}));
 vi.mock("../src/lib/inbox/useAccountId", () => ({ useAccountId: () => "acct" }));
 vi.mock("../src/components/compose/useAccounts", () => ({
   default: () => ({ connected: [{ id: "acct", email: "me@example.test" }] }),
@@ -49,6 +56,10 @@ const json = (data: unknown) =>
   });
 const saved = {
   accountId: "acct",
+  kind: "reply" as const,
+  resolution: "resolved" as const,
+  rootId: "root",
+  replyToEntry: "A",
   id: "d1",
   messageId: "m1",
   threadId: "thread-1",
@@ -98,6 +109,25 @@ async function mount(reply = true) {
   });
   await settle();
 }
+function selectFixture(draft: SavedDraft = saved, epoch = 1) {
+  const retired = new Set<string>();
+  selectionFixture.current = {
+    selection: { epoch, active: true, accountId: draft.accountId, id: draft.id, draft },
+    editor: { current: undefined },
+    approve: () => true,
+    select: () => {},
+    detach: () => true,
+    isRetired: (account, id) => retired.has(JSON.stringify([account, id])),
+    retire: (account, id) => {
+      retired.add(JSON.stringify([account, id]));
+      selectionFixture.current!.selection = { epoch: epoch + 1, active: false };
+    },
+  };
+}
+async function mountSelected() {
+  selectFixture();
+  await mount();
+}
 const fields = () =>
   root.root.findByType("composer-fields" as never).props as ComponentProps<typeof ComposerFields>;
 const form = () =>
@@ -132,6 +162,7 @@ async function autosave() {
 }
 
 beforeEach(() => {
+  selectionFixture.current = null;
   vi.useFakeTimers();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal("window", { setTimeout, clearTimeout, confirm: () => true });
@@ -171,6 +202,45 @@ afterEach(async () => {
 });
 
 it.each([true, false])(
+  "shows draft-list failure, preserves typed text, and resumes autosave after a safe retry (reply: %s)",
+  async (reply) => {
+    client.setDefaultOptions({ queries: { retry: false } });
+    const normal = handle;
+    let unavailable = true;
+    handle = async (req) => {
+      if (req.method === "GET" && new URL(req.url).pathname === "/v1/drafts" && unavailable)
+        return new Response(JSON.stringify({ error: "Draft decoding failed" }), {
+          status: 502,
+          headers: { "Content-Type": "application/json" },
+        });
+      return normal(req);
+    };
+    await mount(reply);
+    if (reply) await typeReply("Keep these unsaved words");
+    else
+      await act(async () => {
+        form().onDraft({ body: "Keep these unsaved words" });
+      });
+    await autosave();
+    expect(visibleText()).toContain("Autosave is paused");
+    expect(visibleText()).toContain("Copy your text before leaving");
+    expect(visibleText()).toContain("Draft decoding failed");
+    expect(requests.filter((request) => request.method !== "GET")).toEqual([]);
+    expect(reply ? fields().draft.body : form().draft.body).toBe("Keep these unsaved words");
+    unavailable = false;
+    await click("Retry draft check");
+    expect(visibleText()).not.toContain("Autosave is paused");
+    expect(reply ? fields().draft.body : form().draft.body).toBe("Keep these unsaved words");
+    await autosave();
+    const writes = requests.filter(
+      (request) => request.method === "POST" && request.path === "/v1/drafts",
+    );
+    expect(writes).toHaveLength(1);
+    expect(writes[0]!.body.body).toBe("Keep these unsaved words");
+  },
+);
+
+it.each([true, false])(
   "does not replay an uncertain draft creation through autosave (reply: %s)",
   async (reply) => {
     vi.spyOn(console, "error").mockImplementation(() => {});
@@ -201,6 +271,238 @@ it.each([true, false])(
     expect(requests.filter((r) => r.method === "POST" && r.path === "/v1/drafts")).toHaveLength(1);
   },
 );
+
+const draftWrites = () =>
+  requests.filter(
+    (r) =>
+      (r.method === "POST" && r.path === "/v1/drafts") ||
+      (r.method === "PUT" && r.path.startsWith("/v1/drafts/")),
+  );
+async function editWords(reply: boolean, body: string) {
+  if (reply) await typeReply(body);
+  else
+    await act(async () => {
+      form().onDraft({ to: [{ address: "to@example.test" }], body });
+    });
+}
+
+describe("acknowledged autosave input", () => {
+  it.each([true, false])(
+    "does not show an old acknowledgement while different input is still being written (reply: %s)",
+    async (reply) => {
+      await mount(reply);
+      await editWords(reply, "Payload A");
+      await autosave();
+      expect(visibleText()).toContain("Saved to Gmail");
+      const pending = deferred<Response>();
+      const normal = handle;
+      handle = (req) => (req.method === "PUT" ? pending.promise : normal(req));
+      await editWords(reply, "Payload B");
+      await autosave();
+      expect(draftWrites()).toHaveLength(2);
+      await editWords(reply, "Payload A");
+      expect(visibleText()).not.toContain("Saved to Gmail");
+      handle = normal;
+      await act(async () => pending.resolve(json({ ...saved, messageId: "revision-B" })));
+      await settle();
+      expect(visibleText()).not.toContain("Saved to Gmail");
+      await autosave();
+      expect(draftWrites().map((request) => [request.method, request.body.body])).toEqual([
+        ["POST", "Payload A"],
+        ["PUT", "Payload B"],
+        ["PUT", "Payload A"],
+      ]);
+      expect(draftWrites()[2]!.body.expectedMessageId).toBe("revision-B");
+      expect(visibleText()).toContain("Saved to Gmail");
+    },
+  );
+
+  it.each([true, false])(
+    "stays idle after acknowledgement and writes exactly once for a new edit (reply: %s)",
+    async (reply) => {
+      await mount(reply);
+      await editWords(reply, "Stable idle fixture words");
+      await autosave();
+      expect(draftWrites()).toHaveLength(1);
+      expect(visibleText()).toContain("Saved to Gmail");
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(6_000);
+        await client.invalidateQueries({ queryKey: ["get", "/v1/drafts"] });
+      });
+      await settle();
+      await editWords(reply, "Stable idle fixture words");
+      await autosave();
+      expect(draftWrites()).toHaveLength(1);
+      await editWords(reply, "One genuine edit");
+      expect(visibleText()).not.toContain("Saved to Gmail");
+      await autosave();
+      expect(draftWrites().map((r) => [r.method, r.body.body])).toEqual([
+        ["POST", "Stable idle fixture words"],
+        ["PUT", "One genuine edit"],
+      ]);
+      expect(visibleText()).toContain("Saved to Gmail");
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(6_000);
+      });
+      await settle();
+      expect(draftWrites()).toHaveLength(2);
+    },
+  );
+
+  it.each([
+    [true, "POST"],
+    [false, "POST"],
+    [true, "PUT"],
+    [false, "PUT"],
+  ] as const)(
+    "skips duplicate input queued behind a slow successful save (reply: %s, method: %s)",
+    async (reply, method) => {
+      await mount(reply);
+      if (method === "PUT") {
+        await editWords(reply, "Initial words");
+        await autosave();
+      }
+      const pending = deferred<Response>();
+      const normal = handle;
+      handle = (req) => (req.method === method ? pending.promise : normal(req));
+      await editWords(reply, "Same pending words");
+      await autosave();
+      const count = draftWrites().length;
+      for (let i = 0; i < 2; i++) {
+        await editWords(reply, "Same pending words");
+        await autosave();
+      }
+      expect(draftWrites()).toHaveLength(count);
+      await act(async () => {
+        pending.resolve(json({ ...saved, messageId: "m2" }));
+      });
+      await settle();
+      expect(draftWrites()).toHaveLength(count);
+      expect(visibleText()).toContain("Saved to Gmail");
+    },
+  );
+
+  it.each([
+    [true, "POST"],
+    [false, "POST"],
+    [true, "PUT"],
+    [false, "PUT"],
+  ] as const)(
+    "does not label newer input Saved when an older save is acknowledged (reply: %s, method: %s)",
+    async (reply, method) => {
+      await mount(reply);
+      if (method === "PUT") {
+        await editWords(reply, "Initial words");
+        await autosave();
+      }
+      const pending = deferred<Response>();
+      const normal = handle;
+      let writes = 0;
+      handle = (req) => (req.method === method && ++writes === 1 ? pending.promise : normal(req));
+      await editWords(reply, "Older in-flight words");
+      await autosave();
+      const count = draftWrites().length;
+      await editWords(reply, "Newer unsaved words");
+      await act(async () => {
+        pending.resolve(json(saved));
+      });
+      await settle();
+      expect(draftWrites()).toHaveLength(count);
+      expect(visibleText()).not.toContain("Saved to Gmail");
+      expect(reply ? fields().draft.body : form().draft.body).toBe("Newer unsaved words");
+      await autosave();
+      expect(draftWrites()).toHaveLength(count + 1);
+      expect(draftWrites()[count]!.body.body).toBe("Newer unsaved words");
+      expect(visibleText()).toContain("Saved to Gmail");
+    },
+  );
+
+  it.each([true, false])(
+    "saves identical words again after discard resets the draft owner (reply: %s)",
+    async (reply) => {
+      await mount(reply);
+      await editWords(reply, "Identical words in a new draft");
+      await autosave();
+      await click("Discard draft");
+      expect(visibleText()).not.toContain("Saved to Gmail");
+      const normal = handle;
+      handle = (req) =>
+        req.method === "POST" && new URL(req.url).pathname === "/v1/drafts"
+          ? Promise.resolve(json({ ...saved, id: "d2", messageId: "m2" }))
+          : normal(req);
+      await editWords(reply, "Identical words in a new draft");
+      await autosave();
+      expect(draftWrites().map((r) => r.method)).toEqual(["POST", "POST"]);
+      expect(visibleText()).toContain("Saved to Gmail");
+    },
+  );
+
+  it.each([true, false])(
+    "does not reuse an acknowledgement across reply targets or sending accounts (reply: %s)",
+    async (reply) => {
+      await mount(reply);
+      await editWords(reply, "Words that stay when scope changes");
+      await autosave();
+      if (reply) {
+        await act(async () => {
+          root.update(
+            createElement(
+              QueryClientProvider,
+              { client },
+              createElement(ReplyBox, {
+                ...replyProps,
+                answer: { ...answer, extId: "B", container: "thread-2" },
+              }),
+            ),
+          );
+        });
+        await settle();
+      } else {
+        await act(async () => {
+          form().onAccount("other-account");
+        });
+        await settle();
+      }
+      expect(visibleText()).not.toContain("Saved to Gmail");
+      await autosave();
+      expect(draftWrites()).toHaveLength(2);
+      expect(draftWrites()[1]!.method).toBe("POST");
+      expect(draftWrites()[1]!.body).toMatchObject({
+        body: "Words that stay when scope changes",
+        ...(reply ? { replyToEntry: "B" } : { accountId: "other-account" }),
+      });
+    },
+  );
+
+  it("acknowledges each explicitly selected compose snapshot without writing on open", async () => {
+    const original = {
+      ...saved,
+      kind: "compose" as const,
+      resolution: "compose" as const,
+      to: "to@example.test",
+      subject: "Same subject",
+      body: "Same words",
+    };
+    selectFixture(original);
+    await mount(false);
+    await autosave();
+    expect(form().draft.body).toBe("Same words");
+    expect(draftWrites()).toEqual([]);
+    selectFixture({ ...original, id: "d2", messageId: "m2" }, 2);
+    await act(async () => {
+      form().onDraft({});
+    });
+    await settle();
+    await autosave();
+    expect(draftWrites()).toEqual([]);
+    await act(async () => {
+      form().onDraft({ body: "A real edit" });
+    });
+    await autosave();
+    expect(draftWrites().map((r) => r.path)).toEqual(["/v1/drafts/d2"]);
+    expect(draftWrites()[0]!.body.expectedMessageId).toBe("m2");
+  });
+});
 
 describe("queued autosave outcomes", () => {
   async function edit(reply: boolean, body: string) {
@@ -288,8 +590,23 @@ describe("queued autosave outcomes", () => {
   );
 });
 
+it.each([true, false])(
+  "list arrival never prefills an unselected editor (reply: %s)",
+  async (reply) => {
+    const normal = handle;
+    handle = (req) =>
+      req.method === "GET" && new URL(req.url).pathname === "/v1/drafts"
+        ? Promise.resolve(json([saved]))
+        : normal(req);
+    await mount(reply);
+    expect(reply ? fields().draft.body : form().draft.body).toBe("");
+    await autosave();
+    expect(draftWrites()).toEqual([]);
+  },
+);
+
 describe("reply draft ownership", () => {
-  it("does not hydrate over words typed before initial draft discovery", async () => {
+  it("does not hydrate or pause new words when saved drafts are discovered", async () => {
     const list = deferred<Response>();
     const normal = handle;
     handle = (req) =>
@@ -304,11 +621,9 @@ describe("reply draft ownership", () => {
     await settle();
     expect(fields().draft.body).toBe("NEW UNSAVED WORDS");
     await autosave();
-    expect(requests.filter((r) => r.path.startsWith("/v1/drafts") && r.method !== "GET")).toEqual(
-      [],
-    );
-    await click("Resume saved draft");
-    expect(fields().draft.body).toBe("OLD SAVED WORDS");
+    expect(draftWrites()).toHaveLength(1);
+    expect(draftWrites()[0]!.method).toBe("POST");
+    expect(fields().draft.body).toBe("NEW UNSAVED WORDS");
   });
 
   it.each(["discard", "send"])(
@@ -323,7 +638,7 @@ describe("reply draft ownership", () => {
             ? Promise.resolve(json([saved]))
             : refresh.promise
           : normal(req);
-      await mount();
+      await mountSelected();
       expect(fields().draft.body).toBe("OLD SAVED WORDS");
       if (action === "discard") await click("Discard draft");
       else {
@@ -357,7 +672,8 @@ describe("reply draft ownership", () => {
         if (req.method === "PUT") return put.promise;
         return normal(req);
       };
-      await mount();
+      await mountSelected();
+      await typeReply("Edited saved words");
       await autosave();
       expect(requests.filter((r) => r.method === "PUT")).toHaveLength(1);
       await click("Discard draft");
@@ -380,7 +696,7 @@ describe("reply draft ownership", () => {
         put.resolve(json({ ...saved, messageId: "m2" }));
       });
       await settle();
-      expect(fields().draft.body).toBe(retarget ? "OLD SAVED WORDS" : "");
+      expect(fields().draft.body).toBe(retarget ? "Edited saved words" : "");
       expect(requests.filter((r) => r.method === "DELETE").map((r) => r.path)).toEqual(
         retarget ? [] : ["/v1/drafts/d1"],
       );
@@ -418,7 +734,7 @@ it("resumes canonical mailbox recipients without changing Reply-To to corpus Fro
     req.method === "GET" && new URL(req.url).pathname === "/v1/drafts"
       ? Promise.resolve(json([saved]))
       : normal(req);
-  await mount();
+  await mountSelected();
   expect(fields().draft.to.map((r) => r.address)).toEqual(["reply-target@example.test"]);
   await click("preview");
   expect(requests.find((r) => r.path === "/v1/send")?.body.to).toEqual([
@@ -447,8 +763,11 @@ describe("reply draft send safety", () => {
           );
         return normal(req);
       };
-      await mount();
-      if (autosaved) await autosave();
+      await mountSelected();
+      if (autosaved) {
+        await typeReply("Edited saved words");
+        await autosave();
+      }
       await click("preview");
       await click("send this reply");
       expect(requests.filter((r) => r.body.confirm === true)).toEqual([]);
@@ -476,7 +795,8 @@ describe("reply draft send safety", () => {
         );
       return normal(req);
     };
-    await mount();
+    await mountSelected();
+    await typeReply("OLD SAVED WORDS edited");
     await autosave();
     expect(puts).toBe(1);
     await click("preview");
@@ -489,7 +809,7 @@ describe("reply draft send safety", () => {
     expect(preflight.body).toMatchObject({
       expectedMessageId: "m1",
       replyToEntry: "A",
-      body: "OLD SAVED WORDS",
+      body: "OLD SAVED WORDS edited",
     });
   });
 });
@@ -503,7 +823,7 @@ it("does not send or clean up if the reply owner changes during draft preflight"
     if (req.method === "PUT") return preflight.promise;
     return normal(req);
   };
-  await mount();
+  await mountSelected();
   await click("preview");
   await click("send this reply");
   expect(requests.filter((r) => r.method === "PUT")).toHaveLength(1);
@@ -569,7 +889,7 @@ describe("immutable review requests", () => {
       if (path === "/v1/send" && (await req.clone().json()).confirm) return sent.promise;
       return normal(req);
     };
-    await mount();
+    await mountSelected();
     await click("preview");
     await click("send this reply");
     await act(async () => {
@@ -678,4 +998,38 @@ describe("immutable review requests", () => {
     await settle();
     expect(button("Confirm and send")).toBeUndefined();
   });
+});
+
+it("opens a selected reply once without PUT, including explicit empty recipients, then writes the next recipient edit", async () => {
+  selectFixture({ ...saved, to: "", cc: "", body: "" });
+  await mount();
+  expect(fields().draft.to).toEqual([]);
+  expect(fields().draft.cc).toEqual([]);
+  await autosave();
+  expect(draftWrites()).toEqual([]);
+  await act(async () => fields().onDraft({ cc: [{ address: "cc@example.test" }] }));
+  await autosave();
+  expect(draftWrites()).toHaveLength(1);
+  expect(draftWrites()[0]).toMatchObject({
+    method: "PUT",
+    path: "/v1/drafts/d1",
+    body: { to: [], cc: ["cc@example.test"], body: "", replyToEntry: "A", expectedMessageId: "m1" },
+  });
+  expect(draftWrites()[0]!.body).not.toHaveProperty("kind");
+  expect(draftWrites()[0]!.body).not.toHaveProperty("resolution");
+});
+
+it("does not rehydrate newer words from same-epoch detail refetches", async () => {
+  await mountSelected();
+  await typeReply("New local words");
+  selectionFixture.current!.selection.draft = {
+    ...saved,
+    body: "Stale refetch words",
+    messageId: "stale-revision",
+  };
+  await act(async () => fields().onDraft({ body: "Newest words" }));
+  await settle();
+  expect(fields().draft.body).toBe("Newest words");
+  await autosave();
+  expect(draftWrites()[0]!.body).toMatchObject({ body: "Newest words", expectedMessageId: "m1" });
 });

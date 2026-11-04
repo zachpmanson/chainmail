@@ -292,6 +292,10 @@ func TestFoldCancellationAfterWriterAcquisitionRollsBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.Close()
+	// This observer probes ownership rather than waiting to become a writer.
+	if _, err = conn.ExecContext(context.Background(), "pragma busy_timeout=0"); err != nil {
+		t.Fatal(err)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	done := make(chan error, 1)

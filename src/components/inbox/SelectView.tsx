@@ -18,6 +18,7 @@ import CompactModeToggle from "./CompactModeToggle";
 import ComposeBox from "../compose/ComposeBox";
 import { useCompose } from "../compose/ComposeContext";
 import ThreadListScroll from "./ThreadListScroll";
+import { openThread } from "../../lib/ui/openSelection";
 
 export default function SelectView() {
   const navigate = useNavigate();
@@ -44,14 +45,17 @@ export default function SelectView() {
     return () => document.body.classList.remove("search");
   }, []);
 
-  const opened = useSearch({ from: "/" }).open;
+  const opened = openThread(useSearch({ from: "/" }).open);
   // Choosing a candidate dismisses compose, or the thread would open hidden beneath it.
   const openChain = (root: string) => {
-    closeCompose();
-    if (root === opened) return;
-    navigate({ to: "/", search: (prev) => ({ ...prev, open: root }) });
+    if (root === opened && !urlSearch.draft) return;
+    navigate({
+      to: "/",
+      search: (prev) => ({ ...prev, open: root, draft: undefined, popup: undefined }),
+    });
   };
-  const closeChain = () => navigate({ to: "/", search: (prev) => ({ ...prev, open: undefined }) });
+  const closeChain = () =>
+    navigate({ to: "/", search: (prev) => ({ ...prev, open: undefined, draft: undefined }) });
 
   // The idle init is never sent; it only gives the disabled query a key.
   const results = $api.useQuery(

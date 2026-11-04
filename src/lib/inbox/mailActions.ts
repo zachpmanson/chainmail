@@ -132,17 +132,12 @@ export function useReadAction({
 } = {}) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (variables: { body: MarkReadRequest }) =>
-      undoableMail(
-        async () => {
-          const { data } = await fetchClient.POST("/v1/read", {
-            body: { ...variables.body, undoable: true },
-          });
-          return data!;
-        },
-        variables.body.unread ? "mark unread" : "mark read",
-        queryClient,
-      ),
+    mutationFn: async (variables: { body: MarkReadRequest }) => {
+      const { data } = await fetchClient.POST("/v1/read", {
+        body: { ...variables.body, undoable: false },
+      });
+      return data!;
+    },
     ...mailWriteOptions(queryClient, (variables: { body: MarkReadRequest }) =>
       markInLists(queryClient, variables.body.chain, variables.body.unread),
     ),

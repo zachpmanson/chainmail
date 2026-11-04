@@ -1,3 +1,5 @@
+import { useDraftCoordinator } from "../compose/DraftSelectionContext";
+import InlineAlert from "../ui/InlineAlert";
 import { Fragment, useEffect, useMemo, type ReactNode } from "react";
 import { $api, type CorpusEntry } from "../../lib/api/api";
 import { useAccountId } from "../../lib/inbox/useAccountId";
@@ -26,6 +28,12 @@ export default function ThreadMessages({
   tree?: boolean;
 }) {
   const accountId = useAccountId();
+  const coordinator = useDraftCoordinator();
+  const selected = coordinator?.selection;
+  const selectedReply =
+    selected?.draft?.kind === "reply" && selected.draft.rootId === thread.rootExtId
+      ? selected.draft
+      : undefined;
   const fetched = $api.useQuery("get", "/v1/chains/{rootExtId}", {
     params: { path: { rootExtId: thread.rootExtId } },
   });
@@ -38,14 +46,29 @@ export default function ThreadMessages({
     [entries, shown, parentOf, people],
   );
 
-  const flip = usePreferOriginal();
+  const { flip, pending: readingPending } = usePreferOriginal();
   const { pulling, pullNote, pull } = useMediaPull({ accountId });
   // Re-attach when entries change: `attach` only wires elements present at the time.
   useEffect(() => {
     const detach = attach(document);
     return detach;
   }, [entries]);
-  const { answer, all, setAll, aimed, aim } = useReplyTarget(thread.rootExtId, shown);
+  const { answer, all, setAll, aimed, aim } = useReplyTarget(
+    thread.rootExtId,
+    shown,
+    selected?.active
+      ? {
+          entries,
+          parent:
+            selectedReply?.replyToEntry ??
+            (selected.adopting?.destination === thread.rootExtId
+              ? selected.adopting.target
+              : undefined) ??
+            "",
+        }
+      : undefined,
+    entries,
+  );
   const { landed, endLanding } = useLandOnNewest(thread.rootExtId, shown);
 
   if (fetched.isError) return <Failure error={fetched.error} />;
@@ -100,8 +123,16 @@ export default function ThreadMessages({
         key={thread.rootExtId}
         lookup={lookup}
         answerExtId={answer?.extId}
-        aim={aim}
+        aim={(extId) => {
+          if (selected?.active) {
+            // A different parent must not inherit the saved draft identity.
+            if (!coordinator?.approve()) return;
+            coordinator.detach(accountId ?? "");
+          }
+          aim(extId);
+        }}
         flip={flip}
+        readingPending={readingPending}
         pulling={pulling}
         pull={pull}
         landed={landed}
@@ -110,6 +141,11 @@ export default function ThreadMessages({
         {forest.map((node) => draw(node))}
       </ThreadViewProvider>
       {/* Only when the thread holds a message the mailbox can answer. */}
+      {selected?.active && !answer ? (
+        <InlineAlert>
+          The selected reply parent is missing or unavailable. No fallback message will be used.
+        </InlineAlert>
+      ) : null}
       {answer ? (
         <ReplyBox
           thread={thread}

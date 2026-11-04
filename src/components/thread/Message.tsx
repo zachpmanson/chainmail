@@ -3,6 +3,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { receiptNames } from "../../lib/message/who";
 import type { MessageEmail } from "../../lib/message/email";
 import { useOriginal } from "../../lib/message/useOriginal";
+import type { ReadingPreference } from "../../lib/prefs/usePrefs";
 import type { OriginalPayload } from "../../lib/message/original";
 import StatusBadge from "../ui/StatusBadge";
 import Attachments from "./Attachments";
@@ -59,13 +60,14 @@ export type MessageMedia = {
   mediaBase: string;
 };
 
-/** The original-styling switch; absent unless the corpus holds the sender's own part and a server can fetch it. */
+/** The reading-style control; absent unless the sender's own part can be fetched. */
 export type MessageReading = {
   original: { extId: string; load: (extId: string) => Promise<OriginalPayload> };
-  /** stored half of the switch; absent keeps it in browser storage */
-  person?: { id: number; preferOriginal: boolean | undefined };
-  /** flips that preference; absent keeps the switch local */
-  onPreferOriginal?: (next: boolean) => void;
+  /** stored preference; absent keeps it in browser storage */
+  person?: { id: number; preferOriginal: ReadingPreference };
+  /** saves that preference; undefined restores automatic rendering */
+  onPreferOriginal?: (next: ReadingPreference) => Promise<void>;
+  pending?: boolean;
 };
 
 /** One message bubble. */
@@ -182,7 +184,12 @@ export default function Message({
               <span className="ml-auto inline-flex items-center gap-1.5">
                 {answer}
                 {reading !== undefined ? (
-                  <OriginalControl on={styled.on} state={styled.state} ask={styled.ask} />
+                  <OriginalControl
+                    preference={styled.preference}
+                    state={styled.state}
+                    choose={styled.choose}
+                    pending={reading.pending}
+                  />
                 ) : null}
                 {copyJson !== undefined ? <CopyJson data={copyJson} /> : null}
               </span>

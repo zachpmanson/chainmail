@@ -119,7 +119,7 @@ func TestRepairQuotedBodiesRewritesTheOldParsersText(t *testing.T) {
 		t.Errorf("body = %q, want it to open on the message", body)
 	}
 	// The hash is the embedder's staleness test, so it must be the new body's.
-	if want := BodySHA("Fernbrook sites", recovered); sha != want {
+	if want := BodySHA(recovered, "Fernbrook sites"); sha != want {
 		t.Errorf("body_sha = %s, want the re-derived body's %s", sha, want)
 	}
 	// The search index must follow the row, or the residue stays findable.

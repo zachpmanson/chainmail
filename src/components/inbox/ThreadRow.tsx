@@ -1,4 +1,5 @@
 import Checkbox from "../ui/Checkbox";
+import IconFrame from "../ui/IconFrame";
 import { type ReactNode } from "react";
 import { type ChainHit } from "../../lib/api/api";
 import { useReadAction } from "../../lib/inbox/mailActions";
@@ -94,15 +95,17 @@ export default function ThreadRow({
       </button>
       {aside}
       <label
-        className="absolute top-0 right-0 flex w-6 cursor-pointer justify-end pt-2 pr-1.5 pb-1.5"
+        className="group/icon absolute top-0 right-0 flex cursor-pointer"
         title="include this thread in a page"
       >
-        <Checkbox
-          checked={checked}
-          onChange={onToggle}
-          aria-label={`Select ${subject}`}
-          className="m-0 cursor-pointer"
-        />
+        <IconFrame>
+          <Checkbox
+            checked={checked}
+            onChange={onToggle}
+            aria-label={`Select ${subject}`}
+            className="m-0 size-6 cursor-pointer"
+          />
+        </IconFrame>
       </label>
     </li>
   );

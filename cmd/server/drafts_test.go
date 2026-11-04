@@ -232,4 +232,7 @@ func TestDraftUnsupportedMIMEIsAnActionableConflict(t *testing.T) {
 	if res.status != 409 || !strings.Contains(res.errText(t), "edit it in Gmail") {
 		t.Fatalf("status %d: %s", res.status, res.body)
 	}
+	if !strings.Contains(res.errText(t), "operation=update") || !strings.Contains(res.errText(t), "reply_parent=false") {
+		t.Fatalf("missing sanitized request context: %s", res.errText(t))
+	}
 }

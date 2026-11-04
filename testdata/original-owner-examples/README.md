@@ -1,7 +1,8 @@
 # Owner-confirmed original-view examples
 
-Two additional examples the owner explicitly said should default to original HTML
-on 2026-10-27. Their desired labels are asserted directly by
+The first two examples were explicitly requested to default to original HTML
+on 2026-10-27. Example 3 is an invented structural regression for the owner's
+whole-message table-containment request in [#359](https://github.com/zachpmanson/chainmail/issues/359). Their desired labels are asserted directly by
 `TestOriginalAnalysisOwnerExamples`; both now pass through generic structural
 rules described in [RULE-PROPOSALS.md](RULE-PROPOSALS.md).
 These are not additional temporarily paused corpus expectations. At collection,
@@ -10,7 +11,7 @@ pre-anonymisation endpoint snapshots produced the same receipts too. This was
 observed agreement on these examples, not a general guarantee of raw-input
 equivalence.
 
-## Provenance and anonymisation
+## First two examples: provenance and anonymisation
 
 These snapshots come from the read-only `/original?analysis=1` endpoint's **rendered,
 sanitized HTML**, not the raw stored `body_html` analysed by the endpoint. Raw
@@ -40,6 +41,26 @@ Run the regressions:
 nix develop --command go test ./internal/spec -run TestOriginalAnalysisOwnerExamples -count=1 -v
 ```
 
-Current receipts are score 3 (layout, hierarchy, graphic) and score 2 (layout,
-action), both original without uncertainty. The full existing corpus receipts
-are unchanged, including the two independently owner-paused expectations.
+Current receipts are score 4 (layout, hierarchy, graphic, table containment),
+score 3 (layout, action, table containment), and score 2 (layout, table containment),
+all original without uncertainty. The containment addition changes 48 of the 119
+corpus receipts by exactly one point, with all prior matches unchanged. Only the
+two independently owner-paused cases change default (simplified to original);
+their labels and pause code are unchanged. Strict mode now passes all 119 labels.
+
+## Invented whole-table example
+
+Example 3 contains only synthetic wording and `example.test` resources. It is not
+an anonymised copy of private sender HTML. It preserves a full-width outer table,
+a bounded main table, a small CSS-sized logo with larger intrinsic dimensions,
+a link whose paint belongs to its enclosing cell, and prose/footer inside the
+outer table. Hidden preview text and an external tracking-size image do not vote.
+It failed before the containment rule with score 1 (layout only), then passed
+with score 2; neither its link nor logo gains an action/graphic vote.
+
+The private motivating example's authoritative live receipt was computed on raw
+input, whereas local follow-up analysis used sanitized display HTML. The local
+result is not evidence of raw-input parity. Its explicit saved simplified sender
+preference is separate from the classifier default and is neither changed nor
+overridden by this rule. No private HTML, identities, wording or destinations are
+included in this fixture.

@@ -5,6 +5,7 @@ import { ApiError, $api } from "../../lib/api/api";
 import { errText } from "../../lib/ui/errText";
 import { when } from "../../lib/ui/stamp";
 import { pushToast, SAID_MS } from "../../lib/ui/toasts";
+import { embeddingIndicator } from "../../lib/ops/embeddingIndicator";
 import IconButton from "../ui/IconButton";
 
 /**
@@ -16,6 +17,7 @@ export default function NavRefresh() {
   const [busy, setBusy] = useState(false);
   const status = $api.useQuery("get", "/v1/status", {}, { refetchInterval: 10_000 });
   const sweep = status.data?.sweep;
+  const embedding = embeddingIndicator(status.data?.embedding);
   const running = Boolean(sweep?.running);
   const warning = !running && (sweep?.outcome === "incomplete" || sweep?.outcome === "failed");
   const indicator = busy || running;
@@ -94,6 +96,16 @@ export default function NavRefresh() {
         />
       </IconButton>
       {stageLabel && <span className="text-xs whitespace-nowrap">{stageLabel}</span>}
+      {embedding && (
+        <span
+          role="status"
+          aria-label={embedding.title}
+          title={embedding.title}
+          className="text-xs whitespace-nowrap text-muted"
+        >
+          {embedding.label}
+        </span>
+      )}
     </span>
   );
 }

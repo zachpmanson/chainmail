@@ -21,6 +21,7 @@ import ComposeBox from "../compose/ComposeBox";
 import { useCompose } from "../compose/ComposeContext";
 import FolderPicker from "./FolderPicker";
 import ThreadListScroll from "./ThreadListScroll";
+import { openThread } from "../../lib/ui/openSelection";
 
 export default function Inbox() {
   const folder = useFolder();
@@ -47,18 +48,22 @@ function FolderInbox({ folder }: { folder: ReturnType<typeof useFolder> }) {
   }, []);
 
   // Absent means nothing is open; the pane never fills itself with the top thread.
-  const opened = useSearch({ from: "/" }).open;
+  const urlSearch = useSearch({ from: "/" });
+  const opened = openThread(urlSearch.open);
   const { label } = folder;
   // Waits for settings so the default folder doesn't swap in after All mail.
   const { list: inbox, rows } = useThreadList(label, folder.accountId, folder.settled);
 
   // Choosing a thread dismisses compose, or the thread would open hidden beneath it.
   const openChain = (root: string) => {
-    closeCompose();
-    if (root === opened) return;
-    navigate({ to: "/", search: (prev) => ({ ...prev, open: root }) });
+    if (root === opened && !urlSearch.draft) return;
+    navigate({
+      to: "/",
+      search: (prev) => ({ ...prev, open: root, draft: undefined, popup: undefined }),
+    });
   };
-  const closeChain = () => navigate({ to: "/", search: (prev) => ({ ...prev, open: undefined }) });
+  const closeChain = () =>
+    navigate({ to: "/", search: (prev) => ({ ...prev, open: undefined, draft: undefined }) });
 
   // The opened thread may not be on a loaded page; the pane fetches it by id.
   const onlyID: PreviewableThread = { rootExtId: opened ?? "" };
@@ -116,9 +121,7 @@ function FolderInbox({ folder }: { folder: ReturnType<typeof useFolder> }) {
             <FolderPicker
               current={label}
               currentAccountId={folder.accountId}
-              isDefault={folder.isDefault}
               onPick={folder.pick}
-              onDefault={folder.makeDefault}
             />
             <ThreadListScroll>
               {compact && rows.length > 0 ? <CompactListHeader /> : null}

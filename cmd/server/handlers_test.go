@@ -86,10 +86,23 @@ func TestSlurpFailureIsBadGatewayWithTheError(t *testing.T) {
 	}
 }
 
-// What the server passes the CLI is a contract, so it is pinned against a real
-// sibling: the phases a human's button is allowed to run, and no transport flag
-// at all. The ingest and the server are one package reading one credential, so a
-// -bin docket shim here would name access this unit has no reason to want.
+// Routine refresh ingests and settles mail; unread audits and dedupe plans
+// belong to explicit repair/review rather than either server refresh path.
+func TestServerRefreshUsesOnlyMailAndSettlingPhases(t *testing.T) {
+	for _, tc := range []struct {
+		name, phases, want string
+	}{
+		{"manual", manualPhases, "mail,twins,repair"},
+		{"scheduled", sweepPhases, "mail,twins,repair"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.phases != tc.want {
+				t.Fatalf("server phases = %q, want %q: History supplies labels; audits and merge plans stay explicit", tc.phases, tc.want)
+			}
+		})
+	}
+}
+
 func TestSlurpRunsTheSiblingCLIWithThePipelinePhases(t *testing.T) {
 	dir := t.TempDir()
 	record := filepath.Join(dir, "args")
@@ -526,8 +539,14 @@ func TestOriginalAnalysisDoesNotCountAppCanvasOrRewriteDisplay(t *testing.T) {
 		if got.HTML != string(a.body) {
 			t.Fatal("analysis rewrote original")
 		}
-		if got.Analysis.Score != 0 || got.Analysis.DefaultsToOriginal {
-			t.Fatalf("app presentation counted: %+v", got.Analysis)
+		want := spec.OriginalAnalysis{Matches: []spec.OriginalMatch{}}
+		if i == 1 {
+			// The sender's bare table earns one point, not the app's canvas.
+			want.Score = 1
+			want.Matches = []spec.OriginalMatch{{Rule: "whole message in a table", Points: 1}}
+		}
+		if !reflect.DeepEqual(got.Analysis, want) {
+			t.Fatalf("want only sender evidence %+v; got %+v", want, got.Analysis)
 		}
 		if !strings.Contains(got.HTML, ":host") {
 			t.Fatal("missing app canvas")

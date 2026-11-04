@@ -36,6 +36,10 @@ func printRefresh(w io.Writer, r refresh.Report) {
 	// The sweep is part of the run: a quote stored before its mailbox original
 	// arrived is one message kept twice, and clearing it before redrawing is a
 	// refresh's job, not a separate chore. Printed next to the passes it cost.
+	fmt.Fprintf(w, "maintenance: skipped=%t pending=%t source=%d covered=%d people=%d bodies=%d hosts=%d\n", r.MaintenanceSkipped, r.MaintenancePending, r.ReconcileSource, r.ReconcileCovered, r.TwinsPeopleScanned, r.TwinsBodiesScanned, r.QuoteHostsScanned)
+	if r.MaintenancePending {
+		fmt.Fprintln(w, "full maintenance verification pending — run corpus slurp -only twins,repair")
+	}
 	if r.TwinsCollapsed > 0 {
 		fmt.Fprintf(w, "twins   collapsed %d stored %s before redrawing\n",
 			r.TwinsCollapsed, plural(r.TwinsCollapsed, "pair", "pairs"))

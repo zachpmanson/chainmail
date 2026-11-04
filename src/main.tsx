@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { router } from "./router";
 import { makeQueryClient } from "./lib/api/queryClient";
+import TooltipProvider from "./components/ui/TooltipProvider";
 import "./styles.css";
 import "./select.css";
 import "./tailwind.css";
@@ -15,7 +16,9 @@ void router.load().then(() => {
   createRoot(root).render(
     <StrictMode>
       <QueryClientProvider client={makeQueryClient()}>
-        <RouterProvider router={router} />
+        <TooltipProvider>
+          <RouterProvider router={router} />
+        </TooltipProvider>
       </QueryClientProvider>
     </StrictMode>,
   );

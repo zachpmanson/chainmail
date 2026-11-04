@@ -97,16 +97,16 @@ type server struct {
 	// server process, not the HTTP connection. A reader leaving the page must not
 	// kill a mailbox walk halfway through; a server shutdown still cancels it.
 	lifecycleCtx context.Context
-	// slurpTimeout bounds one ingest. A slurp walks the mail query, then twins,
-	// repair, dedupe (reported, never applied) and embed, so it takes minutes
-	// rather than seconds; the server-lifetime context cancels it on shutdown.
+	// slurpTimeout bounds one ingest. History synchronizes mail and labels, then
+	// twins and repair settle the corpus. The server-lifetime context cancels it
+	// on shutdown.
 	slurpTimeout time.Duration
 	// runSlurp is the mailbox-reaching operation, injected so the handler can be
 	// tested without a mailbox. The real one delegates to the sibling `corpus`
 	// binary (see defaultSlurp), so every phase and its ordering stays there.
 	runSlurp func(ctx context.Context, corpusPath string) ([]byte, error)
-	// runSweep is the same operation on the schedule's terms: the same pipeline
-	// without dedupe, because a plan nobody is watching is work nobody reads.
+	// runSweep is the scheduled form of the same mail/twins/repair pipeline.
+	// Neither caller generates a dedupe plan; that belongs to explicit review.
 	// Nil when this host has nothing to sweep with, which leaves the loop idle.
 	runSweep func(ctx context.Context, corpusPath string) ([]byte, error)
 	// sweeping is the one-ingest-at-a-time latch, shared by POST /v1/slurp and
@@ -119,7 +119,8 @@ type server struct {
 	// finish" — the question a page otherwise cannot ask, because a scheduled
 	// sweep runs with no press behind it and a corpus mid-rebuild reads as a
 	// threading bug rather than as work in progress. Served on GET /v1/status.
-	sweep sweepState
+	sweep     sweepState
+	embedding *embeddingWorker
 
 	// mediaEnabled enables POST /v1/media/pull: fetch the bytes behind one
 	// message's attachments, so the page can show a file instead of sending the
@@ -1018,9 +1019,8 @@ type slurpResponse struct {
 // and returns the ingest transcript.
 //
 // It delegates to the sibling `corpus` binary rather than re-implementing the
-// phases: the ingest order, fail-closed threading check, dedupe-as-dry-run,
-// embed-skip reporting and connection-snapshot probe all live there, and the
-// server shares none of that logic. The sibling ships beside this binary in the
+// phases: the ingest order, fail-closed threading check and connection-snapshot
+// probe all live there, and the server shares none of that logic. The sibling ships beside this binary in the
 // same nix package (corpus lands next to chainmail-server in $out/bin).
 //
 // Mail reaches the mailbox the way every other ingest on this host does — the
@@ -1030,20 +1030,16 @@ type slurpResponse struct {
 // the server did not already have, and `-backend` needs no spelling out because
 // the ingest and the server are one package with one default.
 //
-// Which phases run is the caller's choice, in one list, because the two callers
-// differ by exactly one phase: `manualPhases` is what a person pressing the
-// button gets — the dedupe plan is part of what they asked to see, and it stays
-// a dry run either way (see cmd/corpus/slurp.go) — and `sweepPhases` is the same
-// pipeline without it, since a plan printed into the journal of a sweep nobody
-// is watching is work nobody reads. Both include unread, which is the phase that
-// makes a scheduled sweep worth having: it fixes the badges a phone has moved on
-// from, and the person most likely to notice is the one looking at that row.
+// Manual and scheduled callers share unbounded in:anywhere History sync and
+// corpus settling. History reconciles labels including UNREAD; full unread
+// audits remain CLI repair. Dedupe plans remain explicit CLI/Ops review, not
+// work every refresh must await. Neither is replaced by a background task.
 //
 // CHAINMAIL_CORPUS pins the same database this process has open; being WAL, the
 // ingest writes beside the reader.
 const (
-	manualPhases = "mail,twins,repair,dedupe,unread,embed"
-	sweepPhases  = "mail,twins,repair,unread,embed"
+	manualPhases = "mail,twins,repair"
+	sweepPhases  = manualPhases
 )
 
 func defaultSlurp(phases, source string) func(ctx context.Context, corpusPath string) ([]byte, error) {
@@ -2939,7 +2935,7 @@ func (s *server) status(w http.ResponseWriter, r *http.Request) {
 	} else {
 		snap = status.Parse(blob)
 	}
-	send(w, http.StatusOK, toStatusResponse(snap, s.nextSlurpAt(), s.sweepStatus()))
+	send(w, http.StatusOK, toStatusResponse(snap, s.nextSlurpAt(), s.sweepStatus(), s.embedding.snapshot()))
 }
 
 // labels is the folder list the home page's button opens. It is the mailbox's
@@ -3285,7 +3281,7 @@ func send(w http.ResponseWriter, status int, body any) {
 // is the corpus, which the reader can already rebuild from the mailbox.
 func (s *server) editPerson(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("personId"), 10, 64)
-	if err != nil || id == 0 {
+	if err != nil || id <= 0 {
 		fail(w, http.StatusBadRequest, fmt.Errorf(
 			"personId %q: want the id of a person, e.g. /v1/people/12", r.PathValue("personId")))
 		return
@@ -3300,17 +3296,18 @@ func (s *server) editPerson(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.DisplayName == "" && len(req.AddIdentities) == 0 && len(req.RemoveIdentities) == 0 &&
-		req.PreferOriginal == nil {
+		req.PreferOriginal == nil && !req.ResetOriginalPreference {
 		fail(w, http.StatusBadRequest, errors.New(
 			"nothing to do: name at least one of displayName, addIdentities, removeIdentities, "+
-				"preferOriginal"))
+				"preferOriginal, resetOriginalPreference:true"))
 		return
 	}
 	person, err := corpus.UpdatePerson(s.store, id, corpus.PersonEdit{
-		DisplayName:    req.DisplayName,
-		Add:            req.AddIdentities,
-		Remove:         req.RemoveIdentities,
-		PreferOriginal: req.PreferOriginal,
+		DisplayName:             req.DisplayName,
+		Add:                     req.AddIdentities,
+		Remove:                  req.RemoveIdentities,
+		PreferOriginal:          req.PreferOriginal,
+		ResetOriginalPreference: req.ResetOriginalPreference,
 	})
 	switch {
 	case errors.Is(err, corpus.ErrNoPerson):
@@ -3324,9 +3321,8 @@ func (s *server) editPerson(w http.ResponseWriter, r *http.Request) {
 			fail(w, http.StatusConflict, err)
 			return
 		}
-		// A malformed identity is the caller's own mistake, and the only other
-		// error the corpus reports from here.
-		if errors.Is(err, corpus.ErrBadIdentity) {
+		// Malformed identities and conflicting reading preferences are caller errors.
+		if errors.Is(err, corpus.ErrBadIdentity) || errors.Is(err, corpus.ErrConflictingOriginalPreference) {
 			fail(w, http.StatusBadRequest, err)
 			return
 		}

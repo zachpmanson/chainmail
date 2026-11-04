@@ -20,7 +20,7 @@ func TestOriginalAnalysisStructures(t *testing.T) {
 		{"empty", "", false},
 		{"designed page", designedOriginal, true},
 		{"short designed main", `<table width="600" align="center"><tr><td style="padding:24px;background:#eef;border:1px solid #ccd"><h2>Review packet</h2><p>The agenda is ready.</p><a href="https://example.test/open" style="display:inline-block;background:#147;padding:12px">Open packet</a></td></tr></table>`, true},
-		{"ordinary references inside a painted page cell", `<table width="600"><tr><td style="padding:24px;background:#eef"><p>This is ordinary correspondence with enough words and two inline reference links to follow.</p><a href="https://example.test/one">First reference</a><a href="https://example.test/two">Second reference</a></td></tr></table>`, false},
+		{"ordinary references inside a painted page cell", `<table width="600"><tr><td style="padding:24px;background:#eef"><p>This is ordinary correspondence with enough words and two inline reference links to follow.</p><a href="https://example.test/one">First reference</a><a href="https://example.test/two">Second reference</a></td></tr></table>`, true},
 		{"correlated padded wrappers", `<div style="width:600px;padding:24px;background:#eef"><div style="padding:24px;background:#eef"><div style="padding:24px;background:#eef">This is ordinary correspondence with enough words and no independent designed elements at all.</div></div></div>`, false},
 		{"uniform large body", `<div style="width:600px;font-size:24px"><p>This ordinary message uses uniformly large text for the whole body.</p><p>It does not have a separate visual heading or any other independent design evidence.</p></div>`, false},
 		{"uniform large type inherited outside candidate", `<div style="font-size:24px"><table width="600"><tr><td><div style="font-size:24px">Short opening line</div><p>Ordinary correspondence uses the same size everywhere with no independent design evidence.</p></td></tr></table></div>`, false},
@@ -52,6 +52,9 @@ func TestOriginalAnalysisStructures(t *testing.T) {
 			a := AnalyseOriginal(tc.raw)
 			if a.DefaultsToOriginal != tc.want {
 				t.Fatalf("got %+v, want original=%v", a, tc.want)
+			}
+			if tc.name == "ordinary references inside a painted page cell" && (a.Score != 2 || hasOriginalRule(a, "designed action") || !hasOriginalRule(a, "whole message in a table")) {
+				t.Fatalf("table containment must not turn references into controls: %+v", a)
 			}
 			sum := 0
 			for _, m := range a.Matches {

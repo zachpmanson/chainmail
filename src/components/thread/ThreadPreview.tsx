@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import DialogShell from "../ui/DialogShell";
 import type { PreviewableThread } from "./ThreadShared";
 import ThreadPane from "./ThreadPane";
 
@@ -10,35 +10,20 @@ export default function ThreadPreview({
   thread: PreviewableThread;
   onClose: () => void;
 }) {
-  useEffect(() => {
-    const onKey = (ev: KeyboardEvent) => {
-      if (ev.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   return (
-    <div
-      className="fixed inset-0 z-55 flex items-center justify-center bg-black/45"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Thread preview"
-      onClick={onClose}
+    <DialogShell
+      label="Thread preview"
+      onClose={onClose}
+      panelClassName="h-[min(82vh,56rem)] max-h-none w-[min(58rem,94vw)] max-w-none overflow-hidden"
     >
-      <div
-        className="flex h-[min(82vh,56rem)] w-[min(58rem,94vw)] flex-col overflow-hidden rounded-lg border border-line bg-card shadow-[0_8px_40px_rgba(0,0,0,.35)]"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <ThreadPane
-          thread={thread}
-          label="Thread preview"
-          backLabel="Close"
-          empty="No entries to show."
-          onClose={onClose}
-          openInWindow={false}
-        />
-      </div>
-    </div>
+      <ThreadPane
+        thread={thread}
+        label="Thread preview"
+        backLabel="Close"
+        empty="No entries to show."
+        onClose={onClose}
+        openInWindow={false}
+      />
+    </DialogShell>
   );
 }

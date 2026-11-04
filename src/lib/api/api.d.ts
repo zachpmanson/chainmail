@@ -41,9 +41,9 @@ export interface paths {
         put?: never;
         /**
          * Reach the work mailbox and ingest it.
-         * @description Runs `corpus slurp` against the corpus — reading the work mailbox through the mail credential this unit already holds — so a subsequent /v1/refresh can build over mail that arrived since the last ingest. The phases are the ones the chainmail-slurp unit runs (mail, twins, repair, dedupe as a dry run, embed), and the ingest's own transcript is returned.
+         * @description Runs `corpus slurp` against the corpus using this unit’s existing mail credential (mail, twins and repair; dedupe plans remain explicit CLI/Ops review). Gmail History synchronizes message labels, including read/unread state; the full unread-set audit is not part of this refresh. Returns the ingest transcript after fold warming; lexical search is available immediately. A separate coalescing background embedding pass catches semantic search up, independently of this response and its outcome. Even a partial or failed ingest queues a pass.
          *
-         *     Opt-in and off by default: a server started without -slurp answers 403, keeping the surface read-most and never touching the mailbox.
+         *     Opt-in and off by default: a server started without -slurp answers 403 and does not run background embedding.
          */
         post: operations["slurp"];
         delete?: never;
@@ -609,7 +609,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Edit one person: their name, or the identities attached to them.
+         * Edit one person's name, identities or reading preference.
          * @description The ops screen's own editor, and the corpus's only hand-made identity write. Fields left out are left alone. An identity another person already holds is refused with 409 naming them: moving an address between people is the same act as merging them, and the merge plan is where that act carries evidence. A rename writes the name and adds it as an identity; the spellings the corpus read from headers are kept, because a name is evidence too. There is deliberately no delete: a person is a thing the mail says, not a row a screen owns.
          */
         post: operations["editPerson"];
@@ -1152,6 +1152,7 @@ export interface components {
             sweep: components["schemas"]["SweepStatus"];
             /** @description Every backend, in the screen's order. */
             services: components["schemas"]["ServiceStatus"][];
+            embedding: components["schemas"]["EmbeddingStatus"];
         };
         /** @description The ingest as a reader can see it: one run at a time, and how the last one ended. Not persisted — a restart forgets the last outcome, because the corpus itself shows what a finished run left and the fact worth carrying across a restart is whether one is running now. */
         SweepStatus: {
@@ -1256,6 +1257,14 @@ export interface components {
         };
         /** @description What moved between the previous run and this one. A chain is in exactly one list: added (new to the page), grown (was there and gained entries), proposed (found but not accepted) or unranked (kept, but its query no longer finds it). queriesRecorded is not a chain but a change to the page's record. */
         RefreshReport: {
+            /** @description Full twins and repair verification remains pending; independent of page/content nothingNew. */
+            maintenancePending?: boolean;
+            /** @description A durable full-maintenance checkpoint allowed the legacy prepass to skip scanning. */
+            maintenanceSkipped?: boolean;
+            /** @description Mail bodies loaded by the twins prepass; absent when zero. */
+            twinsBodiesScanned?: number;
+            /** @description Hosts peeled by quote repair; absent when zero. */
+            quoteHostsScanned?: number;
             /** @description Messages on the page when the refresh started. */
             entriesBefore: number;
             /** @description Messages on the page after the refresh. */
@@ -1923,8 +1932,10 @@ export interface components {
             addIdentities?: string[];
             /** @description Identities to detach, as "kind:value". Detaching the last one leaves a person known by name alone, which the corpus already tolerates: some participants are only ever a first name in someone else's quoted header. */
             removeIdentities?: string[];
-            /** @description The reading style for this person's mail: true for the sender's own rendering, false for the transcript's. Absent leaves the answer as it stands, which is the rule every other field here follows — a request that renamed somebody must not switch their reading style off by leaving it out. This is what the staged/original control on a message sends, and it is the only write in this API that is about how mail is read rather than about what the corpus holds. */
-            preferOriginal?: boolean;
+            /** @description The reading style for this person's mail: true for the sender's own rendering, false for the transcript's. Absent or null leaves the answer as it stands; false is an explicit preference, not a reset. Cannot be combined with resetOriginalPreference:true. */
+            preferOriginal?: boolean | null;
+            /** @description True clears this person's stored reading preference and restores automatic rendering (prefer_original=0, prefer_original_set=0). Idempotent. Absent, null or false does nothing; true counts as an edit on its own. Combining true with an explicit preferOriginal true or false returns 400 before any part of the edit is applied. Other fields can be edited in the same transaction. Verify via GET /v1/entries/{extId}: preferOriginal and preferOriginalSet are false or absent. */
+            resetOriginalPreference?: boolean | null;
         };
         /** @description One person, as the write left them. */
         PersonResponse: {
@@ -1986,7 +1997,22 @@ export interface components {
             body?: string;
         };
         DraftResponse: {
+            /** @description Stable application account ID, not email; scopes Gmail draft and message IDs. */
             accountId: string;
+            /**
+             * @description Navigation only; does not assert MIME editability or sender compatibility. No reply headers means compose even with Gmail threadId. Unresolved drafts remain visible.
+             * @enum {string}
+             */
+            kind: "compose" | "reply" | "unresolved";
+            /**
+             * @description compose iff kind compose; resolved iff kind reply. All other values mean kind unresolved with no navigation handles. lookup-unavailable explicitly indicates corpus lookup failure, not missing mail; successful Gmail writes still succeed.
+             * @enum {string}
+             */
+            resolution: "compose" | "resolved" | "missing-explicit-parent" | "malformed-parent" | "missing-parent" | "ambiguous-parent" | "unresolved-root" | "lookup-unavailable";
+            /** @description Exact account-qualified unique parent corpus ext ID. Present only for kind reply / resolution resolved, together with rootId. Never a Gmail ID or raw RFC Message-ID. */
+            replyToEntry?: string;
+            /** @description Current stored corpus graph root ext ID for replyToEntry. Present only for resolved reply. Root can retain unresolved external parent_ref. Never Gmail threadId. */
+            rootId?: string;
         } & components["schemas"]["Draft"];
         DraftDeleteResponse: {
             accountId: string;
@@ -2016,6 +2042,26 @@ export interface components {
             /** @description Exactly the sanitized fragment returned by the default text/html response. */
             html: string;
             analysis: components["schemas"]["OriginalAnalysis"];
+        };
+        /** @description Process-local background indexing, independent of ingest and the embed service probe. Pending is the initial pass baseline, done counts committed work only; concurrent changes may leave work for a later pass. Disabled without -slurp. Startup and completed ingest attempts queue work; requests coalesce into one follow-up. State and errors are not persisted. */
+        EmbeddingStatus: {
+            enabled: boolean;
+            running: boolean;
+            queued: boolean;
+            model?: string;
+            dim: number;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            finishedAt?: string;
+            /** @enum {string} */
+            outcome?: "complete" | "failed" | "skipped" | "cancelled";
+            /** @description Last pass error, limited to 512 characters. */
+            error?: string;
+            done: number;
+            pending: number;
+            embedded: number;
+            skipped: number;
         };
     };
     responses: never;
@@ -3077,7 +3123,7 @@ export interface operations {
                     "application/json": components["schemas"]["PersonResponse"];
                 };
             };
-            /** @description Malformed body, nothing to do, or an identity that is not kind:value. */
+            /** @description Malformed body, non-positive person id, nothing to do, an identity that is not kind:value, or resetOriginalPreference:true combined with an explicit preferOriginal true or false. No part of an invalid edit is applied. */
             400: {
                 headers: {
                     [name: string]: unknown;

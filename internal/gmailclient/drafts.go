@@ -10,6 +10,7 @@ import (
 	"mime/multipart"
 	"mime/quotedprintable"
 	"net/mail"
+	"sort"
 	"strings"
 
 	"google.golang.org/api/gmail/v1"
@@ -33,13 +34,14 @@ func IsNotFound(err error) bool {
 // Draft is a Gmail-owned draft. IDs are mailbox-local; AccountID is supplied by
 // the server that selected the credential used for this call.
 type Draft struct {
-	ID        string `json:"id"`
-	MessageID string `json:"messageId,omitempty"`
-	ThreadID  string `json:"threadId,omitempty"`
-	To        string `json:"to,omitempty"`
-	Cc        string `json:"cc,omitempty"`
-	Subject   string `json:"subject,omitempty"`
-	Body      string `json:"body,omitempty"`
+	ReplyHeaders ReplyHeaders `json:"-"`
+	ID           string       `json:"id"`
+	MessageID    string       `json:"messageId,omitempty"`
+	ThreadID     string       `json:"threadId,omitempty"`
+	To           string       `json:"to,omitempty"`
+	Cc           string       `json:"cc,omitempty"`
+	Subject      string       `json:"subject,omitempty"`
+	Body         string       `json:"body,omitempty"`
 }
 
 // ListDrafts lists drafts in Gmail and fetches each full message so callers can
@@ -76,6 +78,15 @@ func (c Client) ListDrafts() ([]Draft, error) {
 	return nil, fmt.Errorf("Gmail draft listing exceeded 100 pages")
 }
 
+// Gmail returns base64url with or without padding; neither form changes the MIME.
+func decodeDraftRaw(encoded string) ([]byte, error) {
+	raw, err := base64.RawURLEncoding.DecodeString(encoded)
+	if err == nil {
+		return raw, nil
+	}
+	return base64.URLEncoding.DecodeString(encoded)
+}
+
 // GetDraft reads the latest saved content from Gmail. A deleted or stale draft
 // is reported as an error instead of being reconstructed from client state.
 func (c Client) GetDraft(id string) (Draft, error) {
@@ -89,7 +100,7 @@ func (c Client) GetDraft(id string) (Draft, error) {
 	if got.Message == nil {
 		return Draft{}, fmt.Errorf("Gmail draft %q has no message", id)
 	}
-	raw, err := base64.RawURLEncoding.DecodeString(got.Message.Raw)
+	raw, err := decodeDraftRaw(got.Message.Raw)
 	if err != nil {
 		return Draft{}, fmt.Errorf("decoding Gmail draft %q: %w", id, err)
 	}
@@ -111,7 +122,25 @@ func (c Client) SaveDraft(d Draft, replyToMessageID string) (Draft, error) {
 	if err != nil {
 		return Draft{}, err
 	}
-	message := &gmail.Message{Raw: base64.RawURLEncoding.EncodeToString(raw)}
+	var current *gmail.Draft
+	var currentRaw []byte
+	if d.ID != "" {
+		if d.MessageID == "" {
+			return Draft{}, ErrDraftConflict
+		}
+		current, err = c.svc.Users.Drafts.Get("me", d.ID).Format("raw").Do()
+		if err != nil {
+			return Draft{}, fmt.Errorf("checking Gmail draft before update: %w", err)
+		}
+		if current.Message == nil || current.Message.Id != d.MessageID {
+			return Draft{}, ErrDraftConflict
+		}
+		currentRaw, err = decodeDraftRaw(current.Message.Raw)
+		if err != nil {
+			return Draft{}, fmt.Errorf("checking Gmail draft MIME: %w", err)
+		}
+	}
+	message := &gmail.Message{}
 	if replyToMessageID != "" {
 		parent, err := c.svc.Users.Messages.Get("me", replyToMessageID).Format("metadata").MetadataHeaders("Message-ID", "References").Do()
 		if err != nil {
@@ -126,32 +155,34 @@ func (c Client) SaveDraft(d Draft, replyToMessageID string) (Draft, error) {
 			raw = addHeader(raw, "In-Reply-To", id)
 			refs := strings.TrimSpace(headers["references"] + " " + id)
 			raw = addHeader(raw, "References", refs)
-			message.Raw = base64.RawURLEncoding.EncodeToString(raw)
 		}
 	}
-	container := &gmail.Draft{Message: message}
+	if current != nil {
+		if replyToMessageID != "" && current.Message.ThreadId != "" && current.Message.ThreadId != message.ThreadId {
+			return Draft{}, draftRefusal("thread_mismatch")
+		}
+		raw, err = c.preserveDraftMetadata(currentRaw, raw)
+		if err != nil {
+			return Draft{}, err
+		}
+		// Guard the actual bytes to PUT, after all metadata/parent construction.
+		if err := checkDraftReplacement(currentRaw, raw); err != nil {
+			return Draft{}, err
+		}
+	}
+	// Extract only navigation evidence from the final bytes, before mutation.
+	// Never reparse editable content or perform a post-write provider read.
+	finalMessage, err := mail.ReadMessage(bytes.NewReader(raw))
+	if err != nil {
+		return Draft{}, fmt.Errorf("reading outgoing draft headers: %w", err)
+	}
+	d.ReplyHeaders = replyHeaders(finalMessage.Header)
+	message.Raw = base64.RawURLEncoding.EncodeToString(raw)
+	container := &gmail.Draft{Id: d.ID, Message: message}
 	var saved *gmail.Draft
 	if d.ID == "" {
 		saved, err = c.svc.Users.Drafts.Create("me", container).Do()
 	} else {
-		if d.MessageID == "" {
-			return Draft{}, ErrDraftConflict
-		}
-		current, getErr := c.svc.Users.Drafts.Get("me", d.ID).Format("raw").Do()
-		if getErr != nil {
-			return Draft{}, fmt.Errorf("checking Gmail draft before update: %w", getErr)
-		}
-		if current.Message == nil || current.Message.Id != d.MessageID {
-			return Draft{}, ErrDraftConflict
-		}
-		currentRaw, decodeErr := base64.RawURLEncoding.DecodeString(current.Message.Raw)
-		if decodeErr != nil {
-			return Draft{}, fmt.Errorf("checking Gmail draft MIME: %w", decodeErr)
-		}
-		if err := checkDraftReplacement(currentRaw, raw); err != nil {
-			return Draft{}, err
-		}
-		container.Id = d.ID
 		saved, err = c.svc.Users.Drafts.Update("me", d.ID, container).Do()
 	}
 	if err != nil {
@@ -197,46 +228,89 @@ func (c Client) SendDraft(id string) (string, string, error) {
 func checkDraftReplacement(current, replacement []byte) error {
 	old, err := mail.ReadMessage(bytes.NewReader(current))
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrUnsupportedDraft, err)
+		// Parser errors can quote a private header line; report only the category.
+		return draftRefusal("malformed_message")
 	}
 	next, err := mail.ReadMessage(bytes.NewReader(replacement))
 	if err != nil {
 		return err
 	}
+	var duplicates, changed []string
 	for name, values := range old.Header {
 		switch strings.ToLower(name) {
 		case "to", "cc", "subject", "mime-version", "content-type", "content-transfer-encoding":
 			if len(values) != 1 {
-				return ErrUnsupportedDraft
+				duplicates = append(duplicates, name)
 			}
 		default:
-			if strings.Join(values, "\n") != strings.Join(next.Header[name], "\n") {
-				return ErrUnsupportedDraft
+			nextValues, present := next.Header[name]
+			if !present || strings.Join(values, "\n") != strings.Join(nextValues, "\n") {
+				changed = append(changed, name)
 			}
 		}
+	}
+	if len(duplicates) != 0 {
+		return draftRefusal("duplicate_header", duplicates...)
+	}
+	if len(changed) != 0 {
+		return draftRefusal("header_missing_or_changed", changed...)
 	}
 	contentType := old.Header.Get("Content-Type")
 	if contentType == "" {
 		contentType = "text/plain"
 	}
 	mediaType, params, err := mime.ParseMediaType(contentType)
-	if err != nil || mediaType != "text/plain" || len(params) > 1 {
-		return ErrUnsupportedDraft
+	if err != nil || mediaType != "text/plain" {
+		return draftRefusal("media_type")
+	}
+	if len(params) > 1 {
+		return draftRefusal("mime_parameter")
 	}
 	if charset := strings.ToLower(params["charset"]); charset != "" && charset != "utf-8" && charset != "us-ascii" {
-		return ErrUnsupportedDraft
+		return draftRefusal("charset")
 	}
 	for name := range params {
 		if name != "charset" {
-			return ErrUnsupportedDraft
+			return draftRefusal("mime_parameter")
 		}
 	}
 	switch strings.ToLower(old.Header.Get("Content-Transfer-Encoding")) {
 	case "", "7bit", "8bit", "quoted-printable":
 		return nil
 	default:
-		return ErrUnsupportedDraft
+		return draftRefusal("transfer_encoding")
 	}
+}
+
+// Report stable categories/header names, never MIME, addresses or header values.
+func draftRefusal(reason string, headers ...string) error {
+	// net/mail accepts unusual field names, including names containing secrets.
+	// Emit only these fixed labels; even valid custom names remain private.
+	standard := map[string]string{
+		"to": "To", "cc": "Cc", "bcc": "Bcc", "subject": "Subject",
+		"from": "From", "sender": "Sender", "reply-to": "Reply-To",
+		"date": "Date", "message-id": "Message-Id", "received": "Received", "in-reply-to": "In-Reply-To",
+		"references": "References", "mime-version": "Mime-Version",
+		"content-type": "Content-Type", "content-transfer-encoding": "Content-Transfer-Encoding",
+		"content-disposition": "Content-Disposition",
+	}
+	seen := map[string]bool{}
+	var labels []string
+	for _, name := range headers {
+		label, ok := standard[strings.ToLower(name)]
+		if !ok {
+			label = "other_header"
+		}
+		if !seen[label] {
+			seen[label] = true
+			labels = append(labels, label)
+		}
+	}
+	sort.Strings(labels)
+	if len(labels) != 0 {
+		return fmt.Errorf("%w [reason=%s; headers=%s]", ErrUnsupportedDraft, reason, strings.Join(labels, ","))
+	}
+	return fmt.Errorf("%w [reason=%s]", ErrUnsupportedDraft, reason)
 }
 
 func draftMIME(d Draft) ([]byte, error) {
@@ -271,6 +345,7 @@ func parseDraft(raw []byte) (Draft, error) {
 		return Draft{}, err
 	}
 	var d Draft
+	d.ReplyHeaders = replyHeaders(msg.Header)
 	d.To, d.Cc = msg.Header.Get("To"), msg.Header.Get("Cc")
 	d.Subject, err = new(mime.WordDecoder).DecodeHeader(msg.Header.Get("Subject"))
 	if err != nil {

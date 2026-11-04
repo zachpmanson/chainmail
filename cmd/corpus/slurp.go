@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -139,15 +140,17 @@ var errSlackdumpMissing = errors.New("slackdump is not on PATH")
 // and no second implementation of any phase — and a test can drive the sequence
 // without a mailbox, a Slack archive or an embedding daemon.
 type slurpDeps struct {
-	now          func() time.Time // nil uses the monotonic wall clock
-	refreshSlack func(dir string) error
-	ingestSlack  func(archive string) error
-	mailAccounts func() ([]string, error)
-	ingestMail   func(o mailOpts) (mailingest.Result, error)
-	twins        func(apply bool) error
-	repair       func() error
-	dedupe       func(apply bool) error
-	unread       func() error
+	reconciliationState      func() (corpus.ReconcileState, error)
+	checkpointReconciliation func(corpus.ReconcileState) (bool, error)
+	now                      func() time.Time // nil uses the monotonic wall clock
+	refreshSlack             func(dir string) error
+	ingestSlack              func(archive string) error
+	mailAccounts             func() ([]string, error)
+	ingestMail               func(o mailOpts) (mailingest.Result, error)
+	twins                    func(apply bool) error
+	repair                   func() error
+	dedupe                   func(apply bool) error
+	unread                   func() error
 	// embedReady answers before the work starts, and says what is missing when
 	// the answer is no.
 	embedReady func() (bool, string)
@@ -162,6 +165,22 @@ func defaultSlurpDeps(path string, o slurpOpts) slurpDeps {
 	eo := embedOpts{model: o.embedModel, url: o.embedURL, timeout: defaultEmbedTimeout,
 		dim: o.embedDim}
 	return slurpDeps{
+		reconciliationState: func() (corpus.ReconcileState, error) {
+			s, err := corpus.Open(path)
+			if err != nil {
+				return corpus.ReconcileState{}, err
+			}
+			defer s.Close()
+			return s.ReconciliationState()
+		},
+		checkpointReconciliation: func(start corpus.ReconcileState) (bool, error) {
+			s, err := corpus.Open(path)
+			if err != nil {
+				return false, err
+			}
+			defer s.Close()
+			return s.CheckpointReconciliation(context.Background(), start)
+		},
 		refreshSlack: refreshSlackArchive,
 		mailAccounts: func() ([]string, error) { return connectedMailAccounts(path) },
 		ingestSlack:  func(archive string) error { return runIngestSlack(path, archive) },
@@ -318,6 +337,14 @@ func runSlurp(w io.Writer, o slurpOpts, d slurpDeps) error {
 		timing(string(p), string(oc), elapsed)
 	}
 
+	var pair, hasTwins, hasRepair, twinsDone, current bool
+	var reconcileStart corpus.ReconcileState
+	var reconcileErr error
+	for _, p := range sel {
+		hasTwins = hasTwins || p == phaseTwins
+		hasRepair = hasRepair || p == phaseRepair
+	}
+	pair = hasTwins && hasRepair && d.reconciliationState != nil && d.checkpointReconciliation != nil
 	for i, p := range sel {
 		fmt.Fprintf(w, "\n[%d/%d] %s\n", i+1, len(sel), p)
 		phaseStarted = now()
@@ -368,16 +395,49 @@ func runSlurp(w io.Writer, o slurpOpts, d slurpDeps) error {
 			}
 
 		case phaseTwins:
+			if pair {
+				reconcileStart, reconcileErr = d.reconciliationState()
+				if reconcileErr != nil {
+					report(p, outcomeFailed, reconcileErr.Error())
+					continue
+				}
+				current = reconcileStart.Clean()
+				fmt.Fprintf(w, "reconcile: source=%d covered=%d rules=%d covered_rules=%d current=%t\n", reconcileStart.Source, reconcileStart.Covered, reconcileStart.Rules, reconcileStart.CoveredRules, current)
+				if current {
+					report(p, outcomeDone, "current, not rescanned (people=0 bodies=0)")
+					continue
+				}
+			}
 			if err := d.twins(true); err != nil {
 				report(p, outcomeFailed, err.Error())
 				continue
 			}
+			twinsDone = true
 			report(p, outcomeDone, "duplicate copies collapsed")
 
 		case phaseRepair:
+			if pair && reconcileErr != nil {
+				report(p, outcomeFailed, reconcileErr.Error())
+				continue
+			}
+			if pair && current {
+				report(p, outcomeDone, "current, not rescanned (hosts=0)")
+				continue
+			}
 			if err := d.repair(); err != nil {
 				report(p, outcomeFailed, err.Error())
 				continue
+			}
+			if pair && twinsDone {
+				covered, err := d.checkpointReconciliation(reconcileStart)
+				if err != nil {
+					report(p, outcomeFailed, err.Error())
+					continue
+				}
+				if !covered {
+					report(p, outcomeIncomplete, "maintenance changed inputs; verification pending for next refresh")
+					continue
+				}
 			}
 			report(p, outcomeDone, "identities reduced")
 
@@ -435,6 +495,35 @@ func runSlurp(w io.Writer, o slurpOpts, d slurpDeps) error {
 	timing(string(phaseStatus), "started", 0)
 	oc, note := probeTail(w, d)
 	report(phaseStatus, oc, note)
+	if pair {
+		// The skip/checkpoint can precede a relevant write, including in the tail.
+		// Amend an existing outcome without adding phases or changing their timing.
+		state, stateErr := d.reconciliationState()
+		repairIndex, pendingIndex := -1, -1
+		for i, r := range results {
+			if r.Phase != phaseTwins && r.Phase != phaseRepair {
+				continue
+			}
+			if r.Phase == phaseRepair {
+				repairIndex = i
+			}
+			if r.Outcome == outcomeFailed || (r.Outcome == outcomeIncomplete && pendingIndex < 0) {
+				pendingIndex = i
+			}
+		}
+		if stateErr != nil {
+			if pendingIndex >= 0 {
+				repairIndex = pendingIndex
+			}
+			r := &results[repairIndex]
+			r.Outcome = outcomeFailed
+			r.Note += fmt.Sprintf("; final reconciliation state: %v", stateErr)
+		} else if !state.Clean() && pendingIndex < 0 {
+			r := &results[repairIndex]
+			r.Outcome = outcomeIncomplete
+			r.Note = "maintenance inputs changed; verification pending for next refresh"
+		}
+	}
 	err = summarise(w, results)
 	totalOutcome := outcomeDone
 	for _, r := range results {
@@ -517,7 +606,7 @@ func summarise(w io.Writer, results []phaseResult) error {
 		len(results)-len(failed)-len(skipped)-len(incomplete),
 		len(incomplete), len(skipped), len(failed))
 	if len(incomplete) > 0 {
-		fmt.Fprintf(w, "INCOMPLETE: %s left work unread — re-run to continue from the cursor\n",
+		fmt.Fprintf(w, "INCOMPLETE: %s left work pending — re-run to continue\n",
 			strings.Join(incomplete, ", "))
 	}
 	if len(skipped) > 0 {

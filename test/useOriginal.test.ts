@@ -24,20 +24,29 @@ const plain = (html: string): OriginalPayload => ({
   html,
   analysis: { score: 0, matches: [], defaultsToOriginal: false, uncertain: false },
 });
-const prefer = vi.fn();
+const prefer = vi.fn<(next: boolean | undefined) => Promise<void>>(async () => {});
 type Props = {
   source: { extId: string; load: (id: string) => Promise<OriginalPayload> };
   explicit?: boolean;
   explain?: boolean;
   local?: boolean;
+  fromEmail?: string;
+  unknown?: boolean;
 };
 let tree: ReactTestRenderer | undefined;
 let latest: ReturnType<typeof useOriginal>;
-function Probe({ source, explicit, explain, local }: Props) {
+function Probe({
+  source,
+  explicit,
+  explain,
+  local,
+  fromEmail = "original-test@example.test",
+  unknown,
+}: Props) {
   latest = useOriginal(
     source,
-    "original-test@example.test",
-    { id: 1, preferOriginal: explicit },
+    fromEmail,
+    unknown ? undefined : { id: 1, preferOriginal: explicit },
     local ? undefined : prefer,
     explain,
   );
@@ -62,6 +71,7 @@ afterEach(async () => {
   await act(async () => tree?.unmount());
   tree = undefined;
   usePrefs.setState({ styledSenders: [], plainSenders: [] });
+  prefer.mockClear();
 });
 
 describe("original display lifecycle", () => {
@@ -127,10 +137,99 @@ describe("original display lifecycle", () => {
     expect(latest.on).toBe(false);
     expect(latest.explicit).toBe(true);
     expect(latest.analysis?.score).toBe(2);
-    await act(async () => latest.ask());
+    await act(async () => latest.choose(true));
     expect(latest.on).toBe(true);
     expect(latest.state).toEqual({ at: "sent", html: designed });
     expect(source.load).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps mode Default even when automatic rendering selects original", async () => {
+    const source = { extId: "mode", load: vi.fn(async () => positive) };
+    await render({ source });
+    expect(latest.preference).toBeUndefined();
+    expect(latest.on).toBe(true);
+    await render({ source, explicit: true });
+    expect(latest.preference).toBe(true);
+    expect(latest.on).toBe(true);
+    await act(async () => latest.choose(undefined));
+    expect(prefer).toHaveBeenLastCalledWith(undefined);
+    await render({ source });
+    expect(latest.preference).toBeUndefined();
+    expect(latest.on).toBe(true);
+    expect(source.load).toHaveBeenCalledOnce();
+  });
+
+  it("uses server Default and explicit choices ahead of stale browser fallback", async () => {
+    const key = "original-test@example.test";
+    const source = { extId: "precedence", load: vi.fn(async () => positive) };
+    usePrefs.getState().setStyled(key, false);
+    await render({ source });
+    expect(latest.preference).toBeUndefined();
+    expect(latest.on).toBe(true);
+    await act(async () => usePrefs.getState().setStyled(key, true));
+    await render({ source, explicit: false, explain: true });
+    expect(latest.preference).toBe(false);
+    expect(latest.on).toBe(false);
+    await act(async () => latest.choose(undefined));
+    expect(usePrefs.getState().styledSenders).not.toContain(key);
+    expect(usePrefs.getState().plainSenders).not.toContain(key);
+    await render({ source });
+    expect(latest.on).toBe(true);
+  });
+
+  it.each([false, true])(
+    "resets a local %s preference without affecting another sender",
+    async (forced) => {
+      const key = "original-test@example.test";
+      usePrefs.getState().setStyled(key, forced);
+      usePrefs.getState().setStyled("other@example.test", !forced);
+      const source = { extId: "local-reset", load: vi.fn(async () => positive) };
+      await render({ source, local: true, explain: true });
+      expect(latest.preference).toBe(forced);
+      await act(async () => latest.choose(undefined));
+      expect(latest.preference).toBeUndefined();
+      expect(latest.on).toBe(true);
+      expect(usePrefs.getState().styledSenders).toEqual(forced ? [] : ["other@example.test"]);
+      expect(usePrefs.getState().plainSenders).toEqual(forced ? ["other@example.test"] : []);
+      expect(JSON.parse(localStorage.getItem("chainmail:styled-senders")!)).not.toContain(key);
+      expect(JSON.parse(localStorage.getItem("chainmail:plain-senders")!)).not.toContain(key);
+      expect(prefer).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps all three local modes for recovered entries with only a message key", async () => {
+    const source = { extId: "recovered", load: vi.fn(async () => plain("<p>Quote</p>")) };
+    await render({ source, fromEmail: "", unknown: true });
+    expect(latest.preference).toBeUndefined();
+    for (const next of [true, false, undefined]) {
+      await act(async () => latest.choose(next));
+      expect(latest.preference).toBe(next);
+      expect(latest.on).toBe(next === true);
+    }
+    expect(usePrefs.getState().styledSenders).not.toContain("recovered");
+    expect(usePrefs.getState().plainSenders).not.toContain("recovered");
+    expect(prefer).not.toHaveBeenCalled();
+  });
+
+  it("returns to the automatic simplified view rather than a cached forced original", async () => {
+    const source = { extId: "reset-negative", load: vi.fn(async () => plain("<p>Hi</p>")) };
+    await render({ source, explicit: true });
+    expect(latest.on).toBe(true);
+    await render({ source });
+    expect(latest.preference).toBeUndefined();
+    expect(latest.on).toBe(false);
+    expect(latest.state).toEqual({ at: "read" });
+    expect(source.load).toHaveBeenCalledOnce();
+  });
+
+  it("does not clear a browser fallback when the server reset fails", async () => {
+    usePrefs.getState().setStyled("original-test@example.test", false);
+    prefer.mockRejectedValueOnce(new Error("refused"));
+    const source = { extId: "failed-reset", load: vi.fn(async () => positive) };
+    await render({ source, explicit: true });
+    await act(async () => latest.choose(undefined));
+    expect(latest.preference).toBe(true);
+    expect(usePrefs.getState().plainSenders).toContain("original-test@example.test");
   });
 
   it("ignores a pending automatic response after an explicit switch off", async () => {

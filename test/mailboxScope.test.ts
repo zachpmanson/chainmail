@@ -1,10 +1,12 @@
 import { createElement } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, create, type ReactTestRenderer } from "react-test-renderer";
+import { act, create, type ReactTestInstance, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChainHit } from "../src/lib/api/api";
 import type { SearchParams } from "../src/router";
 import Inbox from "../src/components/inbox/Inbox";
+import FolderPicker from "../src/components/inbox/FolderPicker";
+import IconFrame from "../src/components/ui/IconFrame";
 import SelectView from "../src/components/inbox/SelectView";
 import ThreadPopup from "../src/components/thread/ThreadPopup";
 import ActionBar from "../src/components/inbox/ActionBar";
@@ -25,6 +27,7 @@ const state = vi.hoisted(() => ({
   labels: vi.fn(),
   list: vi.fn(),
   navigate: vi.fn(),
+  mutations: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -47,7 +50,10 @@ vi.mock("../src/lib/api/api", () => ({
       if (path === "/v1/search") return { data: { chains: state.rows } };
       return { data: { summary: { unread: 1 } } };
     },
-    useMutation: () => ({ mutate: vi.fn(), mutateAsync: state.draftSave }),
+    useMutation: (method: string, path: string) => {
+      state.mutations(method, path);
+      return { mutate: vi.fn(), mutateAsync: state.draftSave };
+    },
   },
 }));
 vi.mock("../src/lib/inbox/useThreadList", () => ({
@@ -97,6 +103,15 @@ function click(label: string) {
       .props.onClick();
   });
 }
+function mailControlOrder(root: ReactTestInstance) {
+  return root
+    .findAll(
+      (node) =>
+        (node.type === "button" || node.type === "select") &&
+        ["Move to a folder", "Archive", "Delete"].includes(node.props["aria-label"]),
+    )
+    .map((node) => node.props["aria-label"]);
+}
 function tick(subject: string) {
   act(() => {
     rendered!.root.findByProps({ "aria-label": `Select ${subject}` }).props.onChange();
@@ -133,6 +148,18 @@ afterEach(() => {
 });
 
 describe("selection belongs to the effective mailbox location", () => {
+  it("navigates to the picked account's Inbox without a default-setting mutation", () => {
+    state.search = { label: "Saved", accountId: "work" };
+    render();
+    const picker = rendered!.root.findByType(FolderPicker);
+    expect(picker.props).not.toHaveProperty("onDefault");
+    expect(state.mutations.mock.calls.some(([, path]) => path === "/v1/settings")).toBe(false);
+    act(() => picker.props.onPick("INBOX", "personal"));
+    const navigation = state.navigate.mock.calls.at(-1)![0];
+    expect(navigation.to).toBe("/");
+    expect(navigation.search(state.search)).toEqual({ label: "INBOX", accountId: "personal" });
+  });
+
   it("does not trash a hidden shared copy after switching accounts", () => {
     state.search = { accountId: "work", label: "INBOX" };
     render();
@@ -254,6 +281,39 @@ describe("thread read toggle", () => {
   });
 });
 
+describe("thread checkbox icon sizing", () => {
+  it.each([false, true])(
+    "uses the shared icon frame in compact=%s without opening or marking the thread",
+    (compact) => {
+      state.compact = compact;
+      render();
+      const row = rendered!.root.findByType("li");
+      const label = row.findByType("label");
+      expect(label.findAllByType(IconFrame)).toHaveLength(1);
+      expect(label.props.className.split(" ")).toContain("flex");
+      const input = label.findByType("input");
+      expect(input.props.type).toBe("checkbox");
+      expect(input.props.className.split(" ")).toContain("size-6");
+      expect(input.props.checked).toBe(false);
+      act(() => input.props.onChange());
+      expect(rendered!.root.findByType(ActionBar).props.chosen).toEqual(["S"]);
+      expect(state.navigate).not.toHaveBeenCalled();
+      expect(state.read).not.toHaveBeenCalled();
+      expect(state.mail).not.toHaveBeenCalled();
+      if (!compact) {
+        const dates = row
+          .findAllByType("span")
+          .filter(
+            (node) =>
+              node.props.className?.includes("tabular-nums") &&
+              node.props.className?.split(" ").includes("mr-8"),
+          );
+        expect(dates).toHaveLength(1);
+      }
+    },
+  );
+});
+
 describe("all write surfaces use the displayed account", () => {
   it.each(["default", "explicit", "search"])(
     "scopes row, bulk, pane and move actions from %s",
@@ -289,6 +349,16 @@ describe("all write surfaces use the displayed account", () => {
         body: { chains: ["S"], action: "archive", accountId: "work" },
       });
       tick("Shared");
+      expect(mailControlOrder(rendered!.root.findByType(ActionBar))).toEqual([
+        "Move to a folder",
+        "Archive",
+        "Delete",
+      ]);
+      expect(mailControlOrder(rendered!.root.findByType(ThreadPane))).toEqual([
+        "Move to a folder",
+        "Archive",
+        "Delete",
+      ]);
       for (const [label, action] of [
         ["Archive", "archive"],
         ["Delete", "trash"],
@@ -364,6 +434,11 @@ describe("all write surfaces use the displayed account", () => {
     act(() => {
       rendered = create(createElement(ThreadPopup, { rootExtId: "S" }));
     });
+    expect(mailControlOrder(rendered!.root.findByType(ThreadPane))).toEqual([
+      "Move to a folder",
+      "Archive",
+      "Delete",
+    ]);
     act(() => {
       rendered!.root
         .findAllByType("button")

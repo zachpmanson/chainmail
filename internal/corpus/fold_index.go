@@ -81,31 +81,14 @@ func (s *Store) RefreshFoldIndex(ctx context.Context, r boiler.Rules) (stats Fol
 		return stats, nil
 	}
 	// Bound lock acquisition independently of the amount of normalization work.
-	conn, err := s.db.Conn(ctx)
+	lockStart := time.Now()
+	writer, err := s.beginWriter(ctx, 5*time.Second)
+	stats.LockWait = time.Since(lockStart)
 	if err != nil {
 		return stats, err
 	}
-	defer conn.Close()
-	lockStart := time.Now()
-	for {
-		_, err = conn.ExecContext(ctx, "begin immediate")
-		if err == nil {
-			break
-		}
-		if !foldBusy(err) {
-			return stats, err
-		}
-		if time.Since(lockStart) >= 5*time.Second {
-			return stats, fmt.Errorf("fold writer busy: %w", err)
-		}
-		select {
-		case <-ctx.Done():
-			return stats, ctx.Err()
-		case <-time.After(10 * time.Millisecond):
-		}
-	}
-	stats.LockWait = time.Since(lockStart)
-	defer func() { _, _ = conn.ExecContext(context.Background(), "rollback") }()
+	defer func() { err = errors.Join(err, writer.close()) }()
+	conn := writer.Conn
 	st, err := readFoldState(ctx, conn, r.Window)
 	if err != nil {
 		return stats, err
@@ -132,7 +115,7 @@ func (s *Store) RefreshFoldIndex(ctx context.Context, r boiler.Rules) (stats Fol
 	if err != nil {
 		return stats, err
 	}
-	if _, err = conn.ExecContext(ctx, "commit"); err != nil {
+	if err = writer.commit(ctx); err != nil {
 		return stats, err
 	}
 	stats.Generation++

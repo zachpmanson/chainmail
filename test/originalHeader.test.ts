@@ -48,7 +48,7 @@ async function render(
         reading: {
           original: { extId: "header", load },
           person: { id: 1, preferOriginal: explicit },
-          onPreferOriginal: vi.fn(),
+          onPreferOriginal: vi.fn(async () => {}),
         },
       }),
     );
@@ -72,6 +72,21 @@ describe("expanded message header", () => {
     expect(
       tree!.root.findByType("summary").findAllByProps({ "data-original-analysis": true }),
     ).toHaveLength(0);
+  });
+
+  it("shows the independent global nested-layout point from the server", async () => {
+    await render("<p>Distinct sanitized display</p>", undefined, {
+      score: 2,
+      matches: [
+        { rule: "whole message in a table", points: 1 },
+        { rule: "complex nested table layout", points: 1 },
+      ],
+      defaultsToOriginal: true,
+      uncertain: false,
+    });
+    expect(explanation()).toBe(
+      "HTML 2 pt — whole message in a table (+1), complex nested table layout (+1) · automatic original (main layout + design evidence required)",
+    );
   });
 
   it("clearly explains zero/no matches", async () => {

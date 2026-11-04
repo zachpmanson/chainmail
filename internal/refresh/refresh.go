@@ -219,9 +219,14 @@ type Growth struct {
 
 // Report is what changed, in the terms a reader of the page would use.
 type Report struct {
-	Fetched bool
-	Queries []QueryPass
-	Threads []ThreadPass
+	// Page changes and full maintenance coverage are independent. This legacy
+	// pipeline can consume, but never publish, a full-pair checkpoint.
+	MaintenancePending, MaintenanceSkipped                    bool
+	TwinsPeopleScanned, TwinsBodiesScanned, QuoteHostsScanned int
+	ReconcileSource, ReconcileCovered                         int64
+	Fetched                                                   bool
+	Queries                                                   []QueryPass
+	Threads                                                   []ThreadPass
 
 	// QueriesRecorded are the searches this refresh added to the page's record,
 	// from Options.Queries and not already there. Recording a search changes the
@@ -324,17 +329,29 @@ func Run(store *corpus.Store, mb Mailbox, prev spec.Spec, opts Options) (Report,
 	// given: an entry stored before a parser fix carries the old parser's body,
 	// and for the header-fold case that meant a duplicate the sweep was built to
 	// collapse declined every time. See corpus.RepairQuotedBodies.
-	qr, err := corpus.RepairQuotedBodies(store)
+	state, err := store.ReconciliationState()
 	if err != nil {
-		return rep, spec.Spec{}, fmt.Errorf("re-deriving the quoted entries: %w", err)
+		return rep, spec.Spec{}, err
 	}
-	rep.QuotedRefixed = qr.Fixed
+	// This legacy quote -> twins path may consume a full pair's checkpoint but
+	// cannot certify it: identity and graph repair are not part of this pipeline.
+	rep.MaintenanceSkipped = state.Clean()
+	if !state.Clean() {
+		qr, err := corpus.RepairQuotedBodies(store)
+		if err != nil {
+			return rep, spec.Spec{}, fmt.Errorf("re-deriving the quoted entries: %w", err)
+		}
+		rep.QuotedRefixed = qr.Fixed
+		rep.QuoteHostsScanned = qr.Hosts
 
-	plan, err := corpus.CollapseTwins(store, true)
-	if err != nil {
-		return rep, spec.Spec{}, fmt.Errorf("collapsing stored twins: %w", err)
+		plan, err := corpus.CollapseTwins(store, true)
+		if err != nil {
+			return rep, spec.Spec{}, fmt.Errorf("collapsing stored twins: %w", err)
+		}
+		rep.TwinsCollapsed = len(plan.Collapse)
+		rep.TwinsPeopleScanned, rep.TwinsBodiesScanned = plan.PeopleScanned, plan.BodiesScanned
+
 	}
-	rep.TwinsCollapsed = len(plan.Collapse)
 
 	known, err := knownMessageIDs(store)
 	if err != nil {
@@ -432,6 +449,12 @@ func Run(store *corpus.Store, mb Mailbox, prev spec.Spec, opts Options) (Report,
 	next.OpenItemsTitle = prev.OpenItemsTitle
 
 	rep.fill(prev, next)
+	state, err = store.ReconciliationState()
+	if err != nil {
+		return rep, spec.Spec{}, err
+	}
+	rep.MaintenancePending = !state.Clean()
+	rep.ReconcileSource, rep.ReconcileCovered = state.Source, state.Covered
 	return rep, next, nil
 }
 

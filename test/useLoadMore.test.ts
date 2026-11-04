@@ -164,9 +164,12 @@ it("rearms after an unchanged background refetch consumes the intersection", asy
   act(() => {
     root.render(createElement(QueryClientProvider, { client }, createElement(PagedList)));
   });
-  await settle();
+  // Query notifications can settle after the first timer turn under concurrent test load.
+  await vi.waitFor(async () => {
+    await settle();
+    expect(observations.at(-1)).toBeDefined();
+  });
   const first = observations.at(-1)!;
-  expect(first).toBeDefined();
   const data = client.getQueryCache().getAll()[0]!.state.data;
   await act(async () => {
     const refetch = client.refetchQueries();
@@ -200,7 +203,11 @@ it("fills a short list serially, preserves opaque cursors, pauses on error and e
   });
   expect(observations).toHaveLength(0); // Initial request is still pending.
   finish!(page(["a"], "opaque-1"));
-  await settle();
+  // Wait for the enabled observer, not an assumed query-notification timer turn.
+  await vi.waitFor(async () => {
+    await settle();
+    expect(observations.at(-1)).toBeDefined();
+  });
   intersect(); // Visible sentinel in a short list needs no scroll event.
   intersect();
   expect(urls).toHaveLength(2);

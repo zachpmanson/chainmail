@@ -1,16 +1,12 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { $api } from "../api/api";
+import { COMPOSE_OPEN } from "../ui/openSelection";
 
 /** The folder the inbox shows: the URL's, or the reader's default from settings. */
 export default function useFolder() {
   const navigate = useNavigate();
-  const { label: urlLabel, accountId: urlAccountId } = useSearch({ from: "/" });
+  const { label: urlLabel, accountId: urlAccountId, open } = useSearch({ from: "/" });
   const settings = $api.useQuery("get", "/v1/settings", {});
-  const save = $api.useMutation("post", "/v1/settings", {
-    onSuccess: () => {
-      void settings.refetch();
-    },
-  });
 
   // "" in the URL is All mail chosen on purpose; only undefined falls back to the default.
   const home = urlLabel === undefined && urlAccountId === undefined;
@@ -21,28 +17,21 @@ export default function useFolder() {
       : home
         ? settings.data?.defaultFolderAccountId
         : undefined;
-  // Compare the whole location: one folder name can exist in several accounts.
-  const isDefault =
-    (settings.data?.defaultFolder ?? "") === label &&
-    (settings.data?.defaultFolderAccountId ?? "") === (accountId ?? "");
-
   return {
     label,
     accountId,
-    isDefault,
     // Settled, not succeeded: a failed settings read means All mail, not waiting forever.
     settled: !settings.isPending,
     pick: (name: string, pickedAccountId?: string) =>
       navigate({
         to: "/",
-        search: (prev) => ({ ...prev, label: name, accountId: pickedAccountId }),
-      }),
-    makeDefault: (on: boolean) =>
-      save.mutate({
-        body: {
-          defaultFolder: on ? label : "",
-          defaultFolderAccountId: on ? (accountId ?? "") : "",
-        },
+        search: (prev) => ({
+          ...prev,
+          label: name,
+          accountId: pickedAccountId,
+          draft: prev.accountId === pickedAccountId ? prev.draft : undefined,
+        }),
+        state: (prev) => (open === COMPOSE_OPEN ? { composeOrigin: prev.composeOrigin } : {}),
       }),
   };
 }

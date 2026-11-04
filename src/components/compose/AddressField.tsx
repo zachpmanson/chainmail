@@ -1,3 +1,4 @@
+import { Autocomplete } from "@base-ui/react/autocomplete";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import { useMemo, useRef, useState } from "react";
 import Button from "../ui/Button";
@@ -79,9 +80,9 @@ export default function AddressField({
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
-  const [active, setActive] = useState(0);
+  const highlighted = useRef<Address | undefined>(undefined);
   const [refused, setRefused] = useState<string | null>(null);
-  const input = useRef<HTMLInputElement | null>(null);
+  const field = useRef<HTMLSpanElement | null>(null);
 
   const here = useMemo(() => new Set(value.map((a) => addressKey(a.address))), [value]);
   const elsewhere = useMemo(() => new Set(taken.map((a) => addressKey(a.address))), [taken]);
@@ -110,6 +111,7 @@ export default function AddressField({
   const showing = open && words !== "";
 
   function add(who: Address) {
+    if (disabled) return;
     const key = addressKey(who.address);
     if (own.has(key)) {
       setRefused(
@@ -131,119 +133,126 @@ export default function AddressField({
     setQuery("");
     setRefused(null);
     setOpen(false);
-    setActive(0);
-  }
-
-  function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "ArrowDown" && rows.length) {
-      e.preventDefault();
-      setOpen(true);
-      setActive((i) => Math.min(i + 1, rows.length - 1));
-      return;
-    }
-    if (e.key === "ArrowUp" && rows.length) {
-      e.preventDefault();
-      setActive((i) => Math.max(i - 1, 0));
-      return;
-    }
-    if (e.key === "Enter" || e.key === "," || e.key === ";") {
-      const pick = rows[active] ?? typed;
-      if (!pick) return;
-      e.preventDefault();
-      add(pick);
-      return;
-    }
-    if (e.key === "Escape" && (words !== "" || showing)) {
-      e.preventDefault();
-      setQuery("");
-      setRefused(null);
-      setOpen(false);
-      return;
-    }
-    if (e.key === "Backspace" && query === "" && value.length) {
-      e.preventDefault();
-      onChange(value.slice(0, -1));
-    }
+    highlighted.current = undefined;
   }
 
   return (
-    <span
-      className="relative mx-0.5 inline-flex min-h-7 w-full max-w-full min-w-0 flex-wrap items-center gap-1 rounded-md border border-line bg-bg px-1 py-0.5 align-middle focus-within:border-accent"
-      data-list={label}
-    >
-      {value.map((who) => (
-        <Chip
-          key={addressKey(who.address)}
-          who={who}
-          disabled={disabled}
-          remove={() =>
-            onChange(value.filter((a) => addressKey(a.address) !== addressKey(who.address)))
-          }
-        />
-      ))}
-      <input
-        ref={input}
-        className="min-w-12 flex-[1_1_7rem] border-0 bg-transparent px-0 py-0.5 text-xs text-fg outline-none placeholder:text-muted"
-        type="text"
-        role="combobox"
-        aria-label={`${label} addresses`}
-        aria-autocomplete="list"
-        aria-expanded={showing}
-        aria-controls={`${label}-suggestions`}
-        aria-activedescendant={showing && rows[active] ? `${label}-option-${active}` : undefined}
-        autoComplete="off"
-        placeholder={value.length ? "" : `add an address`}
-        value={query}
-        disabled={disabled}
-        onChange={(e) => {
-          setQuery(e.target.value);
+    <Autocomplete.Root
+      items={rows}
+      filter={null}
+      itemToStringValue={addressWords}
+      value={query}
+      onValueChange={(text, details) => {
+        if (details.reason === "item-press") {
+          const who = rows.find((a) => addressWords(a) === text);
+          if (who) add(who);
+        } else if (details.reason === "input-change") {
+          setQuery(text);
           setRefused(null);
           setOpen(true);
-          setActive(0);
-        }}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setOpen(false)}
-        onKeyDown={onKeyDown}
-      />
-      {showing ? (
-        <span
-          className="absolute top-full left-0 z-20 mt-1 flex max-h-56 max-w-96 min-w-full flex-col overflow-auto rounded-md border border-line bg-card p-0.5 shadow-[0_6px_18px_rgba(0,0,0,.18)]"
-          role="listbox"
-          id={`${label}-suggestions`}
-          aria-label={`${label} suggestions`}
-        >
-          {rows.map((a, i) => (
-            <span
-              key={addressKey(a.address)}
-              id={`${label}-option-${i}`}
-              className={`flex items-baseline gap-1.5 rounded-sm px-1.5 py-1 text-xs cursor-pointer${i === active ? " bg-mine" : ""}`}
-              role="option"
-              aria-selected={i === active}
-              // Keep focus on mousedown, or the blur closes the list before the click lands.
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => add(a)}
-              title={a.name ? `${a.name} <${a.address}>` : a.address}
-            >
-              <span className="wrap-anywhere">{a.name ?? a.address}</span>
-              {a.name ? (
-                <span className="text-2xs wrap-anywhere text-muted">{a.address}</span>
+        }
+      }}
+      disabled={disabled}
+      open={showing && !disabled}
+      onOpenChange={setOpen}
+      onItemHighlighted={(who) => {
+        highlighted.current = who;
+      }}
+      autoHighlight="always"
+      keepHighlight
+      openOnInputClick
+      submitOnItemClick={false}
+    >
+      <span
+        ref={field}
+        className="relative mx-0.5 inline-flex min-h-7 w-full max-w-full min-w-0 flex-wrap items-center gap-1 rounded-md border border-line bg-bg px-1 py-0.5 align-middle focus-within:border-accent"
+        data-list={label}
+      >
+        {value.map((who) => (
+          <Chip
+            key={addressKey(who.address)}
+            who={who}
+            disabled={disabled}
+            remove={() =>
+              onChange(value.filter((a) => addressKey(a.address) !== addressKey(who.address)))
+            }
+          />
+        ))}
+        <Autocomplete.Input
+          className="min-w-12 flex-[1_1_7rem] border-0 bg-transparent px-0 py-0.5 text-xs text-fg outline-none placeholder:text-muted"
+          type="text"
+          aria-label={`${label} addresses`}
+          autoComplete="off"
+          placeholder={value.length ? "" : `add an address`}
+          onFocus={() => setOpen(true)}
+          onKeyDown={(e) => {
+            if (disabled) return;
+            if (e.nativeEvent.isComposing || e.which === 229) {
+              e.preventBaseUIHandler();
+              return;
+            }
+            if (e.key === "Enter" || e.key === "," || e.key === ";") {
+              // Recipient acceptance never submits the enclosing compose form.
+              e.preventDefault();
+              e.preventBaseUIHandler();
+              const pick = (showing ? highlighted.current : undefined) ?? typed;
+              if (pick) add(pick);
+            } else if (e.key === "Escape" && (query !== "" || refused || showing)) {
+              e.preventDefault();
+              e.preventBaseUIHandler();
+              e.stopPropagation();
+              setQuery("");
+              setRefused(null);
+              setOpen(false);
+            } else if (e.key === "Backspace" && query === "" && value.length) {
+              e.preventDefault();
+              e.preventBaseUIHandler();
+              onChange(value.slice(0, -1));
+            }
+          }}
+        />
+        <Autocomplete.Portal>
+          <Autocomplete.Positioner
+            anchor={field}
+            className="z-60 w-(--anchor-width) max-w-96"
+            sideOffset={4}
+            align="start"
+            positionMethod="fixed"
+          >
+            <Autocomplete.Popup className="rounded-md border border-line bg-card p-0.5 shadow-[0_6px_18px_rgba(0,0,0,.18)]">
+              <Autocomplete.List
+                className="m-0 flex max-h-56 flex-col overflow-auto p-0"
+                aria-label={`${label} suggestions`}
+              >
+                {(a: Address) => (
+                  <Autocomplete.Item
+                    key={addressKey(a.address)}
+                    value={a}
+                    className="flex cursor-pointer items-baseline gap-1.5 rounded-sm px-1.5 py-1 text-xs data-highlighted:bg-mine"
+                  >
+                    <span className="wrap-anywhere">{a.name ?? a.address}</span>
+                    {a.name ? (
+                      <span className="text-2xs wrap-anywhere text-muted">{a.address}</span>
+                    ) : null}
+                  </Autocomplete.Item>
+                )}
+              </Autocomplete.List>
+              {rows.length === 0 ? (
+                <span className="cursor-default text-xs text-muted" role="status">
+                  {typed === null && words !== ""
+                    ? `${words} is not an address — an address has something@somewhere in it.`
+                    : "No address matches."}
+                </span>
               ) : null}
-            </span>
-          ))}
-          {rows.length === 0 ? (
-            <span className="cursor-default text-muted" aria-disabled="true">
-              {typed === null && words !== ""
-                ? `${words} is not an address — an address has something@somewhere in it.`
-                : "No address matches."}
-            </span>
-          ) : null}
-        </span>
-      ) : null}
-      {refused ? (
-        <span className="basis-full px-1 py-0.5 text-2xs text-red-700" role="status">
-          {refused}
-        </span>
-      ) : null}
-    </span>
+            </Autocomplete.Popup>
+          </Autocomplete.Positioner>
+        </Autocomplete.Portal>
+        {refused ? (
+          <span className="basis-full px-1 py-0.5 text-2xs text-red-700" role="status">
+            {refused}
+          </span>
+        ) : null}
+      </span>
+    </Autocomplete.Root>
   );
 }

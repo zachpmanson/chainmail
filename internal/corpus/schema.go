@@ -635,4 +635,22 @@ create trigger fold_sightings_insert after insert on sightings
  and exists(select 1 from entries where id=new.entry_id and source='mail')
  and (select count(*) from sightings where entry_id=new.entry_id and kind='direct')=1 on conflict do nothing;
  end;`,
+	// 25: source changes alter preparation even when text is unchanged.
+	`create trigger embedding_source_update after update of source on entries
+     when old.source is not new.source begin
+       delete from entry_embeddings where entry_id=new.id;
+     end;`,
+	// 26: per-sighting quote repair could retract stale values repeatedly,
+	// corrupting both external-content indexes. Rebuild derived search data
+	// once; source entries, preferences, folds and vectors are not rewritten.
+	`insert into entries_fts(entries_fts) values('delete-all');
+     insert into entries_fts(entries_fts, rank) values('rebuild', 0);
+     insert into entries_ident(entries_ident) values('delete-all');
+     insert into entries_ident(entries_ident, rank) values('rebuild', 0);`,
+	// 27: durable relevant-change gate; no corpus scan during Open.
+	reconcileMigration(),
+	// 28: disposable exact-input twin reductions; no source-write triggers.
+	`create table twins_body_cache (
+ entry_id integer primary key, format_version integer not null,
+ input_digest blob not null, payload blob not null);`,
 }

@@ -1,7 +1,9 @@
 package corpus
 
 import (
+	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"math"
 	"regexp"
@@ -121,9 +123,11 @@ type TwinDecline struct {
 
 // TwinPlan is what CollapseTwins decided, and whether it carried it out.
 type TwinPlan struct {
-	Collapse []TwinCollapse
-	Declined []TwinDecline
-	Applied  bool
+	PeopleScanned, BodiesScanned, Comparisons, Retries int
+	WriterWait                                         time.Duration
+	Collapse                                           []TwinCollapse
+	Declined                                           []TwinDecline
+	Applied                                            bool
 	// Removed is how many entries the plan deletes: what a before-and-after entry
 	// count should differ by.
 	Removed int
@@ -180,6 +184,7 @@ type twinCopy struct {
 	// prose is words again with the markup residue removed: what the positional
 	// test needs, and what the identity gates must not use. See proseWords.
 	prose []string
+	links quoteLinks
 	atts  int
 }
 
@@ -193,17 +198,113 @@ type twinCopy struct {
 // is also what makes a triplicate converge — three copies of one message are one
 // group with two entries dropped, whatever order the pairs are considered in.
 func CollapseTwins(s *Store, apply bool) (TwinPlan, error) {
+	return CollapseTwinsContext(context.Background(), s, apply)
+}
+
+// Planning holds only a WAL read snapshot. Each short apply validates that no
+// outside writer changed any input; committed prefixes are never replayed.
+func CollapseTwinsContext(ctx context.Context, s *Store, apply bool) (TwinPlan, error) {
+	return collapseTwinsContext(ctx, s, apply, s.guardedReconcileWrite, s.guardedReconcileWrite)
+}
+
+type twinWrite func(context.Context, *int64, func(corpusWriter) error) (time.Duration, error)
+
+func collapseTwinsContext(ctx context.Context, s *Store, apply bool, write, publish twinWrite) (TwinPlan, error) {
+	var total TwinPlan
+	for attempt := 0; attempt < 3; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return total, err
+		}
+		tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+		if err != nil {
+			return total, err
+		}
+		state, err := readReconcileState(tx)
+		var plan TwinPlan
+		var cache *twinBodyCache
+		if apply {
+			cache = new(twinBodyCache)
+		}
+		if err == nil {
+			plan, err = planTwinsCached(tx, cache)
+		}
+		tx.Rollback()
+		total.PeopleScanned += plan.PeopleScanned
+		total.BodiesScanned += plan.BodiesScanned
+		total.Comparisons += plan.Comparisons
+		if err != nil {
+			return total, err
+		}
+		if err := ctx.Err(); err != nil {
+			return total, err
+		}
+		if !apply {
+			return plan, nil
+		}
+		total.Applied = true
+		total.Declined, total.Annotated = plan.Declined, plan.Annotated
+		expected := state.Source
+		wait, err := publishTwinBodies(ctx, cache.pending, expected, publish)
+		total.WriterWait += wait
+		for _, c := range plan.Collapse {
+			if err != nil {
+				break
+			}
+			var wait time.Duration
+			wait, err = write(ctx, &expected, func(w corpusWriter) error { return collapseGroup(w, s, c) })
+			total.WriterWait += wait
+			if err != nil {
+				break
+			}
+			total.Collapse = append(total.Collapse, c)
+			total.Removed += len(c.Drop)
+			total.Measured += len(c.Offsets)
+			if c.Mailbox {
+				total.WithMailbox++
+			} else {
+				total.QuotedOnly++
+			}
+		}
+		if err == nil {
+			for _, d := range plan.Derived {
+				var wait time.Duration
+				wait, err = write(ctx, &expected, func(w corpusWriter) error { return persistDerived(w, d.Copy, d.Base) })
+				total.WriterWait += wait
+				if err != nil {
+					break
+				}
+				total.Derived = append(total.Derived, d)
+			}
+		}
+		if !errors.Is(err, ErrReconcileConflict) {
+			if err == nil {
+				err = ctx.Err()
+			}
+			return total, err
+		}
+		total.Retries++
+	}
+	return total, ErrReconcileConflict
+}
+
+func planTwins(q corpusQuery) (TwinPlan, error) {
+	return planTwinsCached(q, nil)
+}
+
+func planTwinsCached(q corpusQuery, cache *twinBodyCache) (TwinPlan, error) {
 	var plan TwinPlan
-	people, err := peopleWithQuotedEntries(s)
+	people, err := peopleWithQuotedEntries(q)
 	if err != nil {
 		return plan, err
 	}
 	for _, person := range people {
-		copies, err := twinCopies(s, person)
+		copies, err := twinCopiesCached(q, person, cache)
 		if err != nil {
 			return plan, err
 		}
-		groups, declined := groupTwins(copies)
+		plan.PeopleScanned++
+		plan.BodiesScanned += len(copies)
+		groups, declined := groupTwinsCount(copies, &plan.Comparisons)
 		plan.Declined = append(plan.Declined, declined...)
 		for _, g := range groups {
 			c, kept, why, ok := resolveTwins(g)
@@ -237,7 +338,7 @@ func CollapseTwins(s *Store, apply bool) (TwinPlan, error) {
 				continue
 			}
 			for _, drop := range c.Drop {
-				off, ok, err := measureOffset(s, c.Keep, drop)
+				off, ok, err := measureOffset(q, c.Keep, drop)
 				if err != nil {
 					return plan, err
 				}
@@ -264,20 +365,6 @@ func CollapseTwins(s *Store, apply bool) (TwinPlan, error) {
 	sort.Slice(plan.Derived, func(i, j int) bool {
 		return plan.Derived[i].Copy < plan.Derived[j].Copy
 	})
-	if !apply {
-		return plan, nil
-	}
-	plan.Applied = true
-	for _, c := range plan.Collapse {
-		if err := collapseGroup(s, c); err != nil {
-			return plan, fmt.Errorf("collapsing into %s: %w", c.KeepExt, err)
-		}
-	}
-	for _, d := range plan.Derived {
-		if err := persistDerived(s, d.Copy, d.Base); err != nil {
-			return plan, err
-		}
-	}
 	return plan, nil
 }
 
@@ -287,30 +374,30 @@ func CollapseTwins(s *Store, apply bool) (TwinPlan, error) {
 // message line (the twin gates), annotates refused the collapse because the
 // quoter answered inside, and the survivor is the base it modified. Writing it
 // here lets the renderer draw the edit inline instead of a floating duplicate.
-func persistDerived(s *Store, copy, base int64) error {
+func persistDerived(w corpusWriter, copy, base int64) error {
 	// The modified copy can sit inside a reply whose own edge points back at the
 	// base (the reply-back pattern that also rings absorb's adopt), so the
 	// parent edge is checked before it is written: refused, the entry is still
 	// marked derived — the renderer still reads it as an edit — but keeps the
 	// parent it had, which cannot be a ring.
-	bad, err := closesCycle(s.db, copy, base)
+	bad, err := closesCycle(w, copy, base)
 	if err != nil {
 		return fmt.Errorf("checking %d against %d: %w", copy, base, err)
 	}
 	if bad {
-		if _, err := s.db.Exec(`update entries set derived = 1 where id = ?`, copy); err != nil {
+		if _, err := w.Exec(`update entries set derived = 1 where id = ?`, copy); err != nil {
 			return fmt.Errorf("marking %d a modified copy of %d: %w", copy, base, err)
 		}
 		return nil
 	}
-	if _, err := s.db.Exec(`update entries set derived = 1, parent_id = ? where id = ?`, base, copy); err != nil {
+	if _, err := w.Exec(`update entries set derived = 1, parent_id = ? where id = ?`, base, copy); err != nil {
 		return fmt.Errorf("marking %d a modified copy of %d: %w", copy, base, err)
 	}
 	return nil
 }
 
-func peopleWithQuotedEntries(s *Store) ([]int64, error) {
-	rows, err := s.db.Query(`
+func peopleWithQuotedEntries(q corpusQuery) ([]int64, error) {
+	rows, err := q.Query(`
 		select distinct person_id from entries
 		where quoted = 1 and person_id is not null and source = ?
 		order by person_id`, SourceMail)
@@ -336,13 +423,24 @@ func peopleWithQuotedEntries(s *Store) ([]int64, error) {
 // the same attribution. Two people are two messages however alike the words are.
 // Grouping by person is also what keeps this a windowed sweep rather than a
 // 31,000-entry cross join.
-func twinCopies(s *Store, person int64) ([]twinCopy, error) {
-	rows, err := s.db.Query(`
+func twinCopies(q corpusQuery, person int64) ([]twinCopy, error) {
+	return twinCopiesCached(q, person, nil)
+}
+
+func twinCopiesCached(q corpusQuery, person int64, cache *twinBodyCache) ([]twinCopy, error) {
+	columns, join := "", ""
+	if cache != nil {
+		columns = fmt.Sprintf(`, case when typeof(b.format_version)='integer' then b.format_version end,
+		       case when typeof(b.input_digest)='blob' and length(b.input_digest)=32 then b.input_digest end,
+		       case when typeof(b.payload)='blob' and length(b.payload)<=%d then b.payload end`, twinBodyMaxPayload)
+		join = ` left join twins_body_cache b on b.entry_id=e.id`
+	}
+	rows, err := q.Query(`
 		select e.id, e.ext_id, e.quoted, e.ts, coalesce(e.subject,''),
 		       coalesce(e.container,''),
 		       coalesce(e.body_text,''), coalesce(e.body_html,''),
-		       (select count(*) from attachments a where a.entry_id = e.id)
-		from entries e
+		       (select count(*) from attachments a where a.entry_id = e.id), e.source`+columns+`
+		from entries e`+join+`
 		where e.person_id = ? and e.source = ?
 		order by e.ts, e.id`, person, SourceMail)
 	if err != nil {
@@ -353,16 +451,31 @@ func twinCopies(s *Store, person int64) ([]twinCopy, error) {
 	for rows.Next() {
 		var c twinCopy
 		var ts int64
-		var body string
-		if err := rows.Scan(&c.id, &c.ext, &c.quoted, &ts, &c.subject, &c.container, &body, &c.bodyHTML, &c.atts); err != nil {
+		var body, source string
+		var version sql.NullInt64
+		var digest, payload []byte
+		dest := []any{&c.id, &c.ext, &c.quoted, &ts, &c.subject, &c.container, &body, &c.bodyHTML, &c.atts, &source}
+		if cache != nil {
+			dest = append(dest, &version, &digest, &payload)
+		}
+		if err := rows.Scan(dest...); err != nil {
 			return nil, err
 		}
 		c.wall = time.Unix(ts, 0).UTC()
-		c.words = copyWords(body, c.bodyHTML, c.quoted)
-		c.prose = proseWords(body, c.bodyHTML, c.quoted)
+		if cache == nil {
+			reduceTwinBody(&c, body)
+		} else {
+			cache.reduce(&c, body, source, version.Int64, digest, payload)
+		}
 		out = append(out, c)
 	}
 	return out, rows.Err()
+}
+
+func reduceTwinBody(c *twinCopy, body string) {
+	c.words = copyWords(body, c.bodyHTML, c.quoted)
+	c.prose = proseWords(body, c.bodyHTML, c.quoted)
+	c.links = copyLinks(body, c.bodyHTML, c.quoted)
 }
 
 // copyWords is the tokens of what the sender wrote themselves, with the history
@@ -457,6 +570,10 @@ var markupResidue = []*regexp.Regexp{
 // against it: "shares the words but not the opening" from a candidate that
 // cleared the clock says more than "nothing was near it".
 func groupTwins(copies []twinCopy) ([][]twinCopy, []TwinDecline) {
+	return groupTwinsCount(copies, nil)
+}
+
+func groupTwinsCount(copies []twinCopy, comparisons *int) ([][]twinCopy, []TwinDecline) {
 	parent := make([]int, len(copies))
 	for i := range parent {
 		parent[i] = i
@@ -497,8 +614,11 @@ func groupTwins(copies []twinCopy) ([][]twinCopy, []TwinDecline) {
 			// A short copy is only paired with a mailbox copy that can vouch for it
 			// by subject or by sharing its thread; every other pairing still meets
 			// the floor in twinnable, where the refusal names the offset.
-			if short && !shortVouched(copies[i], copies[j]) {
+			if short && !shortVouched(copies[i], copies[j]) && !vouchedQuoteLinks(copies[i], copies[j]) {
 				continue
+			}
+			if comparisons != nil {
+				*comparisons++
 			}
 			why, ok := twinnable(copies[i], copies[j])
 			if !ok {
@@ -557,6 +677,12 @@ func twinnable(a, b twinCopy) (string, bool) {
 	off, ok := twinOffset(a, b)
 	if !ok {
 		return "", false
+	}
+	if replacedQuoteLinks(a, b) {
+		if vouchedQuoteLinks(a, b) {
+			return "", true
+		}
+		return "a short link replacement lacks a mailbox/thread witness", false
 	}
 	// The length floor is per pair, and a fetched mailbox copy can vouch for a
 	// short one: where the pair shares a thread subject, the words being alike
@@ -786,6 +912,12 @@ func resolveTwins(g []twinCopy) (TwinCollapse, []TwinDecline, string, bool) {
 // single run counts: scattered insertions of a word each are what a renderer
 // produces, and summing them would read a renumbered list as a paragraph.
 func annotates(keep, drop twinCopy) (string, bool) {
+	if replacedQuoteLinks(keep, drop) {
+		why := fmt.Sprintf("a quoted link destination differs from entry %d; both destinations must be retained", keep.id)
+		// A mailbox copy establishes direction. URL length/id cannot tell which
+		// recovered-only variant was the original, so keep both without a claim.
+		return why, !keep.quoted && drop.quoted
+	}
 	d := textsim.Divergences(keep.prose, drop.prose)
 	if !d.Measured {
 		// Too long to align — a machine-generated report rather than anything a
@@ -815,12 +947,7 @@ func annotates(keep, drop twinCopy) (string, bool) {
 // was seen, a participant is somebody it was routed to, and a reply edge is one
 // message answering another. Losing an edge would sever a chain at exactly the
 // point the duplicate made hard to read.
-func collapseGroup(s *Store, c TwinCollapse) error {
-	tx, err := s.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
+func collapseGroup(tx corpusWriter, s *Store, c TwinCollapse) error {
 	for _, drop := range c.Drop {
 		if err := absorb(tx, s, c.Keep, drop); err != nil {
 			return err
@@ -831,11 +958,11 @@ func collapseGroup(s *Store, c TwinCollapse) error {
 			return err
 		}
 	}
-	return tx.Commit()
+	return nil
 }
 
 // absorb moves one dropped copy's evidence onto the survivor and deletes it.
-func absorb(tx *sql.Tx, s *Store, keep, drop int64) error {
+func absorb(tx corpusWriter, s *Store, keep, drop int64) error {
 	// The survivor may already hold a sighting or a participation the dropped copy
 	// also holds, and both are keyed on the entry — so repoint what does not
 	// collide and clear what does, as a person merge does.
@@ -1002,10 +1129,10 @@ func absorb(tx *sql.Tx, s *Store, keep, drop int64) error {
 // hosts mean several clients rendered this message and the store keeps one clock
 // without saying whose, so the offset is real and its owner is not known — and a
 // measurement filed against the wrong person is worse than one not filed at all.
-func measureOffset(s *Store, keep, drop int64) (RenderOffset, bool, error) {
+func measureOffset(q corpusQuery, keep, drop int64) (RenderOffset, bool, error) {
 	var keepQuoted int
 	var keepTS, dropTS int64
-	if err := s.db.QueryRow(`select quoted, ts from entries where id=?`, keep).
+	if err := q.QueryRow(`select quoted, ts from entries where id=?`, keep).
 		Scan(&keepQuoted, &keepTS); err != nil {
 		return RenderOffset{}, false, err
 	}
@@ -1013,10 +1140,10 @@ func measureOffset(s *Store, keep, drop int64) (RenderOffset, bool, error) {
 		// No mailbox copy in this group, so there is no true instant to subtract.
 		return RenderOffset{}, false, nil
 	}
-	if err := s.db.QueryRow(`select ts from entries where id=?`, drop).Scan(&dropTS); err != nil {
+	if err := q.QueryRow(`select ts from entries where id=?`, drop).Scan(&dropTS); err != nil {
 		return RenderOffset{}, false, err
 	}
-	rows, err := s.db.Query(`
+	rows, err := q.Query(`
 		select h.id, coalesce(h.person_id,0), h.ts from sightings g
 		join entries h on h.id = g.seen_in
 		where g.entry_id = ? and g.kind = 'quoted'`, drop)
@@ -1044,7 +1171,7 @@ func measureOffset(s *Store, keep, drop int64) (RenderOffset, bool, error) {
 	return hosts[0], true, nil
 }
 
-func recordOffset(tx *sql.Tx, o RenderOffset) error {
+func recordOffset(tx corpusWriter, o RenderOffset) error {
 	if _, err := tx.Exec(`
 		insert into render_offsets (person_id, entry_id, at, off, measured_from, measured_at)
 		values (?,?,?,?,?,?)
@@ -1101,6 +1228,7 @@ func nearbyCopies(s *Store, person int64, wall time.Time) ([]twinCopy, error) {
 		o.wall = time.Unix(ts, 0).UTC()
 		o.words = copyWords(body, o.bodyHTML, o.quoted)
 		o.prose = proseWords(body, o.bodyHTML, o.quoted)
+		o.links = copyLinks(body, o.bodyHTML, o.quoted)
 		out = append(out, o)
 	}
 	if err := rows.Err(); err != nil {
@@ -1129,41 +1257,19 @@ func FindTwin(s *Store, person int64, wall time.Time, text, subject, container s
 	// No length pre-check: a short block can still be vouched for by a mailbox
 	// copy on the same thread, and twinnable applies the floor per pair.
 	c := twinCopy{quoted: true, wall: wall, subject: subject, container: container,
-		words: copyWords(text, "", true), prose: proseWords(text, "", true)}
+		words: copyWords(text, "", true), prose: proseWords(text, "", true), links: copyLinks(text, "", true)}
 	near, err := nearbyCopies(s, person, wall)
 	if err != nil {
 		return 0, false, fmt.Errorf("looking for a twin of a recovered block: %w", err)
 	}
-	var mailbox, all []int64
-	for _, o := range near {
-		if _, ok := twinnable(c, o); !ok {
-			continue
-		}
-		// Converging here would store nothing but a sighting, so an inline answer
-		// in this block would never reach the corpus at all — the same loss the
-		// repair pass declines, one ingest earlier. The block becomes its own
-		// entry instead, which is what the caller does with a refusal.
-		if why, _ := annotates(o, c); why != "" {
-			continue
-		}
-		all = append(all, o.id)
-		if !o.quoted {
-			mailbox = append(mailbox, o.id)
-		}
+	base, ok := uniqueCopyBase(c, near)
+	if !ok {
+		return 0, false, nil
 	}
-	// The mailbox copy is the one to converge on when there is exactly one, for
-	// the reasons resolveTwins gives. Two of them, or several recovered copies
-	// with none, is the ambiguous case: the block is stored as its own entry and
-	// left for the repair pass, which reports what it will not decide instead of
-	// deciding it here, one block at a time, with no view of the group.
-	switch {
-	case len(mailbox) == 1:
-		return mailbox[0], true, nil
-	case len(mailbox) == 0 && len(all) == 1:
-		return all[0], true, nil
+	if why, _ := annotates(base, c); why != "" {
+		return 0, false, nil
 	}
-
-	return 0, false, nil
+	return base.id, true, nil
 }
 
 // DerivedMatch reports that a recovered block is recognisably a MODIFIED copy of
@@ -1192,22 +1298,37 @@ func FindDerived(s *Store, person int64, wall time.Time, text, subject, containe
 		return DerivedMatch{}, false, nil
 	}
 	c := twinCopy{quoted: true, wall: wall, subject: subject, container: container,
-		words: copyWords(text, "", true), prose: proseWords(text, "", true)}
+		words: copyWords(text, "", true), prose: proseWords(text, "", true), links: copyLinks(text, "", true)}
 	near, err := nearbyCopies(s, person, wall)
 	if err != nil {
 		return DerivedMatch{}, false, fmt.Errorf("looking for the base of a modified block: %w", err)
 	}
-	// The quoter answered WHERE the base's own text runs straight through: the
-	// divergence is verifiably an interior insertion. That is a modified copy,
-	// and annotates already refuses to merge such a block, so naming its base
-	// here is evidence, not a guess.
+	if base, ok := uniqueCopyBase(c, near); ok {
+		if why, yes := annotates(base, c); yes {
+			return DerivedMatch{Base: base.id, Why: why}, true, nil
+		}
+	}
+	return DerivedMatch{}, false, nil
+}
+
+// Count all identity candidates BEFORE deciding whether they are edited. Otherwise
+// a clean candidate can win just because a conflicting mailbox copy was edited.
+func uniqueCopyBase(c twinCopy, near []twinCopy) (twinCopy, bool) {
+	var all, mailbox []twinCopy
 	for _, o := range near {
 		if _, ok := twinnable(c, o); !ok {
 			continue
 		}
-		if why, yes := annotates(o, c); yes {
-			return DerivedMatch{Base: o.id, Why: why}, true, nil
+		all = append(all, o)
+		if !o.quoted {
+			mailbox = append(mailbox, o)
 		}
 	}
-	return DerivedMatch{}, false, nil
+	if len(mailbox) == 1 {
+		return mailbox[0], true
+	}
+	if len(mailbox) == 0 && len(all) == 1 {
+		return all[0], true
+	}
+	return twinCopy{}, false
 }

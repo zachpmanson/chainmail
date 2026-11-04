@@ -6,8 +6,10 @@ import { router } from "../src/router";
 const state = vi.hoisted(() => ({ pathname: "/settings" }));
 vi.mock("@tanstack/react-router", async (original) => ({
   ...(await original<typeof import("@tanstack/react-router")>()),
+  useNavigate: () => vi.fn(),
+  useRouter: () => ({ buildLocation: vi.fn() }),
   useRouterState: ({ select }: { select: (value: unknown) => unknown }) =>
-    select({ location: { pathname: state.pathname, search: {} } }),
+    select({ location: { pathname: state.pathname, search: {}, state: {} } }),
   Link: () => null,
   Outlet: () => createElement("main", { "data-page": state.pathname }),
 }));

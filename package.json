@@ -17,6 +17,7 @@
     "render": "tsx scripts/render.tsx"
   },
   "dependencies": {
+    "@base-ui/react": "^1.9.0",
     "@heroicons/react": "^2.2.0",
     "@tailwindcss/node": "^4.3.3",
     "@tailwindcss/vite": "^4.3.3",

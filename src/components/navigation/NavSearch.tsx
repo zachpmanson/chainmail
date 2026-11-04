@@ -7,6 +7,7 @@ import Button from "../ui/Button";
 import IconButton from "../ui/IconButton";
 import SelectInput from "../ui/SelectInput";
 import TextInput from "../ui/TextInput";
+import { COMPOSE_OPEN } from "../../lib/ui/openSelection";
 
 const MODES: SearchMode[] = ["hybrid", "semantic", "lexical"];
 
@@ -67,6 +68,8 @@ export default function NavSearch() {
     },
   });
 
+  const selectedDraft = useRouterState({ select: (s) => s.location.search.draft });
+  const composeOrigin = useRouterState({ select: (s) => s.location.state.composeOrigin });
   const openThread = useRouterState({
     select: (s): string | undefined => {
       const open = homeSearch(s.location)?.open;
@@ -107,9 +110,15 @@ export default function NavSearch() {
         ...(four.person ? { person: four.person } : {}),
         ...(four.since ? { since: four.since } : {}),
         ...(four.accountId ? { accountId: four.accountId } : {}),
-        // Keep the open thread only when leaving search; a new question starts with an empty pane.
-        ...(asks(four) || openThread === undefined ? {} : { open: openThread }),
+        ...(four.accountId === asked.accountId && (openThread === COMPOSE_OPEN || !asks(four))
+          ? { draft: selectedDraft }
+          : {}),
+        // Compose stays visible across search edits; a new question clears only real threads.
+        ...(openThread === COMPOSE_OPEN || (!asks(four) && openThread !== undefined)
+          ? { open: openThread }
+          : {}),
       },
+      state: openThread === COMPOSE_OPEN ? { composeOrigin } : {},
       // Replace, so Back from a built page lands straight on the search.
       replace: true,
     });

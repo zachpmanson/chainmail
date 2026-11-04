@@ -144,7 +144,7 @@ func (s *Store) EnrichQuoted(id int64, e Entry) error {
 // collapse needs the same fill-the-gaps update in the middle of a transaction
 // that is also moving rows, and one connection cannot hold two write
 // transactions at once.
-func (s *Store) enrich(tx *sql.Tx, id int64, e Entry) error {
+func (s *Store) enrich(tx corpusWriter, id int64, e Entry) error {
 	// The FTS retraction needs the values the index currently holds, so they are
 	// read BEFORE the update. Retracting with the new text would leave the old
 	// terms in the index permanently, matching text the entry no longer contains.

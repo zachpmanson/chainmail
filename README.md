@@ -81,6 +81,53 @@ sync restarts safely. Each mail run reports list/history pages, full-message rea
 attempts and elapsed time (the query backend may also fetch envelope metadata).
 The first full sync/recovery can be expensive; compare subsequent sweeps for savings.
 
+Server manual and scheduled refreshes rely on History for read/unread label changes;
+they do not run a separate full unread-set scan. For explicit audit/repair, run
+`corpus unread`: it compares Gmail's complete unread set with the local mirror.
+Standalone CLI `corpus slurp` keeps its existing unread phase; custom/bounded CLI
+scans are unchanged.
+
+Both server refresh paths run mail, twins and repair, without generating a dedupe
+plan. Review identity merge proposals explicitly in Ops or with `corpus dedupe`;
+standalone CLI slurp still reports its existing dry-run plan. No merge behavior
+or twins/repair behavior is changed by excluding the plan from refresh.
+
+### Quote-body repair
+
+Repair groups all host sightings of a recovered message before writing it. A
+single host or multiple exactly agreeing hosts can repair old parser output;
+divergent variants are reported and left unchanged rather than choosing the
+longest, most frequent or last-seen copy. Missing hosts are not deletion evidence.
+Each actual repair updates the body, canonical quote hash and both search indexes
+once; unchanged bodies do not dirty folds or invalidate vectors. Single-host
+parser-upgrade repairs still run even without new Gmail messages.
+
+Schema migration26 rebuilds both derived search indexes once, repairing stale
+index retractions from the old per-sighting loop. It does not rewrite source
+entries, preferences, folds or vectors. This is not an incremental repair cache;
+the host scan remains, and ambiguous source text is preserved for review.
+
+### Background semantic indexing
+
+Server-triggered refreshes finish after mail ingestion/reconciliation and fold
+warming; they no longer wait for embedding. With `-slurp` enabled, one background
+worker indexes pending vectors at startup and after ingest attempts. Repeated
+requests coalesce into one queued follow-up. CLI `corpus slurp` and `corpus embed`
+remain synchronous.
+
+`GET /v1/status` reports indexing separately in `embedding`, including queued/running
+state, committed progress, outcome and bounded errors; the navigation shows this
+independently of ingest status. New mail is immediately available to lexical search.
+Semantic results catch up as indexing finishes; stale vectors are excluded.
+Embedding does not disable refresh, and its failure does not fail a completed ingest.
+The daemon's connectivity status remains distinct from this worker's progress.
+
+A job is bounded to 30 minutes and tied to server lifetime, not the HTTP request.
+Shutdown cancels and joins it before closing the store. Committed batches survive
+interruption; the next ingest or enabled-server restart retries pending work.
+There is no separate retry timer. Progress uses the pass's initial pending count,
+not a guarantee that concurrently arriving mail has already been indexed.
+
 ## Running it
 
 ```bash
@@ -92,7 +139,7 @@ Search, tick the chains that belong, build a page from them. Without the server,
 on disk still renders: `corpus spec -q "…" -o spec.json && npm run render -- spec.json -o page.html`.
 
 **Saying "now" fetches first.** The nav's ↻ and the saved page's own refresh button both
-start with `POST /v1/slurp` — the same ingest the hourly sweep runs — and only then ask the
+start with `POST /v1/slurp` — the server's mailbox-ingest pipeline — and only then ask the
 corpus again (the nav) or re-derive the page (the page's button). Fetch, then read: a
 re-read of a corpus the fetch has not written to is the same page twice. Without `-slurp`
 the endpoint answers 403 and both controls fall back to re-reading what the corpus already
@@ -118,9 +165,10 @@ operations that cannot safely be reversed (including sends and draft lifecycle c
 messages Gmail still calls unread, and the reading pane's mark read / mark unread button
 changes that in the mailbox itself — so the reader's phone agrees with the page. The
 server needs `-mark-read` to be allowed to write (`enableMarkRead` in the nix module);
-without it the button says so and changes nothing. The corpus's own copy of the label is
-corrected by the `unread` phase of `corpus slurp`, which reads the mailbox's unread set
-and fixes every stored label that disagrees with it.
+without it the button says so and changes nothing. Normal server refreshes update the
+local label mirror through Gmail History. The explicit `corpus unread` audit (also
+retained in standalone CLI `corpus slurp`) compares the complete unread set and
+repairs differences; it is not part of routine server refreshes.
 
 **Timeline** is one chronological column. **Columns** gives one lane per reply chain.
 The **reply tree** panel lights the ancestry of the entry you're reading.
@@ -133,9 +181,9 @@ conservative mismatches.
 **Replying starts as reply-all, and who it reaches is the reader's to say.** A thread in the
 reading pane ends with a reply box: one row of To and Cc autocomplete fields and a link to
 its target message, then the reader's own words. Hovering the link highlights that message.
-Pressing *preview* sends
+Pressing _preview_ sends
 nothing — the server composes the reply and returns it as a plan, and the reader sees the
-whole message and its actual recipients before anything leaves. Pressing *send* sends that.
+whole message and its actual recipients before anything leaves. Pressing _send_ sends that.
 The audience starts from the message being answered — the newest message in the thread Gmail
 holds, its sender in `To`, its original `To` and `Cc` in `Cc`. The two compose-screen address
 fields let the reader add, remove or move recipients before preview; autocomplete offers the
@@ -144,7 +192,7 @@ Untouched lists remain the mailbox's default, so its Reply-To and account-alias 
 stays authoritative. The two things a field refuses are the reader's own address and an
 address already on the reply, in either list.
 
-The one thing the reply-all tick decides about the *starting* audience is whether the
+The one thing the reply-all tick decides about the _starting_ audience is whether the
 message's other people come with it: it is on by default, and clearing it answers the sender
 alone. Adding anybody back is the compose fields' business, not the tick's.
 
@@ -224,7 +272,7 @@ own. `make repage P=page.html` runs the loop.
 Input is a **timeline spec**: JSON conforming to `schema/timeline.schema.json`. A
 collector produces it; chainmail only renders. The two load-bearing fields are
 `parent` (what each entry replies to — drives ordering, lanes, the reply tree) and
-`tz` (ordering is by *absolute* time; a missing zone is inferred from what that sender
+`tz` (ordering is by _absolute_ time; a missing zone is inferred from what that sender
 stated elsewhere and never allowed to invert a reply chain).
 
 ## Development

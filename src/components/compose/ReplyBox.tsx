@@ -1,4 +1,7 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import DraftCards from "./DraftCards";
+import useSelectedDraft from "./useSelectedDraft";
+import { draftIdentity } from "../../lib/ui/draftSelection";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { $api, type CorpusEntry, type SendResponse } from "../../lib/api/api";
 import { useAccountId } from "../../lib/inbox/useAccountId";
@@ -6,6 +9,7 @@ import { staleAfterMail } from "../../lib/inbox/mailActions";
 import { errText } from "../../lib/ui/errText";
 import useOwnToast from "../../lib/ui/useOwnToast";
 import ComposerFields from "./ComposerFields";
+import DraftReadError from "./DraftReadError";
 import { parseAddressHeader, type Draft } from "./Draft";
 import { refusal } from "../inbox/MailVerbs";
 import CheckboxRow from "../ui/CheckboxRow";
@@ -123,10 +127,14 @@ export default function ReplyBox({
   const displayedAccountId = accountId || (connected.length === 1 ? (connected[0]?.id ?? "") : "");
   const [draftId, setDraftId] = useState("");
   const [draftSaveError, setDraftSaveError] = useState("");
+  const [acknowledgedSave, setAcknowledgedSave] = useState("");
+  const acknowledgedSaveRef = useRef("");
   const draftIdRef = useRef("");
   const draftMessageIdRef = useRef("");
   const saveGeneration = useRef(0);
   const saveQueue = useRef(Promise.resolve());
+  const pendingWrites = useRef(0);
+  const writeRevision = useRef(0);
   const drafts = $api.useQuery(
     "get",
     "/v1/drafts",
@@ -143,10 +151,28 @@ export default function ReplyBox({
   ownership.enter(JSON.stringify([answer.extId, displayedAccountId]), Boolean(own));
   const { to, cc } = recipients;
   const restoreRecipients = recipients.restore;
-  const { busy, error, clearError, run } = useBusyTask();
+  const { busy, busyRef, operationRevision, error, clearError, run } = useBusyTask();
   const send = $api.useMutation("post", "/v1/send");
   // The box isn't remounted between threads, so its toast goes when the thread changes.
   const say = useOwnToast(thread.rootExtId);
+  const draftInput = useMemo(
+    () => ({
+      accountId: displayedAccountId,
+      ...recipients.edited,
+      replyAll: all,
+      subject: answer.subject?.startsWith("Re:") ? answer.subject : `Re: ${answer.subject ?? ""}`,
+      body: own,
+      replyToEntry: answer.extId,
+    }),
+    [displayedAccountId, recipients.edited, all, answer.subject, own, answer.extId],
+  );
+  const draftInputKey = JSON.stringify(draftInput);
+  const draftIsSaved =
+    Boolean(draftId) &&
+    !createDraft.isPending &&
+    !updateDraft.isPending &&
+    !draftSaveError &&
+    acknowledgedSave === JSON.stringify([saveGeneration.current, draftId, draftInputKey]);
   const sendFailed = step.kind === "reviewing" && step.sendFailed;
   const reviewInput = useRef(new ReviewInput<ReplyInput>()).current;
   reviewInput.update({
@@ -169,6 +195,7 @@ export default function ReplyBox({
   const draft: Draft = { to, cc, subject: "", body: own };
   const onDraft = (patch: Partial<Draft>) => {
     ownership.edit();
+    selected.edit();
     if (patch.to) recipients.changeTo(patch.to);
     if (patch.cc) recipients.changeCc(patch.cc);
     if (patch.body !== undefined) dispatch({ type: "words", own: patch.body });
@@ -176,75 +203,121 @@ export default function ReplyBox({
   // A ref rather than a document query: this is one box among any the shell has drawn.
   const host = useRef<HTMLDivElement | null>(null);
 
+  const effectiveRouteAccountId =
+    routeAccountId ?? (connected.length === 1 ? (connected[0]?.id ?? "") : "");
   useEffect(() => {
-    dispatch({ type: "retarget", accountId: routeAccountId ?? "" });
+    dispatch({ type: "retarget", accountId: effectiveRouteAccountId });
     saveGeneration.current++;
     setDraftSaveError("");
     draftIdRef.current = "";
     draftMessageIdRef.current = "";
     setDraftId("");
-  }, [answer.extId, routeAccountId]);
+  }, [answer.extId, effectiveRouteAccountId]);
 
-  // Gmail associates a reply draft with its thread. Resume it automatically when
-  // the selected thread/account changes, rather than starting a second draft.
-  const matchingDraft = drafts.data?.find(
-    (item) =>
-      item.accountId === displayedAccountId &&
-      item.threadId &&
-      item.threadId === answer.container &&
-      !ownership.isRetired(item.accountId, item.id),
-  );
-  const draftConflict = Boolean(matchingDraft && matchingDraft.id !== draftId);
-  const resumeDraft = useCallback(() => {
-    if (!matchingDraft) return;
-    saveGeneration.current++;
-    setDraftSaveError("");
-    draftIdRef.current = matchingDraft.id;
-    draftMessageIdRef.current = matchingDraft.messageId ?? "";
-    setDraftId(matchingDraft.id);
-    dispatch({ type: "words", own: matchingDraft.body ?? "" });
-    restoreRecipients(parseAddressHeader(matchingDraft.to), parseAddressHeader(matchingDraft.cc));
-  }, [matchingDraft, restoreRecipients]);
-  useEffect(() => {
-    if (!matchingDraft || matchingDraft.id === draftIdRef.current || !ownership.canHydrate())
-      return;
-    resumeDraft();
-  }, [matchingDraft, ownership, resumeDraft]);
+  const selected = useSelectedDraft({
+    kind: "reply",
+    account: displayedAccountId,
+    id: draftId,
+    target: answer.extId,
+    snapshot: () => ({
+      kind: "reply",
+      destination: thread.rootExtId,
+      target: answer.extId,
+      revision: JSON.stringify([
+        draftInputKey,
+        all,
+        html,
+        step.kind,
+        draftSaveError,
+        sendFailed,
+        operationRevision.current,
+        writeRevision.current,
+      ]),
+      owner: draftIdRef.current ? draftIdentity(displayedAccountId, draftIdRef.current) : undefined,
+      busy:
+        busyRef.current ||
+        pendingWrites.current > 0 ||
+        createDraft.isPending ||
+        updateDraft.isPending ||
+        deleteDraft.isPending,
+      dirty: Boolean(
+        own ||
+        recipients.edited.to ||
+        recipients.edited.cc ||
+        !all ||
+        !html ||
+        draftSaveError ||
+        sendFailed,
+      ),
+      invalidate: () => {
+        saveGeneration.current++;
+        reviewInput.invalidate();
+      },
+    }),
+    hydrate: (saved) => {
+      saveGeneration.current++;
+      reviewInput.invalidate();
+      dispatch({ type: "edit" });
+      setDraftSaveError("");
+      draftIdRef.current = saved.id;
+      draftMessageIdRef.current = saved.messageId ?? "";
+      setDraftId(saved.id);
+      const to = parseAddressHeader(saved.to);
+      const cc = parseAddressHeader(saved.cc);
+      dispatch({ type: "words", own: saved.body ?? "" });
+      restoreRecipients(to, cc);
+      const input = {
+        accountId: displayedAccountId,
+        to: to.map((a) => a.address),
+        cc: cc.map((a) => a.address),
+        replyAll: all,
+        subject: answer.subject?.startsWith("Re:") ? answer.subject : `Re: ${answer.subject ?? ""}`,
+        body: saved.body ?? "",
+        replyToEntry: answer.extId,
+      };
+      const acknowledgement = JSON.stringify([
+        saveGeneration.current,
+        saved.id,
+        JSON.stringify(input),
+      ]);
+      acknowledgedSaveRef.current = acknowledgement;
+      setAcknowledgedSave(acknowledgement);
+    },
+  });
 
   // Autosave to Gmail. Queue writes so an older request cannot land after a newer
   // edit and replace it; a draft ID returned by create is reused by later saves.
   useEffect(() => {
     if (
-      !own.trim() ||
+      (!own.trim() && !draftIdRef.current) ||
       !displayedAccountId ||
       !answer.extId ||
       drafts.isPending ||
       drafts.isError ||
       draftSaveError ||
       busy ||
-      draftConflict ||
+      selected.blocked ||
       step.kind !== "editing"
     )
       return;
-    const words = own;
-    const edited = recipients.edited;
     const generation = saveGeneration.current;
-    const subject = answer.subject?.startsWith("Re:")
-      ? answer.subject
-      : `Re: ${answer.subject ?? ""}`;
+    if (
+      acknowledgedSaveRef.current ===
+      JSON.stringify([generation, draftIdRef.current, draftInputKey])
+    )
+      return;
     const timer = window.setTimeout(() => {
+      writeRevision.current++;
+      pendingWrites.current++;
       saveQueue.current = saveQueue.current
         .catch(() => undefined)
         .then(async () => {
           if (generation !== saveGeneration.current) return;
           const id = draftIdRef.current;
+          if (acknowledgedSaveRef.current === JSON.stringify([generation, id, draftInputKey]))
+            return;
           const body = {
-            accountId: displayedAccountId,
-            ...edited,
-            replyAll: all,
-            subject,
-            body: words,
-            replyToEntry: answer.extId,
+            ...draftInput,
             ...(id ? { expectedMessageId: draftMessageIdRef.current } : {}),
           };
           const saved = id
@@ -253,6 +326,10 @@ export default function ReplyBox({
           if (generation !== saveGeneration.current) return;
           draftIdRef.current = saved.id;
           draftMessageIdRef.current = saved.messageId ?? "";
+          // A provider-normalised response must not acknowledge newer editor input.
+          const acknowledgement = JSON.stringify([generation, saved.id, draftInputKey]);
+          acknowledgedSaveRef.current = acknowledgement;
+          setAcknowledgedSave(acknowledgement);
           setDraftId(saved.id);
           setDraftSaveError("");
           await queryClient.invalidateQueries({ queryKey: ["get", "/v1/drafts"] });
@@ -265,19 +342,21 @@ export default function ReplyBox({
           setDraftSaveError(
             `${errText(error)} Autosave stopped; check Gmail before resuming this draft.`,
           );
+        })
+        .finally(() => {
+          pendingWrites.current--;
         });
     }, 700);
     return () => window.clearTimeout(timer);
   }, [
     own,
+    selected.blocked,
     draftSaveError,
     busy,
-    recipients.edited,
-    all,
+    draftInput,
+    draftInputKey,
     displayedAccountId,
-    draftConflict,
     step.kind,
-    answer.subject,
     answer.extId,
     drafts.isPending,
     drafts.isError,
@@ -295,21 +374,23 @@ export default function ReplyBox({
 
   // Nothing is written to the mailbox, so a failure here has cost nothing.
   const review = () =>
-    run(
-      async () => {
-        const reviewed = reviewInput.capture();
-        const plan = await send.mutateAsync({ body: { ...reviewed.input, confirm: false } });
-        if (!reviewInput.isCurrent(reviewed)) return;
-        dispatch({ type: "planned", plan, reviewed });
-        recipients.adopt(plan);
-      },
-      (e) => refusal(e, "-send-mail", "Preparing the reply"),
-    );
+    selected.blocked
+      ? Promise.resolve()
+      : run(
+          async () => {
+            const reviewed = reviewInput.capture();
+            const plan = await send.mutateAsync({ body: { ...reviewed.input, confirm: false } });
+            if (!reviewInput.isCurrent(reviewed)) return;
+            dispatch({ type: "planned", plan, reviewed });
+            recipients.adopt(plan);
+          },
+          (e) => refusal(e, "-send-mail", "Preparing the reply"),
+        );
 
   // The server files the sent message into the corpus in the same request, so the
   // thread is re-read rather than drawn optimistically.
   async function ship() {
-    if (step.kind !== "reviewing" || !previewIsCurrent) return;
+    if (selected.blocked || step.kind !== "reviewing" || !previewIsCurrent) return;
     const { plan, reviewed } = step;
     let sending = false;
     await run(
@@ -350,6 +431,7 @@ export default function ReplyBox({
         let draftCleanupFailed = false;
         if (savedDraftId) {
           ownership.retire(plan.accountId ?? displayedAccountId, savedDraftId);
+          selected.coordinator?.retire(plan.accountId ?? displayedAccountId, savedDraftId);
           removeCachedDraft(queryClient, plan.accountId ?? displayedAccountId, savedDraftId);
           try {
             await deleteDraft.mutateAsync({
@@ -400,6 +482,7 @@ export default function ReplyBox({
         params: { path: { id }, query: { accountId: displayedAccountId } },
       });
       ownership.retire(displayedAccountId, id);
+      selected.coordinator?.retire(displayedAccountId, id);
       removeCachedDraft(queryClient, displayedAccountId, id);
       if (generation !== saveGeneration.current) return;
       draftIdRef.current = "";
@@ -421,25 +504,15 @@ export default function ReplyBox({
 
   return (
     <div className="mt-4 mb-1 rounded-lg border border-line bg-card px-3 py-2" ref={host}>
-      {draftSaveError ? <InlineAlert>{draftSaveError}</InlineAlert> : null}
-      {draftConflict && !ownership.canHydrate() ? (
-        <InlineAlert>
-          A saved Gmail draft exists. Your new words have not been replaced or autosaved.
-          <Button
-            type="button"
-            variant="subtle"
-            density="compact"
-            disabled={busy}
-            onClick={() => {
-              if (window.confirm("Replace your unsaved words with the saved Gmail draft?"))
-                resumeDraft();
-            }}
-          >
-            Resume saved draft
-          </Button>
-        </InlineAlert>
+      {drafts.isError ? (
+        <DraftReadError
+          error={drafts.error}
+          retrying={drafts.isFetching}
+          onRetry={() => void drafts.refetch()}
+        />
       ) : null}
-      {draftId ? <p className="mb-1 text-2xs text-muted">Saved to Gmail</p> : null}
+      {draftSaveError ? <InlineAlert>{draftSaveError}</InlineAlert> : null}
+      {draftIsSaved ? <p className="mb-1 text-2xs text-muted">Saved to Gmail</p> : null}
       <section aria-label="Reply">
         {step.kind === "reviewing" ? (
           <>
@@ -464,7 +537,7 @@ export default function ReplyBox({
                   variant="danger"
                   density="compact"
                   type="button"
-                  disabled={busy || !previewIsCurrent || to.length === 0}
+                  disabled={busy || selected.blocked || !previewIsCurrent || to.length === 0}
                   onClick={() => void ship()}
                 >
                   {busy ? "Sending…" : "send this reply"}
@@ -487,7 +560,10 @@ export default function ReplyBox({
                   value={displayedAccountId}
                   disabled={busy}
                   onChange={(id) => {
+                    if (selected.coordinator && !selected.coordinator.detach(id)) return;
+                    selected.edit();
                     ownership.edit();
+                    reviewInput.invalidate();
                     saveGeneration.current++;
                     setDraftSaveError("");
                     draftIdRef.current = "";
@@ -513,6 +589,7 @@ export default function ReplyBox({
                   accent="accent"
                   inputClassName="m-0 cursor-pointer"
                   onChange={(e) => {
+                    selected.edit();
                     ownership.edit();
                     onAll(e.target.checked);
                   }}
@@ -526,7 +603,10 @@ export default function ReplyBox({
                   disabled={busy}
                   accent="accent"
                   inputClassName="m-0 cursor-pointer"
-                  onChange={(e) => dispatch({ type: "html", html: e.target.checked })}
+                  onChange={(e) => {
+                    selected.edit();
+                    dispatch({ type: "html", html: e.target.checked });
+                  }}
                 >
                   send html
                 </CheckboxRow>
@@ -549,7 +629,12 @@ export default function ReplyBox({
                 title={
                   to.length === 0 ? "Add somebody in to before previewing this reply." : undefined
                 }
-                disabled={busy || own.trim() === "" || (recipients.toTouched && to.length === 0)}
+                disabled={
+                  busy ||
+                  selected.blocked ||
+                  own.trim() === "" ||
+                  (recipients.toTouched && to.length === 0)
+                }
                 onClick={() => void review()}
               >
                 {busy ? "Preparing…" : "preview"}
@@ -558,6 +643,22 @@ export default function ReplyBox({
           </>
         )}
       </section>
+      {selected.replacement ? (
+        <InlineAlert>
+          New input arrived while the selected draft was loading.{" "}
+          <Button type="button" density="compact" onClick={selected.replace}>
+            Replace with selected draft
+          </Button>
+        </InlineAlert>
+      ) : null}
+      <DraftCards
+        drafts={(drafts.data ?? []).filter(
+          (item) => !selected.coordinator?.isRetired(item.accountId, item.id),
+        )}
+        loading={drafts.isPending}
+        selected={selected.coordinator?.selection.id}
+        onSelect={(item) => selected.coordinator?.select(item)}
+      />
     </div>
   );
 }

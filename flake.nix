@@ -35,7 +35,7 @@
           version = "0.1.0";
           src = self;
           nodejs = pkgs.nodejs_22;
-          npmDepsHash = "sha256-kiIMD+bFIQ0aawydes0kcgZKal30f4Zl8TzGkYkKjt8=";
+          npmDepsHash = "sha256-dCgKJjhEd3E059RIrhydPRoTYnwly1/vKpBWxsBYjBU=";
           # The default npmInstallHook re-installs from package.json, which
           # drops the vite-built cmd/server/dist (untracked, not in `files`).
           # The only artifact this package must ship IS that dist, so the
@@ -51,7 +51,7 @@
           pname = "chainmail";
           version = "0.1.0";
           src = self;
-          vendorHash = "sha256-J3VNiNyHX5uvllkGMElJJH3qx8PsRewQcLiTI4jAh9w=";
+          vendorHash = "sha256-i+HuAIRw52qInPnTZAW6VsNTTmo8/bAS6TEhzLh3wfQ=";
 
           # copy the vite-built client into the Go source so go:embed finds it.
           preBuild = ''

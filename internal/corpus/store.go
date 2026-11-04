@@ -91,11 +91,14 @@ func Open(path string) (*Store, error) {
 		separator = "&"
 	}
 	// PRAGMAs in the DSN are applied to every physical pooled connection.
-	db, err := sql.Open("sqlite", path+separator+"_pragma=foreign_keys(1)")
+	// Ordinary transactions write: acquire before reading to avoid obsolete WAL
+	// snapshot upgrades (SQLITE_BUSY_SNAPSHOT cannot be repaired by a timeout).
+	// Snapshot readers must explicitly use TxOptions{ReadOnly: true}.
+	db, err := sql.Open("sqlite", path+separator+fmt.Sprintf("_pragma=foreign_keys(1)&_pragma=busy_timeout(%d)&_txlock=immediate", writerBusyMS))
 	if err != nil {
 		return nil, fmt.Errorf("opening %s: %w", path, err)
 	}
-	// WAL suits the access pattern: one writer (the slurper), many readers.
+	// WAL permits many readers alongside one source or derived-cache writer.
 	// It is a no-op for :memory:, which is why the error is tolerated.
 	if _, err := db.Exec(`pragma journal_mode=wal`); err != nil && path != ":memory:" {
 		db.Close()
@@ -336,7 +339,7 @@ func (s *Store) put(tx *sql.Tx, e Entry, m *Mail, sd *Slack, atts []Attachment, 
 // reindex refreshes both FTS tables for one entry. External-content tables are
 // not updated automatically, so this must follow every write — and a delete must
 // pass the OLD column values, since FTS5 has no copy of the text to look up.
-func (s *Store) reindex(tx *sql.Tx, id int64, created bool, oldSubject, oldBody string) error {
+func (s *Store) reindex(tx corpusWriter, id int64, created bool, oldSubject, oldBody string) error {
 	if !created {
 		if _, err := tx.Exec(
 			`insert into entries_fts(entries_fts, rowid, subject, body_text) values ('delete', ?, ?, ?)`,
