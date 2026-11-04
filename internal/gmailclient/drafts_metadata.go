@@ -129,12 +129,12 @@ func (c Client) verifyDraftSender(value string) error {
 	if err != nil || !strings.Contains(from.Address, "@") {
 		return draftRefusal("sender_invalid", "From")
 	}
-	profile, err := c.svc.Users.GetProfile("me").Context(c.ctx).Do()
+	profile, err := c.svc.Users.GetProfile("me").Fields("emailAddress").Context(c.ctx).Do()
 	if err != nil || profile == nil || !bareDraftAddress(profile.EmailAddress) {
 		// Provider errors can contain private response data.
 		return draftRefusal("sender_identity_unverified", "From")
 	}
-	settings, err := c.svc.Users.Settings.SendAs.List("me").Context(c.ctx).Do()
+	settings, err := c.svc.Users.Settings.SendAs.List("me").Fields("sendAs(sendAsEmail,displayName,isPrimary,isDefault)").Context(c.ctx).Do()
 	if err != nil || settings == nil {
 		return draftRefusal("sender_identity_unverified", "From")
 	}
@@ -145,10 +145,21 @@ func (c Client) verifyDraftSender(value string) error {
 		return draftRefusal("sender_identity_unverified", "From")
 	}
 	sender := settings.SendAs[0]
-	if !sender.IsPrimary || !sender.IsDefault || !bareDraftAddress(sender.SendAsEmail) ||
-		!strings.EqualFold(profile.EmailAddress, sender.SendAsEmail) ||
-		!strings.EqualFold(from.Address, profile.EmailAddress) || from.Name != sender.DisplayName {
-		return draftRefusal("sender_mismatch", "From")
+	switch {
+	case !sender.IsPrimary:
+		return draftRefusal("sender_not_primary", "From")
+	case !sender.IsDefault:
+		return draftRefusal("sender_not_default", "From")
+	case !bareDraftAddress(sender.SendAsEmail):
+		return draftRefusal("sender_settings_address_invalid", "From")
+	case !strings.EqualFold(profile.EmailAddress, sender.SendAsEmail):
+		return draftRefusal("sender_profile_mismatch", "From")
+	case !strings.EqualFold(from.Address, profile.EmailAddress):
+		return draftRefusal("sender_address_mismatch", "From")
+	case from.Name != sender.DisplayName && sender.DisplayName == "":
+		return draftRefusal("sender_display_name_unconfigured", "From")
+	case from.Name != sender.DisplayName:
+		return draftRefusal("sender_display_name_mismatch", "From")
 	}
 	return nil
 }

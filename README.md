@@ -242,6 +242,13 @@ saved content; confirmed sends are filed back into the corpus when possible. The
 OAuth grant already requests `https://mail.google.com/`, which includes draft operations, so
 this feature does not require a narrower-scope re-consent.
 
+For a sender refusal, `GET /v1/drafts/{id}/sender-check?accountId=…` runs the same
+metadata/sender checks without saving or sending. Refusals identify fixed categories
+such as `sender_not_default`, `sender_address_mismatch`, or
+`sender_display_name_unconfigured`, never header values. This is only a snapshot,
+not a full MIME compatibility check or assurance that a later save/send will succeed.
+Ordinary draft reads do not fetch sender settings.
+
 An **`html`** field turns the second part off for one reply (absent means it goes, so an
 older client sends the message it always sent). A reader who knows their correspondent or a
 list wants the words alone can say so, and what they get is byte for byte the text part they

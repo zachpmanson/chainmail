@@ -1707,6 +1707,88 @@
         }
       }
     },
+    "/v1/drafts/{id}/sender-check": {
+      "get": {
+        "summary": "Check a saved draft's sender without writing",
+        "description": "Runs the metadata and sender snapshot checks used by draft updates. Returns fixed refusal categories without sender values. Does not save, send, validate body MIME compatibility, or guarantee later settings/state. Requires no mail-write grant; ordinary draft reads do not run this probe.",
+        "operationId": "checkDraftSender",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "accountId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sender snapshot accepted; not a full draft compatibility check.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "accountId",
+                    "id",
+                    "senderCompatible"
+                  ],
+                  "properties": {
+                    "accountId": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "senderCompatible": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Draft no longer exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Account selection or sender/metadata check refused; fixed reason only.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Mailbox unavailable or sender checking unsupported.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/drafts/{id}/send": {
       "parameters": [
         {

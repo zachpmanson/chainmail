@@ -115,6 +115,14 @@ func (s *server) draft(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := parts[0]
+	if len(parts) == 2 && parts[1] == "sender-check" {
+		if r.Method != http.MethodGet {
+			fail(w, http.StatusMethodNotAllowed, errors.New("method must be GET"))
+			return
+		}
+		s.checkDraftSender(w, r, id)
+		return
+	}
 	if len(parts) == 2 && parts[1] == "send" && r.Method == http.MethodPost {
 		if !s.sendMailEnabled {
 			fail(w, http.StatusForbidden, errors.New("sending mail is disabled: restart with -send-mail to send a Gmail draft"))
@@ -272,6 +280,34 @@ func (s *server) saveDraft(w http.ResponseWriter, req draftRequest) {
 		return
 	}
 	send(w, http.StatusOK, s.draftResponse(accountID, d))
+}
+
+// Explicit read-only probe: ordinary draft lists/reads do not gain settings calls.
+func (s *server) checkDraftSender(w http.ResponseWriter, r *http.Request, id string) {
+	accountID, err := s.connectedAccount(r.URL.Query().Get("accountId"))
+	if err != nil {
+		fail(w, http.StatusConflict, err)
+		return
+	}
+	mb, err := s.mailboxForAccount(accountID)
+	if err != nil {
+		fail(w, http.StatusBadGateway, fmt.Errorf("opening the mailbox: %w", err))
+		return
+	}
+	checker, ok := mb.(interface{ CheckDraftSender(string) error })
+	if !ok {
+		fail(w, http.StatusBadGateway, errors.New("mailbox does not support draft sender checks"))
+		return
+	}
+	if err := checker.CheckDraftSender(id); err != nil {
+		status := gmailDraftErrorStatus(err)
+		if errors.Is(err, gmailclient.ErrUnsupportedDraft) {
+			status = http.StatusConflict
+		}
+		fail(w, status, fmt.Errorf("checking Gmail draft sender: %w", err))
+		return
+	}
+	send(w, http.StatusOK, map[string]any{"accountId": accountID, "id": id, "senderCompatible": true})
 }
 
 func gmailDraftErrorStatus(err error) int {

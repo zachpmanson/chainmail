@@ -693,6 +693,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/drafts/{id}/sender-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Check a saved draft's sender without writing
+         * @description Runs the metadata and sender snapshot checks used by draft updates. Returns fixed refusal categories without sender values. Does not save, send, validate body MIME compatibility, or guarantee later settings/state. Requires no mail-write grant; ordinary draft reads do not run this probe.
+         */
+        get: operations["checkDraftSender"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/drafts/{id}/send": {
         parameters: {
             query?: never;
@@ -3615,6 +3635,61 @@ export interface operations {
                 };
             };
             /** @description Gmail could not delete the draft. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    checkDraftSender: {
+        parameters: {
+            query?: {
+                accountId?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sender snapshot accepted; not a full draft compatibility check. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        accountId: string;
+                        id: string;
+                        senderCompatible: boolean;
+                    };
+                };
+            };
+            /** @description Draft no longer exists. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Account selection or sender/metadata check refused; fixed reason only. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Mailbox unavailable or sender checking unsupported. */
             502: {
                 headers: {
                     [name: string]: unknown;
