@@ -735,6 +735,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/hassles/location": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Capability and saved atomic reminder location
+         * @description Requires explicit -hassles grant for upstream access. Only the selected dedicated calendar is used; conditional writes may partially fail and require inventory refresh. No scheduler or local task storage.
+         */
+        get: operations["getHassleLocation"];
+        put?: never;
+        /**
+         * Select a dedicated calendar without moving existing events
+         * @description Requires explicit -hassles grant for upstream access. Only the selected dedicated calendar is used; conditional writes may partially fail and require inventory refresh. No scheduler or local task storage.
+         */
+        post: operations["setHassleLocation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/hassles/calendars": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Discover event calendars for one explicitly connected account
+         * @description Requires explicit -hassles grant for upstream access. Only the selected dedicated calendar is used; conditional writes may partially fail and require inventory refresh. No scheduler or local task storage.
+         */
+        get: operations["hassleCalendars"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/hassles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Raw all-master reminder inventory (no time window)
+         * @description Requires explicit -hassles grant for upstream access. Only the selected dedicated calendar is used; conditional writes may partially fail and require inventory refresh. No scheduler or local task storage.
+         */
+        get: operations["hassleInventory"];
+        put?: never;
+        /**
+         * Create, safely edit, or remove all resources of a task
+         * @description Requires explicit -hassles grant for upstream access. Only the selected dedicated calendar is used; conditional writes may partially fail and require inventory refresh. No scheduler or local task storage.
+         */
+        post: operations["hassleMutation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2062,6 +2130,63 @@ export interface components {
             pending: number;
             embedded: number;
             skipped: number;
+        };
+        HassleLocation: {
+            accountId: string;
+            calendarId: string;
+        };
+        HassleConfig: {
+            enabled: boolean;
+            location: components["schemas"]["HassleLocation"];
+        };
+        HassleCalendar: {
+            id: string;
+            name: string;
+        };
+        HassleCalendars: {
+            calendars: components["schemas"]["HassleCalendar"][];
+        };
+        HassleSchedule: {
+            title: string;
+            /** @description Australia/Melbourne wall time YYYY-MM-DDTHH:mm; DST gaps and overlaps rejected */
+            start: string;
+            /** @enum {string} */
+            timeZone: "Australia/Melbourne";
+            /** @enum {string} */
+            cadence: "once" | "daily" | "weekdays" | "weekly" | "monthly" | "yearly";
+            interval: number;
+            until: string;
+        };
+        HassleTask: {
+            id: string;
+            revision: string;
+            title: string;
+            reminder: string;
+            resources: number;
+            writable: boolean;
+            restriction: string;
+            schedule: components["schemas"]["HassleSchedule"] | null;
+        };
+        HassleInventory: {
+            tasks: components["schemas"]["HassleTask"][];
+        };
+        HassleSelection: {
+            location: components["schemas"]["HassleLocation"];
+            previous: components["schemas"]["HassleLocation"];
+            /** @constant */
+            dedicated: true;
+        };
+        HassleMutation: {
+            location: components["schemas"]["HassleLocation"];
+            /** @enum {string} */
+            action: "create" | "edit" | "done" | "delete";
+            id: string;
+            revision?: string;
+            schedule?: components["schemas"]["HassleSchedule"];
+        };
+        HassleResult: {
+            removed: number;
+            message: string;
         };
     };
     responses: never;
@@ -3631,6 +3756,279 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getHassleLocation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HassleConfig"];
+                };
+            };
+            /** @description Invalid input/selection */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Calendar feature disabled or cross-origin request refused */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Selection, group membership, or ETag conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Calendar permission/connection failure; mutation may be partially applied */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    setHassleLocation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HassleSelection"];
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HassleConfig"];
+                };
+            };
+            /** @description Invalid input/selection */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Calendar feature disabled or cross-origin request refused */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Selection, group membership, or ETag conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Calendar permission/connection failure; mutation may be partially applied */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    hassleCalendars: {
+        parameters: {
+            query: {
+                accountId: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HassleCalendars"];
+                };
+            };
+            /** @description Invalid input/selection */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Calendar feature disabled or cross-origin request refused */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Selection, group membership, or ETag conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Calendar permission/connection failure; mutation may be partially applied */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    hassleInventory: {
+        parameters: {
+            query: {
+                accountId: string;
+                calendarId: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HassleInventory"];
+                };
+            };
+            /** @description Invalid input/selection */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Calendar feature disabled or cross-origin request refused */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Selection, group membership, or ETag conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Calendar permission/connection failure; mutation may be partially applied */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    hassleMutation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HassleMutation"];
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HassleResult"];
+                };
+            };
+            /** @description Invalid input/selection */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Calendar feature disabled or cross-origin request refused */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Selection, group membership, or ETag conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Calendar permission/connection failure; mutation may be partially applied */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
                 };
             };
         };

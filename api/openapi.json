@@ -1881,6 +1881,285 @@
           }
         }
       }
+    },
+    "/v1/hassles/location": {
+      "get": {
+        "operationId": "getHassleLocation",
+        "summary": "Capability and saved atomic reminder location",
+        "description": "Requires explicit -hassles grant for upstream access. Only the selected dedicated calendar is used; conditional writes may partially fail and require inventory refresh. No scheduler or local task storage.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HassleConfig"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input/selection"
+          },
+          "403": {
+            "description": "Calendar feature disabled or cross-origin request refused"
+          },
+          "409": {
+            "description": "Selection, group membership, or ETag conflict"
+          },
+          "502": {
+            "description": "Calendar permission/connection failure; mutation may be partially applied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "setHassleLocation",
+        "summary": "Select a dedicated calendar without moving existing events",
+        "description": "Requires explicit -hassles grant for upstream access. Only the selected dedicated calendar is used; conditional writes may partially fail and require inventory refresh. No scheduler or local task storage.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HassleSelection"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HassleConfig"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input/selection"
+          },
+          "403": {
+            "description": "Calendar feature disabled or cross-origin request refused"
+          },
+          "409": {
+            "description": "Selection, group membership, or ETag conflict"
+          },
+          "502": {
+            "description": "Calendar permission/connection failure; mutation may be partially applied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/hassles/calendars": {
+      "get": {
+        "operationId": "hassleCalendars",
+        "summary": "Discover event calendars for one explicitly connected account",
+        "description": "Requires explicit -hassles grant for upstream access. Only the selected dedicated calendar is used; conditional writes may partially fail and require inventory refresh. No scheduler or local task storage.",
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HassleCalendars"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input/selection"
+          },
+          "403": {
+            "description": "Calendar feature disabled or cross-origin request refused"
+          },
+          "409": {
+            "description": "Selection, group membership, or ETag conflict"
+          },
+          "502": {
+            "description": "Calendar permission/connection failure; mutation may be partially applied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/hassles": {
+      "get": {
+        "operationId": "hassleInventory",
+        "summary": "Raw all-master reminder inventory (no time window)",
+        "description": "Requires explicit -hassles grant for upstream access. Only the selected dedicated calendar is used; conditional writes may partially fail and require inventory refresh. No scheduler or local task storage.",
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "calendarId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HassleInventory"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input/selection"
+          },
+          "403": {
+            "description": "Calendar feature disabled or cross-origin request refused"
+          },
+          "409": {
+            "description": "Selection, group membership, or ETag conflict"
+          },
+          "502": {
+            "description": "Calendar permission/connection failure; mutation may be partially applied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "hassleMutation",
+        "summary": "Create, safely edit, or remove all resources of a task",
+        "description": "Requires explicit -hassles grant for upstream access. Only the selected dedicated calendar is used; conditional writes may partially fail and require inventory refresh. No scheduler or local task storage.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HassleMutation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HassleResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input/selection"
+          },
+          "403": {
+            "description": "Calendar feature disabled or cross-origin request refused"
+          },
+          "409": {
+            "description": "Selection, group membership, or ETag conflict"
+          },
+          "502": {
+            "description": "Calendar permission/connection failure; mutation may be partially applied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4987,6 +5266,246 @@
             "type": "integer"
           }
         }
+      },
+      "HassleLocation": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "calendarId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "accountId",
+          "calendarId"
+        ]
+      },
+      "HassleConfig": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "location": {
+            "$ref": "#/components/schemas/HassleLocation"
+          }
+        },
+        "required": [
+          "enabled",
+          "location"
+        ]
+      },
+      "HassleCalendar": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ]
+      },
+      "HassleCalendars": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "calendars": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HassleCalendar"
+            }
+          }
+        },
+        "required": [
+          "calendars"
+        ]
+      },
+      "HassleSchedule": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "start": {
+            "type": "string",
+            "description": "Australia/Melbourne wall time YYYY-MM-DDTHH:mm; DST gaps and overlaps rejected"
+          },
+          "timeZone": {
+            "type": "string",
+            "enum": [
+              "Australia/Melbourne"
+            ]
+          },
+          "cadence": {
+            "type": "string",
+            "enum": [
+              "once",
+              "daily",
+              "weekdays",
+              "weekly",
+              "monthly",
+              "yearly"
+            ]
+          },
+          "interval": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 999
+          },
+          "until": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "start",
+          "timeZone",
+          "cadence",
+          "interval",
+          "until"
+        ]
+      },
+      "HassleTask": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "reminder": {
+            "type": "string"
+          },
+          "resources": {
+            "type": "integer"
+          },
+          "writable": {
+            "type": "boolean"
+          },
+          "restriction": {
+            "type": "string"
+          },
+          "schedule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HassleSchedule"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "title",
+          "reminder",
+          "resources",
+          "writable",
+          "restriction",
+          "schedule"
+        ]
+      },
+      "HassleInventory": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HassleTask"
+            }
+          }
+        },
+        "required": [
+          "tasks"
+        ]
+      },
+      "HassleSelection": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "location": {
+            "$ref": "#/components/schemas/HassleLocation"
+          },
+          "previous": {
+            "$ref": "#/components/schemas/HassleLocation"
+          },
+          "dedicated": {
+            "type": "boolean",
+            "const": true
+          }
+        },
+        "required": [
+          "location",
+          "previous",
+          "dedicated"
+        ]
+      },
+      "HassleMutation": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "location": {
+            "$ref": "#/components/schemas/HassleLocation"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "create",
+              "edit",
+              "done",
+              "delete"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          },
+          "schedule": {
+            "$ref": "#/components/schemas/HassleSchedule"
+          }
+        },
+        "required": [
+          "location",
+          "action",
+          "id"
+        ]
+      },
+      "HassleResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "removed": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "removed",
+          "message"
+        ]
       }
     }
   }

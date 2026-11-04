@@ -3,6 +3,9 @@ module github.com/zachpmanson/chainmail
 go 1.26.4
 
 require (
+	github.com/emersion/go-ical v0.0.0-20250609112844-439c63cef608
+	github.com/emersion/go-webdav v0.7.0
+	github.com/teambition/rrule-go v1.8.2
 	github.com/gofrs/flock v0.13.0
 	github.com/yuin/goldmark v1.7.13
 	github.com/zachpmanson/docket/gmail v0.0.0-20261028111617-a9102963acb4

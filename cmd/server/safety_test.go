@@ -22,7 +22,7 @@ import (
 )
 
 func TestCrossOriginMutationsAreRejected(t *testing.T) {
-	for _, path := range []string{"/v1/settings", "/v1/people/1", "/v1/ops/merge", "/auth/accounts/legacy/disconnect"} {
+	for _, path := range []string{"/v1/hassles", "/v1/hassles/location", "/v1/settings", "/v1/people/1", "/v1/ops/merge", "/auth/accounts/legacy/disconnect"} {
 		for _, fetchSite := range []string{"cross-site", "same-site", ""} {
 			t.Run(path+"/"+fetchSite, func(t *testing.T) {
 				srv := testServer(t)

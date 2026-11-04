@@ -165,6 +165,8 @@ function RootLayout() {
               <span className="mx-2 text-line">·</span>
               <Link to="/specs">Braids</Link>
               <span className="mx-2 text-line">·</span>
+              <Link to="/hassles">Hassles</Link>
+              <span className="mx-2 text-line">·</span>
               <Link to="/settings">Settings</Link>
               <span className="mx-2 text-line">·</span>
               <Link to="/ops">Ops</Link>
@@ -233,6 +235,12 @@ const settingsRoute = createRoute({
   component: lazyRouteComponent(() => import("./components/settings/SettingsView")),
 });
 
+const hasslesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/hassles",
+  component: lazyRouteComponent(() => import("./components/hassles/HasslesView")),
+});
+
 const specsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/specs",
@@ -255,6 +263,7 @@ const viewRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   searchRoute,
   settingsRoute,
+  hasslesRoute,
   specsRoute,
   opsRoute,
   viewRoute,

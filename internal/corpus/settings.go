@@ -11,6 +11,8 @@ import (
 // The settings the corpus stores. Named here rather than spelled at each call
 // site so a typo is a compile error rather than a silently empty setting.
 const (
+	// SettingHasslesLocation stores only the atomic account/calendar selection, not tasks.
+	SettingHasslesLocation = "hassles_location"
 	// SettingDefaultFolder is the mailbox folder name the home page opens in.
 	// It pairs with SettingDefaultFolderAccountID: an empty name and account id
 	// mean no home folder was chosen, while an account id alone means All mail

@@ -213,6 +213,17 @@ in {
       '';
     };
 
+    enableHassles = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Permit Hassles to read and conditionally write the dedicated Google
+        reminder calendar explicitly selected in Settings. Off by default and
+        independent of all mail grants. Calendar recurrence and notifications
+        remain upstream; enabling this adds no scheduler or local task mirror.
+      '';
+    };
+
     enableDraftMail = lib.mkOption {
       type = lib.types.bool;
       default = false;
@@ -311,6 +322,7 @@ in {
           lib.optionalString cfg.enableMedia " -media" +
           lib.optionalString cfg.enableMarkRead " -mark-read" +
           lib.optionalString cfg.enableMailWrite " -mail-write" +
+          lib.optionalString cfg.enableHassles " -hassles" +
           lib.optionalString cfg.enableDraftMail " -draft-mail" +
           lib.optionalString cfg.enableSendMail " -send-mail";
         User = cfg.user;

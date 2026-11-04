@@ -7,6 +7,7 @@ import Palette from "./Palette";
 import FolderPicker from "../inbox/FolderPicker";
 import SelectInput from "../ui/SelectInput";
 import InlineAlert from "../ui/InlineAlert";
+import SettingsHassles from "./SettingsHassles";
 import SettingsAccounts from "./SettingsAccounts";
 import SettingsCorpus from "./SettingsCorpus";
 import SettingsServices from "./SettingsServices";
@@ -106,6 +107,7 @@ export default function SettingsView() {
       {save.isError ? <InlineAlert compact>{errText(save.error)}</InlineAlert> : null}
 
       <SettingsAccounts />
+      <SettingsHassles />
       <SettingsServices status={status} />
 
       <SettingsSection

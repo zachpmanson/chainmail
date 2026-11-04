@@ -1,0 +1,146 @@
+import { useState } from "react";
+import { defaultSchedule, validateSchedule, type HassleSchedule } from "../../lib/hassles/forms";
+import Button from "../ui/Button";
+import DialogShell from "../ui/DialogShell";
+import FormField from "../ui/FormField";
+import InlineAlert from "../ui/InlineAlert";
+import SelectInput from "../ui/SelectInput";
+import TextInput from "../ui/TextInput";
+
+export default function HassleForm({
+  initial,
+  busy,
+  error,
+  onSave,
+  onClose,
+}: {
+  initial?: HassleSchedule;
+  busy: boolean;
+  error: string;
+  onSave: (schedule: HassleSchedule) => void;
+  onClose: () => void;
+}) {
+  const [schedule, setSchedule] = useState(initial ?? defaultSchedule);
+  const [validation, setValidation] = useState("");
+  const [endMode, setEndMode] = useState(initial?.until ? "date" : "done");
+  const change = (patch: Partial<HassleSchedule>) => setSchedule((s) => ({ ...s, ...patch }));
+  return (
+    <DialogShell
+      label={initial ? "Edit hassle" : "Add hassle"}
+      onClose={onClose}
+      closeDisabled={busy}
+      panelClassName="w-[min(34rem,95vw)] overflow-y-auto p-5"
+    >
+      <h2 className="mt-0 text-lg">{initial ? "Edit hassle" : "Add hassle"}</h2>
+      <form
+        className="flex flex-col gap-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const clean = { ...schedule, title: schedule.title.trim() };
+          const problem =
+            endMode === "date" && clean.cadence !== "once" && !clean.until
+              ? "Choose a repeat end date and time."
+              : validateSchedule(clean);
+          setValidation(problem ?? "");
+          if (!problem) onSave(clean);
+        }}
+      >
+        <FormField label="Title" className="flex flex-col gap-1">
+          <TextInput
+            required
+            value={schedule.title}
+            disabled={busy}
+            onChange={(e) => change({ title: e.target.value })}
+          />
+        </FormField>
+        <FormField label="First reminder · Australia/Melbourne" className="flex flex-col gap-1">
+          <TextInput
+            type="datetime-local"
+            required
+            value={schedule.start}
+            disabled={busy}
+            onChange={(e) => change({ start: e.target.value })}
+          />
+        </FormField>
+        <FormField label="Repeat" className="flex flex-col gap-1">
+          <SelectInput
+            value={schedule.cadence}
+            disabled={busy}
+            onChange={(e) => {
+              setEndMode("done");
+              change({
+                cadence: e.target.value as HassleSchedule["cadence"],
+                interval: 1,
+                until: "",
+              });
+            }}
+          >
+            <option value="once">Once</option>
+            <option value="daily">Daily</option>
+            <option value="weekdays">Weekdays</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+            <option value="yearly">Yearly</option>
+            <option value="hourly" disabled>
+              Hourly — not verified with Google
+            </option>
+          </SelectInput>
+        </FormField>
+        {schedule.cadence !== "once" && (
+          <>
+            {schedule.cadence !== "weekdays" && (
+              <FormField label="Every N units" className="flex flex-col gap-1">
+                <TextInput
+                  type="number"
+                  min={1}
+                  max={999}
+                  required
+                  disabled={busy}
+                  value={schedule.interval}
+                  onChange={(e) => change({ interval: Number(e.target.value) })}
+                />
+              </FormField>
+            )}
+            <FormField label="Repeat until" className="flex flex-col gap-1">
+              <SelectInput
+                value={endMode}
+                disabled={busy}
+                onChange={(e) => {
+                  setEndMode(e.target.value);
+                  if (e.target.value === "done") change({ until: "" });
+                }}
+              >
+                <option value="done">Done</option>
+                <option value="date">Date and time</option>
+              </SelectInput>
+            </FormField>
+            {endMode === "date" ? (
+              <FormField label="Repeat end · Australia/Melbourne" className="flex flex-col gap-1">
+                <TextInput
+                  type="datetime-local"
+                  required
+                  value={schedule.until}
+                  disabled={busy}
+                  onChange={(e) => change({ until: e.target.value })}
+                />
+              </FormField>
+            ) : null}
+          </>
+        )}
+        <p className="m-0 text-xs text-muted">
+          Five-minute, free events with a display alarm. Phone delivery is not live-verified.
+          Monthly/yearly repeats skip nonexistent dates.
+        </p>
+        {validation || error ? <InlineAlert>{validation || error}</InlineAlert> : null}
+        <div className="flex justify-end gap-2">
+          <Button type="button" disabled={busy} onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" disabled={busy}>
+            {busy ? "Saving…" : "Save reminder"}
+          </Button>
+        </div>
+      </form>
+    </DialogShell>
+  );
+}

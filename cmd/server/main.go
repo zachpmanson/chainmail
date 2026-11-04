@@ -74,6 +74,7 @@ func run(args []string) error {
 			"mailbox round trips, this changes what is in the mailbox. A host that does "+
 			"not grant it answers 403. The credential is the mail grant this unit "+
 			"already reads; what changes is that the server may now write.")
+	hasslesEnabled := fs.Bool("hassles", false, "allow Hassles to read and write a selected dedicated Google reminder calendar")
 	mailWrite := fs.Bool("mail-write", false,
 		"permit POST /v1/mail: archive, trash or move the messages of the chains a "+
 			"reader ticked, and store the labels the write comes back with. Off by "+
@@ -158,6 +159,7 @@ func run(args []string) error {
 		runMediaPull: defaultMediaPull(store, *uploads),
 
 		markReadEnabled:       *markRead,
+		hasslesEnabled:        *hasslesEnabled,
 		mailWriteEnabled:      *mailWrite,
 		sendMailEnabled:       *sendMail,
 		draftMailEnabled:      *draftMail,
