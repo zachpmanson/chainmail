@@ -14,6 +14,7 @@ that all its VEVENT resources are tasks. No primary-calendar default, all-calend
 scan, or account fallback is used. Only that atomic location preference is saved
 in corpus settings. Changing selection never moves/deletes existing events.
 Task content, recurrence and notification state remain exclusively in Calendar.
+Configured calendar details and its settings link stay in Settings, not the Hassles header.
 
 ## Behavior and limits
 
@@ -24,6 +25,17 @@ Task content, recurrence and notification state remain exclusively in Calendar.
 - The Add form stays above accessible **Upcoming / Past** tabs; switching tabs or
   editing/removing another task preserves its draft and retry UUID. Only a successful
   create or a selected-location change resets it. Edit and removal still use dialogs.
+  Repeat, Every (with the actual day/week/month/year unit) and Repeat until share one row.
+- First reminder offers In an hour, This afternoon (13:00), This evening (18:00),
+  Tomorrow morning (08:30), and Custom. Only Custom shows the date/time picker.
+  All wall times are Melbourne; passed afternoon/evening times roll to tomorrow.
+  In an hour adds 60 elapsed minutes at selection, rounded down to the minute.
+  Selection fixes the payload for retries; existing schedules open as Custom.
+  The default remains the next 08:30 (Custom if today, Tomorrow morning otherwise).
+  Ambiguous or nonexistent daylight-saving times still require a different choice.
+- The global refresh on Hassles reloads reminder settings, then only the selected
+  calendar inventory. It does not fetch mail or invalidate unrelated mail queries;
+  an unchanged location preserves the Add draft and retry UUID.
 - Upcoming shows groups with future reminders, including recurring series whose first
   reminder was long ago. Past is explicitly the **last 30 days** of ended reminders,
   not completion history. Each group appears once, ordered by earliest next reminder

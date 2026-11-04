@@ -24,6 +24,7 @@ import ToastHost from "./components/ui/ToastHost";
 import NavUndo from "./components/navigation/NavUndo";
 import NavReading from "./components/navigation/NavReading";
 import NavRefresh from "./components/navigation/NavRefresh";
+import NavHasslesRefresh from "./components/navigation/NavHasslesRefresh";
 import AutoRefresh from "./components/navigation/AutoRefresh";
 import NavSearch from "./components/navigation/NavSearch";
 import ComposeProvider from "./components/compose/ComposeProvider";
@@ -174,7 +175,7 @@ function RootLayout() {
               <span className="navright ml-auto flex flex-nowrap items-center justify-end gap-4 pr-52">
                 <DeployStamp />
                 <AutoRefresh />
-                <NavRefresh />
+                {location.pathname === "/hassles" ? <NavHasslesRefresh /> : <NavRefresh />}
                 <NavUndo />
                 <IconButton aria-label="Compose" title="Compose" onClick={openCompose}>
                   <PencilSquareIcon aria-hidden="true" />

@@ -1,5 +1,12 @@
 import { useState } from "react";
-import { defaultSchedule, validateSchedule, type HassleSchedule } from "../../lib/hassles/forms";
+import {
+  defaultSchedule,
+  intervalUnit,
+  reminderStart,
+  validateSchedule,
+  type HassleSchedule,
+  type ReminderStartPreset,
+} from "../../lib/hassles/forms";
 import Button from "../ui/Button";
 import FormField from "../ui/FormField";
 import InlineAlert from "../ui/InlineAlert";
@@ -20,6 +27,9 @@ export default function HassleForm({
   onClose?: () => void;
 }) {
   const [schedule, setSchedule] = useState(initial ?? defaultSchedule);
+  const [startPreset, setStartPreset] = useState<ReminderStartPreset | "custom">(() =>
+    !initial && schedule.start === reminderStart("tomorrow") ? "tomorrow" : "custom",
+  );
   const [validation, setValidation] = useState("");
   const [endMode, setEndMode] = useState(initial?.until ? "date" : "done");
   const change = (patch: Partial<HassleSchedule>) => setSchedule((s) => ({ ...s, ...patch }));
@@ -28,7 +38,7 @@ export default function HassleForm({
       aria-label={initial ? "Edit hassle" : "Add hassle"}
       className="rounded-md border border-line p-4"
     >
-      <h2 className="mt-0 text-lg">{initial ? "Edit hassle" : "Add hassle"}</h2>
+      {initial ? <h2 className="mt-0 text-lg">Edit hassle</h2> : null}
       <form
         className="flex flex-col gap-3"
         onSubmit={(event) => {
@@ -42,52 +52,76 @@ export default function HassleForm({
           if (!problem) onSave(clean);
         }}
       >
-        <FormField label="Title" className="flex flex-col gap-1">
-          <TextInput
-            required
-            value={schedule.title}
-            disabled={busy}
-            onChange={(e) => change({ title: e.target.value })}
-          />
-        </FormField>
+        <TextInput
+          aria-label="Hassle"
+          placeholder="Hassle me about…"
+          required
+          value={schedule.title}
+          disabled={busy}
+          onChange={(e) => change({ title: e.target.value })}
+        />
         <FormField label="First reminder · Australia/Melbourne" className="flex flex-col gap-1">
-          <TextInput
-            type="datetime-local"
-            required
-            value={schedule.start}
-            disabled={busy}
-            onChange={(e) => change({ start: e.target.value })}
-          />
-        </FormField>
-        <FormField label="Repeat" className="flex flex-col gap-1">
           <SelectInput
-            value={schedule.cadence}
+            value={startPreset}
             disabled={busy}
             onChange={(e) => {
-              setEndMode("done");
-              change({
-                cadence: e.target.value as HassleSchedule["cadence"],
-                interval: 1,
-                until: "",
-              });
+              const preset = e.target.value as ReminderStartPreset | "custom";
+              setStartPreset(preset);
+              if (preset !== "custom") change({ start: reminderStart(preset) });
             }}
           >
-            <option value="once">Once</option>
-            <option value="daily">Daily</option>
-            <option value="weekdays">Weekdays</option>
-            <option value="weekly">Weekly</option>
-            <option value="monthly">Monthly</option>
-            <option value="yearly">Yearly</option>
-            <option value="hourly" disabled>
-              Hourly — not verified with Google
-            </option>
+            <option value="hour">In an hour</option>
+            <option value="afternoon">This afternoon</option>
+            <option value="evening">This evening</option>
+            <option value="tomorrow">Tomorrow morning</option>
+            <option value="custom">Custom</option>
           </SelectInput>
         </FormField>
-        {schedule.cadence !== "once" && (
-          <>
-            {schedule.cadence !== "weekdays" && (
-              <FormField label="Every N units" className="flex flex-col gap-1">
+        {startPreset === "custom" ? (
+          <FormField
+            label="First reminder date and time · Australia/Melbourne"
+            className="flex flex-col gap-1"
+          >
+            <TextInput
+              type="datetime-local"
+              required
+              value={schedule.start}
+              disabled={busy}
+              onChange={(e) => change({ start: e.target.value })}
+            />
+          </FormField>
+        ) : null}
+        <div data-hassle-repeat className="flex min-w-0 items-start gap-3">
+          <FormField label="Repeat" className="flex min-w-0 flex-1 flex-col gap-1">
+            <SelectInput
+              className="w-full min-w-0"
+              value={schedule.cadence}
+              disabled={busy}
+              onChange={(e) => {
+                setEndMode("done");
+                change({
+                  cadence: e.target.value as HassleSchedule["cadence"],
+                  interval: 1,
+                  until: "",
+                });
+              }}
+            >
+              <option value="once">Once</option>
+              <option value="daily">Daily</option>
+              <option value="weekdays">Weekdays</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+              <option value="yearly">Yearly</option>
+              <option value="hourly" disabled>
+                Hourly — not verified with Google
+              </option>
+            </SelectInput>
+          </FormField>
+          {schedule.cadence !== "once" && schedule.cadence !== "weekdays" ? (
+            <FormField label="Every" className="flex min-w-0 flex-1 flex-col gap-1">
+              <div className="flex items-center gap-2">
                 <TextInput
+                  className="w-full min-w-0"
                   type="number"
                   min={1}
                   max={999}
@@ -96,10 +130,16 @@ export default function HassleForm({
                   value={schedule.interval}
                   onChange={(e) => change({ interval: Number(e.target.value) })}
                 />
-              </FormField>
-            )}
-            <FormField label="Repeat until" className="flex flex-col gap-1">
+                <span className="shrink-0 text-sm">
+                  {intervalUnit(schedule.cadence, schedule.interval)}
+                </span>
+              </div>
+            </FormField>
+          ) : null}
+          {schedule.cadence !== "once" ? (
+            <FormField label="Repeat until" className="flex min-w-0 flex-1 flex-col gap-1">
               <SelectInput
+                className="w-full min-w-0"
                 value={endMode}
                 disabled={busy}
                 onChange={(e) => {
@@ -111,19 +151,19 @@ export default function HassleForm({
                 <option value="date">Date and time</option>
               </SelectInput>
             </FormField>
-            {endMode === "date" ? (
-              <FormField label="Repeat end · Australia/Melbourne" className="flex flex-col gap-1">
-                <TextInput
-                  type="datetime-local"
-                  required
-                  value={schedule.until}
-                  disabled={busy}
-                  onChange={(e) => change({ until: e.target.value })}
-                />
-              </FormField>
-            ) : null}
-          </>
-        )}
+          ) : null}
+        </div>
+        {schedule.cadence !== "once" && endMode === "date" ? (
+          <FormField label="Repeat end · Australia/Melbourne" className="flex flex-col gap-1">
+            <TextInput
+              type="datetime-local"
+              required
+              value={schedule.until}
+              disabled={busy}
+              onChange={(e) => change({ until: e.target.value })}
+            />
+          </FormField>
+        ) : null}
         <p className="m-0 text-xs text-muted">
           Five-minute, free events with a display alarm. Phone delivery is not live-verified.
           Monthly/yearly repeats skip nonexistent dates.

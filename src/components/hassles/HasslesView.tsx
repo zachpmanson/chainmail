@@ -23,19 +23,10 @@ export default function HasslesView() {
       {config.data && !config.data.enabled ? (
         <p>Hassles is disabled. Calendar access must be enabled by the operator.</p>
       ) : null}
-      {config.data ? (
-        <div className="flex flex-wrap items-center gap-3">
-          {selected ? (
-            <p className="m-0 min-w-0 flex-1 text-xs wrap-break-word text-muted">
-              Reminder calendar: {location.accountId} · {location.calendarId}
-            </p>
-          ) : null}
-          <ButtonLink href="/settings#hassles-heading">
-            {selected
-              ? "Reminder calendar settings"
-              : "Choose a dedicated reminder calendar in Settings"}
-          </ButtonLink>
-        </div>
+      {config.data && !selected ? (
+        <ButtonLink href="/settings#hassles-heading">
+          Choose a dedicated reminder calendar in Settings
+        </ButtonLink>
       ) : null}
       {config.data?.enabled && selected && location ? (
         <HassleInventory

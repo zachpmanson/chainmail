@@ -53,17 +53,6 @@ export default function HassleInventory({
           write.mutate({ body: { location, action: "create", id: createId, schedule } })
         }
       />
-      <div className="flex flex-wrap gap-2">
-        <Button
-          disabled={disabled || write.isPending || inventory.isFetching}
-          onClick={() => {
-            write.reset();
-            void inventory.refetch();
-          }}
-        >
-          Refresh reminders
-        </Button>
-      </div>
       <p className="m-0 text-xs text-muted">
         Done and Delete both remove all reminder resources permanently, with no completed history.
         Notifications and recurrence belong to your calendar, not an app scheduler.

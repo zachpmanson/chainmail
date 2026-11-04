@@ -5,6 +5,17 @@ export type HassleSchedule = components["schemas"]["HassleSchedule"];
 export type HassleTask = components["schemas"]["HassleTask"];
 export const timeZone = "Australia/Melbourne";
 
+export function intervalUnit(cadence: string, interval: number): string {
+  const units: Record<string, string> = {
+    daily: "day",
+    weekly: "week",
+    monthly: "month",
+    yearly: "year",
+  };
+  const unit = units[cadence];
+  return unit ? `${unit}${interval === 1 ? "" : "s"}` : "";
+}
+
 export function locationKey(location: HassleLocation): string {
   return JSON.stringify([location.accountId, location.calendarId]);
 }
@@ -21,6 +32,17 @@ function wall(date: Date): string {
   }).formatToParts(date);
   const p = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
   return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
+}
+
+export type ReminderStartPreset = "hour" | "afternoon" | "evening" | "tomorrow";
+
+export function reminderStart(preset: ReminderStartPreset, now = new Date()): string {
+  if (preset === "hour") return wall(new Date(now.getTime() + 3600000));
+  const local = wall(now);
+  const time = { afternoon: "13:00", evening: "18:00", tomorrow: "08:30" }[preset];
+  const date = new Date(`${local.slice(0, 10)}T12:00:00Z`);
+  if (preset === "tomorrow" || local.slice(11) >= time) date.setUTCDate(date.getUTCDate() + 1);
+  return `${date.toISOString().slice(0, 10)}T${time}`;
 }
 
 export function defaultSchedule(now = new Date()): HassleSchedule {
