@@ -9,6 +9,7 @@ import (
 )
 
 func TestUpgradeFromMigration19PreservesMailboxLabels(t *testing.T) {
+	sqliteSecurityDB(t)
 	path := filepath.Join(t.TempDir(), "corpus.db")
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
@@ -68,9 +69,11 @@ func TestUpgradeFromMigration19PreservesMailboxLabels(t *testing.T) {
 	if column == "" {
 		t.Fatal("migration 20 did not add people.prefer_original_set")
 	}
+	sqliteSecurityIntegrity(t, store.DB())
 }
 
 func TestUpgradeFrom20RepairsPromotionAndDirectSightings(t *testing.T) {
+	sqliteSecurityDB(t)
 	path := filepath.Join(t.TempDir(), "corpus.db")
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
@@ -141,9 +144,11 @@ func TestUpgradeFrom20RepairsPromotionAndDirectSightings(t *testing.T) {
 	if err := s.migrate(); err != nil {
 		t.Fatal(err)
 	}
+	sqliteSecurityIntegrity(t, s.DB())
 }
 
 func TestMigration24SeedsOnlyUninitializedIndex(t *testing.T) {
+	sqliteSecurityDB(t)
 	path := filepath.Join(t.TempDir(), "migration24.db")
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
@@ -185,4 +190,5 @@ Synthetic')`); err != nil {
 	if !first.Rebuilt || first.Bodies != 1 {
 		t.Fatalf("lazy initialization: %+v", first)
 	}
+	sqliteSecurityIntegrity(t, s.DB())
 }
