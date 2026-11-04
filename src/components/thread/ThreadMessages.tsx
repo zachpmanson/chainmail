@@ -1,4 +1,5 @@
 import { useDraftCoordinator } from "../compose/DraftSelectionContext";
+import DraftCards from "../compose/DraftCards";
 import InlineAlert from "../ui/InlineAlert";
 import { Fragment, useEffect, useMemo, type ReactNode } from "react";
 import { $api, type CorpusEntry } from "../../lib/api/api";
@@ -142,9 +143,18 @@ export default function ThreadMessages({
       </ThreadViewProvider>
       {/* Only when the thread holds a message the mailbox can answer. */}
       {selected?.active && !answer ? (
-        <InlineAlert>
-          The selected reply parent is missing or unavailable. No fallback message will be used.
-        </InlineAlert>
+        selected.loading ? (
+          <DraftCards
+            accountId={selected.accountId ?? ""}
+            drafts={[]}
+            loading={false}
+            onSelect={(draft) => coordinator?.select(draft)}
+          />
+        ) : (
+          <InlineAlert>
+            The selected reply parent is missing or unavailable. No fallback message will be used.
+          </InlineAlert>
+        )
       ) : null}
       {answer ? (
         <ReplyBox

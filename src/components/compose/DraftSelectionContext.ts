@@ -16,6 +16,7 @@ export type DraftSelection = {
   accountId?: string;
   id?: string;
   active: boolean;
+  loading: boolean;
   draft?: SavedDraft;
   adopting?: { target?: string; destination: string };
 };
@@ -23,6 +24,7 @@ export type DraftCoordinator = {
   selection: DraftSelection;
   editor: MutableRefObject<(() => LeaveSnapshot) | undefined>;
   select: (draft: SavedDraft) => void;
+  clear: () => void;
   detach: (account: string) => boolean;
   approve: () => boolean;
   retire: (account: string, id: string) => void;
