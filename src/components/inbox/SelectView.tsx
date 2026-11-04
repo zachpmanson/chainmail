@@ -13,7 +13,7 @@ import RankMeta from "./RankMeta";
 import Failure from "../thread/Failure";
 import { type PreviewableThread } from "../thread/ThreadShared";
 import SplitPane from "./SplitPane";
-import CompactListHeader from "./CompactListHeader";
+import ThreadListHeader from "./ThreadListHeader";
 import CompactModeToggle from "./CompactModeToggle";
 import ComposeBox from "../compose/ComposeBox";
 import { useCompose } from "../compose/ComposeContext";
@@ -35,10 +35,6 @@ export default function SelectView() {
   // A mode alone is not a question (see router.tsx).
   const asked: SearchParams | null =
     q || person || since ? { q, mode, person, since, accountId } : null;
-  const { chosen, clearChosen, toggle } = useScopedSelection(
-    JSON.stringify([q, mode, person, since, accountId, urlSearch.label]),
-  );
-  useEscapeToClear(chosen.length > 0, clearChosen);
 
   useEffect(() => {
     document.body.classList.add("search");
@@ -66,6 +62,12 @@ export default function SelectView() {
   );
 
   const chains = results.data?.chains ?? [];
+  const { chosen, clearChosen, toggle, toggleAll, allSelected, mixed, canClear } =
+    useScopedSelection(
+      JSON.stringify([q, mode, person, since, accountId, urlSearch.label]),
+      chains.map((chain) => chain.rootExtId),
+    );
+  useEscapeToClear(canClear, clearChosen);
 
   // The opened thread may not be in these results (e.g. moved out by a write, see
   // dropFromLists); the pane fetches it by id and keeps the last known description.
@@ -94,7 +96,14 @@ export default function SelectView() {
                 <div className="flex items-center gap-2 p-2">
                   <CompactModeToggle compact={compact} onChange={setCompact} />
                 </div>
-                {compact ? <CompactListHeader /> : null}
+                {chains.length > 0 ? (
+                  <ThreadListHeader
+                    compact={compact}
+                    checked={allSelected}
+                    mixed={mixed}
+                    onChange={toggleAll}
+                  />
+                ) : null}
                 <ul className="m-0 list-none divide-y divide-line overflow-hidden rounded-lg border border-line bg-card p-0 min-[60rem]:rounded-none min-[60rem]:border-0 min-[60rem]:bg-transparent">
                   {chains.map((c) => (
                     <Row
@@ -103,7 +112,7 @@ export default function SelectView() {
                       checked={chosen.includes(c.rootExtId)}
                       current={!composing && reading?.rootExtId === c.rootExtId}
                       meta={<RankMeta thread={c} />}
-                      onToggle={() => toggle(c.rootExtId)}
+                      onToggle={(extend, checked) => toggle(c.rootExtId, extend, checked)}
                       onOpen={() => openChain(c.rootExtId)}
                     />
                   ))}

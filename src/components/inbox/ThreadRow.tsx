@@ -35,7 +35,7 @@ export default function ThreadRow({
   aside?: ReactNode;
   /** The body of the row: what the variant says about the thread. */
   children: ReactNode;
-  onToggle: () => void;
+  onToggle: (extend: boolean, checked: boolean) => void;
   onOpen: () => void;
 }) {
   const accountId = useAccountId();
@@ -96,12 +96,17 @@ export default function ThreadRow({
       </button>
       {aside}
       <label
-        className={`absolute right-0 flex size-8 cursor-pointer items-center justify-center ${centerCheckbox ? "top-1/2 -translate-y-1/2" : "top-0"}`}
+        className={`absolute right-0 flex size-8 cursor-pointer items-center justify-center select-none ${centerCheckbox ? "top-1/2 -translate-y-1/2" : "top-0"}`}
         title="include this thread in a page"
       >
         <Checkbox
           checked={checked}
-          onChange={onToggle}
+          onChange={(event) =>
+            onToggle(
+              "shiftKey" in event.nativeEvent && event.nativeEvent.shiftKey === true,
+              event.currentTarget.checked,
+            )
+          }
           aria-label={`Select ${subject}`}
           className="m-0 size-6 cursor-pointer"
         />

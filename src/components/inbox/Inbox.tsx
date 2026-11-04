@@ -16,7 +16,7 @@ import FullThreadRow from "./FullThreadRow";
 import Failure from "../thread/Failure";
 import { type PreviewableThread } from "../thread/ThreadShared";
 import SplitPane from "./SplitPane";
-import CompactListHeader from "./CompactListHeader";
+import ThreadListHeader from "./ThreadListHeader";
 import ComposeBox from "../compose/ComposeBox";
 import { useCompose } from "../compose/ComposeContext";
 import FolderPicker from "./FolderPicker";
@@ -37,10 +37,6 @@ function FolderInbox({ folder }: { folder: ReturnType<typeof useFolder> }) {
   const { composing, closeCompose } = useCompose();
   const compact = usePrefs((s) => s.compact);
   const Row = compact ? CompactThreadRow : FullThreadRow;
-  const { chosen, clearChosen, toggle } = useScopedSelection(
-    JSON.stringify([folder.accountId ?? "", folder.label]),
-  );
-  useEscapeToClear(chosen.length > 0, clearChosen);
 
   useEffect(() => {
     document.body.classList.add("inbox");
@@ -53,6 +49,12 @@ function FolderInbox({ folder }: { folder: ReturnType<typeof useFolder> }) {
   const { label } = folder;
   // Waits for settings so the default folder doesn't swap in after All mail.
   const { list: inbox, rows } = useThreadList(label, folder.accountId, folder.settled);
+  const { chosen, clearChosen, toggle, toggleAll, allSelected, mixed, canClear } =
+    useScopedSelection(
+      JSON.stringify([folder.accountId ?? "", folder.label]),
+      rows.map((row) => row.rootExtId),
+    );
+  useEscapeToClear(canClear, clearChosen);
 
   // Choosing a thread dismisses compose, or the thread would open hidden beneath it.
   const openChain = (root: string) => {
@@ -124,7 +126,14 @@ function FolderInbox({ folder }: { folder: ReturnType<typeof useFolder> }) {
               onPick={folder.pick}
             />
             <ThreadListScroll>
-              {compact && rows.length > 0 ? <CompactListHeader /> : null}
+              {rows.length > 0 ? (
+                <ThreadListHeader
+                  compact={compact}
+                  checked={allSelected}
+                  mixed={mixed}
+                  onChange={toggleAll}
+                />
+              ) : null}
               {rows.length > 0 ? (
                 <ul className="m-0 list-none divide-y divide-line overflow-hidden rounded-lg border border-line bg-card p-0 min-[60rem]:rounded-none min-[60rem]:border-0 min-[60rem]:bg-transparent">
                   {rows.map((c) => (
@@ -135,7 +144,7 @@ function FolderInbox({ folder }: { folder: ReturnType<typeof useFolder> }) {
                       // Not current while composing: the pane isn't showing it, and ThreadRow's press
                       // relies on this to take the pane back.
                       current={!composing && selected?.rootExtId === c.rootExtId}
-                      onToggle={() => toggle(c.rootExtId)}
+                      onToggle={(extend, checked) => toggle(c.rootExtId, extend, checked)}
                       onOpen={() => openChain(c.rootExtId)}
                     />
                   ))}

@@ -18,7 +18,7 @@ export default function FullThreadRow({
   /** Whether this is the thread the pane is reading. */
   current: boolean;
   meta?: ReactNode;
-  onToggle: () => void;
+  onToggle: (extend: boolean, checked: boolean) => void;
   onOpen: () => void;
 }) {
   const last = newest(thread.best ?? []);

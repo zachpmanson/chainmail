@@ -112,9 +112,15 @@ function mailControlOrder(root: ReactTestInstance) {
     )
     .map((node) => node.props["aria-label"]);
 }
-function tick(subject: string) {
+function tick(subject: string, extend = false) {
   act(() => {
-    rendered!.root.findByProps({ "aria-label": `Select ${subject}` }).props.onChange();
+    const input = rendered!.root
+      .findAllByType("input")
+      .find((node) => node.props["aria-label"] === `Select ${subject}`)!;
+    input.props.onChange({
+      nativeEvent: { shiftKey: extend },
+      currentTarget: { checked: !input.props.checked },
+    });
   });
 }
 
@@ -307,7 +313,12 @@ describe("unframed thread checkbox sizing", () => {
       expect(input.props.type).toBe("checkbox");
       expect(input.props.className.split(" ")).toContain("size-6");
       expect(input.props.checked).toBe(false);
-      act(() => input.props.onChange());
+      act(() =>
+        input.props.onChange({
+          nativeEvent: { shiftKey: false },
+          currentTarget: { checked: true },
+        }),
+      );
       expect(rendered!.root.findByType(ActionBar).props.chosen).toEqual(["S"]);
       expect(state.navigate).not.toHaveBeenCalled();
       expect(state.read).not.toHaveBeenCalled();
@@ -322,6 +333,51 @@ describe("unframed thread checkbox sizing", () => {
           );
         expect(dates).toHaveLength(1);
       }
+    },
+  );
+});
+
+describe("shown-thread range and header selection", () => {
+  it.each([
+    [Inbox, false],
+    [Inbox, true],
+    [SelectView, false],
+    [SelectView, true],
+  ] as const)(
+    "selects shown ranges and all rows in %s compact=%s without opening or writing",
+    (view, compact) => {
+      state.compact = compact;
+      state.search =
+        view === SelectView
+          ? { q: "synthetic", accountId: "work" }
+          : { accountId: "work", label: "INBOX" };
+      state.rows = ["A", "B", "C", "D"].map((id) => ({ ...shared, rootExtId: id, subject: id }));
+      render(view as typeof Inbox);
+      const header = () =>
+        rendered!.root
+          .findAllByType("input")
+          .find((node) => node.props["aria-label"] === "Select all shown threads")!;
+      const chosen = () => rendered!.root.findByType(ActionBar).props.chosen;
+      expect(header().props.checked).toBe(false);
+      tick("A");
+      tick("C", true);
+      expect(chosen()).toEqual(["A", "B", "C"]);
+      expect(header().props.checked).toBe(false);
+      act(() => header().props.onChange({ currentTarget: { checked: true } }));
+      expect(chosen()).toEqual(["A", "B", "C", "D"]);
+      expect(header().props.checked).toBe(true);
+      state.rows = [...state.rows, { ...shared, rootExtId: "E", subject: "E" }];
+      refresh(view as typeof Inbox);
+      expect(chosen()).toEqual(["A", "B", "C", "D"]);
+      expect(header().props.checked).toBe(false);
+      act(() => header().props.onChange({ currentTarget: { checked: false } }));
+      expect(chosen()).toEqual([]);
+      tick("E", true);
+      expect(chosen()).toEqual(["E"]);
+      expect(state.navigate).not.toHaveBeenCalled();
+      expect(state.mail).not.toHaveBeenCalled();
+      expect(state.read).not.toHaveBeenCalled();
+      expect(state.draftSave).not.toHaveBeenCalled();
     },
   );
 });

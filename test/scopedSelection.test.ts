@@ -14,7 +14,7 @@ describe("scope-owned selection without remounting", () => {
       return null;
     }
     function Probe({ scope }: { scope: string }) {
-      current = useScopedSelection(scope);
+      current = useScopedSelection(scope, ["S", "T"]);
       return createElement(Observe, { scope, chosen: current.chosen });
     }
     let rendered: ReturnType<typeof create>;
@@ -48,7 +48,7 @@ describe("scope-owned selection without remounting", () => {
   it("ignores callbacks retained from the previous scope", () => {
     let current: ReturnType<typeof useScopedSelection>;
     function Probe({ scope }: { scope: string }) {
-      current = useScopedSelection(scope);
+      current = useScopedSelection(scope, ["S", "T"]);
       return null;
     }
     let rendered: ReturnType<typeof create>;
@@ -65,6 +65,7 @@ describe("scope-owned selection without remounting", () => {
       });
       act(() => {
         previous.toggle("S");
+        previous.toggleAll();
         previous.clearChosen();
       });
       expect(current!.chosen).toEqual(["T"]);
