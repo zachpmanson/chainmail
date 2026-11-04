@@ -1,6 +1,6 @@
 import DraftCards from "./DraftCards";
 import useSelectedDraft from "./useSelectedDraft";
-import { draftIdentity } from "../../lib/ui/draftSelection";
+import { draftDestination, draftIdentity } from "../../lib/ui/draftSelection";
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { $api, type CorpusEntry, type SendResponse } from "../../lib/api/api";
@@ -652,11 +652,15 @@ export default function ReplyBox({
         </InlineAlert>
       ) : null}
       <DraftCards
+        accountId={displayedAccountId}
         drafts={(drafts.data ?? []).filter(
-          (item) => !selected.coordinator?.isRetired(item.accountId, item.id),
+          (item) =>
+            item.kind === "reply" &&
+            item.accountId === displayedAccountId &&
+            draftDestination(item) === thread.rootExtId &&
+            !selected.coordinator?.isRetired(item.accountId, item.id),
         )}
         loading={drafts.isPending}
-        selected={selected.coordinator?.selection.id}
         onSelect={(item) => selected.coordinator?.select(item)}
       />
     </div>

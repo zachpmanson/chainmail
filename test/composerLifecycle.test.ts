@@ -112,15 +112,23 @@ async function mount(reply = true) {
 function selectFixture(draft: SavedDraft = saved, epoch = 1) {
   const retired = new Set<string>();
   selectionFixture.current = {
-    selection: { epoch, active: true, accountId: draft.accountId, id: draft.id, draft },
+    selection: {
+      epoch,
+      active: true,
+      loading: false,
+      accountId: draft.accountId,
+      id: draft.id,
+      draft,
+    },
     editor: { current: undefined },
     approve: () => true,
     select: () => {},
+    clear: () => {},
     detach: () => true,
     isRetired: (account, id) => retired.has(JSON.stringify([account, id])),
     retire: (account, id) => {
       retired.add(JSON.stringify([account, id]));
-      selectionFixture.current!.selection = { epoch: epoch + 1, active: false };
+      selectionFixture.current!.selection = { epoch: epoch + 1, active: false, loading: false };
     },
   };
 }

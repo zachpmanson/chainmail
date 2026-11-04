@@ -1,5 +1,4 @@
 import Checkbox from "../ui/Checkbox";
-import IconFrame from "../ui/IconFrame";
 import { type ReactNode } from "react";
 import { type ChainHit } from "../../lib/api/api";
 import { useReadAction } from "../../lib/inbox/mailActions";
@@ -17,6 +16,7 @@ export default function ThreadRow({
   current,
   className,
   openClassName,
+  centerCheckbox = false,
   aside,
   children,
   onToggle,
@@ -30,6 +30,7 @@ export default function ThreadRow({
   className?: string;
   /** The variant's own classes on the row body, a flex box that lays out its children. */
   openClassName?: string;
+  centerCheckbox?: boolean;
   /** What the variant draws in the row beside the body, outside its hit area. */
   aside?: ReactNode;
   /** The body of the row: what the variant says about the thread. */
@@ -95,17 +96,15 @@ export default function ThreadRow({
       </button>
       {aside}
       <label
-        className="group/icon absolute top-0 right-0 flex cursor-pointer"
+        className={`absolute right-0 flex size-8 cursor-pointer items-center justify-center ${centerCheckbox ? "top-1/2 -translate-y-1/2" : "top-0"}`}
         title="include this thread in a page"
       >
-        <IconFrame>
-          <Checkbox
-            checked={checked}
-            onChange={onToggle}
-            aria-label={`Select ${subject}`}
-            className="m-0 size-6 cursor-pointer"
-          />
-        </IconFrame>
+        <Checkbox
+          checked={checked}
+          onChange={onToggle}
+          aria-label={`Select ${subject}`}
+          className="m-0 size-6 cursor-pointer"
+        />
       </label>
     </li>
   );

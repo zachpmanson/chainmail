@@ -496,11 +496,11 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
         </InlineAlert>
       ) : null}
       <DraftCards
+        accountId={displayedAccountId}
         drafts={(drafts.data ?? []).filter(
           (item) => !selected.coordinator?.isRetired(item.accountId, item.id),
         )}
         loading={drafts.isPending}
-        selected={selected.coordinator?.selection.id}
         onSelect={(item) => selected.coordinator?.select(item)}
       />
     </aside>

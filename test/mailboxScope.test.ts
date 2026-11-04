@@ -281,16 +281,28 @@ describe("thread read toggle", () => {
   });
 });
 
-describe("thread checkbox icon sizing", () => {
+describe("unframed thread checkbox sizing", () => {
   it.each([false, true])(
-    "uses the shared icon frame in compact=%s without opening or marking the thread",
+    "keeps a plain native checkbox in compact=%s without opening or marking the thread",
     (compact) => {
       state.compact = compact;
       render();
       const row = rendered!.root.findByType("li");
       const label = row.findByType("label");
-      expect(label.findAllByType(IconFrame)).toHaveLength(1);
-      expect(label.props.className.split(" ")).toContain("flex");
+      expect(label.findAllByType(IconFrame)).toHaveLength(0);
+      expect(label.findAllByType("span")).toHaveLength(0);
+      const classes = label.props.className.split(" ");
+      expect(classes).toEqual(
+        expect.arrayContaining(["flex", "size-8", "items-center", "justify-center"]),
+      );
+      expect(classes.some((name: string) => /group|bg-|border|rounded/.test(name))).toBe(false);
+      if (compact) {
+        expect(classes).toEqual(expect.arrayContaining(["top-1/2", "-translate-y-1/2"]));
+        expect(classes).not.toContain("top-0");
+      } else {
+        expect(classes).toContain("top-0");
+        expect(classes).not.toContain("-translate-y-1/2");
+      }
       const input = label.findByType("input");
       expect(input.props.type).toBe("checkbox");
       expect(input.props.className.split(" ")).toContain("size-6");

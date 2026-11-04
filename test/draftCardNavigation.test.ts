@@ -46,6 +46,7 @@ const render = domHarness();
 let reads: string[];
 let writes: { method: string; url: string; body: Record<string, unknown> }[];
 let detail: () => Promise<Response>;
+let listed: SavedDraft[];
 const json = (value: unknown) =>
   new Response(JSON.stringify(value), { headers: { "Content-Type": "application/json" } });
 function Root() {
@@ -96,6 +97,10 @@ beforeEach(() => {
   reads = [];
   writes = [];
   detail = async () => json(saved);
+  listed = [
+    saved,
+    { ...saved, id: "unresolved", kind: "unresolved", resolution: "lookup-unavailable" },
+  ];
   vi.spyOn(window, "confirm").mockReturnValue(true);
   vi.stubGlobal("fetch", async (request: Request) => {
     const url = new URL(request.url);
@@ -109,11 +114,7 @@ beforeEach(() => {
     reads.push(url.pathname + url.search);
     if (url.pathname === "/auth/status")
       return json({ accounts: [{ id: "A", signedIn: true, displayName: "Synthetic" }] });
-    if (url.pathname === "/v1/drafts")
-      return json([
-        saved,
-        { ...saved, id: "unresolved", kind: "unresolved", resolution: "lookup-unavailable" },
-      ]);
+    if (url.pathname === "/v1/drafts") return json(listed);
     if (url.pathname === `/v1/drafts/${saved.id}`) return detail();
     if (url.pathname === "/v1/chains/root")
       return json({
@@ -236,21 +237,33 @@ describe("real editor and provider with memory history", () => {
   });
 });
 
-it("a real selected reply targets the older raw parent, opens with no PUT, and shows all account cards below the editor", async () => {
-  detail = async () =>
-    json({
-      ...saved,
-      kind: "reply",
-      resolution: "resolved",
-      rootId: "root",
-      replyToEntry: "older",
-      to: "",
-      cc: "",
-    });
+it("a real selected reply targets the older raw parent and lists only this account's same-thread replies", async () => {
+  const reply: SavedDraft = {
+    ...saved,
+    kind: "reply",
+    resolution: "resolved",
+    rootId: "root",
+    replyToEntry: "older",
+    to: "",
+    cc: "",
+  };
+  listed = [
+    reply,
+    { ...reply, id: "newer-reply", replyToEntry: "newer" },
+    { ...reply, id: "other-thread", rootId: "elsewhere", threadId: "root" },
+    { ...saved, id: "compose" },
+    { ...reply, id: "unresolved", kind: "unresolved" },
+    { ...reply, accountId: "B" },
+    { ...reply, id: "missing-parent", replyToEntry: undefined },
+    { ...reply, id: "lookup-failed", resolution: "lookup-unavailable" },
+  ];
+  detail = async () => json(reply);
   const { host } = await mount("/?accountId=A&draft=" + saved.id + "&open=root");
   expect(host.querySelector("textarea")!.value).toBe("Saved words");
   await settle(750);
-  expect(host.querySelectorAll("[data-draft]")).toHaveLength(2);
+  expect(
+    [...host.querySelectorAll("[data-draft]")].map((card) => card.getAttribute("data-draft")),
+  ).toEqual([saved.id, "newer-reply"]);
   expect(writes).toEqual([]);
   await words(host, "A real reply edit");
   await settle(750);
@@ -286,4 +299,99 @@ it("refuses a switch while a noncancelable save is outstanding", async () => {
   expect(window.confirm).not.toHaveBeenCalled();
   await act(async () => finish(json({ ...saved, messageId: "revision-2" })));
   await settle();
+});
+
+it.each([false, true])(
+  "keeps selected-detail loading in its card when listed=%s",
+  async (present) => {
+    if (!present) listed = [];
+    let finish!: (response: Response) => void;
+    detail = () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      });
+    const { host } = await mount(`/?accountId=A&draft=${saved.id}&open=compose`);
+    const card = host.querySelector(`[data-draft="${saved.id}"]`)!;
+    expect(card).not.toBeNull();
+    expect(card.querySelector('[role="status"]')?.textContent).toContain("Loading selected draft");
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+    expect(host.querySelector("textarea")!.value).toBe("");
+    await act(async () => finish(json(saved)));
+    await settle(750);
+    expect(host.textContent).not.toContain("Loading selected draft");
+    expect(host.querySelector("textarea")!.value).toBe("Saved words");
+    expect(writes).toEqual([]);
+  },
+);
+
+it("can clear a pending selection from its card without admitting the late result", async () => {
+  let finish!: (response: Response) => void;
+  detail = () =>
+    new Promise((resolve) => {
+      finish = resolve;
+    });
+  const { host, router } = await mount(`/?accountId=A&draft=${saved.id}&open=compose`);
+  const card = host.querySelector(`[data-draft="${saved.id}"]`)!;
+  const clear = [...card.querySelectorAll("button")].find(
+    (button) => button.textContent === "Clear draft selection",
+  )!;
+  expect(clear).toBeTruthy();
+  await pick(clear);
+  expect(router.state.location.search.draft).toBeUndefined();
+  expect(host.textContent).not.toContain("Loading selected draft");
+  await act(async () => finish(json(saved)));
+  await settle(750);
+  expect(host.querySelector("textarea")!.value).toBe("");
+  expect(writes).toEqual([]);
+});
+
+it("keeps actionable detail failures global even without an editor", async () => {
+  detail = async () => json({ ...saved, accountId: "wrong" });
+  const { host } = await mount(`/?accountId=A&draft=${saved.id}`);
+  expect(host.querySelector("textarea")).toBeNull();
+  const alert = host.querySelector('[role="alert"]')!;
+  expect(alert.textContent).toContain("different account or ID");
+  expect(alert.textContent).not.toContain("Loading selected draft");
+  expect(
+    [...alert.querySelectorAll("button")].some(
+      (button) => button.textContent === "Clear draft selection",
+    ),
+  ).toBe(true);
+  expect(writes).toEqual([]);
+});
+
+it("keeps ordinary reply-card loading local without inventing a fallback parent", async () => {
+  const reply: SavedDraft = {
+    ...saved,
+    kind: "reply",
+    resolution: "resolved",
+    rootId: "root",
+    replyToEntry: "older",
+    to: "",
+    cc: "",
+  };
+  listed = [reply];
+  let finish!: (response: Response) => void;
+  detail = () =>
+    new Promise((resolve) => {
+      finish = resolve;
+    });
+  const { host } = await mount("/?accountId=A&open=root");
+  expect(host.querySelector("textarea")!.value).toBe("");
+  await pick(host.querySelector(`[data-draft="${saved.id}"] button`)!);
+  const card = host.querySelector(`[data-draft="${saved.id}"]`)!;
+  expect(card.querySelector('[role="status"]')?.textContent).toContain("Loading selected draft");
+  expect(host.querySelector('[role="alert"]')).toBeNull();
+  expect(host.textContent).not.toContain("parent is missing");
+  expect(host.querySelector("textarea")).toBeNull();
+  expect(writes).toEqual([]);
+  await act(async () => finish(json(reply)));
+  await settle(750);
+  expect(host.querySelector("textarea")!.value).toBe("Saved words");
+  expect(host.textContent).not.toContain("Loading selected draft");
+  expect(writes).toEqual([]);
+  await words(host, "Older parent edit");
+  await settle(750);
+  expect(writes).toHaveLength(1);
+  expect(writes[0]!.body.replyToEntry).toBe("older");
 });

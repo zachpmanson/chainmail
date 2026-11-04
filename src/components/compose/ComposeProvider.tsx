@@ -242,19 +242,6 @@ export default function ComposeProvider({
     canonicalNavigation.current = { epoch, destination };
     void navigate({ to: "/", search: (prev) => ({ ...prev, open: destination }), replace: true });
   }, [active, unavailable, destination, search.open, epoch, canonicalAttempt, navigate]);
-  const selection: DraftSelection = {
-    epoch,
-    active,
-    accountId: account,
-    id,
-    adopting:
-      adoption.current?.identity === identity &&
-      adoption.current.epoch === epoch &&
-      adoption.current.editor === editor.current
-        ? adoption.current
-        : undefined,
-    draft: !unavailable && connected && destination === search.open ? resolved?.draft : undefined,
-  };
   const clear = () =>
     void navigate({ to: "/", search: (prev) => ({ ...prev, draft: undefined }), replace: true });
   const error = active
@@ -268,11 +255,26 @@ export default function ComposeProvider({
             ? "This draft's account is disconnected or missing."
             : resolved?.error
     : undefined;
+  const selection: DraftSelection = {
+    epoch,
+    active,
+    loading: Boolean(active && !error && !destination),
+    accountId: account,
+    id,
+    adopting:
+      adoption.current?.identity === identity &&
+      adoption.current.epoch === epoch &&
+      adoption.current.editor === editor.current
+        ? adoption.current
+        : undefined,
+    draft: !unavailable && connected && destination === search.open ? resolved?.draft : undefined,
+  };
   return (
     <ComposeContext.Provider value={{ composing, closeCompose }}>
       <DraftSelectionContext.Provider
         value={{
           selection,
+          clear,
           editor,
           approve,
           isRetired,
@@ -358,12 +360,9 @@ export default function ComposeProvider({
           />
         ) : null}
         {notice ? <InlineAlert>{notice}</InlineAlert> : null}
-        {active && !selection.draft ? (
+        {active && !selection.draft && (error || destination) ? (
           <InlineAlert>
-            {error ||
-              (destination
-                ? "The draft's destination requires approval."
-                : "Loading selected draft…")}{" "}
+            {error || "The draft's destination requires approval."}{" "}
             {destination && !error ? (
               <Button
                 type="button"

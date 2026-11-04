@@ -45,6 +45,7 @@ export default function CompactThreadRow({
       checked={checked}
       current={current}
       openClassName="items-baseline gap-3 pr-9"
+      centerCheckbox
       aside={
         <IconButton
           // opacity, not `invisible`, so it stays reachable by keyboard.
