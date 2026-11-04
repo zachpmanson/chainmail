@@ -24,9 +24,7 @@ export default function HassleInventory({
   );
   const [createId, setCreateId] = useState(() => crypto.randomUUID());
   const [editor, setEditor] = useState<Editor | null>(null);
-  const [removing, setRemoving] = useState<{ task: HassleTask; action: "done" | "delete" } | null>(
-    null,
-  );
+  const [removing, setRemoving] = useState<HassleTask | null>(null);
   const [notice, setNotice] = useState("");
   const write = $api.useMutation("post", "/v1/hassles", {
     retry: false,
@@ -53,10 +51,6 @@ export default function HassleInventory({
           write.mutate({ body: { location, action: "create", id: createId, schedule } })
         }
       />
-      <p className="m-0 text-xs text-muted">
-        Done and Delete both remove all reminder resources permanently, with no completed history.
-        Notifications and recurrence belong to your calendar, not an app scheduler.
-      </p>
       {inventory.isError ? <InlineAlert>{errText(inventory.error)}</InlineAlert> : null}
       {write.isError && !editor && write.variables?.body.action !== "create" ? (
         <InlineAlert>{errText(write.error)}</InlineAlert>
@@ -71,9 +65,9 @@ export default function HassleInventory({
           write.reset();
           setEditor({ id: task.id, task });
         }}
-        onRemove={(task, action) => {
+        onDone={(task) => {
           write.reset();
-          setRemoving({ task, action });
+          setRemoving(task);
         }}
       />
       {editor ? (
@@ -104,17 +98,14 @@ export default function HassleInventory({
       ) : null}
       {removing ? (
         <DialogShell
-          label="Remove hassle"
+          label="Finish hassle"
           onClose={() => setRemoving(null)}
           closeDisabled={write.isPending}
           panelClassName="max-w-full p-5"
         >
-          <h2 className="mt-0 text-lg">
-            {removing.action === "done" ? "Done with" : "Delete"} {removing.task.title}?
-          </h2>
+          <h2 className="mt-0 text-lg">Done with {removing.title}?</h2>
           <p>
-            Permanently remove all {removing.task.resources} calendar resources. This cannot be
-            undone.
+            Permanently remove all reminders for this hassle from Calendar. This cannot be undone.
           </p>
           <div className="flex justify-end gap-2">
             <Button disabled={write.isPending} onClick={() => setRemoving(null)}>
@@ -124,9 +115,11 @@ export default function HassleInventory({
               variant="danger"
               disabled={busy}
               onClick={() => {
-                const { task, action } = removing;
+                const task = removing;
                 setRemoving(null);
-                write.mutate({ body: { location, action, id: task.id, revision: task.revision } });
+                write.mutate({
+                  body: { location, action: "done", id: task.id, revision: task.revision },
+                });
               }}
             >
               Remove all reminders

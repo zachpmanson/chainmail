@@ -23,10 +23,16 @@ Configured calendar details and its settings link stay in Settings, not the Hass
   exhausted series and distant reminders. No occurrence duplication or background
   scheduler. Canceled events are hidden, retained as members of an otherwise-active
   logical task where appropriate.
-- The Add form stays above accessible **Upcoming / Past** tabs; switching tabs or
+- The Add form stays above accessible **Upcoming / Ended** tabs; switching tabs or
   editing/removing another task preserves its draft and retry UUID. Only a successful
-  create or a selected-location change resets it. Edit and removal still use dialogs.
-  Repeat, Every (with the actual day/week/month/year unit) and Repeat until share one row.
+  create or a selected-location change resets it. Click a task title to edit its whole
+  recurring series; separate tasks with the same title are not linked. The tick icon
+  is Done (accessible name and tooltip); the redundant Delete action is not shown.
+  Edit and removal still use dialogs; Done retains a permanent-removal warning.
+  Repeat, Every (with the actual day/week/month/year unit) and Until share one row.
+  The form names Melbourne once under When. Routine explanatory small print is omitted;
+  validation errors, timing uncertainty and edit restrictions remain visible.
+  Rows show a compact Melbourne date/time plus recurrence and repeat end when editable.
 - First reminder offers In an hour, This afternoon (13:00), This evening (18:00),
   Tomorrow morning (08:30), and Custom. Only Custom shows the date/time picker.
   All wall times are Melbourne; passed afternoon/evening times roll to tomorrow.
@@ -38,9 +44,9 @@ Configured calendar details and its settings link stay in Settings, not the Hass
   calendar inventory. It does not fetch mail or invalidate unrelated mail queries;
   an unchanged location preserves the Add draft and retry UUID.
 - Upcoming shows groups with future reminders, including recurring series whose first
-  reminder was long ago. Past is explicitly the **last 30 days** of ended reminders,
+  reminder was long ago. Ended shows the **last 30 days** of ended reminders,
   not completion history. Each group appears once, ordered by earliest next reminder
-  (Upcoming) or most recent last reminder (Past), under Melbourne-date day headers.
+  (Upcoming) or most recent last reminder (Ended), under Melbourne-date day headers.
   Unsupported/incomplete schedules stay visible in Upcoming, undated when no next
   occurrence is known; they are never inferred to be ended from their original start.
 - One `[hassle:v1 task=<UUID>]` description marker groups resources within the selected
@@ -58,7 +64,7 @@ Configured calendar details and its settings link stay in Settings, not the Hass
 - Once, daily, weekdays, weekly, monthly and yearly are supported. Weekdays means
   Monday–Friday every week (interval 1); the first reminder must be a weekday. Monthly/yearly skip nonexistent dates.
   An optional inclusive repeat-end timestamp must be after the first reminder;
-  the Repeat until dropdown chooses Done/no end or Date and time. **Hourly is visibly unavailable and rejected.**
+  the Until dropdown chooses Done/no end or Date and time. **Hourly is visibly unavailable and rejected.**
 - Schedule editing is deliberately limited to one simple five-minute event/series
   in Australia/Melbourne with minute precision and a representable RRULE. Imported
   exceptions, RDATE/EXDATE/COUNT or other complex rules, all-day/floating/other-zone
@@ -80,7 +86,8 @@ Configured calendar details and its settings link stay in Settings, not the Hass
   a known occurrence is not mistaken for a complete schedule.
   Resource inventory is bounded to 2,000 resources, 1 MiB
   parsed resource data and 16 MiB responses; requests have bounded timeouts.
-- Done and Delete remove **all** members permanently; there is no completion history.
+- Done removes **all** members permanently; there is no completion history.
+  The API retains its equivalent `delete` action for compatibility, but the UI offers only Done.
   Group revisions and server-side rereads detect stale membership/data; PUT/DELETE
   use each real returned href and ETag. Multi-resource deletion is not atomic: a
   failure states the number removed, refreshes inventory, and never recreates
@@ -106,7 +113,8 @@ nix develop --command bash -c 'npm run build && npx --no-install tsx scripts/has
 Open <http://127.0.0.1:8877/hassles>. Follow its Settings link. In the Hassles
 settings section select Offline account → Offline reminders → acknowledge dedicated
 overlay → Use calendar, then return to Hassles using navigation. Add a title/date, repeat interval
-and end; save; inspect chronological day groups; switch Upcoming/Past; edit; Done and confirm. Add another and Delete.
+and end; save; inspect chronological day groups; switch Upcoming/Ended; click a title to edit;
+use the Done tick and confirm. There is no separate Delete button.
 Check Hourly is disabled. Tab/Shift-Tab through controls; verify dialog initial
 focus, Escape to cancel, focus return and trapped tab order. Repeat at 375px and
 wide desktop widths: controls should wrap, labels stay visible and dialogs scroll.

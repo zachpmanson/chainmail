@@ -68,7 +68,9 @@ async function settle() {
   });
 }
 function button(text: string) {
-  const el = [...document.querySelectorAll("button")].find((el) => el.textContent === text);
+  const el = [...document.querySelectorAll("button")].find(
+    (el) => el.textContent === text || el.getAttribute("aria-label")?.startsWith(`${text} `),
+  );
   if (!el) throw new Error(`Missing button ${text}: ${document.body.textContent}`);
   return el;
 }
@@ -132,13 +134,13 @@ function repeat(scope: ParentNode = addForm()) {
   return field("Repeat", scope).querySelector("select")!;
 }
 function repeatUntil(scope: ParentNode = addForm()) {
-  return field("Repeat until", scope).querySelector("select")!;
+  return field("Until", scope).querySelector("select")!;
 }
 function firstReminder(scope: ParentNode = addForm()) {
-  return field("First reminder · Australia/Melbourne", scope).querySelector("select")!;
+  return field("When · Melbourne", scope).querySelector("select")!;
 }
 function customStart(scope: ParentNode = addForm()) {
-  return field("First reminder date and time · Australia/Melbourne", scope).querySelector("input")!;
+  return field("Date and time", scope).querySelector("input")!;
 }
 function titleInput(scope: ParentNode = addForm()) {
   return scope.querySelector<HTMLInputElement>('input[aria-label="Hassle"]')!;
@@ -153,7 +155,7 @@ async function add(title: string) {
   await type(customStart(), "2027-01-01T08:30");
   await click(button("Add hassle"));
 }
-it("keeps Add hassle inline above the list through create, edit, Done and Delete", async () => {
+it("keeps Add hassle inline through create, title editing and tick-icon Done without Delete", async () => {
   expect(document.body.textContent).toContain("dedicated reminder calendar");
   await choose();
   expect(document.body.textContent).toContain("No hassles");
@@ -166,6 +168,17 @@ it("keeps Add hassle inline above the list through create, edit, Done and Delete
   await add("Offline bill");
   expect(document.body.textContent).toContain("Offline bill");
   expect(titleInput().value).toBe("");
+  expect(document.querySelector('h3 button[aria-label="Edit Offline bill"]')).not.toBeNull();
+  expect(button("Done").getAttribute("aria-label")).toBe("Done with Offline bill");
+  expect(button("Done").title).toBe("Done");
+  expect(button("Done").querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+  expect(button("Done").textContent).toBe("");
+  expect([...document.querySelectorAll("button")].some((el) => el.textContent === "Delete")).toBe(
+    false,
+  );
+  expect([...document.querySelectorAll("button")].some((el) => el.textContent === "Edit")).toBe(
+    false,
+  );
   await type(titleInput(), "Unsaved next hassle");
   await click(button("Edit"));
   expect(document.activeElement).toBe(document.querySelector('[role="dialog"] input'));
@@ -183,10 +196,9 @@ it("keeps Add hassle inline above the list through create, edit, Done and Delete
   expect(document.body.textContent).toContain("Edited bill");
   expect(titleInput().value).toBe("Unsaved next hassle");
   await click(button("Done"));
-  await click(button("Remove all reminders"));
-  expect(document.body.textContent).toContain("No hassles");
-  await add("Delete me");
-  await click(button("Delete"));
+  expect(document.querySelector('[role="dialog"]')!.textContent).toContain(
+    "Permanently remove all reminders for this hassle from Calendar. This cannot be undone.",
+  );
   await click(button("Remove all reminders"));
   expect(document.body.textContent).toContain("No hassles");
   const writes = fixture.requests.filter(
@@ -196,8 +208,6 @@ it("keeps Add hassle inline above the list through create, edit, Done and Delete
     "create",
     "edit",
     "done",
-    "create",
-    "delete",
   ]);
   expect(
     writes.every(
@@ -206,6 +216,17 @@ it("keeps Add hassle inline above the list through create, edit, Done and Delete
         JSON.stringify(fixtureLocation),
     ),
   ).toBe(true);
+});
+it("constrains a long unbroken clickable title to the row width", async () => {
+  await choose();
+  const title = "A".repeat(100);
+  await add(title);
+  const edit = document.querySelector<HTMLButtonElement>("h3 button")!;
+  expect(edit.textContent).toBe(title);
+  expect(edit.classList.contains("max-w-full")).toBe(true);
+  expect(edit.classList.contains("wrap-break-word")).toBe(true);
+  await click(edit);
+  expect(titleInput(document.querySelector('[role="dialog"]')!).value).toBe(title);
 });
 it("keeps an uncertain create UUID for explicit retry and displays permission errors", async () => {
   await choose();
@@ -282,17 +303,12 @@ it("offers Repeat until Done / Date and time and clears the timestamp when Done 
   await select(repeat(dialog), "daily");
   expect(dialog.querySelectorAll('input[type="datetime-local"]')).toHaveLength(1);
   await select(repeatUntil(dialog), "date");
-  await type(
-    field("Repeat end · Australia/Melbourne", dialog).querySelector("input")!,
-    "2027-02-01T08:30",
-  );
+  await type(field("End date and time", dialog).querySelector("input")!, "2027-02-01T08:30");
   await click(button("Add hassle"));
   await click(button("Edit"));
   dialog = document.querySelector('[role="dialog"]')!;
   expect(repeatUntil(dialog).value).toBe("date");
-  expect(field("Repeat end · Australia/Melbourne", dialog).querySelector("input")!.value).toBe(
-    "2027-02-01T08:30",
-  );
+  expect(field("End date and time", dialog).querySelector("input")!.value).toBe("2027-02-01T08:30");
   await select(repeatUntil(dialog), "done");
   expect(dialog.querySelectorAll('input[type="datetime-local"]')).toHaveLength(1);
   await click(button("Save reminder"));
@@ -310,12 +326,12 @@ it("defaults to daily until Done and keeps the create draft/UUID through accessi
   const first = fixture.requests
     .filter((r) => r.method === "POST" && r.path.endsWith("/v1/hassles"))
     .at(-1)!.body as { id: string };
-  await click(button("Past"));
-  expect(button("Past").getAttribute("aria-selected")).toBe("true");
+  await click(button("Ended"));
+  expect(button("Ended").getAttribute("aria-selected")).toBe("true");
   expect(document.querySelector('[role="tabpanel"]')!.getAttribute("aria-labelledby")).toBe(
-    button("Past").id,
+    button("Ended").id,
   );
-  expect(document.body.textContent).toContain("Last 30 days");
+  expect(document.body.textContent).toContain("No ended reminders in the last 30 days.");
   expect(titleInput().value).toBe("Keep across tabs");
   await click(button("Upcoming"));
   fixture.handle("/__hassles_fixture", "POST", { mode: "normal" });
@@ -379,7 +395,11 @@ it("separates ended reminders from ongoing/unknown schedules and shares Melbourn
     "Date unavailable · view in calendar",
   ]);
   expect(panel.textContent).not.toContain("Ended once");
-  await click(button("Past"));
+  expect(panel.textContent).toContain("Unsupported schedule");
+  expect(panel.textContent).toContain("Imported timezone definition: schedule editing unavailable");
+  expect(button("Edit").disabled).toBe(true);
+  expect(button("Done").disabled).toBe(true);
+  await click(button("Ended"));
   expect(
     [...document.querySelectorAll('[role="tabpanel"] h3')].map((el) => el.textContent),
   ).toEqual(["Ended once"]);
@@ -393,7 +413,7 @@ it("keeps recurrence controls in one row and names the actual interval unit", as
   expect([...row.children].map((field) => field.querySelector("span")?.textContent)).toEqual([
     "Repeat",
     "Every",
-    "Repeat until",
+    "Until",
   ]);
   for (const [cadence, singular, plural] of [
     ["daily", "day", "days"],
@@ -436,6 +456,13 @@ it("uses placeholder-only title and presets, revealing the picker only for Custo
   );
   expect(titleInput().getAttribute("aria-label")).toBe("Hassle");
   expect(titleInput().placeholder).toBe("Hassle me about…");
+  expect(document.body.textContent).not.toContain("Five-minute, free events");
+  expect(document.body.textContent).not.toContain("Phone delivery is not live-verified");
+  expect(document.body.textContent).not.toContain("Monthly/yearly repeats skip");
+  expect(document.body.textContent).not.toContain("Done and Delete both");
+  expect(document.body.textContent).not.toContain("Notifications and recurrence belong");
+  expect(document.body.textContent).not.toContain("Next scheduled reminders");
+  expect(addForm().textContent?.match(/Melbourne/g)).toHaveLength(1);
   expect([...firstReminder().options].map((option) => option.textContent)).toEqual([
     "In an hour",
     "This afternoon",

@@ -1,19 +1,22 @@
 import { Tabs } from "@base-ui/react/tabs";
+import { CheckIcon } from "@heroicons/react/24/outline";
 import type { HassleTask } from "../../lib/hassles/forms";
 import { hassleGroups, type HassleTab } from "../../lib/hassles/groups";
+import { hassleSummary } from "../../lib/hassles/summary";
 import Button from "../ui/Button";
+import IconButton from "../ui/IconButton";
 import { buttonClasses } from "../ui/styles";
 
 export default function HassleList({
   tasks,
   busy,
   onEdit,
-  onRemove,
+  onDone,
 }: {
   tasks: HassleTask[];
   busy: boolean;
   onEdit: (task: HassleTask) => void;
-  onRemove: (task: HassleTask, action: "done" | "delete") => void;
+  onDone: (task: HassleTask) => void;
 }) {
   return (
     <Tabs.Root defaultValue="upcoming">
@@ -28,7 +31,7 @@ export default function HassleList({
               "aria-selected:border-accent aria-selected:text-accent",
             )}
           >
-            {tab === "upcoming" ? "Upcoming" : "Past"}
+            {tab === "upcoming" ? "Upcoming" : "Ended"}
           </Tabs.Tab>
         ))}
       </Tabs.List>
@@ -36,11 +39,6 @@ export default function HassleList({
         const groups = hassleGroups(tasks, tab);
         return (
           <Tabs.Panel key={tab} value={tab}>
-            <p className="text-xs text-muted">
-              {tab === "past"
-                ? "Last 30 days · ended reminders only · Australia/Melbourne dates"
-                : "Next scheduled reminders · Australia/Melbourne dates. Unknown schedules stay here until verified in Calendar."}
-            </p>
             {groups.length === 0 ? (
               <p>
                 {tab === "past"
@@ -58,8 +56,18 @@ export default function HassleList({
                       className="flex flex-wrap items-center gap-3 rounded-md border border-line p-4"
                     >
                       <div className="min-w-0 flex-1 wrap-break-word">
-                        <h3 className="m-0 text-base">{task.title}</h3>
-                        <p className="my-1 text-sm text-muted">{task.reminder}</p>
+                        <h3 className="m-0 text-base">
+                          <Button
+                            variant="bare"
+                            className="max-w-full text-left wrap-break-word enabled:hover:underline"
+                            aria-label={`Edit ${task.title}`}
+                            disabled={busy || !task.writable || !task.schedule}
+                            onClick={() => onEdit(task)}
+                          >
+                            {task.title}
+                          </Button>
+                        </h3>
+                        <p className="my-1 text-sm text-muted">{hassleSummary(task)}</p>
                         {task.timing.note ? (
                           <p className="my-1 text-xs text-muted">{task.timing.note}</p>
                         ) : null}
@@ -67,27 +75,14 @@ export default function HassleList({
                           <p className="my-1 text-xs text-muted">{task.restriction}</p>
                         ) : null}
                       </div>
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          disabled={busy || !task.writable || !task.schedule}
-                          onClick={() => onEdit(task)}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          disabled={busy || !task.writable}
-                          onClick={() => onRemove(task, "done")}
-                        >
-                          Done
-                        </Button>
-                        <Button
-                          variant="danger"
-                          disabled={busy || !task.writable}
-                          onClick={() => onRemove(task, "delete")}
-                        >
-                          Delete
-                        </Button>
-                      </div>
+                      <IconButton
+                        aria-label={`Done with ${task.title}`}
+                        title="Done"
+                        disabled={busy || !task.writable}
+                        onClick={() => onDone(task)}
+                      >
+                        <CheckIcon aria-hidden="true" />
+                      </IconButton>
                     </li>
                   ))}
                 </ul>

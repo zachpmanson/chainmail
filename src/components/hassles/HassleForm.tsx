@@ -60,7 +60,7 @@ export default function HassleForm({
           disabled={busy}
           onChange={(e) => change({ title: e.target.value })}
         />
-        <FormField label="First reminder · Australia/Melbourne" className="flex flex-col gap-1">
+        <FormField label="When · Melbourne" className="flex flex-col gap-1">
           <SelectInput
             value={startPreset}
             disabled={busy}
@@ -78,10 +78,7 @@ export default function HassleForm({
           </SelectInput>
         </FormField>
         {startPreset === "custom" ? (
-          <FormField
-            label="First reminder date and time · Australia/Melbourne"
-            className="flex flex-col gap-1"
-          >
+          <FormField label="Date and time" className="flex flex-col gap-1">
             <TextInput
               type="datetime-local"
               required
@@ -113,7 +110,7 @@ export default function HassleForm({
               <option value="monthly">Monthly</option>
               <option value="yearly">Yearly</option>
               <option value="hourly" disabled>
-                Hourly — not verified with Google
+                Hourly (unavailable)
               </option>
             </SelectInput>
           </FormField>
@@ -137,7 +134,7 @@ export default function HassleForm({
             </FormField>
           ) : null}
           {schedule.cadence !== "once" ? (
-            <FormField label="Repeat until" className="flex min-w-0 flex-1 flex-col gap-1">
+            <FormField label="Until" className="flex min-w-0 flex-1 flex-col gap-1">
               <SelectInput
                 className="w-full min-w-0"
                 value={endMode}
@@ -154,7 +151,7 @@ export default function HassleForm({
           ) : null}
         </div>
         {schedule.cadence !== "once" && endMode === "date" ? (
-          <FormField label="Repeat end · Australia/Melbourne" className="flex flex-col gap-1">
+          <FormField label="End date and time" className="flex flex-col gap-1">
             <TextInput
               type="datetime-local"
               required
@@ -164,10 +161,6 @@ export default function HassleForm({
             />
           </FormField>
         ) : null}
-        <p className="m-0 text-xs text-muted">
-          Five-minute, free events with a display alarm. Phone delivery is not live-verified.
-          Monthly/yearly repeats skip nonexistent dates.
-        </p>
         {validation || error ? <InlineAlert>{validation || error}</InlineAlert> : null}
         <div className="flex justify-end gap-2">
           {onClose ? (
