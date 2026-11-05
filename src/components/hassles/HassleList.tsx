@@ -4,6 +4,7 @@ import type { HassleTask } from "../../lib/hassles/forms";
 import { hassleGroups, type HassleTab } from "../../lib/hassles/groups";
 import { hassleSummary } from "../../lib/hassles/summary";
 import IconButton from "../ui/IconButton";
+import StatusBadge from "../ui/StatusBadge";
 import { buttonClasses } from "../ui/styles";
 
 export default function HassleList({
@@ -58,7 +59,12 @@ export default function HassleList({
                     >
                       <div className="min-w-0 flex-1 wrap-break-word">
                         <h3 className="m-0 text-base">{task.title}</h3>
-                        <p className="my-1 text-sm text-muted">{hassleSummary(task)}</p>
+                        <p className="my-1 flex flex-wrap items-center gap-2 text-sm text-muted">
+                          <span className="min-w-0">{hassleSummary(task)}</span>
+                          {task.schedule?.workHours ? (
+                            <StatusBadge tone="neutral">work</StatusBadge>
+                          ) : null}
+                        </p>
                         {task.timing.note ? (
                           <p className="my-1 text-xs text-muted">{task.timing.note}</p>
                         ) : null}

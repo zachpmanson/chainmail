@@ -105,6 +105,9 @@ it("submits hourly work-hours schedules, preserves a failed-create draft and edi
   await click(button("Add hassle"));
   expect(writes().at(-1)!.body).toEqual(first);
   expect(checkbox().checked).toBe(false);
+  expect(document.querySelector('section[aria-label="Reminders"] p')?.textContent).toContain(
+    "work",
+  );
   await click(button("Edit"));
   const dialog = document.querySelector('[role="dialog"][aria-modal="true"]')!;
   expect(checkbox(dialog).checked).toBe(true);
@@ -114,6 +117,9 @@ it("submits hourly work-hours schedules, preserves a failed-create draft and edi
   await click(button("Save reminder"));
   expect((writes().at(-1)!.body as { schedule: { workHours: boolean } }).schedule.workHours).toBe(
     false,
+  );
+  expect(document.querySelector('section[aria-label="Reminders"] p')?.textContent).not.toContain(
+    "work",
   );
 });
 it.each(

@@ -44,6 +44,8 @@ Configured calendar details and its settings link stay in Settings, not the Hass
   validation errors, timing uncertainty and edit restrictions remain visible.
   Rows use the raised card surface (white in light mode, theme-aware in dark mode)
   and show a compact Melbourne date/time plus recurrence and repeat end when editable.
+  A small **work** badge appears beside that summary only when the known schedule has
+  Work hours only enabled; unchecked or unknown schedules do not imply the restriction.
 - First reminder offers In an hour, This afternoon (13:00), This evening (18:00),
   Tomorrow morning (08:30), and Custom. Only Custom shows the date/time picker.
   All wall times are Melbourne; passed afternoon/evening times roll to tomorrow.
