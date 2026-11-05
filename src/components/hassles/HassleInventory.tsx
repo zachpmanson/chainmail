@@ -42,7 +42,7 @@ export default function HassleInventory({
   return (
     <section
       aria-label="Hassle inventory"
-      className="grid items-start gap-6 min-[60rem]:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]"
+      className="grid items-start gap-6 min-[60rem]:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]"
     >
       <div className="min-w-0">
         <HassleForm

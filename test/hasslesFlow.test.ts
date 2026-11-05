@@ -222,7 +222,7 @@ it("places the narrow create form before a separate wider reminders column", asy
   const layout = document.querySelector('section[aria-label="Hassle inventory"]')!;
   const reminders = layout.querySelector('section[aria-label="Reminders"]')!;
   expect(layout.classList.contains("grid")).toBe(true);
-  expect(layout.className).toContain("min-[60rem]:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]");
+  expect(layout.className).toContain("min-[60rem]:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]");
   expect(document.querySelector("main")!.classList.contains("max-w-6xl")).toBe(true);
   expect(layout.children[0]!.contains(addForm())).toBe(true);
   expect(layout.children[1]).toBe(reminders);
