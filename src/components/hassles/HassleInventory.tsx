@@ -51,9 +51,10 @@ export default function HassleInventory({
   return (
     <section
       aria-label="Hassle inventory"
-      className="mx-auto grid w-full max-w-[40rem] items-start justify-center gap-6 min-[60rem]:max-w-none min-[60rem]:grid-cols-[minmax(0,450px)_minmax(0,40rem)_minmax(0,450px)]"
+      className="mx-auto grid w-full max-w-[40rem] grid-cols-1 items-start justify-center gap-6 @min-[calc(900px+43rem)]:max-w-none @min-[calc(900px+43rem)]:grid-cols-[450px_minmax(0,40rem)_450px]"
     >
-      {/* The empty right track balances the form, centring the list itself. */}
+      {/* Split only when two 450px side tracks, a 40rem list and two 1.5rem gaps fit.
+          The empty right track keeps the list itself centred. */}
       <div className="w-full max-w-[450px] min-w-0">
         <HassleForm
           key={createId}

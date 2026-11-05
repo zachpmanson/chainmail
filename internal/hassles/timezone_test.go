@@ -287,7 +287,7 @@ func TestCompatibleTimezoneRetainsReadOnlyAndScheduleGuards(t *testing.T) {
 			}
 		})
 	}
-	for _, rule := range []string{"FREQ=HOURLY", "FREQ=DAILY;COUNT=3", "FREQ=DAILY;BYHOUR=8"} {
+	for _, rule := range []string{"FREQ=MINUTELY", "FREQ=DAILY;COUNT=3", "FREQ=DAILY;BYHOUR=8"} {
 		o := withTimezone(t, googleTimezoneFixture(t))
 		o.Data.Events()[0].Props.Get("RRULE").Value = rule
 		if inventory(t, o)[0].Schedule != nil {

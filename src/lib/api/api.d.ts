@@ -2173,9 +2173,12 @@ export interface components {
             /** @enum {string} */
             timeZone: "Australia/Melbourne";
             /** @enum {string} */
-            cadence: "once" | "daily" | "weekdays" | "weekly" | "monthly" | "yearly";
+            cadence: "once" | "hourly" | "daily" | "weekdays" | "weekly" | "monthly" | "yearly";
+            /** @description Hourly accepts exactly 0.5, 1, 2, 3, 4, 6, 8, 12 or 24 hours. Other cadences require integer 1–999; once and weekdays require 1. */
             interval: number;
             until: string;
+            /** @description Defaults to false when absent. Skip outside Monday–Friday 09:00 inclusive–17:00 exclusive Australia/Melbourne; first reminder must be within these hours. Interval phase is preserved. */
+            workHours?: boolean;
         };
         HassleTask: {
             id: string;

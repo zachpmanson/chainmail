@@ -55,9 +55,7 @@ describe("Hassle form identity and Melbourne times", () => {
     expect(validateSchedule(schedule)).toBeNull();
     expect(validateSchedule({ ...schedule, until: schedule.start })).toContain("after");
     expect(validateSchedule({ ...schedule, interval: 0 })).toContain("interval");
-    expect(validateSchedule({ ...schedule, cadence: "hourly" as "daily" })).toContain(
-      "unavailable",
-    );
+    expect(validateSchedule({ ...schedule, cadence: "hourly" })).toBeNull();
     expect(validateSchedule({ ...schedule, title: "\n" })).toContain("title");
     expect(validateSchedule({ ...schedule, cadence: "once", until: schedule.start })).toContain(
       "One-off",

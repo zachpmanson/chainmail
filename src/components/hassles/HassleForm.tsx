@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   defaultSchedule,
+  hourlyIntervals,
   intervalUnit,
   reminderStart,
   validateSchedule,
@@ -8,6 +9,7 @@ import {
   type ReminderStartPreset,
 } from "../../lib/hassles/forms";
 import Button from "../ui/Button";
+import CheckboxRow from "../ui/CheckboxRow";
 import FormField from "../ui/FormField";
 import InlineAlert from "../ui/InlineAlert";
 import SelectInput from "../ui/SelectInput";
@@ -111,24 +113,37 @@ export default function HassleForm({
               <option value="weekly">Weekly</option>
               <option value="monthly">Monthly</option>
               <option value="yearly">Yearly</option>
-              <option value="hourly" disabled>
-                Hourly (unavailable)
-              </option>
+              <option value="hourly">Hourly</option>
             </SelectInput>
           </FormField>
           {schedule.cadence !== "once" && schedule.cadence !== "weekdays" ? (
             <FormField label="Every" className="flex min-w-0 flex-1 flex-col gap-1">
               <div className="flex items-center gap-2">
-                <TextInput
-                  className="w-full min-w-0"
-                  type="number"
-                  min={1}
-                  max={999}
-                  required
-                  disabled={busy}
-                  value={schedule.interval}
-                  onChange={(e) => change({ interval: Number(e.target.value) })}
-                />
+                {schedule.cadence === "hourly" ? (
+                  <SelectInput
+                    className="w-full min-w-0"
+                    disabled={busy}
+                    value={schedule.interval}
+                    onChange={(e) => change({ interval: Number(e.target.value) })}
+                  >
+                    {hourlyIntervals.map((interval) => (
+                      <option key={interval} value={interval}>
+                        {interval}
+                      </option>
+                    ))}
+                  </SelectInput>
+                ) : (
+                  <TextInput
+                    className="w-full min-w-0"
+                    type="number"
+                    min={1}
+                    max={999}
+                    required
+                    disabled={busy}
+                    value={schedule.interval}
+                    onChange={(e) => change({ interval: Number(e.target.value) })}
+                  />
+                )}
                 <span className="shrink-0 text-sm">
                   {intervalUnit(schedule.cadence, schedule.interval)}
                 </span>
@@ -162,6 +177,20 @@ export default function HassleForm({
               onChange={(e) => change({ until: e.target.value })}
             />
           </FormField>
+        ) : null}
+        <CheckboxRow
+          className="flex items-center gap-2 text-sm"
+          checked={schedule.workHours ?? false}
+          disabled={busy}
+          onChange={(e) => change({ workHours: e.target.checked })}
+        >
+          Work hours only · weekdays 9–5 Melbourne
+        </CheckboxRow>
+        {schedule.workHours ? (
+          <p className="m-0 text-xs text-muted">
+            Reminders outside 09:00–17:00 are skipped, not delayed. The original repeat cycle
+            continues through nights and weekends.
+          </p>
         ) : null}
         {validation || error ? <InlineAlert>{validation || error}</InlineAlert> : null}
         <div className="flex justify-end gap-2">

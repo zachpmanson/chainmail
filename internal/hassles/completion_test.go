@@ -60,7 +60,7 @@ func completionInput(t *testing.T, f *completionBackend) Mutation {
 func TestInstanceOutsideCompletionYearProfileFailsWithoutWrite(t *testing.T) {
 	for _, test := range []struct {
 		name, start, cadence string
-		interval             int
+		interval             float64
 	}{
 		{"derived future", "1970-06-01T08:30", "yearly", 200},
 		{"UTC lower boundary", "1970-01-01T00:30", "once", 1},

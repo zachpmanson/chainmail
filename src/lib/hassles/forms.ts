@@ -4,9 +4,11 @@ export type HassleLocation = components["schemas"]["HassleLocation"];
 export type HassleSchedule = components["schemas"]["HassleSchedule"];
 export type HassleTask = components["schemas"]["HassleTask"];
 export const timeZone = "Australia/Melbourne";
+export const hourlyIntervals = [0.5, 1, 2, 3, 4, 6, 8, 12, 24];
 
 export function intervalUnit(cadence: string, interval: number): string {
   const units: Record<string, string> = {
+    hourly: "hour",
     daily: "day",
     weekly: "week",
     monthly: "month",
@@ -53,6 +55,7 @@ export function defaultSchedule(now = new Date()): HassleSchedule {
     cadence: "daily",
     interval: 1,
     until: "",
+    workHours: false,
   };
 }
 
@@ -77,9 +80,21 @@ export function validateSchedule(s: HassleSchedule): string | null {
   if (start === null || s.start.slice(0, 4) < "1970" || s.start.slice(0, 4) > "2100")
     return "Choose a valid, unambiguous Melbourne time (1970–2100); daylight-saving gaps and overlaps are unavailable.";
   if (s.timeZone !== timeZone) return "Use Australia/Melbourne time.";
-  if (!["once", "daily", "weekdays", "weekly", "monthly", "yearly"].includes(s.cadence))
-    return "This cadence is unavailable. Hourly needs separate Google compatibility testing.";
-  if (!Number.isInteger(s.interval) || s.interval < 1 || s.interval > 999)
+  if (!["once", "hourly", "daily", "weekdays", "weekly", "monthly", "yearly"].includes(s.cadence))
+    return "This cadence is unavailable.";
+  if (
+    s.workHours &&
+    (s.start.slice(11) < "09:00" ||
+      s.start.slice(11) >= "17:00" ||
+      ["Sat", "Sun"].includes(
+        new Intl.DateTimeFormat("en", { timeZone, weekday: "short" }).format(new Date(start)),
+      ))
+  )
+    return "Choose a first reminder on a weekday, 09:00–17:00 Melbourne (before 17:00).";
+  if (s.cadence === "hourly") {
+    if (!hourlyIntervals.includes(s.interval))
+      return "Hourly interval must be 0.5, 1, 2, 3, 4, 6, 8, 12 or 24 hours.";
+  } else if (!Number.isInteger(s.interval) || s.interval < 1 || s.interval > 999)
     return "Repeat interval must be a whole number from 1 to 999.";
   if ((s.cadence === "once" || s.cadence === "weekdays") && s.interval !== 1)
     return "This cadence requires interval 1.";

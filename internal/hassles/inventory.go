@@ -253,6 +253,17 @@ func ApplySchedule(e ical.Event, s Schedule, now time.Time) error {
 	if preserveTiming {
 		return nil
 	}
+	// Persist checkbox intent where the recurrence alone is indistinguishable
+	// (one-offs and weekly schedules). Never use this marker as ownership.
+	if p := e.Props.Get("DESCRIPTION"); p != nil {
+		applyHourlyMetadata(p, s)
+		desc, _ := p.Text()
+		if s.WorkHours && !strings.Contains(desc, workHoursMarker) {
+			p.Value += `\n` + workHoursMarker
+		} else if !s.WorkHours && strings.Contains(desc, workHoursMarker) {
+			p.Value = strings.Replace(p.Value, workHoursMarker, "", 1)
+		}
+	}
 	for name, value := range map[string]time.Time{"DTSTART": start, "DTEND": start.Add(5 * time.Minute)} {
 		p := e.Props.Get(name)
 		if p == nil {

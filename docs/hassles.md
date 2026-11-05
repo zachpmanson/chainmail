@@ -23,10 +23,13 @@ Configured calendar details and its settings link stay in Settings, not the Hass
   exhausted series and distant reminders. No occurrence duplication or background
   scheduler. Canceled events are hidden, retained as members of an otherwise-active
   logical task where appropriate.
-- Desktop (60rem and up) uses two content columns: a narrower (450px) Add form on
-  the left and a wider reminders column with accessible **Upcoming / Ended** tabs.
-  Below that breakpoint the form stacks above the list. App navigation/sidebar is
-  unchanged. Switching tabs or
+- The reminders list is centred independently of the Add form, capped at 40rem
+  and filling available width on narrow screens. The 450px Add form sits on its left
+  only when the content container fits both plus a balancing right track and gaps
+  (`calc(900px + 43rem)`); otherwise it stacks above the list. The page cap includes
+  its padding (`calc(900px + 45rem)`), so root-font changes preserve the same fit rule.
+  Container queries use actual available
+  width, not just the window breakpoint. App navigation/sidebar is unchanged. Switching tabs or
   editing/removing another task preserves its draft and retry UUID. Only a successful
   create or a selected-location change resets it. The plain task heading is not interactive;
   the pencil beside the completion controls edits its whole recurring series. Separate
@@ -34,9 +37,9 @@ Configured calendar details and its settings link stay in Settings, not the Hass
   single check **This instance only**, double check **All instances**, with task-specific
   accessible names/tooltips. Edit and all-instance removal use dialogs; All instances
   retains the permanent-removal warning. There is no separate Delete control.
-  Repeat, Every (with the actual day/week/month/year unit) and Until share one row.
+  Repeat, Every (with the actual hour/day/week/month/year unit) and Until share one row.
   The title uses a four-row textarea in both Add and Edit; line breaks become spaces
-  on save so the Calendar title remains one line. The form names Melbourne once under When.
+  on save so the Calendar title remains one line. The form names Melbourne under When and beside the work-hours checkbox.
   Routine explanatory small print is omitted;
   validation errors, timing uncertainty and edit restrictions remain visible.
   Rows use the raised card surface (white in light mode, theme-aware in dark mode)
@@ -69,17 +72,60 @@ Configured calendar details and its settings link stay in Settings, not the Hass
   do not grant ownership: every master must have docket's `[docket]` marker.
   Meetings with attendees/organizers and resources without a strong ETag are read-only.
 - Create uses a stable per-form UUID, a conditional resource create, five minutes,
-  transparent/free, no attendees, and a DISPLAY alarm at the start. No phone delivery
-  or Google behavior has been live-tested. Calendar/phone notification settings still
-  determine delivery.
+  transparent/free, no attendees, and a DISPLAY alarm at the start. Calendar/phone
+  notification settings still determine delivery; phone delivery is not live-verified.
 - Melbourne wall time is explicit in the form, transport and TZID. New reminders start
   an hour from draft creation and repeat **daily until Done**, independent of browser timezone.
   Defaults apply only to new drafts, never to existing Calendar events. DST gaps **and ambiguous overlaps**
-  are rejected. Supported input dates: 1970–2100; intervals: 1–999.
-- Once, daily, weekdays, weekly, monthly and yearly are supported. Weekdays means
+  are rejected. Supported input dates: 1970–2100. Non-hourly intervals are integers 1–999.
+- Once, hourly, daily, weekdays, weekly, monthly and yearly are supported. Hourly Every
+  offers exactly **0.5, 1, 2, 3, 4, 6, 8, 12 or 24 hours**; 0.5 means 30 minutes.
+  Arbitrary intervals such as 0.6, 5, 7 and 999 hours are rejected, not approximated. Weekdays means
   Monday–Friday every week (interval 1); the first reminder must be a weekday. Monthly/yearly skip nonexistent dates.
   An optional inclusive repeat-end timestamp must be after the first reminder;
-  the Until dropdown chooses Done/no end or Date and time. **Hourly is visibly unavailable and rejected.**
+  the Until dropdown chooses Done/no end or Date and time.
+- **Work hours only** is optional and defaults unchecked on new drafts, in both Add
+  and Edit. Notification starts must fall Monday–Friday, 09:00 inclusive to 17:00
+  exclusive **Australia/Melbourne**; no public-holiday logic. An out-of-hours first
+  reminder is rejected with actionable validation, never silently moved (including
+  presets such as Tomorrow morning at 08:30). Outside-window occurrences are skipped,
+  not deferred. The original DTSTART-anchored every-N-hour cycle continues through
+  nights and weekends, rather than restarting at 09:00 or counting business hours.
+  For example, every 3 hours from Friday 6 November 2026 at 15:00 next notifies at
+  09:00, 12:00 and 15:00 Monday. Every 0.5 hours from Friday at 16:45 next notifies
+  at 09:15 Monday, not 09:00. Hourly phase is Melbourne **wall-clock** time,
+  not an elapsed-hour promise across DST. Nonexistent recurrence wall times are skipped;
+  a repeated recurrence wall time uses its first occurrence (RFC 5545), while ambiguous
+  user-entered first/end times remain rejected.
+  Monthly/yearly filtering preserves the original day/month; it never expands into
+  all weekdays. A five-minute event starting at 16:59 is allowed.
+  Standard RRULEs carry all recurrence behavior; `[chainmail:work-hours:v1]` in
+  DESCRIPTION retains checkbox intent for once/weekly/weekdays schedules that otherwise
+  have identical rules. That marker grants no ownership, and never overrides filters
+  or first-reminder validation. Duplicate/unknown marker versions disable editing.
+- Hourly uses a single **DAILY** RRULE, daily interval 1, exact sorted BYHOUR and
+  BYMINUTE slots, optional weekday filtering and inclusive UTC UNTIL. It never emits
+  native FREQ=HOURLY. Integer hour choices divide the civil day; the 0.5-hour choice
+  uses two minute slots, preserving the original minute offset across midnight.
+  `[chainmail:hourly:v1 hours=<choice>]` in DESCRIPTION retains logical cadence and
+  interval (12/24-hour work-hours rules can otherwise look identical). The complete
+  rule must match those slots; missing/duplicate/unknown/conflicting metadata is not
+  trusted and never grants ownership. Title-only edits retain the original properties;
+  timing edits remove only exact owned markers, preserving raw notes/escapes/parameters.
+  Native HOURLY and generic imported slot rules remain unsupported.
+  Prior bounded Google CalDAV testing rejected native HOURLY with COUNT=3 and accepted
+  DAILY+BYHOUR+BYMINUTE at one hour (COUNT=3) and two hours (inclusive UNTIL). That proves
+  storage/readback of those bounded candidates. A separately owner-authorized follow-up
+  also accepted/read back three isolated test series: unbounded 0.5-hour work-hours
+  (Friday 16:45 → Monday 09:15 through 16:45), unbounded 0.5-hour plain (minute slots
+  17/47), and 3-hour work-hours at 09:17/12:17/15:17 with inclusive Monday 15:17 UNTIL.
+  The parent verified their expected 17/16/4 client-expanded occurrences, deleted all
+  three (direct 404 and empty searches), and confirmed all 58 actual reminder identities,
+  revisions and writable flags unchanged. This is stored-recurrence/client-readback
+  evidence, not raw-rule/metadata byte identity, server expansion, all interval choices,
+  live recurrence editing, DST, Google UI or phone delivery. No native HOURLY was retried.
+  The code implementation itself used only offline fixtures; further live probes need
+  separate owner authorization.
 - Schedule editing is deliberately limited to one simple five-minute event/series
   in Australia/Melbourne with minute precision and a representable RRULE. Imported
   exceptions, imported RDATE/EXDATE/COUNT or other complex rules, all-day/floating/other-zone
@@ -101,7 +147,13 @@ Configured calendar details and its settings link stay in Settings, not the Hass
   Other BY* filters are classified unknown before iteration: impossible combinations
   can make the recurrence library scan to year 9999 inside one iterator call.
   Detached exceptions, floating/all-day/unknown-zone times, high-frequency or exotic
-  rules and scans beyond 10,000 generated occurrences remain honestly unavailable.
+  rules and generic scans beyond 10,000 generated occurrences remain honestly unavailable.
+  Narrow uncounted hourly/work-hours profiles use bounded civil-time evaluation with
+  a seek near the current time, preserving DTSTART phase even after more than 10,000
+  historical hours. Each direction examines at most 10,000 candidates, including skipped
+  dates and exclusions; budget exhaustion is unknown, not proof a series ended.
+  Generic imported/COUNT/DATE recurrence admission is unchanged; unreachable imported
+  hourly filters never enter the recurrence library's potentially unbounded iterator.
   Recurrence dates are limited to 10,000 per property family.
   The API exposes `timing.state` (`upcoming`, `past`, `unknown`), nullable RFC3339
   `timing.next`/`timing.last`, and `timing.note`. A multi-resource group uses the
@@ -185,6 +237,20 @@ Automated flow, real typed fetch/query layer and Base UI dialogs:
 nix develop --command bash -c 'npm test -- --run test/hasslesForms.test.ts test/hasslesGroups.test.ts test/hasslesFlow.test.ts'
 ```
 
+Real-browser geometry regression, with actual React SSR and built production CSS,
+no server, credentials, or network fallback:
+
+```sh
+nix develop --command bash -c 'npm run build && nix shell nixpkgs#chromium --command npx --no-install tsx scripts/hassles-layout-smoke.ts'
+```
+
+The script uses Chromium from PATH and temporary isolated browser state. It checks
+54 empty/short-list layouts at 320/375/480/640/960px available widths, immediately
+below/at/above the fit threshold, and 2200px, with 14/16/20px root fonts. It asserts
+filled/capped, independently centred lists, sidebar/stack placement, the 450px form
+cap, and no overflowing controls. This is rendered geometry evidence, not hydrated
+keyboard/focus testing or live Calendar/phone delivery.
+
 Browser smoke harness, using only an in-memory **test fixture**, not the real server:
 
 ```sh
@@ -194,11 +260,16 @@ nix develop --command bash -c 'npm run build && npx --no-install tsx scripts/has
 Open <http://127.0.0.1:8877/hassles>. Follow its Settings link. In the Hassles
 settings section select Offline account → Offline reminders → acknowledge dedicated
 overlay → Use calendar, then return to Hassles using navigation. Add a title/date, repeat interval
-and end; save; inspect chronological day groups; switch Upcoming/Ended; click a title to edit;
+and end; save; inspect chronological day groups; switch Upcoming/Ended; use the pencil to edit;
 use the Done tick and confirm. There is no separate Delete button.
-Check Hourly is disabled. Tab/Shift-Tab through controls; verify dialog initial
+Select Hourly and each supported Every dropdown choice (including 0.5), check Work hours only, and try an invalid first
+reminder (08:59, 17:00 or a weekend) before submitting a valid weekday start.
+After a simulated failed create, verify interval/checkbox/date and retry UUID survive;
+edit the created schedule and toggle the checkbox. No live delivery claim is implied. Tab/Shift-Tab through controls; verify dialog initial
 focus, Escape to cancel, focus return and trapped tab order. Repeat at 375px and
-wide desktop widths: controls should wrap, labels stay visible and dialogs scroll.
+wide desktop widths (including 960, 1200, 1600 and 1920px): controls should stay visible,
+list width should fill/cap correctly without squeezing at the old 60rem breakpoint,
+the list should remain centred, and dialogs should scroll.
 These visual/responsive checks are a runnable review path, not a claim that a real
 browser or phone has been manually tested.
 
@@ -271,8 +342,8 @@ zones/parameters, gaps/overlaps and duplicate equivalent instants remain restric
 the marker never grants ownership. Original EXDATE properties are retained through
 both title and timing edits: completed instances keep their exact original UTC
 instants, **not ordinal positions** in an edited schedule. Google embedded Melbourne
-2008–2100 and native 1970–2100 profiles are unchanged. No hourly/workhours/logical-nag
-redesign is included. Calendar notification delivery still needs separate live review.
+2008–2100 and native 1970–2100 profiles were unchanged by that normalization work.
+Hourly/work-hours support is documented above; no logical-nag redesign is included. Calendar notification delivery still needs separate live review.
 
 Single-day all-day DATE events now have read-only date timing, including bounded
 DATE RDATE/EXDATE and known recurrence rules. An explicit MONTHLY BYMONTHDAY is

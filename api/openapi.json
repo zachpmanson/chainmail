@@ -5433,6 +5433,7 @@
             "type": "string",
             "enum": [
               "once",
+              "hourly",
               "daily",
               "weekdays",
               "weekly",
@@ -5441,12 +5442,17 @@
             ]
           },
           "interval": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 999
+            "type": "number",
+            "minimum": 0.5,
+            "maximum": 999,
+            "description": "Hourly accepts exactly 0.5, 1, 2, 3, 4, 6, 8, 12 or 24 hours. Other cadences require integer 1–999; once and weekdays require 1."
           },
           "until": {
             "type": "string"
+          },
+          "workHours": {
+            "type": "boolean",
+            "description": "Defaults to false when absent. Skip outside Monday–Friday 09:00 inclusive–17:00 exclusive Australia/Melbourne; first reminder must be within these hours. Interval phase is preserved."
           }
         },
         "required": [

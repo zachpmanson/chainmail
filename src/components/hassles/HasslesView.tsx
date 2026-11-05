@@ -26,7 +26,7 @@ export default function HasslesView() {
   return (
     <main
       aria-label="Hassles"
-      className="mx-auto flex w-full max-w-[1620px] flex-col gap-4 px-4 py-5"
+      className="@container mx-auto box-border flex w-full max-w-[calc(900px+45rem)] flex-col gap-4 px-4 py-5"
     >
       {config.isError ? <InlineAlert>{errText(config.error)}</InlineAlert> : null}
       {config.isPending ? <p>Reading reminder settings…</p> : null}

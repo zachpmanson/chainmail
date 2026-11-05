@@ -189,6 +189,11 @@ func resourceTiming(events []ical.Event, now time.Time) Timing {
 	if err != nil || start.Year() < 1970 || start.Year() > 2100 {
 		return unknownTiming()
 	}
+	if !allDay && p.Params.Get("TZID") == Zone {
+		if checked, err := melbourneStart(p); err != nil || !checked.Equal(start) {
+			return unknownTiming()
+		}
+	}
 	rdates, err := typedRecurrenceDates(e.Props["RDATE"], allDay)
 	if err != nil {
 		return unknownTiming()
@@ -223,6 +228,27 @@ func resourceTiming(events []ical.Event, now time.Time) Timing {
 		add(date)
 	}
 	if p := e.Props.Get("RRULE"); p != nil {
+		if !allDay {
+			if profile := timingProfile(e, p, start); profile != nil {
+				timing, complete := profileTiming(*profile, start, now, excluded)
+				if !complete {
+					return unknownTiming()
+				}
+				if timing.Last != nil {
+					add(*timing.Last)
+				}
+				if timing.Next != nil {
+					add(*timing.Next)
+				}
+				if out.Next != nil {
+					out.State = "upcoming"
+				}
+				if out.Next == nil && out.Last == nil {
+					return unknownTiming()
+				}
+				return out
+			}
+		}
 		reader := readRule
 		if allDay {
 			reader = readDateRule

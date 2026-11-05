@@ -128,14 +128,14 @@ func TestCanceledMembersExceptionsAndUnknownFields(t *testing.T) {
 }
 
 func TestSchedulesValidationAndInventoryDates(t *testing.T) {
-	for _, change := range []func(*Schedule){func(s *Schedule) { s.Cadence = "hourly" }, func(s *Schedule) { s.Interval = 0 }, func(s *Schedule) { s.Interval = 1000 }, func(s *Schedule) { s.TimeZone = "UTC" }, func(s *Schedule) { s.Start = "2026-10-04T02:30" }, func(s *Schedule) { s.Start = "2026-04-05T02:30" }, func(s *Schedule) { s.Until = s.Start }, func(s *Schedule) { s.Title = "" }, func(s *Schedule) { s.Cadence = "once"; s.Interval = 1; s.Until = "2027-01-01T08:30" }} {
+	for _, change := range []func(*Schedule){func(s *Schedule) { s.Cadence = "minutely" }, func(s *Schedule) { s.Interval = 0 }, func(s *Schedule) { s.Interval = 1000 }, func(s *Schedule) { s.TimeZone = "UTC" }, func(s *Schedule) { s.Start = "2026-10-04T02:30" }, func(s *Schedule) { s.Start = "2026-04-05T02:30" }, func(s *Schedule) { s.Until = s.Start }, func(s *Schedule) { s.Title = "" }, func(s *Schedule) { s.Cadence = "once"; s.Interval = 1; s.Until = "2027-01-01T08:30" }} {
 		s := sample()
 		change(&s)
 		if _, _, err := s.Validate(); err == nil {
 			t.Fatalf("accepted invalid %+v", s)
 		}
 	}
-	for _, cadence := range []string{"once", "daily", "weekdays", "weekly", "monthly", "yearly"} {
+	for _, cadence := range []string{"once", "hourly", "daily", "weekdays", "weekly", "monthly", "yearly"} {
 		s := sample()
 		s.Cadence = cadence
 		s.Interval = 1

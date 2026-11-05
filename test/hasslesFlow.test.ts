@@ -71,6 +71,101 @@ afterEach(async () => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
+it("submits hourly work-hours schedules, preserves a failed-create draft and edits the checkbox", async () => {
+  await choose();
+  const checkbox = (scope: ParentNode = addForm()) =>
+    scope.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+  expect(checkbox().checked).toBe(false);
+  const hourly = [...repeat().options].find((o) => o.value === "hourly")!;
+  expect(hourly.disabled).toBe(false);
+  await type(titleInput(), "Office cycle");
+  await select(firstReminder(), "custom");
+  await type(customStart(), "2027-01-01T09:00");
+  await select(repeat(), "hourly");
+  const every = field("Every", addForm()).querySelector("select")!;
+  expect([...every.options].map((option) => Number(option.value))).toEqual([
+    0.5, 1, 2, 3, 4, 6, 8, 12, 24,
+  ]);
+  await select(every, "0.5");
+  expect(field("Every", addForm()).textContent).toContain("hours");
+  await click(checkbox());
+  fixture.handle("/__hassles_fixture", "POST", { mode: "read-only" });
+  await click(button("Add hassle"));
+  const writes = () =>
+    fixture.requests.filter((r) => r.method === "POST" && r.path.endsWith("/v1/hassles"));
+  const first = writes().at(-1)!.body as {
+    id: string;
+    schedule: { cadence: string; interval: number; workHours: boolean };
+  };
+  expect(first.schedule).toMatchObject({ cadence: "hourly", interval: 0.5, workHours: true });
+  expect(checkbox().checked).toBe(true);
+  await click(button("Ended"));
+  await click(button("Upcoming"));
+  fixture.handle("/__hassles_fixture", "POST", { mode: "normal" });
+  await click(button("Add hassle"));
+  expect(writes().at(-1)!.body).toEqual(first);
+  expect(checkbox().checked).toBe(false);
+  await click(button("Edit"));
+  const dialog = document.querySelector('[role="dialog"][aria-modal="true"]')!;
+  expect(checkbox(dialog).checked).toBe(true);
+  expect(repeat(dialog).value).toBe("hourly");
+  expect(field("Every", dialog).querySelector("select")!.value).toBe("0.5");
+  await click(checkbox(dialog));
+  await click(button("Save reminder"));
+  expect((writes().at(-1)!.body as { schedule: { workHours: boolean } }).schedule.workHours).toBe(
+    false,
+  );
+});
+it.each(
+  [0.5, 1, 2, 3, 4, 6, 8, 12, 24].flatMap((interval) =>
+    [false, true].map((workHours) => ({ interval, workHours })),
+  ),
+)(
+  "roundtrips hourly $interval / work hours $workHours through create retry and edit",
+  async ({ interval, workHours }) => {
+    await choose();
+    await type(titleInput(), "Supported slots");
+    await select(firstReminder(), "custom");
+    await type(customStart(), "2027-01-01T16:45");
+    await select(repeat(), "hourly");
+    await select(field("Every", addForm()).querySelector("select")!, String(interval));
+    if (workHours)
+      await click(addForm().querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+    fixture.handle("/__hassles_fixture", "POST", { mode: "read-only" });
+    await click(button("Add hassle"));
+    const writes = () =>
+      fixture.requests.filter((r) => r.method === "POST" && r.path.endsWith("/v1/hassles"));
+    const first = writes().at(-1)!.body;
+    fixture.handle("/__hassles_fixture", "POST", { mode: "normal" });
+    await click(button("Add hassle"));
+    expect(writes().at(-1)!.body).toEqual(first);
+    await click(button("Edit"));
+    const dialog = document.querySelector('[role="dialog"][aria-modal="true"]')!;
+    expect(field("Every", dialog).querySelector("select")!.value).toBe(String(interval));
+    const checkbox = dialog.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    expect(checkbox.checked).toBe(workHours);
+    await click(checkbox);
+    await click(button("Save reminder"));
+    expect((writes().at(-1)!.body as { schedule: unknown }).schedule).toMatchObject({
+      cadence: "hourly",
+      interval,
+      workHours: !workHours,
+    });
+  },
+);
+it("validates work-hours first reminders without moving them or sending a write", async () => {
+  await choose();
+  await type(titleInput(), "Invalid office time");
+  await select(firstReminder(), "custom");
+  await type(customStart(), "2027-01-01T18:00");
+  await click(addForm().querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+  await click(button("Add hassle"));
+  expect(addForm().textContent).toContain("Choose a first reminder on a weekday");
+  expect(customStart().value).toBe("2027-01-01T18:00");
+  expect(
+    fixture.requests.filter((r) => r.method === "POST" && r.path.endsWith("/v1/hassles")),
+  ).toHaveLength(0);
+});
 it("sets the document title to Hassles and restores it when leaving the page", async () => {
   expect(document.title).toBe("Hassles");
   expect(document.head.querySelector("title")!.textContent).toBe("Hassles");
@@ -287,12 +382,17 @@ it("centres the reminders column with the create form in a balanced left sidebar
   const layout = document.querySelector('section[aria-label="Hassle inventory"]')!;
   const reminders = layout.querySelector('section[aria-label="Reminders"]')!;
   expect(layout.classList.contains("grid")).toBe(true);
+  expect(layout.classList.contains("grid-cols-1")).toBe(true);
   expect(layout.className).toContain(
-    "min-[60rem]:grid-cols-[minmax(0,450px)_minmax(0,40rem)_minmax(0,450px)]",
+    "@min-[calc(900px+43rem)]:grid-cols-[450px_minmax(0,40rem)_450px]",
   );
   expect(layout.className).toContain("max-w-[40rem]");
-  expect(layout.className).toContain("min-[60rem]:max-w-none");
-  expect(document.querySelector("main")!.classList.contains("max-w-[1620px]")).toBe(true);
+  expect(layout.className).toContain("@min-[calc(900px+43rem)]:max-w-none");
+  const main = document.querySelector("main")!;
+  expect(main.classList.contains("max-w-[calc(900px+45rem)]")).toBe(true);
+  expect(main.classList.contains("@container")).toBe(true);
+  expect(main.classList.contains("box-border")).toBe(true);
+  expect(layout.className).not.toContain("min-[60rem]");
   expect(layout.children).toHaveLength(2);
   expect(layout.children[0]!.contains(addForm())).toBe(true);
   expect(layout.children[1]).toBe(reminders);
@@ -550,7 +650,7 @@ it("uses placeholder-only title and presets, revealing the picker only for Custo
   expect(document.body.textContent).not.toContain("Done and Delete both");
   expect(document.body.textContent).not.toContain("Notifications and recurrence belong");
   expect(document.body.textContent).not.toContain("Next scheduled reminders");
-  expect(addForm().textContent?.match(/Melbourne/g)).toHaveLength(1);
+  expect(addForm().textContent?.match(/Melbourne/g)).toHaveLength(2);
   expect([...firstReminder().options].map((option) => option.textContent)).toEqual([
     "In an hour",
     "This afternoon",
