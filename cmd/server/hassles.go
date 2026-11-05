@@ -219,8 +219,12 @@ func (s *server) hassleMutation(w http.ResponseWriter, r *http.Request) {
 	if !decodeHassle(w, r, &in) {
 		return
 	}
-	if in.Action != "create" && in.Action != "edit" && in.Action != "done" && in.Action != "delete" {
+	if in.Action != "create" && in.Action != "edit" && in.Action != "done" && in.Action != "delete" && in.Action != "adopt" {
 		fail(w, 400, errors.New("unsupported task action"))
+		return
+	}
+	if err := hassles.ValidateAdoptionFields(in); err != nil {
+		fail(w, 400, err)
 		return
 	}
 	if in.Action == "create" && !hassles.ValidUUID(in.ID) {

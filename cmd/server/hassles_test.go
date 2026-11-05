@@ -24,10 +24,12 @@ const otherCalendar = "/caldav/v2/other@example.test/events/"
 const hassleUUID = "607cbf13-2aac-414d-bebd-df221c943de9"
 
 type calendarFixture struct {
-	objects []caldav.CalendarObject
-	calls   int
-	deny    bool
-	serial  int
+	objects  []caldav.CalendarObject
+	calls    int
+	writes   int
+	deny     bool
+	conflict bool
+	serial   int
 }
 
 func (f *calendarFixture) Calendars(context.Context) ([]hassles.Calendar, error) {
@@ -40,6 +42,10 @@ func (f *calendarFixture) Objects(context.Context, string) ([]caldav.CalendarObj
 }
 func (f *calendarFixture) Write(_ context.Context, _, href, etag, body string) error {
 	f.calls++
+	f.writes++
+	if f.conflict {
+		return hassles.ErrConflict
+	}
 	if f.deny {
 		return errors.New("calendar is read-only (HTTP 403)")
 	}
@@ -245,5 +251,165 @@ func TestEnabledHasslesCrossOriginNeverReachesCalendar(t *testing.T) {
 		if w.Code != 403 || f.calls != 0 {
 			t.Fatalf("CSRF reached Calendar: %d %d", w.Code, f.calls)
 		}
+	}
+}
+
+func legacyHassleMutation(t *testing.T, f *calendarFixture, loc hassles.Location) hassles.Mutation {
+	t.Helper()
+	c, err := hassles.NewCalendar(hassleUUID, hassles.Schedule{Title: "Legacy offline", Start: "2027-01-01T08:30", TimeZone: hassles.Zone, Cadence: "daily", Interval: 1}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Events()[0].Props.SetText("UID", "original-legacy-uid")
+	c.Events()[0].Props.SetText("DESCRIPTION", "[docket]\nHuman notes; keep")
+	f.objects = []caldav.CalendarObject{{Path: reminderCalendar + "original.ics", ETag: `"original"`, Data: c}}
+	tasks, err := hassles.Inventory(f.objects, time.Now())
+	if err != nil || len(tasks) != 1 {
+		t.Fatalf("legacy fixture: %+v %v", tasks, err)
+	}
+	id, dry := strings.ToUpper(hassleUUID), true
+	return hassles.Mutation{Location: loc, Action: "adopt", ID: tasks[0].ID, Revision: tasks[0].Revision, AdoptID: &id, DryRun: &dry}
+}
+
+func TestHasslesAdoptionHTTPPreviewCommitAndRetry(t *testing.T) {
+	h, f, loc := hassleHarness(t)
+	chooseHassles(t, h, loc)
+	in := legacyHassleMutation(t, f, loc)
+	before, _ := hassles.Encode(f.objects[0].Data)
+	r := h.do(t, "POST", "/v1/hassles", hassleJSON(t, in))
+	if r.status != 200 {
+		t.Fatalf("preview %d %s", r.status, r.body)
+	}
+	preview := decode[hassles.Result](t, r)
+	if f.writes != 0 || preview.Adoption == nil || preview.Adoption.Before != before || preview.Adoption.TaskID != "task:"+hassleUUID {
+		t.Fatalf("preview mutated or missing export: %+v", preview)
+	}
+	unchanged, _ := hassles.Encode(f.objects[0].Data)
+	if before != unchanged {
+		t.Fatal("preview mutated input")
+	}
+	commit := false
+	in.DryRun, in.AdoptHash = &commit, &preview.Adoption.Fingerprint
+	r = h.do(t, "POST", "/v1/hassles", hassleJSON(t, in))
+	if r.status != 200 || f.writes != 1 || len(f.objects) != 1 || f.objects[0].Path != reminderCalendar+"original.ics" {
+		t.Fatalf("commit %d %s", r.status, r.body)
+	}
+	uid, _ := f.objects[0].Data.Events()[0].Props.Text("UID")
+	if uid != "original-legacy-uid" {
+		t.Fatal("adoption replaced UID")
+	}
+	r = h.do(t, "POST", "/v1/hassles", hassleJSON(t, in))
+	if r.status != 200 || decode[hassles.Result](t, r).Message != "Already adopted" || f.writes != 1 {
+		t.Fatalf("retry %d %s", r.status, r.body)
+	}
+	wrong := strings.Repeat("0", 64)
+	in.AdoptHash = &wrong
+	if r = h.do(t, "POST", "/v1/hassles", hassleJSON(t, in)); r.status != 409 || f.writes != 1 {
+		t.Fatal("wrong hash accepted", r.status, string(r.body))
+	}
+}
+
+func TestHasslesAdoptionHTTPRejectsInvalidFieldsBeforeUpstream(t *testing.T) {
+	h, f, loc := hassleHarness(t)
+	chooseHassles(t, h, loc)
+	valid := legacyHassleMutation(t, f, loc)
+	for _, action := range []string{"create", "edit", "done", "delete"} {
+		for _, flag := range []map[string]any{{"dryRun": false}, {"dryRun": true}, {"adoptId": hassleUUID}, {"adoptHash": strings.Repeat("0", 64)}, {"dryRun": nil}, {"adoptId": nil}, {"adoptHash": nil}, {"DRYRUN": nil}} {
+			body := map[string]any{"location": loc, "action": action, "id": hassleUUID}
+			for k, v := range flag {
+				body[k] = v
+			}
+			calls := f.calls
+			if r := h.do(t, "POST", "/v1/hassles", hassleJSON(t, body)); r.status != 400 || f.calls != calls {
+				t.Fatalf("%s flag reached upstream: %d %s", action, r.status, r.body)
+			}
+		}
+	}
+	for _, change := range []func(*hassles.Mutation){
+		func(in *hassles.Mutation) { in.DryRun = nil },
+		func(in *hassles.Mutation) { dry := false; in.DryRun = &dry },
+		func(in *hassles.Mutation) { in.AdoptID = nil },
+		func(in *hassles.Mutation) { in.ID = "task:" + hassleUUID },
+		func(in *hassles.Mutation) { in.Revision = "stale" },
+		func(in *hassles.Mutation) { in.Schedule.Title = "not metadata" },
+	} {
+		in := valid
+		change(&in)
+		calls := f.calls
+		if r := h.do(t, "POST", "/v1/hassles", hassleJSON(t, in)); r.status != 400 || f.calls != calls {
+			t.Fatalf("invalid adoption reached upstream: %d %s", r.status, r.body)
+		}
+	}
+	body := string(hassleJSON(t, valid))
+	body = strings.TrimSuffix(body, "}") + `,"unknown":true}`
+	calls := f.calls
+	if r := h.do(t, "POST", "/v1/hassles", []byte(body)); r.status != 400 || f.calls != calls {
+		t.Fatal("unknown field reached upstream")
+	}
+}
+
+func TestHasslesAdoptionHTTPGrantLocationDiscoveryAndOriginGuards(t *testing.T) {
+	for _, kind := range []string{"disabled", "unselected", "wrong location", "discovery", "disconnect", "origin", "stale revision", "protected", "upstream denied", "upstream conflict"} {
+		t.Run(kind, func(t *testing.T) {
+			h, f, loc := hassleHarness(t)
+			if kind != "unselected" {
+				chooseHassles(t, h, loc)
+			}
+			in := legacyHassleMutation(t, f, loc)
+			want := 409
+			switch kind {
+			case "disabled":
+				h.hasslesEnabled = false
+				want = 403
+			case "wrong location":
+				in.Location.CalendarID = otherCalendar
+			case "discovery":
+				in.Location.CalendarID = otherCalendar
+				_ = h.store.PutSetting(corpus.SettingHasslesLocation, string(hassleJSON(t, in.Location)))
+			case "disconnect":
+				p, _ := gmailclient.AccountTokenPath("personal")
+				_ = os.Remove(p)
+			case "stale revision":
+				f.objects[0].ETag = `"new"`
+			case "protected":
+				f.objects[0].Data.Events()[0].Props.SetText("ORGANIZER", "mailto:owner@example.test")
+				tasks, _ := hassles.Inventory(f.objects, time.Now())
+				in.Revision = tasks[0].Revision
+				want = 502
+			case "upstream denied", "upstream conflict":
+				f.deny = kind == "upstream denied"
+				f.conflict = kind == "upstream conflict"
+				preview := decode[hassles.Result](t, h.do(t, "POST", "/v1/hassles", hassleJSON(t, in)))
+				dry := false
+				in.DryRun, in.AdoptHash = &dry, &preview.Adoption.Fingerprint
+				if kind == "upstream denied" {
+					want = 502
+				}
+			}
+			calls := f.calls
+			if kind == "origin" {
+				req := httptest.NewRequest("POST", "http://localhost:9876/v1/hassles", strings.NewReader(string(hassleJSON(t, in))))
+				req.Header.Set("Origin", "http://attacker.invalid")
+				req.Header.Set("Sec-Fetch-Site", "cross-site")
+				req.Header.Set("Content-Type", "application/json")
+				w := httptest.NewRecorder()
+				h.routes().ServeHTTP(w, req)
+				if w.Code != 403 || f.calls != calls || f.writes != 0 {
+					t.Fatal("adoption CSRF reached calendar")
+				}
+				return
+			}
+			r := h.do(t, "POST", "/v1/hassles", hassleJSON(t, in))
+			wantWrites := 0
+			if kind == "upstream denied" || kind == "upstream conflict" {
+				wantWrites = 1
+			}
+			if r.status != want || f.writes != wantWrites {
+				t.Fatalf("guard %s: %d %s, %d writes", kind, r.status, r.body, f.writes)
+			}
+			if (kind == "disabled" || kind == "unselected" || kind == "wrong location" || kind == "disconnect") && f.calls != calls {
+				t.Fatal("guard reached calendar")
+			}
+		})
 	}
 }

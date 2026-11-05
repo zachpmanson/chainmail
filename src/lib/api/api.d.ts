@@ -2197,17 +2197,28 @@ export interface components {
             /** @constant */
             dedicated: true;
         };
+        /** @description Adopt is metadata-only and requires the original resource: digest ID, original revision, a stable adoptId UUID and explicit dryRun. Commit (dryRun:false) also requires adoptHash from the saved preview. No nonzero schedule is accepted. Adoption-only fields are rejected on all other actions. */
         HassleMutation: {
             location: components["schemas"]["HassleLocation"];
             /** @enum {string} */
-            action: "create" | "edit" | "done" | "delete";
+            action: "create" | "edit" | "done" | "delete" | "adopt";
             id: string;
             revision?: string;
             schedule?: components["schemas"]["HassleSchedule"];
+            /**
+             * Format: uuid
+             * @description Stable client-generated adoption UUID; normalized to lowercase. Adopt only.
+             */
+            adoptId?: string;
+            /** @description Saved preview fingerprint, mandatory for commit and completed retry. Adopt only. */
+            adoptHash?: string;
+            /** @description Required explicitly for adopt. True previews without writing; false conditionally updates the existing resource. Adopt only. */
+            dryRun?: boolean;
         };
         HassleResult: {
             removed: number;
             message: string;
+            adoption?: components["schemas"]["HassleAdoption"];
         };
         /** @description Read-only recurrence classification, independent of mutation/edit eligibility. Unknown schedules remain visible in Upcoming; next/last are known occurrences, not DTSTART guesses. */
         HassleTiming: {
@@ -2225,6 +2236,16 @@ export interface components {
             last: string | null;
             /** @description Nonempty when some resource timing is unsupported or incomplete. */
             note: string;
+        };
+        /** @description Semantic iCalendar exports, NOT byte-exact backups. Save preview before commit. Fingerprint excludes only the appended marker and VEVENT DTSTAMP/LAST-MODIFIED/SEQUENCE. An exact completed retry returns Already adopted without writing; its before/after are the current tagged resource, not the original backup. */
+        HassleAdoption: {
+            resourceId: string;
+            revision: string;
+            taskId: string;
+            before: string;
+            after: string;
+            /** @description Protected-content SHA-256; pass as adoptHash and compare after actual writes. */
+            fingerprint: string;
         };
     };
     responses: never;

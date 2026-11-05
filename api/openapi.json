@@ -5558,7 +5558,8 @@
               "create",
               "edit",
               "done",
-              "delete"
+              "delete",
+              "adopt"
             ]
           },
           "id": {
@@ -5569,13 +5570,28 @@
           },
           "schedule": {
             "$ref": "#/components/schemas/HassleSchedule"
+          },
+          "adoptId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Stable client-generated adoption UUID; normalized to lowercase. Adopt only."
+          },
+          "adoptHash": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{64}$",
+            "description": "Saved preview fingerprint, mandatory for commit and completed retry. Adopt only."
+          },
+          "dryRun": {
+            "type": "boolean",
+            "description": "Required explicitly for adopt. True previews without writing; false conditionally updates the existing resource. Adopt only."
           }
         },
         "required": [
           "location",
           "action",
           "id"
-        ]
+        ],
+        "description": "Adopt is metadata-only and requires the original resource: digest ID, original revision, a stable adoptId UUID and explicit dryRun. Commit (dryRun:false) also requires adoptHash from the saved preview. No nonzero schedule is accepted. Adoption-only fields are rejected on all other actions."
       },
       "HassleResult": {
         "type": "object",
@@ -5586,6 +5602,9 @@
           },
           "message": {
             "type": "string"
+          },
+          "adoption": {
+            "$ref": "#/components/schemas/HassleAdoption"
           }
         },
         "required": [
@@ -5632,6 +5651,40 @@
           "next",
           "last",
           "note"
+        ]
+      },
+      "HassleAdoption": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Semantic iCalendar exports, NOT byte-exact backups. Save preview before commit. Fingerprint excludes only the appended marker and VEVENT DTSTAMP/LAST-MODIFIED/SEQUENCE. An exact completed retry returns Already adopted without writing; its before/after are the current tagged resource, not the original backup.",
+        "properties": {
+          "resourceId": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          },
+          "taskId": {
+            "type": "string"
+          },
+          "before": {
+            "type": "string"
+          },
+          "after": {
+            "type": "string"
+          },
+          "fingerprint": {
+            "type": "string",
+            "description": "Protected-content SHA-256; pass as adoptHash and compare after actual writes."
+          }
+        },
+        "required": [
+          "resourceId",
+          "revision",
+          "taskId",
+          "before",
+          "after",
+          "fingerprint"
         ]
       }
     }

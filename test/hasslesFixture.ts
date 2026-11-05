@@ -62,6 +62,8 @@ export function hasslesFixture() {
     if (url.pathname === "/v1/hassles") {
       if (method === "GET") return ok({ tasks });
       const mutation = body as Mutation;
+      if (!["create", "edit", "done", "delete"].includes(mutation.action))
+        return fail(400, "Offline fixture does not support this task action");
       if (JSON.stringify(mutation.location) !== JSON.stringify(location))
         return fail(409, "Location changed; refresh");
       if (mode === "read-only")
@@ -90,7 +92,8 @@ export function hasslesFixture() {
       } else {
         const task = tasks.find((t) => t.id === mutation.id);
         if (!task || task.revision !== mutation.revision) return fail(409, "Stale task revision");
-        if (mutation.action === "edit" && mutation.schedule) {
+        if (mutation.action === "edit") {
+          if (!mutation.schedule) return fail(400, "Schedule required");
           task.title = mutation.schedule.title;
           task.schedule = mutation.schedule;
           task.timing.next = new Date(wallInstant(mutation.schedule.start)!).toISOString();

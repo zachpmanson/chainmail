@@ -1,7 +1,9 @@
 package hassles
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -9,22 +11,52 @@ import (
 )
 
 type Mutation struct {
-	Location Location `json:"location"`
-	Action   string   `json:"action"`
-	ID       string   `json:"id"`
-	Revision string   `json:"revision"`
-	Schedule Schedule `json:"schedule"`
+	Location  Location `json:"location"`
+	Action    string   `json:"action"`
+	ID        string   `json:"id"`
+	Revision  string   `json:"revision"`
+	Schedule  Schedule `json:"schedule"`
+	AdoptID   *string  `json:"adoptId,omitempty"`
+	AdoptHash *string  `json:"adoptHash,omitempty"`
+	DryRun    *bool    `json:"dryRun,omitempty"`
+}
+
+// JSON null is not absence: an adoption-only flag must never be silently
+// ignored on a destructive action. Keep strict unknown-field decoding here too.
+func (in *Mutation) UnmarshalJSON(data []byte) error {
+	type wire Mutation
+	var value wire
+	d := json.NewDecoder(bytes.NewReader(data))
+	d.DisallowUnknownFields()
+	if err := d.Decode(&value); err != nil {
+		return err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	for name, raw := range fields {
+		if (strings.EqualFold(name, "adoptId") || strings.EqualFold(name, "adoptHash") || strings.EqualFold(name, "dryRun")) && bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+			return fmt.Errorf("%s must not be null", name)
+		}
+	}
+	*in = Mutation(value)
+	return nil
 }
 
 type Result struct {
-	Removed int    `json:"removed"`
-	Message string `json:"message"`
+	Removed  int       `json:"removed"`
+	Message  string    `json:"message"`
+	Adoption *Adoption `json:"adoption,omitempty"`
 }
 
 // Caller serializes mutations and selection changes. Real ETags remain the
 // cross-process/upstream concurrency boundary, not that local mutex.
 func Mutate(ctx context.Context, b Backend, in Mutation, now time.Time) (Result, error) {
 	result := Result{}
+	if err := ValidateAdoptionFields(in); err != nil {
+		return result, err
+	}
 	objects, err := b.Objects(ctx, in.Location.CalendarID)
 	if err != nil {
 		return result, err
@@ -32,6 +64,9 @@ func Mutate(ctx context.Context, b Backend, in Mutation, now time.Time) (Result,
 	tasks, err := Inventory(objects, now)
 	if err != nil {
 		return result, err
+	}
+	if in.Action == "adopt" {
+		return adoptReminder(ctx, b, in, objects, tasks)
 	}
 	if in.Action == "create" {
 		c, err := NewCalendar(in.ID, in.Schedule, now)
