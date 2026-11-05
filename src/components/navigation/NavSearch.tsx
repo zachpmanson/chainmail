@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
-import { MagnifyingGlassIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import { IconSearch, IconX } from "@tabler/icons-react";
 import { $api, type SearchMode } from "../../lib/api/api";
 import NavPerson from "./NavPerson";
 import Button from "../ui/Button";
@@ -146,7 +146,7 @@ export default function NavSearch() {
           onMouseDown={(ev) => ev.preventDefault()}
           onClick={dismiss}
         >
-          <XMarkIcon aria-hidden="true" />
+          <IconX aria-hidden="true" />
         </IconButton>
       ) : null}
       <form
@@ -170,12 +170,7 @@ export default function NavSearch() {
           if (!asks(shown)) setOpen(false);
         }}
       >
-        <MagnifyingGlassIcon
-          className="flex-none opacity-80"
-          width={12}
-          height={12}
-          aria-hidden="true"
-        />
+        <IconSearch className="flex-none opacity-80" width={12} height={12} aria-hidden="true" />
         <TextInput
           className="min-h-0 min-w-24 flex-1 border-0 bg-transparent px-0 py-0.5 text-sm text-fg placeholder:text-muted focus:ring-0"
           value={shown.q}

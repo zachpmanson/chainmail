@@ -1,4 +1,4 @@
-import { ArrowDownTrayIcon } from "@heroicons/react/24/outline";
+import { IconDownload } from "@tabler/icons-react";
 import { graphLanes } from "../../lib/timeline/lanes";
 import type { View } from "../../lib/timeline/derive";
 import { prefersDark } from "../../lib/ui/palette";
@@ -231,7 +231,7 @@ export default function Minimap({ v }: { v: View }) {
           aria-label="Download this reply tree as an SVG file"
           onClick={download}
         >
-          <ArrowDownTrayIcon width={11} height={11} aria-hidden="true" />
+          <IconDownload width={11} height={11} aria-hidden="true" />
         </button>
       </h3>
       {/* Both orientations render; body.tree-h picks one in CSS, so no React state. */}

@@ -1,3 +1,4 @@
+import { IconArrowBackUp } from "@tabler/icons-react";
 import type { ReplyTarget } from "../../lib/timeline/replyTarget";
 
 export default function ReplyLink({ parent }: { parent: ReplyTarget | null }) {
@@ -14,7 +15,7 @@ export default function ReplyLink({ parent }: { parent: ReplyTarget | null }) {
       /* In column mode CSS hides the label (.parlbl), so the title is the only full statement. */
       title={`In reply to ${parent.whoTitle ?? parent.who}, ${parent.when}`}
     >
-      <span className="block translate-y-[.045em] text-sm leading-none">&#8617;</span>
+      <IconArrowBackUp className="block size-3.5 shrink-0" aria-hidden="true" />
       <span className="parlbl">
         in reply to <b className="font-[650] text-inherit">{parent.who}</b>, {parent.when}
       </span>

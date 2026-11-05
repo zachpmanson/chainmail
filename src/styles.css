@@ -32,25 +32,26 @@
   header.sitehead:has(.navsearch.open) .navright { flex:1 1 auto; justify-content:flex-start; }
   header.sitehead:has(.navsearch.open) .navsearch { width:calc(100% - var(--searchgap)); }
   h1 { font-size:1.3rem; margin:0 0 .25rem; letter-spacing:-.01em; }
-  .pan > summary::-webkit-details-marker { display:none; }
-  .pan > summary::before { content:""; display:inline-block; width:0; height:0;
-    border:.3em solid transparent; border-left-color:currentColor;
-    margin-right:.4em; vertical-align:.04em;
-    transition:transform .12s; }
-  .pan[open] > summary::before { transform:rotate(90deg); }
-  .srcgrp > summary::-webkit-details-marker { display:none; }
-  .srcgrp > summary::before { content:""; display:inline-block; width:0; height:0;
-    border:.25em solid transparent; border-left-color:currentColor;
-    transition:transform .12s; }
-  .srcgrp[open] > summary::before { transform:rotate(90deg); }
+  .pan > summary::-webkit-details-marker, .srcgrp > summary::-webkit-details-marker { display:none; }
+  /* Tabler 3.50.0 chevrons as masks: also works in static and signature HTML. */
+  .pan > summary::before, .srcgrp > summary::before {
+    content:""; display:inline-block; width:1em; height:1em;
+    background-color:currentColor;
+    mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20class%3D%22tabler-icon%20tabler-icon-chevron-right%22%3E%3Cpath%20d%3D%22M9%206l6%206l-6%206%22%3E%3C%2Fpath%3E%3C%2Fsvg%3E");
+    mask-size:contain; mask-repeat:no-repeat;
+    vertical-align:-.15em; transition:transform .12s;
+  }
+  .pan > summary::before { margin-right:.4em; }
+  .pan[open] > summary::before, .srcgrp[open] > summary::before { transform:rotate(90deg); }
   details.hdr > summary::-webkit-details-marker { display:none; }
   details.hdr > summary > .htail::after { content:""; display:inline-block;
-    width:0; height:0;
-    border:.25em solid transparent; border-right-color:var(--muted);
-    transition:transform .12s, border-right-color .12s; }
-  details.hdr > summary:hover > .htail::after { border-right-color:var(--accent); }
+    width:1em; height:1em; background-color:var(--muted);
+    mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20class%3D%22tabler-icon%20tabler-icon-chevron-left%22%3E%3Cpath%20d%3D%22M15%206l-6%206l6%206%22%3E%3C%2Fpath%3E%3C%2Fsvg%3E");
+    mask-size:contain; mask-repeat:no-repeat;
+    transition:transform .12s, background-color .12s; }
+  details.hdr > summary:hover > .htail::after { background-color:var(--accent); }
   details.hdr[open] > summary > .htail::after { transform:rotate(-90deg);
-    border-right-color:var(--accent); }
+    background-color:var(--accent); }
   .bub p { margin:.25rem 0; }
   .bub p:first-of-type { margin-top:0; }
   .bub ul { margin:.25rem 0; padding-left:1rem; }
@@ -60,9 +61,11 @@
   .bd details.sig > summary { list-style:none; cursor:pointer; display:inline-block;
     font-size:.8rem; color:var(--muted); font-style:italic; }
   .bd details.sig > summary::-webkit-details-marker { display:none; }
-  .bd details.sig > summary::before { content:""; display:inline-block; width:0; height:0;
-    border:.28em solid transparent; border-left-color:currentColor;
-    margin-right:.35em; vertical-align:.02em; transition:transform .12s; }
+  .bd details.sig > summary::before { content:""; display:inline-block; width:1em; height:1em;
+    background-color:currentColor;
+    mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20class%3D%22tabler-icon%20tabler-icon-chevron-right%22%3E%3Cpath%20d%3D%22M9%206l6%206l-6%206%22%3E%3C%2Fpath%3E%3C%2Fsvg%3E");
+    mask-size:contain; mask-repeat:no-repeat;
+    margin-right:.35em; vertical-align:-.15em; transition:transform .12s; }
   .bd details.sig[open] > summary::before { transform:rotate(90deg); }
   .bd details.sig > summary:hover { color:var(--accent); }
   .bd details.sig .sigbd { border-left:2px solid var(--line); padding-left:.5rem;

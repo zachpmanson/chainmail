@@ -1,5 +1,5 @@
 import { Autocomplete } from "@base-ui/react/autocomplete";
-import { XMarkIcon } from "@heroicons/react/24/outline";
+import { IconX } from "@tabler/icons-react";
 import { useMemo, useRef, useState } from "react";
 import Button from "../ui/Button";
 
@@ -51,7 +51,7 @@ function Chip({ who, remove, disabled }: { who: Address; remove: () => void; dis
         title={`Take ${who.address} off this reply.`}
         aria-label={`remove ${words}`}
       >
-        <XMarkIcon className="block" width={10} height={10} aria-hidden="true" />
+        <IconX className="block" width={10} height={10} aria-hidden="true" />
       </Button>
     </span>
   );

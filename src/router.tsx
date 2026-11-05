@@ -11,7 +11,7 @@ import {
   useSearch,
 } from "@tanstack/react-router";
 import { lazy, Suspense, useEffect, useState } from "react";
-import { PencilSquareIcon } from "@heroicons/react/24/outline";
+import { IconEdit } from "@tabler/icons-react";
 import type { Timeline } from "./lib/timeline/spec";
 import { normalise } from "./lib/timeline/normalise";
 import SelectView from "./components/inbox/SelectView";
@@ -176,7 +176,7 @@ function RootLayout() {
                 {location.pathname === "/hassles" ? <NavHasslesRefresh /> : <NavRefresh />}
                 <NavUndo />
                 <IconButton aria-label="Compose" title="Compose" onClick={openCompose}>
-                  <PencilSquareIcon aria-hidden="true" />
+                  <IconEdit aria-hidden="true" />
                 </IconButton>
                 <NavSearch />
               </span>

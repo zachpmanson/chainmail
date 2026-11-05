@@ -1,5 +1,5 @@
-import { ArchiveBoxIcon } from "@heroicons/react/24/outline";
+import { IconArchive } from "@tabler/icons-react";
 
 export default function ArchiveGlyph() {
-  return <ArchiveBoxIcon aria-hidden="true" />;
+  return <IconArchive aria-hidden="true" />;
 }

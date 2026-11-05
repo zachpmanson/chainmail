@@ -1,5 +1,5 @@
-import { TrashIcon } from "@heroicons/react/24/outline";
+import { IconTrash } from "@tabler/icons-react";
 
 export default function TrashGlyph() {
-  return <TrashIcon aria-hidden="true" />;
+  return <IconTrash aria-hidden="true" />;
 }

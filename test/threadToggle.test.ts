@@ -1,4 +1,4 @@
-import { Bars3BottomRightIcon, Bars3Icon } from "@heroicons/react/24/outline";
+import { IconListTree, IconMenu2 } from "@tabler/icons-react";
 import { createElement } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -52,9 +52,9 @@ it.each([false, true])("offers the destination layout icon when tree is %s", asy
     expect(button.props["aria-pressed"]).toBe(on);
     expect(button.props["aria-label"]).toBe(label(on));
     expect(button.props.title).toBe(label(on));
-    const icon = button.findByType(on ? Bars3Icon : Bars3BottomRightIcon);
+    const icon = button.findByType(on ? IconMenu2 : IconListTree);
     expect(icon.props["aria-hidden"]).toBe("true");
-    expect(button.findAllByType(on ? Bars3BottomRightIcon : Bars3Icon)).toHaveLength(0);
+    expect(button.findAllByType(on ? IconListTree : IconMenu2)).toHaveLength(0);
     expect(rendered!.root.findByType(ThreadMessages).props.tree).toBe(on);
     expect(usePrefs.getState().tree).toBe(on);
     return button;

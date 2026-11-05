@@ -1,3 +1,5 @@
+import { IconArrowBackUp } from "@tabler/icons-react";
+
 export default function ReplyTarget({
   answerAnchor,
   words,
@@ -12,9 +14,7 @@ export default function ReplyTarget({
       aria-label={`Jump to the message being replied to: ${words.who || "the sender"}, ${words.when}`}
       title={`Jump to the message being replied to: ${words.whoTitle ?? words.who}, ${words.when}`}
     >
-      <span className="block translate-y-[.045em] text-sm leading-none" aria-hidden="true">
-        &#8617;
-      </span>
+      <IconArrowBackUp className="block size-3.5 shrink-0" aria-hidden="true" />
       <span>{words.who || "message"}</span>
     </a>
   );

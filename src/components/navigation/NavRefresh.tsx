@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowPathIcon } from "@heroicons/react/24/outline";
+import { IconRefresh } from "@tabler/icons-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError, $api } from "../../lib/api/api";
 import { errText } from "../../lib/ui/errText";
@@ -88,7 +88,7 @@ export default function NavRefresh() {
         disabled={busy}
         onClick={() => void refresh()}
       >
-        <ArrowPathIcon
+        <IconRefresh
           className={[indicator && "motion-safe:animate-spin", warning && "text-accent"]
             .filter(Boolean)
             .join(" ")}

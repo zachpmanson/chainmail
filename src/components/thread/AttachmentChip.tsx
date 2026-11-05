@@ -1,4 +1,4 @@
-import { ArrowPathIcon, ArrowTopRightOnSquareIcon } from "@heroicons/react/24/outline";
+import { IconRefresh, IconExternalLink } from "@tabler/icons-react";
 import {
   attHref,
   isSkipped,
@@ -46,7 +46,7 @@ export default function AttachmentChip({
       <span className={`text-2xs text-muted${fetching && fetchable ? " text-fg" : ""}`}>
         {fetching && fetchable ? (
           /* An image, not a status: the chip has aria-busy and the pane owns the one live region. */
-          <ArrowPathIcon
+          <IconRefresh
             className="inline-block size-[1em] align-middle motion-safe:animate-spin"
             role="img"
             aria-label="Downloading…"
@@ -116,7 +116,7 @@ export default function AttachmentChip({
     >
       {label}
       {opens ? (
-        <ArrowTopRightOnSquareIcon
+        <IconExternalLink
           className="size-[.7rem] shrink-0 text-muted group-hover/attachment:text-accent group-focus-visible/attachment:text-accent"
           aria-hidden="true"
         />

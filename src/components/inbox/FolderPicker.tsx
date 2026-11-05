@@ -1,5 +1,5 @@
 import { Menu } from "@base-ui/react/menu";
-import { ChevronDownIcon } from "@heroicons/react/24/outline";
+import { IconChevronDown } from "@tabler/icons-react";
 import { $api } from "../../lib/api/api";
 import { cn } from "../../lib/ui/cn";
 import { buttonClasses } from "../ui/styles";
@@ -116,7 +116,7 @@ export default function FolderPicker({
               </>
             ) : null}
           </span>
-          <ChevronDownIcon className="size-3 shrink-0 text-muted" aria-hidden="true" />
+          <IconChevronDown className="size-3 shrink-0 text-muted" aria-hidden="true" />
         </Menu.Trigger>
       </div>
 

@@ -1,3 +1,4 @@
+import { IconX } from "@tabler/icons-react";
 import { Toast } from "@base-ui/react/toast";
 import { useEffect, useRef } from "react";
 import { dismissToast, useToasts } from "../../lib/ui/toasts";
@@ -58,7 +59,7 @@ function ToastList() {
               aria-hidden={false}
               title="Dismiss"
             >
-              ×
+              <IconX className="block size-[1em]" aria-hidden="true" />
             </Toast.Close>
           </Toast.Root>
         ))}

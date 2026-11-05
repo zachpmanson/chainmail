@@ -1,3 +1,4 @@
+import { IconPaperclip } from "@tabler/icons-react";
 import type { Attachment } from "../../lib/message/attachments";
 import AttachmentChip from "./AttachmentChip";
 
@@ -24,7 +25,7 @@ export default function Attachments({
   return (
     <div className="my-1.5 mb-0.5 flex flex-wrap items-center gap-1">
       <span className="text-xs text-muted" role="img" aria-label="attachments">
-        📎
+        <IconPaperclip className="block size-3" aria-hidden="true" />
       </span>
       {attachments.map((a, i) => (
         <AttachmentChip

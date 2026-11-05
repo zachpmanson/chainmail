@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowPathIcon } from "@heroicons/react/24/outline";
+import { IconRefresh } from "@tabler/icons-react";
 import { useIsFetching, useIsMutating, useQueryClient } from "@tanstack/react-query";
 import { $api } from "../../lib/api/api";
 import { errText } from "../../lib/ui/errText";
@@ -50,7 +50,7 @@ export default function NavHasslesRefresh() {
       disabled={busy || fetching > 0 || writing > 0}
       onClick={() => void refresh()}
     >
-      <ArrowPathIcon
+      <IconRefresh
         aria-hidden="true"
         className={busy || fetching > 0 ? "motion-safe:animate-spin" : ""}
       />

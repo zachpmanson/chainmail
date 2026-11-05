@@ -1,4 +1,4 @@
-import { FolderIcon } from "@heroicons/react/24/outline";
+import { IconFolder } from "@tabler/icons-react";
 import { $api } from "../../lib/api/api";
 import { useAccountId } from "../../lib/inbox/useAccountId";
 import { pushToast } from "../../lib/ui/toasts";
@@ -104,7 +104,7 @@ export default function MoveFolder({
 
   return (
     <IconSelect
-      icon={<FolderIcon aria-hidden="true" />}
+      icon={<IconFolder aria-hidden="true" />}
       title="Move to a folder"
       aria-label="Move to a folder"
       value={allAccounts ? "" : (defaultFolder ?? "")}

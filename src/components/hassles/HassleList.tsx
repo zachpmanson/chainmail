@@ -1,22 +1,10 @@
 import { Tabs } from "@base-ui/react/tabs";
-import { PencilIcon } from "@heroicons/react/24/outline";
+import { IconCheck, IconChecks, IconPencil } from "@tabler/icons-react";
 import type { HassleTask } from "../../lib/hassles/forms";
 import { hassleGroups, type HassleTab } from "../../lib/hassles/groups";
 import { hassleSummary } from "../../lib/hassles/summary";
 import IconButton from "../ui/IconButton";
 import { buttonClasses } from "../ui/styles";
-
-function CompletionIcon({ all = false }: { all?: boolean }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d={all ? "m2 12 4 4L16 6m-5 10 3 3L24 9" : "m5 13 4 4L19 7"}
-      />
-    </svg>
-  );
-}
 
 export default function HassleList({
   tasks,
@@ -84,7 +72,7 @@ export default function HassleList({
                         disabled={busy || !task.writable || !task.schedule}
                         onClick={() => onEdit(task)}
                       >
-                        <PencilIcon aria-hidden="true" />
+                        <IconPencil aria-hidden="true" />
                       </IconButton>
                       <IconButton
                         aria-label={`This instance only: ${task.title}`}
@@ -96,7 +84,7 @@ export default function HassleList({
                         disabled={busy || !task.writable || !task.instance}
                         onClick={() => onDoneInstance(task)}
                       >
-                        <CompletionIcon />
+                        <IconCheck aria-hidden="true" />
                       </IconButton>
                       <IconButton
                         aria-label={`All instances: ${task.title}`}
@@ -104,7 +92,7 @@ export default function HassleList({
                         disabled={busy || !task.writable}
                         onClick={() => onDone(task)}
                       >
-                        <CompletionIcon all />
+                        <IconChecks aria-hidden="true" />
                       </IconButton>
                     </li>
                   ))}

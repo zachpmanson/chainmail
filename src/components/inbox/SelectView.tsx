@@ -126,7 +126,7 @@ export default function SelectView() {
                 <ThreadPane
                   thread={reading}
                   label="The candidate being read"
-                  backLabel="← Results"
+                  backLabel="Results"
                   empty="Nothing open — pick a result from the list."
                   onClose={closeChain}
                 />

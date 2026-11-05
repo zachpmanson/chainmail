@@ -1,3 +1,4 @@
+import { IconX } from "@tabler/icons-react";
 import type { PersonSummary } from "../../lib/api/api";
 import Button from "../ui/Button";
 
@@ -24,7 +25,7 @@ export default function Identity({
         aria-label={`Detach ${id} from ${owner.displayName}`}
         onClick={() => onDetach(id)}
       >
-        ×
+        <IconX className="block size-[1em]" aria-hidden="true" />
       </Button>
     </span>
   );

@@ -183,7 +183,7 @@ function FolderInbox({ folder }: { folder: ReturnType<typeof useFolder> }) {
             <ThreadPane
               thread={selected}
               label="The selected thread"
-              backLabel="← List"
+              backLabel="List"
               empty="Nothing open — pick a thread from the list."
               moveDefault={label}
               onClose={closeChain}

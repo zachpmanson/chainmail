@@ -1,9 +1,12 @@
 import { useDraftCoordinator } from "../compose/DraftSelectionContext";
 import {
-  ArrowTopRightOnSquareIcon,
-  Bars3BottomRightIcon,
-  Bars3Icon,
-} from "@heroicons/react/24/outline";
+  IconArrowLeft,
+  IconCircle,
+  IconCircleFilled,
+  IconExternalLink,
+  IconListTree,
+  IconMenu2,
+} from "@tabler/icons-react";
 import { flushSync } from "react-dom";
 import { useMailAction, useReadAction } from "../../lib/inbox/mailActions";
 import { useAccountId } from "../../lib/inbox/useAccountId";
@@ -88,6 +91,9 @@ export default function ThreadPane({
               className={`min-h-0 px-2 py-1 text-xs ${backLabel === "Close" ? "" : "min-[60rem]:hidden"}`}
               onClick={onClose}
             >
+              {backLabel !== "Close" ? (
+                <IconArrowLeft className="size-[1em] shrink-0" aria-hidden="true" />
+              ) : null}
               {backLabel}
             </Button>
             <span className="min-w-0 text-sm font-semibold wrap-break-word">
@@ -117,7 +123,7 @@ export default function ThreadPane({
                   );
                 }}
               >
-                <ArrowTopRightOnSquareIcon aria-hidden="true" />
+                <IconExternalLink aria-hidden="true" />
               </IconButton>
             ) : null}
             <IconButton
@@ -129,11 +135,7 @@ export default function ThreadPane({
                 withTransition(document, () => flushSync(() => setTree(!tree)));
               }}
             >
-              {tree ? (
-                <Bars3Icon aria-hidden="true" />
-              ) : (
-                <Bars3BottomRightIcon aria-hidden="true" />
-              )}
+              {tree ? <IconMenu2 aria-hidden="true" /> : <IconListTree aria-hidden="true" />}
             </IconButton>
             <MoveFolder
               defaultFolder={moveDefault}
@@ -203,17 +205,11 @@ export default function ThreadPane({
                   })
                 }
               >
-                <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                  <circle
-                    cx="8"
-                    cy="8"
-                    r="6.4"
-                    className={
-                      // 1/16 matches Heroicons' 1.5/24 stroke at the shared icon size.
-                      thread.unread > 0 ? "fill-current" : "fill-none stroke-current stroke-1"
-                    }
-                  />
-                </svg>
+                {thread.unread > 0 ? (
+                  <IconCircleFilled aria-hidden="true" />
+                ) : (
+                  <IconCircle aria-hidden="true" />
+                )}
               </IconButton>
             ) : null}
           </div>

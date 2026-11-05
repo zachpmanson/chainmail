@@ -1,3 +1,4 @@
+import { IconArrowLeft } from "@tabler/icons-react";
 import type { OpsMergeRecord, OpsPlanResponse } from "../../lib/api/api";
 import { ruleLabel } from "../../lib/ops/opsMerges";
 import { when } from "../../lib/ui/stamp";
@@ -6,8 +7,12 @@ function OneTrail(t: OpsMergeRecord) {
   return (
     <li className="py-1 text-sm/normal">
       <span className="text-xs text-muted tabular-nums">{when(t.mergedAt)}</span>
-      <code>#{t.keepId}</code> {t.keepName ?? ""} <span className="text-muted">←</span>{" "}
-      <code>#{t.dropId}</code> {t.dropName ?? ""}
+      <code>#{t.keepId}</code> {t.keepName ?? ""}{" "}
+      <IconArrowLeft
+        className="inline-block size-[1em] align-middle text-muted"
+        aria-hidden="true"
+      />
+      <span className="sr-only">merged from</span> <code>#{t.dropId}</code> {t.dropName ?? ""}
       {t.reason ? <span className="block text-xs text-muted">{t.reason}</span> : null}
     </li>
   );

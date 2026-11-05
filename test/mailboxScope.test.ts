@@ -232,22 +232,19 @@ describe("thread read toggle", () => {
     expect(button.props.disabled).toBe(false);
     const svg = button.findByType("svg");
     expect(svg.props).toMatchObject({
-      viewBox: "0 0 16 16",
+      viewBox: "0 0 24 24",
       "aria-hidden": "true",
-      focusable: "false",
+      className:
+        unread > 0 ? "tabler-icon tabler-icon-circle-filled" : "tabler-icon tabler-icon-circle",
+      fill: unread > 0 ? "currentColor" : "none",
     });
-    const circle = svg.findByType("circle");
-    expect(circle.props).toMatchObject({ cx: "8", cy: "8", r: "6.4" });
-    // Both glyphs render at size-6: 1/16 and Heroicons' 1.5/24 are the same width.
-    expect(circle.props.className).toBe(
-      unread > 0 ? "fill-current" : "fill-none stroke-current stroke-1",
-    );
+    expect(button.findByType(IconFrame)).toBeDefined();
     const archive = pane
       .findAllByType("button")
       .find((node) => node.props["aria-label"] === "Archive")!;
     expect(archive.findByType("svg").props).toMatchObject({
       viewBox: "0 0 24 24",
-      strokeWidth: 1.5,
+      strokeWidth: 2,
     });
     act(() => button.props.onClick());
     expect(state.read).toHaveBeenCalledExactlyOnceWith({
@@ -528,7 +525,7 @@ describe("empty search results keep the explicitly opened reader", () => {
     const back = rendered!.root
       .findByType(ThreadPane)
       .findAllByType("button")
-      .find((node) => node.children.includes("← Results"))!;
+      .find((node) => node.children.includes("Results"))!;
     act(() => {
       back.props.onClick();
     });

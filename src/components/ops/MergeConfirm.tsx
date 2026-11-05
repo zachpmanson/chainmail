@@ -1,3 +1,4 @@
+import { IconArrowRight } from "@tabler/icons-react";
 import type { OpsMerge } from "../../lib/api/api";
 import Button from "../ui/Button";
 
@@ -26,7 +27,11 @@ export default function MergeConfirm({
             <code>
               #{m.dropId} {m.dropName}
             </code>{" "}
-            <span className="text-muted">→</span>{" "}
+            <IconArrowRight
+              className="inline-block size-[1em] align-middle text-muted"
+              aria-hidden="true"
+            />
+            <span className="sr-only">into</span>{" "}
             <code>
               #{m.keepId} {m.keepName}
             </code>

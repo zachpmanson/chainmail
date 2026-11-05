@@ -112,9 +112,13 @@ Use `src/components/ui/` before writing control styles at a call site:
 | `InlineAlert`                                                                  | an error in place (`compact` for settings panels)                                                                       |
 | `StatusBadge`, `DialogShell`, `ToastHost`                                      | badges, modals, toasts                                                                                                  |
 
-Icons are Heroicons outline (`@heroicons/react/24/outline`), `aria-hidden`, inside an `IconButton`
-with an `aria-label` and `title`. Interactive elements show focus with the shared
-`focus-visible:outline-accent` ring.
+Interface icons are Tabler (`@tabler/icons-react`), normally `aria-hidden`, inside an `IconButton`
+with an `aria-label` and `title`. Use meaningful Tabler glyphs with their default stroke; preserve
+explicit compact sizes and label any icon that independently conveys accessible meaning. Static
+CSS disclosure markers use masks generated from the same Tabler chevrons (library-provenance
+tests), without changing sender HTML. Reply-tree/chart data graphics, matching legends, branding,
+content images and native controls are not interface icons. Interactive elements show focus with
+the shared `focus-visible:outline-accent` ring.
 
 ### Components
 

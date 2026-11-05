@@ -1,3 +1,5 @@
+import { IconPaperclip } from "@tabler/icons-react";
+
 /** The four bubble states, so the page explains its own notation. */
 export default function Legend() {
   return (
@@ -26,7 +28,7 @@ export default function Legend() {
       </div>
       <div className="flex items-start gap-2 leading-snug">
         <span className="flex size-[1.15rem] shrink-0 items-center justify-center text-sm">
-          &#128206;
+          <IconPaperclip className="size-3.5" aria-hidden="true" />
         </span>
         <div>
           <b className="font-semibold text-fg">Attachment</b> — links through to that message in

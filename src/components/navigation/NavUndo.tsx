@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from "react";
-import { ArrowUturnLeftIcon } from "@heroicons/react/24/outline";
+import { IconArrowBackUp } from "@tabler/icons-react";
 import IconButton from "../ui/IconButton";
 import { appUndo, isUndoKey } from "../../lib/ui/undo";
 import { pushToast } from "../../lib/ui/toasts";
@@ -36,7 +36,7 @@ export default function NavUndo() {
       disabled={!state.label && !state.pending}
       onClick={undo}
     >
-      <ArrowUturnLeftIcon aria-hidden="true" />
+      <IconArrowBackUp aria-hidden="true" />
     </IconButton>
   );
 }

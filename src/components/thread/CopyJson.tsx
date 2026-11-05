@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CheckIcon, ClipboardDocumentIcon } from "@heroicons/react/24/outline";
+import { IconCheck, IconClipboard } from "@tabler/icons-react";
 import ReceiptIconButton from "../ui/ReceiptIconButton";
 
 export default function CopyJson({ data }: { data: unknown }) {
@@ -19,9 +19,9 @@ export default function CopyJson({ data }: { data: unknown }) {
       }}
     >
       {done ? (
-        <CheckIcon width={18} height={18} aria-hidden="true" />
+        <IconCheck width={18} height={18} aria-hidden="true" />
       ) : (
-        <ClipboardDocumentIcon width={18} height={18} aria-hidden="true" />
+        <IconClipboard width={18} height={18} aria-hidden="true" />
       )}
     </ReceiptIconButton>
   );

@@ -1,3 +1,4 @@
+import { IconArrowLeft } from "@tabler/icons-react";
 import Button from "../ui/Button";
 import { useEffect, useMemo, useState } from "react";
 import Timeline from "./Timeline";
@@ -67,7 +68,8 @@ export default function Rendered({
           className="fixed bottom-[.6rem] left-[.6rem] z-32 px-2 py-1 text-xs text-muted hover:text-accent"
           onClick={onBack}
         >
-          ← choose chains
+          <IconArrowLeft className="size-[1em] shrink-0" aria-hidden="true" />
+          choose chains
         </Button>
       ) : null}
       <Timeline

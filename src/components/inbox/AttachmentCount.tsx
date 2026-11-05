@@ -1,4 +1,4 @@
-import { PaperClipIcon } from "@heroicons/react/24/outline";
+import { IconPaperclip } from "@tabler/icons-react";
 
 export default function AttachmentCount({ attachments }: { attachments: number }) {
   return (
@@ -6,7 +6,7 @@ export default function AttachmentCount({ attachments }: { attachments: number }
       className="inline-flex items-center gap-1 text-2xs text-muted tabular-nums"
       title={`${attachments} attachment${attachments === 1 ? "" : "s"} in this thread`}
     >
-      <PaperClipIcon width={11} height={11} aria-hidden="true" />
+      <IconPaperclip width={11} height={11} aria-hidden="true" />
       {attachments}
     </span>
   );

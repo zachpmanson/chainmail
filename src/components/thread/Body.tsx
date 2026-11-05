@@ -1,4 +1,4 @@
-import { ArrowPathIcon } from "@heroicons/react/24/outline";
+import { IconRefresh } from "@tabler/icons-react";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { mountOriginal } from "../../lib/message/original";
 import type { Original } from "../../lib/message/useOriginal";
@@ -23,7 +23,7 @@ export default function Body({ body, state }: { body: string; state: Original })
   if (state.at === "asking") {
     return (
       <div key="asking" className="bd text-sm text-muted" role="status">
-        <ArrowPathIcon
+        <IconRefresh
           className="inline-block size-[1em] align-middle motion-safe:animate-spin"
           aria-hidden="true"
         />

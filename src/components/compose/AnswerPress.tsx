@@ -1,4 +1,4 @@
-import { ArrowUturnLeftIcon } from "@heroicons/react/24/outline";
+import { IconArrowBackUp } from "@tabler/icons-react";
 import ReceiptIconButton from "../ui/ReceiptIconButton";
 
 /** Also turns reply-all on. Drawn only when the message has a mailbox copy to
@@ -25,7 +25,7 @@ export default function AnswerPress({
       aria-label={label}
       onClick={() => onPress(extId)}
     >
-      <ArrowUturnLeftIcon width={18} height={18} aria-hidden="true" />
+      <IconArrowBackUp width={18} height={18} aria-hidden="true" />
     </ReceiptIconButton>
   );
 }
