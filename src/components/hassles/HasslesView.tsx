@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useIsMutating } from "@tanstack/react-query";
 import { $api } from "../../lib/api/api";
 import { locationKey } from "../../lib/hassles/forms";
@@ -7,6 +8,13 @@ import InlineAlert from "../ui/InlineAlert";
 import HassleInventory from "./HassleInventory";
 
 export default function HasslesView() {
+  useEffect(() => {
+    const previous = document.title;
+    document.title = "Hassles";
+    return () => {
+      document.title = previous;
+    };
+  }, []);
   const config = $api.useQuery("get", "/v1/hassles/location", {}, { staleTime: 0 });
   const mutations = useIsMutating({
     predicate: (m) =>

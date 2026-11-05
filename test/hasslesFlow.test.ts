@@ -22,6 +22,7 @@ function hassleScreen() {
 }
 
 let root: Root;
+let previousTitle: string;
 let host: HTMLDivElement;
 let client: QueryClient;
 let fixture: ReturnType<typeof hasslesFixture>;
@@ -29,6 +30,7 @@ let inventoryGate: Promise<void> | null = null;
 let configGate: Promise<void> | null = null;
 let writeGate: Promise<void> | null = null;
 beforeEach(async () => {
+  previousTitle = document.title;
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-11-04T01:15:45Z"));
@@ -68,6 +70,12 @@ afterEach(async () => {
   vi.restoreAllMocks();
   vi.useRealTimers();
   vi.unstubAllGlobals();
+});
+it("sets the document title to Hassles and restores it when leaving the page", async () => {
+  expect(document.title).toBe("Hassles");
+  expect(document.head.querySelector("title")!.textContent).toBe("Hassles");
+  await act(async () => root.render(createElement("p", null, "Another page")));
+  expect(document.title).toBe(previousTitle);
 });
 async function settle() {
   await act(async () => {
