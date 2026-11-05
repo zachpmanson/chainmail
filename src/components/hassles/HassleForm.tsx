@@ -33,6 +33,8 @@ export default function HassleForm({
   const [startPreset, setStartPreset] = useState<ReminderStartPreset | "custom">(
     initial ? "custom" : "hour",
   );
+  const [presetNow, setPresetNow] = useState(() => new Date());
+  const hourStart = startPreset === "hour" ? schedule.start : reminderStart("hour", presetNow);
   const [validation, setValidation] = useState("");
   const [endMode, setEndMode] = useState(initial?.until ? "date" : "done");
   const change = (patch: Partial<HassleSchedule>) => setSchedule((s) => ({ ...s, ...patch }));
@@ -68,16 +70,19 @@ export default function HassleForm({
           <SelectInput
             value={startPreset}
             disabled={busy}
+            onFocus={() => setPresetNow(new Date())}
+            onPointerDown={() => setPresetNow(new Date())}
+            onKeyDown={() => setPresetNow(new Date())}
             onChange={(e) => {
               const preset = e.target.value as ReminderStartPreset | "custom";
               setStartPreset(preset);
               if (preset !== "custom") change({ start: reminderStart(preset) });
             }}
           >
-            <option value="hour">In an hour</option>
-            <option value="afternoon">This afternoon</option>
-            <option value="evening">This evening</option>
-            <option value="tomorrow">Tomorrow morning</option>
+            <option value="hour">In an hour ({hourStart.slice(11)})</option>
+            <option value="afternoon">This afternoon (13:00)</option>
+            <option value="evening">This evening (18:00)</option>
+            <option value="tomorrow">Tomorrow morning (08:30)</option>
             <option value="custom">Custom</option>
           </SelectInput>
         </FormField>
@@ -184,7 +189,7 @@ export default function HassleForm({
           disabled={busy}
           onChange={(e) => change({ workHours: e.target.checked })}
         >
-          Work hours only · weekdays 9–5 Melbourne
+          Work hours only
         </CheckboxRow>
         {validation || error ? <InlineAlert>{validation || error}</InlineAlert> : null}
         <div className="flex justify-end gap-2">

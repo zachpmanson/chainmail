@@ -44,7 +44,8 @@ Configured calendar details and its settings link stay in Settings, not the Hass
   on narrow forms rather than hiding the selected value.
   Repeat lists Once, Hourly, Daily, Weekdays, Weekly, Monthly, then Yearly.
   The title uses a four-row textarea in both Add and Edit; line breaks become spaces
-  on save so the Calendar title remains one line. The form names Melbourne under When and beside the work-hours checkbox.
+  on save so the Calendar title remains one line. The form names Melbourne under When;
+  the checkbox label is simply Work hours only.
   Routine explanatory small print is omitted;
   validation errors, timing uncertainty and edit restrictions remain visible.
   Rows use the raised card surface (white in light mode, theme-aware in dark mode)
@@ -53,7 +54,10 @@ Configured calendar details and its settings link stay in Settings, not the Hass
   Work hours only enabled; unchecked or unknown schedules do not imply the restriction.
 - First reminder offers In an hour, This afternoon (13:00), This evening (18:00),
   Tomorrow morning (08:30), and Custom. Only Custom shows the date/time picker.
-  All wall times are Melbourne; passed afternoon/evening times roll to tomorrow.
+  Preset labels include their Melbourne clock time in parentheses; Custom stays unadorned.
+  The selected In an hour label reflects the draft's fixed start, including retries; an
+  unselected In an hour preview refreshes on focus, pointer or keyboard interaction without
+  changing the draft. All wall times are Melbourne; passed afternoon/evening times roll to tomorrow.
   In an hour adds 60 elapsed minutes at selection, rounded down to the minute.
   Selection fixes the payload for retries; existing schedules open as Custom.
   New hassles default to In an hour, with no custom picker shown.

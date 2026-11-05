@@ -677,12 +677,15 @@ it("uses placeholder-only title and presets, revealing the picker only for Custo
   expect(document.body.textContent).not.toContain("Done and Delete both");
   expect(document.body.textContent).not.toContain("Notifications and recurrence belong");
   expect(document.body.textContent).not.toContain("Next scheduled reminders");
-  expect(addForm().textContent?.match(/Melbourne/g)).toHaveLength(2);
+  expect(addForm().textContent?.match(/Melbourne/g)).toHaveLength(1);
+  expect(addForm().querySelector('input[type="checkbox"]')!.closest("label")!.textContent).toBe(
+    "Work hours only",
+  );
   expect([...firstReminder().options].map((option) => option.textContent)).toEqual([
-    "In an hour",
-    "This afternoon",
-    "This evening",
-    "Tomorrow morning",
+    "In an hour (13:15)",
+    "This afternoon (13:00)",
+    "This evening (18:00)",
+    "Tomorrow morning (08:30)",
     "Custom",
   ]);
   expect(firstReminder().value).toBe("hour");
@@ -717,6 +720,38 @@ it("defaults to In an hour before morning too, without showing a custom picker",
   const dialog = document.querySelector('[role="dialog"][aria-modal="true"]')!;
   expect(firstReminder(dialog).value).toBe("custom");
   expect(customStart(dialog).value).toBe(create.schedule.start);
+});
+it("refreshes unselected hour previews without changing a saved reminder time", async () => {
+  await choose();
+  await select(firstReminder(), "custom");
+  vi.setSystemTime(new Date("2026-11-04T03:45:00Z"));
+  await act(async () => firstReminder().focus());
+  expect(firstReminder().options[0]!.textContent).toBe("In an hour (15:45)");
+  expect(customStart().value).toBe("2026-11-04T13:15");
+  await select(firstReminder(), "hour");
+  vi.setSystemTime(new Date("2026-11-04T05:15:00Z"));
+  await act(async () => {
+    firstReminder().blur();
+    firstReminder().focus();
+  });
+  expect(firstReminder().options[0]!.textContent).toBe("In an hour (15:45)");
+  await select(firstReminder(), "custom");
+  expect(customStart().value).toBe("2026-11-04T15:45");
+  expect(firstReminder().options[0]!.textContent).toBe("In an hour (17:15)");
+  vi.setSystemTime(new Date("2026-11-04T06:25:00Z"));
+  await act(async () => {
+    firstReminder().dispatchEvent(new Event("pointerdown", { bubbles: true }));
+  });
+  expect(firstReminder().options[0]!.textContent).toBe("In an hour (18:25)");
+  expect(customStart().value).toBe("2026-11-04T15:45");
+  vi.setSystemTime(new Date("2026-11-04T07:35:00Z"));
+  await act(async () => {
+    firstReminder().dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
+    );
+  });
+  expect(firstReminder().options[0]!.textContent).toBe("In an hour (19:35)");
+  expect(customStart().value).toBe("2026-11-04T15:45");
 });
 it("resolves presets at selection and keeps that payload and UUID on uncertain retry", async () => {
   await choose();
