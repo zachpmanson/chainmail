@@ -18,12 +18,16 @@ import TextInput from "../ui/TextInput";
 
 export default function HassleForm({
   initial,
+  editing = !!initial,
+  locked = false,
   busy,
   error,
   onSave,
   onClose,
 }: {
   initial?: HassleSchedule;
+  editing?: boolean;
+  locked?: boolean;
   busy: boolean;
   error: string;
   onSave: (schedule: HassleSchedule) => void;
@@ -40,14 +44,15 @@ export default function HassleForm({
   const change = (patch: Partial<HassleSchedule>) => setSchedule((s) => ({ ...s, ...patch }));
   return (
     <section
-      aria-label={initial ? "Edit hassle" : "Add hassle"}
-      className={initial ? undefined : "rounded-md border border-line p-4"}
+      aria-label={editing ? "Edit hassle" : "Add hassle"}
+      className={editing ? undefined : "rounded-md border border-line p-4"}
     >
-      {initial ? <h2 className="mt-0 text-lg">Edit hassle</h2> : null}
+      {editing ? <h2 className="mt-0 text-lg">Edit hassle</h2> : null}
       <form
         className="flex flex-col gap-3"
         onSubmit={(event) => {
           event.preventDefault();
+          if (busy) return;
           const clean = { ...schedule, title: schedule.title.replace(/[\r\n]+/g, " ").trim() };
           const problem =
             endMode === "date" && clean.cadence !== "once" && !clean.until
@@ -63,13 +68,13 @@ export default function HassleForm({
           rows={4}
           required
           value={schedule.title}
-          disabled={busy}
+          disabled={busy || locked}
           onChange={(e) => change({ title: e.target.value })}
         />
         <FormField label="When · Melbourne" className="flex flex-col gap-1">
           <SelectInput
             value={startPreset}
-            disabled={busy}
+            disabled={busy || locked}
             onFocus={() => setPresetNow(new Date())}
             onPointerDown={() => setPresetNow(new Date())}
             onKeyDown={() => setPresetNow(new Date())}
@@ -92,7 +97,7 @@ export default function HassleForm({
               type="datetime-local"
               required
               value={schedule.start}
-              disabled={busy}
+              disabled={busy || locked}
               onChange={(e) => change({ start: e.target.value })}
             />
           </FormField>
@@ -102,7 +107,7 @@ export default function HassleForm({
             <SelectInput
               className="w-full min-w-0"
               value={schedule.cadence}
-              disabled={busy}
+              disabled={busy || locked}
               onChange={(e) => {
                 setEndMode("done");
                 change({
@@ -127,7 +132,7 @@ export default function HassleForm({
                 {schedule.cadence === "hourly" ? (
                   <SelectInput
                     className="min-w-14 flex-1"
-                    disabled={busy}
+                    disabled={busy || locked}
                     value={schedule.interval}
                     onChange={(e) => change({ interval: Number(e.target.value) })}
                   >
@@ -144,7 +149,7 @@ export default function HassleForm({
                     min={1}
                     max={999}
                     required
-                    disabled={busy}
+                    disabled={busy || locked}
                     value={schedule.interval}
                     onChange={(e) => change({ interval: Number(e.target.value) })}
                   />
@@ -160,7 +165,7 @@ export default function HassleForm({
               <SelectInput
                 className="w-full min-w-0"
                 value={endMode}
-                disabled={busy}
+                disabled={busy || locked}
                 onChange={(e) => {
                   setEndMode(e.target.value);
                   if (e.target.value === "done") change({ until: "" });
@@ -178,7 +183,7 @@ export default function HassleForm({
               type="datetime-local"
               required
               value={schedule.until}
-              disabled={busy}
+              disabled={busy || locked}
               onChange={(e) => change({ until: e.target.value })}
             />
           </FormField>
@@ -186,7 +191,7 @@ export default function HassleForm({
         <CheckboxRow
           className="flex items-center gap-2 text-sm"
           checked={schedule.workHours ?? false}
-          disabled={busy}
+          disabled={busy || locked}
           onChange={(e) => change({ workHours: e.target.checked })}
         >
           Work hours only
@@ -199,7 +204,7 @@ export default function HassleForm({
             </Button>
           ) : null}
           <Button type="submit" variant="primary" disabled={busy}>
-            {busy ? "Saving…" : initial ? "Save reminder" : "Add hassle"}
+            {busy ? "Saving…" : editing ? "Save reminder" : "Add hassle"}
           </Button>
         </div>
       </form>

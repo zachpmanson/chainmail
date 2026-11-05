@@ -30,8 +30,11 @@ Configured calendar details and its settings link stay in Settings, not the Hass
   its padding (`calc(900px + 45rem)`), so root-font changes preserve the same fit rule.
   Container queries use actual available
   width, not just the window breakpoint. App navigation/sidebar is unchanged. Switching tabs or
-  editing/removing another task preserves its draft and retry UUID. Only a successful
-  create or a selected-location change resets it. The plain task heading is not interactive;
+  editing/removing another task preserves its draft and retry UUID. Only its acknowledged
+  create or an explicit **Start a separate new hassle** resets a submitted draft. Attempted
+  creates survive in-app navigation and remounts, scoped to their original calendar;
+  switching calendars never reuses an uncertain create's UUID for another calendar.
+  The plain task heading is not interactive;
   the pencil beside the completion controls edits its whole recurring series. Separate
   tasks with the same title are not linked. Every card has two completion buttons:
   single check **This instance only**, double check **All instances**, with task-specific
@@ -66,12 +69,41 @@ Configured calendar details and its settings link stay in Settings, not the Hass
   calendar inventory. It does not fetch mail or invalidate unrelated mail queries;
   an unchanged location preserves the Add draft and retry UUID. Once a selected location
   is known, Add stays usable during settings/inventory refreshes, including the initial
-  inventory read. Existing-row actions still wait for refresh; writes and blocking errors
-  still disable the form. After a write, cancel any older inventory read before fetching
-  the post-write list so a stale initial response cannot hide a newly created hassle.
+  inventory read. Cached unrelated rows remain usable during reads and other rows' writes.
+  Actual writes still block Settings calendar selection and the navigation refresh control.
+  Conversely, an in-flight calendar selection blocks Add and row writes even after navigating
+  back to Hassles. Only the server-confirmed selection response replaces cached configuration;
+  older config reads are cancelled before publication, so a delayed readback never enables
+  writes against the previously selected calendar. Invalid configuration and unavailable
+  initial inventory retain their safeguards. After
+  a write, cancel any older exact-calendar inventory read before fetching the post-write
+  list so a stale initial response cannot hide a newly created hassle.
   Reading status occupies the header's deploy-stamp slot (reminders while Hassles is
   reading, corpus for other reads); the commit/date return when idle. Create/edit/Done
-  success messages are five-second toasts, never text above the reminder list.
+  acknowledgements use five-second toasts; pending work and refresh-needed errors also
+  remain visible beside the list until reconciled.
+- Create, edit and both completion actions update the screen optimistically. Only the
+  affected row (or the single submitted Add slot) is reserved; other tasks and Add remain
+  usable. Create shows a UUID-deduplicated placeholder; edit shows the submitted title
+  and schedule with provisional timing. All instances hides its row after confirmation.
+  This instance only suppresses the displayed witness and shows **Updating next reminder…**,
+  never a guessed successor or an assertion that the series ended. Calendar remains the
+  authoritative inventory; temporary rows have no usable revision or instance actions.
+- Successful writes remain **Saved; awaiting Calendar refresh…** until a successful read
+  started after acknowledgement. A failed GET is not a failed save: **Retry refresh** sends
+  only a GET, never another write. Concurrent and cancelled reads cannot retire newer work.
+  Failed writes remove only their own optimistic projection and show the freshest cached
+  row, not a whole-list rollback. A failure can mean a lost response or partial deletion;
+  revision/witness-sensitive row actions wait for authoritative refresh, with no Calendar undo.
+  Failed edit drafts can be explicitly restored without reopening over another editor;
+  their original revision is retained, never silently upgraded to overwrite a conflict.
+- Failed/uncertain creates retain the exact submitted payload and UUID in memory for the
+  lifetime of the app's QueryClient, including navigation away and back. Their Add fields
+  are locked; Add retries that identical request without automatically resending it.
+  **Start a separate new hassle** explicitly abandons that retry slot and uses a new UUID
+  (the previous create may already exist). An acknowledged create frees a fresh Add draft
+  immediately, even while its row awaits readback. Browser reload/session persistence is
+  not provided; no task content is written to browser storage.
 - Upcoming shows groups with future reminders, including recurring series whose first
   reminder was long ago. Ended shows the **last 30 days** of ended reminders,
   not completion history. Each group appears once, ordered by earliest next reminder
@@ -246,7 +278,7 @@ exact completed retry. Ambiguous UID/master/exception identities are refused.
 Automated flow, real typed fetch/query layer and Base UI dialogs:
 
 ```sh
-nix develop --command bash -c 'npm test -- --run test/hasslesForms.test.ts test/hasslesGroups.test.ts test/hasslesFlow.test.ts'
+nix develop --command bash -c 'npm test -- test/hassles*.test.ts'
 ```
 
 Real-browser geometry regression, with actual React SSR and built production CSS,
@@ -262,6 +294,20 @@ below/at/above the fit threshold, and 2200px, with 14/16/20px root fonts. It ass
 filled/capped, independently centred lists, sidebar/stack placement, the 450px form
 cap, and no overflowing controls. This is rendered geometry evidence, not hydrated
 keyboard/focus testing or live Calendar/phone delivery.
+
+Hydrated offline Chromium checks (Chromium must be on PATH), using the real React
+controls and typed fetch layer with separate delayed-processing and delayed-response gates:
+
+```sh
+nix develop --command bash -c 'npm run build && nix shell nixpkgs#chromium --command npx --no-install tsx scripts/hassles-optimistic-smoke.ts'
+```
+
+This checks visible optimism before processing, independent rows/Add, intermediate
+readback, acknowledged removal followed by a failed inventory GET, and GET-only retry.
+It uses a temporary file/profile and an in-memory fixture with no network fallback.
+The flow/coordinator tests additionally cover lost create responses and exact retries
+through remount, partial deletes, same-tick double clicks, location isolation, failed
+edit restoration, read cutoffs and reversed write response ordering.
 
 Browser smoke harness, using only an in-memory **test fixture**, not the real server:
 
@@ -292,9 +338,11 @@ curl -s http://127.0.0.1:8877/__hassles_fixture -H 'Content-Type: application/js
   -d '{"mode":"read-only"}'
 ```
 
-Other modes: `conflict`, `disconnected`, `disabled`, `normal`, `reset`. Refresh reminders
+Other modes: `conflict`, `disconnected`, `disabled`, `inventory-error`, `partial-delete`,
+`normal`, `reset`. Partial deletion requires a fixture task with multiple resources. Refresh reminders
 for read errors; reload for changed capability/account state. Restore `normal` and
-retry the **same open create form** to verify its UUID is retained. The fixture
+retry the **same create request**, including after in-app navigation, to verify its UUID
+and exact payload are retained. The fixture
 intentionally implements only the Hassles flow; other mail sections have no fallback.
 Stop it with Ctrl-C. Do not use this fixture as a service.
 

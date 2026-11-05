@@ -16,10 +16,9 @@ export default function HasslesView() {
     };
   }, []);
   const config = $api.useQuery("get", "/v1/hassles/location", {}, { staleTime: 0 });
-  const mutations = useIsMutating({
-    predicate: (m) =>
-      m.options.mutationKey?.some((k) => typeof k === "string" && k.startsWith("/v1/hassles")) ??
-      false,
+  const selecting = useIsMutating({
+    predicate: (mutation) =>
+      mutation.options.mutationKey?.includes("/v1/hassles/location") ?? false,
   });
   const location = config.data?.location;
   const selected = !!location?.accountId && !!location.calendarId;
@@ -42,8 +41,7 @@ export default function HasslesView() {
         <HassleInventory
           key={locationKey(location)}
           location={location}
-          disabled={mutations > 0 || config.isError}
-          refreshing={config.isFetching}
+          disabled={config.isError || selecting > 0}
         />
       ) : null}
     </main>

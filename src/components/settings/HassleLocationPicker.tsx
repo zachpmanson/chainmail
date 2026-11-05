@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { $api } from "../../lib/api/api";
 import { type HassleLocation } from "../../lib/hassles/forms";
 import { errText } from "../../lib/ui/errText";
@@ -27,8 +28,15 @@ export default function HassleLocationPicker({
     { params: { query: { accountId } } },
     { enabled: !!accountId, retry: false, staleTime: 0 },
   );
+  const client = useQueryClient();
   const save = $api.useMutation("post", "/v1/hassles/location", {
     retry: false,
+    onSuccess: async (config) => {
+      const queryKey = $api.queryOptions("get", "/v1/hassles/location", {}).queryKey;
+      // Publish only the confirmed selection; an older settings read must not replace it.
+      await client.cancelQueries({ queryKey, exact: true });
+      client.setQueryData(queryKey, config);
+    },
     onSettled: onSaved,
   });
   const disabled = busy || save.isPending;

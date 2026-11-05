@@ -14,6 +14,7 @@ export function hasslesFixture() {
   let location: Location = { accountId: "", calendarId: "" };
   let tasks: Task[] = [];
   const buckets = new Map<string, Task[]>();
+  let calendars = [{ id: fixtureLocation.calendarId, name: "Offline reminders" }];
   let revision = 0;
   let mode = "normal";
   const requests: { path: string; method: string; body: unknown }[] = [];
@@ -31,6 +32,7 @@ export function hasslesFixture() {
         mode = "normal";
       }
       if (Array.isArray(input?.tasks)) tasks = input.tasks as Task[];
+      if (Array.isArray(input?.calendars)) calendars = input.calendars as typeof calendars;
       return ok({ mode });
     }
     if (url.pathname === "/auth/status")
@@ -57,10 +59,10 @@ export function hasslesFixture() {
     }
     if (url.pathname.startsWith("/v1/hassles") && mode === "disconnected")
       return fail(409, "Selected account is disconnected; reconnect it");
-    if (url.pathname === "/v1/hassles/calendars")
-      return ok({ calendars: [{ id: fixtureLocation.calendarId, name: "Offline reminders" }] });
+    if (url.pathname === "/v1/hassles/calendars") return ok({ calendars });
     if (url.pathname === "/v1/hassles") {
-      if (method === "GET") return ok({ tasks });
+      if (method === "GET")
+        return mode === "inventory-error" ? fail(502, "Inventory unavailable") : ok({ tasks });
       const mutation = body as Mutation;
       if (!["create", "edit", "done", "delete", "done-instance"].includes(mutation.action))
         return fail(400, "Offline fixture does not support this task action");
@@ -72,7 +74,10 @@ export function hasslesFixture() {
       if (mutation.action === "create") {
         if (!mutation.schedule) return fail(400, "Schedule required");
         const id = `task:${mutation.id}`;
-        if (!tasks.some((t) => t.id === id))
+        const existing = tasks.find((t) => t.id === id);
+        if (existing && JSON.stringify(existing.schedule) !== JSON.stringify(mutation.schedule))
+          return fail(409, "Create ID already used with a different schedule");
+        if (!existing)
           tasks.push({
             id,
             revision: String(++revision),
@@ -121,6 +126,10 @@ export function hasslesFixture() {
           task.timing.next = new Date(wallInstant(mutation.schedule.start)!).toISOString();
           task.reminder = `${mutation.schedule.start} Australia/Melbourne · ${mutation.schedule.cadence}`;
           task.revision = String(++revision);
+        } else if (mode === "partial-delete" && task.resources > 1) {
+          task.resources--;
+          task.revision = String(++revision);
+          return fail(502, "Removed 1 resource; remaining delete failed");
         } else tasks = tasks.filter((t) => t.id !== mutation.id);
       }
       return ok({

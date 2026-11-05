@@ -29,6 +29,8 @@ let fixture: ReturnType<typeof hasslesFixture>;
 let inventoryGate: Promise<void> | null = null;
 let configGate: Promise<void> | null = null;
 let writeGate: Promise<void> | null = null;
+let processing: ((request: Request, body: Record<string, unknown>) => Promise<void>) | null = null;
+let delivery: ((request: Request, body: Record<string, unknown>) => Promise<void>) | null = null;
 beforeEach(async () => {
   previousTitle = document.title;
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -38,14 +40,19 @@ beforeEach(async () => {
   inventoryGate = null;
   configGate = null;
   writeGate = null;
+  processing = null;
+  delivery = null;
   vi.stubGlobal("fetch", async (input: Request) => {
     const text = await input.text();
-    const result = fixture.handle(input.url, input.method, text ? JSON.parse(text) : undefined);
+    const body = text ? JSON.parse(text) : {};
+    if (processing) await processing(input, body);
+    const result = fixture.handle(input.url, input.method, text ? body : undefined);
     const payload = JSON.stringify(result.data);
     const path = new URL(input.url).pathname;
     if (input.method === "GET" && path === "/v1/hassles" && inventoryGate) await inventoryGate;
     if (input.method === "GET" && path === "/v1/hassles/location" && configGate) await configGate;
     if (input.method === "POST" && path === "/v1/hassles" && writeGate) await writeGate;
+    if (delivery) await delivery(input, body);
     return new Response(payload, {
       status: result.status,
       headers: { "Content-Type": "application/json" },
@@ -900,7 +907,7 @@ it("keeps Add usable on cached page entry and cancels a stale initial read after
   await settle();
   expect(document.querySelector("h3")!.textContent).toBe("Created during first inventory read");
 });
-it("allows drafting through settings and list refreshes but still disables during a write", async () => {
+it("keeps cached rows and Add usable through unrelated reads and writes", async () => {
   await choose();
   await add("Existing reminder");
   let releaseConfig!: () => void;
@@ -918,7 +925,7 @@ it("allows drafting through settings and list refreshes but still disables durin
   expect(document.querySelector('[aria-label="Hassle inventory"]')!.textContent).not.toContain(
     "Reading reminders…",
   );
-  expect(button("Edit").disabled).toBe(true);
+  expect(button("Edit").disabled).toBe(false);
   expect(titleInput().disabled).toBe(false);
   await type(titleInput(), "Draft while settings refresh");
   await act(async () => {
@@ -926,7 +933,7 @@ it("allows drafting through settings and list refreshes but still disables durin
   });
   await settle();
   expect(refresh().disabled).toBe(true);
-  expect(button("Edit").disabled).toBe(true);
+  expect(button("Edit").disabled).toBe(false);
   expect(titleInput().disabled).toBe(false);
   expect(button("Add hassle").disabled).toBe(false);
   await type(titleInput(), "Draft while reminders refresh");
@@ -943,6 +950,7 @@ it("allows drafting through settings and list refreshes but still disables durin
     releaseWrite = resolve;
   });
   await click(button("Add hassle"));
+  expect(rowAction("Edit Existing reminder").disabled).toBe(false);
   expect(titleInput().disabled).toBe(true);
   expect(button("Saving…").disabled).toBe(true);
   await act(async () => {
@@ -1098,4 +1106,388 @@ it("does not retry a failed instance completion and refreshes its inventory", as
   expect(
     fixture.requests.filter((r) => r.method === "GET" && r.path.includes("/v1/hassles?")).length,
   ).toBeGreaterThan(reads);
+});
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+function rowAction(label: string) {
+  return document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
+}
+function writes(action?: string) {
+  return fixture.requests.filter(
+    (r) =>
+      r.method === "POST" &&
+      new URL(r.path, "http://localhost").pathname === "/v1/hassles" &&
+      (!action || (r.body as { action: string }).action === action),
+  );
+}
+async function navigateAwayAndBack() {
+  await act(async () =>
+    root.render(createElement(QueryClientProvider, { client }, createElement("p", null, "Away"))),
+  );
+  await act(async () =>
+    root.render(createElement(QueryClientProvider, { client }, hassleScreen())),
+  );
+  await settle();
+}
+
+it("projects edit before processing and independently creates and completes another row", async () => {
+  await choose();
+  await add("Alpha");
+  await add("Beta");
+  const edit = deferred();
+  const complete = deferred();
+  processing = async (_request, body) => {
+    if (body.action === "edit") await edit.promise;
+    if (body.action === "done-instance") await complete.promise;
+  };
+  await click(rowAction("Edit Alpha"));
+  await type(
+    document.querySelector<HTMLTextAreaElement>('[role="dialog"] textarea')!,
+    "Alpha edited",
+  );
+  await click(button("Save reminder"));
+  expect(document.querySelector('[role="dialog"][aria-modal="true"]')).toBeNull();
+  expect(rowAction("Edit Alpha edited").disabled).toBe(true);
+  expect(rowAction("Edit Beta").disabled).toBe(false);
+  expect(titleInput().disabled).toBe(false);
+  expect(writes("edit")).toHaveLength(0); // processing, not just response delivery, is gated
+  await click(rowAction("This instance only: Beta"));
+  expect(rowAction("Edit Beta").closest("li")!.textContent).toContain("Updating next reminder…");
+  expect(rowAction("Edit Beta").closest("li")!.textContent).not.toContain("Tomorrow");
+  await add("Gamma");
+  expect(rowAction("Edit Gamma").disabled).toBe(false);
+  expect(rowAction("Edit Alpha edited").disabled).toBe(true);
+  complete.resolve();
+  await settle();
+  expect(rowAction("Edit Beta").disabled).toBe(false);
+  expect(rowAction("Edit Alpha edited").disabled).toBe(true);
+  edit.resolve();
+  await settle();
+  expect(rowAction("Edit Alpha edited").disabled).toBe(false);
+  expect(writes("edit")).toHaveLength(1);
+  expect(writes("done-instance")).toHaveLength(1);
+});
+
+it("retains acknowledged removal after failed GET; retry refresh never resends POST", async () => {
+  await choose();
+  await add("Remove me");
+  const response = deferred();
+  delivery = async (_request, body) => {
+    if (body.action === "done") await response.promise;
+  };
+  await click(rowAction("All instances: Remove me"));
+  await click(button("Cancel"));
+  expect(writes("done")).toHaveLength(0);
+  await click(rowAction("All instances: Remove me"));
+  await click(button("Remove all reminders"));
+  expect(rowAction("Edit Remove me")).toBeNull();
+  expect(titleInput().disabled).toBe(false);
+  fixture.handle("/__hassles_fixture", "POST", { mode: "inventory-error" });
+  response.resolve();
+  await settle();
+  expect(document.body.textContent).toContain("Saved; awaiting Calendar refresh");
+  expect(rowAction("Edit Remove me")).toBeNull();
+  expect(writes("done")).toHaveLength(1);
+  fixture.handle("/__hassles_fixture", "POST", { mode: "normal" });
+  await click(button("Retry refresh"));
+  expect(writes("done")).toHaveLength(1);
+  expect(document.body.textContent).not.toContain("Saved; awaiting Calendar refresh");
+  expect(rowAction("Edit Remove me")).toBeNull();
+});
+
+it("persists a lost-response create's exact UUID/payload as Add across remount", async () => {
+  await choose();
+  const response = deferred();
+  delivery = async (_request, body) => {
+    if (body.action === "create") {
+      await response.promise;
+      throw new TypeError("Lost response");
+    }
+  };
+  await type(titleInput(), "Uncertain create");
+  await click(button("Add hassle"));
+  const original = structuredClone(writes("create")[0]!.body);
+  expect(rowAction("Edit Uncertain create").disabled).toBe(true);
+  await navigateAwayAndBack();
+  expect(button("Saving…").disabled).toBe(true);
+  expect(titleInput().value).toBe("Uncertain create");
+  response.resolve();
+  await settle();
+  delivery = null;
+  await navigateAwayAndBack();
+  expect(addForm().textContent).not.toContain("Edit hassle");
+  expect(titleInput().value).toBe("Uncertain create");
+  expect(titleInput().disabled).toBe(true); // attempted payload is immutable
+  expect(button("Add hassle").disabled).toBe(false);
+  await click(button("Add hassle"));
+  expect(writes("create")).toHaveLength(2);
+  expect(writes("create")[1]!.body).toEqual(original);
+  expect([...document.querySelectorAll("h3")].map((el) => el.textContent)).toEqual([
+    "Uncertain create",
+  ]);
+  expect(titleInput().value).toBe("");
+});
+
+it("keeps an intermediate read from retiring a later settle or stranding earlier success", async () => {
+  await choose();
+  await add("First");
+  await add("Second");
+  const firstResponse = deferred();
+  const secondResponse = deferred();
+  const firstRead = deferred();
+  const secondRead = deferred();
+  let reads = 0;
+  delivery = async (request, body) => {
+    if (body.action === "done-instance") {
+      const task = body.id as string;
+      const firstId = (writes("create")[0]!.body as { id: string }).id;
+      await (task === `task:${firstId}` ? firstResponse.promise : secondResponse.promise);
+    }
+    if (request.method === "GET" && new URL(request.url).pathname === "/v1/hassles") {
+      reads++;
+      await (reads === 1 ? firstRead.promise : secondRead.promise);
+    }
+  };
+  await click(rowAction("This instance only: First"));
+  await click(rowAction("This instance only: Second"));
+  firstResponse.resolve();
+  await settle();
+  expect(reads).toBe(1);
+  secondResponse.resolve();
+  await settle();
+  expect(rowAction("Edit First").disabled).toBe(true);
+  expect(rowAction("Edit Second").disabled).toBe(true);
+  firstRead.resolve();
+  await settle();
+  expect(reads).toBe(2);
+  expect(rowAction("Edit First").disabled).toBe(false);
+  expect(rowAction("Edit Second").disabled).toBe(true);
+  secondRead.resolve();
+  await settle();
+  expect(rowAction("Edit Second").disabled).toBe(false);
+  const before = writes("done-instance").length;
+  await click(rowAction("This instance only: Second"));
+  expect(writes("done-instance")).toHaveLength(before + 1); // authoritative replacement witness
+});
+
+it("restores only failed edit draft without stealing an unrelated open editor", async () => {
+  await choose();
+  await add("Failed edit");
+  await add("Other edit");
+  const response = deferred();
+  fixture.handle("/__hassles_fixture", "POST", { mode: "conflict" });
+  delivery = async (_request, body) => {
+    if (body.action === "edit") await response.promise;
+  };
+  await click(rowAction("Edit Failed edit"));
+  await type(
+    document.querySelector<HTMLTextAreaElement>('[role="dialog"] textarea')!,
+    "Captured draft",
+  );
+  await click(button("Save reminder"));
+  await click(rowAction("Edit Other edit"));
+  response.resolve();
+  await settle();
+  expect(document.querySelector<HTMLTextAreaElement>('[role="dialog"] textarea')!.value).toBe(
+    "Other edit",
+  );
+  expect(rowAction("Edit Failed edit").disabled).toBe(false);
+  await click(button("Cancel"));
+  await click(button("Restore submitted edit"));
+  expect(document.querySelector<HTMLTextAreaElement>('[role="dialog"] textarea')!.value).toBe(
+    "Captured draft",
+  );
+  const original = writes("edit")[0]!.body as { revision: string };
+  fixture.handle("/__hassles_fixture", "POST", { mode: "normal" });
+  await click(button("Save reminder"));
+  expect((writes("edit")[1]!.body as { revision: string }).revision).toBe(original.revision);
+});
+
+it("blocks uncertain partial-delete witnesses until refresh exposes the actual remainder", async () => {
+  await choose();
+  await add("Partial delete");
+  const inventory = fixture.handle("/v1/hassles", "GET").data as {
+    tasks: { resources: number; revision: string }[];
+  };
+  inventory.tasks[0]!.resources = 2;
+  await click(refresh());
+  const oldRevision = inventory.tasks[0]!.revision;
+  const response = deferred();
+  delivery = async (_request, body) => {
+    if (body.action === "done") await response.promise;
+  };
+  fixture.handle("/__hassles_fixture", "POST", { mode: "partial-delete" });
+  await click(rowAction("All instances: Partial delete"));
+  await click(button("Remove all reminders"));
+  fixture.handle("/__hassles_fixture", "POST", { mode: "inventory-error" });
+  response.resolve();
+  await settle();
+  expect(document.body.textContent).toContain("Removed 1 resource");
+  expect(rowAction("All instances: Partial delete").disabled).toBe(true);
+  expect(titleInput().disabled).toBe(false);
+  fixture.handle("/__hassles_fixture", "POST", { mode: "normal" });
+  await click(button("Retry refresh"));
+  expect(rowAction("All instances: Partial delete").disabled).toBe(false);
+  const remaining = fixture.handle("/v1/hassles", "GET").data as {
+    tasks: { resources: number; revision: string }[];
+  };
+  expect(remaining.tasks[0]!.resources).toBe(1);
+  expect(remaining.tasks[0]!.revision).not.toBe(oldRevision);
+  await click(rowAction("All instances: Partial delete"));
+  await click(button("Remove all reminders"));
+  expect((writes("done")[1]!.body as { revision: string }).revision).toBe(
+    remaining.tasks[0]!.revision,
+  );
+});
+
+it("reserves a row synchronously against same-tick instance double clicks", async () => {
+  await choose();
+  await add("Rapid click");
+  const response = deferred();
+  delivery = async (_request, body) => {
+    if (body.action === "done-instance") await response.promise;
+  };
+  const action = rowAction("This instance only: Rapid click");
+  await act(async () => {
+    action.click();
+    action.click();
+  });
+  await settle();
+  expect(writes("done-instance")).toHaveLength(1);
+  expect(titleInput().disabled).toBe(false);
+  response.resolve();
+  await settle();
+});
+
+it("keeps selection protected after navigation and isolates late old-location callbacks", async () => {
+  await choose();
+  const response = deferred();
+  delivery = async (_request, body) => {
+    if (body.action === "create") await response.promise;
+  };
+  await type(titleInput(), "Old location pending");
+  await click(button("Add hassle"));
+  await act(async () =>
+    root.render(createElement(QueryClientProvider, { client }, createElement(SettingsHassles))),
+  );
+  await settle();
+  expect(
+    document.querySelector<HTMLSelectElement>('section[aria-label="Reminder location"] select')!
+      .disabled,
+  ).toBe(true);
+  expect(button("Use calendar").disabled).toBe(true);
+  const other = { ...fixtureLocation, calendarId: "/other/" };
+  fixture.handle("/v1/hassles/location", "POST", {
+    location: other,
+    previous: fixtureLocation,
+    dedicated: true,
+  });
+  await client.invalidateQueries({ queryKey: ["get", "/v1/hassles/location"] });
+  await act(async () =>
+    root.render(createElement(QueryClientProvider, { client }, hassleScreen())),
+  );
+  await settle();
+  await type(titleInput(), "New location draft");
+  response.resolve();
+  await settle();
+  expect(titleInput().value).toBe("New location draft");
+  expect(rowAction("Edit Old location pending")).toBeNull();
+  expect(document.body.textContent).not.toContain("Old location pending:");
+  delivery = null;
+  await click(button("Add hassle"));
+  expect((writes("create").at(-1)!.body as { location: unknown }).location).toEqual(other);
+});
+
+it("offers an explicitly separate new create rather than changing an uncertain request", async () => {
+  await choose();
+  fixture.handle("/__hassles_fixture", "POST", { mode: "read-only" });
+  await add("Original failed draft");
+  const original = writes("create")[0]!.body as { id: string; schedule: unknown };
+  expect(titleInput().disabled).toBe(true);
+  await click(button("Start a separate new hassle"));
+  expect(titleInput().value).toBe("");
+  expect(titleInput().disabled).toBe(false);
+  fixture.handle("/__hassles_fixture", "POST", { mode: "normal" });
+  await add("Separate create");
+  expect((writes("create")[1]!.body as { id: string }).id).not.toBe(original.id);
+  const replay = fixture.handle("/v1/hassles", "POST", {
+    ...(writes("create")[1]!.body as object),
+    schedule: original.schedule,
+  });
+  expect(replay.status).toBe(409);
+});
+
+it("blocks cached-calendar writes through pending selection and publishes only confirmed config before delayed readback", async () => {
+  await choose();
+  await add("Old selected task");
+  const other = { ...fixtureLocation, calendarId: "/new-confirmed-calendar/" };
+  fixture.handle("/__hassles_fixture", "POST", {
+    calendars: [
+      { id: fixtureLocation.calendarId, name: "Original calendar" },
+      { id: other.calendarId, name: "New calendar" },
+    ],
+  });
+  await act(async () =>
+    root.render(createElement(QueryClientProvider, { client }, createElement(SettingsHassles))),
+  );
+  await settle();
+  await select(
+    field("Dedicated reminder calendar", document).querySelector("select")!,
+    other.calendarId,
+  );
+  await click(document.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+  const selectProcessing = deferred();
+  const staleConfig = deferred();
+  const newConfig = deferred();
+  let reads = 0;
+  processing = async (request) => {
+    if (request.method === "POST" && new URL(request.url).pathname === "/v1/hassles/location")
+      await selectProcessing.promise;
+  };
+  delivery = async (request) => {
+    if (request.method === "GET" && new URL(request.url).pathname === "/v1/hassles/location") {
+      reads++;
+      await (reads === 1 ? staleConfig.promise : newConfig.promise);
+    }
+  };
+  await click(button("Use calendar"));
+  await act(async () =>
+    root.render(createElement(QueryClientProvider, { client }, hassleScreen())),
+  );
+  await settle();
+  expect(reads).toBe(1);
+  expect(titleInput().disabled).toBe(true);
+  expect(button("Saving…").disabled).toBe(true);
+  expect(rowAction("Edit Old selected task").disabled).toBe(true);
+  expect(rowAction("This instance only: Old selected task").disabled).toBe(true);
+  expect(rowAction("All instances: Old selected task").disabled).toBe(true);
+  expect(refresh().disabled).toBe(true);
+  const before = writes().length;
+  await type(titleInput(), "Blocked cached create");
+  await act(async () => {
+    rowAction("This instance only: Old selected task").click();
+    addForm()
+      .querySelector("form")!
+      .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  });
+  expect(writes()).toHaveLength(before);
+  selectProcessing.resolve();
+  await settle();
+  expect(reads).toBeGreaterThanOrEqual(2); // onSaved readback remains gated
+  expect(titleInput().disabled).toBe(false); // POST response itself confirms new config
+  expect(rowAction("Edit Old selected task")).toBeNull();
+  await add("Confirmed calendar create");
+  expect((writes("create").at(-1)!.body as { location: unknown }).location).toEqual(other);
+  staleConfig.resolve();
+  await settle();
+  expect(rowAction("Edit Old selected task")).toBeNull();
+  newConfig.resolve();
+  await settle();
+  expect(rowAction("Edit Confirmed calendar create").disabled).toBe(false);
 });

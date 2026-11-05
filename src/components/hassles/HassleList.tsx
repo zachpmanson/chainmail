@@ -10,12 +10,14 @@ import { buttonClasses } from "../ui/styles";
 export default function HassleList({
   tasks,
   busy,
+  blocked = new Set<string>(),
   onEdit,
   onDone,
   onDoneInstance,
 }: {
   tasks: HassleTask[];
   busy: boolean;
+  blocked?: Set<string>;
   onEdit: (task: HassleTask) => void;
   onDone: (task: HassleTask) => void;
   onDoneInstance: (task: HassleTask) => void;
@@ -75,7 +77,7 @@ export default function HassleList({
                       <IconButton
                         aria-label={`Edit ${task.title}`}
                         title="Edit"
-                        disabled={busy || !task.writable || !task.schedule}
+                        disabled={busy || blocked.has(task.id) || !task.writable || !task.schedule}
                         onClick={() => onEdit(task)}
                       >
                         <IconPencil aria-hidden="true" />
@@ -87,7 +89,7 @@ export default function HassleList({
                             ? `This instance only: ${task.title}`
                             : `${task.title}: ${task.instanceRestriction || "This instance only unavailable"}`
                         }
-                        disabled={busy || !task.writable || !task.instance}
+                        disabled={busy || blocked.has(task.id) || !task.writable || !task.instance}
                         onClick={() => onDoneInstance(task)}
                       >
                         <IconCheck aria-hidden="true" />
@@ -95,7 +97,7 @@ export default function HassleList({
                       <IconButton
                         aria-label={`All instances: ${task.title}`}
                         title={`All instances: ${task.title}`}
-                        disabled={busy || !task.writable}
+                        disabled={busy || blocked.has(task.id) || !task.writable}
                         onClick={() => onDone(task)}
                       >
                         <IconChecks aria-hidden="true" />
