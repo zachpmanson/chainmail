@@ -11,6 +11,8 @@ function task(id: string, state: HassleTask["timing"]["state"], date: string | n
     resources: 1,
     writable: false,
     restriction: "Imported timezone definition: schedule editing unavailable",
+    instance: null,
+    instanceRestriction: "Unavailable",
     schedule: null,
     reminder: "A display string is not schedule state",
     timing: {

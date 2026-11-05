@@ -11,6 +11,8 @@ function task(): HassleTask {
     revision: "1",
     writable: true,
     restriction: "",
+    instance: null,
+    instanceRestriction: "Not available in this fixture",
     reminder: "Reminder date unavailable · view in calendar",
     schedule: defaultSchedule(new Date(now)),
     timing: { state: "upcoming", next: "2026-11-04T21:30:00Z", last: null, note: "" },

@@ -11,17 +11,19 @@ import (
 )
 
 type Mutation struct {
-	Location  Location `json:"location"`
-	Action    string   `json:"action"`
-	ID        string   `json:"id"`
-	Revision  string   `json:"revision"`
-	Schedule  Schedule `json:"schedule"`
-	AdoptID   *string  `json:"adoptId,omitempty"`
-	AdoptHash *string  `json:"adoptHash,omitempty"`
-	DryRun    *bool    `json:"dryRun,omitempty"`
+	Location      Location `json:"location"`
+	Action        string   `json:"action"`
+	ID            string   `json:"id"`
+	Revision      string   `json:"revision"`
+	Schedule      Schedule `json:"schedule"`
+	AdoptID       *string  `json:"adoptId,omitempty"`
+	AdoptHash     *string  `json:"adoptHash,omitempty"`
+	InstanceAt    *string  `json:"instanceAt,omitempty"`
+	InstanceToken *string  `json:"instanceToken,omitempty"`
+	DryRun        *bool    `json:"dryRun,omitempty"`
 }
 
-// JSON null is not absence: an adoption-only flag must never be silently
+// JSON null is not absence: an action-specific flag must never be silently
 // ignored on a destructive action. Keep strict unknown-field decoding here too.
 func (in *Mutation) UnmarshalJSON(data []byte) error {
 	type wire Mutation
@@ -36,7 +38,7 @@ func (in *Mutation) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	for name, raw := range fields {
-		if (strings.EqualFold(name, "adoptId") || strings.EqualFold(name, "adoptHash") || strings.EqualFold(name, "dryRun")) && bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		if (strings.EqualFold(name, "adoptId") || strings.EqualFold(name, "adoptHash") || strings.EqualFold(name, "dryRun") || strings.EqualFold(name, "instanceAt") || strings.EqualFold(name, "instanceToken")) && bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
 			return fmt.Errorf("%s must not be null", name)
 		}
 	}
@@ -45,9 +47,10 @@ func (in *Mutation) UnmarshalJSON(data []byte) error {
 }
 
 type Result struct {
-	Removed  int       `json:"removed"`
-	Message  string    `json:"message"`
-	Adoption *Adoption `json:"adoption,omitempty"`
+	Removed    int         `json:"removed"`
+	Message    string      `json:"message"`
+	Adoption   *Adoption   `json:"adoption,omitempty"`
+	Completion *Completion `json:"completion,omitempty"`
 }
 
 // Caller serializes mutations and selection changes. Real ETags remain the
@@ -109,6 +112,8 @@ func Mutate(ctx context.Context, b Backend, in Mutation, now time.Time) (Result,
 		return result, errors.New(task.Restriction)
 	}
 	switch in.Action {
+	case "done-instance":
+		return completeInstance(ctx, b, in, task, now)
 	case "edit":
 		if task.Schedule == nil || task.Resources != 1 {
 			return result, errors.New("complex/imported schedule cannot be safely edited")

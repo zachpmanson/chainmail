@@ -88,6 +88,12 @@ func (s Schedule) Validate() (time.Time, string, error) {
 }
 
 func readSchedule(e ical.Event) (*Schedule, string) {
+	if len(e.Props["EXDATE"]) > 0 && validCompletionDates(e) {
+		// Validate the base without changing the original exclusion identities.
+		e = ical.Event{Component: cloneComponent(e.Component)}
+		e.Props.Del("EXDATE")
+	}
+
 	if len(e.Props["SUMMARY"]) > 1 || len(e.Props["DTEND"]) > 1 || len(e.Props["DURATION"]) > 1 || (len(e.Props["DTEND"])+len(e.Props["DURATION"]) > 1) || len(e.Props["DTSTART"]) != 1 || len(e.Props["RRULE"]) > 1 || len(e.Props["EXDATE"])+len(e.Props["RDATE"])+len(e.Props["RECURRENCE-ID"]) > 0 {
 		return nil, "Imported recurrence/exception data: schedule editing unavailable"
 	}

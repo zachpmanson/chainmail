@@ -219,7 +219,7 @@ func (s *server) hassleMutation(w http.ResponseWriter, r *http.Request) {
 	if !decodeHassle(w, r, &in) {
 		return
 	}
-	if in.Action != "create" && in.Action != "edit" && in.Action != "done" && in.Action != "delete" && in.Action != "adopt" {
+	if in.Action != "create" && in.Action != "edit" && in.Action != "done" && in.Action != "delete" && in.Action != "adopt" && in.Action != "done-instance" {
 		fail(w, 400, errors.New("unsupported task action"))
 		return
 	}

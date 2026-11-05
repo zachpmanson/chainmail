@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/emersion/go-ical"
 	"github.com/emersion/go-webdav/caldav"
@@ -29,9 +30,22 @@ func validDigest(value string) bool {
 
 // Presence-aware dryRun prevents adoption flags being silently ignored by delete/create.
 func ValidateAdoptionFields(in Mutation) error {
+	if in.Action != "done-instance" && (in.InstanceAt != nil || in.InstanceToken != nil) {
+		return errors.New("instanceAt and instanceToken are only valid for done-instance")
+	}
+	if in.Action == "done-instance" {
+		if in.AdoptID != nil || in.AdoptHash != nil || in.DryRun == nil || in.InstanceAt == nil || in.InstanceToken == nil || in.Schedule != (Schedule{}) || !validDigest(in.Revision) || !validDigest(*in.InstanceToken) {
+			return errors.New("done-instance requires revision, instanceAt, instanceToken and explicit dryRun; no adoption or schedule fields")
+		}
+		at, err := time.Parse(time.RFC3339, *in.InstanceAt)
+		if err != nil || at.UTC().Format(time.RFC3339) != *in.InstanceAt {
+			return errors.New("instanceAt must be an exact RFC3339 UTC instant")
+		}
+		return nil
+	}
 	if in.Action != "adopt" {
 		if in.AdoptID != nil || in.AdoptHash != nil || in.DryRun != nil {
-			return errors.New("adoptId, adoptHash and dryRun are only valid for adopt")
+			return errors.New("adoptId/adoptHash are adopt-only; dryRun is only valid for adopt/done-instance")
 		}
 		return nil
 	}

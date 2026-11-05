@@ -413,3 +413,145 @@ func TestHasslesAdoptionHTTPGrantLocationDiscoveryAndOriginGuards(t *testing.T) 
 		})
 	}
 }
+
+func instanceHassleMutation(t *testing.T, f *calendarFixture, loc hassles.Location) hassles.Mutation {
+	t.Helper()
+	c, err := hassles.NewCalendar(hassleUUID, hassles.Schedule{Title: "Instance offline", Start: "2027-01-01T08:30", TimeZone: hassles.Zone, Cadence: "daily", Interval: 1}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.objects = []caldav.CalendarObject{{Path: reminderCalendar + "instance.ics", ETag: `"original"`, Data: c}}
+	tasks, err := hassles.Inventory(f.objects, time.Now())
+	if err != nil || len(tasks) != 1 || tasks[0].Instance == nil {
+		t.Fatalf("instance fixture %+v %v", tasks, err)
+	}
+	task := tasks[0]
+	dry := true
+	return hassles.Mutation{Location: loc, Action: "done-instance", ID: task.ID, Revision: task.Revision, InstanceAt: &task.Instance.At, InstanceToken: &task.Instance.Token, DryRun: &dry}
+}
+func TestHasslesInstanceHTTPPreviewCommitAndRetry(t *testing.T) {
+	h, f, loc := hassleHarness(t)
+	chooseHassles(t, h, loc)
+	in := instanceHassleMutation(t, f, loc)
+	r := h.do(t, "POST", "/v1/hassles", hassleJSON(t, in))
+	if r.status != 200 || f.writes != 0 {
+		t.Fatalf("preview %d %s writes %d", r.status, r.body, f.writes)
+	}
+	preview := decode[hassles.Result](t, r)
+	if preview.Completion == nil || preview.Completion.Operation != "exclude-occurrence" || preview.Completion.Before == preview.Completion.After {
+		t.Fatal("missing semantic preview", string(r.body))
+	}
+	dry := false
+	in.DryRun = &dry
+	r = h.do(t, "POST", "/v1/hassles", hassleJSON(t, in))
+	if r.status != 200 || f.writes != 1 {
+		t.Fatalf("commit %d %s writes %d", r.status, r.body, f.writes)
+	}
+	tasks := hassleList(t, h)
+	if len(tasks) != 1 || tasks[0].Schedule == nil || tasks[0].Instance == nil || tasks[0].Instance.At == *in.InstanceAt {
+		t.Fatalf("bad inventory %+v", tasks)
+	}
+	r = h.do(t, "POST", "/v1/hassles", hassleJSON(t, in))
+	if r.status != 409 || f.writes != 1 {
+		t.Fatal("retry completed next", r.status, string(r.body))
+	}
+}
+func TestHasslesInstanceHTTPBoundaryGuards(t *testing.T) {
+	for _, kind := range []string{"disabled", "unselected", "wrong location", "discovery", "disconnect", "origin", "stale revision", "wrong token", "weak etag", "participant", "upstream denied", "upstream conflict"} {
+		t.Run(kind, func(t *testing.T) {
+			h, f, loc := hassleHarness(t)
+			if kind != "unselected" {
+				chooseHassles(t, h, loc)
+			}
+			in := instanceHassleMutation(t, f, loc)
+			dry := false
+			in.DryRun = &dry
+			want := 409
+			switch kind {
+			case "disabled":
+				h.hasslesEnabled = false
+				want = 403
+			case "wrong location":
+				in.Location.CalendarID = otherCalendar
+			case "discovery":
+				in.Location.CalendarID = otherCalendar
+				_ = h.store.PutSetting(corpus.SettingHasslesLocation, string(hassleJSON(t, in.Location)))
+			case "disconnect":
+				p, _ := gmailclient.AccountTokenPath("personal")
+				_ = os.Remove(p)
+			case "stale revision":
+				f.objects[0].ETag = `"changed"`
+			case "wrong token":
+				token := strings.Repeat("0", 64)
+				in.InstanceToken = &token
+			case "weak etag", "participant":
+				if kind == "weak etag" {
+					f.objects[0].ETag = `W/"weak"`
+				} else {
+					f.objects[0].Data.Events()[0].Props.SetText("ATTENDEE", "mailto:offline@example.test")
+				}
+				tasks, _ := hassles.Inventory(f.objects, time.Now())
+				in.Revision = tasks[0].Revision
+				want = 502
+			case "upstream denied":
+				f.deny = true
+				want = 502
+			case "upstream conflict":
+				f.conflict = true
+			}
+			calls := f.calls
+			if kind == "origin" {
+				req := httptest.NewRequest("POST", "http://localhost:9876/v1/hassles", strings.NewReader(string(hassleJSON(t, in))))
+				req.Header.Set("Origin", "http://attacker.invalid")
+				req.Header.Set("Sec-Fetch-Site", "cross-site")
+				req.Header.Set("Content-Type", "application/json")
+				w := httptest.NewRecorder()
+				h.routes().ServeHTTP(w, req)
+				if w.Code != 403 || f.calls != calls || f.writes != 0 {
+					t.Fatal("CSRF reached Calendar")
+				}
+				return
+			}
+			r := h.do(t, "POST", "/v1/hassles", hassleJSON(t, in))
+			writes := 0
+			if kind == "upstream denied" || kind == "upstream conflict" {
+				writes = 1
+			}
+			if r.status != want || f.writes != writes {
+				t.Fatalf("%s: %d %s writes %d", kind, r.status, r.body, f.writes)
+			}
+			if (kind == "disabled" || kind == "unselected" || kind == "wrong location" || kind == "disconnect") && f.calls != calls {
+				t.Fatal("guard reached Calendar")
+			}
+		})
+	}
+}
+func TestHasslesInstanceHTTPStrictFieldsBeforeUpstream(t *testing.T) {
+	h, f, loc := hassleHarness(t)
+	chooseHassles(t, h, loc)
+	in := instanceHassleMutation(t, f, loc)
+	for _, field := range []string{"instanceAt", "instanceToken", "dryRun", "adoptId", "adoptHash"} {
+		for _, value := range []any{nil, "invalid"} {
+			var body map[string]any
+			_ = json.Unmarshal(hassleJSON(t, in), &body)
+			body[field] = value
+			calls := f.calls
+			r := h.do(t, "POST", "/v1/hassles", hassleJSON(t, body))
+			if r.status != 400 || f.calls != calls || f.writes != 0 {
+				t.Fatalf("ignored %s %v: %d %s", field, value, r.status, r.body)
+			}
+		}
+	}
+	for _, action := range []string{"done", "delete", "create", "edit", "adopt"} {
+		for _, field := range []string{"instanceAt", "instanceToken"} {
+			for _, value := range []any{nil, "ignored"} {
+				body := map[string]any{"location": loc, "action": action, "id": hassleUUID, field: value}
+				calls := f.calls
+				r := h.do(t, "POST", "/v1/hassles", hassleJSON(t, body))
+				if r.status != 400 || f.calls != calls {
+					t.Fatal("cross-action witness ignored", action, field, r.status)
+				}
+			}
+		}
+	}
+}

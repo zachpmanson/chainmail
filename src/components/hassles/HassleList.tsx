@@ -1,9 +1,8 @@
 import { Tabs } from "@base-ui/react/tabs";
-import { CheckIcon } from "@heroicons/react/24/outline";
+import { CheckIcon, PencilIcon } from "@heroicons/react/24/outline";
 import type { HassleTask } from "../../lib/hassles/forms";
 import { hassleGroups, type HassleTab } from "../../lib/hassles/groups";
 import { hassleSummary } from "../../lib/hassles/summary";
-import Button from "../ui/Button";
 import IconButton from "../ui/IconButton";
 import { buttonClasses } from "../ui/styles";
 
@@ -12,11 +11,13 @@ export default function HassleList({
   busy,
   onEdit,
   onDone,
+  onDoneInstance,
 }: {
   tasks: HassleTask[];
   busy: boolean;
   onEdit: (task: HassleTask) => void;
   onDone: (task: HassleTask) => void;
+  onDoneInstance: (task: HassleTask) => void;
 }) {
   return (
     <Tabs.Root defaultValue="upcoming">
@@ -56,17 +57,7 @@ export default function HassleList({
                       className="flex flex-wrap items-center gap-3 rounded-md border border-line bg-card p-4"
                     >
                       <div className="min-w-0 flex-1 wrap-break-word">
-                        <h3 className="m-0 text-base">
-                          <Button
-                            variant="bare"
-                            className="max-w-full text-left wrap-break-word enabled:hover:underline"
-                            aria-label={`Edit ${task.title}`}
-                            disabled={busy || !task.writable || !task.schedule}
-                            onClick={() => onEdit(task)}
-                          >
-                            {task.title}
-                          </Button>
-                        </h3>
+                        <h3 className="m-0 text-base">{task.title}</h3>
                         <p className="my-1 text-sm text-muted">{hassleSummary(task)}</p>
                         {task.timing.note ? (
                           <p className="my-1 text-xs text-muted">{task.timing.note}</p>
@@ -76,12 +67,44 @@ export default function HassleList({
                         ) : null}
                       </div>
                       <IconButton
-                        aria-label={`Done with ${task.title}`}
-                        title="Done"
+                        aria-label={`Edit ${task.title}`}
+                        title="Edit"
+                        disabled={busy || !task.writable || !task.schedule}
+                        onClick={() => onEdit(task)}
+                      >
+                        <PencilIcon aria-hidden="true" />
+                      </IconButton>
+                      <IconButton
+                        aria-label={`This instance only: ${task.title}`}
+                        title={
+                          task.instance
+                            ? `This instance only: ${task.title}`
+                            : `${task.title}: ${task.instanceRestriction || "This instance only unavailable"}`
+                        }
+                        disabled={busy || !task.writable || !task.instance}
+                        onClick={() => onDoneInstance(task)}
+                      >
+                        <CheckIcon aria-hidden="true" />
+                      </IconButton>
+                      <IconButton
+                        aria-label={`All instances: ${task.title}`}
+                        title={`All instances: ${task.title}`}
                         disabled={busy || !task.writable}
                         onClick={() => onDone(task)}
                       >
-                        <CheckIcon aria-hidden="true" />
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth={1.5}
+                          aria-hidden="true"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="m2 12 4 4L16 6m-5 10 3 3L24 9"
+                          />
+                        </svg>
                       </IconButton>
                     </li>
                   ))}

@@ -166,7 +166,7 @@ async function add(title: string) {
   await type(customStart(), "2027-01-01T08:30");
   await click(button("Add hassle"));
 }
-it("keeps Add hassle inline through create, title editing and tick-icon Done without Delete", async () => {
+it("keeps Add hassle inline through create, pencil-icon editing and tick-icon Done without Delete", async () => {
   expect(document.body.textContent).toContain("dedicated reminder calendar");
   await choose();
   expect(document.body.textContent).toContain("No hassles");
@@ -183,15 +183,27 @@ it("keeps Add hassle inline through create, title editing and tick-icon Done wit
     "Created",
   );
   expect(titleInput().value).toBe("");
-  expect(document.querySelector('h3 button[aria-label="Edit Offline bill"]')).not.toBeNull();
-  const card = button("Edit").closest("li")!;
+  const edit = button("Edit");
+  const card = edit.closest("li")!;
+  const heading = card.querySelector("h3")!;
+  expect(heading.textContent).toBe("Offline bill");
+  expect(heading.children).toHaveLength(0);
+  expect(heading.hasAttribute("tabindex")).toBe(false);
+  await click(heading);
+  expect(document.querySelector('[role="dialog"][aria-modal="true"]')).toBeNull();
+  expect(edit.getAttribute("aria-label")).toBe("Edit Offline bill");
+  expect(edit.title).toBe("Edit");
+  expect(edit.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+  expect(edit.textContent).toBe("");
+  expect(edit.nextElementSibling).toBe(button("This instance only:"));
+  expect(button("This instance only:").nextElementSibling).toBe(button("All instances:"));
   expect(card.classList.contains("bg-card")).toBe(true);
   expect(card.classList.contains("border-line")).toBe(true);
-  expect(card.contains(button("Done"))).toBe(true);
-  expect(button("Done").getAttribute("aria-label")).toBe("Done with Offline bill");
-  expect(button("Done").title).toBe("Done");
-  expect(button("Done").querySelector('svg[aria-hidden="true"]')).not.toBeNull();
-  expect(button("Done").textContent).toBe("");
+  expect(card.contains(button("All instances:"))).toBe(true);
+  expect(button("All instances:").getAttribute("aria-label")).toBe("All instances: Offline bill");
+  expect(button("All instances:").title).toBe("All instances: Offline bill");
+  expect(button("All instances:").querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+  expect(button("All instances:").textContent).toBe("");
   expect([...document.querySelectorAll("button")].some((el) => el.textContent === "Delete")).toBe(
     false,
   );
@@ -220,7 +232,7 @@ it("keeps Add hassle inline through create, title editing and tick-icon Done wit
     "Updated",
   );
   expect(titleInput().value).toBe("Unsaved next hassle");
-  await click(button("Done"));
+  await click(button("All instances:"));
   expect(document.querySelector('[role="dialog"][aria-modal="true"]')!.textContent).toContain(
     "Permanently remove all reminders for this hassle from Calendar. This cannot be undone.",
   );
@@ -277,15 +289,16 @@ it("places the narrow create form before a separate wider reminders column", asy
   await click(button("Ended"));
   expect(titleInput().value).toBe("Draft across columns");
 });
-it("constrains a long unbroken clickable title to the row width", async () => {
+it("constrains a long unbroken plain title to the row width and edits via its pencil icon", async () => {
   await choose();
   const title = "A".repeat(100);
   await add(title);
-  const edit = document.querySelector<HTMLButtonElement>("h3 button")!;
-  expect(edit.textContent).toBe(title);
-  expect(edit.classList.contains("max-w-full")).toBe(true);
-  expect(edit.classList.contains("wrap-break-word")).toBe(true);
-  await click(edit);
+  const heading = document.querySelector("h3")!;
+  expect(heading.textContent).toBe(title);
+  expect(heading.children).toHaveLength(0);
+  expect(heading.parentElement!.classList.contains("min-w-0")).toBe(true);
+  expect(heading.parentElement!.classList.contains("wrap-break-word")).toBe(true);
+  await click(button("Edit"));
   expect(titleInput(document.querySelector('[role="dialog"][aria-modal="true"]')!).value).toBe(
     title,
   );
@@ -460,7 +473,7 @@ it("separates ended reminders from ongoing/unknown schedules and shares Melbourn
   expect(panel.textContent).toContain("Unsupported schedule");
   expect(panel.textContent).toContain("Imported timezone definition: schedule editing unavailable");
   expect(button("Edit").disabled).toBe(true);
-  expect(button("Done").disabled).toBe(true);
+  expect(button("All instances:").disabled).toBe(true);
   await click(button("Ended"));
   expect(
     [...document.querySelectorAll('[role="tabpanel"] h3')].map((el) => el.textContent),
@@ -813,4 +826,93 @@ it("exposes global refresh busy state and accessible inventory failures", async 
   expect(refresh().disabled).toBe(false);
   expect(document.querySelector('[role="alert"]')!.textContent).toContain("disconnected");
   expect(document.body.textContent).toContain("Refreshing hassles failed");
+});
+
+it("completes only the displayed instance, refreshes rather than removes the card, and keeps pencil editing", async () => {
+  await choose();
+  await type(titleInput(), "Instance bill");
+  await click(button("Add hassle"));
+  const card = button("Edit").closest("li")!;
+  const before = card.textContent;
+  const single = button("This instance only:");
+  expect(single.getAttribute("aria-label")).toBe("This instance only: Instance bill");
+  expect(single.title).toBe("This instance only: Instance bill");
+  expect(single.querySelector("svg")!.innerHTML).not.toBe(
+    button("All instances:").querySelector("svg")!.innerHTML,
+  );
+  let release!: () => void;
+  writeGate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await click(single);
+  expect(button("This instance only:").disabled).toBe(true);
+  expect(button("All instances:").disabled).toBe(true);
+  expect(button("Edit").disabled).toBe(true);
+  release();
+  writeGate = null;
+  await settle();
+  await settle();
+  const request = fixture.requests
+    .filter((r) => r.method === "POST" && r.path.endsWith("/v1/hassles"))
+    .at(-1)!.body as Record<string, unknown>;
+  expect(request.action).toBe("done-instance");
+  expect(request.dryRun).toBe(false);
+  expect(request.instanceAt).toBeTruthy();
+  expect(request.instanceToken).toBeTruthy();
+  expect(button("Edit").closest("li")!.textContent).not.toBe(before);
+  expect(
+    document.querySelector('[aria-label="Dismiss: Completed this instance only"]'),
+  ).not.toBeNull();
+  await click(button("Edit"));
+  expect(document.querySelector('[role="dialog"] textarea')).not.toBeNull();
+});
+
+it("disables only instance completion for an owned ambiguous schedule and explains why", async () => {
+  await choose();
+  fixture.handle("/__hassles_fixture", "POST", {
+    tasks: [
+      {
+        id: "task:ambiguous",
+        title: "Ambiguous bill",
+        revision: "1",
+        resources: 2,
+        writable: true,
+        restriction: "Multiple resources",
+        schedule: null,
+        instance: null,
+        instanceRestriction: "This instance only unavailable: ambiguous occurrence",
+        reminder: "Unknown",
+        timing: { state: "unknown", next: null, last: null, note: "Unsupported" },
+      },
+    ],
+  });
+  await click(refresh());
+  expect(button("This instance only:").disabled).toBe(true);
+  expect(button("This instance only:").title).toContain("ambiguous occurrence");
+  expect(button("All instances:").disabled).toBe(false);
+  expect(button("Edit").disabled).toBe(true);
+  await click(button("All instances:"));
+  await click(button("Remove all reminders"));
+  expect(document.body.textContent).not.toContain("Ambiguous bill");
+});
+
+it("does not retry a failed instance completion and refreshes its inventory", async () => {
+  await choose();
+  await type(titleInput(), "Stale instance");
+  await click(button("Add hassle"));
+  fixture.handle("/__hassles_fixture", "POST", { mode: "conflict" });
+  const reads = fixture.requests.filter(
+    (r) => r.method === "GET" && r.path.includes("/v1/hassles?"),
+  ).length;
+  await click(button("This instance only:"));
+  await settle();
+  const writes = fixture.requests.filter(
+    (r) => (r.body as { action?: string } | undefined)?.action === "done-instance",
+  );
+  expect(writes).toHaveLength(1);
+  expect(document.body.textContent).toContain("Calendar changed");
+  expect(document.body.textContent).toContain("Stale instance");
+  expect(
+    fixture.requests.filter((r) => r.method === "GET" && r.path.includes("/v1/hassles?")).length,
+  ).toBeGreaterThan(reads);
 });

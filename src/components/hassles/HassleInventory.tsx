@@ -77,6 +77,21 @@ export default function HassleInventory({
             write.reset();
             setEditor({ id: task.id, task });
           }}
+          onDoneInstance={(task) => {
+            if (busy || !task.writable || !task.instance) return;
+            write.reset();
+            write.mutate({
+              body: {
+                location,
+                action: "done-instance",
+                id: task.id,
+                revision: task.revision,
+                instanceAt: task.instance.at,
+                instanceToken: task.instance.token,
+                dryRun: false,
+              },
+            });
+          }}
           onDone={(task) => {
             write.reset();
             setRemoving(task);

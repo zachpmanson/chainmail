@@ -226,3 +226,47 @@ func TestClientRequiresAnExplicitKnownGoogleEmail(t *testing.T) {
 		}
 	}
 }
+
+func TestInstanceCompletionCalDAVPreviewAndConditionalFailure(t *testing.T) {
+	collection := testCollection
+	o := object(t, collection+"server-selected.ics")
+	raw, _ := Encode(o.Data)
+	writes := 0
+	reports := 0
+	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer offline-fake-token" {
+			t.Error("OAuth missing")
+		}
+		switch r.Method {
+		case "REPORT":
+			reports++
+			w.Header().Set("Content-Type", "application/xml")
+			w.WriteHeader(207)
+			_, _ = io.WriteString(w, multistatus(o.Path, `<d:getetag>"v1"</d:getetag><c:calendar-data>`+escaped(raw)+`</c:calendar-data>`))
+		case "PUT":
+			writes++
+			body, _ := io.ReadAll(r.Body)
+			if r.URL.Path != strings.ReplaceAll(o.Path, "%40", "@") || r.Header.Get("If-Match") != o.ETag || !strings.Contains(string(body), "EXDATE:") {
+				t.Errorf("unsafe occurrence update %s %s", r.URL, body)
+			}
+			w.WriteHeader(412)
+		default:
+			t.Errorf("unexpected operation %s", r.Method)
+			w.WriteHeader(500)
+		}
+	})
+	objects, err := c.Objects(context.Background(), collection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := inventory(t, objects...)[0]
+	dry := true
+	in := Mutation{Location: Location{CalendarID: collection}, Action: "done-instance", ID: task.ID, Revision: task.Revision, InstanceAt: &task.Instance.At, InstanceToken: &task.Instance.Token, DryRun: &dry}
+	if _, err := Mutate(context.Background(), c, in, now); err != nil || writes != 0 || reports != 2 {
+		t.Fatalf("preview %v writes %d reports %d", err, writes, reports)
+	}
+	dry = false
+	if _, err := Mutate(context.Background(), c, in, now); !errors.Is(err, ErrConflict) || writes != 1 || reports != 3 {
+		t.Fatalf("conditional completion %v writes %d reports %d", err, writes, reports)
+	}
+}

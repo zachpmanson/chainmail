@@ -28,10 +28,12 @@ Configured calendar details and its settings link stay in Settings, not the Hass
   Below that breakpoint the form stacks above the list. App navigation/sidebar is
   unchanged. Switching tabs or
   editing/removing another task preserves its draft and retry UUID. Only a successful
-  create or a selected-location change resets it. Click a task title to edit its whole
-  recurring series; separate tasks with the same title are not linked. The tick icon
-  is Done (accessible name and tooltip); the redundant Delete action is not shown.
-  Edit and removal still use dialogs; Done retains a permanent-removal warning.
+  create or a selected-location change resets it. The plain task heading is not interactive;
+  the pencil beside the completion controls edits its whole recurring series. Separate
+  tasks with the same title are not linked. Every card has two completion buttons:
+  single check **This instance only**, double check **All instances**, with task-specific
+  accessible names/tooltips. Edit and all-instance removal use dialogs; All instances
+  retains the permanent-removal warning. There is no separate Delete control.
   Repeat, Every (with the actual day/week/month/year unit) and Until share one row.
   The title uses a four-row textarea in both Add and Edit; line breaks become spaces
   on save so the Calendar title remains one line. The form names Melbourne once under When.
@@ -80,7 +82,7 @@ Configured calendar details and its settings link stay in Settings, not the Hass
   the Until dropdown chooses Done/no end or Date and time. **Hourly is visibly unavailable and rejected.**
 - Schedule editing is deliberately limited to one simple five-minute event/series
   in Australia/Melbourne with minute precision and a representable RRULE. Imported
-  exceptions, RDATE/EXDATE/COUNT or other complex rules, all-day/floating/other-zone
+  exceptions, imported RDATE/EXDATE/COUNT or other complex rules, all-day/floating/other-zone
   events, unsupported embedded timezone definitions and multi-resource groups remain visible,
   with edit restrictions explained. One embedded Google Melbourne definition is permitted:
   exactly one STANDARD (first Sunday in April at 03:00, +1100 → +1000) and DAYLIGHT
@@ -220,3 +222,51 @@ No dependency upgrades, OAuth reimplementation or security-pin changes.
 `vendorHash` is updated for the newly reachable packages. It was derived using
 `go mod vendor` + `nix hash path`; the same procedure reproduced the previous
 baseline hash exactly. No deployment or host/pin changes were performed.
+
+## Physical-occurrence completion (temporary semantics)
+
+These two controls operate on the current Calendar-backed model, not new task types.
+**All instances** retains `done`: conditionally delete every resource in the logical group.
+**This instance only** targets exactly the displayed `timing.next`, or `timing.last` for
+an entirely known Ended group. A server-produced nullable `instance: {at, token}` binds
+that instant to its unique resource path and UID (SHA-256, NUL-delimited). This is an
+identity witness, not a grant. Ownership, no participants, strong ETags, supported
+unambiguous master and the existing Melbourne/timezone guards still apply. Any
+incomplete member, tied selected occurrence, unsupported selected schedule, or 1,000
+existing app exclusions disables the single check with a reason; owned groups can
+still use All instances. A multi-resource group may complete its unique known member;
+this does not make that group's schedule editable.
+
+`POST /v1/hassles` with `action: "done-instance"` requires the selected `location`,
+group `id`/`revision`, exact `instanceAt`/`instanceToken` copied from inventory, and
+explicit boolean `dryRun`. No raw resource path is accepted. `dryRun: true` re-fetches
+and validates under the normal selection/mutation mutex, then returns `completion`
+with `instanceAt`, digest `resourceId`, `operation` (`delete-resource` or
+`exclude-occurrence`) and semantic iCalendar `before`/`after` exports, with **zero
+writes**. Empty `after` means deletion. Operator testing must preview before committing
+with `dryRun: false` and the same bound identity/revision/witness. The UI explicitly
+sends false on a user click. `adoptId`/`adoptHash` remain adopt-only; `dryRun` is valid
+only for adopt/done-instance. Null or cross-action instance/adoption flags are rejected.
+
+Commit revalidates the exact displayed witness and revision against the fresh list.
+If the clock moved to another Next/Last, even without an ETag change, return conflict;
+never silently complete the new occurrence. Stale/lost-response retries may return
+409 and require refresh; automatic mutation retries remain off. A one-off deletes only
+its selected resource. A recurring master is deep-cloned and gains one UTC EXDATE,
+not a detached event or replacement resource. UID, DTSTART/DTEND, RRULE, notes, alarms,
+VTIMEZONE, unknown parameters and every other group member remain intact. The sole
+write uses the original strong ETag and confined selected-calendar path; no rollback
+or partial deletion of other members is attempted. Both actions toast and refresh;
+instance completion updates a recurring card rather than removing its whole group.
+
+To retain editing after app completion, only a previously recognized base schedule
+(or a valid existing app completion marker) gets the DESCRIPTION provenance marker
+`[chainmail:completed-instances:v1]`, separate from the single hassle grouping tag.
+Only bounded, distinct, well-formed UTC EXDATE values (1970–2100, no parameters,
+at most 1,000) with that marker permit validating a clone of the base schedule with
+EXDATE removed. Unknown imported exclusions/recurrences/timezones remain restricted;
+the marker never grants ownership. Original EXDATE properties are retained through
+both title and timing edits: completed instances keep their exact original UTC
+instants, **not ordinal positions** in an edited schedule. Google embedded Melbourne
+2008–2100 and native 1970–2100 profiles are unchanged. No hourly/workhours/logical-nag
+redesign is included. Calendar notification delivery still needs separate live review.

@@ -31,17 +31,19 @@ func marker(description string) (string, bool) {
 }
 
 type Task struct {
-	ID          string    `json:"id"`
-	Revision    string    `json:"revision"`
-	Title       string    `json:"title"`
-	Reminder    string    `json:"reminder"`
-	Resources   int       `json:"resources"`
-	Writable    bool      `json:"writable"`
-	Restriction string    `json:"restriction"`
-	Schedule    *Schedule `json:"schedule"`
-	Timing      Timing    `json:"timing"`
-	members     []caldav.CalendarObject
-	active      bool
+	ID                  string    `json:"id"`
+	Revision            string    `json:"revision"`
+	Title               string    `json:"title"`
+	Reminder            string    `json:"reminder"`
+	Resources           int       `json:"resources"`
+	Writable            bool      `json:"writable"`
+	Restriction         string    `json:"restriction"`
+	Schedule            *Schedule `json:"schedule"`
+	Instance            *Instance `json:"instance"`
+	InstanceRestriction string    `json:"instanceRestriction"`
+	Timing              Timing    `json:"timing"`
+	members             []caldav.CalendarObject
+	active              bool
 }
 
 func Inventory(objects []caldav.CalendarObject, now time.Time) ([]Task, error) {
@@ -177,9 +179,10 @@ func Inventory(objects []caldav.CalendarObject, now time.Time) ([]Task, error) {
 		if t.Resources > 1 {
 			t.Schedule = nil
 			if t.Restriction == "" {
-				t.Restriction = "Multiple resources: schedule editing unavailable; Done/Delete removes the whole group"
+				t.Restriction = "Multiple resources: schedule editing unavailable; All instances removes the whole group"
 			}
 		}
+		t.Instance, t.InstanceRestriction = selectedInstance(t, now)
 		t.Reminder = timingReminder(t.Timing)
 		if t.active {
 			out = append(out, *t)

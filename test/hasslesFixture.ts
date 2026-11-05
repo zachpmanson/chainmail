@@ -62,7 +62,7 @@ export function hasslesFixture() {
     if (url.pathname === "/v1/hassles") {
       if (method === "GET") return ok({ tasks });
       const mutation = body as Mutation;
-      if (!["create", "edit", "done", "delete"].includes(mutation.action))
+      if (!["create", "edit", "done", "delete", "done-instance"].includes(mutation.action))
         return fail(400, "Offline fixture does not support this task action");
       if (JSON.stringify(mutation.location) !== JSON.stringify(location))
         return fail(409, "Location changed; refresh");
@@ -81,6 +81,13 @@ export function hasslesFixture() {
             resources: 1,
             writable: true,
             restriction: "",
+            instance: {
+              at: new Date(wallInstant(mutation.schedule.start)!)
+                .toISOString()
+                .replace(".000Z", "Z"),
+              token: "fixture-token",
+            },
+            instanceRestriction: "",
             schedule: mutation.schedule,
             timing: {
               state: "upcoming",
@@ -92,7 +99,22 @@ export function hasslesFixture() {
       } else {
         const task = tasks.find((t) => t.id === mutation.id);
         if (!task || task.revision !== mutation.revision) return fail(409, "Stale task revision");
-        if (mutation.action === "edit") {
+        if (mutation.action === "done-instance") {
+          if (
+            !task.writable ||
+            !task.instance ||
+            mutation.instanceAt !== task.instance.at ||
+            mutation.instanceToken !== task.instance.token ||
+            mutation.dryRun !== false
+          )
+            return fail(409, "Wrong instance witness");
+          if (task.schedule?.cadence === "once") tasks = tasks.filter((t) => t.id !== mutation.id);
+          else {
+            task.timing.next = new Date(Date.parse(task.instance.at) + 86400000).toISOString();
+            task.instance.at = task.timing.next.replace(".000Z", "Z");
+            task.revision = String(++revision);
+          }
+        } else if (mutation.action === "edit") {
           if (!mutation.schedule) return fail(400, "Schedule required");
           task.title = mutation.schedule.title;
           task.schedule = mutation.schedule;
@@ -106,9 +128,11 @@ export function hasslesFixture() {
         message:
           mutation.action === "create"
             ? "Created"
-            : mutation.action === "edit"
-              ? "Updated"
-              : "Removed all reminder resources",
+            : mutation.action === "done-instance"
+              ? "Completed this instance only"
+              : mutation.action === "edit"
+                ? "Updated"
+                : "Removed all reminder resources",
       });
     }
     if (url.pathname === "/v1/stats")

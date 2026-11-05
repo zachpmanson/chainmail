@@ -2187,6 +2187,8 @@ export interface components {
             restriction: string;
             schedule: components["schemas"]["HassleSchedule"] | null;
             timing: components["schemas"]["HassleTiming"];
+            instance: components["schemas"]["HassleInstance"] | null;
+            instanceRestriction: string;
         };
         HassleInventory: {
             tasks: components["schemas"]["HassleTask"][];
@@ -2197,11 +2199,11 @@ export interface components {
             /** @constant */
             dedicated: true;
         };
-        /** @description Adopt is metadata-only and requires the original resource: digest ID, original revision, a stable adoptId UUID and explicit dryRun. Commit (dryRun:false) also requires adoptHash from the saved preview. No nonzero schedule is accepted. Adoption-only fields are rejected on all other actions. */
+        /** @description Adopt is metadata-only and requires the original resource: digest ID, original revision, a stable adoptId UUID and explicit dryRun. Commit (dryRun:false) also requires adoptHash from the saved preview. No nonzero schedule is accepted. Adoption-only fields are rejected on all other actions. done-instance requires revision, instanceAt, instanceToken and explicit dryRun; no schedule/adoption fields. A changed displayed occurrence or stale revision conflicts, never completes another occurrence. */
         HassleMutation: {
             location: components["schemas"]["HassleLocation"];
             /** @enum {string} */
-            action: "create" | "edit" | "done" | "delete" | "adopt";
+            action: "create" | "edit" | "done" | "delete" | "adopt" | "done-instance";
             id: string;
             revision?: string;
             schedule?: components["schemas"]["HassleSchedule"];
@@ -2212,13 +2214,21 @@ export interface components {
             adoptId?: string;
             /** @description Saved preview fingerprint, mandatory for commit and completed retry. Adopt only. */
             adoptHash?: string;
-            /** @description Required explicitly for adopt. True previews without writing; false conditionally updates the existing resource. Adopt only. */
+            /** @description Explicitly required for adopt and done-instance; true previews with zero writes, false commits conditionally. Rejected on other actions. */
             dryRun?: boolean;
+            /**
+             * Format: date-time
+             * @description done-instance only. Copy exact instance.at from inventory.
+             */
+            instanceAt?: string;
+            /** @description done-instance only. Copy instance.token from inventory. */
+            instanceToken?: string;
         };
         HassleResult: {
             removed: number;
             message: string;
             adoption?: components["schemas"]["HassleAdoption"];
+            completion?: components["schemas"]["HassleCompletion"];
         };
         /** @description Read-only recurrence classification, independent of mutation/edit eligibility. Unknown schedules remain visible in Upcoming; next/last are known occurrences, not DTSTART guesses. */
         HassleTiming: {
@@ -2246,6 +2256,25 @@ export interface components {
             after: string;
             /** @description Protected-content SHA-256; pass as adoptHash and compare after actual writes. */
             fingerprint: string;
+        };
+        HassleInstance: {
+            /**
+             * Format: date-time
+             * @description Exact displayed physical Calendar occurrence, RFC3339 UTC.
+             */
+            at: string;
+            token: string;
+        };
+        HassleCompletion: {
+            /** Format: date-time */
+            instanceAt: string;
+            /** @enum {string} */
+            operation: "delete-resource" | "exclude-occurrence";
+            resourceId: string;
+            /** @description Semantic iCalendar before export. */
+            before: string;
+            /** @description Semantic iCalendar after export; empty for resource deletion. */
+            after: string;
         };
     };
     responses: never;
