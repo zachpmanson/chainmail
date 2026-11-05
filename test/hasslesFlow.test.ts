@@ -78,6 +78,15 @@ it("submits hourly work-hours schedules, preserves a failed-create draft and edi
   expect(checkbox().checked).toBe(false);
   const hourly = [...repeat().options].find((o) => o.value === "hourly")!;
   expect(hourly.disabled).toBe(false);
+  expect([...repeat().options].map((option) => option.value)).toEqual([
+    "once",
+    "hourly",
+    "daily",
+    "weekdays",
+    "weekly",
+    "monthly",
+    "yearly",
+  ]);
   await type(titleInput(), "Office cycle");
   await select(firstReminder(), "custom");
   await type(customStart(), "2027-01-01T09:00");
@@ -88,7 +97,10 @@ it("submits hourly work-hours schedules, preserves a failed-create draft and edi
   ]);
   await select(every, "0.5");
   expect(field("Every", addForm()).textContent).toContain("hours");
+  expect(every.classList.contains("min-w-14")).toBe(true);
+  expect(every.parentElement!.classList.contains("flex-wrap")).toBe(true);
   await click(checkbox());
+  expect(addForm().textContent).not.toContain("Reminders outside");
   fixture.handle("/__hassles_fixture", "POST", { mode: "read-only" });
   await click(button("Add hassle"));
   const writes = () =>
@@ -110,7 +122,16 @@ it("submits hourly work-hours schedules, preserves a failed-create draft and edi
   );
   await click(button("Edit"));
   const dialog = document.querySelector('[role="dialog"][aria-modal="true"]')!;
+  expect(document.querySelectorAll('[role="dialog"][aria-modal="true"]')).toHaveLength(1);
+  expect(dialog.querySelector('[role="dialog"]')).toBeNull();
+  const editForm = dialog.querySelector('section[aria-label="Edit hassle"]')!;
+  expect(editForm.classList.contains("border")).toBe(false);
+  expect(editForm.classList.contains("p-4")).toBe(false);
+  expect(dialog.classList.contains("box-border")).toBe(true);
+  expect(addForm().classList.contains("border")).toBe(true);
+  expect(addForm().classList.contains("p-4")).toBe(true);
   expect(checkbox(dialog).checked).toBe(true);
+  expect(dialog.textContent).not.toContain("Reminders outside");
   expect(repeat(dialog).value).toBe("hourly");
   expect(field("Every", dialog).querySelector("select")!.value).toBe("0.5");
   await click(checkbox(dialog));

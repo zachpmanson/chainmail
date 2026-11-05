@@ -39,7 +39,7 @@ export default function HassleForm({
   return (
     <section
       aria-label={initial ? "Edit hassle" : "Add hassle"}
-      className="rounded-md border border-line p-4"
+      className={initial ? undefined : "rounded-md border border-line p-4"}
     >
       {initial ? <h2 className="mt-0 text-lg">Edit hassle</h2> : null}
       <form
@@ -108,20 +108,20 @@ export default function HassleForm({
               }}
             >
               <option value="once">Once</option>
+              <option value="hourly">Hourly</option>
               <option value="daily">Daily</option>
               <option value="weekdays">Weekdays</option>
               <option value="weekly">Weekly</option>
               <option value="monthly">Monthly</option>
               <option value="yearly">Yearly</option>
-              <option value="hourly">Hourly</option>
             </SelectInput>
           </FormField>
           {schedule.cadence !== "once" && schedule.cadence !== "weekdays" ? (
             <FormField label="Every" className="flex min-w-0 flex-1 flex-col gap-1">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {schedule.cadence === "hourly" ? (
                   <SelectInput
-                    className="w-full min-w-0"
+                    className="min-w-14 flex-1"
                     disabled={busy}
                     value={schedule.interval}
                     onChange={(e) => change({ interval: Number(e.target.value) })}
@@ -134,7 +134,7 @@ export default function HassleForm({
                   </SelectInput>
                 ) : (
                   <TextInput
-                    className="w-full min-w-0"
+                    className="min-w-14 flex-1"
                     type="number"
                     min={1}
                     max={999}
@@ -186,12 +186,6 @@ export default function HassleForm({
         >
           Work hours only · weekdays 9–5 Melbourne
         </CheckboxRow>
-        {schedule.workHours ? (
-          <p className="m-0 text-xs text-muted">
-            Reminders outside 09:00–17:00 are skipped, not delayed. The original repeat cycle
-            continues through nights and weekends.
-          </p>
-        ) : null}
         {validation || error ? <InlineAlert>{validation || error}</InlineAlert> : null}
         <div className="flex justify-end gap-2">
           {onClose ? (

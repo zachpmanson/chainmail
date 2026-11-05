@@ -35,9 +35,14 @@ Configured calendar details and its settings link stay in Settings, not the Hass
   the pencil beside the completion controls edits its whole recurring series. Separate
   tasks with the same title are not linked. Every card has two completion buttons:
   single check **This instance only**, double check **All instances**, with task-specific
-  accessible names/tooltips. Edit and all-instance removal use dialogs; All instances
+  accessible names/tooltips. Edit and all-instance removal use dialogs. The edit dialog
+  owns the only panel frame/padding; shared fields do not repeat the inline Add card's
+  border, and the dialog's padding stays inside its viewport-bounded width. All instances
   retains the permanent-removal warning. There is no separate Delete control.
   Repeat, Every (with the actual hour/day/week/month/year unit) and Until share one row.
+  The interval control retains a readable minimum width; its unit can wrap within Every
+  on narrow forms rather than hiding the selected value.
+  Repeat lists Once, Hourly, Daily, Weekdays, Weekly, Monthly, then Yearly.
   The title uses a four-row textarea in both Add and Edit; line breaks become spaces
   on save so the Calendar title remains one line. The form names Melbourne under When and beside the work-hours checkbox.
   Routine explanatory small print is omitted;
@@ -87,7 +92,8 @@ Configured calendar details and its settings link stay in Settings, not the Hass
   An optional inclusive repeat-end timestamp must be after the first reminder;
   the Until dropdown chooses Done/no end or Date and time.
 - **Work hours only** is optional and defaults unchecked on new drafts, in both Add
-  and Edit. Notification starts must fall Monday–Friday, 09:00 inclusive to 17:00
+  and Edit. Checking it does not expand an explanatory paragraph; the label and validation
+  remain visible. Notification starts must fall Monday–Friday, 09:00 inclusive to 17:00
   exclusive **Australia/Melbourne**; no public-holiday logic. An out-of-hours first
   reminder is rejected with actionable validation, never silently moved (including
   presets such as Tomorrow morning at 08:30). Outside-window occurrences are skipped,

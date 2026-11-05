@@ -105,7 +105,7 @@ export default function HassleInventory({
           label="Edit hassle"
           onClose={() => setEditor(null)}
           closeDisabled={write.isPending}
-          panelClassName="w-[min(34rem,95vw)] overflow-y-auto p-5"
+          panelClassName="box-border w-[min(34rem,95vw)] overflow-y-auto p-5"
         >
           <HassleForm
             initial={editor.task.schedule ?? undefined}
