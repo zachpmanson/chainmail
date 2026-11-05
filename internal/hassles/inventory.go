@@ -143,17 +143,16 @@ func Inventory(objects []caldav.CalendarObject, now time.Time) ([]Task, error) {
 			t.Writable = false
 			t.Restriction = "Read-only: calendar did not provide a strong ETag"
 		}
-		hasTimezone := false
-		for _, child := range o.Data.Children {
-			hasTimezone = hasTimezone || child.Name == "VTIMEZONE"
-		}
-		if hasTimezone {
+		if why := scheduleTimezoneRestriction(o.Data, nil); why != "" {
 			t.Schedule = nil
 			if t.Restriction == "" {
-				t.Restriction = "Imported timezone definition: schedule editing unavailable"
+				t.Restriction = why
 			}
 		} else if len(events) == 1 && masters == 1 {
 			s, why := readSchedule(events[0])
+			if timezoneWhy := scheduleTimezoneRestriction(o.Data, s); timezoneWhy != "" {
+				s, why = nil, timezoneWhy
+			}
 			t.Schedule = s
 			if s == nil && t.Restriction == "" {
 				t.Restriction = why
@@ -232,6 +231,12 @@ func ApplySchedule(e ical.Event, s Schedule, now time.Time) error {
 	if err != nil {
 		return err
 	}
+	previous, _ := readSchedule(e)
+	preserveTiming := false
+	if previous != nil {
+		previous.Title = s.Title
+		preserveTiming = *previous == s
+	}
 	summary := e.Props.Get("SUMMARY")
 	if summary == nil {
 		summary = ical.NewProp("SUMMARY")
@@ -239,6 +244,12 @@ func ApplySchedule(e ical.Event, s Schedule, now time.Time) error {
 		summary = e.Props.Get("SUMMARY")
 	}
 	summary.SetText(strings.TrimSpace(s.Title))
+	e.Props.SetDateTime("DTSTAMP", now.UTC())
+	e.Props.SetDateTime("LAST-MODIFIED", now.UTC())
+	// A title-only edit must not normalize imported time/recurrence properties.
+	if preserveTiming {
+		return nil
+	}
 	for name, value := range map[string]time.Time{"DTSTART": start, "DTEND": start.Add(5 * time.Minute)} {
 		p := e.Props.Get(name)
 		if p == nil {
@@ -249,8 +260,6 @@ func ApplySchedule(e ical.Event, s Schedule, now time.Time) error {
 		p.SetDateTime(value)
 	}
 	e.Props.Del("DURATION")
-	e.Props.SetDateTime("DTSTAMP", now.UTC())
-	e.Props.SetDateTime("LAST-MODIFIED", now.UTC())
 	e.Props.Del("RRULE")
 	if rule != "" {
 		p := ical.NewProp("RRULE")

@@ -184,6 +184,10 @@ it("keeps Add hassle inline through create, title editing and tick-icon Done wit
   );
   expect(titleInput().value).toBe("");
   expect(document.querySelector('h3 button[aria-label="Edit Offline bill"]')).not.toBeNull();
+  const card = button("Edit").closest("li")!;
+  expect(card.classList.contains("bg-card")).toBe(true);
+  expect(card.classList.contains("border-line")).toBe(true);
+  expect(card.contains(button("Done"))).toBe(true);
   expect(button("Done").getAttribute("aria-label")).toBe("Done with Offline bill");
   expect(button("Done").title).toBe("Done");
   expect(button("Done").querySelector('svg[aria-hidden="true"]')).not.toBeNull();

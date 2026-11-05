@@ -114,6 +114,9 @@ func Mutate(ctx context.Context, b Backend, in Mutation, now time.Time) (Result,
 			return result, errors.New("complex/imported schedule cannot be safely edited")
 		}
 		o := task.members[0]
+		if why := scheduleTimezoneRestriction(o.Data, &in.Schedule); why != "" {
+			return result, errors.New(why)
+		}
 		if err := ApplySchedule(o.Data.Events()[0], in.Schedule, now); err != nil {
 			return result, err
 		}

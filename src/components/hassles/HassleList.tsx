@@ -53,7 +53,7 @@ export default function HassleList({
                   {group.tasks.map((task) => (
                     <li
                       key={task.id}
-                      className="flex flex-wrap items-center gap-3 rounded-md border border-line p-4"
+                      className="flex flex-wrap items-center gap-3 rounded-md border border-line bg-card p-4"
                     >
                       <div className="min-w-0 flex-1 wrap-break-word">
                         <h3 className="m-0 text-base">

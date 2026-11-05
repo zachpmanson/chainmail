@@ -37,7 +37,8 @@ Configured calendar details and its settings link stay in Settings, not the Hass
   on save so the Calendar title remains one line. The form names Melbourne once under When.
   Routine explanatory small print is omitted;
   validation errors, timing uncertainty and edit restrictions remain visible.
-  Rows show a compact Melbourne date/time plus recurrence and repeat end when editable.
+  Rows use the raised card surface (white in light mode, theme-aware in dark mode)
+  and show a compact Melbourne date/time plus recurrence and repeat end when editable.
 - First reminder offers In an hour, This afternoon (13:00), This evening (18:00),
   Tomorrow morning (08:30), and Custom. Only Custom shows the date/time picker.
   All wall times are Melbourne; passed afternoon/evening times roll to tomorrow.
@@ -80,9 +81,18 @@ Configured calendar details and its settings link stay in Settings, not the Hass
 - Schedule editing is deliberately limited to one simple five-minute event/series
   in Australia/Melbourne with minute precision and a representable RRULE. Imported
   exceptions, RDATE/EXDATE/COUNT or other complex rules, all-day/floating/other-zone
-  events, embedded timezone definitions and multi-resource groups remain visible,
-  with edit restrictions explained. Unknown calendar/event fields, human description,
-  markers and alarms are preserved on supported edits.
+  events, unsupported embedded timezone definitions and multi-resource groups remain visible,
+  with edit restrictions explained. One embedded Google Melbourne definition is permitted:
+  exactly one STANDARD (first Sunday in April at 03:00, +1100 → +1000) and DAYLIGHT
+  (first Sunday in October at 02:00, +1000 → +1100), with the provider's 1970 anchors.
+  Only the recognized optional location/name labels are accepted; extra/duplicate properties,
+  transitions, recurrence dates or rule parts fail closed. These projected rules disagree with
+  historical IANA data, so both existing and requested start/end dates must be in 2008–2100.
+  Native calendars without embedded definitions retain the 1970–2100 input range.
+  Ongoing recurrences use the current projected rules, as native schedules do; future legal
+  timezone changes may require revisiting this profile. Unknown calendar/event fields, human
+  description, markers, alarms and the embedded component are preserved on supported edits.
+  Title-only edits also preserve time and recurrence properties without normalization.
 - Read-only timing is independent of edit restrictions, including embedded VTIMEZONE.
   Known IANA TZIDs, daily/weekly/monthly/yearly RRULEs (including COUNT/UNTIL,
   INTERVAL, WKST and weekly bare-weekday BYDAY), RDATE and EXDATE are read.
