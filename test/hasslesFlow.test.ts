@@ -842,9 +842,16 @@ it("completes only the displayed instance, refreshes rather than removes the car
   const single = button("This instance only:");
   expect(single.getAttribute("aria-label")).toBe("This instance only: Instance bill");
   expect(single.title).toBe("This instance only: Instance bill");
-  expect(single.querySelector("svg")!.innerHTML).not.toBe(
-    button("All instances:").querySelector("svg")!.innerHTML,
-  );
+  const singleIcon = single.querySelector("svg")!;
+  const allIcon = button("All instances:").querySelector("svg")!;
+  expect(singleIcon.querySelector("path")!.getAttribute("d")).toBe("m5 13 4 4L19 7");
+  expect(allIcon.querySelector("path")!.getAttribute("d")).toBe("m2 12 4 4L16 6m-5 10 3 3L24 9");
+  for (const icon of [singleIcon, allIcon]) {
+    expect(icon.getAttribute("stroke-width")).toBe("1.5");
+    expect(icon.getAttribute("aria-hidden")).toBe("true");
+    expect(icon.querySelector("path")!.getAttribute("stroke-linecap")).toBe("round");
+    expect(icon.querySelector("path")!.getAttribute("stroke-linejoin")).toBe("round");
+  }
   let release!: () => void;
   writeGate = new Promise<void>((resolve) => {
     release = resolve;
