@@ -217,6 +217,21 @@ it("keeps Add hassle inline through create, title editing and tick-icon Done wit
     ),
   ).toBe(true);
 });
+it("places the narrow create form before a separate wider reminders column", async () => {
+  await choose();
+  const layout = document.querySelector('section[aria-label="Hassle inventory"]')!;
+  const reminders = layout.querySelector('section[aria-label="Reminders"]')!;
+  expect(layout.classList.contains("grid")).toBe(true);
+  expect(layout.className).toContain("min-[60rem]:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]");
+  expect(document.querySelector("main")!.classList.contains("max-w-6xl")).toBe(true);
+  expect(layout.children[0]!.contains(addForm())).toBe(true);
+  expect(layout.children[1]).toBe(reminders);
+  expect(reminders.contains(document.querySelector('[role="tablist"]'))).toBe(true);
+  expect(reminders.contains(addForm())).toBe(false);
+  await type(titleInput(), "Draft across columns");
+  await click(button("Ended"));
+  expect(titleInput().value).toBe("Draft across columns");
+});
 it("constrains a long unbroken clickable title to the row width", async () => {
   await choose();
   const title = "A".repeat(100);

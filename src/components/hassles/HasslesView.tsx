@@ -16,7 +16,7 @@ export default function HasslesView() {
   const location = config.data?.location;
   const selected = !!location?.accountId && !!location.calendarId;
   return (
-    <main aria-label="Hassles" className="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-5">
+    <main aria-label="Hassles" className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-5">
       {config.isError ? <InlineAlert>{errText(config.error)}</InlineAlert> : null}
       {config.isPending ? <p>Reading reminder settings…</p> : null}
       {config.data && !config.data.enabled ? (

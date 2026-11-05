@@ -40,36 +40,43 @@ export default function HassleInventory({
   });
   const busy = disabled || write.isPending || inventory.isFetching || inventory.isError;
   return (
-    <section aria-label="Hassle inventory" className="flex flex-col gap-3">
-      <HassleForm
-        key={createId}
-        busy={busy}
-        error={
-          write.isError && write.variables?.body.action === "create" ? errText(write.error) : ""
-        }
-        onSave={(schedule) =>
-          write.mutate({ body: { location, action: "create", id: createId, schedule } })
-        }
-      />
-      {inventory.isError ? <InlineAlert>{errText(inventory.error)}</InlineAlert> : null}
-      {write.isError && !editor && write.variables?.body.action !== "create" ? (
-        <InlineAlert>{errText(write.error)}</InlineAlert>
-      ) : null}
-      <p role="status" className="m-0 text-sm">
-        {inventory.isFetching ? "Reading reminders…" : notice}
-      </p>
-      <HassleList
-        tasks={inventory.data?.tasks ?? []}
-        busy={busy}
-        onEdit={(task) => {
-          write.reset();
-          setEditor({ id: task.id, task });
-        }}
-        onDone={(task) => {
-          write.reset();
-          setRemoving(task);
-        }}
-      />
+    <section
+      aria-label="Hassle inventory"
+      className="grid items-start gap-6 min-[60rem]:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]"
+    >
+      <div className="min-w-0">
+        <HassleForm
+          key={createId}
+          busy={busy}
+          error={
+            write.isError && write.variables?.body.action === "create" ? errText(write.error) : ""
+          }
+          onSave={(schedule) =>
+            write.mutate({ body: { location, action: "create", id: createId, schedule } })
+          }
+        />
+      </div>
+      <section aria-label="Reminders" className="flex min-w-0 flex-col gap-3">
+        {inventory.isError ? <InlineAlert>{errText(inventory.error)}</InlineAlert> : null}
+        {write.isError && !editor && write.variables?.body.action !== "create" ? (
+          <InlineAlert>{errText(write.error)}</InlineAlert>
+        ) : null}
+        <p role="status" className="m-0 text-sm">
+          {inventory.isFetching ? "Reading reminders…" : notice}
+        </p>
+        <HassleList
+          tasks={inventory.data?.tasks ?? []}
+          busy={busy}
+          onEdit={(task) => {
+            write.reset();
+            setEditor({ id: task.id, task });
+          }}
+          onDone={(task) => {
+            write.reset();
+            setRemoving(task);
+          }}
+        />
+      </section>
       {editor ? (
         <DialogShell
           label="Edit hassle"

@@ -23,7 +23,10 @@ Configured calendar details and its settings link stay in Settings, not the Hass
   exhausted series and distant reminders. No occurrence duplication or background
   scheduler. Canceled events are hidden, retained as members of an otherwise-active
   logical task where appropriate.
-- The Add form stays above accessible **Upcoming / Ended** tabs; switching tabs or
+- Desktop (60rem and up) uses two content columns: a narrow (20rem) Add form on
+  the left and a wider reminders column with accessible **Upcoming / Ended** tabs.
+  Below that breakpoint the form stacks above the list. App navigation/sidebar is
+  unchanged. Switching tabs or
   editing/removing another task preserves its draft and retry UUID. Only a successful
   create or a selected-location change resets it. Click a task title to edit its whole
   recurring series; separate tasks with the same title are not linked. The tick icon
