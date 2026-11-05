@@ -275,7 +275,10 @@ instants, **not ordinal positions** in an edited schedule. Google embedded Melbo
 redesign is included. Calendar notification delivery still needs separate live review.
 
 Single-day all-day DATE events now have read-only date timing, including bounded
-DATE RDATE/EXDATE and known recurrence rules. Today's date remains Upcoming until
+DATE RDATE/EXDATE and known recurrence rules. An explicit MONTHLY BYMONTHDAY is
+recognized only when its single canonical positive day equals DTSTART's day,
+which is equivalent to the already-supported implicit monthly day. Other filters
+remain unknown. Today's date remains Upcoming until
 Melbourne midnight; next/last all-day flags mean a civil date, not a notification
 hour. The UI says All day instead of displaying midnight. Malformed/mixed types,
 multiday/DURATION and unsupported rules remain unknown. All-day editing and

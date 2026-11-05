@@ -12,6 +12,11 @@ import (
 func TestDateTiming(t *testing.T) {
 	for _, tc := range []struct{ name, start, rule, extra, at, state, day string }{
 		{"monthly 28", "20261028", "FREQ=MONTHLY", "", "2026-11-04T01:00:00Z", "upcoming", "2026-11-28"},
+		{"Google November", "20261028", "FREQ=MONTHLY;WKST=TU;BYMONTHDAY=28", "DTEND;VALUE=DATE:20261029\r\n", "2026-11-05T04:00:00Z", "upcoming", "2026-11-28"},
+		{"Google December", "20261028", "FREQ=MONTHLY;WKST=TU;BYMONTHDAY=28", "DTEND;VALUE=DATE:20261029\r\n", "2026-11-29T01:00:00Z", "upcoming", "2026-12-28"},
+		{"Google January", "20261028", "FREQ=MONTHLY;WKST=TU;BYMONTHDAY=28", "DTEND;VALUE=DATE:20261029\r\n", "2026-12-29T01:00:00Z", "upcoming", "2027-01-28"},
+		{"Google inclusive until", "20261028", "FREQ=MONTHLY;WKST=TU;BYMONTHDAY=28;UNTIL=20261128", "DTEND;VALUE=DATE:20261029\r\n", "2026-11-29T01:00:00Z", "past", "2026-11-28"},
+		{"Google month end skips February", "20260131", "FREQ=MONTHLY;BYMONTHDAY=31", "", "2026-02-01T01:00:00Z", "upcoming", "2026-03-31"},
 		{"December 28", "20261028", "FREQ=MONTHLY", "", "2026-11-29T01:00:00Z", "upcoming", "2026-12-28"},
 		{"January 28", "20261028", "FREQ=MONTHLY", "", "2026-12-29T01:00:00Z", "upcoming", "2027-01-28"},
 		{"today", "20261104", "", "", "2026-11-04T12:59:59Z", "upcoming", "2026-11-04"},
@@ -65,6 +70,12 @@ func TestDateTiming(t *testing.T) {
 func TestDateTimingRejectsUnsupported(t *testing.T) {
 	for _, tc := range []struct{ name, start, rule, extra string }{
 		{"untyped", ":20261104", "", ""},
+		{"different monthly day", ";VALUE=DATE:20261104", "FREQ=MONTHLY;BYMONTHDAY=5", ""},
+		{"duplicate monthly day", ";VALUE=DATE:20261104", "FREQ=MONTHLY;BYMONTHDAY=4;BYMONTHDAY=4", ""},
+		{"monthly day list", ";VALUE=DATE:20261104", "FREQ=MONTHLY;BYMONTHDAY=4,5", ""},
+		{"weekly monthly day", ";VALUE=DATE:20261104", "FREQ=WEEKLY;BYMONTHDAY=4", ""},
+		{"yearly monthly day", ";VALUE=DATE:20261104", "FREQ=YEARLY;BYMONTHDAY=4", ""},
+		{"negative monthly day", ";VALUE=DATE:20261104", "FREQ=MONTHLY;BYMONTHDAY=-4", ""},
 		{"invalid day", ";VALUE=DATE:20260229", "", ""},
 		{"lower bound", ";VALUE=DATE:19691231", "", ""},
 		{"upper bound", ";VALUE=DATE:21010101", "", ""},

@@ -2,6 +2,7 @@ package hassles
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 
@@ -131,17 +132,29 @@ func readDateRule(p *ical.Prop, start time.Time) (*rrule.RRule, bool) {
 	}
 	copy := *p
 	parts := strings.Split(p.Value, ";")
-	for i, part := range parts {
+	out := make([]string, 0, len(parts))
+	monthDaySeen := false
+	for _, part := range parts {
+		if strings.HasPrefix(part, "BYMONTHDAY=") {
+			// Google's explicit matching monthly day is equivalent to the
+			// already-supported implicit DTSTART day. Do not broaden filters.
+			if monthDaySeen || !strings.Contains(";"+p.Value+";", ";FREQ=MONTHLY;") || part != "BYMONTHDAY="+strconv.Itoa(start.Day()) {
+				return nil, false
+			}
+			monthDaySeen = true
+			continue
+		}
 		if strings.HasPrefix(part, "UNTIL=") {
 			end, err := reminderDate(&ical.Prop{Params: ical.Params{"VALUE": {"DATE"}}, Value: strings.TrimPrefix(part, "UNTIL=")})
 			if err != nil || end.Before(start) {
 				return nil, false
 			}
 			// The library accepts local DATE-TIME UNTIL; midnight is inclusive.
-			parts[i] = "UNTIL=" + end.Format("20060102T150405")
+			part = "UNTIL=" + end.Format("20060102T150405")
 		}
+		out = append(out, part)
 	}
-	copy.Value = strings.Join(parts, ";")
+	copy.Value = strings.Join(out, ";")
 	return readRule(&copy, start)
 }
 
