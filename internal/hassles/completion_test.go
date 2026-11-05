@@ -64,6 +64,8 @@ func TestInstanceOutsideCompletionYearProfileFailsWithoutWrite(t *testing.T) {
 	}{
 		{"derived future", "1970-06-01T08:30", "yearly", 200},
 		{"UTC lower boundary", "1970-01-01T00:30", "once", 1},
+		{"local upper boundary", "1970-01-01T00:30", "yearly", 131},
+		{"derived DST overlap", "2026-04-04T02:30", "yearly", 1},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			s := sample()
@@ -90,6 +92,67 @@ func TestInstanceOutsideCompletionYearProfileFailsWithoutWrite(t *testing.T) {
 			_, err = Mutate(context.Background(), f, Mutation{Location: Location{CalendarID: testCollection}, Action: "done-instance", ID: task.ID, Revision: task.Revision, InstanceAt: ptr(instant), InstanceToken: ptr(instanceToken(o.Path, uid, instant)), DryRun: ptr(false)}, now)
 			if !errors.Is(err, ErrConflict) || len(f.writes) != 0 || inventory(t, f.objects...)[0].Schedule == nil {
 				t.Fatalf("out-of-profile completion changed reminder: %v, %v", err, f.writes)
+			}
+		})
+	}
+}
+
+func TestCompletionFractionalTimestampSyntaxRejected(t *testing.T) {
+	for _, tzid := range []string{"", Zone} {
+		for _, fraction := range []string{".0", ".5"} {
+			o := object(t, testCollection+"fraction.ics")
+			e := o.Data.Events()[0]
+			e.Props.SetText("DESCRIPTION", "[docket]\\n"+completionMarker)
+			value := "20270104T121700" + fraction
+			params := make(ical.Params)
+			if tzid == "" {
+				value += "Z"
+			} else {
+				params["TZID"] = []string{tzid}
+			}
+			e.Props["EXDATE"] = []ical.Prop{{Name: "EXDATE", Value: value, Params: params}}
+			if validCompletionDates(e) {
+				t.Fatalf("accepted fractional compact syntax: %s %s", tzid, value)
+			}
+		}
+	}
+}
+
+func TestGoogleNormalizedCompletionRetainsEditingAndNextWitness(t *testing.T) {
+	for _, explicitValue := range []bool{false, true} {
+		t.Run(map[bool]string{false: "TZID", true: "TZID and VALUE"}[explicitValue], func(t *testing.T) {
+			f := &completionBackend{objects: []caldav.CalendarObject{object(t, testCollection+"google.ics")}}
+			in := completionInput(t, f)
+			in.DryRun = ptr(false)
+			if _, err := Mutate(context.Background(), f, in, now); err != nil {
+				t.Fatal(err)
+			}
+			at, _ := time.Parse(time.RFC3339, *in.InstanceAt)
+			loc, _ := time.LoadLocation(Zone)
+			e := f.objects[0].Data.Events()[0]
+			p := e.Props.Get("EXDATE")
+			p.Value = at.In(loc).Format("20060102T150405")
+			p.Params = ical.Params{"TZID": []string{Zone}}
+			if explicitValue {
+				p.Params["VALUE"] = []string{"DATE-TIME"}
+			}
+			f.objects[0].ETag += "google"
+			task := inventory(t, f.objects...)[0]
+			if task.Schedule == nil || task.Instance == nil || task.Instance.At == *in.InstanceAt || !validCompletionDates(e) {
+				t.Fatalf("provider normalization lost editing/next witness: %+v", task)
+			}
+			before := snapshot(t, e.Props["EXDATE"])
+			s := *task.Schedule
+			s.Title = "Renamed after Google normalization"
+			if _, err := Mutate(context.Background(), f, Mutation{Location: Location{CalendarID: testCollection}, Action: "edit", ID: task.ID, Revision: task.Revision, Schedule: s}, now); err != nil {
+				t.Fatal(err)
+			}
+			if snapshot(t, f.objects[0].Data.Events()[0].Props["EXDATE"]) != before {
+				t.Fatal("title edit changed provider-normalized exclusion")
+			}
+			next := completionInput(t, f)
+			if _, err := Mutate(context.Background(), f, next, now); err != nil {
+				t.Fatal("next preview rejected normalized exclusion", err)
 			}
 		})
 	}

@@ -24,8 +24,22 @@ type Completion struct {
 	After      string `json:"after"`
 }
 
-// Only our bounded, UTC-only exclusion profile permits base-schedule editing.
-// Imported exclusions without this provenance remain unsupported.
+// Google normalizes submitted UTC exclusions into Melbourne local values.
+// Accept only instants that round-trip unambiguously through both forms.
+func completionInstantSupported(t time.Time) bool {
+	if t.UTC().Year() < 1970 || t.UTC().Year() > 2100 || t.Second() != 0 || t.Nanosecond() != 0 {
+		return false
+	}
+	loc, err := time.LoadLocation(Zone)
+	if err != nil {
+		return false
+	}
+	wall, err := WallTime(t.In(loc).Format("2006-01-02T15:04"))
+	return err == nil && wall.Equal(t)
+}
+
+// Only bounded app exclusions in UTC or the verified provider form permit
+// base-schedule editing. Imported exclusions without provenance stay unsupported.
 func validCompletionDates(e ical.Event) bool {
 	desc, err := e.Props.Text("DESCRIPTION")
 	if err != nil || len(e.Props["DESCRIPTION"]) != 1 || strings.Count(desc, "[chainmail:completed-instances:") != 1 || !strings.Contains(desc, completionMarker) {
@@ -33,15 +47,45 @@ func validCompletionDates(e ical.Event) bool {
 	}
 	seen := map[string]bool{}
 	for _, p := range e.Props["EXDATE"] {
-		if len(p.Params) != 0 {
-			return false
-		}
-		for _, value := range strings.Split(p.Value, ",") {
-			t, err := time.Parse("20060102T150405Z", value)
-			if err != nil || t.Year() < 1970 || t.Year() > 2100 || seen[value] || len(seen) >= maxCompletions {
+		tzid := ""
+		for name, values := range p.Params {
+			if len(values) != 1 {
 				return false
 			}
-			seen[value] = true
+			switch name {
+			case "TZID":
+				if values[0] != Zone {
+					return false
+				}
+				tzid = values[0]
+			case "VALUE":
+				if values[0] != "DATE-TIME" {
+					return false
+				}
+			default:
+				return false
+			}
+		}
+		for _, value := range strings.Split(p.Value, ",") {
+			var t time.Time
+			var err error
+			if tzid == Zone {
+				local, parseErr := time.Parse("20060102T150405", value)
+				if parseErr != nil || local.Second() != 0 || local.Format("20060102T150405") != value {
+					return false
+				}
+				t, err = WallTime(local.Format("2006-01-02T15:04"))
+			} else {
+				t, err = time.Parse("20060102T150405Z", value)
+				if err == nil && t.UTC().Format("20060102T150405Z") != value {
+					return false
+				}
+			}
+			key := t.UTC().Format(time.RFC3339)
+			if err != nil || !completionInstantSupported(t) || seen[key] || len(seen) >= maxCompletions {
+				return false
+			}
+			seen[key] = true
 		}
 	}
 	return len(seen) > 0
@@ -63,7 +107,7 @@ func selectedInstance(task *Task, now time.Time) (*Instance, string) {
 	if target == nil && task.Timing.State == "past" {
 		target = task.Timing.Last
 	}
-	if target == nil || target.UTC().Year() < 1970 || target.UTC().Year() > 2100 {
+	if target == nil || !completionInstantSupported(*target) {
 		return nil, reason
 	}
 	var selected *Instance
@@ -78,7 +122,8 @@ func selectedInstance(task *Task, now time.Time) (*Instance, string) {
 			continue
 		}
 		timing := resourceTiming(events, now)
-		if timing.State == "unknown" || timing.Note != "" {
+		// DATE exclusions are outside the UTC DATE-TIME completion profile.
+		if timing.State == "unknown" || timing.Note != "" || timing.NextAllDay || timing.LastAllDay {
 			return nil, reason
 		}
 		at := timing.Next

@@ -13,7 +13,7 @@ const clock = new Intl.DateTimeFormat("en-AU", {
   hour12: true,
 });
 
-function dateTime(instant: number, now: number): string {
+function dateTime(instant: number, now: number, allDay = false): string {
   const day = dayKey.format(instant);
   const today = dayKey.format(now);
   const tomorrow = new Date(`${today}T12:00:00Z`);
@@ -29,7 +29,7 @@ function dateTime(instant: number, now: number): string {
             month: "short",
             ...(day.slice(0, 4) !== today.slice(0, 4) ? { year: "numeric" } : {}),
           }).format(instant);
-  return `${label}, ${clock.format(instant)}`;
+  return `${label}, ${allDay ? "All day" : clock.format(instant)}`;
 }
 
 export function hassleSummary(task: HassleTask, now = Date.now()): string {
@@ -38,7 +38,8 @@ export function hassleSummary(task: HassleTask, now = Date.now()): string {
   );
   if (!Number.isFinite(instant)) return task.reminder;
   const prefix = task.timing.state === "past" ? "Last: " : task.timing.note ? "Known next: " : "";
-  const parts = [prefix + dateTime(instant, now)];
+  const allDay = task.timing.state === "past" ? task.timing.lastAllDay : task.timing.nextAllDay;
+  const parts = [prefix + dateTime(instant, now, allDay)];
   const schedule = task.schedule;
   if (schedule && schedule.cadence !== "once") {
     parts.push(

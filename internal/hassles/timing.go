@@ -11,10 +11,12 @@ import (
 
 // Timing is read-only: recognizing an imported recurrence never grants edit safety.
 type Timing struct {
-	State string     `json:"state"` // upcoming, past, or unknown (kept in Upcoming).
-	Next  *time.Time `json:"next"`
-	Last  *time.Time `json:"last"`
-	Note  string     `json:"note"`
+	State      string     `json:"state"` // upcoming, past, or unknown (kept in Upcoming).
+	Next       *time.Time `json:"next"`
+	Last       *time.Time `json:"last"`
+	Note       string     `json:"note"`
+	NextAllDay bool       `json:"nextAllDay,omitempty"`
+	LastAllDay bool       `json:"lastAllDay,omitempty"`
 }
 
 func unknownTiming() Timing {
@@ -22,20 +24,40 @@ func unknownTiming() Timing {
 }
 
 func reminderTime(p *ical.Prop) (time.Time, error) {
-	if p == nil || (len(p.Value) != 15 && len(p.Value) != 16) || (len(p.Value) == 15 && p.Params.Get("TZID") == "") {
+	if p == nil || len(p.Params["VALUE"]) > 1 || len(p.Params["TZID"]) > 1 || (p.Params.Get("VALUE") != "" && p.Params.Get("VALUE") != "DATE-TIME") || (len(p.Value) != 15 && len(p.Value) != 16) || (len(p.Value) == 15 && p.Params.Get("TZID") == "") {
 		return time.Time{}, errors.New("undated, all-day or floating reminder")
 	}
 	// IANA TZIDs are resolved independently of embedded VTIMEZONE edit restrictions.
 	return p.DateTime(nil)
 }
 
+// DATE values are civil Melbourne days, not notification instants.
+func reminderDate(p *ical.Prop) (time.Time, error) {
+	if p == nil || len(p.Params) != 1 || len(p.Params["VALUE"]) != 1 || p.Params.Get("VALUE") != "DATE" {
+		return time.Time{}, errors.New("ambiguous DATE property")
+	}
+	loc, _ := time.LoadLocation(Zone)
+	t, err := time.ParseInLocation("20060102", p.Value, loc)
+	if err != nil || t.Format("20060102") != p.Value || t.Year() < 1970 || t.Year() > 2100 {
+		return time.Time{}, errors.New("invalid or out of bounds DATE")
+	}
+	return t, nil
+}
+
 func recurrenceDates(props []ical.Prop) ([]time.Time, error) {
+	return typedRecurrenceDates(props, false)
+}
+
+func typedRecurrenceDates(props []ical.Prop, allDay bool) ([]time.Time, error) {
 	var out []time.Time
 	for _, p := range props {
 		for _, value := range strings.Split(p.Value, ",") {
 			copy := p
 			copy.Value = value
 			t, err := reminderTime(&copy)
+			if allDay {
+				t, err = reminderDate(&copy)
+			}
 			if err != nil || len(out) >= 10000 {
 				return nil, errors.New("unsupported recurrence dates")
 			}
@@ -103,6 +125,26 @@ func readRule(p *ical.Prop, start time.Time) (*rrule.RRule, bool) {
 	return r, err == nil
 }
 
+func readDateRule(p *ical.Prop, start time.Time) (*rrule.RRule, bool) {
+	if len(p.Params) != 0 || len(p.Value) > 1024 {
+		return nil, false
+	}
+	copy := *p
+	parts := strings.Split(p.Value, ";")
+	for i, part := range parts {
+		if strings.HasPrefix(part, "UNTIL=") {
+			end, err := reminderDate(&ical.Prop{Params: ical.Params{"VALUE": {"DATE"}}, Value: strings.TrimPrefix(part, "UNTIL=")})
+			if err != nil || end.Before(start) {
+				return nil, false
+			}
+			// The library accepts local DATE-TIME UNTIL; midnight is inclusive.
+			parts[i] = "UNTIL=" + end.Format("20060102T150405")
+		}
+	}
+	copy.Value = strings.Join(parts, ";")
+	return readRule(&copy, start)
+}
+
 func resourceTiming(events []ical.Event, now time.Time) Timing {
 	// Detached exceptions can replace/cancel future instances. Never infer an end
 	// from the master alone, even when an exception itself is cancelled.
@@ -113,15 +155,32 @@ func resourceTiming(events []ical.Event, now time.Time) Timing {
 	if len(e.Props["DTSTART"]) != 1 || len(e.Props["RRULE"]) > 1 || len(e.Props["EXRULE"]) != 0 {
 		return unknownTiming()
 	}
-	start, err := reminderTime(e.Props.Get("DTSTART"))
+	p := e.Props.Get("DTSTART")
+	allDay := p.Params.Get("VALUE") == "DATE"
+	start, err := reminderTime(p)
+	if allDay {
+		start, err = reminderDate(p)
+		// Only the RFC single-day default or an explicit exclusive next-day end.
+		if len(e.Props["DTEND"]) > 1 || len(e.Props["DURATION"]) != 0 {
+			return unknownTiming()
+		}
+		if endProp := e.Props.Get("DTEND"); endProp != nil {
+			end, endErr := reminderDate(endProp)
+			if endErr != nil || !end.Equal(start.AddDate(0, 0, 1)) {
+				return unknownTiming()
+			}
+		}
+		local := now.In(start.Location())
+		now = time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, start.Location())
+	}
 	if err != nil || start.Year() < 1970 || start.Year() > 2100 {
 		return unknownTiming()
 	}
-	rdates, err := recurrenceDates(e.Props["RDATE"])
+	rdates, err := typedRecurrenceDates(e.Props["RDATE"], allDay)
 	if err != nil {
 		return unknownTiming()
 	}
-	exdates, err := recurrenceDates(e.Props["EXDATE"])
+	exdates, err := typedRecurrenceDates(e.Props["EXDATE"], allDay)
 	if err != nil {
 		return unknownTiming()
 	}
@@ -138,10 +197,12 @@ func resourceTiming(events []ical.Event, now time.Time) Timing {
 			if out.Last == nil || date.After(*out.Last) {
 				d := date.UTC()
 				out.Last = &d
+				out.LastAllDay = allDay
 			}
 		} else if out.Next == nil || date.Before(*out.Next) {
 			d := date.UTC()
 			out.Next = &d
+			out.NextAllDay = allDay
 		}
 	}
 	add(start)
@@ -149,7 +210,11 @@ func resourceTiming(events []ical.Event, now time.Time) Timing {
 		add(date)
 	}
 	if p := e.Props.Get("RRULE"); p != nil {
-		r, ok := readRule(p, start)
+		reader := readRule
+		if allDay {
+			reader = readDateRule
+		}
+		r, ok := reader(p, start)
 		if !ok {
 			return unknownTiming()
 		}
@@ -189,9 +254,11 @@ func mergeTiming(a, b Timing) Timing {
 	out := a
 	if b.Next != nil && (out.Next == nil || b.Next.Before(*out.Next)) {
 		out.Next = b.Next
+		out.NextAllDay = b.NextAllDay
 	}
 	if b.Last != nil && (out.Last == nil || b.Last.After(*out.Last)) {
 		out.Last = b.Last
+		out.LastAllDay = b.LastAllDay
 	}
 	if b.Note != "" {
 		out.Note = b.Note
@@ -216,9 +283,15 @@ func timingReminder(t Timing) string {
 		if t.Note != "" {
 			prefix = "Known next · "
 		}
+		if t.NextAllDay {
+			return prefix + t.Next.In(loc).Format("2 Jan 2006") + " · All day"
+		}
 		return prefix + t.Next.In(loc).Format("2 Jan 2006 15:04 MST")
 	}
 	if t.State == "past" && t.Last != nil {
+		if t.LastAllDay {
+			return "Last · " + t.Last.In(loc).Format("2 Jan 2006") + " · All day"
+		}
 		return "Last · " + t.Last.In(loc).Format("2 Jan 2006 15:04 MST")
 	}
 	return "Reminder date unavailable · view in calendar"

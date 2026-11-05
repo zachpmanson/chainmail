@@ -63,3 +63,34 @@ it("uses calendar days across DST and Melbourne midnight", () => {
   );
   expect(hassleSummary(t, Date.parse("2026-10-03T14:15:00Z"))).toBe("Today, 8:30 am · Every day");
 });
+
+it("labels DATE occurrences without inventing a midnight notification hour", () => {
+  const t = task();
+  t.schedule = null;
+  t.timing = {
+    state: "upcoming",
+    next: "2026-11-03T13:00:00Z",
+    nextAllDay: true,
+    last: "2026-11-03T02:00:00Z",
+    note: "",
+  };
+  expect(hassleSummary(t, now)).toBe("Today, All day");
+  expect(hassleSummary(t, Date.parse("2026-11-04T12:59:59Z"))).toBe("Today, All day");
+  t.timing.note = "Incomplete member";
+  expect(hassleSummary(t, now)).toBe("Known next: Today, All day");
+  t.timing.state = "past";
+  expect(hassleSummary(t, now)).toBe("Last: 3 Nov, 1:00 pm");
+  t.timing.last = "2026-11-02T13:00:00Z";
+  t.timing.lastAllDay = true;
+  expect(hassleSummary(t, now)).toBe("Last: 3 Nov, All day");
+});
+
+it("keeps all-day labels on the Melbourne date across DST", () => {
+  const t = task();
+  t.schedule = null;
+  t.timing.nextAllDay = true;
+  t.timing.next = "2026-04-04T13:00:00Z";
+  expect(hassleSummary(t, Date.parse("2026-04-05T13:59:59Z"))).toBe("Today, All day");
+  t.timing.next = "2026-10-03T14:00:00Z";
+  expect(hassleSummary(t, Date.parse("2026-10-04T12:59:59Z"))).toBe("Today, All day");
+});

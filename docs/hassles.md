@@ -262,11 +262,21 @@ instance completion updates a recurring card rather than removing its whole grou
 To retain editing after app completion, only a previously recognized base schedule
 (or a valid existing app completion marker) gets the DESCRIPTION provenance marker
 `[chainmail:completed-instances:v1]`, separate from the single hassle grouping tag.
-Only bounded, distinct, well-formed UTC EXDATE values (1970–2100, no parameters,
-at most 1,000) with that marker permit validating a clone of the base schedule with
-EXDATE removed. Unknown imported exclusions/recurrences/timezones remain restricted;
+Only bounded, distinct, well-formed EXDATE values (at most 1,000) with that marker
+permit validating a clone of the base schedule with EXDATE removed. UTC values and
+Google's normalized `TZID=Australia/Melbourne` form are accepted; only the optional
+`VALUE=DATE-TIME` parameter is additionally allowed. Each instant must round-trip
+unambiguously through the supported 1970–2100 UTC/Melbourne date profile. Unknown
+zones/parameters, gaps/overlaps and duplicate equivalent instants remain restricted. Unknown imported exclusions/recurrences/timezones remain restricted;
 the marker never grants ownership. Original EXDATE properties are retained through
 both title and timing edits: completed instances keep their exact original UTC
 instants, **not ordinal positions** in an edited schedule. Google embedded Melbourne
 2008–2100 and native 1970–2100 profiles are unchanged. No hourly/workhours/logical-nag
 redesign is included. Calendar notification delivery still needs separate live review.
+
+Single-day all-day DATE events now have read-only date timing, including bounded
+DATE RDATE/EXDATE and known recurrence rules. Today's date remains Upcoming until
+Melbourne midnight; next/last all-day flags mean a civil date, not a notification
+hour. The UI says All day instead of displaying midnight. Malformed/mixed types,
+multiday/DURATION and unsupported rules remain unknown. All-day editing and
+single-instance completion remain unavailable; ownership protections are unchanged.

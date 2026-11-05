@@ -71,3 +71,32 @@ it("uses Melbourne day boundaries on either side of the daylight-saving transiti
   );
   expect(groups.map((g) => g.key)).toEqual(["2026-10-03", "2026-10-04", "2026-10-05"]);
 });
+
+it("groups DATE transport midnights with timed occurrences on their Melbourne civil day", () => {
+  const today = task("all-day", "upcoming", "2026-04-04T13:00:00Z");
+  today.timing.nextAllDay = true;
+  today.timing.note = "Another resource has unknown timing";
+  const groups = hassleGroups(
+    [
+      task("timed", "upcoming", "2026-04-05T12:00:00Z"),
+      task("unknown", "unknown", null),
+      today,
+      task("tomorrow", "upcoming", "2026-04-05T14:00:00Z"),
+    ],
+    "upcoming",
+    Date.parse("2026-04-05T13:59:59Z"),
+  );
+  expect(groups.map((g) => g.key)).toEqual(["2026-04-05", "2026-04-06", "undated"]);
+  expect(groups[0]!.tasks.map((t) => t.id)).toEqual(["all-day", "timed"]);
+  expect(groups[0]!.label).toContain("5 Apr 2026");
+  today.timing = {
+    state: "past",
+    next: null,
+    last: "2026-04-04T13:00:00Z",
+    lastAllDay: true,
+    note: "",
+  };
+  expect(hassleGroups([today], "past", Date.parse("2026-04-05T14:00:00Z"))[0]!.key).toBe(
+    "2026-04-05",
+  );
+});

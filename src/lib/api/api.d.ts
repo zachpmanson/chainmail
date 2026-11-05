@@ -2236,16 +2236,20 @@ export interface components {
             state: "upcoming" | "past" | "unknown";
             /**
              * Format: date-time
-             * @description Earliest known occurrence at or after inventory time; null if unavailable.
+             * @description Earliest known upcoming occurrence; nextAllDay includes the whole current Melbourne day. Null if unavailable.
              */
             next: string | null;
             /**
              * Format: date-time
-             * @description Most recent known occurrence before inventory time; may be partial when note is set.
+             * @description Most recent known past occurrence; lastAllDay is a civil day before today. May be partial when note is set.
              */
             last: string | null;
             /** @description Nonempty when some resource timing is unsupported or incomplete. */
             note: string;
+            /** @description When true, next encodes a Melbourne civil DATE at local midnight for transport/grouping only, not a notification hour. Today remains Upcoming until next local midnight. */
+            nextAllDay?: boolean;
+            /** @description When true, last encodes a Melbourne civil DATE at local midnight for transport/grouping only, not a notification hour. */
+            lastAllDay?: boolean;
         };
         /** @description Semantic iCalendar exports, NOT byte-exact backups. Save preview before commit. Fingerprint excludes only the appended marker and VEVENT DTSTAMP/LAST-MODIFIED/SEQUENCE. An exact completed retry returns Already adopted without writing; its before/after are the current tagged resource, not the original backup. */
         HassleAdoption: {
