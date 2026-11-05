@@ -274,13 +274,18 @@ it("uses four-row title fields and saves line breaks as spaces in the one-line C
   expect(titleInput(dialog).rows).toBe(4);
   expect(titleInput(dialog).value).toBe(create.schedule.title);
 });
-it("places the narrow create form before a separate wider reminders column", async () => {
+it("centres the reminders column with the create form in a balanced left sidebar", async () => {
   await choose();
   const layout = document.querySelector('section[aria-label="Hassle inventory"]')!;
   const reminders = layout.querySelector('section[aria-label="Reminders"]')!;
   expect(layout.classList.contains("grid")).toBe(true);
-  expect(layout.className).toContain("min-[60rem]:grid-cols-[minmax(0,450px)_minmax(0,1fr)]");
-  expect(document.querySelector("main")!.classList.contains("max-w-6xl")).toBe(true);
+  expect(layout.className).toContain(
+    "min-[60rem]:grid-cols-[minmax(0,450px)_minmax(0,40rem)_minmax(0,450px)]",
+  );
+  expect(layout.className).toContain("max-w-[40rem]");
+  expect(layout.className).toContain("min-[60rem]:max-w-none");
+  expect(document.querySelector("main")!.classList.contains("max-w-[1620px]")).toBe(true);
+  expect(layout.children).toHaveLength(2);
   expect(layout.children[0]!.contains(addForm())).toBe(true);
   expect(layout.children[1]).toBe(reminders);
   expect(reminders.contains(document.querySelector('[role="tablist"]'))).toBe(true);
