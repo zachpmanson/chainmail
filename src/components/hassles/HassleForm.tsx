@@ -11,6 +11,7 @@ import Button from "../ui/Button";
 import FormField from "../ui/FormField";
 import InlineAlert from "../ui/InlineAlert";
 import SelectInput from "../ui/SelectInput";
+import TextArea from "../ui/TextArea";
 import TextInput from "../ui/TextInput";
 
 export default function HassleForm({
@@ -43,7 +44,7 @@ export default function HassleForm({
         className="flex flex-col gap-3"
         onSubmit={(event) => {
           event.preventDefault();
-          const clean = { ...schedule, title: schedule.title.trim() };
+          const clean = { ...schedule, title: schedule.title.replace(/[\r\n]+/g, " ").trim() };
           const problem =
             endMode === "date" && clean.cadence !== "once" && !clean.until
               ? "Choose a repeat end date and time."
@@ -52,9 +53,10 @@ export default function HassleForm({
           if (!problem) onSave(clean);
         }}
       >
-        <TextInput
+        <TextArea
           aria-label="Hassle"
           placeholder="Hassle me about…"
+          rows={4}
           required
           value={schedule.title}
           disabled={busy}

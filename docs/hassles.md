@@ -33,7 +33,9 @@ Configured calendar details and its settings link stay in Settings, not the Hass
   is Done (accessible name and tooltip); the redundant Delete action is not shown.
   Edit and removal still use dialogs; Done retains a permanent-removal warning.
   Repeat, Every (with the actual day/week/month/year unit) and Until share one row.
-  The form names Melbourne once under When. Routine explanatory small print is omitted;
+  The title uses a four-row textarea in both Add and Edit; line breaks become spaces
+  on save so the Calendar title remains one line. The form names Melbourne once under When.
+  Routine explanatory small print is omitted;
   validation errors, timing uncertainty and edit restrictions remain visible.
   Rows show a compact Melbourne date/time plus recurrence and repeat end when editable.
 - First reminder offers In an hour, This afternoon (13:00), This evening (18:00),

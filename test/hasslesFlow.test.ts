@@ -88,9 +88,13 @@ async function select(el: HTMLSelectElement, value: string) {
   });
   await settle();
 }
-async function type(el: HTMLInputElement, value: string) {
+async function type(el: HTMLInputElement | HTMLTextAreaElement, value: string) {
   await act(async () => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(el, value);
+    const prototype =
+      el instanceof HTMLTextAreaElement
+        ? HTMLTextAreaElement.prototype
+        : HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(prototype, "value")!.set!.call(el, value);
     el.dispatchEvent(new Event("input", { bubbles: true }));
   });
 }
@@ -143,7 +147,7 @@ function customStart(scope: ParentNode = addForm()) {
   return field("Date and time", scope).querySelector("input")!;
 }
 function titleInput(scope: ParentNode = addForm()) {
-  return scope.querySelector<HTMLInputElement>('input[aria-label="Hassle"]')!;
+  return scope.querySelector<HTMLTextAreaElement>('textarea[aria-label="Hassle"]')!;
 }
 function refresh() {
   return document.querySelector<HTMLButtonElement>('[aria-label="Refresh hassles"]')!;
@@ -181,7 +185,7 @@ it("keeps Add hassle inline through create, title editing and tick-icon Done wit
   );
   await type(titleInput(), "Unsaved next hassle");
   await click(button("Edit"));
-  expect(document.activeElement).toBe(document.querySelector('[role="dialog"] input'));
+  expect(document.activeElement).toBe(document.querySelector('[role="dialog"] textarea'));
   await act(async () =>
     document.activeElement!.dispatchEvent(
       new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
@@ -191,7 +195,7 @@ it("keeps Add hassle inline through create, title editing and tick-icon Done wit
   expect(document.querySelector('[role="dialog"]')).toBeNull();
   expect(titleInput().value).toBe("Unsaved next hassle");
   await click(button("Edit"));
-  await type(document.querySelector('[role="dialog"] input')!, "Edited bill");
+  await type(document.querySelector('[role="dialog"] textarea')!, "Edited bill");
   await click(button("Save reminder"));
   expect(document.body.textContent).toContain("Edited bill");
   expect(titleInput().value).toBe("Unsaved next hassle");
@@ -216,6 +220,20 @@ it("keeps Add hassle inline through create, title editing and tick-icon Done wit
         JSON.stringify(fixtureLocation),
     ),
   ).toBe(true);
+});
+it("uses four-row title fields and saves line breaks as spaces in the one-line Calendar title", async () => {
+  await choose();
+  expect(titleInput().rows).toBe(4);
+  await type(titleInput(), "Pay bill\nCheck receipt");
+  await click(button("Add hassle"));
+  const create = fixture.requests
+    .filter((r) => r.method === "POST" && r.path.endsWith("/v1/hassles"))
+    .at(-1)!.body as { schedule: { title: string } };
+  expect(create.schedule.title).toBe("Pay bill Check receipt");
+  await click(button("Edit"));
+  const dialog = document.querySelector('[role="dialog"]')!;
+  expect(titleInput(dialog).rows).toBe(4);
+  expect(titleInput(dialog).value).toBe(create.schedule.title);
 });
 it("places the narrow create form before a separate wider reminders column", async () => {
   await choose();
