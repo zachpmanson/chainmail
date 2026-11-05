@@ -100,7 +100,12 @@ export function hasslesFixture() {
       }
       return ok({
         removed: mutation.action === "done" || mutation.action === "delete" ? 1 : 0,
-        message: "Calendar updated (offline fixture)",
+        message:
+          mutation.action === "create"
+            ? "Created"
+            : mutation.action === "edit"
+              ? "Updated"
+              : "Removed all reminder resources",
       });
     }
     if (url.pathname === "/v1/stats")

@@ -1,12 +1,16 @@
 import { useIsFetching } from "@tanstack/react-query";
 
-/** Sits before the right-hand group (pinned by `margin-left:auto`) so it doesn't shift it. */
+/** Loading text in the deploy-stamp slot; the version query stays mounted behind it. */
 export default function NavReading() {
   const reading = useIsFetching();
+  const reminders = useIsFetching({
+    predicate: (query) =>
+      typeof query.queryKey[1] === "string" && query.queryKey[1].startsWith("/v1/hassles"),
+  });
   if (reading === 0) return null;
   return (
-    <span className="ml-4 text-xs whitespace-nowrap text-muted" role="status">
-      Reading the corpus…
+    <span className="text-xs whitespace-nowrap text-muted" role="status">
+      {reminders > 0 ? "Reading reminders…" : "Reading corpus…"}
     </span>
   );
 }

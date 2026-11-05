@@ -6,6 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import SettingsHassles from "../src/components/settings/SettingsHassles";
 import HasslesView from "../src/components/hassles/HasslesView";
 import NavHasslesRefresh from "../src/components/navigation/NavHasslesRefresh";
+import DeployStamp from "../src/components/navigation/DeployStamp";
 import ToastHost from "../src/components/ui/ToastHost";
 import { clearToasts } from "../src/lib/ui/toasts";
 import { hasslesFixture, fixtureLocation } from "./hasslesFixture";
@@ -14,7 +15,7 @@ function hassleScreen() {
   return createElement(
     Fragment,
     null,
-    createElement(NavHasslesRefresh),
+    createElement("header", null, createElement(DeployStamp), createElement(NavHasslesRefresh)),
     createElement(HasslesView),
     createElement(ToastHost),
   );
@@ -25,18 +26,24 @@ let host: HTMLDivElement;
 let client: QueryClient;
 let fixture: ReturnType<typeof hasslesFixture>;
 let inventoryGate: Promise<void> | null = null;
+let configGate: Promise<void> | null = null;
+let writeGate: Promise<void> | null = null;
 beforeEach(async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-11-04T01:15:45Z"));
   fixture = hasslesFixture();
   inventoryGate = null;
+  configGate = null;
+  writeGate = null;
   vi.stubGlobal("fetch", async (input: Request) => {
     const text = await input.text();
     const result = fixture.handle(input.url, input.method, text ? JSON.parse(text) : undefined);
     const payload = JSON.stringify(result.data);
-    if (input.method === "GET" && new URL(input.url).pathname === "/v1/hassles" && inventoryGate)
-      await inventoryGate;
+    const path = new URL(input.url).pathname;
+    if (input.method === "GET" && path === "/v1/hassles" && inventoryGate) await inventoryGate;
+    if (input.method === "GET" && path === "/v1/hassles/location" && configGate) await configGate;
+    if (input.method === "POST" && path === "/v1/hassles" && writeGate) await writeGate;
     return new Response(payload, {
       status: result.status,
       headers: { "Content-Type": "application/json" },
@@ -164,13 +171,17 @@ it("keeps Add hassle inline through create, title editing and tick-icon Done wit
   await choose();
   expect(document.body.textContent).toContain("No hassles");
   expect(addForm()).not.toBeNull();
-  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(document.querySelector('[role="dialog"][aria-modal="true"]')).toBeNull();
   expect(
     addForm().compareDocumentPosition(document.querySelector('[role="tablist"]')!) &
       Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
   await add("Offline bill");
   expect(document.body.textContent).toContain("Offline bill");
+  expect(document.querySelector('[aria-label="Dismiss: Created"]')).not.toBeNull();
+  expect(document.querySelector('[aria-label="Hassle inventory"]')!.textContent).not.toContain(
+    "Created",
+  );
   expect(titleInput().value).toBe("");
   expect(document.querySelector('h3 button[aria-label="Edit Offline bill"]')).not.toBeNull();
   expect(button("Done").getAttribute("aria-label")).toBe("Done with Offline bill");
@@ -185,26 +196,38 @@ it("keeps Add hassle inline through create, title editing and tick-icon Done wit
   );
   await type(titleInput(), "Unsaved next hassle");
   await click(button("Edit"));
-  expect(document.activeElement).toBe(document.querySelector('[role="dialog"] textarea'));
+  expect(document.activeElement).toBe(
+    document.querySelector('[role="dialog"][aria-modal="true"] textarea'),
+  );
   await act(async () =>
     document.activeElement!.dispatchEvent(
       new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
     ),
   );
   await settle();
-  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(document.querySelector('[role="dialog"][aria-modal="true"]')).toBeNull();
   expect(titleInput().value).toBe("Unsaved next hassle");
   await click(button("Edit"));
-  await type(document.querySelector('[role="dialog"] textarea')!, "Edited bill");
+  await type(document.querySelector('[role="dialog"][aria-modal="true"] textarea')!, "Edited bill");
   await click(button("Save reminder"));
   expect(document.body.textContent).toContain("Edited bill");
+  expect(document.querySelector('[aria-label="Dismiss: Updated"]')).not.toBeNull();
+  expect(document.querySelector('[aria-label="Hassle inventory"]')!.textContent).not.toContain(
+    "Updated",
+  );
   expect(titleInput().value).toBe("Unsaved next hassle");
   await click(button("Done"));
-  expect(document.querySelector('[role="dialog"]')!.textContent).toContain(
+  expect(document.querySelector('[role="dialog"][aria-modal="true"]')!.textContent).toContain(
     "Permanently remove all reminders for this hassle from Calendar. This cannot be undone.",
   );
   await click(button("Remove all reminders"));
   expect(document.body.textContent).toContain("No hassles");
+  expect(
+    document.querySelector('[aria-label="Dismiss: Removed all reminder resources"]'),
+  ).not.toBeNull();
+  expect(document.querySelector('[aria-label="Hassle inventory"]')!.textContent).not.toContain(
+    "Removed all reminder resources",
+  );
   const writes = fixture.requests.filter(
     (r) => r.path.endsWith("/v1/hassles") && r.method === "POST",
   );
@@ -231,7 +254,7 @@ it("uses four-row title fields and saves line breaks as spaces in the one-line C
     .at(-1)!.body as { schedule: { title: string } };
   expect(create.schedule.title).toBe("Pay bill Check receipt");
   await click(button("Edit"));
-  const dialog = document.querySelector('[role="dialog"]')!;
+  const dialog = document.querySelector('[role="dialog"][aria-modal="true"]')!;
   expect(titleInput(dialog).rows).toBe(4);
   expect(titleInput(dialog).value).toBe(create.schedule.title);
 });
@@ -259,7 +282,9 @@ it("constrains a long unbroken clickable title to the row width", async () => {
   expect(edit.classList.contains("max-w-full")).toBe(true);
   expect(edit.classList.contains("wrap-break-word")).toBe(true);
   await click(edit);
-  expect(titleInput(document.querySelector('[role="dialog"]')!).value).toBe(title);
+  expect(titleInput(document.querySelector('[role="dialog"][aria-modal="true"]')!).value).toBe(
+    title,
+  );
 });
 it("keeps an uncertain create UUID for explicit retry and displays permission errors", async () => {
   await choose();
@@ -277,7 +302,7 @@ it("keeps an uncertain create UUID for explicit retry and displays permission er
     .at(-1)!.body as { id: string };
   expect(last.id).toBe(first.id);
   expect(document.body.textContent).toContain("Permission test");
-  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(document.querySelector('[role="dialog"][aria-modal="true"]')).toBeNull();
   expect(titleInput().value).toBe("");
   await add("Another task");
   const next = fixture.requests
@@ -318,7 +343,7 @@ it("discards an open editor and late old-location inventory after a selection sw
     await client.invalidateQueries({ queryKey: ["get", "/v1/hassles/location"] });
   });
   await settle();
-  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(document.querySelector('[role="dialog"][aria-modal="true"]')).toBeNull();
   expect(document.body.textContent).not.toContain("Old location task");
   await act(async () => {
     release();
@@ -339,7 +364,7 @@ it("offers Repeat until Done / Date and time and clears the timestamp when Done 
   await type(field("End date and time", dialog).querySelector("input")!, "2027-02-01T08:30");
   await click(button("Add hassle"));
   await click(button("Edit"));
-  dialog = document.querySelector('[role="dialog"]')!;
+  dialog = document.querySelector('[role="dialog"][aria-modal="true"]')!;
   expect(repeatUntil(dialog).value).toBe("date");
   expect(field("End date and time", dialog).querySelector("input")!.value).toBe("2027-02-01T08:30");
   await select(repeatUntil(dialog), "done");
@@ -515,7 +540,7 @@ it("uses placeholder-only title and presets, revealing the picker only for Custo
     .at(-1)!.body as { schedule: { start: string } };
   expect(create.schedule.start).toBe("2027-02-03T09:45");
   await click(button("Edit"));
-  const dialog = document.querySelector('[role="dialog"]')!;
+  const dialog = document.querySelector('[role="dialog"][aria-modal="true"]')!;
   expect(firstReminder(dialog).value).toBe("custom");
   expect(customStart(dialog).value).toBe(create.schedule.start);
 });
@@ -532,7 +557,7 @@ it("defaults to In an hour before morning too, without showing a custom picker",
   expect(create.schedule.start).toBe("2026-11-04T08:00");
   expect(firstReminder().value).toBe("hour");
   await click(button("Edit"));
-  const dialog = document.querySelector('[role="dialog"]')!;
+  const dialog = document.querySelector('[role="dialog"][aria-modal="true"]')!;
   expect(firstReminder(dialog).value).toBe("custom");
   expect(customStart(dialog).value).toBe(create.schedule.start);
 });
@@ -638,6 +663,133 @@ it("global refresh follows a newly selected account/calendar instead of refetchi
     .filter((r) => r.method === "POST" && r.path.endsWith("/v1/hassles"))
     .at(-1)!.body as { location: unknown };
   expect(last.location).toEqual(other);
+});
+it("keeps Add usable on cached page entry and cancels a stale initial read after creating", async () => {
+  await choose();
+  await act(async () =>
+    root.render(createElement(QueryClientProvider, { client }, createElement("p", null, "Away"))),
+  );
+  client.removeQueries({ queryKey: ["get", "/v1/hassles"] });
+  let releaseConfig!: () => void;
+  let releaseInventory!: () => void;
+  configGate = new Promise<void>((resolve) => {
+    releaseConfig = resolve;
+  });
+  inventoryGate = new Promise<void>((resolve) => {
+    releaseInventory = resolve;
+  });
+  await act(async () =>
+    root.render(createElement(QueryClientProvider, { client }, hassleScreen())),
+  );
+  await settle();
+  expect(refresh().disabled).toBe(true);
+  expect(titleInput().disabled).toBe(false);
+  expect(firstReminder().disabled).toBe(false);
+  await type(titleInput(), "Created during first inventory read");
+  await select(firstReminder(), "custom");
+  await type(customStart(), "2027-01-01T08:30");
+  expect(titleInput().value).toBe("Created during first inventory read");
+  expect(button("Add hassle").disabled).toBe(false);
+  const inventoryReads = () =>
+    fixture.requests.filter(
+      (r) => r.method === "GET" && new URL(r.path, "http://localhost").pathname === "/v1/hassles",
+    ).length;
+  const readsBeforeCreate = inventoryReads();
+  expect(readsBeforeCreate).toBeGreaterThan(0);
+  await click(button("Add hassle"));
+  expect(titleInput().disabled).toBe(false);
+  expect(button("Add hassle").disabled).toBe(false);
+  expect(titleInput().value).toBe("");
+  expect(inventoryReads()).toBeGreaterThan(readsBeforeCreate);
+  await act(async () => {
+    releaseConfig();
+    releaseInventory();
+  });
+  await settle();
+  expect(document.querySelector("h3")!.textContent).toBe("Created during first inventory read");
+});
+it("allows drafting through settings and list refreshes but still disables during a write", async () => {
+  await choose();
+  await add("Existing reminder");
+  let releaseConfig!: () => void;
+  let releaseInventory!: () => void;
+  configGate = new Promise<void>((resolve) => {
+    releaseConfig = resolve;
+  });
+  inventoryGate = new Promise<void>((resolve) => {
+    releaseInventory = resolve;
+  });
+  expect(document.querySelector('header a[href*="/commit/"]')).not.toBeNull();
+  await click(refresh());
+  expect(document.querySelector('header [role="status"]')!.textContent).toBe("Reading reminders…");
+  expect(document.querySelector('header a[href*="/commit/"]')).toBeNull();
+  expect(document.querySelector('[aria-label="Hassle inventory"]')!.textContent).not.toContain(
+    "Reading reminders…",
+  );
+  expect(button("Edit").disabled).toBe(true);
+  expect(titleInput().disabled).toBe(false);
+  await type(titleInput(), "Draft while settings refresh");
+  await act(async () => {
+    releaseConfig();
+  });
+  await settle();
+  expect(refresh().disabled).toBe(true);
+  expect(button("Edit").disabled).toBe(true);
+  expect(titleInput().disabled).toBe(false);
+  expect(button("Add hassle").disabled).toBe(false);
+  await type(titleInput(), "Draft while reminders refresh");
+  await act(async () => {
+    releaseInventory();
+  });
+  await settle();
+  expect(titleInput().value).toBe("Draft while reminders refresh");
+  expect(button("Edit").disabled).toBe(false);
+  expect(document.querySelector('header [role="status"]')).toBeNull();
+  expect(document.querySelector('header a[href*="/commit/"]')).not.toBeNull();
+  let releaseWrite!: () => void;
+  writeGate = new Promise<void>((resolve) => {
+    releaseWrite = resolve;
+  });
+  await click(button("Add hassle"));
+  expect(titleInput().disabled).toBe(true);
+  expect(button("Saving…").disabled).toBe(true);
+  await act(async () => {
+    releaseWrite();
+  });
+  await settle();
+  expect(titleInput().disabled).toBe(false);
+  expect(titleInput().value).toBe("");
+});
+it("replaces the deploy stamp for other reads without remounting its version query", async () => {
+  await choose();
+  const versionReads = () =>
+    fixture.requests.filter((r) => new URL(r.path, "http://localhost").pathname === "/v1/version")
+      .length;
+  const before = versionReads();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const other = new QueryObserver(client, {
+    queryKey: ["get", "/v1/mail"],
+    queryFn: async () => {
+      await gate;
+      return { messages: [] };
+    },
+    staleTime: Infinity,
+  });
+  const stop = other.subscribe(() => {});
+  await settle();
+  expect(document.querySelector('header [role="status"]')!.textContent).toBe("Reading corpus…");
+  expect(document.querySelector('header a[href*="/commit/"]')).toBeNull();
+  await act(async () => {
+    release();
+  });
+  await settle();
+  expect(document.querySelector('header [role="status"]')).toBeNull();
+  expect(document.querySelector('header a[href*="/commit/"]')).not.toBeNull();
+  expect(versionReads()).toBe(before);
+  stop();
 });
 it("exposes global refresh busy state and accessible inventory failures", async () => {
   await choose();

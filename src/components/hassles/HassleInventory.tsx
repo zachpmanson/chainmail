@@ -1,7 +1,9 @@
 import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { $api } from "../../lib/api/api";
 import { type HassleLocation, type HassleTask } from "../../lib/hassles/forms";
 import { errText } from "../../lib/ui/errText";
+import { pushToast, SAID_MS } from "../../lib/ui/toasts";
 import Button from "../ui/Button";
 import DialogShell from "../ui/DialogShell";
 import InlineAlert from "../ui/InlineAlert";
@@ -12,33 +14,40 @@ type Editor = { id: string; task: HassleTask };
 export default function HassleInventory({
   location,
   disabled,
+  refreshing,
 }: {
   location: HassleLocation;
   disabled: boolean;
+  refreshing: boolean;
 }) {
-  const inventory = $api.useQuery(
+  const qc = useQueryClient();
+  const inventoryOptions = $api.queryOptions(
     "get",
     "/v1/hassles",
     { params: { query: location } },
     { retry: false, staleTime: 0 },
   );
+  const inventory = useQuery(inventoryOptions);
   const [createId, setCreateId] = useState(() => crypto.randomUUID());
   const [editor, setEditor] = useState<Editor | null>(null);
   const [removing, setRemoving] = useState<HassleTask | null>(null);
-  const [notice, setNotice] = useState("");
   const write = $api.useMutation("post", "/v1/hassles", {
     retry: false,
     onSuccess: (result, variables) => {
       if (variables.body.action === "create") setCreateId(crypto.randomUUID());
       setEditor(null);
       setRemoving(null);
-      setNotice(result.message);
+      pushToast(result.message, "note", SAID_MS);
     },
     onSettled: () => {
-      void inventory.refetch();
+      // An initial read can predate a create; cancel it before requesting the post-write list.
+      void qc
+        .cancelQueries({ queryKey: inventoryOptions.queryKey, exact: true })
+        .then(() => inventory.refetch());
     },
   });
-  const busy = disabled || write.isPending || inventory.isFetching || inventory.isError;
+  const createBusy = disabled || write.isPending || inventory.isError;
+  const busy = createBusy || refreshing || inventory.isFetching;
   return (
     <section
       aria-label="Hassle inventory"
@@ -47,7 +56,7 @@ export default function HassleInventory({
       <div className="min-w-0">
         <HassleForm
           key={createId}
-          busy={busy}
+          busy={createBusy}
           error={
             write.isError && write.variables?.body.action === "create" ? errText(write.error) : ""
           }
@@ -61,9 +70,6 @@ export default function HassleInventory({
         {write.isError && !editor && write.variables?.body.action !== "create" ? (
           <InlineAlert>{errText(write.error)}</InlineAlert>
         ) : null}
-        <p role="status" className="m-0 text-sm">
-          {inventory.isFetching ? "Reading reminders…" : notice}
-        </p>
         <HassleList
           tasks={inventory.data?.tasks ?? []}
           busy={busy}
@@ -86,7 +92,7 @@ export default function HassleInventory({
         >
           <HassleForm
             initial={editor.task.schedule ?? undefined}
-            busy={disabled || write.isPending || inventory.isFetching}
+            busy={disabled || refreshing || write.isPending || inventory.isFetching}
             error={write.isError ? errText(write.error) : ""}
             onClose={() => setEditor(null)}
             onSave={(schedule) =>

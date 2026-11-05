@@ -47,7 +47,14 @@ Configured calendar details and its settings link stay in Settings, not the Hass
   Ambiguous or nonexistent daylight-saving times still require a different choice.
 - The global refresh on Hassles reloads reminder settings, then only the selected
   calendar inventory. It does not fetch mail or invalidate unrelated mail queries;
-  an unchanged location preserves the Add draft and retry UUID.
+  an unchanged location preserves the Add draft and retry UUID. Once a selected location
+  is known, Add stays usable during settings/inventory refreshes, including the initial
+  inventory read. Existing-row actions still wait for refresh; writes and blocking errors
+  still disable the form. After a write, cancel any older inventory read before fetching
+  the post-write list so a stale initial response cannot hide a newly created hassle.
+  Reading status occupies the header's deploy-stamp slot (reminders while Hassles is
+  reading, corpus for other reads); the commit/date return when idle. Create/edit/Done
+  success messages are five-second toasts, never text above the reminder list.
 - Upcoming shows groups with future reminders, including recurring series whose first
   reminder was long ago. Ended shows the **last 30 days** of ended reminders,
   not completion history. Each group appears once, ordered by earliest next reminder

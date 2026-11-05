@@ -1,9 +1,13 @@
+import { useIsFetching } from "@tanstack/react-query";
 import { $api } from "../../lib/api/api";
 import { isoDay, when } from "../../lib/ui/stamp";
+import NavReading from "./NavReading";
 
 /** Asks the server: the bundle is identical across deploys of a revision, so it can't tell. */
 export default function DeployStamp() {
   const version = $api.useQuery("get", "/v1/version", {});
+  const reading = useIsFetching();
+  if (reading > 0) return <NavReading />;
   const rev = version.data?.rev;
   const startedAt = version.data?.startedAt;
   if (!rev || !startedAt) return null;

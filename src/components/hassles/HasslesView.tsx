@@ -31,7 +31,8 @@ export default function HasslesView() {
         <HassleInventory
           key={locationKey(location)}
           location={location}
-          disabled={mutations > 0 || config.isFetching || config.isError}
+          disabled={mutations > 0 || config.isError}
+          refreshing={config.isFetching}
         />
       ) : null}
     </main>
