@@ -19,8 +19,11 @@ thread checks still apply. From is verified even for unchanged saves.
 
 This is a recognizer, **not a sanitizer**, and does not use the MIME diagnostic's
 feature flags. Initial HTML must have one exact lowercase `div` root with only
-`dir=ltr` (unquoted, single-quoted or double-quoted), and an exact closing
-`</div>`. Its raw opening/closing wrapper survives saves byte-for-byte.
+`dir=ltr` or `dir=auto` (unquoted, single-quoted or double-quoted), and an exact
+closing `</div>`. It may additionally have exactly `<html><body>` before that root
+and `</body></html>` after it, without attributes or extra envelope markup. The
+entire raw envelope, root direction and opening/closing wrapper survive saves
+byte-for-byte; neither direction nor outer markup is normalized.
 
 The legacy inner grammar is either inline text with internal `br` breaks, or
 an optional initial inline run followed by one or more flat `div`/`p` blocks.

@@ -260,7 +260,7 @@ func safeDraftText(s string) bool {
 	return true
 }
 
-var draftRoot = regexp.MustCompile(`^<div dir=(?:"ltr"|'ltr'|ltr)>`)
+var draftRoot = regexp.MustCompile(`^<div dir=(?:"(?:ltr|auto)"|'(?:ltr|auto)'|(?:ltr|auto))>`)
 
 const draftPreWrap = `<span style="white-space: pre-wrap">`
 
@@ -271,12 +271,23 @@ func projectDraftHTML(source string) (text, open, close string, generated bool, 
 	if len(source) > maxDraftHTMLBytes {
 		return fail()
 	}
+	const envelopeOpen, envelopeClose = "<html><body>", "</body></html>"
+	enveloped := strings.HasPrefix(source, envelopeOpen)
+	if enveloped {
+		if !strings.HasSuffix(source, envelopeClose) {
+			return fail()
+		}
+		source = source[len(envelopeOpen) : len(source)-len(envelopeClose)]
+	}
 	open = draftRoot.FindString(source)
 	close = "</div>"
 	if open == "" || !strings.HasSuffix(source, close) {
 		return fail()
 	}
 	inner := source[len(open) : len(source)-len(close)]
+	if enveloped {
+		open, close = envelopeOpen+open, close+envelopeClose
+	}
 	if strings.HasPrefix(inner, draftPreWrap) && strings.HasSuffix(inner, "</span>") {
 		raw := inner[len(draftPreWrap) : len(inner)-len("</span>")]
 		if strings.ContainsAny(raw, "<>") {
