@@ -825,6 +825,10 @@ describe("reviewed editor preservation regressions", () => {
     const { host, navigate, router } = await mount("/?accountId=A&open=compose");
     await words(host, "Owned local input");
     await settle(750);
+    // A first autosave adds its persistent action to the existing footer, not above the editor.
+    expect(button(host, "Discard draft").closest("footer")).toBe(
+      button(host, "Review message").closest("footer"),
+    );
     await navigate({ accountId: "A", draft: "other-selected", open: "compose" });
     expect(window.confirm).toHaveBeenCalledTimes(1);
     await pick(button(host, "Discard draft"));

@@ -55,34 +55,27 @@ export default function HassleInventory({
       </div>
       <section aria-label="Reminders" className="flex min-w-0 flex-col gap-3">
         {inventory.isError ? <InlineAlert>{errText(inventory.error)}</InlineAlert> : null}
-        {state.operations.map((op) => (
-          <div key={op.token} role="status" className="wrap-break-word">
-            {op.status === "failed" ? (
-              <>
-                <InlineAlert>
-                  {op.original?.title ?? op.request.schedule?.title}: {op.error}
-                  {op.blocked
-                    ? " Refresh required before using this reminder again."
-                    : " Calendar refreshed; the write may have partially applied."}
-                </InlineAlert>
-                {op.request.action === "edit" && op.original && op.request.schedule ? (
-                  <Button
-                    onClick={() =>
-                      setEditor({ task: { ...op.original!, schedule: op.request.schedule! } })
-                    }
-                  >
-                    Restore submitted edit
-                  </Button>
-                ) : null}
-              </>
-            ) : (
-              <span className="text-sm text-muted">
-                {op.request.schedule?.title ?? op.original?.title}:{" "}
-                {op.status === "writing" ? "Saving…" : "Saved; awaiting Calendar refresh…"}
-              </span>
-            )}
-          </div>
-        ))}
+        {state.operations
+          .filter((op) => op.status === "failed")
+          .map((op) => (
+            <div key={op.token} role="status" className="wrap-break-word">
+              <InlineAlert>
+                {op.original?.title ?? op.request.schedule?.title}: {op.error}
+                {op.blocked
+                  ? " Refresh required before using this reminder again."
+                  : " Calendar refreshed; the write may have partially applied."}
+              </InlineAlert>
+              {op.request.action === "edit" && op.original && op.request.schedule ? (
+                <Button
+                  onClick={() =>
+                    setEditor({ task: { ...op.original!, schedule: op.request.schedule! } })
+                  }
+                >
+                  Restore submitted edit
+                </Button>
+              ) : null}
+            </div>
+          ))}
         {state.refreshError ? (
           <InlineAlert>
             Calendar refresh failed: {state.refreshError}. Saved changes will not be sent again.

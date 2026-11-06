@@ -212,12 +212,6 @@ function BraidDialog({
       <p className="mx-3 my-2 flex-[1_1_100%] text-xs text-muted">
         Left empty, the page is titled with the earliest thread's subject.
       </p>
-      {busy ? (
-        <p className="mx-3 my-2 flex-[1_1_100%] text-xs text-muted" role="status">
-          Recovering HTML and detecting boilerplate across {count} thread
-          {count === 1 ? "" : "s"}. This takes a few seconds.
-        </p>
-      ) : null}
       {error ? <Failure error={error} className="mx-3 mt-2 mb-3" /> : null}
     </DialogShell>
   );

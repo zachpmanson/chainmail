@@ -1197,7 +1197,12 @@ it("retains acknowledged removal after failed GET; retry refresh never resends P
   fixture.handle("/__hassles_fixture", "POST", { mode: "inventory-error" });
   response.resolve();
   await settle();
-  expect(document.body.textContent).toContain("Saved; awaiting Calendar refresh");
+  expect(document.body.textContent).not.toContain("Saved; awaiting Calendar refresh");
+  expect(
+    document.querySelector('[aria-label="Dismiss: Removed all reminder resources"]'),
+  ).not.toBeNull();
+  expect(document.body.textContent).toContain("Calendar refresh failed");
+  expect(document.querySelector('[aria-label="Reminders"] [role="status"]')).toBeNull();
   expect(rowAction("Edit Remove me")).toBeNull();
   expect(writes("done")).toHaveLength(1);
   fixture.handle("/__hassles_fixture", "POST", { mode: "normal" });

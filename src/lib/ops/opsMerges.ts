@@ -3,6 +3,7 @@ import { useReducer } from "react";
 import { $api, type OpsMerge } from "../api/api";
 import { invalidateOpsPlan } from "../api/queryKeys";
 import { errText } from "../ui/errText";
+import useOwnToast from "../ui/useOwnToast";
 
 export type MergeTarget = Pick<OpsMerge, "keepId" | "dropId">;
 
@@ -102,6 +103,7 @@ function mergeRunReducer(state: MergeRun, action: MergeRunAction): MergeRun {
 /** The Merges tab's pick → confirm → merge loop over the plan's pairs. */
 export function useMergeRun(planned: OpsMerge[] | undefined) {
   const qc = useQueryClient();
+  const say = useOwnToast();
   const apply = $api.useMutation("post", "/v1/ops/merge");
   const [state, dispatch] = useReducer(mergeRunReducer, {
     phase: { kind: "picking" },
@@ -142,6 +144,8 @@ export function useMergeRun(planned: OpsMerge[] | undefined) {
           `was refused: ${errText(refusal.error)}`
         : null,
     });
+    if (result.merged > 0)
+      say(result.merged === 1 ? "merged 1 pair" : `merged ${result.merged} pairs`);
     await invalidateOpsPlan(qc);
   }
 

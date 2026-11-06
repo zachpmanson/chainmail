@@ -4,6 +4,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import ActionBar from "../src/components/inbox/ActionBar";
 import SpecView from "../src/components/specs/SpecView";
+import CopyJson from "../src/components/thread/CopyJson";
+import { clearToasts, dismissToast, useToasts, type Toast } from "../src/lib/ui/toasts";
 import { msg, timeline } from "./fixtures";
 
 const build = vi.hoisted(() => ({
@@ -29,8 +31,14 @@ vi.mock("../src/lib/api/api", async (original) => ({
 }));
 
 let root: Root;
+let observer: Root;
+let observed: Toast[];
+function Snapshot() {
+  observed = useToasts();
+  return null;
+}
 let host: HTMLDivElement;
-beforeEach(() => {
+beforeEach(async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   build.isPending = false;
   build.isError = false;
@@ -39,9 +47,14 @@ beforeEach(() => {
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
+  clearToasts();
+  observer = createRoot(document.createElement("div"));
+  await act(async () => observer.render(createElement(Snapshot)));
 });
 afterEach(async () => {
   await act(async () => root.unmount());
+  await act(async () => observer.unmount());
+  clearToasts();
   host.remove();
   vi.unstubAllGlobals();
 });
@@ -124,7 +137,8 @@ it("Braid focuses the title, keeps build/settings/query semantics, and retains t
   build.isPending = true;
   await act(async () => root.render(braid()));
   expect(button("Braiding…").disabled).toBe(true);
-  expect(dialog()!.querySelector("[role=status]")!.textContent).toContain("across 2 threads");
+  expect(dialog()!.querySelector("[role=status]")).toBeNull();
+  expect(dialog()!.textContent).not.toContain("Recovering HTML and detecting boilerplate");
   // Builds were always dismissible while pending; this isn't an abort of the request.
   await escape();
   expect(dialog()).toBeNull();
@@ -187,7 +201,14 @@ it.each(["escape", "close"])(
     expect(document.activeElement).toBe(button("copy"));
     await click(button("copy"));
     expect(writeText).toHaveBeenCalledExactlyOnceWith(JSON.stringify(spec, null, 2));
-    expect(button("copied")).toBeTruthy();
+    expect(button("copy")).toBeTruthy();
+    expect(observed).toEqual([
+      { id: expect.any(Number), text: "Copied timeline spec JSON", kind: "note" },
+    ]);
+    const first = observed[0]!.id;
+    await click(button("copy"));
+    expect(observed).toHaveLength(1);
+    expect(observed[0]!.id).toBeGreaterThan(first);
     await click(backdrop());
     expect(dialog()).toBe(popup);
     if (method === "escape") await escape();
@@ -207,4 +228,33 @@ it("Spec JSON handles unavailable clipboard without claiming a successful copy",
   await settle();
   await click(button("copy"));
   expect(button("copy")).toBeTruthy();
+  expect(observed).toEqual([
+    { id: expect.any(Number), text: "Could not copy timeline JSON", kind: "fail" },
+  ]);
+});
+
+it("copies message JSON with a toast and unchanged button; copy refusals never claim success", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  vi.stubGlobal("navigator", { clipboard: { writeText } });
+  const data = { message: "synthetic fixture" };
+  await act(async () => root.render(createElement(CopyJson, { data })));
+  const control = () =>
+    host.querySelector<HTMLButtonElement>('[aria-label="Copy this message\'s JSON"]')!;
+  const original = control().innerHTML;
+  await click(control());
+  expect(writeText).toHaveBeenCalledExactlyOnceWith(JSON.stringify(data, null, 2));
+  expect(control().innerHTML).toBe(original);
+  expect(host.textContent).not.toContain("Copied");
+  expect(observed).toEqual([{ id: expect.any(Number), text: "Copied message JSON", kind: "note" }]);
+  const first = observed[0]!.id;
+  await click(control());
+  expect(observed).toHaveLength(1);
+  expect(observed[0]!.id).toBeGreaterThan(first);
+  await act(async () => dismissToast(observed[0]!.id));
+  writeText.mockRejectedValueOnce(new Error("denied"));
+  await click(control());
+  expect(control().innerHTML).toBe(original);
+  expect(observed).toEqual([
+    { id: expect.any(Number), text: "Could not copy message JSON", kind: "fail" },
+  ]);
 });

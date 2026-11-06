@@ -1,3 +1,4 @@
+import useDraftSaveToast from "./useDraftSaveToast";
 import DraftCards from "./DraftCards";
 import useSelectedDraft from "./useSelectedDraft";
 import { draftIdentity } from "../../lib/ui/draftSelection";
@@ -87,6 +88,10 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
   const [draftId, setDraftId] = useState("");
   const [draftSaveError, setDraftSaveError] = useState("");
   const [acknowledgedSave, setAcknowledgedSave] = useState("");
+  const [completedSave, setCompletedSave] = useState<{
+    acknowledgement: string;
+    context: string;
+  } | null>(null);
   const acknowledgedSaveRef = useRef("");
   const draftIdRef = useRef("");
   const draftMessageIdRef = useRef("");
@@ -115,6 +120,7 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
   );
   const { to, cc } = draftInput;
   const draftInputKey = JSON.stringify(draftInput);
+  const saveToastContext = step.kind;
   const draftIsSaved =
     Boolean(draftId) &&
     !createDraft.isPending &&
@@ -258,6 +264,7 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
           setAcknowledgedSave(acknowledgement);
           setDraftId(saved.id);
           setDraftSaveError("");
+          setCompletedSave({ acknowledgement, context: step.kind });
           await queryClient.invalidateQueries({ queryKey: ["get", "/v1/drafts"] });
         })
         .catch((e) => {
@@ -289,6 +296,13 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
     updateDraft,
     queryClient,
   ]);
+
+  useDraftSaveToast({
+    completion: completedSave,
+    currentAcknowledgement: JSON.stringify([saveGeneration.current, draftId, draftInputKey]),
+    saved: draftIsSaved && !busy && !selected.blocked && !drafts.isError,
+    context: saveToastContext,
+  });
 
   async function discardDraft() {
     const id = draftIdRef.current;
@@ -448,20 +462,6 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
               />
             ) : null}
             {draftSaveError ? <InlineAlert>{draftSaveError}</InlineAlert> : null}
-            {draftId ? (
-              <div className="mb-1 flex items-center justify-between">
-                {draftIsSaved ? <p className="text-2xs text-muted">Saved to Gmail</p> : null}
-                <Button
-                  variant="danger"
-                  density="compact"
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void discardDraft()}
-                >
-                  Discard draft
-                </Button>
-              </div>
-            ) : null}
             <ComposeForm
               draft={draft}
               onDraft={(patch) => {
@@ -483,6 +483,7 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
               busy={busy}
               onSubmit={(event) => void prepare(event)}
               onClose={onClose}
+              onDiscard={draftId ? () => void discardDraft() : undefined}
             />
           </>
         )}

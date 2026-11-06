@@ -7,6 +7,7 @@ import InlineAlert from "../ui/InlineAlert";
 import Consequence from "./Consequence";
 import RuleRow, { type Draft } from "./RuleRow";
 import { errText } from "../../lib/ui/errText";
+import useOwnToast from "../../lib/ui/useOwnToast";
 
 type Phase =
   | { kind: "idle" }
@@ -21,7 +22,7 @@ export default function OpsOrgs() {
   const [newDomain, setNewDomain] = useState("");
   const [newOrg, setNewOrg] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [last, setLast] = useState<string | null>(null);
+  const say = useOwnToast();
 
   const preview = $api.useMutation("post", "/v1/ops/orgs/preview");
   const save = $api.useMutation("post", "/v1/ops/orgs", {
@@ -30,7 +31,6 @@ export default function OpsOrgs() {
 
   async function pick(next: Draft) {
     setError(null);
-    setLast(null);
     setPhase({ kind: "previewing", draft: next });
     try {
       await preview.mutateAsync({ body: { domain: next.domain, org: next.org ?? undefined } });
@@ -47,7 +47,7 @@ export default function OpsOrgs() {
     setPhase({ kind: "saving" });
     try {
       await save.mutateAsync({ body: { domain: d.domain, org: d.org ?? undefined } });
-      setLast(
+      say(
         d.org === null
           ? `dropped the rule about ${d.domain}`
           : d.org === ""
@@ -75,9 +75,6 @@ export default function OpsOrgs() {
         organisation, and a domain you leave empty is nobody's.
       </p>
       {error ? <InlineAlert>{error}</InlineAlert> : null}
-      {last ? (
-        <p className="my-1.5 mb-2 text-xs text-muted">{last}. The list below is the current one.</p>
-      ) : null}
 
       {draft ? (
         <div className="mt-2 mb-0.5 rounded-md border border-line bg-quote p-2 text-xs/normal text-fg">

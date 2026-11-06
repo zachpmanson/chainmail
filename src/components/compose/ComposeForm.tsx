@@ -14,6 +14,7 @@ export default function ComposeForm({
   busy,
   onSubmit,
   onClose,
+  onDiscard,
 }: {
   draft: Draft;
   onDraft: (patch: Partial<Draft>) => void;
@@ -22,6 +23,7 @@ export default function ComposeForm({
   busy: boolean;
   onSubmit: (event: FormEvent) => void;
   onClose: () => void;
+  onDiscard?: () => void;
 }) {
   const form = useRef<HTMLFormElement>(null);
   const people = usePersonAddresses();
@@ -54,6 +56,17 @@ export default function ComposeForm({
         />
       </form>
       <footer className="mt-2 flex items-center justify-end gap-2">
+        {onDiscard ? (
+          <Button
+            variant="danger"
+            density="compact"
+            type="button"
+            disabled={busy}
+            onClick={onDiscard}
+          >
+            Discard draft
+          </Button>
+        ) : null}
         <Button variant="subtle" density="compact" type="button" disabled={busy} onClick={onClose}>
           Cancel
         </Button>

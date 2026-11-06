@@ -18,11 +18,6 @@ export default function OpsMerges() {
     <>
       {plan.isError ? <InlineAlert>{errText(plan.error)}</InlineAlert> : null}
       {run.error ? <InlineAlert>{run.error}</InlineAlert> : null}
-      {run.last ? (
-        <p className="my-1.5 mb-2 text-xs text-muted">
-          {run.last} — the plan below is the current one.
-        </p>
-      ) : null}
 
       <h2 className="mt-4 mb-0.5 text-xs tracking-[.1em] text-muted uppercase">Merge plan</h2>
       {applicable.length > 0 ? (

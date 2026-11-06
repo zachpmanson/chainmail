@@ -7,6 +7,7 @@ import TextInput from "../ui/TextInput";
 import InlineAlert from "../ui/InlineAlert";
 import PersonRow from "./PersonRow";
 import { errText } from "../../lib/ui/errText";
+import useOwnToast from "../../lib/ui/useOwnToast";
 
 const SHOWN = 25;
 
@@ -21,7 +22,7 @@ export default function OpsPeople() {
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [last, setLast] = useState<string | null>(null);
+  const say = useOwnToast();
 
   const all = people.data?.people;
   const shown = useMemo(() => {
@@ -37,11 +38,10 @@ export default function OpsPeople() {
     change: { displayName?: string; addIdentities?: string[]; removeIdentities?: string[] },
   ) {
     setError(null);
-    setLast(null);
     setBusy(true);
     try {
       await save.mutateAsync({ params: { path: { personId: id } }, body: change });
-      setLast(
+      say(
         change.displayName
           ? `#${id} is called ${change.displayName}`
           : change.addIdentities
@@ -65,9 +65,6 @@ export default function OpsPeople() {
         are one human are one row after a merge, and that is the plan below, where the evidence is.
       </p>
       {error ? <InlineAlert>{error}</InlineAlert> : null}
-      {last ? (
-        <p className="my-1.5 mb-2 text-xs text-muted">{last}. The list below is the current one.</p>
-      ) : null}
       <FormField className="my-2 mb-1 flex items-center gap-1.5 text-xs" label="Find a person">
         <TextInput
           className="mr-0 min-w-0 flex-[0_1_18rem] px-1.5 py-1 text-xs"

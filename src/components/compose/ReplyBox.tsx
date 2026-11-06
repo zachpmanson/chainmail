@@ -1,3 +1,4 @@
+import useDraftSaveToast from "./useDraftSaveToast";
 import DraftCards from "./DraftCards";
 import useSelectedDraft from "./useSelectedDraft";
 import { draftDestination, draftIdentity } from "../../lib/ui/draftSelection";
@@ -128,6 +129,10 @@ export default function ReplyBox({
   const [draftId, setDraftId] = useState("");
   const [draftSaveError, setDraftSaveError] = useState("");
   const [acknowledgedSave, setAcknowledgedSave] = useState("");
+  const [completedSave, setCompletedSave] = useState<{
+    acknowledgement: string;
+    context: string;
+  } | null>(null);
   const acknowledgedSaveRef = useRef("");
   const draftIdRef = useRef("");
   const draftMessageIdRef = useRef("");
@@ -167,6 +172,11 @@ export default function ReplyBox({
     [displayedAccountId, recipients.edited, all, answer.subject, own, answer.extId],
   );
   const draftInputKey = JSON.stringify(draftInput);
+  const saveToastContext = JSON.stringify([thread.rootExtId, answer.extId, step.kind, html]);
+  const saveToastContextRef = useRef(saveToastContext);
+  useEffect(() => {
+    saveToastContextRef.current = saveToastContext;
+  }, [saveToastContext]);
   const draftIsSaved =
     Boolean(draftId) &&
     !createDraft.isPending &&
@@ -306,6 +316,7 @@ export default function ReplyBox({
       JSON.stringify([generation, draftIdRef.current, draftInputKey])
     )
       return;
+    const toastContext = saveToastContextRef.current;
     const timer = window.setTimeout(() => {
       writeRevision.current++;
       pendingWrites.current++;
@@ -332,6 +343,7 @@ export default function ReplyBox({
           setAcknowledgedSave(acknowledgement);
           setDraftId(saved.id);
           setDraftSaveError("");
+          setCompletedSave({ acknowledgement, context: toastContext });
           await queryClient.invalidateQueries({ queryKey: ["get", "/v1/drafts"] });
         })
         .catch((error) => {
@@ -364,6 +376,13 @@ export default function ReplyBox({
     updateDraft,
     queryClient,
   ]);
+
+  useDraftSaveToast({
+    completion: completedSave,
+    currentAcknowledgement: JSON.stringify([saveGeneration.current, draftId, draftInputKey]),
+    saved: draftIsSaved && !busy && !selected.blocked && !drafts.isError,
+    context: saveToastContext,
+  });
 
   // A press on a message's answer control brings the box, which may be screens away, to the reader.
   useEffect(() => {
@@ -512,7 +531,6 @@ export default function ReplyBox({
         />
       ) : null}
       {draftSaveError ? <InlineAlert>{draftSaveError}</InlineAlert> : null}
-      {draftIsSaved ? <p className="mb-1 text-2xs text-muted">Saved to Gmail</p> : null}
       <section aria-label="Reply">
         {step.kind === "reviewing" ? (
           <>

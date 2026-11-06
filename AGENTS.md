@@ -120,6 +120,14 @@ tests), without changing sender HTML. Reply-tree/chart data graphics, matching l
 content images and native controls are not interface icons. Interactive elements show focus with
 the shared `focus-visible:outline-accent` ring.
 
+### Feedback
+
+Transient, non-actionable feedback (saved, copied, completed, operation progress) uses the existing
+toast store and `ToastHost`, not inline confirmations or conditional status rows that shift layout.
+Use existing busy controls rather than redundant progress rows. Success notes use
+the normal five-second expiry and remain dismissible. Persistent actionable errors/refusals and
+loading content stay in place; they are not temporary feedback.
+
 ### Components
 
 - **One exported component per file,** named after it, `export default function Name`. Several per file only

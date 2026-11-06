@@ -1,7 +1,8 @@
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import type { Timeline as Spec } from "../../lib/timeline/spec";
 import Button from "../ui/Button";
 import DialogShell from "../ui/DialogShell";
+import useOwnToast from "../../lib/ui/useOwnToast";
 
 /** Abbreviates base64 avatars for display only; Copy still yields the full spec. */
 function abbreviate(_key: string, value: unknown) {
@@ -13,7 +14,7 @@ function abbreviate(_key: string, value: unknown) {
 }
 
 export default function SpecView({ spec, onClose }: { spec: Spec; onClose: () => void }) {
-  const [copied, setCopied] = useState(false);
+  const say = useOwnToast();
   const content = useRef<HTMLPreElement>(null);
   const shown = JSON.stringify(spec, abbreviate, 2);
   const full = JSON.stringify(spec, null, 2);
@@ -21,10 +22,9 @@ export default function SpecView({ spec, onClose }: { spec: Spec; onClose: () =>
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(full);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1400);
+      say("Copied timeline spec JSON");
     } catch {
-      setCopied(false);
+      say("Could not copy timeline JSON", "fail");
     }
   };
 
@@ -46,7 +46,7 @@ export default function SpecView({ spec, onClose }: { spec: Spec; onClose: () =>
           · images abbreviated for display
         </span>
         <Button variant="secondary" density="compact" type="button" onClick={copy}>
-          {copied ? "copied" : "copy"}
+          copy
         </Button>
         <Button variant="secondary" density="compact" type="button" onClick={onClose}>
           close
