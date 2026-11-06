@@ -139,6 +139,10 @@ func (c Client) SaveDraft(d Draft, replyToMessageID string) (Draft, error) {
 		if err != nil {
 			return Draft{}, fmt.Errorf("checking Gmail draft MIME: %w", err)
 		}
+		raw, err = draftReplacementMIME(d, currentRaw)
+		if err != nil {
+			return Draft{}, err
+		}
 	}
 	message := &gmail.Message{}
 	if replyToMessageID != "" {
@@ -161,7 +165,7 @@ func (c Client) SaveDraft(d Draft, replyToMessageID string) (Draft, error) {
 		if replyToMessageID != "" && current.Message.ThreadId != "" && current.Message.ThreadId != message.ThreadId {
 			return Draft{}, draftRefusal("thread_mismatch")
 		}
-		raw, err = c.preserveDraftMetadata(currentRaw, raw)
+		raw, err = c.prepareDraftReplacement(currentRaw, raw)
 		if err != nil {
 			return Draft{}, err
 		}
@@ -226,6 +230,9 @@ func (c Client) SendDraft(id string) (string, string, error) {
 // Replacement is intentionally conservative: even a revision-matching draft may
 // contain attachments, Bcc, rich text, an alias, or other fields the editor omits.
 func checkDraftReplacement(current, replacement []byte) error {
+	if isAlternative(current) {
+		return checkAlternativeReplacement(current, replacement)
+	}
 	old, err := mail.ReadMessage(bytes.NewReader(current))
 	if err != nil {
 		// Parser errors can quote a private header line; report only the category.

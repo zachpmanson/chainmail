@@ -2246,7 +2246,7 @@
     "/v1/drafts/{id}/mime-check": {
       "get": {
         "summary": "Inspect saved draft MIME structure without writing",
-        "description": "Explicit account selection required. The inspection method requests only Drafts.Get format raw with message/raw fields; existing mailbox initialization may also load its label cache. Returns allowlisted categories and HTML structural booleans only, never header/parameter/body/attribute values. No writes, profile/settings or parent-message reads. Bounds: raw MIME 2 MiB, 12 MIME levels including root, 100 parts including root, decoded HTML 256 KiB per leaf and 20,000 HTML tokens per leaf. The Google SDK materializes its response before these parser/decoder limits are applied; they are not a transport-level response-size cap. Unknown HTML charset/transfer encodings fail closed. HTML flags are structural heuristics, not evidence of semantic equivalence or preservation safety. Ordinary draft reads and save acceptance are unchanged. Requires no mail-write grant.",
+        "description": "Explicit account selection required. The inspection method requests only Drafts.Get format raw with message/raw fields; existing mailbox initialization may also load its label cache. Returns allowlisted categories and HTML structural booleans only, never header/parameter/body/attribute values. No writes, profile/settings or parent-message reads. Bounds: raw MIME 2 MiB, 12 MIME levels including root, 100 parts including root, decoded HTML 256 KiB per leaf and 20,000 HTML tokens per leaf. The Google SDK materializes its response before these parser/decoder limits are applied; they are not a transport-level response-size cap. Unknown HTML charset/transfer encodings fail closed. HTML flags are structural heuristics, not evidence of semantic equivalence or preservation safety. Ordinary draft reads do not run this probe; this diagnostic does not determine save acceptance. Requires no mail-write grant.",
         "operationId": "checkDraftMIME",
         "parameters": [
           {
@@ -2300,6 +2300,84 @@
           },
           "409": {
             "description": "Account unavailable or MIME inspection refused: malformed_message, limit_exceeded or unsupported_html_encoding. No partial tree.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Mailbox/provider unavailable or unsupported; fixed safe message.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/drafts/{id}/save-check": {
+      "get": {
+        "summary": "Check compose draft save preparation without writing",
+        "description": "Explicit account GET-only snapshot check for compose drafts. Constructs unchanged and representative Unicode/whitespace body-edit replacements through the same preparation and final outgoing-byte guard as SaveDraft, including sender/immutable metadata checks. Never saves, sends, deletes or reads a reply parent. Reply contexts fail closed with context=reply_context. Returns only fixed booleans/categories, no identifiers, content or preparation error details. A positive result covers only this snapshot and the internally chosen representative edit, not every possible edit, a later revision/settings state, send behavior or write permission. Raw MIME limit 2 MiB, HTML/text 256 KiB, HTML 20,000 tokens; SDK response is materialized before limits. Existing mailbox initialization can load its label cache. No mail-write grant required.",
+        "operationId": "checkDraftSave",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "accountId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Fixed compatibility booleans and context category only.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftSaveCheck"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Explicit nonempty accountId is required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Draft no longer exists; fixed safe message.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Selected account unavailable.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5960,6 +6038,31 @@
           },
           "hasUnknownElements": {
             "type": "boolean"
+          }
+        }
+      },
+      "DraftSaveCheck": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "unchangedCompatible",
+          "bodyEditCompatible",
+          "context"
+        ],
+        "properties": {
+          "unchangedCompatible": {
+            "type": "boolean"
+          },
+          "bodyEditCompatible": {
+            "type": "boolean"
+          },
+          "context": {
+            "type": "string",
+            "enum": [
+              "compose",
+              "reply_context",
+              "unsupported"
+            ]
           }
         }
       }
