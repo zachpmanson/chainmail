@@ -115,6 +115,14 @@ func (s *server) draft(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := parts[0]
+	if len(parts) == 2 && parts[1] == "mime-check" {
+		if r.Method != http.MethodGet {
+			fail(w, http.StatusMethodNotAllowed, errors.New("method must be GET"))
+			return
+		}
+		s.checkDraftMIME(w, r, id)
+		return
+	}
 	if len(parts) == 2 && parts[1] == "sender-check" {
 		if r.Method != http.MethodGet {
 			fail(w, http.StatusMethodNotAllowed, errors.New("method must be GET"))
@@ -308,6 +316,53 @@ func (s *server) checkDraftSender(w http.ResponseWriter, r *http.Request, id str
 		return
 	}
 	send(w, http.StatusOK, map[string]any{"accountId": accountID, "id": id, "senderCompatible": true})
+}
+
+// This diagnostic deliberately returns no identifiers or arbitrary error text.
+func (s *server) checkDraftMIME(w http.ResponseWriter, r *http.Request, id string) {
+	requested := r.URL.Query().Get("accountId")
+	if strings.TrimSpace(requested) == "" {
+		fail(w, http.StatusBadRequest, errors.New("accountId is required"))
+		return
+	}
+	accountID, err := s.connectedAccount(requested)
+	if err != nil {
+		fail(w, http.StatusConflict, errors.New("selected Gmail account is unavailable"))
+		return
+	}
+	mb, err := s.mailboxForAccount(accountID)
+	if err != nil {
+		fail(w, http.StatusBadGateway, errors.New("mailbox unavailable for draft MIME checking"))
+		return
+	}
+	checker, ok := mb.(interface {
+		CheckDraftMIME(string) (*gmailclient.DraftMIMEPart, error)
+	})
+	if !ok {
+		fail(w, http.StatusBadGateway, errors.New("mailbox does not support draft MIME checks"))
+		return
+	}
+	tree, err := checker.CheckDraftMIME(id)
+	if err != nil {
+		switch {
+		case gmailclient.IsNotFound(err):
+			fail(w, http.StatusNotFound, errors.New("Gmail draft no longer exists"))
+		case errors.Is(err, gmailclient.ErrDraftMIMEMalformed):
+			fail(w, http.StatusConflict, gmailclient.ErrDraftMIMEMalformed)
+		case errors.Is(err, gmailclient.ErrDraftMIMELimit):
+			fail(w, http.StatusConflict, gmailclient.ErrDraftMIMELimit)
+		case errors.Is(err, gmailclient.ErrDraftMIMEEncoding):
+			fail(w, http.StatusConflict, gmailclient.ErrDraftMIMEEncoding)
+		default:
+			fail(w, http.StatusBadGateway, errors.New("Gmail could not check draft MIME"))
+		}
+		return
+	}
+	if tree == nil {
+		fail(w, http.StatusBadGateway, errors.New("Gmail could not check draft MIME"))
+		return
+	}
+	send(w, http.StatusOK, tree)
 }
 
 func gmailDraftErrorStatus(err error) int {

@@ -823,6 +823,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/drafts/{id}/mime-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Inspect saved draft MIME structure without writing
+         * @description Explicit account selection required. The inspection method requests only Drafts.Get format raw with message/raw fields; existing mailbox initialization may also load its label cache. Returns allowlisted categories and HTML structural booleans only, never header/parameter/body/attribute values. No writes, profile/settings or parent-message reads. Bounds: raw MIME 2 MiB, 12 MIME levels including root, 100 parts including root, decoded HTML 256 KiB per leaf and 20,000 HTML tokens per leaf. The Google SDK materializes its response before these parser/decoder limits are applied; they are not a transport-level response-size cap. Unknown HTML charset/transfer encodings fail closed. HTML flags are structural heuristics, not evidence of semantic equivalence or preservation safety. Ordinary draft reads and save acceptance are unchanged. Requires no mail-write grant.
+         */
+        get: operations["checkDraftMIME"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2282,6 +2302,27 @@ export interface components {
             before: string;
             /** @description Semantic iCalendar after export; empty for resource deletion. */
             after: string;
+        };
+        DraftMIMEPart: {
+            /** @enum {string} */
+            mimeClass: "text/plain" | "text/html" | "multipart/alternative" | "multipart/mixed" | "multipart/related" | "multipart/signed" | "multipart/encrypted" | "other";
+            /** @enum {string} */
+            charset: "none" | "utf-8" | "us-ascii" | "iso-8859-1" | "windows-1252" | "other";
+            /** @enum {string} */
+            transferEncoding: "none" | "7bit" | "8bit" | "binary" | "base64" | "quoted-printable" | "other";
+            /** @enum {string} */
+            disposition: "none" | "inline" | "attachment" | "other";
+            htmlFeatures?: components["schemas"]["DraftHTMLFeatures"];
+            parts: components["schemas"]["DraftMIMEPart"][];
+        };
+        /** @description Only text/html leaves. Token-based feature hints: link/image elements; formatting elements or presentation attributes; blockquote/Gmail quote classes; Gmail signature class; elements outside the structural allowlist. No attribute or text values are returned. */
+        DraftHTMLFeatures: {
+            hasLinks: boolean;
+            hasImages: boolean;
+            hasFormatting: boolean;
+            hasQuotes: boolean;
+            hasSignature: boolean;
+            hasUnknownElements: boolean;
         };
     };
     responses: never;
@@ -4179,6 +4220,66 @@ export interface operations {
                     "application/json": {
                         error: string;
                     };
+                };
+            };
+        };
+    };
+    checkDraftMIME: {
+        parameters: {
+            query: {
+                accountId: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded structural tree only; not save/send acceptance. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftMIMEPart"];
+                };
+            };
+            /** @description Explicit nonempty accountId is required. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Draft no longer exists; fixed safe message. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Account unavailable or MIME inspection refused: malformed_message, limit_exceeded or unsupported_html_encoding. No partial tree. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Mailbox/provider unavailable or unsupported; fixed safe message. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };

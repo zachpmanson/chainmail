@@ -258,6 +258,22 @@ valid bare address, with exactly one primary and one default on the same record.
 only a snapshot, not a full MIME compatibility check or assurance that a later save/send
 will succeed. Ordinary draft reads do not fetch sender settings.
 
+For MIME diagnosis only, `GET /v1/drafts/{id}/mime-check?accountId=…` requires an
+explicit connected account and returns an allowlisted structural tree, not message
+content or identifiers. Charset, transfer encoding and disposition are fixed categories;
+HTML leaves add structural feature booleans (links, images, formatting, quotes, Gmail
+signature markers and unknown elements). These are heuristics, not a preservation or
+save/send acceptance decision. The inspection method requests only the raw draft;
+existing mailbox initialization may also load the label cache. There are no writes,
+settings/profile/parent reads or write-grant requirement. Ordinary draft reads are unchanged.
+Inspection fails closed with fixed `malformed_message`, `limit_exceeded` or
+`unsupported_html_encoding` reasons, never partial trees or provider/parser details.
+Limits are 2 MiB raw MIME, 12 MIME levels and 100 parts (including root), and 256 KiB
+decoded HTML / 20,000 HTML tokens per leaf. Unknown HTML charset/transfer encodings
+are not inspected; other unrecognized media/metadata are reported only as `other`.
+The Google SDK materializes its response before these inspection limits can be applied;
+they are parser/decoder limits, not a transport-level response-size cap.
+
 An **`html`** field turns the second part off for one reply (absent means it goes, so an
 older client sends the message it always sent). A reader who knows their correspondent or a
 list wants the words alone can say so, and what they get is byte for byte the text part they

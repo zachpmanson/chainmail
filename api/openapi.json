@@ -2242,6 +2242,84 @@
           }
         }
       }
+    },
+    "/v1/drafts/{id}/mime-check": {
+      "get": {
+        "summary": "Inspect saved draft MIME structure without writing",
+        "description": "Explicit account selection required. The inspection method requests only Drafts.Get format raw with message/raw fields; existing mailbox initialization may also load its label cache. Returns allowlisted categories and HTML structural booleans only, never header/parameter/body/attribute values. No writes, profile/settings or parent-message reads. Bounds: raw MIME 2 MiB, 12 MIME levels including root, 100 parts including root, decoded HTML 256 KiB per leaf and 20,000 HTML tokens per leaf. The Google SDK materializes its response before these parser/decoder limits are applied; they are not a transport-level response-size cap. Unknown HTML charset/transfer encodings fail closed. HTML flags are structural heuristics, not evidence of semantic equivalence or preservation safety. Ordinary draft reads and save acceptance are unchanged. Requires no mail-write grant.",
+        "operationId": "checkDraftMIME",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "accountId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded structural tree only; not save/send acceptance.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftMIMEPart"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Explicit nonempty accountId is required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Draft no longer exists; fixed safe message.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Account unavailable or MIME inspection refused: malformed_message, limit_exceeded or unsupported_html_encoding. No partial tree.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Mailbox/provider unavailable or unsupported; fixed safe message.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5783,6 +5861,107 @@
           "before",
           "after"
         ]
+      },
+      "DraftMIMEPart": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mimeClass",
+          "charset",
+          "transferEncoding",
+          "disposition",
+          "parts"
+        ],
+        "properties": {
+          "mimeClass": {
+            "type": "string",
+            "enum": [
+              "text/plain",
+              "text/html",
+              "multipart/alternative",
+              "multipart/mixed",
+              "multipart/related",
+              "multipart/signed",
+              "multipart/encrypted",
+              "other"
+            ]
+          },
+          "charset": {
+            "type": "string",
+            "enum": [
+              "none",
+              "utf-8",
+              "us-ascii",
+              "iso-8859-1",
+              "windows-1252",
+              "other"
+            ]
+          },
+          "transferEncoding": {
+            "type": "string",
+            "enum": [
+              "none",
+              "7bit",
+              "8bit",
+              "binary",
+              "base64",
+              "quoted-printable",
+              "other"
+            ]
+          },
+          "disposition": {
+            "type": "string",
+            "enum": [
+              "none",
+              "inline",
+              "attachment",
+              "other"
+            ]
+          },
+          "htmlFeatures": {
+            "$ref": "#/components/schemas/DraftHTMLFeatures"
+          },
+          "parts": {
+            "type": "array",
+            "maxItems": 99,
+            "items": {
+              "$ref": "#/components/schemas/DraftMIMEPart"
+            }
+          }
+        }
+      },
+      "DraftHTMLFeatures": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Only text/html leaves. Token-based feature hints: link/image elements; formatting elements or presentation attributes; blockquote/Gmail quote classes; Gmail signature class; elements outside the structural allowlist. No attribute or text values are returned.",
+        "required": [
+          "hasLinks",
+          "hasImages",
+          "hasFormatting",
+          "hasQuotes",
+          "hasSignature",
+          "hasUnknownElements"
+        ],
+        "properties": {
+          "hasLinks": {
+            "type": "boolean"
+          },
+          "hasImages": {
+            "type": "boolean"
+          },
+          "hasFormatting": {
+            "type": "boolean"
+          },
+          "hasQuotes": {
+            "type": "boolean"
+          },
+          "hasSignature": {
+            "type": "boolean"
+          },
+          "hasUnknownElements": {
+            "type": "boolean"
+          }
+        }
       }
     }
   }
