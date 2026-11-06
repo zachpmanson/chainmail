@@ -79,7 +79,7 @@ async function input(value: string, inputType = "insertText") {
 }
 
 it.each(["border-box", "content-box"] as const)(
-  "grows and shrinks to four rows without padding accumulation (%s)",
+  "only grows, retaining its high-water height without padding accumulation (%s)",
   async (boxSizing) => {
     const props = { autoGrow: true, rows: 4, style: { ...style, boxSizing }, onChange: vi.fn() };
     const minimum = boxSizing === "border-box" ? 98 : 80;
@@ -88,6 +88,10 @@ it.each(["border-box", "content-box"] as const)(
     await render(h(TextArea, { ...props, value: "a\n".repeat(9) }));
     expect(textarea().style.height).toBe(`${minimum + 120}px`);
     await render(h(TextArea, { ...props, value: "short" }));
+    expect(textarea().style.height).toBe(`${minimum + 120}px`);
+    await render(h(TextArea, { ...props, value: "" }));
+    expect(textarea().style.height).toBe(`${minimum + 120}px`);
+    await render(h(TextArea, { ...props, key: "new-editor", value: "" }));
     expect(textarea().style.height).toBe(`${minimum}px`);
     expect(textarea().className).toContain("overflow-y-hidden");
     expect(textarea().className).toContain("resize-none");
@@ -114,7 +118,7 @@ it("refits wrapped hydrated content on width changes, ignores height-only notifi
   width = 400;
   await act(async () => observer.notify());
   await act(async () => flushFrame());
-  expect(textarea().style.height).toBe("98px");
+  expect(textarea().style.height).toBe("258px");
   width = 100;
   await act(async () => observer.notify());
   expect(frame).toBeDefined();
@@ -227,7 +231,7 @@ it.each(["compose", "reply"] as const)(
     expect(document.activeElement).toBe(textarea());
     expect(textarea().selectionStart).toBe(pasted.length);
     await input("");
-    expect(textarea().style.height).toBe("98px");
+    expect(textarea().style.height).toBe("278px");
     await render(h(Harness, { key: "saved", body: pasted, busy: true }));
     expect(textarea().style.height).toBe("278px");
     expect(textarea().disabled).toBe(true);
