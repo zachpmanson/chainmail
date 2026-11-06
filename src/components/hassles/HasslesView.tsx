@@ -1,5 +1,5 @@
-import { useEffect } from "react";
 import { useIsMutating } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { $api } from "../../lib/api/api";
 import { locationKey } from "../../lib/hassles/forms";
 import { errText } from "../../lib/ui/errText";
@@ -25,7 +25,7 @@ export default function HasslesView() {
   return (
     <main
       aria-label="Hassles"
-      className="@container mx-auto box-border flex w-full max-w-[calc(900px+45rem)] flex-col gap-4 px-4 py-5"
+      className="@container mx-auto box-border flex w-full max-w-[125rem] flex-col gap-4 px-4 py-5"
     >
       {config.isError ? <InlineAlert>{errText(config.error)}</InlineAlert> : null}
       {config.isPending ? <p>Reading reminder settings…</p> : null}

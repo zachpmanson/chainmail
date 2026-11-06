@@ -45,7 +45,7 @@ export default function HassleForm({
   return (
     <section
       aria-label={editing ? "Edit hassle" : "Add hassle"}
-      className={editing ? undefined : "rounded-md border border-line p-4"}
+      className={editing ? undefined : "rounded-md border border-line p-4 max-w-full w-[40rem] min-w-0"}
     >
       {editing ? <h2 className="mt-0 text-lg">Edit hassle</h2> : null}
       <form

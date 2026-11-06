@@ -1,5 +1,5 @@
-import { useState, useSyncExternalStore } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState, useSyncExternalStore } from "react";
 import { type HassleLocation, type HassleTask } from "../../lib/hassles/forms";
 import { hassleOperations, projectTasks } from "../../lib/hassles/operations";
 import { errText } from "../../lib/ui/errText";
@@ -31,10 +31,10 @@ export default function HassleInventory({
   return (
     <section
       aria-label="Hassle inventory"
-      className="mx-auto grid w-full max-w-[40rem] grid-cols-1 items-start justify-center gap-6 @min-[calc(900px+43rem)]:max-w-none @min-[calc(900px+43rem)]:grid-cols-[450px_minmax(0,40rem)_450px]"
+      className="grid grid-cols-[minmax(0,40rem)] items-start justify-center gap-6 @min-[83rem]:grid-cols-[40rem_40rem_minmax(0,40rem)]"
     >
-      {/* The empty right track keeps the list centred between two 450px side tracks. */}
-      <div className="w-full min-w-0">
+      {/* Side by side needs two 40rem tracks and one gap: 83rem of the parent container. */}
+      <div className="min-w-0">
         <HassleForm
           key={state.create.id}
           initial={state.create.request?.schedule}
@@ -56,7 +56,7 @@ export default function HassleInventory({
       <section aria-label="Reminders" className="flex min-w-0 flex-col gap-3">
         {inventory.isError ? <InlineAlert>{errText(inventory.error)}</InlineAlert> : null}
         {state.operations.map((op) => (
-          <div key={op.token} role="status" className="min-w-0 wrap-break-word">
+          <div key={op.token} role="status" className="wrap-break-word">
             {op.status === "failed" ? (
               <>
                 <InlineAlert>
@@ -116,6 +116,8 @@ export default function HassleInventory({
           onDone={setRemoving}
         />
       </section>
+      {/* The empty right track centres the list. It shrinks to 0 before the layout stacks. */}
+      <div className="hidden @min-[83rem]:block" />
       {editor ? (
         <DialogShell
           label="Edit hassle"
