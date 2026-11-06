@@ -428,7 +428,10 @@ it("centres the reminders column with the create form in a balanced left sidebar
   expect(main.classList.contains("box-border")).toBe(true);
   expect(layout.className).not.toContain("min-[60rem]");
   expect(layout.children).toHaveLength(2);
-  expect(layout.children[0]!.contains(addForm())).toBe(true);
+  const createPanel = layout.children[0]!;
+  expect(createPanel.contains(addForm())).toBe(true);
+  expect(createPanel.classList.contains("w-full")).toBe(true);
+  expect(createPanel.className).not.toContain("max-w-");
   expect(layout.children[1]).toBe(reminders);
   expect(reminders.contains(document.querySelector('[role="tablist"]'))).toBe(true);
   expect(reminders.contains(addForm())).toBe(false);

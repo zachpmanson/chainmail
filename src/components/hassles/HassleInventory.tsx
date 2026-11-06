@@ -34,7 +34,7 @@ export default function HassleInventory({
       className="mx-auto grid w-full max-w-[40rem] grid-cols-1 items-start justify-center gap-6 @min-[calc(900px+43rem)]:max-w-none @min-[calc(900px+43rem)]:grid-cols-[450px_minmax(0,40rem)_450px]"
     >
       {/* The empty right track keeps the list centred between two 450px side tracks. */}
-      <div className="w-full max-w-[450px] min-w-0">
+      <div className="w-full min-w-0">
         <HassleForm
           key={state.create.id}
           initial={state.create.request?.schedule}

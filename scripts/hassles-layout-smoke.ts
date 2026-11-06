@@ -85,7 +85,8 @@ const measureLayouts = String.raw`function () {
             fail("List must fill available width up to 40rem");
           if (!close(l.x + l.width / 2, m.x + m.width / 2))
             fail("List must remain independently centred");
-          if (!close(f.width, Math.min(450, l.width))) fail("Incorrect form width cap");
+          if (!close(f.width, split ? 450 : l.width))
+            fail("Form must fill the stacked list width or the 450px sidebar");
           if (split ? !close(f.right + 1.5 * root, l.x) : l.y < f.bottom + 1.5 * root - 1)
             fail("Form must split only when all three tracks fit, otherwise stack above");
           if (main.scrollWidth > main.clientWidth + 1) fail("Main has horizontal overflow");

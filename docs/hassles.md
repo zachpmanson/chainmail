@@ -26,7 +26,8 @@ Configured calendar details and its settings link stay in Settings, not the Hass
 - The reminders list is centred independently of the Add form, capped at 40rem
   and filling available width on narrow screens. The 450px Add form sits on its left
   only when the content container fits both plus a balancing right track and gaps
-  (`calc(900px + 43rem)`); otherwise it stacks above the list. The page cap includes
+  (`calc(900px + 43rem)`); otherwise it stacks above and fills the list's width.
+  The page cap includes
   its padding (`calc(900px + 45rem)`), so root-font changes preserve the same fit rule.
   Container queries use actual available
   width, not just the window breakpoint. App navigation/sidebar is unchanged. Switching tabs or
@@ -291,8 +292,8 @@ nix develop --command bash -c 'npm run build && nix shell nixpkgs#chromium --com
 The script uses Chromium from PATH and temporary isolated browser state. It checks
 54 empty/short-list layouts at 320/375/480/640/960px available widths, immediately
 below/at/above the fit threshold, and 2200px, with 14/16/20px root fonts. It asserts
-filled/capped, independently centred lists, sidebar/stack placement, the 450px form
-cap, and no overflowing controls. This is rendered geometry evidence, not hydrated
+filled/capped, independently centred lists, sidebar/stack placement, the 450px sidebar
+form versus full-width stacked form, and no overflowing controls. This is rendered geometry evidence, not hydrated
 keyboard/focus testing or live Calendar/phone delivery.
 
 Hydrated offline Chromium checks (Chromium must be on PATH), using the real React
