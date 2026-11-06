@@ -51,7 +51,11 @@ export default function HassleList({
               </p>
             ) : null}
             {groups.map((group) => (
-              <section key={group.key} aria-label={group.label} className="mb-3 max-w-[40rem] w-full min-w-0">
+              <section
+                key={group.key}
+                aria-label={group.label}
+                className="mb-3 w-full max-w-[40rem] min-w-0"
+              >
                 <h2 className="text-xs font-medium text-muted">{group.label}</h2>
                 <ul className="m-0 flex list-none flex-col gap-3 p-0">
                   {group.tasks.map((task) => (

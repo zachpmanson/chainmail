@@ -411,28 +411,31 @@ it("uses four-row title fields and saves line breaks as spaces in the one-line C
   expect(titleInput(dialog).rows).toBe(4);
   expect(titleInput(dialog).value).toBe(create.schedule.title);
 });
-it("centres the reminders column with the create form in a balanced left sidebar", async () => {
+it("centres the reminders column with fixed-width tracks and a shrinking right spacer", async () => {
   await choose();
   const layout = document.querySelector('section[aria-label="Hassle inventory"]')!;
   const reminders = layout.querySelector('section[aria-label="Reminders"]')!;
   expect(layout.classList.contains("grid")).toBe(true);
-  expect(layout.classList.contains("grid-cols-1")).toBe(true);
-  expect(layout.className).toContain(
-    "@min-[calc(900px+43rem)]:grid-cols-[450px_minmax(0,40rem)_450px]",
-  );
-  expect(layout.className).toContain("max-w-[40rem]");
-  expect(layout.className).toContain("@min-[calc(900px+43rem)]:max-w-none");
+  expect(layout.classList.contains("grid-cols-[minmax(0,40rem)]")).toBe(true);
+  expect(layout.className).toContain("@min-[83rem]:grid-cols-[40rem_40rem_minmax(0,40rem)]");
+  expect(layout.classList.contains("justify-center")).toBe(true);
   const main = document.querySelector("main")!;
-  expect(main.classList.contains("max-w-[calc(900px+45rem)]")).toBe(true);
+  expect(main.classList.contains("max-w-[125rem]")).toBe(true);
   expect(main.classList.contains("@container")).toBe(true);
   expect(main.classList.contains("box-border")).toBe(true);
   expect(layout.className).not.toContain("min-[60rem]");
-  expect(layout.children).toHaveLength(2);
+  expect(layout.children).toHaveLength(3);
   const createPanel = layout.children[0]!;
   expect(createPanel.contains(addForm())).toBe(true);
-  expect(createPanel.classList.contains("w-full")).toBe(true);
-  expect(createPanel.className).not.toContain("max-w-");
+  expect(createPanel.classList.contains("min-w-0")).toBe(true);
+  const formPanel = addForm().closest("section")!;
+  expect(formPanel.classList.contains("w-[40rem]")).toBe(true);
+  expect(formPanel.classList.contains("max-w-full")).toBe(true);
   expect(layout.children[1]).toBe(reminders);
+  const spacer = layout.children[2]!;
+  expect(spacer.children).toHaveLength(0);
+  expect(spacer.classList.contains("hidden")).toBe(true);
+  expect(spacer.classList.contains("@min-[83rem]:block")).toBe(true);
   expect(reminders.contains(document.querySelector('[role="tablist"]'))).toBe(true);
   expect(reminders.contains(addForm())).toBe(false);
   await type(titleInput(), "Draft across columns");

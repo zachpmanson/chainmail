@@ -9,6 +9,7 @@ import (
 	"mime/quotedprintable"
 	"net/mail"
 	"regexp"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -88,6 +89,8 @@ func isAlternative(raw []byte) bool {
 type draftAlternative struct {
 	headers             rawDraftHeaders
 	plain, html         draftSpan
+	formatValue         draftSpan
+	format              string
 	text                string
 	rootOpen, rootClose string
 }
@@ -188,7 +191,9 @@ func parseAlternative(raw []byte) (draftAlternative, error) {
 		}
 		failureCode = "alternative_part_type"
 		pt, pp, err := mime.ParseMediaType(ph.header.Get("Content-Type"))
-		if err != nil || len(pp) != 1 || !strings.EqualFold(pp["charset"], "utf-8") || !singleDraftMIMEParameter(ph.header.Get("Content-Type"), "charset") {
+		plainFormat, formatValue, formatOK := plainDraftFormat(ph, pp)
+		ordinary := len(pp) == 1 && strings.EqualFold(pp["charset"], "utf-8") && singleDraftMIMEParameter(ph.header.Get("Content-Type"), "charset")
+		if err != nil || !(ordinary || pt == "text/plain" && formatOK) {
 			if err == nil && pt == "text/plain" {
 				switch strings.ToLower(pp["format"]) {
 				case "flowed":
@@ -222,6 +227,10 @@ func parseAlternative(raw []byte) (draftAlternative, error) {
 		switch {
 		case pt == "text/plain" && out.plain.end == 0 && strings.EqualFold(ph.header.Get("Content-Transfer-Encoding"), "quoted-printable"):
 			out.plain = span
+			if formatOK {
+				out.format = plainFormat
+				out.formatValue = draftSpan{start + formatValue.start, start + formatValue.end}
+			}
 		case pt == "text/html" && out.html.end == 0 && strings.EqualFold(ph.header.Get("Content-Transfer-Encoding"), "7bit"):
 			out.html = span
 		default:
@@ -259,6 +268,9 @@ func parseAlternative(raw []byte) (draftAlternative, error) {
 	out.text = strings.ReplaceAll(string(decoded), "\r\n", "\n")
 	if !safeDraftText(out.text) {
 		return fail()
+	}
+	if out.format == "flowed" && !inertDraftFlowed(out.text) {
+		return out, draftRefusal("alternative_plain_flowed")
 	}
 	failureCode = "alternative_html_lines"
 	htmlRaw := raw[out.html.start:out.html.end]
@@ -484,6 +496,9 @@ func spliceAlternative(raw []byte, a draftAlternative, text string) ([]byte, err
 	if !safeDraftText(text) {
 		return nil, draftRefusal("body_text")
 	}
+	if text == a.text {
+		return raw, nil
+	}
 	var qp bytes.Buffer
 	w := quotedprintable.NewWriter(&qp)
 	_, err := io.WriteString(w, strings.ReplaceAll(text, "\n", "\r\n"))
@@ -502,30 +517,35 @@ func spliceAlternative(raw []byte, a draftAlternative, text string) ([]byte, err
 			return nil, draftRefusal("boundary_collision")
 		}
 	}
-	spans := []draftSpan{a.plain, a.html}
-	bodies := [][]byte{qp.Bytes(), htmlBody}
-	if spans[0].start > spans[1].start {
-		spans[0], spans[1] = spans[1], spans[0]
-		bodies[0], bodies[1] = bodies[1], bodies[0]
+	type edit struct {
+		span draftSpan
+		body []byte
 	}
+	edits := []edit{{a.plain, qp.Bytes()}, {a.html, htmlBody}}
+	if a.format == "flowed" {
+		edits = append(edits, edit{a.formatValue, []byte("fixed")})
+	}
+	sort.Slice(edits, func(i, j int) bool { return edits[i].span.start < edits[j].span.start })
 	var out []byte
 	pos := 0
-	for i, span := range spans {
-		out = append(out, raw[pos:span.start]...)
-		out = append(out, bodies[i]...)
-		pos = span.end
+	for _, e := range edits {
+		out = append(out, raw[pos:e.span.start]...)
+		out = append(out, e.body...)
+		pos = e.span.end
 	}
 	out = append(out, raw[pos:]...)
 	return out, nil
 }
 
 // The skeleton contains all non-editor bytes, including wrapper, headers,
-// boundary framing, preamble and epilogue. Only the two proven body slots vary.
+// boundary framing, preamble and epilogue. The controlled format-value slot is
+// masked only in conjunction with checkAlternativeReplacement's transition proof.
 func alternativeSkeleton(raw []byte, a draftAlternative) []byte {
 	spans := []draftSpan{a.plain, a.html}
-	if spans[0].start > spans[1].start {
-		spans[0], spans[1] = spans[1], spans[0]
+	if a.format != "" {
+		spans = append(spans, a.formatValue)
 	}
+	sort.Slice(spans, func(i, j int) bool { return spans[i].start < spans[j].start })
 	var out []byte
 	for _, block := range a.headers.blocks {
 		if !editorHeader(blockName(block)) {
@@ -550,6 +570,12 @@ func checkAlternativeReplacement(current, replacement []byte) error {
 	next, err := parseAlternative(replacement)
 	if err != nil {
 		return err
+	}
+	bodyChanged := old.text != next.text
+	normalizing := old.format == "flowed" && next.format == "fixed" && bodyChanged
+	sameFormat := old.format == next.format && bytes.Equal(current[old.formatValue.start:old.formatValue.end], replacement[next.formatValue.start:next.formatValue.end])
+	if !normalizing && (!sameFormat || old.format == "flowed" && bodyChanged) {
+		return draftRefusal("immutable_mime_changed")
 	}
 	if old.rootOpen != next.rootOpen || old.rootClose != next.rootClose || !bytes.Equal(alternativeSkeleton(current, old), alternativeSkeleton(replacement, next)) {
 		return draftRefusal("immutable_mime_changed")

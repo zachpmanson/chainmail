@@ -4,8 +4,11 @@ The existing top-level `text/plain` save path is unchanged. A separate raw-span
 path supports only a flat `multipart/alternative` with exactly one UTF-8
 `text/plain` quoted-printable part and one UTF-8 `text/html` 7bit part (either
 order). Each part has exactly those two MIME headers. No disposition,
-attachments, related/signed/nested/extra parts, other charsets/encodings or extra
-parameters are accepted. Duplicate fields/parameters, malformed/truncated
+attachments, related/signed/nested/extra parts or other charsets/encodings are
+accepted. HTML requires only `charset=UTF-8`; plain allows only `charset=UTF-8`
+with optional `format=flowed` or `format=fixed` (case-insensitive, quoted or
+unquoted). No `delsp` (even `no`) or other parameters are supported. Duplicate
+fields/parameters, RFC2231 extended/continued parameters, malformed/truncated
 framing, invalid quoted-printable, boundary-looking collisions and unknown root
 headers fail closed. Root transfer encoding is not supported on this path.
 
@@ -60,15 +63,41 @@ are numeric entities so the original 7bit CTE is preserved. Plain retains its
 quoted-printable CTE. Unsafe controls and invalid UTF-8 are refused. Changed
 HTML exceeding the 7bit line limit is refused rather than changing encoding.
 
+## Narrow flowed-to-fixed normalization
+
+This is not a flowed codec. Legacy plain `format=flowed` is supported only when
+**every decoded line** has no leading ASCII space, no leading `>`, and no trailing
+ASCII space (including `-- ` signature separators and soft wraps). Bare CR and
+unsafe text remain refused. With no `delsp` or additional parameters, this proves
+flowed semantics equal the stored plain text exactly. The complete existing HTML
+equivalence proof above is still required. A failing flowed proof refuses both
+unchanged and edited saves, with no writes.
+
+On an actual body-text change from that proven snapshot, the owner-approved
+transport exception changes only the raw plain Content-Type **format value**
+from flowed to `fixed`, while synchronizing both bodies. Parameter key spelling,
+quotes, folding, charset, CTE and every other part-header byte are retained.
+This permits new literal indentation, quotes, trailing/repeated spaces, tabs,
+Unicode and NBSP under fixed semantics, subject to the existing text/encoding
+bounds. Plain without a format is unchanged; existing fixed plain is subject to
+the same HTML/text proof but not the flowed line restriction. No-op/header-only
+edits retain the original flowed header and bodies byte-for-byte.
+
 ## Byte invariants and limits
 
 Unchanged supported alternatives retain their original body bytes and, when
 editor fields are unchanged, the entire raw message. Changed To/Cc/Subject
-fields use only the existing editor constructor. All other root/part headers,
+fields use only the existing editor constructor. Except for the controlled
+flowed-to-fixed format-value token on a body edit, all other root/part headers,
 root wrapper, boundary lines, separators, preamble, epilogue and metadata stay
 byte-for-byte. The final guard reparses the **actual outgoing bytes**, proves
 both representations equivalent, compares raw immutable skeletons and wrapper,
-and runs after metadata/parent construction before any PUT. Unsupported cases
+and runs after metadata/parent construction before any PUT. The skeleton masks
+only the two body slots and that positively located format-value span. An explicit
+transition proof requires identical raw token bytes when format is unchanged,
+and permits only proven old flowed to new fixed on a body-text change; it rejects
+reverse transitions, adding/removing format, normalization without a body edit,
+and flowed body edits without normalization. Unsupported cases
 refuse on unchanged as well as edited saves.
 
 Bounds: 2 MiB raw MIME, 256 KiB decoded text/HTML, 20,000 legacy HTML tokens,
@@ -101,5 +130,6 @@ It is not proof for every edit (e.g. a later boundary collision/size limit),
 future revision/settings state, provider send behavior or write permission.
 No live mailbox writes are used to develop or test this path; permanent tests
 use invented Gmail-style messages and synthetic transports. An owner-authorized
-read-only structural inspection informed the exact envelope/direction extension;
-no private message content is retained in repository fixtures.
+read-only structural inspection informed the exact envelope/direction extension
+and the narrow owner-approved flowed-to-fixed exception; no private message
+content is retained in repository fixtures.

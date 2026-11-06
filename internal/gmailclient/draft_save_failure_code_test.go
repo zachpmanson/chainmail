@@ -10,7 +10,7 @@ import (
 
 func TestDraftSaveFailureCodePlainFormat(t *testing.T) {
 	for _, tc := range []struct{ parameter, code string }{
-		{"flowed", "alternative_plain_flowed"}, {"fixed", "alternative_plain_fixed"}, {"PRIVATE", "alternative_plain_parameters"},
+		{"PRIVATE", "alternative_plain_parameters"},
 		{"flowed; delsp=yes", "alternative_plain_flowed_delsp_yes"},
 		{"flowed; delsp=no", "alternative_plain_flowed_delsp_no"},
 		{"flowed; delsp=PRIVATE", "alternative_plain_flowed_delsp_other"},
