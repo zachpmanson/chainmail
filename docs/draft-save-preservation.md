@@ -91,8 +91,15 @@ It never saves, sends, deletes or fetches a reply parent. Mailbox initialization
 may load its normal label cache; sender verification performs profile/settings
 GETs. Ordinary reads do not gain these checks.
 
+Preparation refusals also emit a closed application check code to the service
+journal (for example `alternative_plain_lines` or `alternative_framing`). These
+entries contain no draft/account identifiers, error text, headers or content;
+unrecognized errors map to fixed fallback codes. They do not change acceptance.
+
 A positive result proves **only this snapshot and the representative edit**.
 It is not proof for every edit (e.g. a later boundary collision/size limit),
 future revision/settings state, provider send behavior or write permission.
-No live mailbox evidence was used to develop or test this path; tests use
-invented Gmail-style messages and synthetic transports only.
+No live mailbox writes are used to develop or test this path; permanent tests
+use invented Gmail-style messages and synthetic transports. An owner-authorized
+read-only structural inspection informed the exact envelope/direction extension;
+no private message content is retained in repository fixtures.

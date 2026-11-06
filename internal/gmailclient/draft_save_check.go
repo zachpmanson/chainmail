@@ -4,11 +4,32 @@ import (
 	"bytes"
 	"encoding/base64"
 	"errors"
+	"log"
 	"net/mail"
 	"strings"
 
 	"google.golang.org/api/googleapi"
 )
+
+// Classify only fixed application reasons; never log error text or identifiers.
+func draftSaveFailureCode(err error) string {
+	if !errors.Is(err, ErrUnsupportedDraft) {
+		return "unavailable"
+	}
+	for _, code := range []string{
+		"alternative_size", "alternative_root_type", "alternative_boundary", "alternative_version",
+		"alternative_framing", "alternative_part_headers", "alternative_part_type", "alternative_part_pair",
+		"alternative_plain_lines", "alternative_plain_encoding", "alternative_plain_text",
+		"alternative_html_lines", "alternative_html_encoding", "alternative_text_mismatch", "html_grammar",
+		"malformed_message", "duplicate_header", "header_missing_or_changed", "body_text",
+		"replacement_body", "boundary_collision", "immutable_mime_changed",
+	} {
+		if strings.Contains(err.Error(), "[reason="+code+"]") || strings.Contains(err.Error(), "[reason="+code+";") {
+			return code
+		}
+	}
+	return "unsupported"
+}
 
 type DraftSaveCheck struct {
 	UnchangedCompatible bool   `json:"unchangedCompatible"`
@@ -55,13 +76,19 @@ func (c Client) CheckDraftSave(id string) (DraftSaveCheck, error) {
 	prepare := func(d Draft) bool {
 		next, err := draftReplacementMIME(d, raw)
 		if err != nil {
+			log.Printf("draft save-check refused: code=%s", draftSaveFailureCode(err))
 			return false
 		}
 		final, err := c.prepareDraftReplacement(raw, next)
 		if err != nil {
+			log.Printf("draft save-check refused: code=%s", draftSaveFailureCode(err))
 			return false
 		}
-		return checkDraftReplacement(raw, final) == nil
+		if err := checkDraftReplacement(raw, final); err != nil {
+			log.Printf("draft save-check refused: code=%s", draftSaveFailureCode(err))
+			return false
+		}
+		return true
 	}
 	out.UnchangedCompatible = prepare(d)
 	if !out.UnchangedCompatible {

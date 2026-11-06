@@ -105,7 +105,8 @@ func singleDraftMIMEParameter(value, name string) bool {
 
 func parseAlternative(raw []byte) (draftAlternative, error) {
 	var out draftAlternative
-	fail := func() (draftAlternative, error) { return out, draftRefusal("alternative_shape") }
+	failureCode := "alternative_size"
+	fail := func() (draftAlternative, error) { return out, draftRefusal(failureCode) }
 	if len(raw) > maxDraftMIMEBytes {
 		return fail()
 	}
@@ -114,10 +115,12 @@ func parseAlternative(raw []byte) (draftAlternative, error) {
 		return out, err
 	}
 	out.headers = h
+	failureCode = "alternative_root_type"
 	mt, p, err := mime.ParseMediaType(h.header.Get("Content-Type"))
 	if err != nil || mt != "multipart/alternative" || len(p) != 1 || p["boundary"] == "" || !singleDraftMIMEParameter(h.header.Get("Content-Type"), "boundary") {
 		return fail()
 	}
+	failureCode = "alternative_boundary"
 	boundary := p["boundary"]
 	// Use the standard constructor's boundary grammar, without serializing any MIME.
 	if len(boundary) > 70 || strings.ContainsAny(boundary, "\r\n") {
@@ -135,10 +138,12 @@ func parseAlternative(raw []byte) (draftAlternative, error) {
 			return out, draftRefusal("header_missing_or_changed", name)
 		}
 	}
+	failureCode = "alternative_version"
 	if v := h.header.Get("Mime-Version"); v != "" && v != "1.0" {
 		return fail()
 	}
 	// Exact delimiter lines; any boundary-like line with suffixes is ambiguous.
+	failureCode = "alternative_framing"
 	body := raw[h.body:]
 	if bytes.Contains(bytes.ReplaceAll(body, []byte("\r\n"), nil), []byte("\n")) || bytes.Contains(bytes.ReplaceAll(body, []byte("\r\n"), nil), []byte("\r")) {
 		return fail()
@@ -168,6 +173,7 @@ func parseAlternative(raw []byte) (draftAlternative, error) {
 		return fail()
 	}
 	for i := 0; i < 2; i++ {
+		failureCode = "alternative_framing"
 		start, end := marks[i].end, marks[i+1].start-2
 		if end <= start {
 			return fail()
@@ -176,9 +182,11 @@ func parseAlternative(raw []byte) (draftAlternative, error) {
 		if err != nil {
 			return out, err
 		}
+		failureCode = "alternative_part_headers"
 		if len(ph.header) != 2 {
 			return fail()
 		}
+		failureCode = "alternative_part_type"
 		pt, pp, err := mime.ParseMediaType(ph.header.Get("Content-Type"))
 		if err != nil || len(pp) != 1 || !strings.EqualFold(pp["charset"], "utf-8") || !singleDraftMIMEParameter(ph.header.Get("Content-Type"), "charset") {
 			return fail()
@@ -193,15 +201,18 @@ func parseAlternative(raw []byte) (draftAlternative, error) {
 			return fail()
 		}
 	}
+	failureCode = "alternative_part_pair"
 	if out.plain.end == 0 || out.html.end == 0 {
 		return fail()
 	}
+	failureCode = "alternative_plain_lines"
 	encoded := raw[out.plain.start:out.plain.end]
 	for _, line := range bytes.Split(encoded, []byte("\r\n")) {
 		if len(line) > 76 || bytes.HasSuffix(line, []byte(" ")) || bytes.HasSuffix(line, []byte("\t")) {
 			return fail()
 		}
 	}
+	failureCode = "alternative_plain_encoding"
 	for i := 0; i < len(encoded); i++ {
 		if encoded[i] > 127 {
 			return fail()
@@ -217,16 +228,19 @@ func parseAlternative(raw []byte) (draftAlternative, error) {
 	if err != nil {
 		return fail()
 	}
+	failureCode = "alternative_plain_text"
 	out.text = strings.ReplaceAll(string(decoded), "\r\n", "\n")
 	if !safeDraftText(out.text) {
 		return fail()
 	}
+	failureCode = "alternative_html_lines"
 	htmlRaw := raw[out.html.start:out.html.end]
 	for _, line := range bytes.Split(htmlRaw, []byte("\r\n")) {
 		if len(line) > 998 {
 			return fail()
 		}
 	}
+	failureCode = "alternative_html_encoding"
 	for _, b := range htmlRaw {
 		if b > 127 {
 			return fail()
