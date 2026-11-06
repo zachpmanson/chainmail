@@ -25,6 +25,7 @@ import NavUndo from "./components/navigation/NavUndo";
 import NavRefresh from "./components/navigation/NavRefresh";
 import NavHasslesRefresh from "./components/navigation/NavHasslesRefresh";
 import AutoRefresh from "./components/navigation/AutoRefresh";
+import AccountSignInPrompt from "./components/navigation/AccountSignInPrompt";
 import NavSearch from "./components/navigation/NavSearch";
 import ComposeProvider from "./components/compose/ComposeProvider";
 import IconButton from "./components/ui/IconButton";
@@ -183,6 +184,7 @@ function RootLayout() {
             </nav>
             <div className="buildslot not-empty:grow not-empty:basis-full" />
           </header>
+          <AccountSignInPrompt />
         </>
       ) : (
         <NavUndo />

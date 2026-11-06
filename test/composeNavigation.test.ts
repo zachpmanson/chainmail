@@ -167,6 +167,19 @@ async function travel(
 }
 
 describe("URL-owned Compose with real router history", () => {
+  it.each(["/", "/settings"])(
+    "shows the no-account sign-in prompt in the app shell at %s",
+    async (url) => {
+      const { host } = await mount(url);
+      const prompt = host.querySelector('section[aria-label="Connect a Gmail account"]')!;
+      expect(prompt).not.toBeNull();
+      expect(prompt.querySelector('a[href="/auth/login"]')?.textContent).toBe(
+        "Sign in with Google",
+      );
+      expect(host.querySelector("header")!.nextElementSibling).toBe(prompt);
+    },
+  );
+
   it("pushes Compose once, preserves home scope, and supports Back/Forward and Close origin restoration", async () => {
     const { subject, history, host } = await mount(
       "/?q=hello&mode=lexical&person=Pat&since=2026-01-01&accountId=acct&label=Inbox&open=123",
@@ -427,6 +440,7 @@ describe("URL-owned Compose with real router history", () => {
   it("still dispatches a real popup and Compose action clears the popup flag", async () => {
     const { subject, host } = await mount("/?open=123&popup=1");
     expect(host.querySelector('[data-popup="123"]')).not.toBeNull();
+    expect(host.querySelector('section[aria-label="Connect a Gmail account"]')).toBeNull();
     await act(async () => {
       void subject.navigate({ to: "/", search: { open: "123", popup: "0" } });
     });

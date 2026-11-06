@@ -24,6 +24,7 @@ vi.mock("../src/components/navigation/DeployStamp", () => ({ default: () => null
 vi.mock("../src/components/navigation/NavReading", () => ({ default: () => null }));
 vi.mock("../src/components/navigation/NavRefresh", () => ({ default: () => null }));
 vi.mock("../src/components/navigation/AutoRefresh", () => ({ default: () => null }));
+vi.mock("../src/components/navigation/AccountSignInPrompt", () => ({ default: () => null }));
 vi.mock("../src/components/navigation/NavSearch", () => ({ default: () => null }));
 vi.mock("../src/components/ui/ToastHost", () => ({ default: () => null }));
 

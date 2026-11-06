@@ -320,6 +320,17 @@ npm run gen:types  # regenerate src/lib/timeline/spec.d.ts from the schema
 npm run gen:api    # regenerate src/lib/api/api.d.ts from openapi.json
 ```
 
+For browser development, run `nix develop --command make api` in one terminal
+and `nix develop --command make dev` in another, after initializing the corpus as
+above. `make dev` starts only Vite; its `/v1` and `/auth` requests proxy to the Go
+backend at `http://127.0.0.1:8765` (override with `CHAINMAIL_API` when starting Vite).
+A Vite `ECONNREFUSED 127.0.0.1:8765` with a plain-text HTTP 500 means the backend
+is unreachable, not that Google credentials or an `.env` file are missing.
+
+The app shell offers **Sign in with Google** when account status confirms no
+connected accounts, and hides the prompt during loading/errors or in thread popups.
+Settings → Gmail accounts retains the account connection/disconnection controls.
+
 The Go side has no direct dependencies; the JS runtime is three packages (`react`,
 `@tanstack/react-query`, `openapi-fetch`) — keep it that way unless a dependency earns
 itself. Generated files are never hand-edited. `fixtures/synthetic.json` is a
