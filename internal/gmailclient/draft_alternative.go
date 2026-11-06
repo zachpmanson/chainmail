@@ -189,6 +189,33 @@ func parseAlternative(raw []byte) (draftAlternative, error) {
 		failureCode = "alternative_part_type"
 		pt, pp, err := mime.ParseMediaType(ph.header.Get("Content-Type"))
 		if err != nil || len(pp) != 1 || !strings.EqualFold(pp["charset"], "utf-8") || !singleDraftMIMEParameter(ph.header.Get("Content-Type"), "charset") {
+			if err == nil && pt == "text/plain" {
+				switch strings.ToLower(pp["format"]) {
+				case "flowed":
+					failureCode = "alternative_plain_flowed"
+					if delsp, present := pp["delsp"]; present {
+						switch strings.ToLower(delsp) {
+						case "yes":
+							failureCode = "alternative_plain_flowed_delsp_yes"
+						case "no":
+							failureCode = "alternative_plain_flowed_delsp_no"
+						default:
+							failureCode = "alternative_plain_flowed_delsp_other"
+						}
+					}
+					for name := range pp {
+						if name != "charset" && name != "format" && name != "delsp" {
+							failureCode = "alternative_plain_flowed_extra"
+						}
+					}
+				case "fixed":
+					failureCode = "alternative_plain_fixed"
+				default:
+					failureCode = "alternative_plain_parameters"
+				}
+			} else if err == nil && pt == "text/html" {
+				failureCode = "alternative_html_parameters"
+			}
 			return fail()
 		}
 		span := draftSpan{start + ph.body, end}

@@ -19,6 +19,9 @@ func draftSaveFailureCode(err error) string {
 	for _, code := range []string{
 		"alternative_size", "alternative_root_type", "alternative_boundary", "alternative_version",
 		"alternative_framing", "alternative_part_headers", "alternative_part_type", "alternative_part_pair",
+		"alternative_plain_flowed", "alternative_plain_flowed_delsp_yes", "alternative_plain_flowed_delsp_no",
+		"alternative_plain_flowed_delsp_other", "alternative_plain_flowed_extra",
+		"alternative_plain_fixed", "alternative_plain_parameters", "alternative_html_parameters",
 		"alternative_plain_lines", "alternative_plain_encoding", "alternative_plain_text",
 		"alternative_html_lines", "alternative_html_encoding", "alternative_text_mismatch", "html_grammar",
 		"malformed_message", "duplicate_header", "header_missing_or_changed", "body_text",

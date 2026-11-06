@@ -8,6 +8,22 @@ import (
 	"testing"
 )
 
+func TestDraftSaveFailureCodePlainFormat(t *testing.T) {
+	for _, tc := range []struct{ parameter, code string }{
+		{"flowed", "alternative_plain_flowed"}, {"fixed", "alternative_plain_fixed"}, {"PRIVATE", "alternative_plain_parameters"},
+		{"flowed; delsp=yes", "alternative_plain_flowed_delsp_yes"},
+		{"flowed; delsp=no", "alternative_plain_flowed_delsp_no"},
+		{"flowed; delsp=PRIVATE", "alternative_plain_flowed_delsp_other"},
+		{"flowed; PRIVATE=value", "alternative_plain_flowed_extra"},
+	} {
+		raw := bytes.Replace(alternativeFixture(), []byte("text/plain; charset=UTF-8"), []byte("text/plain; charset=UTF-8; format="+tc.parameter), 1)
+		_, err := parseAlternative(raw)
+		if got := draftSaveFailureCode(err); got != tc.code {
+			t.Fatalf("unsafe/wrong format category: %s", got)
+		}
+	}
+}
+
 func TestDraftSaveFailureCodeEmptySecondPart(t *testing.T) {
 	raw := alternativeFixture()
 	at := bytes.Index(raw, []byte("--abc123\r\nContent-Type: text/html"))
