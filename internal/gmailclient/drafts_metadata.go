@@ -146,24 +146,43 @@ func (c Client) verifyDraftSender(value string) error {
 	if settings == nil || len(settings.SendAs) == 0 {
 		return draftRefusal("sender_identities_missing", "From")
 	}
-	// No alternate sender may exist in the observed settings. The draft's
-	// presentation is preserved verbatim, not compared with current settings.
-	// This verifies an address snapshot, not a later send's provider behavior
-	// or an atomic guarantee against external settings changes.
-	if len(settings.SendAs) != 1 {
-		return draftRefusal("sender_identities_multiple", "From")
+	// Unrelated aliases are allowed, but only one unambiguous primary/default
+	// record may supply the sender address. This verifies a snapshot, not a
+	// later send's provider behavior or an atomic settings guarantee.
+	primary, defaultSender := -1, -1
+	for i, sender := range settings.SendAs {
+		if sender == nil {
+			return draftRefusal("sender_settings_record_missing", "From")
+		}
+		if !bareDraftAddress(sender.SendAsEmail) {
+			return draftRefusal("sender_settings_address_invalid", "From")
+		}
+		for _, previous := range settings.SendAs[:i] {
+			if strings.EqualFold(previous.SendAsEmail, sender.SendAsEmail) {
+				return draftRefusal("sender_identities_multiple", "From")
+			}
+		}
+		if sender.IsPrimary {
+			if primary != -1 {
+				return draftRefusal("sender_identities_multiple", "From")
+			}
+			primary = i
+		}
+		if sender.IsDefault {
+			if defaultSender != -1 {
+				return draftRefusal("sender_identities_multiple", "From")
+			}
+			defaultSender = i
+		}
 	}
-	if settings.SendAs[0] == nil {
-		return draftRefusal("sender_settings_record_missing", "From")
-	}
-	sender := settings.SendAs[0]
-	switch {
-	case !sender.IsPrimary:
+	if primary == -1 {
 		return draftRefusal("sender_not_primary", "From")
-	case !sender.IsDefault:
+	}
+	if defaultSender != primary {
 		return draftRefusal("sender_not_default", "From")
-	case !bareDraftAddress(sender.SendAsEmail):
-		return draftRefusal("sender_settings_address_invalid", "From")
+	}
+	sender := settings.SendAs[primary]
+	switch {
 	case !strings.EqualFold(profile.EmailAddress, sender.SendAsEmail):
 		return draftRefusal("sender_profile_mismatch", "From")
 	case !strings.EqualFold(from.Address, profile.EmailAddress):

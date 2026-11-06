@@ -187,10 +187,10 @@ func TestInterleavedDraftMetadataPreservesRawOrder(t *testing.T) {
 func TestDraftSenderSnapshotGate(t *testing.T) {
 	const plain = "From: Synthetic Owner <owner@example.test>\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\nOld"
 	for _, tc := range []struct {
-		name     string
-		change   func(*metadataFixture)
-		from     string
-		accepted bool
+		name, reason string
+		change       func(*metadataFixture)
+		from         string
+		accepted     bool
 	}{
 		{name: "primary default name match", accepted: true},
 		{name: "encoded folded match", from: "From: =?UTF-8?Q?Synthetic_Owner?=\r\n\t<owner@example.test>", accepted: true},
@@ -209,10 +209,59 @@ func TestDraftSenderSnapshotGate(t *testing.T) {
 		{name: "empty configured name with named draft", change: func(f *metadataFixture) { f.sendAs[0].DisplayName = "" }, accepted: true},
 		{name: "renamed sender settings", change: func(f *metadataFixture) { f.sendAs[0].DisplayName = "New Name" }, accepted: true},
 		{name: "encoded Unicode historical presentation", from: "From: =?UTF-8?Q?Historical_=C3=96wner?=\r\n\t<owner@example.test>", accepted: true},
-		{name: "extra nondefault alias", change: func(f *metadataFixture) {
+		{name: "extra nondefault alias", accepted: true, change: func(f *metadataFixture) {
+			f.sendAs = append(f.sendAs, &gmail.SendAs{SendAsEmail: "alias@example.test", VerificationStatus: "accepted"})
+		}},
+		{name: "pending and unverified aliases before primary", accepted: true, from: "From: =?UTF-8?Q?Historical_=C3=96wner?=\r\n\t<OWNER@EXAMPLE.TEST>", change: func(f *metadataFixture) {
+			f.sendAs = append([]*gmail.SendAs{
+				{SendAsEmail: "pending@example.test", VerificationStatus: "pending"},
+				{SendAsEmail: "alias@example.test"},
+			}, f.sendAs...)
+		}},
+		{name: "case insensitive settings match with alias", accepted: true, change: func(f *metadataFixture) {
+			f.sendAs[0].SendAsEmail = "OWNER@EXAMPLE.TEST"
 			f.sendAs = append(f.sendAs, &gmail.SendAs{SendAsEmail: "alias@example.test"})
 		}},
-		{name: "two primary default records", change: func(f *metadataFixture) { f.sendAs = append(f.sendAs, f.sendAs[0]) }},
+		{name: "duplicate address case insensitive", reason: "sender_identities_multiple", change: func(f *metadataFixture) {
+			f.sendAs = append(f.sendAs, &gmail.SendAs{SendAsEmail: "OWNER@EXAMPLE.TEST"})
+		}},
+		{name: "duplicate aliases case insensitive", reason: "sender_identities_multiple", change: func(f *metadataFixture) {
+			f.sendAs = append(f.sendAs, &gmail.SendAs{SendAsEmail: "alias@example.test"}, &gmail.SendAs{SendAsEmail: "ALIAS@EXAMPLE.TEST"})
+		}},
+		{name: "nil extra record", reason: "sender_settings_record_missing", change: func(f *metadataFixture) { f.sendAs = append(f.sendAs, nil) }},
+		{name: "malformed extra address", reason: "sender_settings_address_invalid", change: func(f *metadataFixture) {
+			f.sendAs = append(f.sendAs, &gmail.SendAs{SendAsEmail: "PRIVATE invalid"})
+		}},
+		{name: "named extra address", reason: "sender_settings_address_invalid", change: func(f *metadataFixture) {
+			f.sendAs = append(f.sendAs, &gmail.SendAs{SendAsEmail: "Alias <alias@example.test>"})
+		}},
+		{name: "empty extra address", reason: "sender_settings_address_invalid", change: func(f *metadataFixture) { f.sendAs = append(f.sendAs, &gmail.SendAs{}) }},
+		{name: "two primary records", reason: "sender_identities_multiple", change: func(f *metadataFixture) {
+			f.sendAs = append(f.sendAs, &gmail.SendAs{SendAsEmail: "alias@example.test", IsPrimary: true})
+		}},
+		{name: "two default records", reason: "sender_identities_multiple", change: func(f *metadataFixture) {
+			f.sendAs = append(f.sendAs, &gmail.SendAs{SendAsEmail: "alias@example.test", IsDefault: true})
+		}},
+		{name: "missing primary with alias", reason: "sender_not_primary", change: func(f *metadataFixture) {
+			f.sendAs[0].IsPrimary = false
+			f.sendAs = append(f.sendAs, &gmail.SendAs{SendAsEmail: "alias@example.test"})
+		}},
+		{name: "missing default with alias", reason: "sender_not_default", change: func(f *metadataFixture) {
+			f.sendAs[0].IsDefault = false
+			f.sendAs = append(f.sendAs, &gmail.SendAs{SendAsEmail: "alias@example.test"})
+		}},
+		{name: "primary default split", reason: "sender_not_default", change: func(f *metadataFixture) {
+			f.sendAs[0].IsDefault = false
+			f.sendAs = append(f.sendAs, &gmail.SendAs{SendAsEmail: "alias@example.test", IsDefault: true})
+		}},
+		{name: "configured alias From", from: "From: Alias <alias@example.test>", reason: "sender_address_mismatch", change: func(f *metadataFixture) {
+			f.sendAs = append(f.sendAs, &gmail.SendAs{SendAsEmail: "alias@example.test"})
+		}},
+		{name: "profile mismatch with aliases", reason: "sender_profile_mismatch", change: func(f *metadataFixture) {
+			f.profile.EmailAddress = "alias@example.test"
+			f.sendAs = append(f.sendAs, &gmail.SendAs{SendAsEmail: "alias@example.test"})
+		}},
+		{name: "two primary default records", reason: "sender_identities_multiple", change: func(f *metadataFixture) { f.sendAs = append(f.sendAs, f.sendAs[0]) }},
 		{name: "absent settings", change: func(f *metadataFixture) { f.sendAs = nil }},
 		{name: "nil settings record", change: func(f *metadataFixture) { f.sendAs = []*gmail.SendAs{nil} }},
 		{name: "invalid settings address", change: func(f *metadataFixture) { f.sendAs[0].SendAsEmail = "Synthetic Owner <owner@example.test>" }},
@@ -234,7 +283,34 @@ func TestDraftSenderSnapshotGate(t *testing.T) {
 			if tc.change != nil {
 				tc.change(f)
 			}
-			_, err := c.SaveDraft(Draft{ID: "d1", MessageID: "api-revision-1", To: "new@example.test", Body: "Edited"}, "")
+			assertRefusal := func(err error) {
+				t.Helper()
+				assertMetadataRefusal(t, err, f)
+				if tc.reason != "" && !strings.Contains(err.Error(), "reason="+tc.reason+";") {
+					t.Fatalf("unexpected category: %v", err)
+				}
+			}
+			err := c.CheckDraftSender("d1")
+			if tc.accepted {
+				if err != nil {
+					t.Fatal(err)
+				}
+				if f.reads["/gmail/v1/users/me/profile"] != 1 || f.reads["/gmail/v1/users/me/settings/sendAs"] != 1 {
+					t.Fatalf("missing identity reads: %v", f.reads)
+				}
+			} else {
+				assertRefusal(err)
+			}
+			if f.writes != 0 || f.reads["/gmail/v1/users/me/drafts/d1"] != 1 {
+				t.Fatalf("probe: writes=%d, reads=%v", f.writes, f.reads)
+			}
+			for path, count := range f.reads {
+				if count != 1 || (path != "/gmail/v1/users/me/drafts/d1" && path != "/gmail/v1/users/me/profile" && path != "/gmail/v1/users/me/settings/sendAs") {
+					t.Fatalf("unexpected probe read: %s count=%d", path, count)
+				}
+			}
+			f.reads = map[string]int{}
+			_, err = c.SaveDraft(Draft{ID: "d1", MessageID: "api-revision-1", To: "new@example.test", Body: "Edited"}, "")
 			if tc.accepted {
 				if err != nil || f.writes != 1 {
 					t.Fatalf("save: %v, writes=%d", err, f.writes)
@@ -252,7 +328,7 @@ func TestDraftSenderSnapshotGate(t *testing.T) {
 					t.Fatal("saved From metadata differs from the original raw block")
 				}
 			} else {
-				assertMetadataRefusal(t, err, f)
+				assertRefusal(err)
 			}
 		})
 	}

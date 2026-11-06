@@ -246,15 +246,17 @@ For a sender refusal, `GET /v1/drafts/{id}/sender-check?accountId=…` runs the 
 metadata/sender checks without saving or sending. Refusals identify fixed categories
 such as `sender_not_default` or `sender_address_mismatch`, never header values.
 Identity checks distinguish profile/settings read failures, invalid profile addresses,
-missing identity records and multiple send-as identities. Read-failure suffixes classify
-only HTTP status (`unauthorized`, `forbidden`, `rate_limited`, `provider_error` or
+missing identity records and duplicate or ambiguous send-as identities. Read-failure
+suffixes classify only HTTP status (`unauthorized`, `forbidden`, `rate_limited`, `provider_error` or
 `failed`); `forbidden` alone does not prove missing OAuth scopes. Provider messages,
 response bodies and identity values are never included.
 Existing `From` presentation is preserved verbatim; it need not match the current
 settings display name. Sender addresses still must match the authenticated account's
-sole primary/default identity. This is only a snapshot, not a full MIME compatibility
-check or assurance that a later save/send will succeed. Ordinary draft reads do not
-fetch sender settings.
+unique primary/default identity. Other aliases may exist, including pending/unverified
+aliases, but cannot supply the draft's `From`. Every settings record must have a distinct,
+valid bare address, with exactly one primary and one default on the same record. This is
+only a snapshot, not a full MIME compatibility check or assurance that a later save/send
+will succeed. Ordinary draft reads do not fetch sender settings.
 
 An **`html`** field turns the second part off for one reply (absent means it goes, so an
 older client sends the message it always sent). A reader who knows their correspondent or a
