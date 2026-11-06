@@ -115,6 +115,14 @@ func (s *server) draft(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := parts[0]
+	if len(parts) == 2 && parts[1] == "save-check" {
+		if r.Method != http.MethodGet {
+			fail(w, http.StatusMethodNotAllowed, errors.New("method must be GET"))
+			return
+		}
+		s.checkDraftSave(w, r, id)
+		return
+	}
 	if len(parts) == 2 && parts[1] == "mime-check" {
 		if r.Method != http.MethodGet {
 			fail(w, http.StatusMethodNotAllowed, errors.New("method must be GET"))
@@ -363,6 +371,42 @@ func (s *server) checkDraftMIME(w http.ResponseWriter, r *http.Request, id strin
 		return
 	}
 	send(w, http.StatusOK, tree)
+}
+
+// No identifiers, provider text or preparation errors leave this diagnostic.
+func (s *server) checkDraftSave(w http.ResponseWriter, r *http.Request, id string) {
+	requested := r.URL.Query().Get("accountId")
+	if strings.TrimSpace(requested) == "" {
+		fail(w, http.StatusBadRequest, errors.New("accountId is required"))
+		return
+	}
+	accountID, err := s.connectedAccount(requested)
+	if err != nil {
+		fail(w, http.StatusConflict, errors.New("selected Gmail account is unavailable"))
+		return
+	}
+	mb, err := s.mailboxForAccount(accountID)
+	if err != nil {
+		fail(w, http.StatusBadGateway, errors.New("mailbox unavailable for draft save checking"))
+		return
+	}
+	checker, ok := mb.(interface {
+		CheckDraftSave(string) (gmailclient.DraftSaveCheck, error)
+	})
+	if !ok {
+		fail(w, http.StatusBadGateway, errors.New("mailbox does not support draft save checks"))
+		return
+	}
+	result, err := checker.CheckDraftSave(id)
+	if err != nil {
+		if gmailclient.IsNotFound(err) {
+			fail(w, http.StatusNotFound, errors.New("Gmail draft no longer exists"))
+		} else {
+			fail(w, http.StatusBadGateway, errors.New("Gmail could not check draft save compatibility"))
+		}
+		return
+	}
+	send(w, http.StatusOK, result)
 }
 
 func gmailDraftErrorStatus(err error) int {

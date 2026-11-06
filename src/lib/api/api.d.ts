@@ -832,9 +832,29 @@ export interface paths {
         };
         /**
          * Inspect saved draft MIME structure without writing
-         * @description Explicit account selection required. The inspection method requests only Drafts.Get format raw with message/raw fields; existing mailbox initialization may also load its label cache. Returns allowlisted categories and HTML structural booleans only, never header/parameter/body/attribute values. No writes, profile/settings or parent-message reads. Bounds: raw MIME 2 MiB, 12 MIME levels including root, 100 parts including root, decoded HTML 256 KiB per leaf and 20,000 HTML tokens per leaf. The Google SDK materializes its response before these parser/decoder limits are applied; they are not a transport-level response-size cap. Unknown HTML charset/transfer encodings fail closed. HTML flags are structural heuristics, not evidence of semantic equivalence or preservation safety. Ordinary draft reads and save acceptance are unchanged. Requires no mail-write grant.
+         * @description Explicit account selection required. The inspection method requests only Drafts.Get format raw with message/raw fields; existing mailbox initialization may also load its label cache. Returns allowlisted categories and HTML structural booleans only, never header/parameter/body/attribute values. No writes, profile/settings or parent-message reads. Bounds: raw MIME 2 MiB, 12 MIME levels including root, 100 parts including root, decoded HTML 256 KiB per leaf and 20,000 HTML tokens per leaf. The Google SDK materializes its response before these parser/decoder limits are applied; they are not a transport-level response-size cap. Unknown HTML charset/transfer encodings fail closed. HTML flags are structural heuristics, not evidence of semantic equivalence or preservation safety. Ordinary draft reads do not run this probe; this diagnostic does not determine save acceptance. Requires no mail-write grant.
          */
         get: operations["checkDraftMIME"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/drafts/{id}/save-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Check compose draft save preparation without writing
+         * @description Explicit account GET-only snapshot check for compose drafts. Constructs unchanged and representative Unicode/whitespace body-edit replacements through the same preparation and final outgoing-byte guard as SaveDraft, including sender/immutable metadata checks. Never saves, sends, deletes or reads a reply parent. Reply contexts fail closed with context=reply_context. Returns only fixed booleans/categories, no identifiers, content or preparation error details. A positive result covers only this snapshot and the internally chosen representative edit, not every possible edit, a later revision/settings state, send behavior or write permission. Raw MIME limit 2 MiB, HTML/text 256 KiB, HTML 20,000 tokens; SDK response is materialized before limits. Existing mailbox initialization can load its label cache. No mail-write grant required.
+         */
+        get: operations["checkDraftSave"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2323,6 +2343,12 @@ export interface components {
             hasQuotes: boolean;
             hasSignature: boolean;
             hasUnknownElements: boolean;
+        };
+        DraftSaveCheck: {
+            unchangedCompatible: boolean;
+            bodyEditCompatible: boolean;
+            /** @enum {string} */
+            context: "compose" | "reply_context" | "unsupported";
         };
     };
     responses: never;
@@ -4265,6 +4291,66 @@ export interface operations {
                 };
             };
             /** @description Account unavailable or MIME inspection refused: malformed_message, limit_exceeded or unsupported_html_encoding. No partial tree. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Mailbox/provider unavailable or unsupported; fixed safe message. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    checkDraftSave: {
+        parameters: {
+            query: {
+                accountId: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Fixed compatibility booleans and context category only. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftSaveCheck"];
+                };
+            };
+            /** @description Explicit nonempty accountId is required. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Draft no longer exists; fixed safe message. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Selected account unavailable. */
             409: {
                 headers: {
                     [name: string]: unknown;
