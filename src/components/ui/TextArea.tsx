@@ -3,6 +3,10 @@ import { cn } from "../../lib/ui/cn";
 import { fieldBase } from "./styles";
 
 function fit(element: HTMLTextAreaElement) {
+  // Measuring at native rows can temporarily shrink a long editor and clamp its scroll parents.
+  const scrolled: [HTMLElement, number][] = [];
+  for (let parent = element.parentElement; parent; parent = parent.parentElement)
+    if (parent.scrollTop > 0) scrolled.push([parent, parent.scrollTop]);
   // Let native rows establish the minimum again before measuring content (including padding).
   element.style.height = "auto";
   const style = getComputedStyle(element);
@@ -10,6 +14,8 @@ function fit(element: HTMLTextAreaElement) {
   const border = parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
   const adjustment = style.boxSizing === "border-box" ? border : -padding;
   element.style.height = `${Math.ceil(element.scrollHeight + adjustment)}px`;
+  // Restore after the final height; genuine content shrink still clamps to the new maximum.
+  for (const [parent, top] of scrolled) parent.scrollTop = top;
 }
 
 export default function TextArea({
@@ -45,7 +51,18 @@ export default function TextArea({
   }, [autoGrow]);
   useLayoutEffect(() => {
     if (autoGrow && ref.current) fit(ref.current);
-  });
+    // Resetting to native rows forces layout and can clamp an ancestor's scroll position.
+    // Unrelated saves/busy-state renders must not remeasure an unchanged body.
+  }, [
+    autoGrow,
+    props.value,
+    props.defaultValue,
+    props.rows,
+    props.cols,
+    props.wrap,
+    props.style,
+    className,
+  ]);
   return (
     <textarea
       ref={ref}

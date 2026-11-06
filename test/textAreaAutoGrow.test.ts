@@ -10,6 +10,7 @@ const render = domHarness();
 let css: HTMLStyleElement;
 let width: number;
 let reads: number;
+let onMeasure: (() => void) | undefined;
 let frame: FrameRequestCallback | undefined;
 const flushFrame = () => {
   const callback = frame;
@@ -23,6 +24,7 @@ beforeEach(() => {
   document.head.append(css);
   width = 200;
   reads = 0;
+  onMeasure = undefined;
   observers = [];
   frame = undefined;
   vi.stubGlobal(
@@ -54,6 +56,7 @@ beforeEach(() => {
     this: HTMLTextAreaElement,
   ) {
     reads++;
+    onMeasure?.();
     const lines = this.value
       .split("\n")
       .reduce((n, line) => n + Math.max(1, Math.ceil(line.length / (width / 10))), 0);
@@ -118,6 +121,62 @@ it("refits wrapped hydrated content on width changes, ignores height-only notifi
   await render(h("div"));
   expect(observer.disconnect).toHaveBeenCalledOnce();
   expect(frame).toBeUndefined();
+});
+
+it("does not remeasure unchanged bodies for unrelated renders, preserving ancestor scroll", async () => {
+  const props = {
+    autoGrow: true,
+    rows: 4,
+    style,
+    value: "long body\n".repeat(40),
+    onChange: vi.fn(),
+  };
+  await render(h(TextArea, props));
+  const before = reads;
+  const height = textarea().style.height;
+  await render(h(TextArea, { ...props, disabled: true }));
+  await render(h(TextArea, { ...props, disabled: false, onChange: vi.fn() }));
+  expect(reads).toBe(before);
+  expect(textarea().style.height).toBe(height);
+});
+
+it("preserves nested scroll parents while measuring actual edits and width changes", async () => {
+  function Harness() {
+    const [value, setValue] = useState("long body ".repeat(40));
+    return h(
+      "main",
+      null,
+      h(
+        "section",
+        null,
+        h(TextArea, {
+          autoGrow: true,
+          rows: 4,
+          style,
+          value,
+          onChange: (event) => setValue(event.target.value),
+        }),
+      ),
+    );
+  }
+  await render(h(Harness));
+  const inner = textarea().parentElement!;
+  const outer = inner.parentElement!;
+  inner.scrollTop = 71;
+  outer.scrollTop = 133;
+  // Reproduce the native layout clamp observed when height temporarily returns to four rows.
+  onMeasure = () => {
+    inner.scrollTop = 0;
+    outer.scrollTop = 0;
+  };
+  await input(textarea().value + "!");
+  expect(inner.scrollTop).toBe(71);
+  expect(outer.scrollTop).toBe(133);
+  width = 100;
+  await act(async () => observers[0]!.notify());
+  await act(async () => flushFrame());
+  expect(inner.scrollTop).toBe(71);
+  expect(outer.scrollTop).toBe(133);
 });
 
 it("leaves ordinary textareas and their manual sizing untouched", async () => {
