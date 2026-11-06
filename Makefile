@@ -10,6 +10,8 @@ SLACK       ?= $(HOME)/.local/state/chainmail/slack
 BIN         ?= $(HOME)/.local/bin/corpus
 SERVER      ?= $(HOME)/.local/bin/chainmail-server
 PORT        ?= 8765
+# Local API development includes reminder-calendar access; HASSLES=0 opts out.
+HASSLES     ?= 1
 # SINCE bounds the mail query, and nothing else does: `ingest mail` follows
 # docket's page token to the end of a query and reports whether it got there, so
 # the window is a choice about how much to fetch rather than a way to stay under
@@ -48,7 +50,7 @@ help:
 	@printf '  make page Q=...     generate a spec and render it\n'
 	@printf '  make repage P=...   refresh that page and re-render it, marking what changed\n'
 	@printf '  make serve          vite dev server\n'
-	@printf '  make api            the read-only API on 127.0.0.1:%s\n' '$(PORT)'
+	@printf '  make api            local API on 127.0.0.1:%s, Hassles enabled (HASSLES=0 opts out)\n' '$(PORT)'
 	@printf '\nOverride CORPUS, SLACK, SINCE, BIN on the command line.\n'
 
 deps:
@@ -184,4 +186,4 @@ serve:
 # no authentication and spec bodies are unsanitised sender HTML (#14), so the
 # dev client reaches this through a Vite proxy rather than over CORS.
 api: frontend
-	go run ./cmd/server -addr 127.0.0.1:$(PORT) -corpus $(CORPUS)
+	go run ./cmd/server -addr 127.0.0.1:$(PORT) -corpus $(CORPUS) $(if $(filter 1,$(HASSLES)),-hassles)

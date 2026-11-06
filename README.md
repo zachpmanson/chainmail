@@ -326,6 +326,9 @@ above. `make dev` starts only Vite; its `/v1` and `/auth` requests proxy to the 
 backend at `http://127.0.0.1:8765` (override with `CHAINMAIL_API` when starting Vite).
 A Vite `ECONNREFUSED 127.0.0.1:8765` with a plain-text HTTP 500 means the backend
 is unreachable, not that Google credentials or an `.env` file are missing.
+`make api` enables Hassles calendar reads/writes by default; use `make api HASSLES=0`
+to opt out. Direct server launches still require `-hassles`, and Nix deployments
+retain their explicit `enableHassles` setting. Other mailbox write grants are unchanged.
 
 The app shell offers **Sign in with Google** when account status confirms no
 connected accounts, and hides the prompt during loading/errors or in thread popups.
