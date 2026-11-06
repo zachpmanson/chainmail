@@ -29,6 +29,7 @@ type metadataFixture struct {
 	profile                          gmail.Profile
 	sendAs                           []*gmail.SendAs
 	failProfile, failSendAs, deleted bool
+	profileStatus, sendAsStatus      int
 	reads                            map[string]int
 	writes                           int
 	update                           *gmail.Draft
@@ -60,10 +61,16 @@ func newMetadataFixture(t *testing.T, raw string) (*metadataFixture, Client) {
 				if f.failProfile {
 					status = http.StatusForbidden
 				}
+				if f.profileStatus != 0 {
+					status = f.profileStatus
+				}
 			case "/gmail/v1/users/me/settings/sendAs":
 				body = &gmail.ListSendAsResponse{SendAs: f.sendAs}
 				if f.failSendAs {
 					status = http.StatusForbidden
+				}
+				if f.sendAsStatus != 0 {
+					status = f.sendAsStatus
 				}
 			case "/gmail/v1/users/me/messages/parent":
 				body = &gmail.Message{ThreadId: "thread-1", Payload: &gmail.MessagePart{Headers: []*gmail.MessagePartHeader{

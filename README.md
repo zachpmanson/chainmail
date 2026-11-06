@@ -245,6 +245,11 @@ this feature does not require a narrower-scope re-consent.
 For a sender refusal, `GET /v1/drafts/{id}/sender-check?accountId=…` runs the same
 metadata/sender checks without saving or sending. Refusals identify fixed categories
 such as `sender_not_default` or `sender_address_mismatch`, never header values.
+Identity checks distinguish profile/settings read failures, invalid profile addresses,
+missing identity records and multiple send-as identities. Read-failure suffixes classify
+only HTTP status (`unauthorized`, `forbidden`, `rate_limited`, `provider_error` or
+`failed`); `forbidden` alone does not prove missing OAuth scopes. Provider messages,
+response bodies and identity values are never included.
 Existing `From` presentation is preserved verbatim; it need not match the current
 settings display name. Sender addresses still must match the authenticated account's
 sole primary/default identity. This is only a snapshot, not a full MIME compatibility

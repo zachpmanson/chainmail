@@ -2,8 +2,11 @@ package gmailclient
 
 import (
 	"bytes"
+	"errors"
 	"net/mail"
 	"strings"
+
+	"google.golang.org/api/googleapi"
 )
 
 // Copy only immutable, non-editor metadata. All other fields still have to
@@ -130,20 +133,28 @@ func (c Client) verifyDraftSender(value string) error {
 		return draftRefusal("sender_invalid", "From")
 	}
 	profile, err := c.svc.Users.GetProfile("me").Fields("emailAddress").Context(c.ctx).Do()
-	if err != nil || profile == nil || !bareDraftAddress(profile.EmailAddress) {
-		// Provider errors can contain private response data.
-		return draftRefusal("sender_identity_unverified", "From")
+	if err != nil {
+		return draftRefusal(draftSenderReadReason("sender_profile_read", err), "From")
+	}
+	if profile == nil || !bareDraftAddress(profile.EmailAddress) {
+		return draftRefusal("sender_profile_address_invalid", "From")
 	}
 	settings, err := c.svc.Users.Settings.SendAs.List("me").Fields("sendAs(sendAsEmail,isPrimary,isDefault)").Context(c.ctx).Do()
-	if err != nil || settings == nil {
-		return draftRefusal("sender_identity_unverified", "From")
+	if err != nil {
+		return draftRefusal(draftSenderReadReason("sender_settings_read", err), "From")
+	}
+	if settings == nil || len(settings.SendAs) == 0 {
+		return draftRefusal("sender_identities_missing", "From")
 	}
 	// No alternate sender may exist in the observed settings. The draft's
 	// presentation is preserved verbatim, not compared with current settings.
 	// This verifies an address snapshot, not a later send's provider behavior
 	// or an atomic guarantee against external settings changes.
-	if len(settings.SendAs) != 1 || settings.SendAs[0] == nil {
-		return draftRefusal("sender_identity_unverified", "From")
+	if len(settings.SendAs) != 1 {
+		return draftRefusal("sender_identities_multiple", "From")
+	}
+	if settings.SendAs[0] == nil {
+		return draftRefusal("sender_settings_record_missing", "From")
 	}
 	sender := settings.SendAs[0]
 	switch {
@@ -159,6 +170,26 @@ func (c Client) verifyDraftSender(value string) error {
 		return draftRefusal("sender_address_mismatch", "From")
 	}
 	return nil
+}
+
+// Provider messages, bodies and structured error reasons can contain private data.
+// Only classify the HTTP status into fixed categories.
+func draftSenderReadReason(prefix string, err error) string {
+	var apiErr *googleapi.Error
+	if errors.As(err, &apiErr) {
+		switch apiErr.Code {
+		case 401:
+			return prefix + "_unauthorized"
+		case 403:
+			return prefix + "_forbidden"
+		case 429:
+			return prefix + "_rate_limited"
+		}
+		if apiErr.Code >= 500 && apiErr.Code <= 599 {
+			return prefix + "_provider_error"
+		}
+	}
+	return prefix + "_failed"
 }
 
 func bareDraftAddress(value string) bool {
