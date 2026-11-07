@@ -118,10 +118,11 @@ export default function useDraftPreflight({
   if (!blocked) failure.current = undefined;
   if (blocked && !pending) {
     if (!current?.messageId)
-      message = "This draft has no revision evidence. Cancel and reopen it before editing.";
+      message =
+        "This draft has no revision evidence. Reopen it from the draft list before editing.";
     else if (check.data?.status === "revision_changed")
       message =
-        "This draft changed in Gmail. Cancel and reopen it to load the latest version before editing.";
+        "This draft changed in Gmail. Reopen it from the draft list to load the latest version before editing.";
     else if (check.isError)
       message =
         "Draft compatibility could not be checked. Retry the check, or edit this draft in Gmail.";

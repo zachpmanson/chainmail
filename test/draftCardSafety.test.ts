@@ -361,6 +361,10 @@ describe("read-only compatibility admission", () => {
       expect(host.textContent).toContain(
         status === "revision_changed" ? "changed in Gmail" : "could not confirm",
       );
+      if (status === "revision_changed")
+        expect(host.querySelector('[role="alert"]')!.textContent).toContain(
+          "Reopen it from the draft list",
+        );
       await settle(750);
       await pick(button(host, "Copy draft text"));
       expect(writeText).toHaveBeenCalledOnce();
