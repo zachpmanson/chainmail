@@ -237,7 +237,7 @@ describe("real editor and provider with memory history", () => {
   });
 });
 
-it("a real selected reply targets the older raw parent and lists only this account's same-thread replies", async () => {
+it("a real selected reply targets the older raw parent and hides the other draft cards", async () => {
   const reply: SavedDraft = {
     ...saved,
     kind: "reply",
@@ -263,7 +263,7 @@ it("a real selected reply targets the older raw parent and lists only this accou
   await settle(750);
   expect(
     [...host.querySelectorAll("[data-draft]")].map((card) => card.getAttribute("data-draft")),
-  ).toEqual([saved.id, "newer-reply"]);
+  ).toEqual([saved.id]);
   expect(writes).toEqual([]);
   await words(host, "A real reply edit");
   await settle(750);
@@ -275,6 +275,32 @@ it("a real selected reply targets the older raw parent and lists only this accou
     to: [],
     cc: [],
   });
+});
+
+it("lists only this account's same-thread reply choices when no draft is being edited", async () => {
+  const reply: SavedDraft = {
+    ...saved,
+    kind: "reply",
+    resolution: "resolved",
+    rootId: "root",
+    replyToEntry: "older",
+  };
+  listed = [
+    reply,
+    { ...reply, id: "newer-reply", replyToEntry: "newer" },
+    { ...reply, id: "other-thread", rootId: "elsewhere", threadId: "root" },
+    { ...saved, id: "compose" },
+    { ...reply, id: "unresolved", kind: "unresolved" },
+    { ...reply, accountId: "B" },
+    { ...reply, id: "missing-parent", replyToEntry: undefined },
+    { ...reply, id: "lookup-failed", resolution: "lookup-unavailable" },
+  ];
+  const { host } = await mount("/?accountId=A&open=root");
+  await settle(750);
+  expect(
+    [...host.querySelectorAll("[data-draft]")].map((card) => card.getAttribute("data-draft")),
+  ).toEqual([saved.id, "newer-reply"]);
+  expect(writes).toEqual([]);
 });
 
 it("refuses a switch while a noncancelable save is outstanding", async () => {

@@ -671,6 +671,7 @@ export default function ReplyBox({
       ) : null}
       <DraftCards
         accountId={displayedAccountId}
+        editingId={draftId || undefined}
         drafts={(drafts.data ?? []).filter(
           (item) =>
             item.kind === "reply" &&

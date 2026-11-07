@@ -1,4 +1,5 @@
 import { draftDestination, type SavedDraft } from "../../lib/ui/draftSelection";
+import { draftCardSummary } from "../../lib/ui/draftCardSummary";
 import Button from "../ui/Button";
 import { useDraftCoordinator } from "./DraftSelectionContext";
 
@@ -6,11 +7,13 @@ export default function DraftCards({
   accountId,
   drafts,
   loading,
+  editingId,
   onSelect,
 }: {
   accountId: string;
   drafts: SavedDraft[];
   loading: boolean;
+  editingId?: string;
   onSelect: (draft: SavedDraft) => void;
 }) {
   const coordinator = useDraftCoordinator();
@@ -18,6 +21,11 @@ export default function DraftCards({
   const selected =
     selection?.active && selection.accountId === accountId ? selection.id : undefined;
   const pending = Boolean(selected && selection?.loading);
+  const focused = selected ?? editingId;
+  const visible = focused
+    ? drafts.filter((draft) => draft.accountId === accountId && draft.id === focused)
+    : drafts;
+  if (focused && !pending && !visible.length) return null;
   const pendingNotice = (
     <>
       <p className="my-1 text-xs text-muted" role="status">
@@ -35,17 +43,18 @@ export default function DraftCards({
         <p className="text-xs text-muted" role="status">
           Loading drafts…
         </p>
-      ) : !loading && !drafts.length && !pending ? (
+      ) : !loading && !visible.length && !pending ? (
         <p className="text-xs text-muted">No saved drafts.</p>
       ) : null}
       <ul className="m-0 grid list-none gap-2 p-0">
         {pending &&
-        !drafts.some((draft) => draft.accountId === accountId && draft.id === selected) ? (
+        !visible.some((draft) => draft.accountId === accountId && draft.id === selected) ? (
           <li className="rounded-md border border-line p-2" data-draft={selected} aria-busy="true">
             {pendingNotice}
           </li>
         ) : null}
-        {drafts.map((draft) => {
+        {visible.map((draft) => {
+          const { preview, wordCount } = draftCardSummary(draft.body);
           const isSelected = draft.accountId === accountId && selected === draft.id;
           return (
             <li
@@ -65,7 +74,13 @@ export default function DraftCards({
               <p className="my-1 text-xs font-semibold wrap-break-word">
                 {draft.subject || "Untitled draft"}
               </p>
-              <p className="my-1 text-xs wrap-break-word">{draft.body?.slice(0, 140)}</p>
+              <p className="my-1 text-xs wrap-break-word">
+                {preview}
+                {preview ? " · " : ""}
+                <span className="text-muted">
+                  {wordCount} {wordCount === 1 ? "word" : "words"}
+                </span>
+              </p>
               {isSelected && pending ? (
                 pendingNotice
               ) : draftDestination(draft) ? (

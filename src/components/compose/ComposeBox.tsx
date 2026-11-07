@@ -498,6 +498,7 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
       ) : null}
       <DraftCards
         accountId={displayedAccountId}
+        editingId={draftId || undefined}
         drafts={(drafts.data ?? []).filter(
           (item) => !selected.coordinator?.isRetired(item.accountId, item.id),
         )}
