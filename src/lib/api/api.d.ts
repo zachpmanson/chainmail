@@ -851,8 +851,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Check compose draft save preparation without writing
-         * @description Explicit account GET-only snapshot check for compose drafts. Constructs unchanged and representative Unicode/whitespace body-edit replacements through the same preparation and final outgoing-byte guard as SaveDraft, including sender/immutable metadata checks. Never saves, sends, deletes or reads a reply parent. Reply contexts fail closed with context=reply_context. Returns only fixed booleans/categories, no identifiers, content or preparation error details. A positive result covers only this snapshot and the internally chosen representative edit, not every possible edit, a later revision/settings state, send behavior or write permission. Raw MIME limit 2 MiB, HTML/text 256 KiB, HTML 20,000 tokens; SDK response is materialized before limits. Existing mailbox initialization can load its label cache. No mail-write grant required.
+         * Check revision-bound compose or reply draft save preparation without writing
+         * @description Explicit account GET-only snapshot check. With nonempty expectedMessageId, reads the draft and matches that revision, resolves reply headers through the selected-account corpus and mailbox copy, shares read-only Reply audience/subject planning, then re-GETs the revision and constructs unchanged and representative body replacements through the actual SaveDraft update constructor, sender/MIME preservation and final-byte guards. Every witness-bound response includes status; only supported with both booleans true and context compose or reply is compatibility evidence. Other statuses have both booleans false. Missing/ambiguous parent or unavailable evidence is indeterminate; revision drift is revision_changed. Without expectedMessageId, retains conservative legacy behavior: reply_context is never supported. No writes, sends, deletes, cached provider evidence, identifiers, header/body values or provider error details. This is snapshot/representative evidence, never future save authorization or write permission; actual SaveDraft independently re-GETs and validates. Existing MIME limits apply; SDK responses are materialized before limits. No mail-write grant required.
          */
         get: operations["checkDraftSave"];
         put?: never;
@@ -2348,7 +2348,12 @@ export interface components {
             unchangedCompatible: boolean;
             bodyEditCompatible: boolean;
             /** @enum {string} */
-            context: "compose" | "reply_context" | "unsupported";
+            context: "compose" | "reply" | "reply_context" | "unsupported";
+            /**
+             * @description Always present for witness-bound checks; omitted for legacy checks. Only supported is compatibility evidence, never edit permission.
+             * @enum {string}
+             */
+            status?: "supported" | "unsupported" | "indeterminate" | "revision_changed";
         };
     };
     responses: never;
@@ -4314,6 +4319,8 @@ export interface operations {
         parameters: {
             query: {
                 accountId: string;
+                /** @description Revision witness from the opened draft detail. If supplied, must be nonempty and unique; omission retains conservative legacy compose-only checking. */
+                expectedMessageId?: string;
             };
             header?: never;
             path: {
@@ -4323,7 +4330,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Fixed compatibility booleans and context category only. */
+            /** @description Fixed compatibility booleans/context; witness-bound responses always include status. Non-supported statuses always have false booleans. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4332,7 +4339,7 @@ export interface operations {
                     "application/json": components["schemas"]["DraftSaveCheck"];
                 };
             };
-            /** @description Explicit nonempty accountId is required. */
+            /** @description Explicit nonempty accountId required; supplied expectedMessageId must be nonempty and unique. */
             400: {
                 headers: {
                     [name: string]: unknown;

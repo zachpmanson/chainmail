@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import useDraftPreflight from "./useDraftPreflight";
 import { draftIdentity, type SavedDraft } from "../../lib/ui/draftSelection";
 import { useDraftCoordinator, type LeaveSnapshot } from "./DraftSelectionContext";
 
@@ -66,10 +67,17 @@ export default function useSelectedDraft({
     setAppliedEpoch(selection.epoch);
     setReplacement(false);
   }, [selection?.epoch, selection?.active, applicable, ready, id, account, appliedEpoch]);
-  const blocked = Boolean(selection?.active && (!applicable || appliedEpoch !== selection.epoch));
+  const preflight = useDraftPreflight({ kind, target, account, id, selection, applicable });
+  const blocked =
+    preflight.blocked ||
+    Boolean(selection?.active && (!applicable || appliedEpoch !== selection.epoch));
   return {
     coordinator,
     blocked,
+    preflight,
+    editingBlocked:
+      preflight.ownedBlocked ||
+      (preflight.blocked && (!selection?.active || appliedEpoch === selection.epoch)),
     replacement: replacement && blocked,
     edit: () => {
       edits.current++;

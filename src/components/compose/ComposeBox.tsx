@@ -1,4 +1,5 @@
-import useDraftSaveToast from "./useDraftSaveToast";
+import DraftSaveError from "./DraftSaveError";
+import DraftCompatibilityNotice from "./DraftCompatibilityNotice";
 import DraftCards from "./DraftCards";
 import useSelectedDraft from "./useSelectedDraft";
 import { draftIdentity } from "../../lib/ui/draftSelection";
@@ -87,17 +88,13 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
   const { busy, busyRef, operationRevision, error, clearError, run } = useBusyTask();
   const [draftId, setDraftId] = useState("");
   const [draftSaveError, setDraftSaveError] = useState("");
-  const [acknowledgedSave, setAcknowledgedSave] = useState("");
-  const [completedSave, setCompletedSave] = useState<{
-    acknowledgement: string;
-    context: string;
-  } | null>(null);
   const acknowledgedSaveRef = useRef("");
   const draftIdRef = useRef("");
   const draftMessageIdRef = useRef("");
   const saveGeneration = useRef(0);
   const saveQueue = useRef(Promise.resolve());
   const pendingWrites = useRef(0);
+  const [pendingWriteCount, setPendingWriteCount] = useState(0);
   const writeRevision = useRef(0);
   const displayedAccountId = accountId || (connected.length === 1 ? (connected[0]?.id ?? "") : "");
   const drafts = $api.useQuery(
@@ -120,13 +117,6 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
   );
   const { to, cc } = draftInput;
   const draftInputKey = JSON.stringify(draftInput);
-  const saveToastContext = step.kind;
-  const draftIsSaved =
-    Boolean(draftId) &&
-    !createDraft.isPending &&
-    !updateDraft.isPending &&
-    !draftSaveError &&
-    acknowledgedSave === JSON.stringify([saveGeneration.current, draftId, draftInputKey]);
   const sendFailed = step.kind === "reviewing" && step.sendFailed;
   const reviewInput = useRef(new ReviewInput<ComposeInput>()).current;
   reviewInput.update({
@@ -212,7 +202,6 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
         JSON.stringify(input),
       ]);
       acknowledgedSaveRef.current = acknowledgement;
-      setAcknowledgedSave(acknowledgement);
     },
   });
 
@@ -241,6 +230,7 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
     const timer = window.setTimeout(() => {
       writeRevision.current++;
       pendingWrites.current++;
+      setPendingWriteCount(pendingWrites.current);
       saveQueue.current = saveQueue.current
         .catch(() => undefined)
         .then(async () => {
@@ -261,10 +251,8 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
           // A provider-normalised response must not acknowledge newer editor input.
           const acknowledgement = JSON.stringify([generation, saved.id, draftInputKey]);
           acknowledgedSaveRef.current = acknowledgement;
-          setAcknowledgedSave(acknowledgement);
           setDraftId(saved.id);
           setDraftSaveError("");
-          setCompletedSave({ acknowledgement, context: step.kind });
           await queryClient.invalidateQueries({ queryKey: ["get", "/v1/drafts"] });
         })
         .catch((e) => {
@@ -278,6 +266,7 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
         })
         .finally(() => {
           pendingWrites.current--;
+          setPendingWriteCount(pendingWrites.current);
         });
     }, 700);
     return () => window.clearTimeout(timer);
@@ -296,13 +285,6 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
     updateDraft,
     queryClient,
   ]);
-
-  useDraftSaveToast({
-    completion: completedSave,
-    currentAcknowledgement: JSON.stringify([saveGeneration.current, draftId, draftInputKey]),
-    saved: draftIsSaved && !busy && !selected.blocked && !drafts.isError,
-    context: saveToastContext,
-  });
 
   async function discardDraft() {
     const id = draftIdRef.current;
@@ -461,7 +443,8 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
                 onRetry={() => void drafts.refetch()}
               />
             ) : null}
-            {draftSaveError ? <InlineAlert>{draftSaveError}</InlineAlert> : null}
+            {draftSaveError ? <DraftSaveError error={draftSaveError} draft={draftInput} /> : null}
+            <DraftCompatibilityNotice check={selected.preflight} draft={draftInput} />
             <ComposeForm
               draft={draft}
               onDraft={(patch) => {
@@ -482,7 +465,13 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
               }}
               busy={busy}
               onSubmit={(event) => void prepare(event)}
-              onClose={onClose}
+              cancelDisabled={pendingWriteCount > 0}
+              editingBlocked={selected.editingBlocked}
+              checkingDraft={selected.preflight.pending}
+              onClose={() => {
+                if (busyRef.current || pendingWrites.current > 0) return;
+                onClose();
+              }}
               onDiscard={draftId ? () => void discardDraft() : undefined}
             />
           </>

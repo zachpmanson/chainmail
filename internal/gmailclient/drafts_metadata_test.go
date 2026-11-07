@@ -33,6 +33,9 @@ type metadataFixture struct {
 	reads                            map[string]int
 	writes                           int
 	update                           *gmail.Draft
+	parent                           *gmail.Message
+	parentStatus                     int
+	forbidWrites                     bool
 }
 
 func newMetadataFixture(t *testing.T, raw string) (*metadataFixture, Client) {
@@ -76,10 +79,19 @@ func newMetadataFixture(t *testing.T, raw string) (*metadataFixture, Client) {
 				body = &gmail.Message{ThreadId: "thread-1", Payload: &gmail.MessagePart{Headers: []*gmail.MessagePartHeader{
 					{Name: "Message-ID", Value: "<parent@example.test>"}, {Name: "References", Value: "<ancestor@example.test>"},
 				}}}
+				if f.parent != nil {
+					body = f.parent
+				}
+				if f.parentStatus != 0 {
+					status = f.parentStatus
+				}
 			default:
 				return nil, fmt.Errorf("unexpected fixture GET path")
 			}
 		} else {
+			if f.forbidWrites {
+				t.Fatalf("read-only probe attempted %s", r.Method)
+			}
 			f.writes++
 			if r.Method != http.MethodPut || r.URL.Path != "/gmail/v1/users/me/drafts/d1" {
 				t.Errorf("unexpected mutation: %s %s", r.Method, r.URL.Path)

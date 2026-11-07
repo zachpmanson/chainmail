@@ -139,40 +139,15 @@ func (c Client) SaveDraft(d Draft, replyToMessageID string) (Draft, error) {
 		if err != nil {
 			return Draft{}, fmt.Errorf("checking Gmail draft MIME: %w", err)
 		}
-		raw, err = draftReplacementMIME(d, currentRaw)
-		if err != nil {
-			return Draft{}, err
-		}
 	}
 	message := &gmail.Message{}
-	if replyToMessageID != "" {
-		parent, err := c.svc.Users.Messages.Get("me", replyToMessageID).Format("metadata").MetadataHeaders("Message-ID", "References").Do()
-		if err != nil {
-			return Draft{}, fmt.Errorf("reading reply parent %q: %w", replyToMessageID, err)
-		}
-		message.ThreadId = parent.ThreadId
-		headers := map[string]string{}
-		for _, h := range parent.Payload.Headers {
-			headers[strings.ToLower(h.Name)] = h.Value
-		}
-		if id := headers["message-id"]; id != "" {
-			raw = addHeader(raw, "In-Reply-To", id)
-			refs := strings.TrimSpace(headers["references"] + " " + id)
-			raw = addHeader(raw, "References", refs)
-		}
-	}
 	if current != nil {
-		if replyToMessageID != "" && current.Message.ThreadId != "" && current.Message.ThreadId != message.ThreadId {
-			return Draft{}, draftRefusal("thread_mismatch")
-		}
-		raw, err = c.prepareDraftReplacement(currentRaw, raw)
-		if err != nil {
-			return Draft{}, err
-		}
-		// Guard the actual bytes to PUT, after all metadata/parent construction.
-		if err := checkDraftReplacement(currentRaw, raw); err != nil {
-			return Draft{}, err
-		}
+		raw, message.ThreadId, err = c.prepareDraftUpdate(d, replyToMessageID, current, currentRaw)
+	} else {
+		raw, message.ThreadId, err = c.addDraftParent(raw, replyToMessageID, false)
+	}
+	if err != nil {
+		return Draft{}, err
 	}
 	// Extract only navigation evidence from the final bytes, before mutation.
 	// Never reparse editable content or perform a post-write provider read.
@@ -197,6 +172,74 @@ func (c Client) SaveDraft(d Draft, replyToMessageID string) (Draft, error) {
 	}
 	d.ID, d.MessageID, d.ThreadID = saved.Id, saved.Message.Id, saved.Message.ThreadId
 	return d, nil
+}
+
+// The caller must freshly GET the draft; real updates and read-only probes
+// share this constructor. Reply headers are rebuilt, never copied.
+func (c Client) prepareDraftUpdate(d Draft, parentID string, current *gmail.Draft, currentRaw []byte) ([]byte, string, error) {
+	if d.MessageID == "" || current == nil || current.Message == nil || current.Message.Id != d.MessageID {
+		return nil, "", ErrDraftConflict
+	}
+	raw, err := draftReplacementMIME(d, currentRaw)
+	if err != nil {
+		return nil, "", err
+	}
+	raw, threadID, err := c.addDraftParent(raw, parentID, true)
+	if err != nil {
+		return nil, "", err
+	}
+	if parentID != "" && current.Message.ThreadId != "" && current.Message.ThreadId != threadID {
+		return nil, "", draftRefusal("thread_mismatch")
+	}
+	raw, err = c.prepareDraftReplacement(currentRaw, raw)
+	if err != nil {
+		return nil, "", err
+	}
+	// Guard the actual bytes to PUT, after all metadata/parent construction.
+	if err := checkDraftReplacement(currentRaw, raw); err != nil {
+		return nil, "", err
+	}
+	return raw, threadID, nil
+}
+
+func (c Client) addDraftParent(raw []byte, parentID string, updating bool) ([]byte, string, error) {
+	if parentID == "" {
+		return raw, "", nil
+	}
+	parent, err := c.svc.Users.Messages.Get("me", parentID).Format("metadata").MetadataHeaders("Message-ID", "References").Do()
+	if err != nil {
+		return nil, "", fmt.Errorf("reading reply parent %q: %w", parentID, err)
+	}
+	if parent == nil || parent.Payload == nil {
+		return nil, "", errors.New("reply parent metadata unavailable")
+	}
+	headers := map[string]string{}
+	var evidence ReplyHeaders
+	for _, h := range parent.Payload.Headers {
+		if h != nil {
+			headers[strings.ToLower(h.Name)] = h.Value
+			switch strings.ToLower(h.Name) {
+			case "message-id":
+				evidence.InReplyTo = append(evidence.InReplyTo, h.Value)
+			case "references":
+				evidence.References = append(evidence.References, h.Value)
+			}
+		}
+	}
+	if updating {
+		if len(evidence.InReplyTo) == 0 || (len(evidence.InReplyTo) == 1 && strings.TrimSpace(evidence.InReplyTo[0]) == "") || parent.ThreadId == "" {
+			return nil, "", draftRefusal("parent_metadata_missing")
+		}
+		if _, resolution := evidence.Parent(); resolution != "candidate" {
+			return nil, "", draftRefusal("parent_metadata_invalid")
+		}
+	}
+	if id := headers["message-id"]; id != "" {
+		raw = addHeader(raw, "In-Reply-To", id)
+		refs := strings.TrimSpace(headers["references"] + " " + id)
+		raw = addHeader(raw, "References", refs)
+	}
+	return raw, parent.ThreadId, nil
 }
 
 // DeleteDraft permanently removes a draft from Gmail. Gmail draft deletion is

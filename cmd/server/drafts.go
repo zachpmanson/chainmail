@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/mail"
 	"strings"
 
 	"github.com/zachpmanson/chainmail/internal/gmailclient"
@@ -246,38 +247,10 @@ func (s *server) saveDraft(w http.ResponseWriter, req draftRequest) {
 		fail(w, http.StatusBadGateway, fmt.Errorf("opening the mailbox: %w", err))
 		return
 	}
-	replyToMessageID := ""
-	if req.ReplyToEntry != "" {
-		entries, err := s.store.ChainEntries(req.ReplyToEntry)
-		if err != nil {
-			fail(w, http.StatusInternalServerError, fmt.Errorf("resolving reply thread: %w", err))
-			return
-		}
-		for _, entry := range entries {
-			if entry.ExtID != req.ReplyToEntry {
-				continue
-			}
-			if copy, ok := copyForAccount(entry, accountID); ok {
-				replyToMessageID = copy.GmailID
-			}
-			break
-		}
-		if replyToMessageID == "" {
-			fail(w, http.StatusBadRequest, errors.New("replyToEntry has no Gmail message in the selected account"))
-			return
-		}
-		// Nil lists belong to the mailbox, not to corpus header estimates. Resolve
-		// Reply-To and reply-all defaults before the draft makes them explicit.
-		plan, err := mb.Reply(replyToMessageID, gmailclient.ReplyBody{Text: req.Body}, gmailclient.ReplyOptions{All: req.ReplyAll, To: req.To, Cc: req.Cc})
-		if err != nil {
-			fail(w, http.StatusBadGateway, fmt.Errorf("preparing reply draft: %w", err))
-			return
-		}
-		req.To, req.Cc = []string{plan.To}, nil
-		if plan.Cc != "" {
-			req.Cc = []string{plan.Cc}
-		}
-		req.Subject = plan.Subject
+	req, replyToMessageID, status, err := s.planDraftRequest(accountID, mb, req)
+	if err != nil {
+		fail(w, status, err)
+		return
 	}
 	d, err := mb.SaveDraft(gmailclient.Draft{ID: req.ID, MessageID: req.ExpectedMessageID, To: strings.Join(req.To, ", "), Cc: strings.Join(req.Cc, ", "), Subject: req.Subject, Body: req.Body}, replyToMessageID)
 	if err != nil {
@@ -296,6 +269,41 @@ func (s *server) saveDraft(w http.ResponseWriter, req draftRequest) {
 		return
 	}
 	send(w, http.StatusOK, s.draftResponse(accountID, d))
+}
+
+// Shared read-only planning keeps save and preflight audience/subject rules equal.
+func (s *server) planDraftRequest(accountID string, mb mailbox, req draftRequest) (draftRequest, string, int, error) {
+	replyToMessageID := ""
+	if req.ReplyToEntry != "" {
+		entries, err := s.store.ChainEntries(req.ReplyToEntry)
+		if err != nil {
+			return req, "", http.StatusInternalServerError, fmt.Errorf("resolving reply thread: %w", err)
+		}
+		for _, entry := range entries {
+			if entry.ExtID != req.ReplyToEntry {
+				continue
+			}
+			if copy, ok := copyForAccount(entry, accountID); ok {
+				replyToMessageID = copy.GmailID
+			}
+			break
+		}
+		if replyToMessageID == "" {
+			return req, "", http.StatusBadRequest, errors.New("replyToEntry has no Gmail message in the selected account")
+		}
+		// Nil lists belong to the mailbox, not to corpus header estimates. Resolve
+		// Reply-To and reply-all defaults before the draft makes them explicit.
+		plan, err := mb.Reply(replyToMessageID, gmailclient.ReplyBody{Text: req.Body}, gmailclient.ReplyOptions{Send: false, All: req.ReplyAll, To: req.To, Cc: req.Cc})
+		if err != nil {
+			return req, "", http.StatusBadGateway, fmt.Errorf("preparing reply draft: %w", err)
+		}
+		req.To, req.Cc = []string{plan.To}, nil
+		if plan.Cc != "" {
+			req.Cc = []string{plan.Cc}
+		}
+		req.Subject = plan.Subject
+	}
+	return req, replyToMessageID, 0, nil
 }
 
 // Explicit read-only probe: ordinary draft lists/reads do not gain settings calls.
@@ -375,9 +383,16 @@ func (s *server) checkDraftMIME(w http.ResponseWriter, r *http.Request, id strin
 
 // No identifiers, provider text or preparation errors leave this diagnostic.
 func (s *server) checkDraftSave(w http.ResponseWriter, r *http.Request, id string) {
-	requested := r.URL.Query().Get("accountId")
+	w.Header().Set("Cache-Control", "no-store")
+	query := r.URL.Query()
+	requested := query.Get("accountId")
 	if strings.TrimSpace(requested) == "" {
 		fail(w, http.StatusBadRequest, errors.New("accountId is required"))
+		return
+	}
+	witnesses, present := query["expectedMessageId"]
+	if present && (len(witnesses) != 1 || strings.TrimSpace(witnesses[0]) == "") {
+		fail(w, http.StatusBadRequest, errors.New("expectedMessageId must be nonempty and unique"))
 		return
 	}
 	accountID, err := s.connectedAccount(requested)
@@ -388,6 +403,10 @@ func (s *server) checkDraftSave(w http.ResponseWriter, r *http.Request, id strin
 	mb, err := s.mailboxForAccount(accountID)
 	if err != nil {
 		fail(w, http.StatusBadGateway, errors.New("mailbox unavailable for draft save checking"))
+		return
+	}
+	if present {
+		s.checkDraftSaveWithContext(w, accountID, mb, id, witnesses[0])
 		return
 	}
 	checker, ok := mb.(interface {
@@ -407,6 +426,90 @@ func (s *server) checkDraftSave(w http.ResponseWriter, r *http.Request, id strin
 		return
 	}
 	send(w, http.StatusOK, result)
+}
+
+func (s *server) checkDraftSaveWithContext(w http.ResponseWriter, accountID string, mb mailbox, id, expected string) {
+	out := gmailclient.DraftSaveCheck{Context: "unsupported", Status: "indeterminate"}
+	reader, ok := mb.(interface {
+		GetDraft(string) (gmailclient.Draft, error)
+	})
+	checker, canCheck := mb.(interface {
+		CheckDraftSaveWithContext(gmailclient.Draft, string) (gmailclient.DraftSaveCheck, error)
+	})
+	if !ok || !canCheck {
+		fail(w, http.StatusBadGateway, errors.New("mailbox does not support draft save checks"))
+		return
+	}
+	d, err := reader.GetDraft(id)
+	if err != nil {
+		if gmailclient.IsNotFound(err) {
+			fail(w, http.StatusNotFound, errors.New("Gmail draft no longer exists"))
+		} else {
+			fail(w, http.StatusBadGateway, errors.New("Gmail could not read draft for save checking"))
+		}
+		return
+	}
+	if d.MessageID != expected {
+		out.Status = "revision_changed"
+		send(w, http.StatusOK, out)
+		return
+	}
+	parent, resolution := d.ReplyHeaders.Parent()
+	parentID := ""
+	switch resolution {
+	case "compose":
+	case "candidate":
+		nav, err := s.store.ResolveDraftParent(accountID, parent)
+		if err != nil || nav.Resolution != "resolved" {
+			send(w, http.StatusOK, out)
+			return
+		}
+		// Explicit empty Cc must not ask Reply to restore its default audience.
+		to, toErr := draftCheckAudience(d.To)
+		cc, ccErr := draftCheckAudience(d.Cc)
+		if toErr != nil || ccErr != nil {
+			out.Status = "unsupported"
+			send(w, http.StatusOK, out)
+			return
+		}
+		req := draftRequest{To: to, Cc: cc, Subject: d.Subject, Body: d.Body, ReplyToEntry: nav.ReplyToEntry}
+		req, parentID, _, err = s.planDraftRequest(accountID, mb, req)
+		if err != nil {
+			send(w, http.StatusOK, out)
+			return
+		}
+		d.To, d.Cc, d.Subject = strings.Join(req.To, ", "), strings.Join(req.Cc, ", "), req.Subject
+	default:
+		out.Status = "unsupported"
+		send(w, http.StatusOK, out)
+		return
+	}
+	out, err = checker.CheckDraftSaveWithContext(d, parentID)
+	if err != nil {
+		// Only this checker draft GET can propagate 404, never a parent GET.
+		if gmailclient.IsNotFound(err) {
+			fail(w, http.StatusNotFound, errors.New("Gmail draft no longer exists"))
+		} else {
+			fail(w, http.StatusBadGateway, errors.New("Gmail could not check draft save compatibility"))
+		}
+		return
+	}
+	send(w, http.StatusOK, out)
+}
+
+func draftCheckAudience(value string) ([]string, error) {
+	out := []string{}
+	if strings.TrimSpace(value) == "" {
+		return out, nil
+	}
+	addresses, err := mail.ParseAddressList(value)
+	if err != nil {
+		return nil, err
+	}
+	for _, address := range addresses {
+		out = append(out, address.String())
+	}
+	return out, nil
 }
 
 func gmailDraftErrorStatus(err error) int {

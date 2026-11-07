@@ -11,14 +11,7 @@ import ComposeForm from "../src/components/compose/ComposeForm";
 import ComposerFields from "../src/components/compose/ComposerFields";
 import { makeQueryClient } from "../src/lib/api/queryClient";
 import type { CorpusEntry } from "../src/lib/api/api";
-import {
-  clearToasts,
-  dismissToast,
-  pushToast,
-  SAID_MS,
-  useToasts,
-  type Toast,
-} from "../src/lib/ui/toasts";
+import { clearToasts, pushToast, SAID_MS, useToasts, type Toast } from "../src/lib/ui/toasts";
 
 const selectionFixture = vi.hoisted(() => ({ current: null as DraftCoordinator | null }));
 vi.mock("../src/components/compose/DraftSelectionContext", async (original) => ({
@@ -103,6 +96,7 @@ const replyProps = {
   onAll: vi.fn(),
   aimed: 0,
 };
+const closeCompose = vi.fn();
 let root: ReactTestRenderer;
 let toastRoot: ReactTestRenderer;
 function ToastModel() {
@@ -111,10 +105,7 @@ function ToastModel() {
 const notifications = (): Toast[] =>
   toastRoot.root.findByType("toast-model" as never).props.notifications;
 const savedNotes = () => notifications().filter((toast) => toast.text === "Saved to Gmail");
-function expectSaved() {
-  expect(visibleText()).not.toContain("Saved to Gmail");
-  expect(savedNotes()).toEqual([{ id: expect.any(Number), text: "Saved to Gmail", kind: "note" }]);
-}
+
 function expectNotSaved() {
   expect(visibleText()).not.toContain("Saved to Gmail");
   expect(savedNotes()).toEqual([]);
@@ -137,7 +128,7 @@ async function mount(reply = true) {
         { client },
         reply
           ? createElement(ReplyBox, replyProps)
-          : createElement(ComposeBox, { onClose: vi.fn() }),
+          : createElement(ComposeBox, { onClose: closeCompose }),
       ),
       { createNodeMock: () => null, unstable_isConcurrent: true } as Parameters<typeof create>[1],
     );
@@ -205,6 +196,7 @@ async function autosave() {
 }
 
 beforeEach(async () => {
+  closeCompose.mockClear();
   clearToasts();
   selectionFixture.current = null;
   vi.useFakeTimers();
@@ -217,6 +209,14 @@ beforeEach(async () => {
   requests = [];
   handle = async (req) => {
     const path = new URL(req.url).pathname;
+    if (path.endsWith("/save-check") && req.method === "GET")
+      return json({
+        status: "supported",
+        context:
+          selectionFixture.current?.selection.draft?.kind === "compose" ? "compose" : "reply",
+        unchangedCompatible: true,
+        bodyEditCompatible: true,
+      });
     if (path === "/v1/drafts" && req.method === "GET") return json([]);
     if (path === "/v1/drafts" || req.method === "PUT") return json(saved);
     if (req.method === "DELETE") return json({ deleted: true });
@@ -338,51 +338,9 @@ async function editWords(reply: boolean, body: string) {
     });
 }
 
-describe("saved draft toast lifetime", () => {
+describe("quiet autosave lifecycle", () => {
   it.each([true, false])(
-    "expires and manually dismisses without resurrection or duplicate notes (reply: %s)",
-    async (reply) => {
-      await mount(reply);
-      await editWords(reply, "First completed autosave");
-      await autosave();
-      expectSaved();
-      const firstId = savedNotes()[0]!.id;
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(SAID_MS - 10);
-      });
-      expectSaved();
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(10);
-      });
-      expectNotSaved();
-      await act(async () => {
-        await client.invalidateQueries({ queryKey: ["get", "/v1/drafts"] });
-      });
-      await settle();
-      await editWords(reply, "First completed autosave");
-      await autosave();
-      expectNotSaved();
-      expect(draftWrites()).toHaveLength(1);
-      await editWords(reply, "Second completed autosave");
-      await autosave();
-      expectSaved();
-      expect(savedNotes()[0]!.id).toBeGreaterThan(firstId);
-      await act(async () => {
-        dismissToast(savedNotes()[0]!.id);
-      });
-      expectNotSaved();
-      await act(async () => {
-        await client.invalidateQueries({ queryKey: ["get", "/v1/drafts"] });
-      });
-      await settle();
-      await autosave();
-      expectNotSaved();
-      expect(draftWrites()).toHaveLength(2);
-    },
-  );
-
-  it.each([true, false])(
-    "clears only its own note on dirty input and failure (reply: %s)",
+    "keeps autosave failures persistent without touching unrelated notifications (reply: %s)",
     async (reply) => {
       vi.spyOn(console, "error").mockImplementation(() => {});
       await mount(reply);
@@ -392,7 +350,7 @@ describe("saved draft toast lifetime", () => {
       });
       await editWords(reply, "Saved first");
       await autosave();
-      expectSaved();
+      expectNotSaved();
       await editWords(reply, "Not saved yet");
       expectNotSaved();
       const normal = handle;
@@ -412,24 +370,6 @@ describe("saved draft toast lifetime", () => {
   );
 
   it.each([true, false])(
-    "removes an active save note on unmount, preserving unrelated toasts (reply: %s)",
-    async (reply) => {
-      await mount(reply);
-      await act(async () => {
-        pushToast("Keep this failure", "fail");
-      });
-      await editWords(reply, "Completed before unmount");
-      await autosave();
-      expectSaved();
-      await act(async () => {
-        root.unmount();
-      });
-      expect(savedNotes()).toEqual([]);
-      expect(notifications().map((toast) => toast.text)).toEqual(["Keep this failure"]);
-    },
-  );
-
-  it.each([true, false])(
     "opens and switches selected drafts without save notes or writes (reply: %s)",
     async (reply) => {
       const selectedDraft = reply
@@ -442,7 +382,7 @@ describe("saved draft toast lifetime", () => {
       expect(draftWrites()).toEqual([]);
       await editWords(reply, "An actual saved edit");
       await autosave();
-      expectSaved();
+      expectNotSaved();
       await act(async () => {
         pushToast("Keep on draft switch", "fail");
       });
@@ -457,12 +397,12 @@ describe("saved draft toast lifetime", () => {
   );
 
   it.each([true, false])(
-    "clears an account's saved note without dismissing another failure (reply: %s)",
+    "saves in the new account without dismissing unrelated failures (reply: %s)",
     async (reply) => {
       await mount(reply);
       await editWords(reply, "Saved under the first account");
       await autosave();
-      expectSaved();
+      expectNotSaved();
       await act(async () => {
         pushToast("Keep on account switch", "fail");
       });
@@ -477,7 +417,7 @@ describe("saved draft toast lifetime", () => {
       expectNotSaved();
       expect(notifications().map((toast) => toast.text)).toEqual(["Keep on account switch"]);
       await autosave();
-      expectSaved();
+      expectNotSaved();
       expect(draftWrites()[1]!.body.accountId).toBe("other-account");
       expect(
         notifications()
@@ -488,7 +428,7 @@ describe("saved draft toast lifetime", () => {
   );
 
   it.each([true, false])(
-    "does not notify for a save completed after an account switch or unmount (reply: %s)",
+    "ignores stale save responses after an account switch or unmount (reply: %s)",
     async (reply) => {
       await mount(reply);
       const pending = deferred<Response>();
@@ -532,7 +472,7 @@ describe("saved draft toast lifetime", () => {
     },
   );
 
-  it("rejects an in-flight completion from a previous reply thread context", async () => {
+  it("keeps live words through a thread-only context change during a save", async () => {
     await mount();
     const pending = deferred<Response>();
     const normal = handle;
@@ -561,46 +501,14 @@ describe("saved draft toast lifetime", () => {
     await settle();
     expectNotSaved();
     expect(draftWrites()).toHaveLength(1);
+    expect(fields().draft.body).toBe("In-flight on the original thread");
   });
 
-  it("keeps independent success notes for simultaneously mounted compose and reply editors", async () => {
-    await act(async () => {
-      root = create(
-        createElement(
-          QueryClientProvider,
-          { client },
-          createElement(
-            "div",
-            null,
-            createElement(ComposeBox, { onClose: vi.fn() }),
-            createElement(ReplyBox, replyProps),
-          ),
-        ),
-      );
-    });
-    await settle();
-    await editWords(false, "Compose words");
-    await editWords(true, "Reply words");
-    await autosave();
-    expect(savedNotes()).toHaveLength(2);
-    const [composeNote, replyNote] = savedNotes();
-    await editWords(false, "New compose words");
-    expect(savedNotes()).toEqual([replyNote]);
-    await autosave();
-    expect(savedNotes()).toHaveLength(2);
-    expect(savedNotes()[1]!.id).not.toBe(composeNote!.id);
-    await editWords(true, "New reply words");
-    expect(savedNotes()).toHaveLength(1);
-    await autosave();
-    expect(savedNotes()).toHaveLength(2);
-    expect(visibleText()).not.toContain("Saved to Gmail");
-  });
-
-  it("clears a reply note on a thread-only context change without touching other notifications", async () => {
+  it("does not rewrite acknowledged input on a thread-only context change", async () => {
     await mount();
     await editWords(true, "Saved on the original thread");
     await autosave();
-    expectSaved();
+    expectNotSaved();
     await act(async () => {
       pushToast("Keep on thread switch", "fail");
     });
@@ -627,13 +535,12 @@ describe("saved draft toast lifetime", () => {
 
 describe("acknowledged autosave input", () => {
   it.each([true, false])(
-    "does not show an old acknowledgement while different input is still being written (reply: %s)",
+    "writes the latest input again after an intervening acknowledged save (reply: %s)",
     async (reply) => {
       await mount(reply);
       await editWords(reply, "Payload A");
       await autosave();
-      expectSaved();
-      const initialToastId = savedNotes()[0]!.id;
+      expectNotSaved();
       const pending = deferred<Response>();
       const normal = handle;
       handle = (req) => (req.method === "PUT" ? pending.promise : normal(req));
@@ -654,8 +561,7 @@ describe("acknowledged autosave input", () => {
         ["PUT", "Payload A"],
       ]);
       expect(draftWrites()[2]!.body.expectedMessageId).toBe("revision-B");
-      expectSaved();
-      expect(savedNotes()[0]!.id).toBeGreaterThan(initialToastId);
+      expectNotSaved();
     },
   );
 
@@ -666,7 +572,7 @@ describe("acknowledged autosave input", () => {
       await editWords(reply, "Stable idle fixture words");
       await autosave();
       expect(draftWrites()).toHaveLength(1);
-      expectSaved();
+      expectNotSaved();
       await act(async () => {
         await vi.advanceTimersByTimeAsync(6_000);
         await client.invalidateQueries({ queryKey: ["get", "/v1/drafts"] });
@@ -682,7 +588,7 @@ describe("acknowledged autosave input", () => {
         ["POST", "Stable idle fixture words"],
         ["PUT", "One genuine edit"],
       ]);
-      expectSaved();
+      expectNotSaved();
       await act(async () => {
         await vi.advanceTimersByTimeAsync(6_000);
       });
@@ -720,7 +626,7 @@ describe("acknowledged autosave input", () => {
       });
       await settle();
       expect(draftWrites()).toHaveLength(count);
-      expectSaved();
+      expectNotSaved();
     },
   );
 
@@ -730,7 +636,7 @@ describe("acknowledged autosave input", () => {
     [true, "PUT"],
     [false, "PUT"],
   ] as const)(
-    "does not label newer input Saved when an older save is acknowledged (reply: %s, method: %s)",
+    "preserves and saves newer input after an older save is acknowledged (reply: %s, method: %s)",
     async (reply, method) => {
       await mount(reply);
       if (method === "PUT") {
@@ -755,7 +661,7 @@ describe("acknowledged autosave input", () => {
       await autosave();
       expect(draftWrites()).toHaveLength(count + 1);
       expect(draftWrites()[count]!.body.body).toBe("Newer unsaved words");
-      expectSaved();
+      expectNotSaved();
     },
   );
 
@@ -775,7 +681,7 @@ describe("acknowledged autosave input", () => {
       await editWords(reply, "Identical words in a new draft");
       await autosave();
       expect(draftWrites().map((r) => r.method)).toEqual(["POST", "POST"]);
-      expectSaved();
+      expectNotSaved();
     },
   );
 
@@ -1346,7 +1252,7 @@ describe("immutable review requests", () => {
 });
 
 it.each([true, false])(
-  "toasts a successful autosave after an unrelated preview refusal (reply: %s)",
+  "autosaves after an unrelated preview refusal without success notifications (reply: %s)",
   async (reply) => {
     await mount(reply);
     const normal = handle;
@@ -1371,7 +1277,7 @@ it.each([true, false])(
     await autosave();
     expect(draftWrites()).toHaveLength(1);
     expect(draftWrites()[0]!.body.body).toBe("Genuinely saved after preview failure");
-    expectSaved();
+    expectNotSaved();
     expect(visibleText()).toContain("Synthetic preview refused");
   },
 );
@@ -1408,4 +1314,81 @@ it("does not rehydrate newer words from same-epoch detail refetches", async () =
   expect(fields().draft.body).toBe("Newest words");
   await autosave();
   expect(draftWrites()[0]!.body).toMatchObject({ body: "Newest words", expectedMessageId: "m1" });
+});
+
+it.each([true, false])(
+  "copies the latest recovery input with honest clipboard feedback (reply: %s)",
+  async (reply) => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const copy = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Clipboard denied"))
+      .mockResolvedValue(undefined);
+    vi.stubGlobal("navigator", { clipboard: { writeText: copy } });
+    const normal = handle;
+    handle = (req) =>
+      req.method === "POST" && new URL(req.url).pathname === "/v1/drafts"
+        ? Promise.resolve(
+            new Response(JSON.stringify({ error: "Synthetic autosave refusal" }), {
+              status: 502,
+              headers: { "Content-Type": "application/json" },
+            }),
+          )
+        : normal(req);
+    await mount(reply);
+    await editWords(reply, "Failed snapshot");
+    await autosave();
+    await editWords(reply, "Latest unsaved words");
+    const count = draftWrites().length;
+    expect(copy).not.toHaveBeenCalled();
+    await click("Copy draft text");
+    expect(notifications().map((toast) => [toast.text, toast.kind])).toEqual([
+      ["Could not copy draft text", "fail"],
+    ]);
+    expect(copy.mock.calls[0]![0]).toContain("Latest unsaved words");
+    await click("Copy draft text");
+    expect(notifications().map((toast) => [toast.text, toast.kind])).toEqual([
+      ["Copied draft text", "note"],
+    ]);
+    expect(draftWrites()).toHaveLength(count);
+    expect(visibleText()).toContain("Autosave stopped");
+  },
+);
+
+it("keeps Cancel guarded through catalog refresh and skipped duplicate queue entries, then re-enables it", async () => {
+  const post = deferred<Response>();
+  const refresh = deferred<Response>();
+  const normal = handle;
+  let refreshHeld = false;
+  handle = (req) => {
+    if (req.method === "POST" && new URL(req.url).pathname === "/v1/drafts") return post.promise;
+    if (req.method === "GET" && refreshHeld) return refresh.promise;
+    return normal(req);
+  };
+  await mount(false);
+  const close = form().onClose;
+  await editWords(false, "Same pending words");
+  await autosave();
+  expect(form().cancelDisabled).toBe(true);
+  expect(form().busy).toBe(false);
+  await act(async () => close());
+  expect(closeCompose).not.toHaveBeenCalled();
+  for (let i = 0; i < 2; i++) {
+    await editWords(false, "Same pending words");
+    await autosave();
+  }
+  refreshHeld = true;
+  await act(async () => post.resolve(json(saved)));
+  await settle();
+  expect(form().cancelDisabled).toBe(true);
+  expect(form().busy).toBe(false);
+  await act(async () => close());
+  expect(closeCompose).not.toHaveBeenCalled();
+  await act(async () => refresh.resolve(json([saved])));
+  await settle();
+  expect(form().cancelDisabled).toBe(false);
+  expect(draftWrites()).toHaveLength(1);
+  expect(form().draft.body).toBe("Same pending words");
+  await act(async () => close());
+  expect(closeCompose).toHaveBeenCalledTimes(1);
 });

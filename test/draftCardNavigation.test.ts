@@ -47,6 +47,7 @@ let reads: string[];
 let writes: { method: string; url: string; body: Record<string, unknown> }[];
 let detail: () => Promise<Response>;
 let listed: SavedDraft[];
+let opened: SavedDraft | undefined;
 const json = (value: unknown) =>
   new Response(JSON.stringify(value), { headers: { "Content-Type": "application/json" } });
 function Root() {
@@ -96,6 +97,7 @@ beforeEach(() => {
   vi.spyOn(window, "scrollTo").mockImplementation(() => {});
   reads = [];
   writes = [];
+  opened = undefined;
   detail = async () => json(saved);
   listed = [
     saved,
@@ -115,7 +117,18 @@ beforeEach(() => {
     if (url.pathname === "/auth/status")
       return json({ accounts: [{ id: "A", signedIn: true, displayName: "Synthetic" }] });
     if (url.pathname === "/v1/drafts") return json(listed);
-    if (url.pathname === `/v1/drafts/${saved.id}`) return detail();
+    if (url.pathname.endsWith("/save-check"))
+      return json({
+        status: "supported",
+        context: opened?.kind === "reply" ? "reply" : "compose",
+        unchangedCompatible: true,
+        bodyEditCompatible: true,
+      });
+    if (url.pathname === `/v1/drafts/${saved.id}`) {
+      const response = await detail();
+      if (response.ok) opened = await response.clone().json();
+      return response;
+    }
     if (url.pathname === "/v1/chains/root")
       return json({
         entries: [

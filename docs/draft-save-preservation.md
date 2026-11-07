@@ -108,19 +108,42 @@ its response.
 
 ## GET-only full preparation check
 
-`GET /v1/drafts/{id}/save-check?accountId=…` requires explicit account selection
-and no write grant. It fetches the selected draft, rejects any reply-header
-context needing parent evidence, constructs unchanged and representative
+`GET /v1/drafts/{id}/save-check?accountId=…&expectedMessageId=…` requires
+explicit account selection and no write grant. The nonempty revision witness
+comes from the opened draft detail. The route reads that revision, resolves any
+strict reply-header evidence through the account-qualified corpus and selected
+account's parent copy, and uses the same read-only Reply audience/subject plan as
+save (with explicit current To/Cc, including empty Cc). The checker re-GETs and
+compares the witness before constructing unchanged and representative
 Unicode/entities/repeated-space/tab/NBSP/CRLF/blank-line replacements through the
-same constructor, metadata/sender checks, splice and final guard as saving, and
-returns only `unchangedCompatible`, `bodyEditCompatible` and the fixed `context`
-category (`compose`, `reply_context`, `unsupported`). Refusals contain no
-content/IDs/preparation errors. Provider/account failures use fixed safe errors.
-It never saves, sends, deletes or fetches a reply parent. Mailbox initialization
-may load its normal label cache; sender verification performs profile/settings
-GETs. Ordinary reads do not gain these checks.
+actual update constructor, real parent metadata/thread/header reconstruction,
+metadata/sender checks, splice and final outgoing-byte guard. Parent headers are
+never copied from the draft. Provider evidence is not cached. Updates additionally
+require one valid, unambiguous live parent Message-ID and, when present, one
+valid References list; duplicate/malformed evidence is refused rather than
+collapsed to the last value. Original parents may omit References. Missing
+Message-ID/thread evidence is indeterminate in preflight and refuses updates.
+First-create and send behavior are unchanged.
 
-Preparation refusals also emit a closed application check code to the service
+Witness-bound responses always include `status`: `supported`, `unsupported`,
+`indeterminate` or `revision_changed`. Only `supported`, both compatibility
+booleans true, and `context=compose` or `context=reply` is positive evidence.
+Every other status has both booleans false. Missing/ambiguous/unresolved parents,
+missing account copies and unavailable/unknown sender or parent evidence fail
+closed as indeterminate, not a definitive formatting refusal. Revision drift
+returns a fixed `revision_changed` response. Actual missing draft reads are 404;
+missing parents do not claim the draft disappeared. Responses contain no
+content, IDs or preparation/provider error details. Explicit empty or repeated
+witness parameters are 400. Omitting the witness retains the legacy conservative
+compose-only check: `reply_context,false,false` is never support evidence.
+
+The operation never saves, sends or deletes and works with both write/send flags
+disabled. Mailbox initialization may load its normal label cache; reply planning
+and parent/sender verification perform additional GETs. Ordinary reads do not
+gain these checks. The SDK materializes responses before parser limits; the
+initial detail read also uses the existing draft reader.
+
+Legacy preparation refusals also emit a closed application check code to the service
 journal (for example `alternative_plain_lines` or `alternative_framing`). These
 entries contain no draft/account identifiers, error text, headers or content;
 unrecognized errors map to fixed fallback codes. They do not change acceptance.
@@ -128,6 +151,10 @@ unrecognized errors map to fixed fallback codes. They do not change acceptance.
 A positive result proves **only this snapshot and the representative edit**.
 It is not proof for every edit (e.g. a later boundary collision/size limit),
 future revision/settings state, provider send behavior or write permission.
+Actual SaveDraft independently fresh-GETs and compares its required revision,
+then runs all parent/sender/MIME/final-byte guards before PUT. Preflight is never
+future save authorization; concurrent provider changes after a check remain
+possible.
 No live mailbox writes are used to develop or test this path; permanent tests
 use invented Gmail-style messages and synthetic transports. An owner-authorized
 read-only structural inspection informed the exact envelope/direction extension

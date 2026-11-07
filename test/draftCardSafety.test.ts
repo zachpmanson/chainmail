@@ -65,6 +65,8 @@ let store: Map<string, SavedDraft>;
 let reads: string[];
 let writes: { method: string; path: string; body: Record<string, unknown> }[];
 let detail: (account: string, id: string) => Promise<Response>;
+let checkedDetails: Map<string, SavedDraft>;
+let preflight: (account: string, id: string, witness: string) => Promise<Response>;
 let connected: string[];
 let entries: Record<string, unknown>[];
 let realHosts: boolean;
@@ -146,6 +148,8 @@ async function mount(url = `/?accountId=A&draft=${saved.id}&open=compose`) {
   await router.load();
   const host = await render(h(QueryClientProvider, { client }, h(RouterProvider, { router })));
   await settle();
+  // Detail admission is followed by a separate read-only preflight query.
+  await settle();
   const navigate = async (search: Record<string, unknown>, replace = false) => {
     await act(async () => {
       void router.navigate({ to: "/", search, replace });
@@ -168,8 +172,10 @@ function button(host: HTMLElement, text: string) {
   return found!;
 }
 const detailReads = () =>
-  reads.filter((url) =>
-    new URL(url, "https://synthetic.invalid").pathname.startsWith("/v1/drafts/"),
+  reads.filter(
+    (url) =>
+      new URL(url, "https://synthetic.invalid").pathname.startsWith("/v1/drafts/") &&
+      !new URL(url, "https://synthetic.invalid").pathname.endsWith("/save-check"),
   );
 const selected = (accountId = "A", draft = saved.id) => ({ accountId, draft, open: "compose" });
 beforeEach(() => {
@@ -178,6 +184,17 @@ beforeEach(() => {
   store = new Map([[owner("A", saved.id), { ...saved }]]);
   reads = [];
   writes = [];
+  checkedDetails = new Map();
+  preflight = async (account, id) =>
+    json({
+      status: "supported",
+      context:
+        (checkedDetails.get(owner(account, id)) ?? store.get(owner(account, id)))?.kind === "reply"
+          ? "reply"
+          : "compose",
+      unchangedCompatible: true,
+      bodyEditCompatible: true,
+    });
   mounted = [];
   unmounted = [];
   connected = ["A", "B"];
@@ -261,13 +278,278 @@ beforeEach(() => {
       });
     if (url.pathname === "/v1/drafts")
       return json([...store.values()].filter((item) => item.accountId === account));
-    if (url.pathname.startsWith("/v1/drafts/"))
-      return detail(account, decodeURIComponent(url.pathname.split("/")[3]!));
+    if (url.pathname.startsWith("/v1/drafts/") && url.pathname.endsWith("/save-check")) {
+      expect(request.cache).toBe("no-store");
+      return preflight(
+        account,
+        decodeURIComponent(url.pathname.split("/")[3]!),
+        url.searchParams.get("expectedMessageId") ?? "",
+      );
+    }
+    if (url.pathname.startsWith("/v1/drafts/")) {
+      const id = decodeURIComponent(url.pathname.split("/")[3]!);
+      const response = await detail(account, id);
+      if (response.ok) checkedDetails.set(owner(account, id), await response.clone().json());
+      return response;
+    }
     if (url.pathname.startsWith("/v1/chains/")) return json({ entries });
     if (url.pathname === "/v1/search") return json({ chains: [] });
     if (url.pathname === "/v1/settings") return json({});
     if (url.pathname === "/v1/people") return json({ people: [] });
     throw new Error(`Unexpected read: ${url}`);
+  });
+});
+
+describe("read-only compatibility admission", () => {
+  it.each(["compose", "reply"] as const)(
+    "checks a fresh %s revision before enabling editing",
+    async (kind) => {
+      const draft: SavedDraft =
+        kind === "reply"
+          ? { ...saved, kind, resolution: "resolved", rootId: "root", replyToEntry: "older" }
+          : saved;
+      store.set(owner("A", draft.id), draft);
+      const check = deferred<Response>();
+      preflight = () => check.promise;
+      const { host } = await mount(
+        `/?accountId=A&draft=${draft.id}&open=${kind === "reply" ? "root" : "compose"}`,
+      );
+      expect(host.querySelector("textarea")!.value).toBe(draft.body);
+      expect(host.querySelector("textarea")!.disabled).toBe(true);
+      if (kind === "compose") expect(button(host, "Cancel").disabled).toBe(false);
+      const request = reads.find((url) => url.includes("/save-check"))!;
+      expect(new URL(request, "https://synthetic.invalid").searchParams.get("accountId")).toBe("A");
+      expect(
+        new URL(request, "https://synthetic.invalid").searchParams.get("expectedMessageId"),
+      ).toBe(draft.messageId);
+      await settle(750);
+      expect(writes).toEqual([]);
+      await act(async () =>
+        check.resolve(
+          json({
+            status: "supported",
+            context: kind,
+            unchangedCompatible: true,
+            bodyEditCompatible: true,
+          }),
+        ),
+      );
+      await settle();
+      expect(host.querySelector("textarea")!.disabled).toBe(false);
+      expect(writes).toEqual([]);
+      await words(host, "New verified words");
+      await settle(750);
+      expect(writes).toHaveLength(1);
+      expect(writes[0]!.body.expectedMessageId).toBe(draft.messageId);
+    },
+  );
+
+  it.each(["unsupported", "indeterminate", "revision_changed", "legacy_reply_context"])(
+    "never enables an unverified draft (%s)",
+    async (status) => {
+      preflight = async () =>
+        json({
+          ...(status === "legacy_reply_context" ? {} : { status }),
+          context: status === "legacy_reply_context" ? "reply_context" : "compose",
+          unchangedCompatible: false,
+          bodyEditCompatible: false,
+        });
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      vi.stubGlobal("navigator", { clipboard: { writeText } });
+      const { host } = await mount();
+      expect(host.querySelector("textarea")!.disabled).toBe(true);
+      expect(host.textContent).toContain(
+        status === "revision_changed" ? "changed in Gmail" : "could not confirm",
+      );
+      await settle(750);
+      await pick(button(host, "Copy draft text"));
+      expect(writeText).toHaveBeenCalledOnce();
+      expect(writeText.mock.calls[0]![0]).toContain(saved.body);
+      expect(writes).toEqual([]);
+    },
+  );
+
+  it("retries unavailable evidence without writing or claiming a save", async () => {
+    preflight = async () => json({ error: "Synthetic unavailable" }, 502);
+    const { host } = await mount();
+    expect(host.querySelector("textarea")!.disabled).toBe(true);
+    expect(host.textContent).toContain("could not be checked");
+    preflight = async () =>
+      json({
+        status: "supported",
+        context: "compose",
+        unchangedCompatible: true,
+        bodyEditCompatible: true,
+      });
+    await pick(button(host, "Retry compatibility check"));
+    await settle();
+    expect(host.querySelector("textarea")!.disabled).toBe(false);
+    await settle(750);
+    expect(writes).toEqual([]);
+    expect(document.body.textContent).not.toContain("Saved to Gmail");
+  });
+
+  it.each([false, true])(
+    "retains recovery controls during a held compatibility retry (network: %s)",
+    async (networkError) => {
+      preflight = async () =>
+        networkError
+          ? json({ error: "Synthetic unavailable" }, 502)
+          : json({
+              status: "indeterminate",
+              context: "unsupported",
+              unchangedCompatible: false,
+              bodyEditCompatible: false,
+            });
+      const { host } = await mount();
+      const copy = button(host, "Copy draft text");
+      const alert = copy.closest('[role="alert"]');
+      const held = deferred<Response>();
+      preflight = () => held.promise;
+      await pick(button(host, "Retry compatibility check"));
+      expect(button(host, "Retry compatibility check").disabled).toBe(true);
+      expect(button(host, "Copy draft text")).toBe(copy);
+      expect(copy.closest('[role="alert"]')).toBe(alert);
+      expect(host.querySelector("textarea")!.disabled).toBe(true);
+      expect(writes).toEqual([]);
+      await act(async () =>
+        held.resolve(
+          json({
+            status: "supported",
+            context: "compose",
+            unchangedCompatible: true,
+            bodyEditCompatible: true,
+          }),
+        ),
+      );
+      await settle();
+      expect(host.querySelector("textarea")!.disabled).toBe(false);
+      expect(host.textContent).not.toContain("Retry compatibility check");
+    },
+  );
+
+  it.each([false, true])(
+    "keeps a pending/refused owner blocked after URL clear and own adoption (pending: %s)",
+    async (pending) => {
+      const check = deferred<Response>();
+      const refused = () =>
+        json({
+          status: "unsupported",
+          context: "unsupported",
+          unchangedCompatible: false,
+          bodyEditCompatible: false,
+        });
+      preflight = () => (pending ? check.promise : Promise.resolve(refused()));
+      const { host, navigate } = await mount();
+      expect(host.querySelector("textarea")!.disabled).toBe(true);
+      await navigate({ accountId: "A", open: "compose" });
+      expect(host.querySelector("textarea")!.disabled).toBe(true);
+      if (pending) {
+        await act(async () => check.resolve(refused()));
+        await settle();
+      }
+      await pick(button(host, "Open draft"));
+      await settle();
+      expect(host.querySelector("textarea")!.disabled).toBe(true);
+      expect(host.textContent).toContain("could not confirm");
+      await settle(750);
+      expect(writes).toEqual([]);
+      expect(reads.filter((url) => url.includes("/save-check"))).toHaveLength(1);
+    },
+  );
+
+  it("retains an admitted old buffer while another refused selection awaits replacement", async () => {
+    const next = { ...saved, id: "draft-B", messageId: "b1", body: "B words" };
+    store.set(owner("A", next.id), next);
+    const b = deferred<Response>();
+    const ordinary = detail;
+    detail = (account, id) => (id === next.id ? b.promise : ordinary(account, id));
+    preflight = async (_account, id) =>
+      json({
+        status: id === next.id ? "unsupported" : "supported",
+        context: "compose",
+        unchangedCompatible: id !== next.id,
+        bodyEditCompatible: id !== next.id,
+      });
+    const { host, navigate } = await mount();
+    expect(host.querySelector("textarea")!.disabled).toBe(false);
+    await navigate(selected("A", next.id));
+    expect(host.querySelector("textarea")!.disabled).toBe(false);
+    await words(host, "Local A changed");
+    await act(async () => b.resolve(json(next)));
+    await settle();
+    await settle();
+    expect(host.textContent).toContain("Replace with selected draft");
+    expect(host.querySelector("textarea")!.value).toBe("Local A changed");
+    expect(host.querySelector("textarea")!.disabled).toBe(false);
+    await navigate({ accountId: "A", open: "compose" });
+    expect(host.querySelector("textarea")!.disabled).toBe(false);
+    await settle(750);
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).toMatchObject({
+      method: "PUT",
+      path: `/v1/drafts/${saved.id}`,
+      body: { body: "Local A changed", expectedMessageId: "m1" },
+    });
+  });
+
+  it.each([false, true])(
+    "ignores a late check after switching draft/account (account: %s)",
+    async (crossAccount) => {
+      const checkA = deferred<Response>();
+      const account = crossAccount ? "B" : "A";
+      const id = crossAccount ? saved.id : "draft-B";
+      const next = { ...saved, accountId: account, id, messageId: "b1", body: "B words" };
+      store.set(owner(account, id), next);
+      preflight = (a, d) =>
+        a === "A" && d === saved.id
+          ? checkA.promise
+          : Promise.resolve(
+              json({
+                status: "supported",
+                context: "compose",
+                unchangedCompatible: true,
+                bodyEditCompatible: true,
+              }),
+            );
+      const { host, navigate } = await mount();
+      expect(host.querySelector("textarea")!.disabled).toBe(true);
+      await navigate(selected(account, id));
+      expect(host.querySelector("textarea")!.value).toBe("B words");
+      expect(host.querySelector("textarea")!.disabled).toBe(false);
+      await act(async () =>
+        checkA.resolve(
+          json({
+            status: "unsupported",
+            context: "unsupported",
+            unchangedCompatible: false,
+            bodyEditCompatible: false,
+          }),
+        ),
+      );
+      await settle();
+      expect(host.querySelector("textarea")!.value).toBe("B words");
+      expect(host.querySelector("textarea")!.disabled).toBe(false);
+      expect(host.textContent).not.toContain("could not confirm");
+      expect(writes).toEqual([]);
+    },
+  );
+
+  it("requires a new check when reopening instead of trusting a cached earlier success", async () => {
+    const { host, navigate } = await mount();
+    expect(host.querySelector("textarea")!.disabled).toBe(false);
+    await navigate({ accountId: "A" });
+    preflight = async () =>
+      json({
+        status: "unsupported",
+        context: "unsupported",
+        unchangedCompatible: false,
+        bodyEditCompatible: false,
+      });
+    await navigate(selected());
+    expect(host.querySelector("textarea")!.disabled).toBe(true);
+    expect(reads.filter((url) => url.includes("/save-check"))).toHaveLength(2);
+    expect(writes).toEqual([]);
   });
 });
 
@@ -922,4 +1204,108 @@ describe("reviewed editor preservation regressions", () => {
     await settle(750);
     expect(writes[1]!.body).toMatchObject({ replyToEntry: "older", expectedMessageId: "m2" });
   });
+});
+
+describe("quiet live draft workflow", () => {
+  it.each([false, true])(
+    "keeps live body metadata and editing usable (reply: %s)",
+    async (reply) => {
+      store.clear();
+      const { host } = await mount(`/?accountId=A&open=${reply ? "root" : "compose"}`);
+      const count = host.querySelector("[data-word-count]");
+      expect(count?.textContent).toBe("0 words");
+      const area = host.querySelector("textarea")!;
+      expect(area.rows).toBe(4);
+      await words(host, " one\t two\nthree\u00a0four ");
+      expect(host.querySelector("[data-word-count]")).toBe(count);
+      expect(count?.textContent).toBe("4 words");
+      expect(area.disabled).toBe(false);
+      await words(host, "single");
+      expect(count?.textContent).toBe("1 word");
+      if (reply) expect(host.textContent).not.toContain("Cancel");
+    },
+  );
+
+  it.each([false, true])(
+    "disables only Cancel through queued writes and drain (failure: %s)",
+    async (failure) => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      store.clear();
+      const first = deferred<Response>();
+      const second = deferred<Response>();
+      mutation = (method) => (method === "POST" ? first.promise : second.promise);
+      const { host } = await mount("/?accountId=A&open=compose");
+      const cancel = button(host, "Cancel");
+      await words(host, "First words");
+      await settle(750);
+      expect(cancel.disabled).toBe(true);
+      expect(host.querySelector("textarea")!.disabled).toBe(false);
+      const to = host.querySelector<HTMLInputElement>('input[aria-label="to addresses"]')!;
+      expect(to.disabled).toBe(false);
+      await type(to, "new@example.test");
+      await key(to, "Enter");
+      await words(host, "Queued words");
+      await settle(750);
+      await act(async () =>
+        first.resolve(failure ? json({ error: "Unknown outcome" }, 502) : json(saved)),
+      );
+      await settle();
+      if (!failure) {
+        expect(cancel.disabled).toBe(true);
+        expect(writes.map((w) => w.method)).toEqual(["POST", "PUT"]);
+        await act(async () => second.resolve(json({ ...saved, messageId: "m2" })));
+        await settle();
+      }
+      expect(cancel.disabled).toBe(false);
+      expect(host.querySelector("textarea")!.value).toBe("Queued words");
+      if (failure) expect(writes.map((w) => w.method)).toEqual(["POST"]);
+    },
+  );
+
+  it.each([false, true])(
+    "copies only current local recovery text after failure (reply: %s)",
+    async (reply) => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      const copy = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: { writeText: copy },
+      });
+      if (reply)
+        store.set(owner("A", saved.id), {
+          ...saved,
+          kind: "reply",
+          resolution: "resolved",
+          rootId: "root",
+          replyToEntry: "newer",
+        });
+      mutation = () => Promise.resolve(json({ error: "Synthetic failure" }, 502));
+      const { host } = await mount(
+        `/?accountId=A&draft=${saved.id}&open=${reply ? "root" : "compose"}`,
+      );
+      await words(host, "Failed request snapshot");
+      await settle(750);
+      expect(copy).not.toHaveBeenCalled();
+      expect(host.textContent).toContain("Autosave stopped");
+      await words(host, "LATEST <script>local text</script>\nSecond line");
+      if (reply)
+        await pick(host.querySelector<HTMLButtonElement>('button[title="Edit recipients"]')!);
+      const cc = host.querySelector<HTMLInputElement>('input[aria-label="cc addresses"]')!;
+      await type(cc, "latest@example.test");
+      await key(cc, "Enter");
+      if (!reply)
+        await type(
+          host.querySelector<HTMLInputElement>('input[aria-label="Subject"]')!,
+          "Latest subject",
+        );
+      const before = writes.length;
+      await pick(button(host, "Copy draft text"));
+      expect(copy).toHaveBeenCalledTimes(1);
+      expect(copy.mock.calls[0]![0]).toBe(
+        `To: Ada <ada@example.test>\nCc: latest@example.test\nSubject: ${reply ? "Re: Newer" : "Latest subject"}\n\nLATEST <script>local text</script>\nSecond line`,
+      );
+      await settle(750);
+      expect(writes).toHaveLength(before);
+    },
+  );
 });

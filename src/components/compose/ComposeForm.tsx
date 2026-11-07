@@ -1,3 +1,4 @@
+import BodyWordCount from "./BodyWordCount";
 import { useMemo, useRef, type FormEvent } from "react";
 import { usePersonAddresses } from "../../lib/message/who";
 import Button from "../ui/Button";
@@ -12,6 +13,9 @@ export default function ComposeForm({
   accountId,
   onAccount,
   busy,
+  cancelDisabled = false,
+  editingBlocked = false,
+  checkingDraft = false,
   onSubmit,
   onClose,
   onDiscard,
@@ -21,6 +25,9 @@ export default function ComposeForm({
   accountId: string;
   onAccount: (accountId: string) => void;
   busy: boolean;
+  cancelDisabled?: boolean;
+  editingBlocked?: boolean;
+  checkingDraft?: boolean;
   onSubmit: (event: FormEvent) => void;
   onClose: () => void;
   onDiscard?: () => void;
@@ -43,19 +50,25 @@ export default function ComposeForm({
 
   return (
     <>
-      <form ref={form} onSubmit={onSubmit}>
+      <form ref={form} onSubmit={onSubmit} aria-busy={checkingDraft || undefined}>
         <ComposerFields
           mode={{ kind: "compose" }}
           from={
-            <AccountSelect value={accountId} disabled={busy} alwaysOfferNone onChange={onAccount} />
+            <AccountSelect
+              value={accountId}
+              disabled={busy || editingBlocked}
+              alwaysOfferNone
+              onChange={onAccount}
+            />
           }
           draft={draft}
           onDraft={onDraft}
           suggestions={suggestions}
-          busy={busy}
+          busy={busy || editingBlocked}
         />
       </form>
-      <footer className="mt-2 flex items-center justify-end gap-2">
+      <footer className="mt-2 flex flex-wrap items-center justify-end gap-2">
+        <BodyWordCount body={draft.body} />
         {onDiscard ? (
           <Button
             variant="danger"
@@ -67,14 +80,20 @@ export default function ComposeForm({
             Discard draft
           </Button>
         ) : null}
-        <Button variant="subtle" density="compact" type="button" disabled={busy} onClick={onClose}>
+        <Button
+          variant="subtle"
+          density="compact"
+          type="button"
+          disabled={busy || cancelDisabled}
+          onClick={onClose}
+        >
           Cancel
         </Button>
         <Button
           variant="subtle"
           density="compact"
           type="button"
-          disabled={busy || draft.to.length === 0}
+          disabled={busy || editingBlocked || draft.to.length === 0}
           onClick={() => form.current?.requestSubmit()}
         >
           {busy ? "Preparing…" : "Review message"}

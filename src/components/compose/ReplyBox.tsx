@@ -1,4 +1,7 @@
-import useDraftSaveToast from "./useDraftSaveToast";
+import DraftSaveError from "./DraftSaveError";
+import DraftCompatibilityNotice from "./DraftCompatibilityNotice";
+import BodyWordCount from "./BodyWordCount";
+import { addressWords } from "./AddressField";
 import DraftCards from "./DraftCards";
 import useSelectedDraft from "./useSelectedDraft";
 import { draftDestination, draftIdentity } from "../../lib/ui/draftSelection";
@@ -128,11 +131,6 @@ export default function ReplyBox({
   const displayedAccountId = accountId || (connected.length === 1 ? (connected[0]?.id ?? "") : "");
   const [draftId, setDraftId] = useState("");
   const [draftSaveError, setDraftSaveError] = useState("");
-  const [acknowledgedSave, setAcknowledgedSave] = useState("");
-  const [completedSave, setCompletedSave] = useState<{
-    acknowledgement: string;
-    context: string;
-  } | null>(null);
   const acknowledgedSaveRef = useRef("");
   const draftIdRef = useRef("");
   const draftMessageIdRef = useRef("");
@@ -172,17 +170,12 @@ export default function ReplyBox({
     [displayedAccountId, recipients.edited, all, answer.subject, own, answer.extId],
   );
   const draftInputKey = JSON.stringify(draftInput);
-  const saveToastContext = JSON.stringify([thread.rootExtId, answer.extId, step.kind, html]);
-  const saveToastContextRef = useRef(saveToastContext);
-  useEffect(() => {
-    saveToastContextRef.current = saveToastContext;
-  }, [saveToastContext]);
-  const draftIsSaved =
-    Boolean(draftId) &&
-    !createDraft.isPending &&
-    !updateDraft.isPending &&
-    !draftSaveError &&
-    acknowledgedSave === JSON.stringify([saveGeneration.current, draftId, draftInputKey]);
+  const recoveryDraft = {
+    to: to.map(addressWords),
+    cc: cc.map(addressWords),
+    subject: draftInput.subject,
+    body: own,
+  };
   const sendFailed = step.kind === "reviewing" && step.sendFailed;
   const reviewInput = useRef(new ReviewInput<ReplyInput>()).current;
   reviewInput.update({
@@ -291,7 +284,6 @@ export default function ReplyBox({
         JSON.stringify(input),
       ]);
       acknowledgedSaveRef.current = acknowledgement;
-      setAcknowledgedSave(acknowledgement);
     },
   });
 
@@ -316,7 +308,6 @@ export default function ReplyBox({
       JSON.stringify([generation, draftIdRef.current, draftInputKey])
     )
       return;
-    const toastContext = saveToastContextRef.current;
     const timer = window.setTimeout(() => {
       writeRevision.current++;
       pendingWrites.current++;
@@ -340,10 +331,8 @@ export default function ReplyBox({
           // A provider-normalised response must not acknowledge newer editor input.
           const acknowledgement = JSON.stringify([generation, saved.id, draftInputKey]);
           acknowledgedSaveRef.current = acknowledgement;
-          setAcknowledgedSave(acknowledgement);
           setDraftId(saved.id);
           setDraftSaveError("");
-          setCompletedSave({ acknowledgement, context: toastContext });
           await queryClient.invalidateQueries({ queryKey: ["get", "/v1/drafts"] });
         })
         .catch((error) => {
@@ -376,13 +365,6 @@ export default function ReplyBox({
     updateDraft,
     queryClient,
   ]);
-
-  useDraftSaveToast({
-    completion: completedSave,
-    currentAcknowledgement: JSON.stringify([saveGeneration.current, draftId, draftInputKey]),
-    saved: draftIsSaved && !busy && !selected.blocked && !drafts.isError,
-    context: saveToastContext,
-  });
 
   // A press on a message's answer control brings the box, which may be screens away, to the reader.
   useEffect(() => {
@@ -530,13 +512,14 @@ export default function ReplyBox({
           onRetry={() => void drafts.refetch()}
         />
       ) : null}
-      {draftSaveError ? <InlineAlert>{draftSaveError}</InlineAlert> : null}
-      <section aria-label="Reply">
+      {draftSaveError ? <DraftSaveError error={draftSaveError} draft={recoveryDraft} /> : null}
+      <DraftCompatibilityNotice check={selected.preflight} draft={recoveryDraft} />
+      <section aria-label="Reply" aria-busy={selected.preflight.pending || undefined}>
         {step.kind === "reviewing" ? (
           <>
             <ReplyPlan plan={step.plan} />
             {errorAlert}
-            <footer className="mt-2 flex items-center justify-end gap-2">
+            <footer className="mt-2 flex flex-wrap items-center justify-end gap-2">
               <Button
                 variant="subtle"
                 density="compact"
@@ -576,7 +559,7 @@ export default function ReplyBox({
               from={
                 <AccountSelect
                   value={displayedAccountId}
-                  disabled={busy}
+                  disabled={busy || selected.editingBlocked}
                   onChange={(id) => {
                     if (selected.coordinator && !selected.coordinator.detach(id)) return;
                     selected.edit();
@@ -595,15 +578,16 @@ export default function ReplyBox({
               onDraft={onDraft}
               suggestions={recipients.suggestions}
               mine={recipients.mine}
-              busy={busy}
+              busy={busy || selected.editingBlocked}
             />
-            <footer className="mt-2 flex items-center justify-end gap-2">
-              <div className="mr-auto flex items-center gap-4">
+            <footer className="mt-2 flex flex-wrap items-center justify-end gap-2">
+              <BodyWordCount body={own} />
+              <div className="mr-auto flex flex-wrap items-center gap-4">
                 <CheckboxRow
                   className="flex cursor-pointer items-center gap-1.5 text-xs text-muted has-disabled:cursor-default has-disabled:opacity-55"
                   title="Answer everyone the message was addressed to. Edit the reply's audience in the fields above."
                   checked={all}
-                  disabled={busy}
+                  disabled={busy || selected.editingBlocked}
                   accent="accent"
                   inputClassName="m-0 cursor-pointer"
                   onChange={(e) => {
@@ -618,7 +602,7 @@ export default function ReplyBox({
                   className="flex cursor-pointer items-center gap-1.5 text-xs text-muted has-disabled:cursor-default has-disabled:opacity-55"
                   title="Send the HTML rendering beside the same plain-text message. Unchecked sends plain text alone."
                   checked={html}
-                  disabled={busy}
+                  disabled={busy || selected.editingBlocked}
                   accent="accent"
                   inputClassName="m-0 cursor-pointer"
                   onChange={(e) => {
