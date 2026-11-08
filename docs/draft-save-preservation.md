@@ -2,15 +2,20 @@
 
 The existing top-level `text/plain` save path is unchanged. A separate raw-span
 path supports only a flat `multipart/alternative` with exactly one UTF-8
-`text/plain` quoted-printable part and one UTF-8 `text/html` 7bit part (either
-order). Each part has exactly those two MIME headers. No disposition,
-attachments, related/signed/nested/extra parts or other charsets/encodings are
-accepted. HTML requires only `charset=UTF-8`; plain allows only `charset=UTF-8`
+`text/plain` part (quoted-printable, explicit 7bit or omitted/default 7bit) and
+one UTF-8 `text/html` part (explicit or omitted/default 7bit), in either order.
+Each part has only Content-Type and, optionally, Content-Transfer-Encoding. An
+explicit empty encoding is refused, as are unknown or duplicate headers. No
+disposition, attachments, related/signed/nested/extra parts or other
+charsets/encodings are accepted. HTML requires only `charset=UTF-8`; plain allows only `charset=UTF-8`
 with optional `format=flowed` or `format=fixed` (case-insensitive, quoted or
 unquoted). No `delsp` (even `no`) or other parameters are supported. Duplicate
 fields/parameters, RFC2231 extended/continued parameters, malformed/truncated
 framing, invalid quoted-printable, boundary-looking collisions and unknown root
-headers fail closed. Root transfer encoding is not supported on this path.
+headers fail closed. The final closing delimiter may end exactly at EOF without
+CRLF; opening delimiters and all other line endings still require CRLF. Original
+framing is retained, not regenerated. Root transfer encoding is not supported on
+this path.
 
 Root non-editor headers remain limited to the existing metadata allowlist
 (Date, Message-ID, Received, verified raw From), MIME-Version, Content-Type and
@@ -26,7 +31,10 @@ feature flags. Initial HTML must have one exact lowercase `div` root with only
 closing `</div>`. It may additionally have exactly `<html><body>` before that root
 and `</body></html>` after it, without attributes or extra envelope markup. The
 entire raw envelope, root direction and opening/closing wrapper survive saves
-byte-for-byte; neither direction nor outer markup is normalized.
+byte-for-byte; neither direction nor outer markup is normalized. Exactly one
+optional terminal CRLF after the complete root/envelope is also retained as part
+of the immutable closing wrapper. Other trailing whitespace, multiple terminal
+CRLFs, comments and junk are not admitted.
 
 The legacy inner grammar is either inline text with internal `br` breaks, or
 an optional initial inline run followed by one or more flat `div`/`p` blocks.
@@ -59,9 +67,16 @@ also recognized on repeat saves; no other style is supported. It preserves
 spaces, tabs, NBSP and line breaks without conflating their characters.
 Generated text equivalence is exact after CRLF-to-LF normalization, without the
 legacy concessions. Ampersands/angle brackets are escaped; non-ASCII characters
-are numeric entities so the original 7bit CTE is preserved. Plain retains its
-quoted-printable CTE. Unsafe controls and invalid UTF-8 are refused. Changed
-HTML exceeding the 7bit line limit is refused rather than changing encoding.
+are numeric entities so HTML's original missing/explicit 7bit CTE is preserved.
+Plain already using quoted-printable retains its exact CTE header. On a genuine
+decoded body-text edit, plain default/explicit 7bit is promoted to quoted-printable:
+insert exactly one canonical `Content-Transfer-Encoding: quoted-printable` header
+if missing, or replace only the existing encoding value if explicit 7bit. Header
+case, folding and surrounding whitespace otherwise remain exact. In 7bit bodies,
+`=` (including `=20`) is literal and is never quoted-printable decoded. Raw 7bit
+requires ASCII, CRLF line endings, at most 998 bytes per line and no unsafe
+controls. Unsafe controls and invalid UTF-8 are refused. Changed HTML exceeding
+the 7bit line limit is refused rather than changing encoding.
 
 ## Narrow flowed-to-fixed normalization
 
@@ -76,35 +91,43 @@ unchanged and edited saves, with no writes.
 On an actual body-text change from that proven snapshot, the owner-approved
 transport exception changes only the raw plain Content-Type **format value**
 from flowed to `fixed`, while synchronizing both bodies. Parameter key spelling,
-quotes, folding, charset, CTE and every other part-header byte are retained.
+quotes, folding, charset and every other part-header byte are retained, except
+for the independently proven plain 7bit-to-quoted-printable promotion above.
 This permits new literal indentation, quotes, trailing/repeated spaces, tabs,
 Unicode and NBSP under fixed semantics, subject to the existing text/encoding
-bounds. Plain without a format is unchanged; existing fixed plain is subject to
-the same HTML/text proof but not the flowed line restriction. No-op/header-only
-edits retain the original flowed header and bodies byte-for-byte.
+bounds. Plain without a format gains no format parameter; existing fixed plain
+is subject to the same HTML/text proof but not the flowed line restriction.
+No-op/header-only edits retain the original flowed header and bodies byte-for-byte.
 
 ## Byte invariants and limits
 
 Unchanged supported alternatives retain their original body bytes and, when
 editor fields are unchanged, the entire raw message. Changed To/Cc/Subject
 fields use only the existing editor constructor. Except for the controlled
-flowed-to-fixed format-value token on a body edit, all other root/part headers,
-root wrapper, boundary lines, separators, preamble, epilogue and metadata stay
+flowed-to-fixed format-value token and plain encoding promotion on a body edit,
+all other root/part headers, root wrapper, boundary lines, separators, preamble,
+epilogue and metadata stay
 byte-for-byte. The final guard reparses the **actual outgoing bytes**, proves
 both representations equivalent, compares raw immutable skeletons and wrapper,
 and runs after metadata/parent construction before any PUT. The skeleton masks
-only the two body slots and that positively located format-value span. An explicit
-transition proof requires identical raw token bytes when format is unchanged,
-and permits only proven old flowed to new fixed on a body-text change; it rejects
+only the two body slots and that positively located format-value span; it does
+not mask part headers or encoding fields. For a proven decoded-text change from
+old default/explicit 7bit, it normalizes only the old positively located insertion
+point/value span to the constructor's exact forward promotion before comparing
+immutable bytes. Reverse, arbitrary, removed, duplicate, or no-body-change encoding
+transitions are refused. Without a decoded-text change, both body spans must also
+remain byte-identical. An explicit format transition proof requires identical raw
+token bytes when format is unchanged, and permits only proven old flowed to new
+fixed on a body-text change; it rejects
 reverse transitions, adding/removing format, normalization without a body edit,
 and flowed body edits without normalization. Unsupported cases
 refuse on unchanged as well as edited saves.
 
 Bounds: 2 MiB raw MIME, 256 KiB decoded text/HTML, 20,000 legacy HTML tokens,
-76-byte quoted-printable lines, 998-byte HTML 7bit lines, 70-byte conservative
-ASCII boundary grammar. Strict CRLF framing is required. These are parser
-bounds, not HTTP transport response bounds; the Google SDK first materializes
-its response.
+76-byte quoted-printable lines, 998-byte raw plain/HTML 7bit lines, 70-byte
+conservative ASCII boundary grammar. Strict CRLF framing is required except for
+the complete final closing delimiter at EOF. These are parser bounds, not HTTP
+transport response bounds; the Google SDK first materializes its response.
 
 ## GET-only full preparation check
 
@@ -158,5 +181,6 @@ possible.
 No live mailbox writes are used to develop or test this path; permanent tests
 use invented Gmail-style messages and synthetic transports. An owner-authorized
 read-only structural inspection informed the exact envelope/direction extension
-and the narrow owner-approved flowed-to-fixed exception; no private message
-content is retained in repository fixtures.
+and the narrow owner-approved flowed-to-fixed, default-7bit, final-delimiter EOF
+and single terminal HTML CRLF compatibility exceptions; no private message content
+is retained in repository fixtures.

@@ -89,6 +89,8 @@ func isAlternative(raw []byte) bool {
 type draftAlternative struct {
 	headers             rawDraftHeaders
 	plain, html         draftSpan
+	plainEncoding       string
+	encodingValue       draftSpan
 	formatValue         draftSpan
 	format              string
 	text                string
@@ -164,7 +166,13 @@ func parseAlternative(raw []byte) (draftAlternative, error) {
 			if line != "--"+boundary && line != "--"+boundary+"--" {
 				return fail()
 			}
-			marks = append(marks, draftSpan{pos, end + 2})
+			markEnd := end
+			if rel >= 0 {
+				markEnd += 2
+			} else if line != "--"+boundary+"--" {
+				return fail()
+			}
+			marks = append(marks, draftSpan{pos, markEnd})
 			closing = append(closing, line == "--"+boundary+"--")
 		}
 		if rel < 0 {
@@ -186,7 +194,13 @@ func parseAlternative(raw []byte) (draftAlternative, error) {
 			return out, err
 		}
 		failureCode = "alternative_part_headers"
-		if len(ph.header) != 2 {
+		for name := range ph.header {
+			if name != "Content-Type" && name != "Content-Transfer-Encoding" {
+				return fail()
+			}
+		}
+		encoding := strings.ToLower(ph.header.Get("Content-Transfer-Encoding"))
+		if _, present := ph.header["Content-Transfer-Encoding"]; present && encoding == "" {
 			return fail()
 		}
 		failureCode = "alternative_part_type"
@@ -225,13 +239,26 @@ func parseAlternative(raw []byte) (draftAlternative, error) {
 		}
 		span := draftSpan{start + ph.body, end}
 		switch {
-		case pt == "text/plain" && out.plain.end == 0 && strings.EqualFold(ph.header.Get("Content-Transfer-Encoding"), "quoted-printable"):
+		case pt == "text/plain" && out.plain.end == 0 && (encoding == "" || encoding == "7bit" || encoding == "quoted-printable"):
 			out.plain = span
+			out.plainEncoding = encoding
+			// Missing CTE is inserted immediately before the header/body separator.
+			out.encodingValue = draftSpan{start + ph.body - 2, start + ph.body - 2}
+			offset := start
+			for _, block := range ph.blocks {
+				if blockName(block) == "content-transfer-encoding" {
+					colon := strings.IndexByte(block, ':') + 1
+					value := strings.Trim(block[colon:], " \t\r\n")
+					begin := colon + strings.Index(block[colon:], value)
+					out.encodingValue = draftSpan{offset + begin, offset + begin + len(value)}
+				}
+				offset += len(block)
+			}
 			if formatOK {
 				out.format = plainFormat
 				out.formatValue = draftSpan{start + formatValue.start, start + formatValue.end}
 			}
-		case pt == "text/html" && out.html.end == 0 && strings.EqualFold(ph.header.Get("Content-Transfer-Encoding"), "7bit"):
+		case pt == "text/html" && out.html.end == 0 && (encoding == "" || encoding == "7bit"):
 			out.html = span
 		default:
 			return fail()
@@ -243,26 +270,39 @@ func parseAlternative(raw []byte) (draftAlternative, error) {
 	}
 	failureCode = "alternative_plain_lines"
 	encoded := raw[out.plain.start:out.plain.end]
-	for _, line := range bytes.Split(encoded, []byte("\r\n")) {
-		if len(line) > 76 || bytes.HasSuffix(line, []byte(" ")) || bytes.HasSuffix(line, []byte("\t")) {
-			return fail()
-		}
-	}
-	failureCode = "alternative_plain_encoding"
-	for i := 0; i < len(encoded); i++ {
-		if encoded[i] > 127 {
-			return fail()
-		}
-		if encoded[i] == '=' {
-			if i+2 >= len(encoded) || !(encoded[i+1] == '\r' && encoded[i+2] == '\n' || mimeHex(encoded[i+1]) && mimeHex(encoded[i+2])) {
+	decoded := encoded
+	if out.plainEncoding == "quoted-printable" {
+		for _, line := range bytes.Split(encoded, []byte("\r\n")) {
+			if len(line) > 76 || bytes.HasSuffix(line, []byte(" ")) || bytes.HasSuffix(line, []byte("\t")) {
 				return fail()
 			}
-			i += 2
 		}
-	}
-	decoded, err := io.ReadAll(quotedprintable.NewReader(bytes.NewReader(encoded)))
-	if err != nil {
-		return fail()
+		failureCode = "alternative_plain_encoding"
+		for i := 0; i < len(encoded); i++ {
+			if encoded[i] > 127 {
+				return fail()
+			}
+			if encoded[i] == '=' {
+				if i+2 >= len(encoded) || !(encoded[i+1] == '\r' && encoded[i+2] == '\n' || mimeHex(encoded[i+1]) && mimeHex(encoded[i+2])) {
+					return fail()
+				}
+				i += 2
+			}
+		}
+		decoded, err = io.ReadAll(quotedprintable.NewReader(bytes.NewReader(encoded)))
+		if err != nil {
+			return fail()
+		}
+	} else {
+		for _, line := range bytes.Split(encoded, []byte("\r\n")) {
+			if len(line) > 998 {
+				return fail()
+			}
+		}
+		failureCode = "alternative_plain_encoding"
+		if !safeDraft7bit(encoded) {
+			return fail()
+		}
 	}
 	failureCode = "alternative_plain_text"
 	out.text = strings.ReplaceAll(string(decoded), "\r\n", "\n")
@@ -280,10 +320,8 @@ func parseAlternative(raw []byte) (draftAlternative, error) {
 		}
 	}
 	failureCode = "alternative_html_encoding"
-	for _, b := range htmlRaw {
-		if b > 127 {
-			return fail()
-		}
+	if !safeDraft7bit(htmlRaw) {
+		return fail()
 	}
 	projection, open, close, generated, err := projectDraftHTML(string(htmlRaw))
 	if err != nil {
@@ -299,6 +337,16 @@ func parseAlternative(raw []byte) (draftAlternative, error) {
 		}
 	}
 	return out, nil
+}
+
+// CRLF framing is checked before this; neither default 7bit body is QP-decoded.
+func safeDraft7bit(raw []byte) bool {
+	for _, b := range raw {
+		if b > 126 || b < 32 && b != '\t' && b != '\r' && b != '\n' {
+			return false
+		}
+	}
+	return true
 }
 
 func safeDraftText(s string) bool {
@@ -324,6 +372,13 @@ func projectDraftHTML(source string) (text, open, close string, generated bool, 
 	if len(source) > maxDraftHTMLBytes {
 		return fail()
 	}
+	// One transport CRLF may follow the complete root/envelope, not arbitrary
+	// HTML whitespace. Retain it as immutable closing-wrapper bytes on edits.
+	trailing := ""
+	if strings.HasSuffix(source, "\r\n") {
+		source = source[:len(source)-2]
+		trailing = "\r\n"
+	}
 	const envelopeOpen, envelopeClose = "<html><body>", "</body></html>"
 	enveloped := strings.HasPrefix(source, envelopeOpen)
 	if enveloped {
@@ -341,6 +396,7 @@ func projectDraftHTML(source string) (text, open, close string, generated bool, 
 	if enveloped {
 		open, close = envelopeOpen+open, close+envelopeClose
 	}
+	close += trailing
 	if strings.HasPrefix(inner, draftPreWrap) && strings.HasSuffix(inner, "</span>") {
 		raw := inner[len(draftPreWrap) : len(inner)-len("</span>")]
 		if strings.ContainsAny(raw, "<>") {
@@ -522,6 +578,9 @@ func spliceAlternative(raw []byte, a draftAlternative, text string) ([]byte, err
 		body []byte
 	}
 	edits := []edit{{a.plain, qp.Bytes()}, {a.html, htmlBody}}
+	if a.plainEncoding != "quoted-printable" {
+		edits = append(edits, edit{a.encodingValue, alternativeEncodingPromotion(a)})
+	}
 	if a.format == "flowed" {
 		edits = append(edits, edit{a.formatValue, []byte("fixed")})
 	}
@@ -537,15 +596,33 @@ func spliceAlternative(raw []byte, a draftAlternative, text string) ([]byte, err
 	return out, nil
 }
 
-// The skeleton contains all non-editor bytes, including wrapper, headers,
-// boundary framing, preamble and epilogue. The controlled format-value slot is
-// masked only in conjunction with checkAlternativeReplacement's transition proof.
-func alternativeSkeleton(raw []byte, a draftAlternative) []byte {
-	spans := []draftSpan{a.plain, a.html}
-	if a.format != "" {
-		spans = append(spans, a.formatValue)
+func alternativeEncodingPromotion(a draftAlternative) []byte {
+	if a.plainEncoding == "" {
+		return []byte("Content-Transfer-Encoding: quoted-printable\r\n")
 	}
-	sort.Slice(spans, func(i, j int) bool { return spans[i].start < spans[j].start })
+	return []byte("quoted-printable")
+}
+
+// All part headers remain exact. Only the positively located old encoding token
+// (or missing-header insertion point) can be normalized to the constructor's
+// exact forward promotion, after the independent decoded-text transition proof.
+func alternativeSkeleton(raw []byte, a draftAlternative) []byte {
+	return alternativeEncodingSkeleton(raw, a, false)
+}
+
+func alternativeEncodingSkeleton(raw []byte, a draftAlternative, promote bool) []byte {
+	type slot struct {
+		span  draftSpan
+		value []byte
+	}
+	slots := []slot{{a.plain, []byte{0}}, {a.html, []byte{0}}}
+	if a.format != "" {
+		slots = append(slots, slot{a.formatValue, []byte{0}})
+	}
+	if promote {
+		slots = append(slots, slot{a.encodingValue, alternativeEncodingPromotion(a)})
+	}
+	sort.Slice(slots, func(i, j int) bool { return slots[i].span.start < slots[j].span.start })
 	var out []byte
 	for _, block := range a.headers.blocks {
 		if !editorHeader(blockName(block)) {
@@ -554,10 +631,10 @@ func alternativeSkeleton(raw []byte, a draftAlternative) []byte {
 	}
 	out = append(out, '\r', '\n')
 	pos := a.headers.body
-	for _, s := range spans {
-		out = append(out, raw[pos:s.start]...)
-		out = append(out, 0)
-		pos = s.end
+	for _, s := range slots {
+		out = append(out, raw[pos:s.span.start]...)
+		out = append(out, s.value...)
+		pos = s.span.end
 	}
 	return append(out, raw[pos:]...)
 }
@@ -572,12 +649,19 @@ func checkAlternativeReplacement(current, replacement []byte) error {
 		return err
 	}
 	bodyChanged := old.text != next.text
+	promoting := bodyChanged && old.plainEncoding != "quoted-printable"
+	if promoting && next.plainEncoding != "quoted-printable" {
+		return draftRefusal("immutable_mime_changed")
+	}
+	if !bodyChanged && (!bytes.Equal(current[old.plain.start:old.plain.end], replacement[next.plain.start:next.plain.end]) || !bytes.Equal(current[old.html.start:old.html.end], replacement[next.html.start:next.html.end])) {
+		return draftRefusal("immutable_mime_changed")
+	}
 	normalizing := old.format == "flowed" && next.format == "fixed" && bodyChanged
 	sameFormat := old.format == next.format && bytes.Equal(current[old.formatValue.start:old.formatValue.end], replacement[next.formatValue.start:next.formatValue.end])
 	if !normalizing && (!sameFormat || old.format == "flowed" && bodyChanged) {
 		return draftRefusal("immutable_mime_changed")
 	}
-	if old.rootOpen != next.rootOpen || old.rootClose != next.rootClose || !bytes.Equal(alternativeSkeleton(current, old), alternativeSkeleton(replacement, next)) {
+	if old.rootOpen != next.rootOpen || old.rootClose != next.rootClose || !bytes.Equal(alternativeEncodingSkeleton(current, old, promoting), alternativeSkeleton(replacement, next)) {
 		return draftRefusal("immutable_mime_changed")
 	}
 	return nil
