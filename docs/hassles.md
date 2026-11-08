@@ -35,8 +35,9 @@ Configured calendar details and its settings link stay in Settings, not the Hass
   create or an explicit **Start a separate new hassle** resets a submitted draft. Attempted
   creates survive in-app navigation and remounts, scoped to their original calendar;
   switching calendars never reuses an uncertain create's UUID for another calendar.
-  The plain task heading spans its own full-width row and is not interactive;
-  the pencil and both completion controls stay together beside the grey schedule text below it.
+  The non-interactive task heading has its own row, with a known work-hours badge
+  at the top right; without a badge the title keeps the full width. The pencil and
+  both completion controls stay together beside the grey schedule text below it.
   The pencil edits its whole recurring series. Separate
   tasks with the same title are not linked. Every card has two completion buttons:
   single check **This instance only**, double check **All instances**, with task-specific
@@ -55,7 +56,7 @@ Configured calendar details and its settings link stay in Settings, not the Hass
   validation errors, timing uncertainty and edit restrictions remain visible.
   Rows use the raised card surface (white in light mode, theme-aware in dark mode)
   and show a compact Melbourne date/time plus recurrence and repeat end when editable.
-  A small **work** badge appears beside that summary only when the known schedule has
+  A small **work** badge appears at the card's top right only when the known schedule has
   Work hours only enabled; unchecked or unknown schedules do not imply the restriction.
 - First reminder offers In an hour, This afternoon (13:00), This evening (18:00),
   Tomorrow morning (08:30), and Custom. Only Custom shows the date/time picker.

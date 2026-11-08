@@ -60,18 +60,25 @@ export default function HassleList({
                 <ul className="m-0 flex list-none flex-col gap-3 p-0">
                   {group.tasks.map((task) => (
                     <li key={task.id} className="min-w-0 rounded-md border border-line bg-card p-4">
-                      <h3 data-hassle-title className="m-0 w-full text-base wrap-break-word">
-                        {task.title}
-                      </h3>
+                      <div data-hassle-heading className="flex min-w-0 items-start gap-2">
+                        <h3
+                          data-hassle-title
+                          className="m-0 min-w-0 flex-1 text-base wrap-break-word"
+                        >
+                          {task.title}
+                        </h3>
+                        {task.schedule?.workHours ? (
+                          <span data-hassle-work className="shrink-0">
+                            <StatusBadge tone="neutral">work</StatusBadge>
+                          </span>
+                        ) : null}
+                      </div>
                       <div data-hassle-details className="mt-1 flex min-w-0 items-center gap-3">
                         <p
                           data-hassle-summary
                           className="m-0 flex min-w-0 flex-1 flex-wrap items-center gap-2 text-sm text-muted"
                         >
                           <span className="min-w-0 wrap-break-word">{hassleSummary(task)}</span>
-                          {task.schedule?.workHours ? (
-                            <StatusBadge tone="neutral">work</StatusBadge>
-                          ) : null}
                         </p>
                         <div data-hassle-actions className="flex shrink-0 items-center gap-3">
                           <IconButton

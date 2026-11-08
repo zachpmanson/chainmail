@@ -49,6 +49,7 @@ const tasks: HassleTask[] = [
     },
   },
 ];
+tasks.push({ ...task, id: "task:unbroken-work", title: "Unbroken".repeat(30) });
 const markup = renderToStaticMarkup(
   createElement(HassleList, {
     tasks,
@@ -77,9 +78,12 @@ const measure = String.raw`function () {
       document.documentElement.style.fontSize = root + "px";
       document.getElementById("fixture").style.width = width + "px";
       const cards = [...document.querySelectorAll("li")];
-      if (cards.length !== 3) throw new Error("Missing fixture cards");
+      if (cards.length !== 4) throw new Error("Missing fixture cards");
       for (const card of cards) {
+        const heading = rect(card.querySelector("[data-hassle-heading]"));
         const title = rect(card.querySelector("[data-hassle-title]"));
+        const workNode = card.querySelector("[data-hassle-work]");
+        const work = workNode ? rect(workNode) : null;
         const details = rect(card.querySelector("[data-hassle-details]"));
         const summary = rect(card.querySelector("[data-hassle-summary]"));
         const actions = rect(card.querySelector("[data-hassle-actions]"));
@@ -87,10 +91,14 @@ const measure = String.raw`function () {
         const outer = rect(card), style = getComputedStyle(card);
         const left = outer.x + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft);
         const right = outer.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight);
-        const result = {theme,root,width,title,details,summary,actions,buttons};
+        const result = {theme,root,width,heading,title,work,details,summary,actions,buttons};
         const fail = (message) => {throw new Error(message + ": " + JSON.stringify(result));};
-        if (!close(title.x,left) || !close(title.right,right)) fail("Title must span the entire card interior");
-        if (details.y < title.bottom || !close(details.width,title.width)) fail("Details must be below the full-width title");
+        if (!close(heading.x,left) || !close(heading.right,right) || !close(title.x,left)) fail("Heading must span the card interior");
+        if (work) {
+          if (!close(work.right,right) || !close(work.y,heading.y) || title.right >= work.x || work.bottom > heading.bottom + 1) fail("Work badge must sit at top right without overlapping the title");
+          if (card.querySelector("[data-hassle-summary]").textContent.includes("work")) fail("Work badge must leave the summary");
+        } else if (!close(title.right,right)) fail("Title without badge must keep the full width");
+        if (details.y < heading.bottom || !close(details.width,heading.width)) fail("Details must be below the heading");
         if (!close(summary.x,left) || summary.width <= 0 || actions.x < summary.right) fail("Summary and actions must share one row");
         if (!close(actions.y + actions.height/2, details.y + details.height/2)) fail("Actions must align with grey summary row");
         if (buttons.length !== 3 || buttons.some((r) => !close(r.y,buttons[0].y))) fail("All three buttons must stay inline");
@@ -127,10 +135,10 @@ try {
   if (!encoded) throw new Error("Missing Chromium geometry results");
   const result = JSON.parse(decodeURIComponent(encoded)) as { error?: string; results: object[] };
   if (result.error) throw new Error(result.error);
-  if (result.results.length !== 90) throw new Error("Incomplete geometry matrix");
+  if (result.results.length !== 120) throw new Error("Incomplete geometry matrix");
   console.log(JSON.stringify(result, null, 2));
   console.log(
-    "PASS: 90 offline card layouts (light/dark, 14/16/20px roots, 320–960px, short/long/unbroken titles).",
+    "PASS: 120 offline card layouts (light/dark, 14/16/20px roots, 320–960px, short/long/unbroken titles with and without work badges).",
   );
 } finally {
   await rm(profile, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });

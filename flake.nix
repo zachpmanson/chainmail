@@ -90,7 +90,7 @@
             pkgs.go
             pkgs.gopls
             pkgs.sqlite            # for poking at a corpus by hand
-          ];
+          ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [ pkgs.chromium ]; # offline layout smoke tests
 
           shellHook = ''
             echo "chainmail  ·  node $(node --version)  npm $(npm --version)"

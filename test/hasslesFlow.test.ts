@@ -124,9 +124,10 @@ it("submits hourly work-hours schedules, preserves a failed-create draft and edi
   await click(button("Add hassle"));
   expect(writes().at(-1)!.body).toEqual(first);
   expect(checkbox().checked).toBe(false);
-  expect(document.querySelector('section[aria-label="Reminders"] p')?.textContent).toContain(
+  expect(document.querySelector("[data-hassle-heading] [data-hassle-work]")?.textContent).toBe(
     "work",
   );
+  expect(document.querySelector("[data-hassle-summary]")?.textContent).not.toContain("work");
   await click(button("Edit"));
   const dialog = document.querySelector('[role="dialog"][aria-modal="true"]')!;
   expect(document.querySelectorAll('[role="dialog"][aria-modal="true"]')).toHaveLength(1);
@@ -451,7 +452,7 @@ it("constrains a long unbroken plain title to the row width and edits via its pe
   expect(heading.children).toHaveLength(0);
   expect(heading.parentElement!.classList.contains("min-w-0")).toBe(true);
   expect(heading.classList.contains("wrap-break-word")).toBe(true);
-  expect(heading.classList.contains("w-full")).toBe(true);
+  expect(heading.classList.contains("flex-1")).toBe(true);
   await click(button("Edit"));
   expect(titleInput(document.querySelector('[role="dialog"][aria-modal="true"]')!).value).toBe(
     title,

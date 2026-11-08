@@ -40,12 +40,14 @@ it.each([true, false, undefined, null])(
         onDoneInstance: () => {},
       }),
     );
-    const badges = [...root.querySelectorAll("p span")].filter(
-      (span) => span.textContent === "work",
-    );
+    const badges = [...root.querySelectorAll("[data-hassle-work] > span")];
     expect(badges).toHaveLength(workHours === true ? 1 : 0);
     expect(root.querySelector("h3")?.textContent).toBe("Pay invoice");
     expect(root.textContent).not.toContain("Mon–Fri 9–5");
-    if (badges[0]) expect(badges[0].className).toContain("rounded-full");
+    if (badges[0]) {
+      expect(badges[0].className).toContain("rounded-full");
+      expect(badges[0].closest("[data-hassle-heading]")).not.toBeNull();
+      expect(root.querySelector("[data-hassle-summary]")?.textContent).not.toContain("work");
+    }
   },
 );
