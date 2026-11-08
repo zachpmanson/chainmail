@@ -450,7 +450,8 @@ it("constrains a long unbroken plain title to the row width and edits via its pe
   expect(heading.textContent).toBe(title);
   expect(heading.children).toHaveLength(0);
   expect(heading.parentElement!.classList.contains("min-w-0")).toBe(true);
-  expect(heading.parentElement!.classList.contains("wrap-break-word")).toBe(true);
+  expect(heading.classList.contains("wrap-break-word")).toBe(true);
+  expect(heading.classList.contains("w-full")).toBe(true);
   await click(button("Edit"));
   expect(titleInput(document.querySelector('[role="dialog"][aria-modal="true"]')!).value).toBe(
     title,
