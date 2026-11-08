@@ -35,8 +35,9 @@ Configured calendar details and its settings link stay in Settings, not the Hass
   create or an explicit **Start a separate new hassle** resets a submitted draft. Attempted
   creates survive in-app navigation and remounts, scoped to their original calendar;
   switching calendars never reuses an uncertain create's UUID for another calendar.
-  The plain task heading is not interactive;
-  the pencil beside the completion controls edits its whole recurring series. Separate
+  The plain task heading spans its own full-width row and is not interactive;
+  the pencil and both completion controls stay together beside the grey schedule text below it.
+  The pencil edits its whole recurring series. Separate
   tasks with the same title are not linked. Every card has two completion buttons:
   single check **This instance only**, double check **All instances**, with task-specific
   accessible names/tooltips. Edit and all-instance removal use dialogs. The edit dialog

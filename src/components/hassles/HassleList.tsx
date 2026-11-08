@@ -59,53 +59,65 @@ export default function HassleList({
                 <h2 className="text-xs font-medium text-muted">{group.label}</h2>
                 <ul className="m-0 flex list-none flex-col gap-3 p-0">
                   {group.tasks.map((task) => (
-                    <li
-                      key={task.id}
-                      className="flex flex-wrap items-center gap-3 rounded-md border border-line bg-card p-4"
-                    >
-                      <div className="min-w-0 flex-1 wrap-break-word">
-                        <h3 className="m-0 text-base">{task.title}</h3>
-                        <p className="my-1 flex flex-wrap items-center gap-2 text-sm text-muted">
-                          <span className="min-w-0">{hassleSummary(task)}</span>
+                    <li key={task.id} className="min-w-0 rounded-md border border-line bg-card p-4">
+                      <h3 data-hassle-title className="m-0 w-full text-base wrap-break-word">
+                        {task.title}
+                      </h3>
+                      <div data-hassle-details className="mt-1 flex min-w-0 items-center gap-3">
+                        <p
+                          data-hassle-summary
+                          className="m-0 flex min-w-0 flex-1 flex-wrap items-center gap-2 text-sm text-muted"
+                        >
+                          <span className="min-w-0 wrap-break-word">{hassleSummary(task)}</span>
                           {task.schedule?.workHours ? (
                             <StatusBadge tone="neutral">work</StatusBadge>
                           ) : null}
                         </p>
-                        {task.timing.note ? (
-                          <p className="my-1 text-xs text-muted">{task.timing.note}</p>
-                        ) : null}
-                        {task.restriction ? (
-                          <p className="my-1 text-xs text-muted">{task.restriction}</p>
-                        ) : null}
+                        <div data-hassle-actions className="flex shrink-0 items-center gap-3">
+                          <IconButton
+                            aria-label={`Edit ${task.title}`}
+                            title="Edit"
+                            disabled={
+                              busy || blocked.has(task.id) || !task.writable || !task.schedule
+                            }
+                            onClick={() => onEdit(task)}
+                          >
+                            <IconPencil aria-hidden="true" />
+                          </IconButton>
+                          <IconButton
+                            aria-label={`This instance only: ${task.title}`}
+                            title={
+                              task.instance
+                                ? `This instance only: ${task.title}`
+                                : `${task.title}: ${task.instanceRestriction || "This instance only unavailable"}`
+                            }
+                            disabled={
+                              busy || blocked.has(task.id) || !task.writable || !task.instance
+                            }
+                            onClick={() => onDoneInstance(task)}
+                          >
+                            <IconCheck aria-hidden="true" />
+                          </IconButton>
+                          <IconButton
+                            aria-label={`All instances: ${task.title}`}
+                            title={`All instances: ${task.title}`}
+                            disabled={busy || blocked.has(task.id) || !task.writable}
+                            onClick={() => onDone(task)}
+                          >
+                            <IconChecks aria-hidden="true" />
+                          </IconButton>
+                        </div>
                       </div>
-                      <IconButton
-                        aria-label={`Edit ${task.title}`}
-                        title="Edit"
-                        disabled={busy || blocked.has(task.id) || !task.writable || !task.schedule}
-                        onClick={() => onEdit(task)}
-                      >
-                        <IconPencil aria-hidden="true" />
-                      </IconButton>
-                      <IconButton
-                        aria-label={`This instance only: ${task.title}`}
-                        title={
-                          task.instance
-                            ? `This instance only: ${task.title}`
-                            : `${task.title}: ${task.instanceRestriction || "This instance only unavailable"}`
-                        }
-                        disabled={busy || blocked.has(task.id) || !task.writable || !task.instance}
-                        onClick={() => onDoneInstance(task)}
-                      >
-                        <IconCheck aria-hidden="true" />
-                      </IconButton>
-                      <IconButton
-                        aria-label={`All instances: ${task.title}`}
-                        title={`All instances: ${task.title}`}
-                        disabled={busy || blocked.has(task.id) || !task.writable}
-                        onClick={() => onDone(task)}
-                      >
-                        <IconChecks aria-hidden="true" />
-                      </IconButton>
+                      {task.timing.note ? (
+                        <p className="my-1 text-xs wrap-break-word text-muted">
+                          {task.timing.note}
+                        </p>
+                      ) : null}
+                      {task.restriction ? (
+                        <p className="my-1 text-xs wrap-break-word text-muted">
+                          {task.restriction}
+                        </p>
+                      ) : null}
                     </li>
                   ))}
                 </ul>
