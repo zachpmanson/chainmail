@@ -124,7 +124,8 @@ writes sidecars/audit only, except for explicitly reviewed source-origin quote
 sightings that have independent sightings; their entries and independent/direct
 evidence remain. Withdrawn sighting rows are retained in the audit payload.
 Unique orphan artifacts are a refusal, **not deletion or a claim of full legacy
-cleanup**. Refused manifests do not partially apply. A changed corpus requires a
+cleanup**. Independent quote evidence must survive outside the entire selected
+source set; two selected notifications cannot witness each other's withdrawal. Refused manifests do not partially apply. A changed corpus requires a
 fresh preview (the conservative graph revision precondition can reject unrelated
 concurrent changes too). There is no general rollback UI/command; withdrawn rows
 and the exact reviewed manifest remain inspectable in the local apply audit.

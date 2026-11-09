@@ -122,6 +122,31 @@ func reactionQuoteCheck(q corpusQuery, id int64) (int, error) {
 	return count, nil
 }
 
+// reactionBatchQuoteCheck requires evidence that survives the whole withdrawal
+// set; two selected notifications cannot count each other as independent hosts.
+func reactionBatchQuoteCheck(q corpusQuery, ids []int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	ph := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
+	args := make([]any, 0, 2*len(ids))
+	for range 2 {
+		for _, id := range ids {
+			args = append(args, id)
+		}
+	}
+	var orphans int
+	if err := q.QueryRow(`select count(distinct g.entry_id) from sightings g
+ where g.seen_in in (`+ph+`) and not exists(select 1 from sightings independent
+ where independent.entry_id=g.entry_id and (independent.seen_in is null or independent.seen_in not in (`+ph+`)))`, args...).Scan(&orphans); err != nil {
+		return err
+	}
+	if orphans != 0 {
+		return fmt.Errorf("refusing %d quote artifacts without independent evidence outside selected sources", orphans)
+	}
+	return nil
+}
+
 // PreviewReactionSource reads only local state. The MIME read is supplied by the
 // normal mailbox boundary; no quote extraction, labels, cursors or Put runs here.
 func (s *Store) PreviewReactionSource(accountID, gmailID string) (ReactionPreviewItem, error) {
@@ -159,6 +184,7 @@ func (s *Store) PreviewReactionSource(accountID, gmailID string) (ReactionPrevie
 // or unknown source-copy account is needed to project the post-apply result.
 func (s *Store) PreviewReactionTargets(manifest *ReactionManifest) error {
 	var prospective [][]any
+	var sourceIDs []int64
 	for _, item := range manifest.Items {
 		if item.Refusal != "" {
 			continue
@@ -170,12 +196,16 @@ func (s *Store) PreviewReactionTargets(manifest *ReactionManifest) error {
 		if err := s.db.QueryRow(`select id from entries where ext_id=?`, item.Source.ExtID).Scan(&id); err != nil {
 			return err
 		}
+		sourceIDs = append(sourceIDs, id)
 		e, m := reactionItemEvidence(item)
 		prospective = append(prospective, []any{item.Source.ExtID, id, reactionSnapshot(e, m, 0), manifest.AccountID, item.GmailID,
 			reactionSemantic(true, item.Inspection.Candidates[0].Emoji, item.Inspection.TargetMessageID, e, m, 0), item.Inspection.Candidates[0].Emoji, item.Inspection.TargetMessageID})
 	}
 	if len(prospective) == 0 {
 		return nil
+	}
+	if err := reactionBatchQuoteCheck(s.db, sourceIDs); err != nil {
+		return err
 	}
 	raw, err := json.Marshal(prospective)
 	if err != nil {
@@ -336,6 +366,13 @@ func (s *Store) ApplyReactionManifest(manifest ReactionManifest) (bool, error) {
 			return false, errors.New("source has attachments")
 		}
 		ids[item.GmailID] = id
+	}
+	var sourceIDs []int64
+	for _, item := range manifest.Items {
+		sourceIDs = append(sourceIDs, ids[item.GmailID])
+	}
+	if err = reactionBatchQuoteCheck(tx, sourceIDs); err != nil {
+		return false, err
 	}
 	// Keep the withdrawn rows in an audit payload for inspection/restoration.
 	var withdrawn []string
