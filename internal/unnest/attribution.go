@@ -97,7 +97,7 @@ func parsePerson(s string) (name, addr string) {
 }
 
 func trimClosers(s string) string {
-	l := strings.ToLower(s)
+	l, offsets := indexedStructure(s)
 	best := -1
 	for _, c := range closers {
 		if i := strings.LastIndex(l, c); i > best {
@@ -105,7 +105,7 @@ func trimClosers(s string) string {
 		}
 	}
 	if best >= 0 {
-		return strings.TrimSpace(s[:best])
+		return strings.TrimSpace(s[:offsets[best]])
 	}
 	return s
 }

@@ -45,7 +45,7 @@ var (
 )
 
 func hasClosum(s string) bool {
-	l := strings.ToLower(s)
+	l := strings.ToLower(structuralText(s))
 	for _, c := range closers {
 		if strings.Contains(l, c) {
 			return true
@@ -157,7 +157,7 @@ func FindHeaderBlock(lines []Line, i int) (Boundary, bool) {
 			lastField, lastValue, folds = field, value, 0
 			continue
 		}
-		if startsWithOpener(t) {
+		if startsWithOpener(t) || reForwardRule.MatchString(t) || reBareRule.MatchString(t) {
 			break
 		}
 		// A long recipient list wraps, and the quoted rendering usually loses the

@@ -77,6 +77,14 @@ func splitDate(s string, whole bool) (DateResult, string, bool) {
 	}
 	rest := s[loc[1]:]
 	clock := s[loc[0]:loc[1]]
+	// A signed suffix is zone evidence, not a malformed clock. Validate it in
+	// the same path as a separately spaced numeric offset.
+	adjacentZone := false
+	if at := strings.IndexAny(clock, "+-"); at >= 0 {
+		adjacentZone = true
+		rest = " " + clock[at:] + rest
+		clock = clock[:at]
+	}
 	// A sign, letter, digit or punctuation glued before the clock is not a pivot.
 	boundary := true
 	if loc[0] > 0 {
@@ -124,11 +132,16 @@ func splitDate(s string, whole bool) (DateResult, string, bool) {
 	// there needs its own terminating comma; a whole header has no person.
 	zoneRest := strings.TrimLeft(rest, " ,")
 	if zoneRest != "" {
-		token := strings.TrimRight(strings.Fields(zoneRest)[0], ",")
+		token := zoneRest
+		if end := strings.IndexAny(token, " ,"); end >= 0 {
+			token = token[:end]
+		}
 		tail := strings.TrimLeft(zoneRest[len(token):], " ")
 		afterComma := strings.HasPrefix(strings.TrimLeft(rest, " "), ",")
 		zonePosition := !strings.HasPrefix(tail, "<") && (!afterComma || whole || strings.HasPrefix(tail, ","))
-		if zonePosition && (strings.HasPrefix(token, "+") || strings.HasPrefix(token, "-")) {
+		signed := strings.HasPrefix(token, "+") || strings.HasPrefix(token, "-")
+		numeric := signed && len(token) > 1 && token[1] >= '0' && token[1] <= '9'
+		if adjacentZone || numeric || (zonePosition && signed) {
 			z := reOffset.FindStringSubmatch(token)
 			if z == nil {
 				return unknownDate(DateInvalidZone), rest, true
@@ -144,6 +157,12 @@ func splitDate(s string, whole bool) (DateResult, string, bool) {
 		}
 		if r.TZ != "" {
 			rest = zoneRest[len(token):]
+			if next := strings.Fields(strings.TrimLeft(rest, " ,")); len(next) > 0 {
+				v := next[0]
+				if len(v) > 1 && (v[0] == '+' || v[0] == '-') && v[1] >= '0' && v[1] <= '9' {
+					return unknownDate(DateContradictory), rest, true
+				}
+			}
 		}
 	}
 	d, reason := parseCalendar(s[:loc[0]])

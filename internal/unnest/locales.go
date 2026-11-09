@@ -76,11 +76,28 @@ func splitHeaderLine(s string) (label, value string, ok bool) {
 	return label, value, true
 }
 
+// Keep structural matching NFC-aware without normalizing author display bytes.
+func indexedStructure(s string) (string, []int) {
+	var iter norm.Iter
+	iter.InitString(norm.NFC, s)
+	var text strings.Builder
+	var offsets []int
+	for !iter.Done() {
+		start := iter.Pos()
+		segment := strings.ToLower(string(iter.Next()))
+		text.WriteString(segment)
+		for range len(segment) {
+			offsets = append(offsets, start)
+		}
+	}
+	return text.String(), append(offsets, len(s))
+}
+
 func stripOpener(s string) string {
-	lower := strings.ToLower(s)
+	lower, offsets := indexedStructure(s)
 	for _, opener := range openers {
 		if strings.HasPrefix(lower, opener+" ") {
-			return strings.TrimLeft(s[len(opener):], " ,")
+			return strings.TrimLeft(s[offsets[len(opener)]:], " ,")
 		}
 	}
 	return s
