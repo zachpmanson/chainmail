@@ -10,7 +10,7 @@ import (
 )
 
 // Bump for changes anywhere in HTML/Peel/preamble/image/token/link reduction.
-const twinBodyVersion = 1
+const twinBodyVersion = 2
 
 // Cache limits do not limit matching: oversized or budget-exhausted entries
 // are reduced normally, without retaining a payload for publication.

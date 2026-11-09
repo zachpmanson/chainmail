@@ -434,6 +434,10 @@ func twinCopies(q corpusQuery, person int64) ([]twinCopy, error) {
 }
 
 func twinCopiesCached(q corpusQuery, person int64, cache *twinBodyCache) ([]twinCopy, error) {
+	eligible, err := quotedClockEligibility(q, person)
+	if err != nil {
+		return nil, err
+	}
 	columns, join := "", ""
 	if cache != nil {
 		columns = fmt.Sprintf(`, case when typeof(b.format_version)='integer' then b.format_version end,
@@ -467,6 +471,9 @@ func twinCopiesCached(q corpusQuery, person int64, cache *twinBodyCache) ([]twin
 		}
 		if err := rows.Scan(dest...); err != nil {
 			return nil, err
+		}
+		if c.quoted && !eligible[c.id] {
+			continue
 		}
 		c.wall = time.Unix(ts, 0).UTC()
 		c.empty = strings.TrimSpace(body) == "" && strings.TrimSpace(c.bodyHTML) == ""
@@ -994,6 +1001,14 @@ func collapseGroup(tx corpusWriter, s *Store, c TwinCollapse) error {
 
 // absorb moves one dropped copy's evidence onto the survivor and deletes it.
 func absorb(tx corpusWriter, s *Store, keep, drop int64) error {
+	// Keep historical keys/digests; a moved host must revalidate, not acquire its
+	// survivor's body as retrospective evidence. Conflicting facts abort cleanup.
+	if _, err := tx.Exec(`update quote_key_aliases set entry_id=? where entry_id=?`, keep, drop); err != nil {
+		return err
+	}
+	if err := moveQuoteAliasHosts(tx, keep, drop); err != nil {
+		return err
+	}
 	// The survivor may already hold a sighting or a participation the dropped copy
 	// also holds, and both are keyed on the entry — so repoint what does not
 	// collide and clear what does, as a person merge does.
@@ -1161,6 +1176,10 @@ func absorb(tx corpusWriter, s *Store, keep, drop int64) error {
 // without saying whose, so the offset is real and its owner is not known — and a
 // measurement filed against the wrong person is worse than one not filed at all.
 func measureOffset(q corpusQuery, keep, drop int64) (RenderOffset, bool, error) {
+	eligible, err := quotedClockEligible(q, drop)
+	if err != nil || !eligible {
+		return RenderOffset{}, false, err
+	}
 	var keepQuoted int
 	var keepTS, dropTS int64
 	if err := q.QueryRow(`select quoted, ts from entries where id=?`, keep).
@@ -1235,6 +1254,10 @@ func offsetLabel(mins int) string {
 // set both twin and derived tests reason over. Shared so the two
 // classifications never disagree about which copies were even in range.
 func nearbyCopies(s *Store, person int64, wall time.Time) ([]twinCopy, error) {
+	eligible, err := quotedClockEligibilityFor(s.db, person, " and e.ts between ? and ?", wall.Add(-26*time.Hour).Unix(), wall.Add(26*time.Hour).Unix())
+	if err != nil {
+		return nil, err
+	}
 	rows, err := s.db.Query(`
 		select e.id, e.ext_id, e.quoted, e.ts, coalesce(e.subject,''),
 		       coalesce(e.container,''),
@@ -1255,6 +1278,9 @@ func nearbyCopies(s *Store, person int64, wall time.Time) ([]twinCopy, error) {
 		var body string
 		if err := rows.Scan(&o.id, &o.ext, &o.quoted, &ts, &o.subject, &o.container, &body, &o.bodyHTML, &o.atts); err != nil {
 			return nil, err
+		}
+		if o.quoted && !eligible[o.id] {
+			continue
 		}
 		o.wall = time.Unix(ts, 0).UTC()
 		o.words = copyWords(body, o.bodyHTML, o.quoted)

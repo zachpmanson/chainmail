@@ -653,4 +653,30 @@ create trigger fold_sightings_insert after insert on sightings
 	`create table twins_body_cache (
  entry_id integer primary key, format_version integer not null,
  input_digest blob not null, payload blob not null);`,
+	// 29: explicit quote clock evidence; NULL remains unverified legacy state.
+	`alter table entries add column quote_time_basis text check(quote_time_basis in ('inferred','stated'));
+	 alter table entries add column quote_time_precision text check(quote_time_precision in ('unknown','minute','second'));
+	 create table quote_key_aliases (
+	 source text not null, parsed_key text not null,
+	 entry_id integer not null references entries(id),
+	 host_id integer not null references entries(id),
+	 original_host_id integer not null,
+	 old_ext_id text not null, parser_version integer not null,
+	 host_digest text not null, sentinel_digest text not null,
+	 primary key(source,parsed_key,host_id));
+	 create trigger quote_alias_target before insert on quote_key_aliases
+	 when exists(select 1 from quote_key_aliases where source=new.source and parsed_key=new.parsed_key and entry_id<>new.entry_id)
+	 begin select raise(abort,'conflicting quote alias'); end;
+	 create trigger quote_time_revision after update of quote_time_basis,quote_time_precision on entries
+	 when old.quote_time_basis is not new.quote_time_basis or old.quote_time_precision is not new.quote_time_precision
+	 begin update reconcile_state set source_revision=source_revision+1 where id=1; end;
+	 create trigger quote_alias_insert after insert on quote_key_aliases
+	 begin update reconcile_state set source_revision=source_revision+1 where id=1; end;
+	 create trigger quote_alias_update after update on quote_key_aliases
+	 begin update reconcile_state set source_revision=source_revision+1 where id=1; end;
+	 create trigger quote_alias_delete after delete on quote_key_aliases
+	 begin update reconcile_state set source_revision=source_revision+1 where id=1; end;
+	 create trigger quote_detail_revision after update of detail on sightings
+	 when (coalesce(old.detail,'') like '%time inferred from host%') <> (coalesce(new.detail,'') like '%time inferred from host%')
+	 begin update reconcile_state set source_revision=source_revision+1 where id=1; end;`,
 }

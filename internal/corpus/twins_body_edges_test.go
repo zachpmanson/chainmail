@@ -102,7 +102,7 @@ func TestTwinBodySQLInputAndMetadataMatrix(t *testing.T) {
 	}{
 		{"text same hash", `update entries set body_text=body_text||' ' where id=?`, 1},
 		{"HTML", `update entries set body_html='<p>changed HTML only</p>' where id=?`, 1},
-		{"quoted", `update entries set quoted=1 where id=?`, 1},
+		{"quoted", `update entries set quoted=1,quote_time_basis='stated' where id=?`, 1},
 		{"source ineligible", `update entries set source='slack' where id=?`, 0},
 		{"subject", `update entries set subject='different witness' where id=?`, 0},
 		{"container", `update entries set container='different thread' where id=?`, 0},

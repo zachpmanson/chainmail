@@ -51,7 +51,11 @@ func TestQuoteRepairMigrationRebuildsBothIndexesWithoutChangingSource(t *testing
 			}
 		}
 	}
-	if _, err := s.DB().Exec("drop table reconcile_state; drop table twins_body_cache"); err != nil {
+	if _, err := s.DB().Exec(`drop trigger quote_time_revision; drop trigger quote_detail_revision;
+        drop table quote_key_aliases;
+        alter table entries drop column quote_time_basis;
+        alter table entries drop column quote_time_precision;
+        drop table reconcile_state; drop table twins_body_cache`); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Close(); err != nil {

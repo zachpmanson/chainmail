@@ -1,7 +1,7 @@
 # Quoted dates and header vocabulary
 
-This is **parser phase 1 of #377**, not an existing-corpus repair or a complete
-multilingual-client implementation. Fixtures use invented identities and prose.
+This covers the fixture-backed parser and safe corpus integration for #377,
+not a complete multilingual-client implementation. Fixtures use invented identities and prose.
 They demonstrate supported syntax, not that a particular client/version emitted
 that synthetic example. The English client shapes also have existing anonymised
 regression fixtures.
@@ -167,18 +167,100 @@ attribution-only blank wrapper remains ambiguous and retained**: parsing the
 nested date does not supply missing wrapper subject/recipients or prove identity.
 No identity, HTML-conflict, twin, repair or reconciliation guards are relaxed.
 
-This phase does **not** migrate, reparse or update existing records. Newly parsed
-dates can change parser-produced address/date keys from the old text-hash keys;
-the key algorithm itself is unchanged. Existing body-only repair matches current
-keys and cannot safely repair those historical metadata/key differences. Normal
-re-ingestion is **not** an approved metadata migration and can create another
-recovered row for affected legacy entries. A stored host-bound fallback timestamp
-must not be promoted to stated matching evidence just because this parser now
-recognises a date elsewhere.
+## Corpus time evidence and key continuity
 
-Deployment/integration is gated on the separately reviewed existing-corpus slice:
-bounded read-only preview, validated old/new key continuity, explicit inferred vs
-stated time basis, separately authorised metadata-only apply, idempotence and
-provenance/integrity checks. No persistence migration, alias write, provider call,
-corpus repair, automatic refresh authorisation or production apply is included in
-phase 1. A parser version change alone authorises none of those operations.
+Migration 29 only adds nullable quote time basis/precision and a small validated
+key/evidence relation. It does not rewrite legacy bodies, timestamps or external
+IDs. NULL basis is unverified legacy state; `inferred` means a host upper bound;
+`stated` means a complete parsed wall clock. New extraction sets these explicitly.
+The low-level `PutQuoted` compatibility API defaults manually supplied timestamps
+to stated/second precision; callers with host bounds must specify inferred.
+
+Fallback/unknown clocks are not twin, derived-copy or offset-measurement evidence,
+in either bulk or nearby matching. Legacy address/date keys can independently
+prove the stored author/wall clock; legacy Message-ID keys additionally need
+bounded, complete agreeing source evidence matching the stored value. Unverified
+text keys and surviving inferred markers cannot prove a clock. Authorised apply
+sets an explicit stated basis; historical inference sighting detail is retained.
+Reconciliation rules/cache versions are bumped, but this **never** authorises an
+automatic timestamp repair during slurp, repair, refresh or startup.
+
+A newly understood date can change a parser key from `quote:t:…` to an
+address/date key. Stored external IDs remain stable. The compatibility bridge
+requires the exact old text key, nonempty identical own body, same resolved
+address/person, an existing same-host quoted sighting, proved old inference,
+and exactly one matching recovered occurrence in **every** sighting host, with
+complete agreeing dates, zones and precision. New-key/alias collisions refuse.
+Empty bodies, changed authors, ambiguous repetitions and incomplete/truncated
+host evidence cannot bridge. No corpus-wide body search or fuzzy matching occurs.
+
+Normal re-ingestion may reuse that row and record validated aliases, but cannot
+promote its stored clock, timezone or time basis. The historical inference marker
+survives later `Sight` updates. An unresolved bridge refuses ingestion rather than
+creating another dated row. Existing aliases revalidate the complete current
+host set, full source digests, sentinel digests, author and key collisions. A
+changed date with identical body cannot retarget a previously stated record.
+A new, previously unseen host needs separate evidence review rather than an
+unvalidated alias extension. Body-only repair honours valid aliases without
+changing timestamps; stale aliases leave the entry missing/unmodified. Explicit
+twin cleanup transfers alias FKs and retains historical key/digest/host provenance;
+a moved host's old digest is not replaced with its survivor's content.
+
+## Explicit bounded local reparse
+
+No provider is involved. Back up the database **and its SQLite sidecars** using
+your normal consistent backup procedure, then preview a narrow selection:
+
+```sh
+corpus reparse-quotes -entry quote:t:SYNTHETIC -out reviewed-plan.json
+# Or one container, with deterministic entry-ID paging:
+corpus reparse-quotes -container synthetic-thread -limit 100 -out batch-1.json
+# Use the reported NextID with -after-id for a subsequent preview.
+```
+
+Preview uses a real SQLite readonly/query-only opener: no migrations, WAL setup,
+cache publication, sightings or FTS writes. It supports schema 28 (pre-evidence)
+and 29; unsupported versions refuse. It does not create a missing database or
+parent directory. Whole-host reads are bounded, including hosts outside the
+selected container: at most 100 entries, 1,000 distinct hosts and 32 MiB source
+text/HTML (including selected own-body reads). Lower these with `-limit`, `-max-hosts`, `-max-bytes`; raise none beyond
+the hard maxima. Oversized hosts are not truncated and parsed; incomplete budgets
+report `evidence_limit` and cannot propose partial-consensus updates. Plans expose
+limits, loaded-host/byte counts, skips/reasons, continuation and metadata changes.
+They contain local IDs, old/new wall clocks and evidence digests, not message
+bodies, subjects, raw headers, addresses or account IDs. Keep plans private.
+
+Review the exact JSON, especially Changes and Skipped, and separately authorise:
+
+```sh
+corpus reparse-quotes -apply -plan reviewed-plan.json
+# Re-preview the same selection afterward; it should propose zero changes.
+```
+
+Apply requires the exact serialized plan/digest/parser version, not a selector.
+The JSON digest detects edits; it is **not** a signature or authorisation service.
+Under the existing short writer lock, apply checks the source revision and
+recomputes the exact bounded proposal, including current rows, aliases, all
+source/sentinel digests, author resolution, sightings and mailbox authority.
+Any change refuses atomically; it never silently replans into a different write.
+A schema-28 reviewed plan can be applied after normal schema migration, which
+itself changes no source metadata. Reapplying an old applied plan is a stale
+refusal; a fresh already-satisfied preview applies as a zero-write no-op.
+
+Only inferred/proved-inferred legacy quotes are eligible, and only for a complete
+stated timestamp and nonconflicting timezone. Already stated, derived, ambiguous,
+mailbox-promoted or mail-detail/account-copy-authoritative rows refuse. Apply
+changes only selected quoted `ts`, `tz`, basis, precision and validated aliases.
+It leaves `tz_offset` unknown and never invents a server/person offset. It does
+not touch original text/HTML, mailbox times, body hashes, embeddings, participants,
+sightings/history, parents, account copies or external IDs; it performs no merges.
+Ordinary `repair` remains a separate body/identity operation, not metadata apply.
+Run your usual foreign-key, SQLite and both external-content FTS integrity checks
+after authorised apply. The synthetic regression suite verifies these alongside
+protected-table snapshots, stale refusals, key continuity and repeated application.
+
+**The original attribution-only blank wrapper remains ambiguous and retained.**
+The nested Italian date improves metadata/order, but supplies neither missing
+wrapper subject nor recipient identity evidence. A full-header variant with
+affirmative evidence still reconciles under the existing guards; resolving the
+missing-evidence variant requires a separate evidence-backed change.

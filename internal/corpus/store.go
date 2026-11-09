@@ -46,6 +46,10 @@ type Entry struct {
 	// decision; the renderer reads it to hoist the copy into its host as an
 	// inline edit rather than rendering a floating duplicate.
 	Derived bool
+	// Quote clock evidence is written only for newly inserted PutQuoted rows.
+	// Empty basis preserves the manual-timestamp API default: stated.
+	QuoteTimeBasis     string
+	QuoteTimePrecision string
 }
 
 // Mail holds the fields that only make sense for a mail entry.
@@ -391,7 +395,9 @@ func (s *Store) Sight(entryID, seenIn int64, kind, detail string) error {
 	}
 	_, err := s.db.Exec(`
 		insert into sightings (entry_id, seen_in, kind, detail) values (?,?,?,?)
-		on conflict do update set detail=excluded.detail`,
+		on conflict do update set detail=case
+          when sightings.detail like '%time inferred from host%' then sightings.detail
+          else excluded.detail end`,
 		entryID, in, kind, nullStr(detail))
 	return err
 }

@@ -1,6 +1,7 @@
 package mailingest
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/zachpmanson/chainmail/internal/corpus"
@@ -9,15 +10,16 @@ import (
 
 // QuotedResult summarises one body's extraction.
 type QuotedResult struct {
-	Blocks   int // sentinel-bearing blocks found
-	Distinct int // after dedup within this body
-	Created  int // new entries
-	Merged   int // matched an entry already present
-	Twinned  int // matched a stored copy of the same message under a different clock
-	Derived  int // a modified copy of a stored message, not a twin and not unrelated
-	Enriched int // merged entries that gained a field from this sighting
-	Edges    int // reply edges linked from positional nesting
-	Undated  int // blocks whose time had to be inferred from the host
+	Blocks      int // sentinel-bearing blocks found
+	Distinct    int // after dedup within this body
+	Created     int // new entries
+	Merged      int // matched an entry already present
+	Twinned     int // matched a stored copy of the same message under a different clock
+	Derived     int // a modified copy of a stored message, not a twin and not unrelated
+	Enriched    int // merged entries that gained a field from this sighting
+	Edges       int // reply edges linked from positional nesting
+	DateReasons map[string]int
+	Undated     int // blocks whose time had to be inferred from the host
 }
 
 // ExtractQuoted stores the messages quoted inside one host message.
@@ -29,7 +31,7 @@ type QuotedResult struct {
 // The first block is the host's own text and is skipped: it was already stored
 // as the host entry.
 func ExtractQuoted(store *corpus.Store, hostID int64, host corpus.Entry, body string) (QuotedResult, error) {
-	var r QuotedResult
+	r := QuotedResult{DateReasons: map[string]int{}}
 
 	// Skip only blocks with no sentinel: those are the host's own words, already
 	// stored as the host entry. Position is NOT the test — a body that opens
@@ -47,6 +49,7 @@ func ExtractQuoted(store *corpus.Store, hostID int64, host corpus.Entry, body st
 
 	ids := make([]int64, len(rs))
 	for i, rec := range rs {
+		r.DateReasons[rec.DateReason]++
 		person, err := resolveRecovered(store, rec)
 		if err != nil {
 			return r, err
@@ -62,7 +65,12 @@ func ExtractQuoted(store *corpus.Store, hostID int64, host corpus.Entry, body st
 			r.Undated++
 		}
 
+		basis := "stated"
+		if inferred {
+			basis = "inferred"
+		}
 		e := corpus.Entry{
+			QuoteTimeBasis: basis, QuoteTimePrecision: rec.DatePrecision,
 			Source:    corpus.SourceMail,
 			ExtID:     rec.Key,
 			Kind:      "message",
@@ -82,9 +90,13 @@ func ExtractQuoted(store *corpus.Store, hostID int64, host corpus.Entry, body st
 		// reconciled by their clocks instead — see corpus.FindTwin. Only a stated
 		// clock qualifies: an inferred one is the host's instant, and the gap to
 		// the copy would be an artefact of that substitution.
-		var twin int64
+		resolved, err := store.ResolveQuotedKey(context.Background(), hostID, rec)
+		if err != nil {
+			return r, err
+		}
+		twin := resolved
 		var derived corpus.DerivedMatch
-		if !inferred {
+		if !inferred && resolved == 0 {
 			// The subject — or, when the client dropped it, the host's own thread —
 			// vouches for a short block: without one of them the same few words on
 			// two threads would collapse into one message.
@@ -127,7 +139,7 @@ func ExtractQuoted(store *corpus.Store, hostID int64, host corpus.Entry, body st
 						id, derived.Base, err)
 				}
 			}
-		} else {
+		} else if resolved == 0 {
 			r.Twinned++
 		}
 		ids[i] = id

@@ -40,15 +40,24 @@ func (s *Store) PutQuoted(e Entry) (int64, bool, error) {
 	}
 	defer tx.Rollback()
 
+	basis := nz(e.QuoteTimeBasis, "stated")
+	precision := e.QuoteTimePrecision
+	if precision == "" {
+		precision = "unknown"
+		if basis == "stated" {
+			precision = "second"
+		}
+	}
 	res, err := tx.Exec(`
 		insert into entries (source, ext_id, kind, ts, tz, tz_offset, person_id,
 		                     container, parent_ref, subject, body_text, permalink,
-		                     body_sha, quoted, derived, ingested_at)
-		values (?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)`,
+		                     body_sha, quoted, derived, ingested_at, quote_time_basis, quote_time_precision)
+		values (?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,?)`,
 		e.Source, e.ExtID, nz(e.Kind, "message"), e.TS.Unix(), nullStr(e.TZ), e.TZOffset,
 		nullInt64(e.PersonID), nullStr(e.Container), nullStr(e.ParentRef),
 		nullStr(e.Subject), nullStr(e.BodyText), nullStr(e.Permalink),
-		BodySHA(e.BodyText, e.Subject), boolInt(e.Derived), time.Now().Unix())
+		BodySHA(e.BodyText, e.Subject), boolInt(e.Derived), time.Now().Unix(),
+		basis, precision)
 	if err != nil {
 		return 0, false, err
 	}
@@ -161,7 +170,7 @@ func (s *Store) enrich(tx corpusWriter, id int64, e Entry) error {
 	if _, err := tx.Exec(`
 		update entries set
 		  subject   = coalesce(nullif(subject,''), ?),
-		  tz        = coalesce(nullif(tz,''), ?),
+		  tz        = case when quote_time_basis='stated' then coalesce(nullif(tz,''), ?) else tz end,
 		  person_id = coalesce(person_id, ?),
 		  body_text = case when length(?) > length(coalesce(body_text,''))
 		                   then ? else body_text end

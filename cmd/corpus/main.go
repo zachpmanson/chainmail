@@ -168,6 +168,10 @@ const usage = `usage: corpus <command> [flags]
   alias         [-from -to]  list or add a domain alias, folding the people that
                            domain split in two and naming every pair it will not
                            fold; -dry-run decides all that and writes nothing
+  reparse-quotes -entry X | -container X [-out plan.json]
+                           readonly bounded quote-date preview; explicit apply
+                           requires -apply -plan reviewed.json, never a selector.
+                           No provider calls; ordinary repair does not set dates
   repair                   re-derive the messages recovered from quoted text out
                            of the hosts they came from, and reduce addresses
                            stored with a mailto: link or an RFC 5233 +tag, split
@@ -203,6 +207,9 @@ func run(args []string) error {
 		return nil
 	}
 	path := defaultPath()
+	if args[0] == "reparse-quotes" {
+		return runReparseQuotes(context.Background(), path, args[1:], os.Stdout)
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}

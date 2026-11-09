@@ -140,6 +140,18 @@ func repeelPassAt(s *Store, cands []quotedCandidate, expected *int64) (QuotedRep
 			texts := map[string]string{}
 			for _, r := range RecoverQuotes(c.hostBody).Distinct {
 				texts[r.Key] = r.Block.Text
+				b := &quoteBudget{limits: DefaultQuoteLimits, hosts: map[int64]quoteHost{}}
+				id, err := validatedQuoteAlias(context.Background(), s.db, r.Key, b)
+				if err != nil {
+					continue
+				}
+				if id != 0 {
+					var ext string
+					if err = s.db.QueryRow(`select ext_id from entries where id=?`, id).Scan(&ext); err != nil {
+						return rep, err
+					}
+					texts[ext] = r.Block.Text
+				}
 			}
 			byHost[c.host] = texts
 			rep.Hosts++

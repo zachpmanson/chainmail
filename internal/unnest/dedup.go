@@ -78,7 +78,7 @@ func quoteKey(r Recovered) string {
 	if r.Address != "" && !r.Sent.IsZero() {
 		return "quote:" + sum(strings.ToLower(r.Address), r.Sent.UTC().Format(time.RFC3339))
 	}
-	return "quote:t:" + sum(strings.Join(strings.Fields(r.Block.Text), " "))
+	return TextKey(r.Block.Text)
 }
 
 func sum(parts ...string) string {
@@ -144,3 +144,9 @@ func merge(a, b Recovered) Recovered {
 	}
 	return a
 }
+
+// Key returns the existing external-key algorithm without changing its tiers.
+func Key(r Recovered) string { return quoteKey(r) }
+
+// TextKey returns the legacy undated key, for evidence-checked corpus lookup.
+func TextKey(text string) string { return "quote:t:" + sum(strings.Join(strings.Fields(text), " ")) }
