@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { act, createElement as h, useEffect } from "react";
 import {
   createMemoryHistory,
@@ -1226,7 +1228,20 @@ describe("quiet live draft workflow", () => {
       expect(area.disabled).toBe(false);
       await words(host, "single");
       expect(count?.textContent).toBe("1 word");
-      if (reply) expect(host.textContent).not.toContain("Cancel");
+      const footer = count!.closest("footer")!;
+      if (reply) {
+        const controls = [...footer.querySelectorAll('input[type="checkbox"], [data-word-count]')];
+        expect(
+          controls.map((node) => node.closest("label")?.textContent ?? node.textContent),
+        ).toEqual(["reply all", "send html", "1 word"]);
+        expect(count!.parentElement).toBe(controls[0]!.closest("label")!.parentElement);
+        expect(host.textContent).not.toContain("Cancel");
+      }
+      if (process.env.COMPOSER_LAYOUT_DIR)
+        await writeFile(
+          join(process.env.COMPOSER_LAYOUT_DIR, `${reply ? "reply" : "compose"}-footer.html`),
+          footer.outerHTML,
+        );
     },
   );
 
