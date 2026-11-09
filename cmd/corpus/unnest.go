@@ -229,7 +229,7 @@ func printChrono(w io.Writer, t unnestTarget, blocks []unnest.Block, o unnestOpt
 		// than in the order. Dropping them would lose messages that exist nowhere
 		// else, and letting them fall silently to the end would read as a claim
 		// that they are the oldest.
-		wrapNote(w, fmt.Sprintf("── undated  %d %s whose sentinel stated no date; "+
+		wrapNote(w, fmt.Sprintf("── undated  %d %s without a complete parsed date; "+
 			"nothing places them in the order, so they follow it, in nesting order",
 			len(c.Undated), plural(len(c.Undated), "block", "blocks")))
 		fmt.Fprintln(w)
@@ -364,6 +364,13 @@ func printBlock(w io.Writer, i int, b unnest.Block, dated string, full bool) {
 	}
 	fmt.Fprintln(w)
 	if b.Sentinel != "" {
+		r := unnest.Parse(b)
+		state := "unknown"
+		if !r.Sent.IsZero() {
+			state = "stated"
+		}
+		fmt.Fprintf(w, "   date: %s  precision: %s  reason: %s  parser: %d\n",
+			state, r.DatePrecision, r.DateReason, unnest.DateParserVersion)
 		for _, l := range strings.Split(b.Sentinel, "\n") {
 			fmt.Fprintf(w, "   ⌐ %s\n", trunc(l, 96))
 		}

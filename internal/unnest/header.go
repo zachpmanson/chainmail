@@ -1,120 +1,98 @@
 package unnest
 
 import (
-	"regexp"
 	"strings"
 	"time"
 )
 
 // HeaderBlock is the sender, time and routing recovered from a quoted header
-// block — the Outlook forward form, and the block that follows a forward rule.
-//
-// Unlike an attribution, this form carries recipients. That matters: a recovered
-// message whose To/Cc are known can credit the people who only ever appear as
-// recipients, who are otherwise invisible in the corpus.
+// block. Unlike an attribution, it can carry recipients and a subject.
 type HeaderBlock struct {
-	Sender  string
-	Address string
-	Sent    time.Time
-	TZ      string
-	Subject string
-	To      string
-	Cc      string
-	// MessageID if the quoting client wrote one. Almost never present in
-	// practice, but when it is it is a far better dedup key than any hash.
-	MessageID string
+	Sender        string
+	Address       string
+	Sent          time.Time
+	TZ            string
+	DatePrecision string
+	DateReason    string
+	Subject       string
+	To            string
+	Cc            string
+	MessageID     string
 }
 
-// Canonical key names, including the localisations seen in this corpus. The
-// value is the field it fills; several source keys map to one field because
-// Outlook writes "Sent:" where Gmail writes "Date:" for the same fact.
-var headerKeyAlias = map[string]string{
-	"from": "from", "von": "from", "de": "from", "da": "from", "van": "from",
-	"fra": "from", "reply-to": "replyto",
-	"sent": "date", "date": "date", "gesendet": "date", "enviado": "date",
-	"envoyé": "date", "verzonden": "date", "inviato": "date", "sendt": "date",
-	"skickat": "date",
-	"to":      "to", "an": "to", "para": "to", "aan": "to", "till": "to", "a": "to",
-	"subject": "subject", "betreff": "subject", "asunto": "subject",
-	"objet": "subject", "oggetto": "subject", "ämne": "subject",
-	"assunto": "subject", "onderwerp": "subject",
-	"cc": "cc", "bcc": "cc",
-	"message-id": "messageid",
-}
-
-var reKeyValue = regexp.MustCompile(`^\*?([A-Za-z\-éÄäÖöÜüÅåÆæØø]{2,12})\*?\s*:\s*(.*)$`)
-
-// ParseHeaderBlock reads a quoted header block. Lines it does not recognise are
-// ignored rather than guessed at, so a meeting-invite block that slipped through
-// detection yields an empty result instead of a fabricated sender.
+// ParseHeaderBlock reads logical values before parsing dates, so a folded date
+// is validated as a whole. Detection bounds the folds; unknown labels never fill
+// a field. Conflicting Date/Sent evidence fails closed independently of sender.
 func ParseHeaderBlock(sentinel string) HeaderBlock {
-	var h HeaderBlock
-	// last names the field a folded continuation line belongs to.
-	var last string
-	for _, raw := range strings.Split(sentinel, "\n") {
-		line := unbold(strings.TrimSpace(raw))
-		m := reKeyValue.FindStringSubmatch(line)
-		if m == nil {
-			// A folded continuation of the previous key. Appending rather than
-			// dropping it is what keeps a wrapped recipient list complete — the
-			// people past the wrap are otherwise lost from the corpus entirely.
-			appendTo(&h, last, line)
-			continue
-		}
-		field, ok := headerKeyAlias[strings.ToLower(m[1])]
-		if !ok {
-			last = ""
-			continue
-		}
-		last = field
-		v := strings.TrimSpace(m[2])
-		if v == "" {
-			continue
-		}
+	h := HeaderBlock{DatePrecision: PrecisionUnknown, DateReason: DateMissing}
+	var field, value string
+	var dates []DateResult
+	var dateValues []string
+	flush := func() {
+		v := strings.TrimSpace(value)
 		switch field {
 		case "from":
-			// A From: value is "Name <addr>", the same shape an attribution ends
-			// with, so it is parsed by the same code.
 			h.Sender, h.Address = parsePerson(v)
 		case "date":
-			if t, tz, _, ok := SplitWhen(v); ok {
-				h.Sent, h.TZ = t, tz
-			}
+			dates = append(dates, ParseDate(v))
+			dateValues = append(dateValues, structuralText(v))
 		case "subject":
 			h.Subject = v
 		case "to":
-			h.To = v
+			h.To = appendHeader(h.To, v)
 		case "cc":
 			h.Cc = appendHeader(h.Cc, v)
 		case "messageid":
 			h.MessageID = strings.Trim(v, "<>")
 		}
 	}
+	for _, raw := range strings.Split(sentinel, "\n") {
+		line := strings.TrimSpace(raw)
+		if f, v, ok := parseHeaderLine(line); ok {
+			flush()
+			field, value = f, v
+			continue
+		}
+		if _, _, label := splitHeaderLine(line); label || line == "" {
+			flush()
+			field, value = "", ""
+			continue
+		}
+		if field != "" && line != "" {
+			// Sentinel continuations have already passed the detector's fold guards.
+			// A comma is appropriate for recipient lists, a space for other values.
+			if field == "to" || field == "cc" {
+				value = appendHeader(value, line)
+			} else {
+				value = strings.TrimSpace(value + " " + line)
+			}
+		}
+	}
+	flush()
+	if len(dates) > 0 {
+		d := dates[0]
+		for i, other := range dates[1:] {
+			if !d.Sent.Equal(other.Sent) || d.TZ != other.TZ || d.Reason != other.Reason ||
+				(d.Reason != DateParsed && dateValues[0] != dateValues[i+1]) {
+				d = unknownDate(DateContradictory)
+				break
+			}
+			if other.Precision == PrecisionSecond {
+				d.Precision = PrecisionSecond
+			}
+		}
+		h.Sent, h.TZ, h.DatePrecision, h.DateReason = d.Sent, d.TZ, d.Precision, d.Reason
+	}
 	return h
 }
 
-// appendHeader joins repeated Cc/Bcc lines rather than letting the last win:
-// Bcc maps onto cc, and a block carrying both would otherwise silently drop one.
+// Repeated recipients, including Bcc (mapped to cc), form a union.
 func appendHeader(existing, v string) string {
 	if existing == "" {
 		return v
 	}
+	if v == "" {
+		return existing
+	}
 	return existing + ", " + v
-}
-
-// appendTo continues a folded value. Only the fields that realistically wrap are
-// handled: a Date: or a From: fits on one line, while recipient lists routinely
-// do not.
-func appendTo(h *HeaderBlock, field, text string) {
-	if field == "" || text == "" {
-		return
-	}
-	switch field {
-	case "to":
-		h.To = appendHeader(h.To, text)
-	case "cc":
-		h.Cc = appendHeader(h.Cc, text)
-	case "subject":
-		h.Subject = strings.TrimSpace(h.Subject + " " + text)
-	}
 }

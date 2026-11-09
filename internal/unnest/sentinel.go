@@ -32,27 +32,7 @@ const (
 	KindSignature
 )
 
-// Openers and closers are kept as separate lists so an attribution can be found
-// by scanning for the rarer closer and walking back to the nearest opener. That
-// is the RE2-expressible equivalent of the "tempered dot" the PHP library uses:
-// refusing to cross a second opener is what stops one match spanning two
-// attributions, which produces a wrong sender rather than a missing one.
 var (
-	openers = []string{
-		"on", "le", "el", "il", "em", "am", "op", "den", "på", "pe",
-		"w dniu", "dnia", "vào", "在",
-	}
-	closers = []string{
-		"wrote:", "sent:", "a écrit :", "a écrit:", "écrit:", "escribió:",
-		"ha scritto:", "scritto:", "escreveu:", "schrieb:", "schreef:",
-		"napisał:", "napisała:", "pisze:", "skrev:", "kirjoitti:",
-		"đã viết:", "写道：", "작성:",
-	}
-
-	reHeaderKey = regexp.MustCompile(`(?i)^\*?(from|sent|to|subject|cc|bcc|date|reply-to|` +
-		`von|gesendet|an|betreff|de|enviado|para|asunto|objet|envoyé|` +
-		`van|verzonden|aan|da|inviato|oggetto|fra|sendt|skickat|till|ämne|assunto)` +
-		`\*?\s*:\s`)
 	reForwardRule = regexp.MustCompile(`(?i)^-{2,}\s?forwarded message\s?-{2,}$|` +
 		`^-{3,}\s?original message\s?-{3,}$|^begin forwarded message\s*:$`)
 	// A bare rule of dashes or underscores is Outlook chrome. It is only a
@@ -75,9 +55,9 @@ func hasClosum(s string) bool {
 }
 
 func startsWithOpener(s string) bool {
-	l := strings.ToLower(strings.TrimSpace(s))
+	l := strings.ToLower(structuralText(s))
 	for _, o := range openers {
-		if l == o || strings.HasPrefix(l, o+" ") || strings.HasPrefix(l, o+" ") {
+		if l == o || strings.HasPrefix(l, o+" ") {
 			return true
 		}
 	}
@@ -136,8 +116,8 @@ func FindAttribution(lines []Line, i int) (Boundary, bool) {
 	return Boundary{}, false
 }
 
-// FindHeaderBlock requires two or more consecutive recognised header keys, at
-// least one of which is NOT a recipient list.
+// FindHeaderBlock requires two or more nonempty recognised header keys, at
+// least one of which carries identity rather than recipients or Reply-To.
 //
 // One key is not enough: 32 messages in this mailbox carry a From: line with no
 // address at all ("From: Alice | Acme"), so requiring an address would reject
@@ -167,14 +147,18 @@ func FindHeaderBlock(lines []Line, i int) (Boundary, bool) {
 		if t == "" {
 			break
 		}
-		if reHeaderKey.MatchString(t) {
-			n++
-			field := headerField(t)
-			if field != "to" && field != "cc" {
+		if field, value, ok := parseHeaderLine(t); ok {
+			if value != "" {
+				n++
+			}
+			if field != "to" && field != "cc" && field != "replyto" && value != "" {
 				recipientsOnly = false
 			}
-			lastField, lastValue, folds = field, headerValue(t), 0
+			lastField, lastValue, folds = field, value, 0
 			continue
+		}
+		if startsWithOpener(t) {
+			break
 		}
 		// A long recipient list wraps, and the quoted rendering usually loses the
 		// leading whitespace RFC 5322 folding would have left. Treat the line as
@@ -187,10 +171,10 @@ func FindHeaderBlock(lines []Line, i int) (Boundary, bool) {
 		//     real trail.
 		//   - the wrap is the block's LAST header, so nothing resumes after it
 		//     (continuesRecipients).
-		if n > 0 && (continuesHeader(lines, j) ||
-			(folds < maxFoldLines && continuesRecipients(lastField, lastValue, t))) {
+		if n > 0 && folds < maxFoldLines && (continuesHeader(lines, j) ||
+			continuesRecipients(lastField, lastValue, t) || continuesDate(lastField, lastValue, t)) {
 			folds++
-			lastValue = t
+			lastValue = strings.TrimSpace(lastValue + " " + t)
 			continue
 		}
 		break
@@ -222,10 +206,10 @@ const maxFoldLines = 6
 func continuesHeader(lines []Line, j int) bool {
 	for k := j + 1; k < len(lines) && k <= j+maxFoldLines; k++ {
 		t := unbold(strings.TrimSpace(lines[k].Text))
-		if t == "" {
+		if t == "" || startsWithOpener(t) || reForwardRule.MatchString(t) || reBareRule.MatchString(t) {
 			return false
 		}
-		if reHeaderKey.MatchString(t) {
+		if isHeaderLine(t) {
 			return true
 		}
 	}
@@ -293,21 +277,20 @@ func endsMidList(v string) bool {
 	return false
 }
 
-// headerField and headerValue split a recognised key line into the HeaderBlock
-// field it fills and the value it states. The field is empty for a key
-// reHeaderKey matched but the alias table does not name.
-func headerField(line string) string {
-	m := reKeyValue.FindStringSubmatch(line)
-	if m == nil {
-		return ""
-	}
-	return headerKeyAlias[strings.ToLower(m[1])]
+func isHeaderLine(line string) bool {
+	_, _, ok := parseHeaderLine(line)
+	return ok
 }
 
-func headerValue(line string) string {
-	m := reKeyValue.FindStringSubmatch(line)
-	if m == nil {
-		return ""
+// A final folded Date has no following key to corroborate it. Only consume a
+// line that completes a recognised date grammar, never arbitrary prose.
+func continuesDate(field, value, line string) bool {
+	if field != "date" {
+		return false
 	}
-	return strings.TrimSpace(m[2])
+	previous := ParseDate(value)
+	if previous.Reason != DateMissingClock && previous.Reason != DateIncomplete && previous.Reason != DateMissing {
+		return false
+	}
+	return ParseDate(value+" "+line).Reason == DateParsed
 }

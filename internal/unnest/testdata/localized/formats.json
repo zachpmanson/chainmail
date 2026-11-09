@@ -1,0 +1,130 @@
+[
+  {
+    "Name": "English en-GB",
+    "Body": "On Mon, 5 Oct 2026 at 22:07, Alex <alex@example.test> wrote:\n\nSynthetic bulletin.",
+    "When": "2026-10-05 22:07:00",
+    "TZ": "",
+    "Precision": "minute",
+    "Reason": "parsed"
+  },
+  {
+    "Name": "English en-US",
+    "Body": "On Mon, October 5, 2026 at 10:07 PM, Alex <alex@example.test> wrote:\n\nSynthetic bulletin.",
+    "When": "2026-10-05 22:07:00",
+    "TZ": "",
+    "Precision": "minute",
+    "Reason": "parsed"
+  },
+  {
+    "Name": "English Apple",
+    "Body": "Begin forwarded message:\nFrom: Alex <alex@example.test>\nDate: 5 October 2026 at 10:07:00 PM NZDT\nTo: Robin\n\nSynthetic bulletin.",
+    "When": "2026-10-05 22:07:00",
+    "TZ": "NZDT",
+    "Precision": "second",
+    "Reason": "parsed"
+  },
+  {
+    "Name": "Italian observed",
+    "Body": "---------- Forwarded message ---------\nDa: Alex <alex@example.test>\nDate: lun 5 ott 2026, 22:07\nSubject: Bulletin\nA: Robin\n\nSynthetic bulletin.",
+    "When": "2026-10-05 22:07:00",
+    "TZ": "",
+    "Precision": "minute",
+    "Reason": "parsed"
+  },
+  {
+    "Name": "Italian attribution",
+    "Body": "Il lun. 5 ottobre 2026 alle 22:07, Alex <alex@example.test> ha scritto:\n\nSynthetic bulletin.",
+    "When": "2026-10-05 22:07:00",
+    "TZ": "",
+    "Precision": "minute",
+    "Reason": "parsed"
+  },
+  {
+    "Name": "French",
+    "Body": "Le lun. 5 oct. 2026 à 22:07, Alex <alex@example.test> a écrit :\n\nSynthetic bulletin.",
+    "When": "2026-10-05 22:07:00",
+    "TZ": "",
+    "Precision": "minute",
+    "Reason": "parsed"
+  },
+  {
+    "Name": "German",
+    "Body": "Am Montag, 5. Oktober 2026 um 22:07, Alex <alex@example.test> schrieb:\n\nSynthetic bulletin.",
+    "When": "2026-10-05 22:07:00",
+    "TZ": "",
+    "Precision": "minute",
+    "Reason": "parsed"
+  },
+  {
+    "Name": "Spanish",
+    "Body": "El lunes, 5 de octubre de 2026 a las 22:07, Alex <alex@example.test> escribió:\n\nSynthetic bulletin.",
+    "When": "2026-10-05 22:07:00",
+    "TZ": "",
+    "Precision": "minute",
+    "Reason": "parsed"
+  },
+  {
+    "Name": "Portuguese",
+    "Body": "Em segunda-feira, 5 de outubro de 2026 às 22:07, Alex <alex@example.test> escreveu:\n\nSynthetic bulletin.",
+    "When": "2026-10-05 22:07:00",
+    "TZ": "",
+    "Precision": "minute",
+    "Reason": "parsed"
+  },
+  {
+    "Name": "Dutch",
+    "Body": "Op maandag 5 oktober 2026 om 22:07, Alex <alex@example.test> schreef:\n\nSynthetic bulletin.",
+    "When": "2026-10-05 22:07:00",
+    "TZ": "",
+    "Precision": "minute",
+    "Reason": "parsed"
+  },
+  {
+    "Name": "Danish",
+    "Body": "Den mandag 5. oktober 2026 kl. 22:07, Alex <alex@example.test> skrev:\n\nSynthetic bulletin.",
+    "When": "2026-10-05 22:07:00",
+    "TZ": "",
+    "Precision": "minute",
+    "Reason": "parsed"
+  },
+  {
+    "Name": "Norwegian",
+    "Body": "Den mandag 5. oktober 2026 kl. 22:07, Alex <alex@example.test> skrev:\n\nSynthetic bulletin.",
+    "When": "2026-10-05 22:07:00",
+    "TZ": "",
+    "Precision": "minute",
+    "Reason": "parsed"
+  },
+  {
+    "Name": "Swedish",
+    "Body": "Den måndag 5 oktober 2026 kl. 22:07, Alex <alex@example.test> skrev:\n\nSynthetic bulletin.",
+    "When": "2026-10-05 22:07:00",
+    "TZ": "",
+    "Precision": "minute",
+    "Reason": "parsed"
+  },
+  {
+    "Name": "Polish",
+    "Body": "W dniu poniedziałek, 5 października 2026 o 22:07, Alex <alex@example.test> napisał:\n\nSynthetic bulletin.",
+    "When": "2026-10-05 22:07:00",
+    "TZ": "",
+    "Precision": "minute",
+    "Reason": "parsed"
+  },
+  {
+    "Name": "English Outlook",
+    "Body": "From: Alex <alex@example.test>\nSent: Monday, 5 October 2026 22:07\nSubject: Bulletin\n\nSynthetic bulletin.",
+    "When": "2026-10-05 22:07:00",
+    "TZ": "",
+    "Precision": "minute",
+    "Reason": "parsed"
+  },
+  {
+    "Name": "German headers",
+    "Body": "Von: Alex <alex@example.test>\nGesendet: Montag, 5 Oktober 2026 22:07\nBetreff: Bulletin\n\nSynthetic bulletin.",
+    "When": "2026-10-05 22:07:00",
+    "TZ": "",
+    "Precision": "minute",
+    "Reason": "parsed"
+  }
+]

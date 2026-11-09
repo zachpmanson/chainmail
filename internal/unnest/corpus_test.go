@@ -158,7 +158,9 @@ func TestFindsEveryHeaderBlockRun(t *testing.T) {
 					// legitimately cover a folded continuation line, which is
 					// inside the block but is not itself a header key.
 					for _, l := range strings.Split(b.Text, "\n") {
-						if reHeaderKey.MatchString(unbold(strings.TrimSpace(l))) {
+						// The historical census excludes empty values (e.g. To:).
+						// Detection may retain them, but they add no census key.
+						if _, value, ok := parseHeaderLine(l); ok && value != "" {
 							keys++
 						}
 					}

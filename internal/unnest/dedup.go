@@ -14,8 +14,10 @@ type Recovered struct {
 	// Sender and Address, whichever the sentinel gave.
 	Sender, Address string
 	// Sent is the stated send time, zero when the sentinel gave none.
-	Sent time.Time
-	TZ   string
+	Sent          time.Time
+	TZ            string
+	DatePrecision string
+	DateReason    string
 	// Subject, To and Cc come only from header blocks; an attribution has none.
 	Subject, To, Cc string
 	// MessageID if the quoting client wrote one.
@@ -26,14 +28,23 @@ type Recovered struct {
 
 // Parse turns a block into a Recovered, reading whichever sentinel form it has.
 func Parse(b Block) Recovered {
-	r := Recovered{Block: b}
-	switch b.Kind {
+	r := Recovered{Block: b, DatePrecision: PrecisionUnknown, DateReason: DateMissing}
+	sentinel := b.Sentinel
+	kind := b.Kind
+	if kind == KindForwardRule {
+		if _, after, ok := strings.Cut(sentinel, "\n"); ok && startsWithOpener(after) {
+			kind, sentinel = KindAttribution, after
+		}
+	}
+	switch kind {
 	case KindAttribution:
-		a := ParseAttribution(b.Sentinel)
+		a := ParseAttribution(sentinel)
 		r.Sender, r.Address, r.Sent, r.TZ = a.Sender, a.Address, a.Sent, a.TZ
+		r.DatePrecision, r.DateReason = a.DatePrecision, a.DateReason
 	case KindHeaderBlock, KindForwardRule:
-		h := ParseHeaderBlock(b.Sentinel)
+		h := ParseHeaderBlock(sentinel)
 		r.Sender, r.Address, r.Sent, r.TZ = h.Sender, h.Address, h.Sent, h.TZ
+		r.DatePrecision, r.DateReason = h.DatePrecision, h.DateReason
 		r.Subject, r.To, r.Cc, r.MessageID = h.Subject, h.To, h.Cc, h.MessageID
 	}
 	r.Key = quoteKey(r)
@@ -114,6 +125,7 @@ func merge(a, b Recovered) Recovered {
 	}
 	if a.Sent.IsZero() {
 		a.Sent = b.Sent
+		a.DatePrecision, a.DateReason = b.DatePrecision, b.DateReason
 	}
 	if a.TZ == "" {
 		a.TZ = b.TZ

@@ -305,10 +305,8 @@ func docketed(t *testing.T, body string, o unnestOpts) string {
 	return out.String()
 }
 
-// The regression that matters: -chrono is a view, and the view it is not must
-// come out exactly as it did before the flag existed. Anything appended to a
-// block header, or to the byte count line, breaks the source ranges a reader
-// checks a parse against.
+// Date diagnostics are metadata lines; the source-range headers and default
+// nesting order remain independent of the chronological view.
 const defaultGolden = `18f2c3a4b5d6e7f8  [docket]
 Depot roster
 Mon, 3 Aug 2026 10:04:00 +1000
@@ -318,16 +316,18 @@ Mon, 3 Aug 2026 10:04:00 +1000
      Approved, go ahead.
 
 ── block 1  depth 0  attribution  lines 2-5
+   date: stated  precision: minute  reason: parsed  parser: 1
    ⌐ On Mon, 3 Aug 2026 at 11:30, Dana Fowler <dana@example.com> wrote:
      Sign off on the depot roster before Friday?
 
 ── block 2  depth 0  attribution  lines 5-8
+   date: stated  precision: minute  reason: parsed  parser: 1
    ⌐ On Sat, 1 Aug 2026 at 07:00, Ravi Oyelaran <ravi@example.com> wrote:
      Roster draft attached.
 
 `
 
-func TestDefaultOutputIsByteIdenticalWithoutTheFlag(t *testing.T) {
+func TestDefaultOutputRetainsSourceRangesWithDateDiagnostics(t *testing.T) {
 	if got := docketed(t, zoneShiftedBody, unnestOpts{}); got != defaultGolden {
 		t.Errorf("default output changed:\ngot:\n%s\nwant:\n%s", got, defaultGolden)
 	}
@@ -405,7 +405,7 @@ func TestChronoReportsAQuotedBlockDatedAfterTheBlockQuotingIt(t *testing.T) {
 
 func TestChronoKeepsAnUndatedBlockAndSaysItCannotPlaceIt(t *testing.T) {
 	got := docketed(t, undatedBody, unnestOpts{Chrono: true})
-	if !strings.Contains(got, "── undated 1 block whose sentinel stated no date") {
+	if !strings.Contains(got, "── undated 1 block without a complete parsed date") {
 		t.Fatalf("the undated block was not accounted for:\n%s", got)
 	}
 	// Kept, not dropped: this block is a message that exists nowhere else.
@@ -466,5 +466,29 @@ func TestChronoOnAnUnpeeledEntrySaysThereIsNothingToOrder(t *testing.T) {
 		if strings.Contains(got, "contradiction") || strings.Contains(got, "undated") {
 			t.Errorf("%s: an unpeeled body produced findings:\n%s", id, got)
 		}
+	}
+}
+
+func TestUnnestDateDiagnostics(t *testing.T) {
+	for _, tc := range []struct{ name, header, want string }{
+		{"Italian", "Date: lun 5 ott 2026, 22:07", "date: stated  precision: minute  reason: parsed  parser: 1"},
+		{"numeric ambiguity", "Date: 03/04/2026 22:07", "date: unknown  precision: unknown  reason: ambiguous_numeric_date  parser: 1"},
+		{"bad clock", "Date: 5 Oct 2026 25:61", "date: unknown  precision: unknown  reason: invalid_clock  parser: 1"},
+		{"missing", "Subject: Bulletin", "date: unknown  precision: unknown  reason: missing_date  parser: 1"},
+		{"seconds", "Date: 5 Oct 2026 22:07:00", "date: stated  precision: second  reason: parsed  parser: 1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var out strings.Builder
+			printUnnest(&out, unnestTarget{ID: "synthetic", Origin: "corpus", Body: "From: Alex <alex@example.test>\n" + tc.header + "\n\nSynthetic bulletin."}, unnestOpts{})
+			got := out.String()
+			if !strings.Contains(got, tc.want) {
+				t.Errorf("missing metadata-only diagnostic %q:\n%s", tc.want, got)
+			}
+			for _, line := range strings.Split(got, "\n") {
+				if strings.HasPrefix(line, "   date:") && (strings.Contains(line, "@") || strings.Contains(line, "bulletin") || strings.Contains(line, "03/04")) {
+					t.Errorf("diagnostic includes source content: %s", line)
+				}
+			}
+		})
 	}
 }

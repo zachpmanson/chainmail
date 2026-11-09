@@ -45,8 +45,6 @@ var (
 	// HTML-to-text flattening leaves these where a boundary marker would be, and
 	// they interfere with "previous non-empty line" logic.
 	reImagePlaceholder = regexp.MustCompile(`(?i)\[(?:image|cid):[^\]]*\]`)
-	// Outlook flattens bold header keys to *From:* / *From: *
-	reBoldKey = regexp.MustCompile(`^\*([A-Za-z-]+)\*?\s*:\s*\*?\s*`)
 )
 
 // Normalise splits a body into lines with depth measured, folding the
@@ -162,8 +160,10 @@ func nextInlineCloser(lower string, from int) (int, int, bool) {
 // unbold turns "*From:*" and "*From: *" into "From:" so one pattern covers all
 // four dialects Outlook emits.
 func unbold(s string) string {
-	if m := reBoldKey.FindStringSubmatch(s); m != nil {
-		return m[1] + ": " + strings.TrimSpace(s[len(m[0]):])
+	if _, value, ok := parseHeaderLine(s); ok {
+		label, _, _ := strings.Cut(s, ":")
+		label = strings.TrimSpace(strings.Trim(strings.TrimSpace(label), "*"))
+		return label + ": " + value
 	}
 	return s
 }
