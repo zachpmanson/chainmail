@@ -21,6 +21,7 @@ export type MessageEmail = {
   /** presentation HTML, already sanitised; edges are trimmed here */
   body: string;
   stamp: StampData;
+  dateNote?: string;
   attachments?: Attachment[];
   /** people @-named in the body, shown above it */
   mentions?: string[];
@@ -43,6 +44,7 @@ export function emailFromCorpus(e: CorpusEntry): MessageEmail {
     subject: e.subject,
     body: e.html ?? "",
     stamp: stampOf(e),
+    dateNote: e.dateNote,
     attachments: e.attachments,
     extId: e.extId,
     me: e.mine,
@@ -66,6 +68,7 @@ export function emailFromSpec(
     subject: e.subject,
     body: e.body,
     stamp,
+    dateNote: e.dateNote,
     attachments: e.attachments,
     mentions: e.mentions,
     extId: e.extId,

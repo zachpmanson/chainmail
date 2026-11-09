@@ -1,6 +1,14 @@
 import type { StampData } from "../../lib/ui/stamp";
 
-export default function Stamp({ id, stamp }: { id: string; stamp: StampData }) {
+export default function Stamp({
+  id,
+  stamp,
+  dateNote,
+}: {
+  id: string;
+  stamp: StampData;
+  dateNote?: string;
+}) {
   const { date, time, tz, zone } = stamp;
   return (
     <a
@@ -25,6 +33,7 @@ export default function Stamp({ id, stamp }: { id: string; stamp: StampData }) {
           {" ?"}
         </span>
       ) : null}
+      {dateNote ? <span className="whitespace-normal"> · {dateNote}</span> : null}
     </a>
   );
 }

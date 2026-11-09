@@ -50,8 +50,7 @@ func putReactionEvidence(tx corpusWriter, accountID string, e Entry, m *Mail, id
 	if err := tx.QueryRow(`select count(*) from attachments where entry_id=?`, id).Scan(&attachments); err != nil {
 		return err
 	}
-	snapshot, _ := json.Marshal([]any{m.From, m.InReplyTo, m.MessageID, e.TS.Unix(), e.BodyText, e.BodyHTML, attachments})
-	snapshotDigest := reactionDigest(snapshot)
+	snapshotDigest := reactionSnapshot(e, m, attachments)
 	var previous string
 	if err := tx.QueryRow(`select current_snapshot from reaction_sources where source_ext_id=?`, e.ExtID).Scan(&previous); err != nil && err != sql.ErrNoRows {
 		return err
@@ -269,6 +268,11 @@ func accountEntrySQL(alias, accountID string) (string, []any) {
 		return "1", nil
 	}
 	return `(exists(select 1 from gmail_copies ac where ac.entry_id=` + alias + `.id and ac.account_id=?) or exists(select 1 from sightings ag join gmail_copies ac on ac.entry_id=ag.seen_in where ag.entry_id=` + alias + `.id and ac.account_id=?))`, []any{accountID, accountID}
+}
+
+func reactionSnapshot(e Entry, m *Mail, attachments int) string {
+	snapshot, _ := json.Marshal([]any{m.From, m.InReplyTo, m.MessageID, e.TS.Unix(), e.BodyText, e.BodyHTML, attachments})
+	return reactionDigest(snapshot)
 }
 
 func reactionSemantic(candidate bool, emoji, target string, e Entry, m *Mail, attachments int) string {

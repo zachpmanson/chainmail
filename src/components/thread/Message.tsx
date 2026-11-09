@@ -82,6 +82,7 @@ export default function Message({
     subject,
     body,
     stamp,
+    dateNote,
     attachments,
     mentions,
     extId,
@@ -154,7 +155,7 @@ export default function Message({
             <span className="text-2xs font-[650] tracking-[.07em] text-(--orgc,var(--muted)) uppercase">
               {org}
             </span>
-            <Stamp id={id} stamp={stamp} />
+            <Stamp id={id} stamp={stamp} dateNote={dateNote} />
             {mark === "new" ? <StatusBadge tone="new">new</StatusBadge> : null}
             {mark === "revised" ? <StatusBadge tone="revised">revised</StatusBadge> : null}
             {/* Always drawn: the caret lives in this box. */}

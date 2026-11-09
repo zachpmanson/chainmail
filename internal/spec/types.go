@@ -115,6 +115,7 @@ type Entry struct {
 	// it.
 	ExtID             string       `json:"extId,omitempty"`
 	Date              string       `json:"date"`
+	DateNote          string       `json:"dateNote,omitempty"`
 	Time              string       `json:"time,omitempty"`
 	TZ                string       `json:"tz,omitempty"`
 	TZSource          string       `json:"tzSource,omitempty"`

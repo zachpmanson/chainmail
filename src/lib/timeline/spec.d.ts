@@ -141,6 +141,10 @@ export interface Entry {
    */
   date: string;
   /**
+   * View-only caveat when the original date is unknown and placement uses an accessible host timestamp.
+   */
+  dateNote?: string;
+  /**
    * As displayed, e.g. '11:35'. Absent for undated notes.
    */
   time?: string;

@@ -15,12 +15,13 @@ import (
 // mailbox message or was recovered from someone's quoted history — are part of
 // the entry here rather than something the caller has to join for.
 type Shown struct {
-	ID     int64
-	ExtID  string
-	Source string
-	Quoted bool
-	TS     time.Time
-	TZ     string
+	ID       int64
+	ExtID    string
+	Source   string
+	Quoted   bool
+	TS       time.Time
+	DateNote string
+	TZ       string
 	// PersonID is the person the corpus resolved this entry's sender to, and 0
 	// where it resolved nobody. It is the handle a client needs for anything the
 	// reader decides about that person rather than about this message — the

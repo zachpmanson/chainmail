@@ -97,6 +97,7 @@ type corpusEntry struct {
 	// reader who has never named an address.
 	Mine            bool   `json:"mine,omitempty"`
 	TS              string `json:"ts"`
+	DateNote        string `json:"dateNote,omitempty"`
 	TZ              string `json:"tz,omitempty"`
 	TZOffsetMinutes *int   `json:"tzOffsetMinutes,omitempty"`
 	Author          string `json:"author,omitempty"`
@@ -731,7 +732,7 @@ func toRefreshReport(r refresh.Report) refreshReport {
 func toCorpusEntry(s corpus.Shown, r spec.Rendered) corpusEntry {
 	e := corpusEntry{
 		ExtID: s.ExtID, Source: s.Source, Quoted: s.Quoted, TS: stamp(s.TS),
-		TZ: s.TZ, TZOffsetMinutes: s.TZOffset, Author: s.Author, Subject: s.Subject,
+		DateNote: s.DateNote, TZ: s.TZ, TZOffsetMinutes: s.TZOffset, Author: s.Author, Subject: s.Subject,
 		Body: s.Body, HTML: r.HTML, To: r.To, Mine: r.Mine, FromEmail: r.FromEmail,
 		Org: r.Org, QuotedBy: r.QuotedBy, Original: s.HasOriginal,
 		PersonID: s.PersonID, PreferOriginal: s.PreferOriginal, PreferOriginalSet: s.PreferOriginalSet,

@@ -32,19 +32,22 @@ func ParseChainCursor(raw string) (*ChainCursor, error) {
 // roots behind a chatty thread, and applying the cursor to entries repeats chains
 // whose older members cross the boundary.
 func (s *Store) browseCandidates(q Query) ([]candidate, error) {
-	where, args := q.filtersForActivity(true)
-	reactionScope := "1"
-	var reactionArgs []any
-	if q.AccountID != "" {
-		reactionScope = "exists(select 1 from gmail_copies rc where rc.entry_id=ra.target_id and rc.account_id=?)"
-		reactionArgs = []any{q.AccountID}
+	where, args := q.filtersForActivity(q.activityEligible())
+	reactionScope, reactionArgs := activeReactionForAccountSQL("ra", q.AccountID)
+	if !q.activityEligible() {
+		reactionScope = "0"
+		reactionArgs = nil
 	}
+	ordinary, ordinaryArgs := ordinaryForAccountSQL(q.AccountID)
+	activityScope, activityArgs := activeReactionForAccountSQL("ra", q.AccountID)
 	spanScope, spanArgs := accountEntrySQL("e", q.AccountID)
 	continuation := "1"
 	callArgs := []any{walkDepthCap, walkDepthCap}
 	callArgs = append(callArgs, reactionArgs...)
 	callArgs = append(callArgs, args...)
 	callArgs = append(callArgs, walkDepthCap)
+	callArgs = append(callArgs, ordinaryArgs...)
+	callArgs = append(callArgs, activityArgs...)
 	callArgs = append(callArgs, spanArgs...)
 	if q.After != nil {
 		continuation = "(last < ? or (last = ? and ext_id > ?))"
@@ -73,7 +76,8 @@ func (s *Store) browseCandidates(q Query) ([]candidate, error) {
    select d.root, e.id, d.depth+1 from down d join entries e on e.parent_id=d.id
    where d.depth < ?
  ), activity(root,id) as (
-   select root,id from down union select d.root,ra.source_id from down d join reaction_active ra on ra.target_id=d.id
+   select d.root,d.id from down d join entries e on e.id=d.id where `+ordinary+`
+   union select d.root,ra.source_id from down d join reaction_active ra on ra.target_id=d.id and `+activityScope+`
  ), spans as (
    select d.root, r.ext_id, max(e.ts) as last from activity d
    join entries e on e.id=d.id join entries r on r.id=d.root where `+spanScope+` group by d.root

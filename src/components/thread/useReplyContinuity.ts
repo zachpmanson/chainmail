@@ -17,6 +17,7 @@ export default function useReplyContinuity(
     editor: DraftCoordinator["editor"]["current"];
     key: string;
   }>();
+  const scope = useRef({ threadId, accountId, generation: 0 });
   const prior = admitted.current;
   const snapshot = coordinator?.editor.current?.();
   const owned =
@@ -34,12 +35,16 @@ export default function useReplyContinuity(
       (coordinator?.selection.adopting &&
         coordinator.selection.id &&
         snapshot.owner === draftIdentity(accountId, coordinator.selection.id)));
-  const transition = prior && (prior.accountId !== accountId || prior.threadId !== threadId);
-  // A warm query cache is fresh reading data, not permission to transfer a buffer.
-  const key =
-    transition && !owned
-      ? `${threadId}:${accountId ?? ""}`
-      : (prior?.key ?? `${threadId}:${accountId ?? ""}`);
+  const transition = scope.current.accountId !== accountId || scope.current.threadId !== threadId;
+  // Never reuse an earlier scope's identity, including after an admitted From transfer.
+  if (transition) {
+    scope.current = {
+      threadId,
+      accountId,
+      generation: scope.current.generation + (owned ? 0 : 1),
+    };
+  }
+  const key = `reply:${scope.current.generation}`;
   const retained = !answer && owned ? prior?.answer : undefined;
   useEffect(() => {
     if (answer)

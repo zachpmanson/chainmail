@@ -922,6 +922,39 @@ describe("authoritative destination and exact parent", () => {
 });
 
 describe("reviewed editor preservation regressions", () => {
+  it.each(["older", "newer"])(
+    "resets the editor on arbitrary warm A return after sanctioned From B transfer (%s parent)",
+    async (parent) => {
+      if (parent === "older") {
+        store.set(owner("A", saved.id), {
+          ...saved,
+          kind: "reply",
+          resolution: "resolved",
+          rootId: "root",
+          replyToEntry: "older",
+        });
+      }
+      const { host, navigate } = await mount(
+        `/?accountId=A&open=root${parent === "older" ? `&draft=${saved.id}` : ""}`,
+      );
+      const original = host.querySelector("textarea");
+      await pick(host.querySelector<HTMLButtonElement>('button[title="Edit recipients"]')!);
+      const from = host.querySelector<HTMLSelectElement>('select[aria-label="From"]')!;
+      await act(async () => {
+        from.value = "B";
+        from.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      await settle();
+      expect(host.querySelector("textarea")).toBe(original);
+      await words(host, "B PRIVATE WORDS");
+      await navigate({ accountId: "A", open: "root" });
+      expect(host.querySelector("textarea")).not.toBe(original);
+      expect(host.querySelector("textarea")!.value).toBe("");
+      await settle(750);
+      expect(writes).toEqual([]);
+    },
+  );
+
   it("does not transfer private input into an arbitrarily selected warm account cache", async () => {
     const { host, navigate } = await mount("/?accountId=B&open=root");
     expect(host.querySelector("textarea")).not.toBeNull();

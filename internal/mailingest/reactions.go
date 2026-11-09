@@ -47,10 +47,7 @@ func PreviewReactions(store *corpus.Store, mailbox Mailbox, accountID string, id
 			item.Status = "ordinary-conflict"
 			continue
 		}
-		item.TargetExtID, item.Status, err = store.PreviewReactionTarget(accountID, item.Source.ExtID, msg.ReactionInspection.TargetMessageID)
-		if err != nil {
-			return manifest, err
-		}
 	}
-	return manifest, nil
+	err := store.PreviewReactionTargets(&manifest)
+	return manifest, err
 }

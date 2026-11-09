@@ -103,3 +103,32 @@ describe("received reaction content and native provenance disclosure", () => {
     expect(document.querySelector("a")?.hasAttribute("href")).toBe(false);
   });
 });
+
+describe("unknown original date projection", () => {
+  it("labels host-time placement in browser and static views without changing quoted words", () => {
+    const dateNote = "Original date unavailable; placement uses an accessible host's timestamp.";
+    const body = "<p>Synthetic bulletin.</p>";
+    const apiEmail = emailFromCorpus(
+      corpus("quote:undated", { dateNote, html: body, quoted: true }),
+    );
+    const spec = normalise({
+      title: "Undated synthetic quote",
+      messages: [msg("undated", { dateNote, body, quoted: true })],
+    });
+    const browser = markupRoot(
+      renderToStaticMarkup(
+        createElement(Message, {
+          email: apiEmail,
+          place: { id: "undated" },
+          look: { orgSlot: "unknown" },
+        }),
+      ),
+    );
+    const exported = markupRoot(renderToStaticMarkup(createElement(Timeline, { spec })));
+    for (const root of [browser, exported]) {
+      expect(root.querySelector(".msg summary")?.textContent).toContain(dateNote);
+      expect(root.querySelector(".bd")?.textContent).toBe("Synthetic bulletin.");
+    }
+    expect(apiEmail.body).toBe(body);
+  });
+});

@@ -2905,6 +2905,10 @@
           "reactionStatus": {
             "type": "string",
             "description": "Resolved or conservative fallback reason for direct source inspection."
+          },
+          "dateNote": {
+            "type": "string",
+            "description": "View-only caveat when the original date is unknown and placement uses an accessible host timestamp."
           }
         }
       },
@@ -4763,6 +4767,10 @@
           "gmailAccountEmail": {
             "type": "string",
             "description": "Known mailbox email for account-selected Gmail links; absent rather than guessed."
+          },
+          "dateNote": {
+            "type": "string",
+            "description": "View-only caveat when the original date is unknown and placement uses an accessible host timestamp."
           }
         }
       },

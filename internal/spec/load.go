@@ -21,6 +21,7 @@ type entryRow struct {
 	Kind         string
 	Source       string // "mail" or "slack"; decides how far a body may be reshaped
 	TS           time.Time
+	DateNote     string
 	TZ           string
 	TZOffset     *int  // minutes east of UTC; nil when the source stated none
 	PersonID     int64 // corpus person id; the key zone inference is per-person on
@@ -208,6 +209,7 @@ func loadForAccount(store *corpus.Store, ids []int64, accountID string) ([]*entr
 		r.Subject = sh.Subject
 		r.Container = sh.Container
 		r.TS = sh.TS
+		r.DateNote = sh.DateNote
 		r.TZ = sh.TZ
 		r.TZOffset = sh.TZOffset
 		r.BodyText = sh.Body

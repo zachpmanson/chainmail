@@ -70,6 +70,9 @@ func TestGenerateAccountSelectsCopyAndConservativeUnavailable(t *testing.T) {
 	if err := s.PutGmailCopy(corpus.GmailCopy{AccountID: "A", GmailID: "copy-A", EntryID: id}); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := s.DB().Exec(`insert into attachments(entry_id,name,mime,size,permalink,source_ref) values(?,'synthetic.pdf','application/pdf',42,'https://mail.google.com/mail/#all/copy-legacy','1')`, id); err != nil {
+		t.Fatal(err)
+	}
 	q, _, err := s.PutQuoted(corpus.Entry{Source: "mail", ExtID: "quote:unprovable", TS: time.Unix(1, 0), Subject: "B PRIVATE SUBJECT", BodyText: "B PRIVATE DETAIL"})
 	if err != nil {
 		t.Fatal(err)
@@ -89,6 +92,9 @@ func TestGenerateAccountSelectsCopyAndConservativeUnavailable(t *testing.T) {
 		if e.ExtID == "mail:shared" && (e.GmailID != "copy-A" || e.Source != "msg copy-A" || e.GmailAccountEmail != "selected@example.test") {
 			t.Fatalf("wrong copy: %+v", e)
 		}
+		if e.ExtID == "mail:shared" && (len(e.Attachments) != 1 || e.Attachments[0].GmailID != "copy-A" || e.Attachments[0].GmailAccountEmail != "selected@example.test" || e.Attachments[0].Link != "") {
+			t.Fatalf("wrong static attachment: %+v", e.Attachments)
+		}
 		if e.ExtID == "quote:unprovable" && !strings.Contains(e.Body, "Content unavailable") {
 			t.Fatalf("unsafe fallback %+v", e)
 		}
@@ -104,5 +110,34 @@ func TestScopedLocalSeedExpansionRefusesOverBudget(t *testing.T) {
 	}
 	if _, err := Generate(s, Options{AccountID: "legacy", EntryIDs: []int64{a}, Title: "Bounded", EntryLimit: 1}); err == nil || !strings.Contains(err.Error(), "exceeds 1 entries") {
 		t.Fatalf("unbounded closure: %v", err)
+	}
+}
+
+func TestGenerateAccountMalformedClockHasViewOnlyDateNote(t *testing.T) {
+	s := open(t)
+	m := mailingest.Message{Envelope: mailingest.Envelope{ID: "malformed-host", MessageID: "<malformed-host@example.test>", Date: "Sat, 07 Nov 2026 10:00:00 +0000"}, Body: "On Thu, Sep 26, 2024 at 16:33 PM, Alex <alex@example.test> wrote:\n\nSynthetic bulletin."}
+	if _, err := mailingest.PutForAccount(s, "legacy", m); err != nil {
+		t.Fatal(err)
+	}
+	recovery := corpus.RecoverQuotes(m.Body)
+	if len(recovery.Distinct) != 1 || !recovery.Distinct[0].Sent.IsZero() {
+		t.Fatalf("fixture changed: %+v", recovery)
+	}
+	ext := recovery.Distinct[0].Key
+	sp, err := Generate(s, Options{Title: "Undated synthetic quote", AccountID: "legacy", ExtIDs: []string{ext}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, entry := range sp.Messages {
+		if entry.ExtID == ext {
+			found = true
+			if entry.DateNote != "Original date unavailable; placement uses an accessible host's timestamp." || entry.Date != "Sat 7 Nov 2026" || strings.Contains(entry.Body, "Original date") || !strings.Contains(entry.Body, "Synthetic bulletin.") {
+				t.Fatalf("unsafe undated export: %+v", entry)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("undated quote omitted")
 	}
 }

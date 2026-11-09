@@ -184,6 +184,16 @@ func (q Query) withDefaults() Query {
 	return q
 }
 
+// Only mailbox/date browsing may nominate a target via notification activity.
+// Authored, participant, thread, source, media and custom-noise predicates must
+// match ordinary content itself, never a source notification on its behalf.
+func (q Query) activityEligible() bool {
+	return q.Text == "" && q.Semantic == nil && len(q.People) == 0 && len(q.PersonIDs) == 0 &&
+		len(q.Involving) == 0 && len(q.InvolvingRoles) == 0 && len(q.Containers) == 0 &&
+		len(q.Sources) == 0 && q.HasAttachment == nil && (q.Noise == nil || len(q.Noise.Predicates) == 0 ||
+		strings.Join(q.Noise.Predicates, "\n") == strings.Join(DefaultNoiseFilter().Predicates, "\n"))
+}
+
 // ranked reports whether the query brought anything to be ranked against: free
 // text the indexes can match, or a query vector. With neither, candidates falls
 // through to byRecency — the zero Query is a browse of the whole corpus — and
@@ -956,6 +966,9 @@ func (s *Store) chainMetaForAccount(roots []int64, accountID string) (map[int64]
 	}
 	countArgs := append([]any{}, args...)
 	countArgs = append(countArgs, walkDepthCap)
+	countArgs = append(countArgs, ordinaryArgs...)
+	reactionScope, reactionArgs := activeReactionForAccountSQL("ra", accountID)
+	countArgs = append(countArgs, reactionArgs...)
 	countArgs = append(countArgs, rootArgs...)
 	countArgs = append(countArgs, rootArgs...)
 	for range 3 {
@@ -981,9 +994,9 @@ func (s *Store) chainMetaForAccount(roots []int64, accountID string) (map[int64]
 		    from down d join entries e on e.parent_id = d.id
 		   where d.depth < ?
 		), activity(root,id) as (
-          select root,id from down
+          select d.root,d.id from down d join entries e on e.id=d.id where `+ordinary+`
           union
-          select d.root,ra.source_id from down d join reaction_active ra on ra.target_id=d.id
+          select d.root,ra.source_id from down d join reaction_active ra on ra.target_id=d.id and `+reactionScope+`
         )
 		select d.root,
 		       (select ext_id from entries where id = d.root),

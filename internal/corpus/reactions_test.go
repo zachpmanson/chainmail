@@ -373,3 +373,143 @@ func TestReactionManifestValidateBeforeStoreAccess(t *testing.T) {
 		})
 	}
 }
+
+func TestReactionAuthorPredicatesNeverNominateTarget(t *testing.T) {
+	s := open(t)
+	target := putReactionTarget(t, s, "mail:<synthetic-target@example.test>", "target", "<synthetic-target@example.test>")
+	e, m := corpusReactionFixture(t)
+	source, err := s.Put(e, m, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.db.Exec(`insert into people(id,display_name) values(11,'Target Author'),(22,'Notification Author')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.db.Exec(`update entries set person_id=11 where id=?`, target); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.db.Exec(`update entries set person_id=22 where id=?`, source.ID); err != nil {
+		t.Fatal(err)
+	}
+	for _, account := range []string{"", "legacy"} {
+		hits, err := s.SearchChains(Query{AccountID: account, PersonIDs: []int64{22}})
+		if err != nil || len(hits) != 0 {
+			t.Fatalf("source author nominated unrelated authored target: %+v %v", hits, err)
+		}
+		hits, err = s.SearchChains(Query{AccountID: account, PersonIDs: []int64{11}})
+		if err != nil || len(hits) != 1 || hits[0].Best[0].ID != target {
+			t.Fatalf("target author lost: %+v %v", hits, err)
+		}
+	}
+	for name, q := range map[string]Query{
+		"text": {Text: "subject"}, "author": {People: []string{"someone"}}, "author-id": {PersonIDs: []int64{22}},
+		"participant": {Involving: []string{"someone"}}, "role": {InvolvingRoles: []string{RoleFrom}},
+		"thread": {Containers: []string{"thread"}}, "source": {Sources: []string{SourceMail}}, "media": {HasAttachment: new(bool)},
+		"semantic": {Semantic: &SemanticQuery{}}, "custom-noise": {Noise: &NoiseFilter{Predicates: []string{"e.person_id=22"}}},
+	} {
+		if q.activityEligible() {
+			t.Errorf("%s admitted notification nomination", name)
+		}
+	}
+	if !(Query{AccountID: "legacy", Labels: []string{"INBOX", "UNREAD"}, Since: time.Unix(1, 0), Until: time.Unix(300, 0), After: &ChainCursor{}}).activityEligible() {
+		t.Fatal("mailbox/date activity browse disabled")
+	}
+}
+
+func TestReactionActivityIgnoresGraphMisparentAndUninspectedCopy(t *testing.T) {
+	for _, unknownCopy := range []bool{false, true} {
+		t.Run(fmt.Sprint("uninspected=", unknownCopy), func(t *testing.T) {
+			s := open(t)
+			target := putReactionTarget(t, s, "mail:<synthetic-target@example.test>", "target", "<synthetic-target@example.test>")
+			other, err := s.Put(Entry{Source: SourceMail, ExtID: "mail:unrelated", TS: time.Unix(50, 0), BodyText: "unrelated authored body"}, &Mail{GmailID: "unrelated", Labels: []string{"INBOX"}}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			middle, err := s.Put(Entry{Source: SourceMail, ExtID: "mail:middle", TS: time.Unix(150, 0), BodyText: "middle authored body"}, &Mail{GmailID: "middle", Labels: []string{"INBOX"}}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			e, m := corpusReactionFixture(t)
+			e.TS = time.Unix(200, 0)
+			m.Labels = []string{"INBOX", "UNREAD"}
+			source, err := s.Put(e, m, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = s.db.Exec(`update entries set ts=100 where id=?`, target); err != nil {
+				t.Fatal(err)
+			}
+			if _, err = s.db.Exec(`update entries set parent_id=? where id=?`, other.ID, source.ID); err != nil {
+				t.Fatal(err)
+			}
+			account := "legacy"
+			if unknownCopy {
+				account = "A"
+				if err = s.PutGmailAccount(GmailAccount{ID: account, DisplayName: account}); err != nil {
+					t.Fatal(err)
+				}
+				for _, copy := range []GmailCopy{{AccountID: account, GmailID: "A-target", EntryID: target}, {AccountID: account, GmailID: "A-other", EntryID: other.ID, Labels: []string{"INBOX"}}, {AccountID: account, GmailID: "A-middle", EntryID: middle.ID, Labels: []string{"INBOX"}}, {AccountID: account, GmailID: "A-source", EntryID: source.ID, Labels: []string{"INBOX", "UNREAD"}}} {
+					if err = s.PutGmailCopy(copy); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			targetLast, targetUnread, otherLast, otherUnread := int64(200), 1, int64(50), 0
+			if unknownCopy {
+				targetLast, targetUnread, otherLast, otherUnread = 100, 0, 200, 1
+			}
+			for _, check := range []struct {
+				ext             string
+				last            int64
+				unread, entries int
+			}{{"mail:<synthetic-target@example.test>", targetLast, targetUnread, 1}, {"mail:unrelated", otherLast, otherUnread, 1 + map[bool]int{true: 1}[unknownCopy]}} {
+				meta, err := s.ChainMetaForAccount(check.ext, account)
+				if err != nil || meta.Last.Unix() != check.last || meta.Unread != check.unread || meta.Entries != check.entries {
+					t.Fatalf("misplaced metadata %s: %+v %v", check.ext, meta, err)
+				}
+			}
+			for _, labels := range [][]string{nil, {"INBOX"}, {"UNREAD"}, {"INBOX", "UNREAD"}} {
+				q := Query{AccountID: account, Labels: labels, Limit: 1}
+				page, err := s.SearchChains(q)
+				want := target
+				if unknownCopy {
+					want = other.ID
+				}
+				if err != nil || len(page) != 1 || page[0].RootID != want || page[0].Last.Unix() != 200 {
+					t.Fatalf("wrong first activity page: %+v %v", page, err)
+				}
+				q.After = &ChainCursor{Last: page[0].Last, RootExtID: page[0].RootExtID}
+				page, err = s.SearchChains(q)
+				if len(labels) > 0 && labels[len(labels)-1] == "UNREAD" {
+					if err != nil || len(page) != 0 {
+						t.Fatalf("misparent gained unread activity: %+v %v", page, err)
+					}
+					continue
+				}
+				if err != nil || len(page) != 1 || page[0].RootID != middle.ID {
+					t.Fatalf("wrong next page: %+v %v", page, err)
+				}
+				q.After = &ChainCursor{Last: page[0].Last, RootExtID: page[0].RootExtID}
+				page, err = s.SearchChains(q)
+				if unknownCopy && len(labels) > 0 {
+					if err != nil || len(page) != 0 {
+						t.Fatalf("unknown source remapped inbox onto target: %+v %v", page, err)
+					}
+					continue
+				}
+				want = other.ID
+				if unknownCopy {
+					want = target
+				}
+				if err != nil || len(page) != 1 || page[0].RootID != want || page[0].Last.Unix() != map[bool]int64{false: 50, true: 100}[unknownCopy] {
+					t.Fatalf("duplicate activity on last page: %+v %v", page, err)
+				}
+				q.After = &ChainCursor{Last: page[0].Last, RootExtID: page[0].RootExtID}
+				page, err = s.SearchChains(q)
+				if err != nil || len(page) != 0 {
+					t.Fatalf("repeated activity root: %+v %v", page, err)
+				}
+			}
+		})
+	}
+}

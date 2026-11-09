@@ -96,6 +96,9 @@ func (s *Store) ProjectForAccount(extID, accountID string) (AccountProjection, e
 		p.Shown.Sightings = append(p.Shown.Sightings, Sighting{Kind: "direct"})
 		p.Shown.Permalink = GmailMessageURL(p.GmailID, p.AccountEmail)
 		p.Shown.GmailAccountEmail = p.AccountEmail
+		for n := range p.Shown.Attachments {
+			p.Shown.Attachments[n].Permalink = p.Shown.Permalink
+		}
 		return p, nil
 	}
 	// Do not reuse global headers, longer text, original HTML, attachments or cast
@@ -105,6 +108,7 @@ func (s *Store) ProjectForAccount(extID, accountID string) (AccountProjection, e
 		return p, ErrNotFound
 	}
 	p.Shown.TS = time.Unix(*placement, 0)
+	p.Shown.DateNote = "Original date unavailable; placement uses an accessible host's timestamp."
 	p.Shown.TZ = ""
 	p.Shown.TZOffset = nil
 	p.Shown.Author = ""
@@ -146,7 +150,16 @@ func (s *Store) ProjectForAccount(extID, accountID string) (AccountProjection, e
 		if r.Address != "" {
 			p.From = (&mail.Address{Name: r.Sender, Address: r.Address}).String()
 		}
-		if !r.Sent.IsZero() {
+		dateConsistent := true
+		for _, other := range recovered {
+			if !other.Sent.Equal(r.Sent) || other.TZ != r.TZ || other.DatePrecision != r.DatePrecision {
+				dateConsistent = false
+			}
+		}
+		if !dateConsistent {
+			p.Shown.DateNote = "Original date unknown or conflicting; placement uses an accessible host's timestamp."
+		} else if !r.Sent.IsZero() {
+			p.Shown.DateNote = ""
 			p.Shown.TS = r.Sent
 			p.Shown.TZ = r.TZ
 			p.Shown.TZOffset = nil

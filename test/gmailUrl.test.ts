@@ -66,3 +66,18 @@ describe("account-selected Gmail links", () => {
     expect(isGmailMessageURL(link)).toBe(false),
   );
 });
+
+it("uses a projected API attachment destination and preserves actual local bytes", () => {
+  const selected = gmailMessageURL("copy-A", "selected+mail@example.test");
+  const attachment = {
+    name: "test.pdf",
+    link: selected,
+    gmailAccountEmail: "selected+mail@example.test",
+  };
+  expect(attHref(attachment)).toBe(selected);
+  expect(attHref(attachment, "/v1/attachments")).toBe(selected);
+  expect(attHref({ ...attachment, blobSha: "actual-local-digest" }, "/v1/attachments")).toBe(
+    "/v1/attachments/actual-local-digest",
+  );
+  expect(attHref(attachment)).not.toMatch(/copy-legacy|copy-B/);
+});

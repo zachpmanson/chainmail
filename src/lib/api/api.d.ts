@@ -1068,6 +1068,8 @@ export interface components {
             }[];
             /** @description Resolved or conservative fallback reason for direct source inspection. */
             reactionStatus?: string;
+            /** @description View-only caveat when the original date is unknown and placement uses an accessible host timestamp. */
+            dateNote?: string;
         };
         /** @description A quoter's in-place change to a message they quoted, as a trail read carries it: the derived (edited) copy they pasted, and the original it was made against. `id` and `base` are ext ids — a chain read's own names for entries, which is what its anchors are made of — and the renderer resolves them against the entries it holds, exactly as a page build resolves a spec id against its rows. */
         TrailEdit: {
@@ -1870,6 +1872,8 @@ export interface components {
             }[];
             /** @description Known mailbox email for account-selected Gmail links; absent rather than guessed. */
             gmailAccountEmail?: string;
+            /** @description View-only caveat when the original date is unknown and placement uses an accessible host timestamp. */
+            dateNote?: string;
         };
         /** @description One message to fetch the files for, and the page to bring up to date once they land. */
         MediaPullRequest: {

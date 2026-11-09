@@ -309,6 +309,7 @@ func (b *builder) add(r *entryRow) {
 
 	e := Entry{
 		Date:      date,
+		DateNote:  r.DateNote,
 		Time:      clock,
 		Sender:    firstNonEmpty(r.Person, from.Who()),
 		Org:       b.orgFor(r.PersonID, from.Address),

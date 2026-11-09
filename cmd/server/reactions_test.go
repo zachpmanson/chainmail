@@ -159,6 +159,9 @@ func TestAccountProjectionUsesSelectedMailboxPermalink(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := mailingest.Message{Envelope: mailingest.Envelope{ID: "copy-legacy", ThreadID: "legacy-thread-not-proven-for-A", MessageID: "<shared-copy@example.test>", From: "Sender <sender@example.test>", Date: "Sat, 07 Nov 2026 10:00:00 +0000"}, Body: "shared content"}
+	if err := json.Unmarshal([]byte(`[{"filename":"synthetic.pdf","mime_type":"application/pdf","size":42,"part_id":"1"}]`), &m.Attachments); err != nil {
+		t.Fatal(err)
+	}
 	r, err := mailingest.PutForAccount(h.store, "legacy", m)
 	if err != nil {
 		t.Fatal(err)
@@ -166,8 +169,64 @@ func TestAccountProjectionUsesSelectedMailboxPermalink(t *testing.T) {
 	if err = h.store.PutGmailCopy(corpus.GmailCopy{AccountID: "A", GmailID: "copy-A", EntryID: r.ID}); err != nil {
 		t.Fatal(err)
 	}
-	res := h.do(t, "GET", "/v1/entries/"+url.PathEscape("mail:"+m.MessageID)+"?accountId=A", nil)
-	if res.status != 200 || strings.Contains(string(res.body), "copy-legacy") || strings.Contains(string(res.body), "legacy-thread-not-proven-for-A") || (!strings.Contains(string(res.body), "#all/copy-A") || !strings.Contains(string(res.body), "authuser=selected%2Bmail%40example.test")) {
-		t.Fatalf("wrong copy metadata: %d %s", res.status, res.body)
+	for _, route := range []string{"/v1/entries/", "/v1/chains/"} {
+		res := h.do(t, "GET", route+url.PathEscape("mail:"+m.MessageID)+"?accountId=A", nil)
+		if res.status != 200 {
+			t.Fatalf("%s: %d %s", route, res.status, res.body)
+		}
+		var entry corpusEntry
+		if route == "/v1/entries/" {
+			if err = json.Unmarshal(res.body, &entry); err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			var chain chainResponse
+			if err = json.Unmarshal(res.body, &chain); err != nil {
+				t.Fatal(err)
+			}
+			if len(chain.Entries) != 1 {
+				t.Fatalf("wrong chain %s", res.body)
+			}
+			entry = chain.Entries[0]
+		}
+		if strings.Contains(string(res.body), "copy-legacy") || strings.Contains(string(res.body), "legacy-thread-not-proven-for-A") || len(entry.Attachments) != 1 {
+			t.Fatalf("wrong copy metadata: %d %s", res.status, res.body)
+		}
+		a := entry.Attachments[0]
+		if a.Link != corpus.GmailMessageURL("copy-A", "selected+mail@example.test") || a.BlobSHA != "" {
+			t.Fatalf("attachment escaped selected account: %+v", a)
+		}
+		if !strings.Contains(entry.Permalink, "#all/copy-A") || !strings.Contains(entry.Permalink, "authuser=selected%2Bmail%40example.test") {
+			t.Fatalf("wrong selected link: %s", res.body)
+		}
+	}
+
+}
+
+func TestAccountProjectionMalformedClockDateNoteOnBothAPIRoutes(t *testing.T) {
+	h := testServer(t)
+	m := mailingest.Message{Envelope: mailingest.Envelope{ID: "malformed-host", MessageID: "<malformed-host@example.test>", Date: "Sat, 07 Nov 2026 10:00:00 +0000"}, Body: "On Thu, Sep 26, 2024 at 16:33 PM, Alex <alex@example.test> wrote:\n\nSynthetic bulletin."}
+	if _, err := mailingest.PutForAccount(h.store, "legacy", m); err != nil {
+		t.Fatal(err)
+	}
+	recovery := corpus.RecoverQuotes(m.Body)
+	if len(recovery.Distinct) != 1 || !recovery.Distinct[0].Sent.IsZero() {
+		t.Fatalf("malformed clock fixture changed: %+v", recovery)
+	}
+	ext := recovery.Distinct[0].Key
+	for _, route := range []string{"/v1/entries/", "/v1/chains/"} {
+		res := h.do(t, "GET", route+url.PathEscape(ext)+"?accountId=legacy", nil)
+		if res.status != 200 || !strings.Contains(string(res.body), `"dateNote":"Original date unavailable; placement uses an accessible host's timestamp."`) {
+			t.Fatalf("date caveat lost: %d %s", res.status, res.body)
+		}
+		if route == "/v1/entries/" {
+			var entry corpusEntry
+			if err := json.Unmarshal(res.body, &entry); err != nil {
+				t.Fatal(err)
+			}
+			if entry.Body != "Synthetic bulletin." || entry.TS != "2026-11-07T10:00:00Z" {
+				t.Fatalf("quote text/date corrupted: %+v", entry)
+			}
+		}
 	}
 }

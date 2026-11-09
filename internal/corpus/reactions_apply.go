@@ -154,43 +154,101 @@ func (s *Store) PreviewReactionSource(accountID, gmailID string) (ReactionPrevie
 	return item, nil
 }
 
-// PreviewReactionTarget never uses References, graph position or body prose.
-func (s *Store) PreviewReactionTarget(accountID, sourceExtID, targetRef string) (string, string, error) {
-	rows, err := s.db.Query(`select distinct e.ext_id,exists(select 1 from reaction_agreed r where r.source_id=e.id),exists(select 1 from gmail_copies selected where selected.entry_id=e.id and selected.account_id=?)
- from reaction_message_refs r join entries e on e.id=r.entry_id join gmail_copies c on c.entry_id=e.id
- where r.reference=? and exists(select 1 from gmail_copies sourceCopy join entries sourceEntry on sourceEntry.id=sourceCopy.entry_id where sourceEntry.ext_id=? and sourceCopy.account_id=c.account_id) order by e.ext_id`, accountID, targetRef, sourceExtID)
+// PreviewReactionTargets overlays the complete bounded manifest's prospective
+// sidecars, then uses the same resolver as the persisted views. No local write
+// or unknown source-copy account is needed to project the post-apply result.
+func (s *Store) PreviewReactionTargets(manifest *ReactionManifest) error {
+	var prospective [][]any
+	for _, item := range manifest.Items {
+		if item.Refusal != "" {
+			continue
+		}
+		if !ReactionOnly(item.Inspection) {
+			return errors.New("invalid prospective reaction inspection")
+		}
+		var id int64
+		if err := s.db.QueryRow(`select id from entries where ext_id=?`, item.Source.ExtID).Scan(&id); err != nil {
+			return err
+		}
+		e, m := reactionItemEvidence(item)
+		prospective = append(prospective, []any{item.Source.ExtID, id, reactionSnapshot(e, m, 0), manifest.AccountID, item.GmailID,
+			reactionSemantic(true, item.Inspection.Candidates[0].Emoji, item.Inspection.TargetMessageID, e, m, 0), item.Inspection.Candidates[0].Emoji, item.Inspection.TargetMessageID})
+	}
+	if len(prospective) == 0 {
+		return nil
+	}
+	raw, err := json.Marshal(prospective)
 	if err != nil {
-		return "", "", err
+		return err
+	}
+	prefix := `with prospective as (
+ select json_extract(value,'$[0]') as source_ext_id,json_extract(value,'$[1]') as entry_id,
+ json_extract(value,'$[2]') as snapshot,json_extract(value,'$[3]') as account_id,json_extract(value,'$[4]') as gmail_id,
+ json_extract(value,'$[5]') as semantic,json_extract(value,'$[6]') as emoji,json_extract(value,'$[7]') as target_ref from json_each(?)
+ ), reaction_sources as (
+ select * from main.reaction_sources where source_ext_id not in (select source_ext_id from prospective)
+ union select source_ext_id,entry_id,snapshot from prospective
+ ), reaction_inspections as (
+ select account_id,gmail_id,source_ext_id,semantic,snapshot,candidate,emoji,target_ref from main.reaction_inspections
+ union select account_id,gmail_id,source_ext_id,semantic,snapshot,1,emoji,target_ref from prospective
+ ), sightings as (
+ select * from main.sightings where seen_in is null or seen_in not in (select entry_id from prospective)
+ ), reaction_agreed as (` + reactionAgreedSQL + `), reaction_resolved as (` + reactionResolvedSQL + `), reaction_active as (` + reactionActiveSQL + `) `
+	targets, err := reviewedReactionTargets(s.db, prefix, []any{string(raw)}, *manifest)
+	if err != nil {
+		return err
+	}
+	for n := range manifest.Items {
+		item := &manifest.Items[n]
+		if item.Refusal == "" {
+			item.TargetExtID = targets[item.Source.ExtID].target
+			item.Status = targets[item.Source.ExtID].status
+		}
+	}
+	return nil
+}
+
+type reviewedReactionTarget struct{ target, status string }
+
+func reviewedReactionTargets(q corpusQuery, prefix string, args []any, manifest ReactionManifest) (map[string]reviewedReactionTarget, error) {
+	var sources []string
+	for _, item := range manifest.Items {
+		sources = append(sources, item.Source.ExtID)
+	}
+	ph, sourceArgs := placeholders(sources)
+	proof, proofArgs := activeReactionForAccountSQL("ra", manifest.AccountID)
+	args = append(args, proofArgs...)
+	args = append(args, sourceArgs...)
+	rows, err := q.Query(prefix+`select e.ext_id,
+ case when active.source_id is not null then t.ext_id else '' end,
+ case when r.targets is null or r.targets!=1 then 'unresolved-missing-ambiguous-or-inaccessible'
+ when r.target_id=r.source_id then 'unresolved-self'
+ when exists(select 1 from reaction_agreed a where a.source_id=r.target_id) then 'unresolved-reaction-target'
+ when active.source_id is not null then 'resolved'
+ else 'unresolved-inaccessible' end
+ from entries e left join (`+reactionResolutionSQL+`) r on r.source_id=e.id
+ left join (select ra.* from reaction_active ra where `+proof+`) active on active.source_id=e.id
+ left join entries t on t.id=active.target_id
+ where e.ext_id in (`+ph+`)`, args...)
+	if err != nil {
+		return nil, err
 	}
 	defer rows.Close()
-	var targets []string
-	var reactionTarget, selectedAccessible bool
+	out := map[string]reviewedReactionTarget{}
 	for rows.Next() {
-		var ext string
-		var reaction, accessible bool
-		if err = rows.Scan(&ext, &reaction, &accessible); err != nil {
-			return "", "", err
+		var source string
+		var target reviewedReactionTarget
+		if err = rows.Scan(&source, &target.target, &target.status); err != nil {
+			return nil, err
 		}
-		targets = append(targets, ext)
-		reactionTarget = reactionTarget || reaction
-		selectedAccessible = selectedAccessible || accessible
+		out[source] = target
 	}
-	if err = rows.Err(); err != nil {
-		return "", "", err
-	}
-	if len(targets) != 1 {
-		return "", "unresolved-missing-ambiguous-or-inaccessible", nil
-	}
-	if !selectedAccessible {
-		return "", "unresolved-inaccessible", nil
-	}
-	if targets[0] == sourceExtID {
-		return "", "unresolved-self", nil
-	}
-	if reactionTarget {
-		return "", "unresolved-reaction-target", nil
-	}
-	return targets[0], "resolved", nil
+	return out, rows.Err()
+}
+
+func reactionItemEvidence(item ReactionPreviewItem) (Entry, *Mail) {
+	return Entry{ExtID: item.Source.ExtID, BodyText: item.Source.Body, BodyHTML: item.Source.BodyHTML, TS: time.Unix(item.Source.TS, 0)},
+		&Mail{GmailID: item.GmailID, MessageID: item.Source.MessageID, InReplyTo: item.Source.InReplyTo, From: item.Source.From, SourceDate: item.Date, ReactionInspection: item.Inspection}
 }
 
 func InspectionDigest(r *mail.ReactionInspection) string {
@@ -303,10 +361,19 @@ func (s *Store) ApplyReactionManifest(manifest ReactionManifest) (bool, error) {
 		if _, err = tx.Exec(`delete from sightings where seen_in=?`, id); err != nil {
 			return false, err
 		}
-		e := Entry{ExtID: item.Source.ExtID, BodyText: item.Source.Body, BodyHTML: item.Source.BodyHTML, TS: time.Unix(item.Source.TS, 0)}
-		m := &Mail{GmailID: item.GmailID, MessageID: item.Source.MessageID, InReplyTo: item.Source.InReplyTo, From: item.Source.From, SourceDate: item.Date, ReactionInspection: item.Inspection}
+		e, m := reactionItemEvidence(item)
 		if err = putReactionEvidence(tx, manifest.AccountID, e, m, id); err != nil {
 			return false, err
+		}
+	}
+	targets, err := reviewedReactionTargets(tx, "", nil, manifest)
+	if err != nil {
+		return false, err
+	}
+	for _, item := range manifest.Items {
+		actual, ok := targets[item.Source.ExtID]
+		if !ok || actual.target != item.TargetExtID || actual.status != item.Status {
+			return false, errors.New("reviewed reaction target/status differs from post-apply association")
 		}
 	}
 	audit, _ := json.Marshal(withdrawn)
