@@ -611,7 +611,6 @@ export default function ReplyBox({
               busy={busy || selected.editingBlocked}
             />
             <footer className="mt-2 flex flex-wrap items-center justify-end gap-2">
-              <BodyWordCount body={own} />
               <div className="mr-auto flex flex-wrap items-center gap-4">
                 <CheckboxRow
                   className="flex cursor-pointer items-center gap-1.5 text-xs text-muted has-disabled:cursor-default has-disabled:opacity-55"
@@ -642,6 +641,7 @@ export default function ReplyBox({
                 >
                   send html
                 </CheckboxRow>
+                <BodyWordCount body={own} />
               </div>
               {draftId ? (
                 <Button
