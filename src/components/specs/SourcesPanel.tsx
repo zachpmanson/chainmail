@@ -34,7 +34,7 @@ export default function SourcesPanel({ v, filter }: { v: View; filter?: ThreadFi
                 {" "}
                 <a
                   className="rounded-sm border border-line px-1 text-2xs font-bold tracking-[.06em] whitespace-nowrap text-muted uppercase no-underline hover:border-accent hover:text-accent"
-                  href={gmailMessageURL(c.gmailId)}
+                  href={gmailMessageURL(c.gmailId, c.gmailAccountEmail)}
                   target="_blank"
                   rel="noopener"
                   title="Open this thread in Gmail"
@@ -99,7 +99,11 @@ export default function SourcesPanel({ v, filter }: { v: View; filter?: ThreadFi
             {t.id ? (
               <a
                 className="text-inherit underline decoration-accent underline-offset-2 hover:text-accent"
-                href={gmailMessageURL(t.id)}
+                href={gmailMessageURL(
+                  t.id,
+                  v.rows.find((r) => r.entry.threadId === t.id || r.entry.gmailId === t.id)?.entry
+                    .gmailAccountEmail,
+                )}
                 target="_blank"
                 rel="noopener"
               >

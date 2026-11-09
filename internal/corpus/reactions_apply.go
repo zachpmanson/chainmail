@@ -14,6 +14,63 @@ import (
 )
 
 const ReactionPreviewLimit = 20
+const ReactionSourceByteLimit = 4 << 20
+const ReactionPreviewByteLimit = 16 << 20
+
+func reactionSourceBytes(r ReactionSource) int {
+	return len(r.ExtID) + len(r.MessageID) + len(r.InReplyTo) + len(r.From) + len(r.Body) + len(r.BodyHTML)
+}
+
+// Validate is database-independent and must run before opening a writer.
+func (m ReactionManifest) Validate() error {
+	if m.Version != 1 || strings.TrimSpace(m.AccountID) == "" || strings.TrimSpace(m.AccountID) != m.AccountID || len(m.Items) == 0 || len(m.Items) > ReactionPreviewLimit {
+		return errors.New("invalid or unbounded reaction manifest")
+	}
+	seen := map[string]bool{}
+	total := 0
+	for _, item := range m.Items {
+		size := reactionSourceBytes(item.Source)
+		total += size
+		if size > ReactionSourceByteLimit || total > ReactionPreviewByteLimit {
+			return errors.New("reaction source byte budget exceeded")
+		}
+		date, err := netmail.ParseDate(item.Date)
+		if item.GmailID == "" || strings.TrimSpace(item.GmailID) != item.GmailID || seen[item.GmailID] || item.Source.ExtID == "" || item.Precondition == "" || item.QuoteSightings < 0 || err != nil || date.Unix() != item.Source.TS {
+			return errors.New("invalid reaction manifest item")
+		}
+		seen[item.GmailID] = true
+		if item.Refusal != "" || !ReactionOnly(item.Inspection) || InspectionDigest(item.Inspection) != item.EvidenceDigest || strings.TrimSpace(item.Source.InReplyTo) != item.Inspection.TargetMessageID {
+			return errors.New("refused or invalid reaction preview")
+		}
+	}
+	return nil
+}
+
+// CheckReactionPreviewSources checks lengths in SQLite before loading bodies or
+// opening the provider boundary. It never truncates a source into apparent proof.
+func (s *Store) CheckReactionPreviewSources(accountID string, ids []string) error {
+	if strings.TrimSpace(accountID) == "" || strings.TrimSpace(accountID) != accountID || len(ids) == 0 || len(ids) > ReactionPreviewLimit {
+		return errors.New("preview requires an explicit account and 1..20 source IDs")
+	}
+	seen := map[string]bool{}
+	var total int64
+	for _, id := range ids {
+		if id == "" || strings.TrimSpace(id) != id || seen[id] {
+			return errors.New("preview IDs must be distinct and nonempty")
+		}
+		seen[id] = true
+		var size int64
+		err := s.db.QueryRow(`select length(cast(e.ext_id as blob))+length(cast(coalesce(m.message_id,'') as blob))+length(cast(coalesce(m.in_reply_to,'') as blob))+length(cast(coalesce(m.from_addr,'') as blob))+length(cast(coalesce(e.body_text,'') as blob))+length(cast(coalesce(e.body_html,'') as blob)) from gmail_copies c join entries e on e.id=c.entry_id join mail_detail m on m.entry_id=e.id where c.account_id=? and c.gmail_id=?`, accountID, id).Scan(&size)
+		if err != nil {
+			return err
+		}
+		total += size
+		if size > ReactionSourceByteLimit || total > ReactionPreviewByteLimit {
+			return errors.New("reaction source byte budget exceeded")
+		}
+	}
+	return nil
+}
 
 type ReactionSource struct {
 	ExtID     string `json:"extId"`
@@ -70,6 +127,9 @@ func reactionQuoteCheck(q corpusQuery, id int64) (int, error) {
 func (s *Store) PreviewReactionSource(accountID, gmailID string) (ReactionPreviewItem, error) {
 	var item ReactionPreviewItem
 	item.GmailID = gmailID
+	if err := s.CheckReactionPreviewSources(accountID, []string{gmailID}); err != nil {
+		return item, err
+	}
 	tx, err := s.db.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return item, err
@@ -142,8 +202,8 @@ func InspectionDigest(r *mail.ReactionInspection) string {
 // origin sightings with independent evidence. Every precondition is checked
 // before any write, and the audit row makes exact replay a no-op.
 func (s *Store) ApplyReactionManifest(manifest ReactionManifest) (bool, error) {
-	if manifest.Version != 1 || manifest.AccountID == "" || len(manifest.Items) == 0 || len(manifest.Items) > ReactionPreviewLimit {
-		return false, errors.New("invalid or unbounded reaction manifest")
+	if err := manifest.Validate(); err != nil {
+		return false, err
 	}
 	unlock, err := s.LockGmailSync(manifest.AccountID)
 	if err != nil {

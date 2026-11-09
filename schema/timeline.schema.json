@@ -141,6 +141,7 @@
         "me": { "type": "boolean", "description": "The reader's own outbound." },
         "source": { "type": "string", "description": "Where it came from: a Gmail id, or 'unspooled from the 2 Aug email'." },
         "gmailId": { "type": "string" },
+        "gmailAccountEmail": { "type": "string", "description": "Known mailbox email for account-selected Gmail links; absent rather than guessed." },
         "threadId": { "type": "string" },
         "parent": { "type": "string", "description": "Id of the entry this replies to. Absent means it opens a chain. Coverage here drives ordering, lanes and the reply tree." },
         "edits": {
@@ -219,6 +220,7 @@
               "kind": { "type": "string" },
               "size": { "type": "string" },
               "gmailId": { "type": "string", "description": "Links to the message in Gmail. Only ever present on real messages." },
+              "gmailAccountEmail": { "type": "string", "description": "Known mailbox email for account-selected Gmail links; absent rather than guessed." },
               "link": { "type": "string", "description": "Opens the attachment at its source, for attachments not reached through Gmail." },
               "preview": { "type": "string", "description": "Thumbnail as a data: URI. Never a URL — the page renders without a network.", "pattern": "^data:image/" },
               "previewW": { "type": "integer", "minimum": 1 },

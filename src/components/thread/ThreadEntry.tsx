@@ -1,3 +1,4 @@
+import { gmailAccountEmail } from "../../lib/message/gmailUrl";
 import type { CorpusEntry } from "../../lib/api/api";
 import type { ReadingPreference } from "../../lib/prefs/usePrefs";
 import { MEDIA_BASE } from "../../lib/message/attachments";
@@ -53,7 +54,11 @@ export default function ThreadEntry({ entry: e }: { entry: CorpusEntry }) {
           : undefined
       }
       source={
-        <Source source={sourceLine(e, lookup.mailName)} anchorByGmail={lookup.anchorByGmail} />
+        <Source
+          source={sourceLine(e, lookup.mailName)}
+          anchorByGmail={lookup.anchorByGmail}
+          accountEmail={gmailAccountEmail(e.permalink)}
+        />
       }
       reply={<ReplyLink parent={lookup.replyOf(e)} />}
       // Only for messages the mailbox holds; the server would refuse the others.

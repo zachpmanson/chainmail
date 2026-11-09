@@ -2,6 +2,7 @@ package corpus
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -203,7 +204,14 @@ func TestReactionApplyRefusesFutureSchemaUnderLock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.ApplyReactionManifest(ReactionManifest{Version: 1, AccountID: "legacy", Items: []ReactionPreviewItem{{GmailID: "explicit-source"}}})
+	e, m := corpusReactionFixture(t)
+	date, parseErr := time.Parse(time.RFC1123Z, m.SourceDate)
+	if parseErr != nil {
+		t.Fatal(parseErr)
+	}
+	e.TS = date
+	item := ReactionPreviewItem{GmailID: m.GmailID, Source: ReactionSource{ExtID: e.ExtID, MessageID: m.MessageID, InReplyTo: m.InReplyTo, From: m.From, TS: e.TS.Unix(), Body: e.BodyText, BodyHTML: e.BodyHTML}, Precondition: "synthetic", Date: m.SourceDate, Inspection: m.ReactionInspection, EvidenceDigest: InspectionDigest(m.ReactionInspection)}
+	_, err = s.ApplyReactionManifest(ReactionManifest{Version: 1, AccountID: "legacy", Items: []ReactionPreviewItem{item}})
 	if err == nil || !strings.Contains(err.Error(), "supported schema") {
 		t.Fatal("future schema not refused before apply", err)
 	}
@@ -252,5 +260,116 @@ func TestReactionPreviewFrozenSnapshotDoesNotCreateSQLiteCompanions(t *testing.T
 		if err = os.Remove(path + suffix); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+func TestReactionMailboxActivityBrowseAndPagination(t *testing.T) {
+	for _, account := range []string{"", "legacy"} {
+		t.Run("scope="+account, func(t *testing.T) {
+			s := open(t)
+			target := putReactionTarget(t, s, "mail:<synthetic-target@example.test>", "target", "<synthetic-target@example.test>")
+			if _, err := s.db.Exec(`update entries set ts=100,subject='Authored target' where id=?`, target); err != nil {
+				t.Fatal(err)
+			}
+			e, m := corpusReactionFixture(t)
+			e.TS = time.Unix(200, 0)
+			m.Labels = []string{"INBOX", "UNREAD"}
+			_, err := s.Put(e, m, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// The reaction's target association is authoritative even before parent repair.
+			other, err := s.Put(Entry{Source: SourceMail, ExtID: "mail:other", TS: time.Unix(150, 0), BodyText: "other authored body"}, &Mail{GmailID: "other", Labels: []string{"INBOX", "UNREAD"}}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, labels := range [][]string{nil, {"INBOX"}, {"UNREAD"}, {"INBOX", "UNREAD"}} {
+				q := Query{AccountID: account, Labels: labels, Limit: 1}
+				page, err := s.SearchChains(q)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(page) != 1 || page[0].RootID != target || page[0].Last.Unix() != 200 || page[0].Unread != 1 || page[0].Entries != 1 || len(page[0].Best) != 1 || page[0].Best[0].ID != target || strings.Contains(page[0].Best[0].Snippet, "reacted") {
+					t.Fatalf("activity/prose separation labels %v: %+v", labels, page)
+				}
+				q.After = &ChainCursor{Last: page[0].Last, RootExtID: page[0].RootExtID}
+				page, err = s.SearchChains(q)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(page) != 1 || page[0].RootID != other.ID {
+					t.Fatalf("pagination lost next chain: %+v", page)
+				}
+				q.After = &ChainCursor{Last: page[0].Last, RootExtID: page[0].RootExtID}
+				page, err = s.SearchChains(q)
+				if err != nil || len(page) != 0 {
+					t.Fatalf("pagination repeated: %+v %v", page, err)
+				}
+			}
+			meta, err := s.ChainMetaForAccount("mail:<synthetic-target@example.test>", account)
+			if err != nil || meta.Last.Unix() != 200 || meta.Entries != 1 || meta.Unread != 1 {
+				t.Fatalf("meta: %+v %v", meta, err)
+			}
+			hits, err := s.SearchEntries(Query{AccountID: account, Text: "reacted"})
+			if err != nil || len(hits) != 0 {
+				t.Fatalf("fallback prose hit: %+v %v", hits, err)
+			}
+			// Two distinct notifications remain two unread source events, not per-person state.
+			e.ExtID = "mail:<second-event@example.test>"
+			m.GmailID = "second-event"
+			m.MessageID = "<second-event@example.test>"
+			e.TS = time.Unix(201, 0)
+			if _, err = s.Put(e, m, nil); err != nil {
+				t.Fatal(err)
+			}
+			meta, err = s.ChainMetaForAccount("mail:<synthetic-target@example.test>", account)
+			if err != nil || meta.Unread != 2 || meta.Last.Unix() != 201 || meta.Entries != 1 {
+				t.Fatalf("distinct event activity: %+v %v", meta, err)
+			}
+		})
+	}
+}
+
+func TestReactionManifestValidateBeforeStoreAccess(t *testing.T) {
+	e, m := corpusReactionFixture(t)
+	date, err := time.Parse(time.RFC1123Z, m.SourceDate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	item := ReactionPreviewItem{GmailID: m.GmailID, Source: ReactionSource{ExtID: e.ExtID, MessageID: m.MessageID, InReplyTo: m.InReplyTo, From: m.From, TS: date.Unix(), Body: e.BodyText, BodyHTML: e.BodyHTML}, Precondition: "synthetic", Date: m.SourceDate, Inspection: m.ReactionInspection, EvidenceDigest: InspectionDigest(m.ReactionInspection)}
+	valid := ReactionManifest{Version: 1, AccountID: "legacy", Items: []ReactionPreviewItem{item}}
+	if err = valid.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	for name, change := range map[string]func(*ReactionManifest){
+		"version":    func(m *ReactionManifest) { m.Version = 2 },
+		"account":    func(m *ReactionManifest) { m.AccountID = " " },
+		"empty":      func(m *ReactionManifest) { m.Items = nil },
+		"count":      func(m *ReactionManifest) { m.Items = make([]ReactionPreviewItem, 21) },
+		"duplicate":  func(m *ReactionManifest) { m.Items = append(m.Items, m.Items[0]) },
+		"date":       func(m *ReactionManifest) { m.Items[0].Date = "invalid" },
+		"source-cap": func(m *ReactionManifest) { m.Items[0].Source.Body = strings.Repeat("x", ReactionSourceByteLimit+1) },
+		"aggregate-cap": func(m *ReactionManifest) {
+			for n := 0; n < 5; n++ {
+				i := item
+				i.GmailID = fmt.Sprint(n)
+				i.Source.Body = strings.Repeat("x", ReactionSourceByteLimit-(1<<10))
+				if n == 0 {
+					m.Items[0] = i
+				} else {
+					m.Items = append(m.Items, i)
+				}
+			}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			manifest := valid
+			manifest.Items = append([]ReactionPreviewItem{}, valid.Items...)
+			change(&manifest)
+			// A nil database intentionally proves pure refusal precedes locks/DB reads.
+			if _, err := (&Store{}).ApplyReactionManifest(manifest); err == nil {
+				t.Fatal("invalid manifest accepted")
+			}
+		})
 	}
 }

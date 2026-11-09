@@ -1766,6 +1766,8 @@ export interface components {
             skip?: string;
             previewW?: number;
             previewH?: number;
+            /** @description Known mailbox email for account-selected Gmail links; absent rather than guessed. */
+            gmailAccountEmail?: string;
         };
         TimelineEntry: {
             /**
@@ -1852,6 +1854,8 @@ export interface components {
                 view?: "image" | "text" | "pdf";
                 /** @description Why the corpus does not hold these bytes, recorded when a pull decided it never will: too large, gone from the sender's copy, nothing to fetch by. Present means the file is not coming, so a page can explain the chip and stop offering to fetch it. The value is the corpus's own word; the page owns the phrasing. */
                 skip?: string;
+                /** @description Known mailbox email for account-selected Gmail links; absent rather than guessed. */
+                gmailAccountEmail?: string;
             }[];
             /** @description Received reaction notification events grouped by the exact Unicode emoji sequence. From is a sender claim, not authenticated intent. Distinct source notification IDs, not per-reactor current state. */
             reactions?: {
@@ -1864,6 +1868,8 @@ export interface components {
                     sourceLink: string;
                 }[];
             }[];
+            /** @description Known mailbox email for account-selected Gmail links; absent rather than guessed. */
+            gmailAccountEmail?: string;
         };
         /** @description One message to fetch the files for, and the page to bring up to date once they land. */
         MediaPullRequest: {

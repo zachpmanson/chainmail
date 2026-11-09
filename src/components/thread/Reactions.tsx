@@ -1,3 +1,4 @@
+import { isGmailMessageURL } from "../../lib/message/gmailUrl";
 import type { Entry } from "../../lib/timeline/spec";
 
 /** Native disclosure also works in a script-free export. Identity is a From claim. */
@@ -25,11 +26,7 @@ export default function Reactions({ reactions }: { reactions?: Entry["reactions"
                 {event.body}
               </pre>
               <a
-                href={
-                  event.sourceLink.startsWith("https://mail.google.com/mail/#all/")
-                    ? event.sourceLink
-                    : undefined
-                }
+                href={isGmailMessageURL(event.sourceLink) ? event.sourceLink : undefined}
                 target="_blank"
                 rel="noreferrer"
               >

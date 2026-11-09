@@ -15,7 +15,7 @@ export function localHref(a: Attachment, mediaBase: string): string | undefined 
 export function attHref(a: Attachment, mediaBase = ""): string | undefined {
   const local = localHref(a, mediaBase);
   if (local) return local;
-  if (a.gmailId) return gmailMessageURL(a.gmailId);
+  if (a.gmailId) return gmailMessageURL(a.gmailId, a.gmailAccountEmail);
   return a.link || undefined;
 }
 

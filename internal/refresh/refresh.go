@@ -319,9 +319,33 @@ func Run(store *corpus.Store, mb Mailbox, prev spec.Spec, opts Options) (Report,
 	// page with provenance.
 	prev, rep.QueriesRecorded = record(prev, opts.Queries)
 
-	if len(prev.Queries) == 0 && len(prev.Threads) == 0 {
-		return rep, spec.Spec{}, fmt.Errorf("the spec records neither a query nor a thread, " +
-			"so there is nothing to re-run — regenerate it with `corpus spec`")
+	var localSeeds []string
+	localLimit := 0
+	if len(prev.Queries) == 0 && len(prev.Threads) == 0 && opts.AccountID != "" {
+		localLimit = searchLimit(opts.Limit)
+		if localLimit < 1 || len(prev.Messages) > localLimit {
+			return rep, spec.Spec{}, fmt.Errorf("scoped local selection exceeds its entry budget")
+		}
+		seen := map[string]bool{}
+		for _, m := range prev.Messages {
+			if m.ExtID == "" {
+				return rep, spec.Spec{}, fmt.Errorf("scoped threadless refresh requires durable entry IDs")
+			}
+			ok, err := store.EntryAccessible(m.ExtID, opts.AccountID)
+			if err != nil {
+				return rep, spec.Spec{}, err
+			}
+			if !ok {
+				return rep, spec.Spec{}, fmt.Errorf("scoped local selection is unavailable in the selected account")
+			}
+			if !seen[m.ExtID] {
+				localSeeds = append(localSeeds, m.ExtID)
+				seen[m.ExtID] = true
+			}
+		}
+	}
+	if len(prev.Queries) == 0 && len(prev.Threads) == 0 && len(localSeeds) == 0 {
+		return rep, spec.Spec{}, fmt.Errorf("the spec records neither a query nor a thread, so there is nothing to re-run — regenerate it with `corpus spec`")
 	}
 
 	// Collapse stored twins before the passes read from the store: a quote and
@@ -427,8 +451,10 @@ func Run(store *corpus.Store, mb Mailbox, prev spec.Spec, opts Options) (Report,
 	}
 
 	containers, kept := membership(prev, sources)
+	kept = append(kept, localSeeds...)
 	next, err := spec.Generate(store, spec.Options{
 		AccountID:  opts.AccountID,
+		EntryLimit: localLimit,
 		Containers: containers,
 		ExtIDs:     append(accepted, kept...),
 		Title:      opts.Title,

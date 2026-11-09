@@ -169,6 +169,7 @@ export default function ThreadMessages({
       ) : null}
       {continuity.answer ? (
         <ReplyBox
+          key={continuity.key}
           thread={thread}
           answer={continuity.answer}
           scopePending={continuity.scopePending}

@@ -763,7 +763,9 @@ func toCorpusEntry(s corpus.Shown, r spec.Rendered) corpusEntry {
 	// corpus knows the message rather than the file: every attachment of a message
 	// opens the message it arrived in.
 	for _, a := range s.Attachments {
-		e.Attachments = append(e.Attachments, toCorpusAttachment(a))
+		att := toCorpusAttachment(a)
+		att.GmailAccountEmail = s.GmailAccountEmail
+		e.Attachments = append(e.Attachments, att)
 	}
 	return e
 }

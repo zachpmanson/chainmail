@@ -65,11 +65,24 @@ changes invalidate fold membership and vectors independently of BodySHA. Target
 ordinary content is searchable once. Ambiguous/mixed/unresolved mail remains
 ordinary. Corpus/source totals and provider label/unread counts still include
 notification sources; unread is not an authored-message count and may exceed it.
+Accessible reaction sources nominate their target conversation for structural
+mailbox browsing even when only the source is in INBOX/UNREAD. Their timestamps
+contribute to latest activity, ordering and pagination, not authored snippets.
 No read/unread or label changes happen as a display side effect.
 
 `accountId` scopes chain reads, direct source evidence, page builds and reaction
 association. Saved `runParams.accountId` survives refresh. Quotes independently
 sighted through selected-account hosts remain eligible without direct copies.
+Selected-account copies supply Gmail IDs/permalinks. Account-local thread IDs
+are not retained per copy, so scoped exports omit unproven legacy thread IDs
+and link through the selected message copy instead. Quoted-only views rederive
+text and headers from selected-account host evidence rather than globally enriched
+bodies, recipients or subjects; unprovable projections show unavailable content.
+Host provenance and HTML recovery use only selected-account hosts. Unavailable
+quotes are placed at the earliest accessible host timestamp with an explicit
+original-date/placement caveat; that placement is never persisted. Known mailbox
+emails select Gmail links with `authuser`; absent emails retain generic legacy
+links without guessing a browser account index.
 Scoped refresh cannot use the legacy provider-fetch path: ingest that account
 separately, then refresh from the corpus. Unscoped legacy behavior is retained.
 These are local account/copy boundaries, not a new server authentication system.
@@ -86,16 +99,23 @@ live corpus. An old/future snapshot schema is a refusal, not migration.
 
 ```
 umask 077
-CHAINMAIL_CORPUS=<frozen-private-snapshot> corpus reactions -account <account-id> -ids <gmail-source-id,...> > review.json
+CHAINMAIL_CORPUS=<frozen-private-snapshot> corpus reactions -account <account-id> -ids <gmail-source-id,...> -out PRIVATE-review.json > summary.json
 # Inspect exact source/evidence/target/status/refusals locally, then separately:
-CHAINMAIL_CORPUS=<live-corpus> corpus reactions -apply review.json
+CHAINMAIL_CORPUS=<live-corpus> corpus reactions -apply PRIVATE-review.json
 ```
 
 Preview permits 1–20 distinct explicit IDs already stored in the selected
 account and uses only the supported Mailbox.Read boundary. It does not search or
 refetch broadly, call Put, extract quotes, advance cursors/history, reconcile
-labels, migrate the corpus or write provider state. The manifest contains source
-content and IDs: treat it as private local mail, not a public fixture.
+labels, migrate the corpus or write provider state. Whole local source bytes are
+limited to 4 MiB per source and 16 MiB across the preview, checked before provider
+reads and before loading an oversized body. Oversized sources refuse; nothing is
+truncated and presented as full proof. Default stdout is a metadata-only redacted
+summary and **cannot be applied**. Only explicit `-out` creates the exact PRIVATE
+manifest, exclusively (no overwrite), with mode 0600. That file contains exact
+source text/HTML and IDs: treat it as private local mail, not a public fixture.
+Apply input is capped at 64 MiB, rejects unknown fields/trailing JSON, and validates
+the version/account/items and source budgets before opening any writable database.
 
 Apply performs no provider calls and takes the existing account sync lock. It
 revalidates versioned evidence and unchanged source/copy/target/evidence/graph
@@ -124,3 +144,10 @@ and the exact reviewed manifest remain inspectable in the local apply audit.
   do not prove that every reported token-save error precedes activation: a rare
   post-rename directory-fsync failure can report an error after installation.
   Production authentication semantics are unchanged.
+
+Scoped threadless saved pages refresh locally from durable entry IDs only when
+there is no recorded query/thread selection. Seeds and their fresh graph closure
+are revalidated through the effective account projection; saved bodies and IDs
+are not authorization. The existing message budget bounds seed/closure size and
+oversized expansions refuse. This fallback does not enable scoped provider fetch
+or alter unscoped refresh behavior.

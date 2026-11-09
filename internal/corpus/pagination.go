@@ -32,11 +32,20 @@ func ParseChainCursor(raw string) (*ChainCursor, error) {
 // roots behind a chatty thread, and applying the cursor to entries repeats chains
 // whose older members cross the boundary.
 func (s *Store) browseCandidates(q Query) ([]candidate, error) {
-	where, args := q.filters()
+	where, args := q.filtersForActivity(true)
+	reactionScope := "1"
+	var reactionArgs []any
+	if q.AccountID != "" {
+		reactionScope = "exists(select 1 from gmail_copies rc where rc.entry_id=ra.target_id and rc.account_id=?)"
+		reactionArgs = []any{q.AccountID}
+	}
+	spanScope, spanArgs := accountEntrySQL("e", q.AccountID)
 	continuation := "1"
 	callArgs := []any{walkDepthCap, walkDepthCap}
+	callArgs = append(callArgs, reactionArgs...)
 	callArgs = append(callArgs, args...)
 	callArgs = append(callArgs, walkDepthCap)
+	callArgs = append(callArgs, spanArgs...)
 	if q.After != nil {
 		continuation = "(last < ? or (last = ? and ext_id > ?))"
 		callArgs = append(callArgs, q.After.Last.Unix(), q.After.Last.Unix(), q.After.RootExtID)
@@ -52,18 +61,22 @@ func (s *Store) browseCandidates(q Query) ([]candidate, error) {
    select u.start, u.cur as root from up u join entries e on e.id=u.cur
    where e.parent_id is null or u.depth >= ?
  ), matched as (
-   select e.id, e.ts, m.root from entries e join membership m on m.start=e.id
+   select coalesce(ra.target_id,e.id) as id, max(e.ts) as ts, m.root from entries e
+   left join reaction_active ra on ra.source_id=e.id and `+reactionScope+`
+   join membership m on m.start=coalesce(ra.target_id,e.id)
    left join mail_detail md on md.entry_id=e.id
    left join slack_detail sd on sd.entry_id=e.id
-   where `+where+`
+   where `+where+` group by coalesce(ra.target_id,e.id),m.root
  ), down(root, id, depth) as (
    select distinct root, root, 0 from matched
    union all
    select d.root, e.id, d.depth+1 from down d join entries e on e.parent_id=d.id
    where d.depth < ?
+ ), activity(root,id) as (
+   select root,id from down union select d.root,ra.source_id from down d join reaction_active ra on ra.target_id=d.id
  ), spans as (
-   select d.root, r.ext_id, max(e.ts) as last from down d
-   join entries e on e.id=d.id join entries r on r.id=d.root where `+ordinaryEntrySQL+` group by d.root
+   select d.root, r.ext_id, max(e.ts) as last from activity d
+   join entries e on e.id=d.id join entries r on r.id=d.root where `+spanScope+` group by d.root
  ), page as (
    select root from spans where `+continuation+` order by last desc, ext_id asc limit ?
  )

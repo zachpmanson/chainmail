@@ -187,6 +187,10 @@ export interface Entry {
    */
   source?: string;
   gmailId?: string;
+  /**
+   * Known mailbox email for account-selected Gmail links; absent rather than guessed.
+   */
+  gmailAccountEmail?: string;
   threadId?: string;
   /**
    * Id of the entry this replies to. Absent means it opens a chain. Coverage here drives ordering, lanes and the reply tree.
@@ -243,6 +247,10 @@ export interface Entry {
      * Links to the message in Gmail. Only ever present on real messages.
      */
     gmailId?: string;
+    /**
+     * Known mailbox email for account-selected Gmail links; absent rather than guessed.
+     */
+    gmailAccountEmail?: string;
     /**
      * Opens the attachment at its source, for attachments not reached through Gmail.
      */

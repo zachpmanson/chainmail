@@ -2823,7 +2823,7 @@ func (s *server) original(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) entry(w http.ResponseWriter, r *http.Request) {
-	shown, err := s.store.Show(r.PathValue("extId"))
+	shown, err := s.store.ShowForAccount(r.PathValue("extId"), r.URL.Query().Get("accountId"))
 	if err != nil {
 		failLookup(w, err)
 		return
@@ -2837,12 +2837,12 @@ func (s *server) entry(w http.ResponseWriter, r *http.Request) {
 		fail(w, 404, corpus.ErrNotFound)
 		return
 	}
-	drawing, err := s.rendered(shown.ExtID)
+	drawings, err := spec.RenderTrailForAccount(s.store, []string{shown.ExtID}, r.URL.Query().Get("accountId"))
 	if err != nil {
 		fail(w, http.StatusInternalServerError, err)
 		return
 	}
-	out := toCorpusEntry(shown, drawing)
+	out := toCorpusEntry(shown, drawings[shown.ExtID])
 	reactions, _, err := s.store.ReactionsFor(r.URL.Query().Get("accountId"), []string{shown.ExtID})
 	if err != nil {
 		fail(w, 500, err)
@@ -2898,6 +2898,11 @@ func (s *server) chain(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if ok {
+			sh, err = s.store.ShowForAccount(sh.ExtID, accountID)
+			if err != nil {
+				fail(w, 500, err)
+				return
+			}
 			visible = append(visible, sh)
 			ids = append(ids, sh.ExtID)
 		}
@@ -2923,7 +2928,7 @@ func (s *server) chain(w http.ResponseWriter, r *http.Request) {
 	// and a client that asks for it and gets entries it cannot draw would be
 	// shown a broken thread instead of a retryable error. See RenderTrail for
 	// what this deliberately does not do (no zone inference, no participation).
-	rendered, err := spec.RenderTrail(s.store, ids)
+	rendered, err := spec.RenderTrailForAccount(s.store, ids, accountID)
 	if err != nil {
 		fail(w, http.StatusInternalServerError, fmt.Errorf("rendering the trail: %w", err))
 		return
@@ -2941,6 +2946,37 @@ func (s *server) chain(w http.ResponseWriter, r *http.Request) {
 	// earliest message that carried a subject.
 	out.Summary = toChainSummary(meta)
 	out.Summary.Entries = len(out.Entries)
+	if accountID != "" {
+		out.Summary.Subject = ""
+		out.Summary.Container = ""
+		// Quote placement must come from the same account projection as its card.
+		var first, last time.Time
+		activity := func(ts time.Time) {
+			if last.IsZero() || ts.After(last) {
+				last = ts
+			}
+		}
+		for _, sh := range shown {
+			activity(sh.TS)
+			if _, hide := hidden[sh.ExtID]; !hide && (first.IsZero() || sh.TS.Before(first)) {
+				first = sh.TS
+			}
+		}
+		for _, groups := range reactions {
+			for _, group := range groups {
+				for _, event := range group.Events {
+					source, err := s.store.ShowForAccount(event.SourceExtID, accountID)
+					if err != nil {
+						fail(w, 500, err)
+						return
+					}
+					activity(source.TS)
+				}
+			}
+		}
+		out.Summary.First = stamp(first)
+		out.Summary.Last = stamp(last)
+	}
 	if out.Summary.Subject == "" {
 		// A root with no subject of its own is named by the first message that has
 		// one, which is what a reader recognises the thread by. The search path makes

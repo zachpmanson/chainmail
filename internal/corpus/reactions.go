@@ -98,11 +98,12 @@ func (s *Store) ReactionsFor(accountID string, extIDs []string) (map[string][]Re
 	}
 	ph, args := placeholders(extIDs)
 	args = append(args, accountID, accountID)
-	rows, err := s.db.Query(`select a.source_ext_id,t.ext_id,i.emoji,i.claimed_from,i.source_date,coalesce(e.body_text,''),i.gmail_id
+	rows, err := s.db.Query(`select a.source_ext_id,t.ext_id,i.emoji,i.claimed_from,i.source_date,coalesce(e.body_text,''),i.gmail_id,coalesce(ga.email,'')
  from reaction_active a join entries t on t.id=a.target_id join entries e on e.id=a.source_id
  join reaction_inspections i on i.source_ext_id=a.source_ext_id
  join gmail_copies sc on sc.account_id=i.account_id and sc.gmail_id=i.gmail_id and sc.entry_id=a.source_id
  join gmail_copies tc on tc.entry_id=a.target_id and tc.account_id=sc.account_id
+ join gmail_accounts ga on ga.id=sc.account_id
  where t.ext_id in (`+ph+`) and (?='' or sc.account_id=?)
  order by t.ext_id,i.emoji,a.source_ext_id,i.account_id,i.gmail_id`, args...)
 	if err != nil {
@@ -111,15 +112,15 @@ func (s *Store) ReactionsFor(accountID string, extIDs []string) (map[string][]Re
 	defer rows.Close()
 	seen := map[string]bool{}
 	for rows.Next() {
-		var source, target, emoji, from, date, body, gmail string
-		if err = rows.Scan(&source, &target, &emoji, &from, &date, &body, &gmail); err != nil {
+		var source, target, emoji, from, date, body, gmail, email string
+		if err = rows.Scan(&source, &target, &emoji, &from, &date, &body, &gmail, &email); err != nil {
 			return nil, nil, err
 		}
 		if seen[source] {
 			continue
 		}
 		seen[source] = true
-		event := ReactionEvent{SourceExtID: source, ClaimedFrom: from, Date: date, Body: body, SourceLink: "https://mail.google.com/mail/#all/" + gmail}
+		event := ReactionEvent{SourceExtID: source, ClaimedFrom: from, Date: date, Body: body, SourceLink: GmailMessageURL(gmail, email)}
 		gs := groups[target]
 		slot := -1
 		for n := range gs {

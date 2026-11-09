@@ -4504,6 +4504,10 @@
           "previewH": {
             "type": "integer",
             "minimum": 1
+          },
+          "gmailAccountEmail": {
+            "type": "string",
+            "description": "Known mailbox email for account-selected Gmail links; absent rather than guessed."
           }
         }
       },
@@ -4700,6 +4704,10 @@
                 "skip": {
                   "type": "string",
                   "description": "Why the corpus does not hold these bytes, recorded when a pull decided it never will: too large, gone from the sender's copy, nothing to fetch by. Present means the file is not coming, so a page can explain the chip and stop offering to fetch it. The value is the corpus's own word; the page owns the phrasing."
+                },
+                "gmailAccountEmail": {
+                  "type": "string",
+                  "description": "Known mailbox email for account-selected Gmail links; absent rather than guessed."
                 }
               }
             }
@@ -4751,6 +4759,10 @@
                 }
               }
             }
+          },
+          "gmailAccountEmail": {
+            "type": "string",
+            "description": "Known mailbox email for account-selected Gmail links; absent rather than guessed."
           }
         }
       },

@@ -673,9 +673,15 @@ func (s *Store) byRecency(q Query, where string, args []any) ([]candidate, error
 
 // filters renders the structural half of the query. It always returns a
 // non-empty predicate so callers can concatenate without special-casing.
-func (q Query) filters() (string, []any) {
+func (q Query) filters() (string, []any) { return q.filtersForActivity(false) }
+
+func (q Query) filtersForActivity(activity bool) (string, []any) {
 	ordinary, args := ordinaryForAccountSQL(q.AccountID)
 	preds := []string{ordinary}
+	if activity {
+		preds = []string{"1"}
+		args = nil
+	}
 
 	if !q.Since.IsZero() {
 		preds = append(preds, "e.ts >= ?")
@@ -944,11 +950,15 @@ func (s *Store) chainMetaForAccount(roots []int64, accountID string) (map[int64]
 	ordinary, ordinaryArgs := ordinaryForAccountSQL(accountID)
 	scope, scopeArgs := accountEntrySQL("e", accountID)
 	rootScope, rootArgs := accountEntrySQL("rootEntry", accountID)
+	if accountID != "" {
+		rootScope = "exists(select 1 from gmail_copies rc where rc.entry_id=rootEntry.id and rc.account_id=?)"
+		rootArgs = []any{accountID}
+	}
 	countArgs := append([]any{}, args...)
 	countArgs = append(countArgs, walkDepthCap)
 	countArgs = append(countArgs, rootArgs...)
 	countArgs = append(countArgs, rootArgs...)
-	for range 4 {
+	for range 3 {
 		countArgs = append(countArgs, ordinaryArgs...)
 	}
 	countArgs = append(countArgs, unreadArgs...)
@@ -970,18 +980,22 @@ func (s *Store) chainMetaForAccount(roots []int64, accountID string) (map[int64]
 		  select d.root, e.id, d.depth + 1
 		    from down d join entries e on e.parent_id = d.id
 		   where d.depth < ?
-		)
+		), activity(root,id) as (
+          select root,id from down
+          union
+          select d.root,ra.source_id from down d join reaction_active ra on ra.target_id=d.id
+        )
 		select d.root,
 		       (select ext_id from entries where id = d.root),
 		       coalesce((select coalesce(subject,'') from entries rootEntry where id = d.root and `+rootScope+`),''),
 		       coalesce((select coalesce(container,'') from entries rootEntry where id = d.root and `+rootScope+`),''),
 		       count(distinct case when `+ordinary+` then d.id end),
-		       coalesce(min(case when `+ordinary+` then e.ts end),min(e.ts)), coalesce(max(case when `+ordinary+` then e.ts end),max(e.ts)),
+		       coalesce(min(case when `+ordinary+` then e.ts end),min(e.ts)), max(e.ts),
 		       group_concat(distinct e.source),
 		       count(distinct case when `+ordinary+` then p.person_id end),
 		       count(distinct a.rowid),
 		       count(distinct case when `+unreadSQL+` then d.id end)
-		from down d join entries e on e.id = d.id
+		from activity d join entries e on e.id = d.id
 		     left join participants p on p.entry_id = e.id
 		     left join mail_detail md on md.entry_id = e.id
 		     left join attachments a on a.entry_id = e.id

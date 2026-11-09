@@ -3,6 +3,7 @@ package spec
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -14,28 +15,29 @@ import (
 // entryRow is one corpus entry with everything the spec needs, gathered in as
 // few queries as the shape of the store allows.
 type entryRow struct {
-	ID        int64
-	ParentID  int64 // 0 when unset or unresolved
-	ParentRef string
-	Kind      string
-	Source    string // "mail" or "slack"; decides how far a body may be reshaped
-	TS        time.Time
-	TZ        string
-	TZOffset  *int  // minutes east of UTC; nil when the source stated none
-	PersonID  int64 // corpus person id; the key zone inference is per-person on
-	Person    string
-	Container string
-	Subject   string
-	ExtID     string
-	GmailID   string
-	From      string
-	To        string
-	Cc        string
-	BodyText  string
-	BodyHTML  string  // the sender's own text/html part, "" for an unspooled entry
-	Direct    bool    // seen in the mailbox itself, not only inside a quote
-	Derived   bool    // a quoter's MODIFIED copy of a quoted message (see twins.go)
-	SeenIn    []int64 // entries this one was found quoted or forwarded inside
+	ID           int64
+	ParentID     int64 // 0 when unset or unresolved
+	ParentRef    string
+	Kind         string
+	Source       string // "mail" or "slack"; decides how far a body may be reshaped
+	TS           time.Time
+	TZ           string
+	TZOffset     *int  // minutes east of UTC; nil when the source stated none
+	PersonID     int64 // corpus person id; the key zone inference is per-person on
+	Person       string
+	Container    string
+	Subject      string
+	ExtID        string
+	GmailID      string
+	AccountEmail string
+	From         string
+	To           string
+	Cc           string
+	BodyText     string
+	BodyHTML     string  // the sender's own text/html part, "" for an unspooled entry
+	Direct       bool    // seen in the mailbox itself, not only inside a quote
+	Derived      bool    // a quoter's MODIFIED copy of a quoted message (see twins.go)
+	SeenIn       []int64 // entries this one was found quoted or forwarded inside
 	// HostHTML is the markup of those entries, loaded only when this entry has
 	// none of its own: an unspooled message's formatting survives inside the
 	// reply that quoted it. See recoverHTML.
@@ -121,11 +123,18 @@ func seeds(db *sql.DB, opts Options) ([]int64, error) {
 // Parents are single, so up-then-down reaches the whole connected component: the
 // walk up ends at each seed's chain root, and the walk down from those roots
 // covers every branch under them.
-func closure(db *sql.DB, ids []int64) ([]int64, error) {
+func closure(db *sql.DB, ids []int64) ([]int64, error) { return closureLimited(db, ids, 0) }
+
+func closureLimited(db *sql.DB, ids []int64, limit int) ([]int64, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
 	ph, args := placeholders(ids)
+	suffix := ""
+	if limit > 0 {
+		suffix = " limit ?"
+		args = append(args, limit+1)
+	}
 	rows, err := db.Query(`
 		with recursive
 		  seed(id) as (select id from entries where id in (`+ph+`)),
@@ -140,7 +149,7 @@ func closure(db *sql.DB, ids []int64) ([]int64, error) {
 		    union
 		    select e.id from entries e join down on e.parent_id = down.id
 		  )
-		select id from down`, args...)
+		select id from down`+suffix, args...)
 	if err != nil {
 		return nil, fmt.Errorf("reply-graph closure: %w", err)
 	}
@@ -152,6 +161,9 @@ func closure(db *sql.DB, ids []int64) ([]int64, error) {
 			return nil, err
 		}
 		out = append(out, id)
+		if limit > 0 && len(out) > limit {
+			return nil, fmt.Errorf("spec: local selection exceeds %d entries; use an explicit bounded query", limit)
+		}
 	}
 	return out, rows.Err()
 }
@@ -168,6 +180,65 @@ func load(store *corpus.Store, ids []int64) ([]*entryRow, error) {
 		return err
 	})
 	return out, err
+}
+
+func loadForAccount(store *corpus.Store, ids []int64, accountID string) ([]*entryRow, error) {
+	rows, err := load(store, ids)
+	if err != nil || accountID == "" {
+		return rows, err
+	}
+	out := rows[:0]
+	for _, r := range rows {
+		p, err := store.ProjectForAccount(r.ExtID, accountID)
+		if errors.Is(err, corpus.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		sh := p.Shown
+		r.GmailID = p.GmailID
+		r.AccountEmail = p.AccountEmail
+		r.From = p.From
+		r.To = p.To
+		r.Cc = p.Cc
+		r.Direct = p.Direct
+		r.PersonID = sh.PersonID
+		r.Person = sh.Author
+		r.Subject = sh.Subject
+		r.Container = sh.Container
+		r.TS = sh.TS
+		r.TZ = sh.TZ
+		r.TZOffset = sh.TZOffset
+		r.BodyText = sh.Body
+		r.BodyHTML = p.HTML
+		r.SeenIn = p.Hosts
+		r.HostHTML = nil
+		if !p.Direct {
+			r.Atts = nil
+			r.Fold = boiler.Fold{}
+			r.Derived = false
+			r.ParentRef = ""
+		}
+		out = append(out, r)
+	}
+	if err := loadHostHTML(store.DB(), out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// A scoped recovered entry's routing comes from its selected host, not global
+// participants filled by an unrelated, more complete quotation.
+func scopeParticipation(rows []*entryRow, part map[int64][]partRow, accountID string) {
+	if accountID == "" {
+		return
+	}
+	for _, r := range rows {
+		if !r.Direct {
+			delete(part, r.ID)
+		}
+	}
 }
 
 type loadQuery interface {

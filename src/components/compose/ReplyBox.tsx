@@ -125,6 +125,7 @@ export default function ReplyBox({
   const queryClient = useQueryClient();
   const routeAccountId = useAccountId();
   const continuityAccount = useRef(routeAccountId ?? "");
+  const transferAccount = useRef<string>();
   const [{ own, html, accountId, editingRecipients, step }, dispatch] = useReducer(reduce, {
     own: "",
     html: true,
@@ -244,6 +245,7 @@ export default function ReplyBox({
       ]),
       owner: draftIdRef.current ? draftIdentity(displayedAccountId, draftIdRef.current) : undefined,
       continuityAccountId: continuityAccount.current,
+      transferAccountId: transferAccount.current,
       busy:
         busyRef.current ||
         pendingWrites.current > 0 ||
@@ -266,6 +268,7 @@ export default function ReplyBox({
     }),
     hydrate: (saved) => {
       continuityAccount.current = saved.accountId;
+      transferAccount.current = undefined;
       saveGeneration.current++;
       reviewInput.invalidate();
       dispatch({ type: "edit" });
@@ -588,6 +591,7 @@ export default function ReplyBox({
                   onChange={(id) => {
                     if (selected.coordinator && !selected.coordinator.detach(id)) return;
                     continuityAccount.current = id;
+                    transferAccount.current = id;
                     selected.edit();
                     ownership.edit();
                     reviewInput.invalidate();

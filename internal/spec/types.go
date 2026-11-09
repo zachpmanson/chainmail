@@ -113,36 +113,38 @@ type Entry struct {
 	// absent on an entry the page invented. A client that needs to *name* a
 	// message back to the server needs this one, and only an ingested entry has
 	// it.
-	ExtID       string       `json:"extId,omitempty"`
-	Date        string       `json:"date"`
-	Time        string       `json:"time,omitempty"`
-	TZ          string       `json:"tz,omitempty"`
-	TZSource    string       `json:"tzSource,omitempty"`
-	Sender      string       `json:"sender,omitempty"`
-	Org         string       `json:"org,omitempty"`
-	FromEmail   string       `json:"fromEmail,omitempty"`
-	To          string       `json:"to,omitempty"`
-	Subject     string       `json:"subject,omitempty"`
-	Label       string       `json:"label,omitempty"`
-	Body        string       `json:"body"`
-	Quoted      bool         `json:"quoted,omitempty"`
-	Me          bool         `json:"me,omitempty"`
-	Source      string       `json:"source,omitempty"`
-	GmailID     string       `json:"gmailId,omitempty"`
-	ThreadID    string       `json:"threadId,omitempty"`
-	Parent      string       `json:"parent,omitempty"`
-	Edits       []Edit       `json:"edits,omitempty"`
-	Meta        bool         `json:"meta,omitempty"`
-	Mentions    []string     `json:"mentions,omitempty"`
-	Attachments []Attachment `json:"attachments,omitempty"`
+	ExtID             string       `json:"extId,omitempty"`
+	Date              string       `json:"date"`
+	Time              string       `json:"time,omitempty"`
+	TZ                string       `json:"tz,omitempty"`
+	TZSource          string       `json:"tzSource,omitempty"`
+	Sender            string       `json:"sender,omitempty"`
+	Org               string       `json:"org,omitempty"`
+	FromEmail         string       `json:"fromEmail,omitempty"`
+	To                string       `json:"to,omitempty"`
+	Subject           string       `json:"subject,omitempty"`
+	Label             string       `json:"label,omitempty"`
+	Body              string       `json:"body"`
+	Quoted            bool         `json:"quoted,omitempty"`
+	Me                bool         `json:"me,omitempty"`
+	Source            string       `json:"source,omitempty"`
+	GmailID           string       `json:"gmailId,omitempty"`
+	GmailAccountEmail string       `json:"gmailAccountEmail,omitempty"`
+	ThreadID          string       `json:"threadId,omitempty"`
+	Parent            string       `json:"parent,omitempty"`
+	Edits             []Edit       `json:"edits,omitempty"`
+	Meta              bool         `json:"meta,omitempty"`
+	Mentions          []string     `json:"mentions,omitempty"`
+	Attachments       []Attachment `json:"attachments,omitempty"`
 }
 
 // Attachment is what the renderer shows as a chip under a message.
 type Attachment struct {
-	Name    string `json:"name"`
-	Kind    string `json:"kind,omitempty"`
-	Size    string `json:"size,omitempty"`
-	GmailID string `json:"gmailId,omitempty"`
+	Name              string `json:"name"`
+	Kind              string `json:"kind,omitempty"`
+	Size              string `json:"size,omitempty"`
+	GmailID           string `json:"gmailId,omitempty"`
+	GmailAccountEmail string `json:"gmailAccountEmail,omitempty"`
 	// Link opens the attachment at its source, for attachments not reached
 	// through Gmail. Without it a Slack attachment is an unopenable label.
 	Link string `json:"link,omitempty"`

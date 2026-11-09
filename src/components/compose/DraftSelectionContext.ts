@@ -4,6 +4,8 @@ import type { SavedDraft } from "../../lib/ui/draftSelection";
 export type LeaveSnapshot = {
   /** View continuity after an explicit sender change, never authorization. */
   continuityAccountId?: string;
+  /** Explicit From detach witness, separate from view continuity. */
+  transferAccountId?: string;
   owner?: string;
   kind?: "compose" | "reply";
   destination?: string;

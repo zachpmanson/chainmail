@@ -8,6 +8,7 @@ export interface ThreadFilter {
     count: number;
     /** mailbox id of the thread's thread, where any entry in it names one */
     gmailId?: string;
+    gmailAccountEmail?: string;
     /** anchor of the thread's first entry, for jumping to it in the page */
     anchor: string;
   }[];

@@ -16,7 +16,9 @@ import (
 type Options struct {
 	// Containers are mail thread ids (entries.container); every entry in them is
 	// selected.
-	AccountID  string
+	AccountID string
+	// EntryLimit bounds local seed expansion when requested by scoped refresh.
+	EntryLimit int
 	Containers []string
 	// EntryIDs are corpus row ids, as an FTS or vector query returns them.
 	EntryIDs []int64
@@ -88,11 +90,11 @@ func Generate(store *corpus.Store, opts Options) (Spec, error) {
 	if len(seedIDs) == 0 {
 		return Spec{}, errors.New("spec: nothing selected — pass containers, entry ids or ext ids")
 	}
-	ids, err := closure(db, seedIDs)
+	ids, err := closureLimited(db, seedIDs, opts.EntryLimit)
 	if err != nil {
 		return Spec{}, err
 	}
-	rows, err := load(store, ids)
+	rows, err := loadForAccount(store, ids, opts.AccountID)
 	if err != nil {
 		return Spec{}, err
 	}
@@ -145,6 +147,8 @@ func Generate(store *corpus.Store, opts Options) (Spec, error) {
 	if err != nil {
 		return Spec{}, err
 	}
+
+	scopeParticipation(rows, part, opts.AccountID)
 
 	// The rules the reader has stored are the rules this page is built under.
 	// There is deliberately no option to build against a set nobody has stored:
@@ -321,8 +325,9 @@ func (b *builder) add(r *entryRow) {
 		Source:   b.source(r),
 		// The corpus's handle for the entry, carried so a client can act on the
 		// message it is looking at (POST /v1/media/pull takes one of these).
-		ExtID:   r.ExtID,
-		GmailID: r.GmailID,
+		ExtID:             r.ExtID,
+		GmailID:           r.GmailID,
+		GmailAccountEmail: r.AccountEmail,
 		// A mail entry's container *is* its thread id; mail_detail has no column
 		// of its own for it.
 		ThreadID: r.Container,
@@ -336,10 +341,12 @@ func (b *builder) add(r *entryRow) {
 		if r.Direct {
 			// Only a real message can be opened in Gmail.
 			att.GmailID = r.GmailID
+			att.GmailAccountEmail = r.AccountEmail
 		} else if a.GmailID != "" {
 			// An inline (cid) image re-attributed to the quoted entry that placed
 			// it: the chip opens the host message that actually shows the image.
 			att.GmailID = a.GmailID
+			att.GmailAccountEmail = r.AccountEmail
 		}
 		if att.GmailID == "" {
 			// A mail attachment's permalink is the same Gmail URL the id already

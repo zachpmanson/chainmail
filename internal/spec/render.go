@@ -114,6 +114,10 @@ type Rendered struct {
 // function a page build uses (derivedEdits), so a thread read in the pane carries
 // the same edits the same page does.
 func RenderTrail(store *corpus.Store, extIDs []string) (map[string]Rendered, error) {
+	return RenderTrailForAccount(store, extIDs, "")
+}
+
+func RenderTrailForAccount(store *corpus.Store, extIDs []string, accountID string) (map[string]Rendered, error) {
 	out := make(map[string]Rendered, len(extIDs))
 	if len(extIDs) == 0 {
 		return out, nil
@@ -143,7 +147,7 @@ func RenderTrail(store *corpus.Store, extIDs []string) (map[string]Rendered, err
 		return nil, err
 	}
 
-	rows, err := load(store, ids)
+	rows, err := loadForAccount(store, ids, accountID)
 	if err != nil {
 		return nil, err
 	}
@@ -159,6 +163,8 @@ func RenderTrail(store *corpus.Store, extIDs []string) (map[string]Rendered, err
 	if err != nil {
 		return nil, err
 	}
+	scopeParticipation(rows, part, accountID)
+
 	// The org rules resolve in the order the caller asked for the entries in,
 	// because that is the trail's own order: a person who appears at two
 	// organisations is coloured at whichever the trail reached first, exactly as a

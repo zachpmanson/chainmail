@@ -1,9 +1,11 @@
 package mailingest
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -182,5 +184,35 @@ func TestReactionPreviewBoundsAndChangedMailboxSource(t *testing.T) {
 	}
 	if changed, err := s.ApplyReactionManifest(manifest); err == nil || changed {
 		t.Fatal("changed source applied")
+	}
+}
+
+func TestReactionPreviewByteBudgetsBeforeAnyProviderRead(t *testing.T) {
+	for _, aggregate := range []bool{false, true} {
+		t.Run(map[bool]string{false: "per-source", true: "aggregate"}[aggregate], func(t *testing.T) {
+			s := store(t)
+			count := 1
+			size := corpus.ReactionSourceByteLimit + 1
+			if aggregate {
+				count = 5
+				size = corpus.ReactionSourceByteLimit - (1 << 10)
+			}
+			var ids []string
+			for n := 0; n < count; n++ {
+				id := fmt.Sprintf("bounded-%d", n)
+				_, err := s.Put(corpus.Entry{Source: "mail", ExtID: "mail:" + id, TS: time.Unix(1, 0), BodyText: strings.Repeat("x", size)}, &corpus.Mail{GmailID: id}, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				ids = append(ids, id)
+			}
+			box := &reactionMailbox{}
+			if _, err := PreviewReactions(s, box, "legacy", ids); err == nil || !strings.Contains(err.Error(), "byte budget") {
+				t.Fatalf("oversized source accepted: %v", err)
+			}
+			if len(box.reads) != 0 {
+				t.Fatalf("provider opened before complete local budget check: %v", box.reads)
+			}
+		})
 	}
 }

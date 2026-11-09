@@ -135,6 +135,7 @@ function useThreadFilter(spec: Spec) {
           date: c.date,
           count: c.entries.length,
           gmailId: withId?.entry.threadId ?? withId?.entry.gmailId,
+          gmailAccountEmail: withId?.entry.gmailAccountEmail,
           anchor: c.root,
         };
       }),

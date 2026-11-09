@@ -920,6 +920,18 @@ describe("authoritative destination and exact parent", () => {
 });
 
 describe("reviewed editor preservation regressions", () => {
+  it("does not transfer private input into an arbitrarily selected warm account cache", async () => {
+    const { host, navigate } = await mount("/?accountId=B&open=root");
+    expect(host.querySelector("textarea")).not.toBeNull();
+    await navigate({ accountId: "A", open: "root" });
+    await words(host, "A private words never belong to B");
+    const area = host.querySelector("textarea");
+    await navigate({ accountId: "B", open: "root" });
+    expect(host.querySelector("textarea")).not.toBe(area);
+    expect(host.querySelector("textarea")!.value).toBe("");
+    await settle(750);
+    expect(writes).toEqual([]);
+  });
   it("does not retain an old editor or target during an arbitrary account URL switch", async () => {
     const { host, navigate } = await mount("/?accountId=A&open=root");
     await words(host, "A-only user input");

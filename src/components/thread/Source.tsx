@@ -7,12 +7,14 @@ function SourceIds({
   ids,
   unspooled,
   anchorByGmail,
+  accountEmail,
 }: {
   ids: SourceId[];
   /** the line is "unspooled from …"; its ids name the message the content was lifted out of */
   unspooled: boolean;
   /** gmailId -> this page's anchor for that message, where it is present as a row */
   anchorByGmail: Map<string, string>;
+  accountEmail?: string;
 }) {
   return (
     <>
@@ -36,7 +38,7 @@ function SourceIds({
               ) : (
                 <a
                   className="text-inherit no-underline hover:text-accent hover:underline"
-                  href={gmailMessageURL(s.gmailId)}
+                  href={gmailMessageURL(s.gmailId, accountEmail)}
                   target="_blank"
                   rel="noopener"
                 >
@@ -55,9 +57,11 @@ function SourceIds({
 export default function Source({
   source,
   anchorByGmail,
+  accountEmail,
 }: {
   source?: string;
   anchorByGmail: Map<string, string>;
+  accountEmail?: string;
 }) {
   if (!source) return null;
   const p = provenance(source);
@@ -68,7 +72,12 @@ export default function Source({
   return (
     <span className="ml-auto font-mono text-2xs text-muted">
       {p.prefix}
-      <SourceIds ids={p.ids} unspooled={unspooled} anchorByGmail={anchorByGmail} />
+      <SourceIds
+        ids={p.ids}
+        unspooled={unspooled}
+        anchorByGmail={anchorByGmail}
+        accountEmail={accountEmail}
+      />
     </span>
   );
 }

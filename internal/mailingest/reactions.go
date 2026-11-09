@@ -1,9 +1,7 @@
 package mailingest
 
 import (
-	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/zachpmanson/chainmail/internal/corpus"
 )
@@ -12,16 +10,10 @@ import (
 // It does not invoke ingest, Put, history, search, labels or repair.
 func PreviewReactions(store *corpus.Store, mailbox Mailbox, accountID string, ids []string) (corpus.ReactionManifest, error) {
 	manifest := corpus.ReactionManifest{Version: 1, AccountID: accountID, Items: []corpus.ReactionPreviewItem{}}
-	if strings.TrimSpace(accountID) == "" || len(ids) == 0 || len(ids) > corpus.ReactionPreviewLimit {
-		return manifest, errors.New("preview requires an explicit account and 1..20 source IDs")
+	if err := store.CheckReactionPreviewSources(accountID, ids); err != nil {
+		return manifest, err
 	}
-	seen := map[string]bool{}
-	// Check the complete bound and every local copy before issuing a single read.
 	for _, id := range ids {
-		if id == "" || strings.TrimSpace(id) != id || seen[id] {
-			return manifest, errors.New("preview IDs must be distinct and nonempty")
-		}
-		seen[id] = true
 		item, err := store.PreviewReactionSource(accountID, id)
 		if err != nil {
 			return manifest, err

@@ -70,7 +70,13 @@ export default function EntryBlock({
       media={onPull ? { onPull, pulling: pulling ?? null, mediaBase: mediaBase ?? "" } : undefined}
       reply={<ReplyLink parent={replyTarget(row, v)} />}
       edits={<Edits edits={row.edits} fallbackWho={v.title} />}
-      source={<Source source={e.source} anchorByGmail={anchorByGmail} />}
+      source={
+        <Source
+          source={e.source}
+          anchorByGmail={anchorByGmail}
+          accountEmail={e.gmailAccountEmail}
+        />
+      }
       copyJson={{
         id: row.id,
         thread: row.chain ?? null,

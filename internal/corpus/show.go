@@ -51,11 +51,12 @@ type Shown struct {
 	// ask to see the original, and answering that by carrying the markup would put
 	// a chain's worth of it on every read. A reader who asks gets the one part they
 	// asked for, from OriginalHTML.
-	HasOriginal bool
-	Container   string
-	Permalink   string
-	Parent      string // parent's ext_id, empty at a chain root
-	ParentRef   string // what it names as its parent, resolved or not
+	HasOriginal       bool
+	Container         string
+	GmailAccountEmail string
+	Permalink         string
+	Parent            string // parent's ext_id, empty at a chain root
+	ParentRef         string // what it names as its parent, resolved or not
 
 	// Sightings is every place this entry was found. A message quoted in five
 	// forwards has five, which is the evidence that it mattered.
