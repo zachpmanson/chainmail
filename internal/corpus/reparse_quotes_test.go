@@ -364,6 +364,8 @@ func TestQuoteMetadataReadOnlyPreMigrationAndMigrationNoBackfill(t *testing.T) {
 	beforeSchema := querySnapshot(t, s, `select type,name,sql from sqlite_schema order by type,name`)
 	before := protectedLocaleSnapshot(t, s)
 	s.Close()
+	freezeQuoteFixture(t, path)
+	assertNoSQLiteCompanions(t, path)
 	beforeFile, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -374,6 +376,10 @@ func TestQuoteMetadataReadOnlyPreMigrationAndMigrationNoBackfill(t *testing.T) {
 	}
 	p := localePlan(t, ro)
 	requireLocaleChange(t, p)
+	assertNoSQLiteCompanions(t, path)
+	if !reflect.DeepEqual(before, protectedLocaleSnapshot(t, ro)) {
+		t.Fatal("preview changed protected rows")
+	}
 	if got := querySnapshot(t, ro, `select type,name,sql from sqlite_schema order by type,name`); got != beforeSchema {
 		t.Fatal("preview migrated schema")
 	}
@@ -385,7 +391,11 @@ func TestQuoteMetadataReadOnlyPreMigrationAndMigrationNoBackfill(t *testing.T) {
 	if !reflect.DeepEqual(beforeFile, afterFile) {
 		t.Fatal("readonly changed database bytes")
 	}
-	s, err = Open(path)
+	// This synthetic fixture is explicitly authorised for migration/apply.
+	if err = os.Chmod(path, 0600); err != nil {
+		t.Fatal(err)
+	}
+	s, err = OpenForMetadata(path)
 	if err != nil {
 		t.Fatal(err)
 	}

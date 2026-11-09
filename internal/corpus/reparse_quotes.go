@@ -9,28 +9,45 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/zachpmanson/chainmail/internal/unnest"
 )
 
-// OpenReadOnly neither migrates nor changes journal mode. Version 28 is the
-// last schema before quote evidence; absent evidence columns mean legacy NULL.
+// OpenReadOnly reads only an explicitly frozen snapshot: a regular non-symlink
+// file without write permission bits or SQLite companions. The caller must keep
+// it frozen for the handle's lifetime. It never migrates or changes journal mode.
+// Version 28 predates quote evidence; absent evidence columns mean legacy NULL.
 func OpenReadOnly(path string) (*Store, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return nil, err
 	}
-	u := url.URL{Scheme: "file", Path: abs}
-	db, err := sql.Open("sqlite", u.String()+"?mode=ro&_pragma=query_only(1)&_pragma=foreign_keys(1)")
+	info, err := os.Lstat(abs)
 	if err != nil {
 		return nil, err
 	}
-	var v int
-	if err = db.QueryRow(`select coalesce(max(v),0) from schema_version`).Scan(&v); err != nil || v < 28 || v > len(migrations) {
+	if !info.Mode().IsRegular() || info.Mode().Perm()&0222 != 0 {
+		return nil, errors.New("readonly preview requires a frozen regular non-symlink snapshot with no write permission bits (recommend chmod 0400 on a private copy)")
+	}
+	for _, suffix := range []string{"-wal", "-shm", "-journal"} {
+		if _, err := os.Lstat(abs + suffix); !os.IsNotExist(err) {
+			if err != nil {
+				return nil, err
+			}
+			return nil, fmt.Errorf("readonly preview refuses SQLite companion %s; create a consistent standalone snapshot", suffix)
+		}
+	}
+	u := url.URL{Scheme: "file", Path: abs}
+	db, err := sql.Open("sqlite", u.String()+"?mode=ro&immutable=1&_pragma=query_only(1)&_pragma=foreign_keys(1)")
+	if err != nil {
+		return nil, err
+	}
+	if err = requireSchema(db, 28); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("readonly quote preview requires schema 28..%d (got %d): %v", len(migrations), v, err)
+		return nil, err
 	}
 	return &Store{db: db}, nil
 }
@@ -183,9 +200,15 @@ func (b *quoteBudget) host(ctx context.Context, q corpusQuery, id int64) (quoteH
 	}
 	h := quoteHost{evidence: QuoteEvidence{HostID: id, HostDigest: quoteDigest([]any{source, ext, ts, body, html})}}
 	for _, block := range unnest.Peel(body) {
+		if err := ctx.Err(); err != nil {
+			return quoteHost{}, err
+		}
 		if block.Sentinel != "" {
 			h.quotes = append(h.quotes, unnest.Parse(block))
 		}
+	}
+	if err := ctx.Err(); err != nil {
+		return quoteHost{}, err
 	}
 	b.hosts[id] = h
 	b.bytes += size
@@ -286,7 +309,7 @@ func quoteProposal(ctx context.Context, q corpusQuery, r quoteRow, modern bool, 
 		if !recoveredAuthor(q, rec, r.Person) {
 			return refuse("author_mismatch")
 		}
-		if consensus.Key != "" && (rec.Key != consensus.Key || rec.TZ != consensus.TZ || rec.DatePrecision != consensus.DatePrecision) {
+		if consensus.Key != "" && (rec.Key != consensus.Key || !rec.Sent.Equal(consensus.Sent) || rec.TZ != consensus.TZ || rec.DatePrecision != consensus.DatePrecision) {
 			return refuse("host_disagreement")
 		}
 		consensus = rec
@@ -346,6 +369,9 @@ func (s *Store) PlanQuotedMetadata(ctx context.Context, selection QuoteSelection
 }
 func planQuotedMetadata(ctx context.Context, q corpusQuery, sel QuoteSelection, limits QuoteLimits) (QuoteMetadataPlan, error) {
 	p := QuoteMetadataPlan{Version: 1, ParserVersion: unnest.DateParserVersion, Selection: sel, Limits: limits}
+	if err := requireSchema(q, 28); err != nil {
+		return p, err
+	}
 	if (sel.ExtID == "") == (sel.Container == "") || sel.AfterID < 0 {
 		return p, errors.New("select exactly one extId or container and a nonnegative cursor")
 	}

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -14,7 +15,8 @@ import (
 	"github.com/zachpmanson/chainmail/internal/unnest"
 )
 
-func TestReparseQuotesCLIReadonlyPreviewReviewedApply(t *testing.T) {
+func seedReparseQuotesCLI(t *testing.T) (string, string) {
+	t.Helper()
 	path := filepath.Join(t.TempDir(), "corpus.db")
 	s, err := corpus.Open(path)
 	if err != nil {
@@ -43,9 +45,17 @@ func TestReparseQuotesCLIReadonlyPreviewReviewedApply(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.Close()
+	return path, body
+}
+
+func TestReparseQuotesCLIReadonlyPreviewReviewedApply(t *testing.T) {
+	path, body := seedReparseQuotesCLI(t)
+	if err := os.Chmod(path, 0400); err != nil {
+		t.Fatal(err)
+	}
 	before, _ := os.ReadFile(path)
 	var out bytes.Buffer
-	if err = runReparseQuotes(context.Background(), path, []string{"-entry", unnest.TextKey(body)}, &out); err != nil {
+	if err := runReparseQuotes(context.Background(), path, []string{"-entry", unnest.TextKey(body)}, &out); err != nil {
 		t.Fatal(err)
 	}
 	after, _ := os.ReadFile(path)
@@ -53,31 +63,38 @@ func TestReparseQuotesCLIReadonlyPreviewReviewedApply(t *testing.T) {
 		t.Fatal("preview wrote database")
 	}
 	var plan corpus.QuoteMetadataPlan
-	if err = json.Unmarshal(out.Bytes(), &plan); err != nil || len(plan.Changes) != 1 {
+	if err := json.Unmarshal(out.Bytes(), &plan); err != nil || len(plan.Changes) != 1 {
 		t.Fatal(out.String(), err)
 	}
 	if strings.Contains(out.String(), body) || strings.Contains(out.String(), "alex@example.test") {
 		t.Fatal("private text leaked")
 	}
 	file := filepath.Join(t.TempDir(), "reviewed.json")
-	if err = os.WriteFile(file, out.Bytes(), 0600); err != nil {
+	if err := os.WriteFile(file, out.Bytes(), 0600); err != nil {
+		t.Fatal(err)
+	}
+	// Explicitly unfreeze only this authorised synthetic apply target.
+	if err := os.Chmod(path, 0600); err != nil {
 		t.Fatal(err)
 	}
 	out.Reset()
-	if err = runReparseQuotes(context.Background(), path, []string{"-apply", "-plan", file}, &out); err != nil {
+	if err := runReparseQuotes(context.Background(), path, []string{"-apply", "-plan", file}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "applied 1") {
 		t.Fatal(out.String())
 	}
-	if err = runReparseQuotes(context.Background(), path, []string{"-apply", "-plan", file}, &out); err == nil {
+	if err := runReparseQuotes(context.Background(), path, []string{"-apply", "-plan", file}, &out); err == nil {
 		t.Fatal("repeat stale plan accepted")
 	}
-	out.Reset()
-	if err = runReparseQuotes(context.Background(), path, []string{"-entry", unnest.TextKey(body)}, &out); err != nil {
+	if err := os.Chmod(path, 0400); err != nil {
 		t.Fatal(err)
 	}
-	if err = json.Unmarshal(out.Bytes(), &plan); err != nil || len(plan.Changes) != 0 {
+	out.Reset()
+	if err := runReparseQuotes(context.Background(), path, []string{"-entry", unnest.TextKey(body)}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(out.Bytes(), &plan); err != nil || len(plan.Changes) != 0 {
 		t.Fatal(out.String(), err)
 	}
 }
@@ -112,5 +129,76 @@ func TestReparseQuotesInvalidEnvelopeDoesNotOpenWritableDatabase(t *testing.T) {
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatal("invalid plan opened writable database", err)
+	}
+}
+
+func TestReparseQuotesCLIUnsupportedSchemaRefusedBeforeWritableSetup(t *testing.T) {
+	for _, future := range []bool{false, true} {
+		t.Run(map[bool]string{false: "old", true: "future"}[future], func(t *testing.T) {
+			path, body := seedReparseQuotesCLI(t)
+			if err := os.Chmod(path, 0400); err != nil {
+				t.Fatal(err)
+			}
+			var out bytes.Buffer
+			if err := runReparseQuotes(context.Background(), path, []string{"-entry", unnest.TextKey(body)}, &out); err != nil {
+				t.Fatal(err)
+			}
+			planPath := filepath.Join(t.TempDir(), "reviewed.json")
+			if err := os.WriteFile(planPath, out.Bytes(), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Chmod(path, 0600); err != nil {
+				t.Fatal(err)
+			}
+			db, err := sql.Open("sqlite", path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var version, revision int64
+			if err = db.QueryRow(`select max(v) from schema_version`).Scan(&version); err != nil {
+				t.Fatal(err)
+			}
+			if err = db.QueryRow(`select source_revision from reconcile_state where id=1`).Scan(&revision); err != nil {
+				t.Fatal(err)
+			}
+			if future {
+				version++
+			} else {
+				version = 27
+			}
+			if _, err = db.Exec(`pragma journal_mode=delete; delete from schema_version; insert into schema_version values(?)`, version); err != nil {
+				t.Fatal(err)
+			}
+			var afterRevision int64
+			if err = db.QueryRow(`select source_revision from reconcile_state where id=1`).Scan(&afterRevision); err != nil || revision != afterRevision {
+				t.Fatal("schema mutation changed source revision", err)
+			}
+			if err = db.Close(); err != nil {
+				t.Fatal(err)
+			}
+			before, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			out.Reset()
+			if err = runReparseQuotes(context.Background(), path, []string{"-apply", "-plan", planPath}, &out); err == nil || !strings.Contains(err.Error(), "unsupported corpus schema") {
+				t.Fatal("unsupported apply accepted or wrong refusal", err)
+			}
+			if err = os.Chmod(path, 0400); err != nil {
+				t.Fatal(err)
+			}
+			if err = runReparseQuotes(context.Background(), path, []string{"-entry", unnest.TextKey(body)}, &out); err == nil || !strings.Contains(err.Error(), "unsupported corpus schema") {
+				t.Fatal("unsupported preview accepted or wrong refusal", err)
+			}
+			after, err := os.ReadFile(path)
+			if err != nil || !bytes.Equal(before, after) {
+				t.Fatal("unsupported schema opener mutated file/journal/schema", err)
+			}
+			for _, suffix := range []string{"-wal", "-shm", "-journal"} {
+				if _, err = os.Lstat(path + suffix); !os.IsNotExist(err) {
+					t.Fatal("refused command created companion", suffix, err)
+				}
+			}
+		})
 	}
 }

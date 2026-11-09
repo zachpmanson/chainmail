@@ -66,7 +66,7 @@ func runReparseQuotes(ctx context.Context, path string, args []string, out io.Wr
 		if err = p.Validate(); err != nil {
 			return err
 		}
-		s, err := corpus.Open(path)
+		s, err := corpus.OpenForMetadata(path)
 		if err != nil {
 			return err
 		}

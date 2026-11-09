@@ -90,6 +90,17 @@ type Store struct {
 // Open opens (creating if absent) a corpus at path and applies any pending
 // migrations. Pass ":memory:" for a throwaway.
 func Open(path string) (*Store, error) {
+	return openSchema(path, 0)
+}
+
+// OpenForMetadata opens a writable corpus only at a supported metadata schema
+// (28 or later), applying known pending migrations without backfilling metadata.
+// Callers must validate the reviewed plan before opening this writable handle.
+func OpenForMetadata(path string) (*Store, error) {
+	return openSchema(path, 28)
+}
+
+func openSchema(path string, minSchema int) (*Store, error) {
 	separator := "?"
 	if strings.Contains(path, "?") {
 		separator = "&"
@@ -101,6 +112,12 @@ func Open(path string) (*Store, error) {
 	db, err := sql.Open("sqlite", path+separator+fmt.Sprintf("_pragma=foreign_keys(1)&_pragma=busy_timeout(%d)&_txlock=immediate", writerBusyMS))
 	if err != nil {
 		return nil, fmt.Errorf("opening %s: %w", path, err)
+	}
+	// Refuse unsupported schemas before journal-mode changes or migrations.
+	// Normal SQLite reads include committed WAL; immutable is only for snapshots.
+	if err := requireSchema(db, minSchema); err != nil {
+		db.Close()
+		return nil, err
 	}
 	// WAL permits many readers alongside one source or derived-cache writer.
 	// It is a no-op for :memory:, which is why the error is tolerated.
@@ -116,6 +133,23 @@ func Open(path string) (*Store, error) {
 	return s, nil
 }
 
+func requireSchema(q corpusQuery, min int) error {
+	var exists bool
+	if err := q.QueryRow(`select exists(select 1 from sqlite_schema where type='table' and name='schema_version')`).Scan(&exists); err != nil {
+		return fmt.Errorf("checking schema_version: %w", err)
+	}
+	var v int
+	if exists {
+		if err := q.QueryRow(`select coalesce(max(v),0) from schema_version`).Scan(&v); err != nil {
+			return fmt.Errorf("reading schema_version: %w", err)
+		}
+	}
+	if v < min || v > len(migrations) {
+		return fmt.Errorf("unsupported corpus schema %d (requires %d..%d)", v, min, len(migrations))
+	}
+	return nil
+}
+
 func (s *Store) Close() error { return s.db.Close() }
 
 // DB exposes the handle for queries that do not warrant a method.
@@ -128,6 +162,9 @@ func (s *Store) migrate() error {
 	var at int
 	if err := s.db.QueryRow(`select coalesce(max(v),0) from schema_version`).Scan(&at); err != nil {
 		return fmt.Errorf("reading schema_version: %w", err)
+	}
+	if at > len(migrations) {
+		return fmt.Errorf("unsupported corpus schema %d (maximum %d)", at, len(migrations))
 	}
 	for i, m := range migrations {
 		v := i + 1

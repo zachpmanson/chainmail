@@ -208,20 +208,38 @@ a moved host's old digest is not replaced with its survivor's content.
 
 ## Explicit bounded local reparse
 
-No provider is involved. Back up the database **and its SQLite sidecars** using
-your normal consistent backup procedure, then preview a narrow selection:
+No provider is involved. Back up the source using your normal consistent SQLite
+backup procedure. Preview accepts **only an explicitly frozen standalone snapshot**,
+not a live database. Create a private consistent copy with SQLite's backup API
+(which includes committed WAL data), or copy a quiescent, cleanly closed database
+with no companions. Do not copy just the main file of a live WAL database, delete
+sidecars to force acceptance, or chmod the production database.
+
+For example, with private paths selected by the operator:
 
 ```sh
-corpus reparse-quotes -entry quote:t:SYNTHETIC -out reviewed-plan.json
+# SOURCE_DB is the original corpus; SNAPSHOT_DB is a new private copy.
+# SQLite .backup includes committed WAL; a plain live-file cp does not.
+(umask 077; sqlite3 "$SOURCE_DB" ".backup '$SNAPSHOT_DB'")
+chmod 0400 "$SNAPSHOT_DB" # private snapshot only, never the source
+CHAINMAIL_CORPUS="$SNAPSHOT_DB" corpus reparse-quotes -entry quote:t:SYNTHETIC -out reviewed-plan.json
 # Or one container, with deterministic entry-ID paging:
-corpus reparse-quotes -container synthetic-thread -limit 100 -out batch-1.json
+CHAINMAIL_CORPUS="$SNAPSHOT_DB" corpus reparse-quotes -container synthetic-thread -limit 100 -out batch-1.json
 # Use the reported NextID with -after-id for a subsequent preview.
 ```
 
-Preview uses a real SQLite readonly/query-only opener: no migrations, WAL setup,
-cache publication, sightings or FTS writes. It supports schema 28 (pre-evidence)
-and 29; unsupported versions refuse. It does not create a missing database or
-parent directory. Whole-host reads are bounded, including hosts outside the
+The shared `OpenReadOnly` helper is a frozen-snapshot reader, not a general live
+readonly connection. It requires a regular non-symlink main file with **no write
+permission bits** (0400 recommended) and no `-wal`, `-shm` or `-journal` companion,
+including empty companions. Writable/live inputs refuse; permissions are never
+changed automatically. Keep the file and its private directory frozen for the
+handle's entire lifetime; the checks are not a lock against concurrent file
+replacement or an owner re-enabling writes. Only after those checks does SQLite
+open with `immutable=1`, `mode=ro` and `query_only`, so no sidecars are created even
+while the reader is open. It performs no migrations, WAL setup, cache publication,
+sightings or FTS writes. It supports schema 28 (pre-evidence) through the current
+known schema; unsupported versions refuse. It does not create a missing database
+or parent directory. Whole-host reads are bounded, including hosts outside the
 selected container: at most 100 entries, 1,000 distinct hosts and 32 MiB source
 text/HTML (including selected own-body reads). Lower these with `-limit`, `-max-hosts`, `-max-bytes`; raise none beyond
 the hard maxima. Oversized hosts are not truncated and parsed; incomplete budgets
@@ -233,12 +251,16 @@ bodies, subjects, raw headers, addresses or account IDs. Keep plans private.
 Review the exact JSON, especially Changes and Skipped, and separately authorise:
 
 ```sh
-corpus reparse-quotes -apply -plan reviewed-plan.json
-# Re-preview the same selection afterward; it should propose zero changes.
+# Separately authorised write against the source, not the frozen snapshot:
+CHAINMAIL_CORPUS="$SOURCE_DB" corpus reparse-quotes -apply -plan reviewed-plan.json
+# Create a fresh frozen snapshot and re-preview afterward (expect zero changes).
 ```
 
 Apply requires the exact serialized plan/digest/parser version, not a selector.
 The JSON digest detects edits; it is **not** a signature or authorisation service.
+The CLI rejects unsupported schemas before writable journal setup or migration;
+known schema-28 migration remains supported without automatic metadata backfill.
+Planning and apply also recheck the supported schema range in their transactions.
 Under the existing short writer lock, apply checks the source revision and
 recomputes the exact bounded proposal, including current rows, aliases, all
 source/sentinel digests, author resolution, sightings and mailbox authority.
@@ -248,7 +270,9 @@ itself changes no source metadata. Reapplying an old applied plan is a stale
 refusal; a fresh already-satisfied preview applies as a zero-write no-op.
 
 Only inferred/proved-inferred legacy quotes are eligible, and only for a complete
-stated timestamp and nonconflicting timezone. Already stated, derived, ambiguous,
+stated timestamp and nonconflicting timezone. All hosts must agree on the stated
+clock as well as key, zone and precision: a shared Message-ID is not proof of an
+identical date. Already stated, derived, ambiguous,
 mailbox-promoted or mail-detail/account-copy-authoritative rows refuse. Apply
 changes only selected quoted `ts`, `tz`, basis, precision and validated aliases.
 It leaves `tz_offset` unknown and never invents a server/person offset. It does
