@@ -186,6 +186,12 @@ type twinCopy struct {
 	prose []string
 	links quoteLinks
 	atts  int
+	// Fresh graph/recipient evidence, never stored in the body-reduction cache.
+	parent  int64
+	derived bool
+	empty   bool
+	forward *forwardBody
+	to      []int64
 }
 
 // CollapseTwins folds together the entries that are one message stored more than
@@ -439,7 +445,8 @@ func twinCopiesCached(q corpusQuery, person int64, cache *twinBodyCache) ([]twin
 		select e.id, e.ext_id, e.quoted, e.ts, coalesce(e.subject,''),
 		       coalesce(e.container,''),
 		       coalesce(e.body_text,''), coalesce(e.body_html,''),
-		       (select count(*) from attachments a where a.entry_id = e.id), e.source`+columns+`
+		       (select count(*) from attachments a where a.entry_id = e.id), e.source,
+		       coalesce(e.parent_id,0), e.derived`+columns+`
 		from entries e`+join+`
 		where e.person_id = ? and e.source = ?
 		order by e.ts, e.id`, person, SourceMail)
@@ -454,7 +461,7 @@ func twinCopiesCached(q corpusQuery, person int64, cache *twinBodyCache) ([]twin
 		var body, source string
 		var version sql.NullInt64
 		var digest, payload []byte
-		dest := []any{&c.id, &c.ext, &c.quoted, &ts, &c.subject, &c.container, &body, &c.bodyHTML, &c.atts, &source}
+		dest := []any{&c.id, &c.ext, &c.quoted, &ts, &c.subject, &c.container, &body, &c.bodyHTML, &c.atts, &source, &c.parent, &c.derived}
 		if cache != nil {
 			dest = append(dest, &version, &digest, &payload)
 		}
@@ -462,14 +469,27 @@ func twinCopiesCached(q corpusQuery, person int64, cache *twinBodyCache) ([]twin
 			return nil, err
 		}
 		c.wall = time.Unix(ts, 0).UTC()
+		c.empty = strings.TrimSpace(body) == "" && strings.TrimSpace(c.bodyHTML) == ""
 		if cache == nil {
 			reduceTwinBody(&c, body)
 		} else {
 			cache.reduce(&c, body, source, version.Int64, digest, payload)
 		}
+		if !c.quoted && c.parent != 0 && !c.derived {
+			c.forward = bareForward(body, c.bodyHTML)
+		}
 		out = append(out, c)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := forwardEvidence(q, out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func reduceTwinBody(c *twinCopy, body string) {
@@ -678,6 +698,9 @@ func twinnable(a, b twinCopy) (string, bool) {
 	if !ok {
 		return "", false
 	}
+	if sameEmptyForward(a, b) {
+		return "", true
+	}
 	if replacedQuoteLinks(a, b) {
 		if vouchedQuoteLinks(a, b) {
 			return "", true
@@ -862,6 +885,14 @@ func resolveTwins(g []twinCopy) (TwinCollapse, []TwinDecline, string, bool) {
 		// one message. A gate is wrong about this group and nothing here can say
 		// which, so all of it stays.
 		return TwinCollapse{}, nil, "group holds more than one mailbox copy", false
+	}
+	// Do not let a broad mailbox To set bridge disjoint recovered forwards.
+	for i := range g {
+		for j := 0; j < i; j++ {
+			if g[i].empty && g[j].empty && !sharedRecipient(g[i].to, g[j].to) {
+				return TwinCollapse{}, nil, "empty forward copies disagree about recipients", false
+			}
+		}
 	}
 	mail := true
 	why := fmt.Sprintf("the mailbox copy, against %d recovered", len(g)-1)

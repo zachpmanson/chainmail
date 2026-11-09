@@ -10,7 +10,7 @@ import (
 )
 
 // Bump when matching, quote parsing, or repair rules change. Catch-up is lazy.
-const reconciliationVersion = 2
+const reconciliationVersion = 3
 
 var ErrReconcileConflict = errors.New("reconciliation inputs changed; work remains pending")
 
