@@ -20,6 +20,7 @@ import { castOfEntries } from "./Participants";
 import ReplyBox from "../compose/ReplyBox";
 import ThreadEntry from "./ThreadEntry";
 import ThreadViewProvider from "./ThreadViewProvider";
+import useReplyContinuity from "./useReplyContinuity";
 
 export default function ThreadMessages({
   thread,
@@ -36,7 +37,7 @@ export default function ThreadMessages({
       ? selected.draft
       : undefined;
   const fetched = $api.useQuery("get", "/v1/chains/{rootExtId}", {
-    params: { path: { rootExtId: thread.rootExtId } },
+    params: { path: { rootExtId: thread.rootExtId }, query: { accountId } },
   });
 
   const entries = useMemo(() => fetched.data?.entries ?? [], [fetched.data?.entries]);
@@ -72,13 +73,12 @@ export default function ThreadMessages({
   );
   const { landed, endLanding } = useLandOnNewest(thread.rootExtId, shown);
 
-  if (fetched.isError) return <Failure error={fetched.error} />;
+  const continuity = useReplyContinuity(answer, thread.rootExtId, accountId, coordinator);
   const notice = fetched.isPending
     ? "Loading the thread…"
     : shown.length === 0
       ? "No entries to show."
       : null;
-  if (notice) return <p className="mt-2 flex-[1_1_100%] text-xs text-muted">{notice}</p>;
 
   const forest = tree
     ? buildTree(
@@ -102,6 +102,17 @@ export default function ThreadMessages({
 
   return (
     <div className="stream">
+      {fetched.isError ? (
+        <Failure error={fetched.error} />
+      ) : notice ? (
+        <p className="mt-2 flex-[1_1_100%] text-xs text-muted">{notice}</p>
+      ) : null}
+      {continuity.scopePending ? (
+        <InlineAlert>
+          Reply target access is not yet confirmed for this account. Your words are retained;
+          autosave, preview and send are paused.
+        </InlineAlert>
+      ) : null}
       {pullNote ? (
         <p
           className="mt-0 mb-3 rounded-md border border-l-3 border-accent bg-card px-3 py-2 text-sm text-fg"
@@ -156,12 +167,13 @@ export default function ThreadMessages({
           </InlineAlert>
         )
       ) : null}
-      {answer ? (
+      {continuity.answer ? (
         <ReplyBox
           thread={thread}
-          answer={answer}
-          answerAnchor={lookup.anchorOf(answer.extId)}
-          words={wordsOf(answer)}
+          answer={continuity.answer}
+          scopePending={continuity.scopePending}
+          answerAnchor={continuity.scopePending ? "" : lookup.anchorOf(continuity.answer.extId)}
+          words={continuity.scopePending ? { who: "", when: "" } : wordsOf(continuity.answer)}
           all={all}
           onAll={setAll}
           aimed={aimed}

@@ -64,7 +64,8 @@
     },
     "limit": { "type": "integer", "description": "How many chains the search was allowed to select." },
     "person": { "type": "string", "description": "Address, name or slack uid the selection was filtered to." },
-    "since": { "type": "string", "description": "YYYY-MM-DD floor on entry dates." }
+    "since": { "type": "string", "description": "YYYY-MM-DD floor on entry dates." },
+    "accountId": { "type": "string", "description": "Gmail account visibility boundary, preserved on saved-page refresh. Omitted means the local unified corpus." }
    }
   },
   "queries": {
@@ -159,6 +160,54 @@
         },
         "meta": { "type": "boolean", "description": "Meeting scheduling exhaust (invitation, notes, accept/decline). Forces the classification the renderer would otherwise infer." },
         "mentions": { "type": "array", "items": { "type": "string" } },
+        "reactions": {
+          "type": "array",
+          "description": "Received reaction notification events grouped by the exact Unicode emoji sequence. From is a sender claim, not authenticated intent. Distinct source notification IDs, not per-reactor current state.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "emoji",
+              "events"
+            ],
+            "properties": {
+              "emoji": {
+                "type": "string"
+              },
+              "events": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "sourceExtId",
+                    "claimedFrom",
+                    "date",
+                    "body",
+                    "sourceLink"
+                  ],
+                  "properties": {
+                    "sourceExtId": {
+                      "type": "string"
+                    },
+                    "claimedFrom": {
+                      "type": "string"
+                    },
+                    "date": {
+                      "type": "string"
+                    },
+                    "body": {
+                      "type": "string"
+                    },
+                    "sourceLink": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
         "attachments": {
           "type": "array",
           "items": {

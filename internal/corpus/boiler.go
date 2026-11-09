@@ -166,7 +166,7 @@ func (s *Store) mailBodies(sc foldScope) ([]boiler.Message, error) {
 		       exists(select 1 from sightings g where g.entry_id = e.id and g.kind = 'direct')
 		from entries e
 		left join mail_detail d on d.entry_id = e.id
-		where e.source = 'mail' and e.body_text is not null and e.body_text != ''`)
+		where e.source = 'mail' and e.body_text is not null and e.body_text != '' and ` + ordinaryEntrySQL)
 	if err != nil {
 		return nil, fmt.Errorf("reading mail bodies: %w", err)
 	}

@@ -13,6 +13,7 @@ import CopyJson from "./CopyJson";
 import OriginalControl from "./OriginalControl";
 import OriginalAnalysis from "./OriginalAnalysis";
 import Stamp from "./Stamp";
+import Reactions from "./Reactions";
 
 // The message-level variable colors both the org label and the bubble's decorative stripe.
 const orgColors: Record<string, string> = {
@@ -86,6 +87,7 @@ export default function Message({
     extId,
     me,
     quoted,
+    reactions,
   },
   place: { id, style, lane, chainStart, mark, landed, onLandedEnd },
   look: { orgSlot, avatarClass, toTitle },
@@ -232,6 +234,7 @@ export default function Message({
           ) : null}
           <Body body={body} state={styled.state} />
           {edits}
+          <Reactions reactions={reactions} />
           <Attachments
             attachments={attachments}
             extId={extId}

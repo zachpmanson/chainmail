@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/zachpmanson/docket/gmail/mail"
 	_ "modernc.org/sqlite"
 )
 
@@ -54,14 +55,16 @@ type Entry struct {
 
 // Mail holds the fields that only make sense for a mail entry.
 type Mail struct {
-	GmailID    string
-	MessageID  string
-	InReplyTo  string
-	References []string
-	From       string
-	To         string
-	Cc         string
-	Labels     []string
+	ReactionInspection *mail.ReactionInspection
+	SourceDate         string
+	GmailID            string
+	MessageID          string
+	InReplyTo          string
+	References         []string
+	From               string
+	To                 string
+	Cc                 string
+	Labels             []string
 }
 
 // Attachment is the metadata a source states about a file on a message. The
@@ -246,6 +249,16 @@ func (s *Store) PutForAccount(accountID string, e Entry, m *Mail, atts []Attachm
 			on conflict(account_id, gmail_id) do update set entry_id=excluded.entry_id, labels=excluded.labels`,
 			accountID, m.GmailID, res.ID, string(labels)); err != nil {
 			return res, fmt.Errorf("recording Gmail copy %q in account %q: %w", m.GmailID, accountID, err)
+		}
+	}
+	if m != nil {
+		if m.MessageID != "" {
+			if _, err := tx.Exec(`insert into reaction_message_refs(reference,entry_id) values(?,?) on conflict do nothing`, m.MessageID, res.ID); err != nil {
+				return res, err
+			}
+		}
+		if err := putReactionEvidence(tx, accountID, e, m, res.ID); err != nil {
+			return res, err
 		}
 	}
 	return res, tx.Commit()

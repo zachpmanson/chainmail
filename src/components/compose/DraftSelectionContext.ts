@@ -2,6 +2,8 @@ import { createContext, useContext, type MutableRefObject } from "react";
 import type { SavedDraft } from "../../lib/ui/draftSelection";
 
 export type LeaveSnapshot = {
+  /** View continuity after an explicit sender change, never authorization. */
+  continuityAccountId?: string;
   owner?: string;
   kind?: "compose" | "reply";
   destination?: string;

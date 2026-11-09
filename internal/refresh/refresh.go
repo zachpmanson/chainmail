@@ -63,6 +63,7 @@ type Mailbox interface {
 // Options carries the parameters that reproduce the previous page, plus the ones
 // a spec does not record. Anything left zero falls back to what the spec says.
 type Options struct {
+	AccountID string
 	// Title, Me, Limit, Person and Since override what the previous spec
 	// recorded. Empty means "keep what it recorded".
 	Title  string
@@ -306,6 +307,9 @@ func (r Report) NothingNew() bool {
 func Run(store *corpus.Store, mb Mailbox, prev spec.Spec, opts Options) (Report, spec.Spec, error) {
 	rep := Report{Fetched: opts.Fetch}
 	opts = opts.merge(prev)
+	if opts.Fetch && opts.AccountID != "" {
+		return rep, spec.Spec{}, fmt.Errorf("account-scoped refresh cannot fetch through the legacy mailbox path; ingest the selected account separately")
+	}
 
 	// A search the caller brings is recorded before either pass runs, so it is
 	// re-run like any other recorded query and the page keeps it for the next
@@ -424,6 +428,7 @@ func Run(store *corpus.Store, mb Mailbox, prev spec.Spec, opts Options) (Report,
 
 	containers, kept := membership(prev, sources)
 	next, err := spec.Generate(store, spec.Options{
+		AccountID:  opts.AccountID,
 		Containers: containers,
 		ExtIDs:     append(accepted, kept...),
 		Title:      opts.Title,
@@ -433,10 +438,11 @@ func Run(store *corpus.Store, mb Mailbox, prev spec.Spec, opts Options) (Report,
 		UploadDir:  opts.Uploads,
 		Blobs:      store.BlobBytes,
 		Params: &spec.RunParams{
-			Me:     opts.Me,
-			Limit:  opts.Limit,
-			Person: opts.Person,
-			Since:  opts.Since,
+			AccountID: opts.AccountID,
+			Me:        opts.Me,
+			Limit:     opts.Limit,
+			Person:    opts.Person,
+			Since:     opts.Since,
 		},
 	})
 	if err != nil {
@@ -502,6 +508,9 @@ func (o Options) merge(prev spec.Spec) Options {
 		o.RunLabel = time.Now().Format("2 Jan 2006")
 	}
 	if p := prev.RunParams; p != nil {
+		if o.AccountID == "" {
+			o.AccountID = p.AccountID
+		}
 		if len(o.Me) == 0 {
 			o.Me = p.Me
 		}
@@ -659,7 +668,7 @@ func candidates(store *corpus.Store, prev spec.Spec, opts Options) ([]Candidate,
 	seen := map[string]bool{}
 	var out []Candidate
 	for _, q := range prev.Queries {
-		cq := corpus.Query{Text: q.Q, Limit: opts.Limit, Semantic: sem[q.Q]}
+		cq := corpus.Query{Text: q.Q, Limit: opts.Limit, Semantic: sem[q.Q], AccountID: opts.AccountID}
 		if opts.Since != "" {
 			t, err := time.Parse("2006-01-02", opts.Since)
 			if err != nil {

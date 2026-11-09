@@ -9,6 +9,7 @@ package mailingest
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/zachpmanson/docket/gmail/mail"
 	"os/exec"
 	"strings"
 	"sync"
@@ -40,6 +41,7 @@ type Envelope struct {
 
 // Message is docket's read shape: an envelope plus the body.
 type Message struct {
+	ReactionInspection *mail.ReactionInspection `json:"reaction_inspection,omitempty"`
 	Envelope
 	Body      string `json:"body"`
 	Truncated bool   `json:"truncated"`

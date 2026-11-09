@@ -286,6 +286,10 @@ func (s *Store) Chain(extID string) ([]Shown, error) {
 // entry is named: search reports the message that matched, not the root, so any
 // member's id has to do (see Chain).
 func (s *Store) ChainMeta(extID string) (ChainMeta, error) {
+	return s.ChainMetaForAccount(extID, "")
+}
+
+func (s *Store) ChainMetaForAccount(extID, accountID string) (ChainMeta, error) {
 	id, err := s.entryID(extID)
 	if err != nil {
 		return ChainMeta{}, err
@@ -301,7 +305,7 @@ func (s *Store) ChainMeta(extID string) (ChainMeta, error) {
 	if root.Valid {
 		seed = root.Int64
 	}
-	return s.chainMetaOf(seed)
+	return s.chainMetaOfForAccount(seed, accountID)
 }
 
 // entryID resolves an ext id to the store's own id for it.

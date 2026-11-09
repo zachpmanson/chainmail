@@ -427,14 +427,16 @@ func PutForAccount(store *corpus.Store, accountID string, msg Message) (corpus.P
 	}
 
 	m := &corpus.Mail{
-		GmailID:    msg.ID,
-		MessageID:  msg.MessageID,
-		InReplyTo:  msg.InReplyTo,
-		References: msg.References,
-		From:       msg.From,
-		To:         msg.To,
-		Cc:         msg.Cc,
-		Labels:     msg.Labels,
+		ReactionInspection: msg.ReactionInspection,
+		SourceDate:         msg.Date,
+		GmailID:            msg.ID,
+		MessageID:          msg.MessageID,
+		InReplyTo:          msg.InReplyTo,
+		References:         msg.References,
+		From:               msg.From,
+		To:                 msg.To,
+		Cc:                 msg.Cc,
+		Labels:             msg.Labels,
 	}
 
 	var atts []corpus.Attachment
@@ -475,8 +477,10 @@ func PutForAccount(store *corpus.Store, accountID string, msg Message) (corpus.P
 	// part of ingest rather than a later pass: a corpus holding only mailbox
 	// messages is a corpus of a different, smaller thing.
 	e.ID = res.ID
-	if _, err := ExtractQuoted(store, res.ID, e, msg.Body); err != nil {
-		return res, fmt.Errorf("extracting quoted history of %s: %w", ext, err)
+	if !reactionOnly(msg) {
+		if _, err := ExtractQuoted(store, res.ID, e, msg.Body); err != nil {
+			return res, fmt.Errorf("extracting quoted history of %s: %w", ext, err)
+		}
 	}
 	return res, nil
 }
@@ -543,4 +547,8 @@ func parseDate(s string) (time.Time, string, *int) {
 	}
 	mins := secs / 60
 	return t, name, &mins
+}
+
+func reactionOnly(msg Message) bool {
+	return corpus.ReactionOnly(msg.ReactionInspection) && strings.TrimSpace(msg.InReplyTo) == msg.ReactionInspection.TargetMessageID && len(msg.Attachments) == 0
 }

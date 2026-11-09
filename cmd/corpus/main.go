@@ -183,6 +183,9 @@ const usage = `usage: corpus <command> [flags]
                            reads a message's labels once, at ingest, so a corpus
                            that never runs this reports "unread when it arrived"
                            as "unread"; needs a mailbox, and writes only labels
+  reactions -account A -ids source,...
+                           bounded read-only preview; -apply reviewed.json applies
+                           exactly reviewed evidence separately, never refetching
   reindex                  rebuild the full-text and identifier search indexes
                            from the entries table. Only needed after a manual
                            wipe of the shadow tables, or when snippet() reports
@@ -215,6 +218,8 @@ func run(args []string) error {
 	}
 
 	switch args[0] {
+	case "reactions":
+		return runReactions(path, args[1:])
 	case "init":
 		s, err := corpus.Open(path)
 		if err != nil {

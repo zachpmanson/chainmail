@@ -679,4 +679,6 @@ create trigger fold_sightings_insert after insert on sightings
 	 create trigger quote_detail_revision after update of detail on sightings
 	 when (coalesce(old.detail,'') like '%time inferred from host%') <> (coalesce(new.detail,'') like '%time inferred from host%')
 	 begin update reconcile_state set source_revision=source_revision+1 where id=1; end;`,
+	// 30: received reaction evidence, exact references and non-destructive views.
+	reactionsMigration(),
 }

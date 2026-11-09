@@ -52,7 +52,8 @@ func (s *accountTokenSource) Token() (*oauth2.Token, error) {
 }
 
 // SaveAccountToken activates an interactive login under the refresh/disconnect
-// lock. Docket's atomic rename preserves the previous token if saving fails.
+// lock. Pre-rename failures preserve the previous token; a final durability-sync
+// error can be reported after the new credential has already been installed.
 func SaveAccountToken(tok *oauth2.Token, path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err

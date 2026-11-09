@@ -1047,6 +1047,27 @@ export interface components {
             attachments?: components["schemas"]["Attachment"][];
             /** @description A quoter's in-place changes to messages this one quoted (issue #42), where this entry is the message that quoted them. The same relation a page build draws inline inside the quoting bubble, resolved by the same function; the renderer must draw them here too rather than letting the derived copy float as its own entry. Absent on a message nobody edited, which is almost all of them. */
             edits?: components["schemas"]["TrailEdit"][];
+            /** @description Received reaction notification events grouped by the exact Unicode emoji sequence. From is a sender claim, not authenticated intent. Distinct source notification IDs, not per-reactor current state. */
+            reactions?: {
+                emoji: string;
+                events: {
+                    sourceExtId: string;
+                    claimedFrom: string;
+                    date: string;
+                    body: string;
+                    sourceLink: string;
+                }[];
+            }[];
+            /** @description Versioned per-copy inspection JSON and digest; absent when not inspected. Direct source inspection only. */
+            reactionEvidence?: {
+                digest: string;
+                /** @description Original serialized structural inspection evidence, not authenticated intent. */
+                evidence: string;
+                /** @description Exact source/envelope/attachment snapshot digest; unchanged bodies alone do not establish unchanged MIME evidence. */
+                sourceDigest: string;
+            }[];
+            /** @description Resolved or conservative fallback reason for direct source inspection. */
+            reactionStatus?: string;
         };
         /** @description A quoter's in-place change to a message they quoted, as a trail read carries it: the derived (edited) copy they pasted, and the original it was made against. `id` and `base` are ext ids — a chain read's own names for entries, which is what its anchors are made of — and the renderer resolves them against the entries it holds, exactly as a page build resolves a spec id against its rows. */
         TrailEdit: {
@@ -1082,7 +1103,7 @@ export interface components {
             container?: string;
             /** @description Every archive this chain has entries from; more than one where a mail trail continued in Slack. */
             sources?: ("mail" | "slack")[];
-            /** @description Entries in the whole chain. */
+            /** @description Authored messages, excluding only safely resolved reaction-only source notifications. Corpus totals and provider label/unread counts still include sources. */
             entries: number;
             /** @description Distinct people involved in the whole chain, authors and recipients — the same "who was involved" answer the spec's participant list gives. 0 only when no entry carries a person row. */
             people: number;
@@ -1154,6 +1175,8 @@ export interface components {
              * @example solar-install-quote
              */
             name?: string;
+            /** @description Limit selected messages and received-reaction/target associations to this account; preserved in runParams for refresh. */
+            accountId?: string;
         };
         /** @description A search that was run, recorded for provenance. */
         SpecQuery: {
@@ -1693,6 +1716,8 @@ export interface components {
                 person?: string;
                 /** @description YYYY-MM-DD floor on entry dates. */
                 since?: string;
+                /** @description Gmail account visibility boundary, preserved on saved-page refresh. Omitted means the local unified corpus. */
+                accountId?: string;
             };
             /** @description Searches run, so a null result is interpretable. */
             queries?: (string | {
@@ -1811,6 +1836,8 @@ export interface components {
                 link?: string;
                 /** @description Thumbnail as a data: URI. Never a URL — the page renders without a network. */
                 preview?: string;
+                previewW?: number;
+                previewH?: number;
                 /** @description Digest of the attachment's bytes in the corpus, present only once they have been pulled. It is what lets a client ask for the file rather than send the reader back to Gmail for something we already hold. */
                 blobSha?: string;
                 /**
@@ -1825,8 +1852,17 @@ export interface components {
                 view?: "image" | "text" | "pdf";
                 /** @description Why the corpus does not hold these bytes, recorded when a pull decided it never will: too large, gone from the sender's copy, nothing to fetch by. Present means the file is not coming, so a page can explain the chip and stop offering to fetch it. The value is the corpus's own word; the page owns the phrasing. */
                 skip?: string;
-                previewW?: number;
-                previewH?: number;
+            }[];
+            /** @description Received reaction notification events grouped by the exact Unicode emoji sequence. From is a sender claim, not authenticated intent. Distinct source notification IDs, not per-reactor current state. */
+            reactions?: {
+                emoji: string;
+                events: {
+                    sourceExtId: string;
+                    claimedFrom: string;
+                    date: string;
+                    body: string;
+                    sourceLink: string;
+                }[];
             }[];
         };
         /** @description One message to fetch the files for, and the page to bring up to date once they land. */
@@ -2825,7 +2861,10 @@ export interface operations {
     };
     getEntry: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Restrict received-reaction/source/target associations to copies accessible in this Gmail account. */
+                accountId?: string;
+            };
             header?: never;
             path: {
                 /**
@@ -2899,7 +2938,10 @@ export interface operations {
     };
     getChain: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Restrict received-reaction/source/target associations to copies accessible in this Gmail account. */
+                accountId?: string;
+            };
             header?: never;
             path: {
                 /**

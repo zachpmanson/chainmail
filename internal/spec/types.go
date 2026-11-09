@@ -15,6 +15,8 @@
 // Options) and expands only the reply-graph closure of that set.
 package spec
 
+import "github.com/zachpmanson/chainmail/internal/corpus"
+
 // Spec is one timeline. Field order follows the schema; every optional field is
 // omitempty so a generated spec carries only what the corpus actually knows.
 // Spec is the document both sides of the wire agree on.
@@ -76,10 +78,11 @@ type Query struct {
 // home directory, and a spec is a document that gets sent to people. `refresh`
 // re-requires that one on the command line.
 type RunParams struct {
-	Me     []string `json:"me,omitempty"`
-	Limit  int      `json:"limit,omitempty"`
-	Person string   `json:"person,omitempty"`
-	Since  string   `json:"since,omitempty"`
+	AccountID string   `json:"accountId,omitempty"`
+	Me        []string `json:"me,omitempty"`
+	Limit     int      `json:"limit,omitempty"`
+	Person    string   `json:"person,omitempty"`
+	Since     string   `json:"since,omitempty"`
 }
 
 // Thread is a mail thread the transcript was assembled from.
@@ -99,8 +102,9 @@ type SourceNote struct {
 
 // Entry is one message or note in the transcript.
 type Entry struct {
-	Kind string `json:"kind,omitempty"`
-	ID   string `json:"id,omitempty"`
+	Reactions []corpus.Reaction `json:"reactions,omitempty"`
+	Kind      string            `json:"kind,omitempty"`
+	ID        string            `json:"id,omitempty"`
 	// ExtID is the corpus's own handle for this entry — `mail:<message-id>` for a
 	// message, a channel-scoped id for a Slack file — and it is what an endpoint
 	// that acts on a message takes: GET /v1/entries/{extId}, POST /v1/media/pull.

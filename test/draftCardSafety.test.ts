@@ -70,6 +70,7 @@ let preflight: (account: string, id: string, witness: string) => Promise<Respons
 let connected: string[];
 let entries: Record<string, unknown>[];
 let realHosts: boolean;
+let chainRead: (account: string) => Promise<Response>;
 let mutation: (
   method: string,
   path: string,
@@ -200,6 +201,7 @@ beforeEach(() => {
   connected = ["A", "B"];
   realHosts = false;
   mutation = () => undefined;
+  chainRead = async () => json({ entries });
   entries = [
     {
       extId: "older",
@@ -292,7 +294,7 @@ beforeEach(() => {
       if (response.ok) checkedDetails.set(owner(account, id), await response.clone().json());
       return response;
     }
-    if (url.pathname.startsWith("/v1/chains/")) return json({ entries });
+    if (url.pathname.startsWith("/v1/chains/")) return chainRead(account);
     if (url.pathname === "/v1/search") return json({ chains: [] });
     if (url.pathname === "/v1/settings") return json({});
     if (url.pathname === "/v1/people") return json({ people: [] });
@@ -918,6 +920,66 @@ describe("authoritative destination and exact parent", () => {
 });
 
 describe("reviewed editor preservation regressions", () => {
+  it("does not retain an old editor or target during an arbitrary account URL switch", async () => {
+    const { host, navigate } = await mount("/?accountId=A&open=root");
+    await words(host, "A-only user input");
+    const old = host.querySelector("textarea");
+    const gate = deferred<Response>();
+    chainRead = (account) => (account === "B" ? gate.promise : Promise.resolve(json({ entries })));
+    await navigate({ accountId: "B", open: "root" });
+    expect(host.querySelector("textarea")).toBeNull();
+    expect(host.textContent).not.toContain("A-only user input");
+    expect(host.textContent).not.toContain("sender@example.test");
+    await settle(750);
+    expect(writes).toEqual([]);
+    await act(async () => gate.resolve(json({ entries: [] })));
+    await settle();
+    expect(host.querySelector("textarea")).toBeNull();
+    expect(old?.isConnected).toBe(false);
+  });
+  it("retains only owned input and pauses target-dependent actions during sanctioned sender detach", async () => {
+    store.set(owner("A", saved.id), {
+      ...saved,
+      kind: "reply",
+      resolution: "resolved",
+      rootId: "root",
+      replyToEntry: "older",
+    });
+    const { host } = await mount(`/?accountId=A&draft=${saved.id}&open=root`);
+    const area = host.querySelector("textarea")!;
+    area.focus();
+    area.setSelectionRange(2, 5);
+    await pick(host.querySelector<HTMLButtonElement>('button[title="Edit recipients"]')!);
+    const gate = deferred<Response>();
+    chainRead = (account) => (account === "B" ? gate.promise : Promise.resolve(json({ entries })));
+    const from = host.querySelector<HTMLSelectElement>('select[aria-label="From"]')!;
+    await act(async () => {
+      from.value = "B";
+      from.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await settle();
+    expect(host.querySelector("textarea")).toBe(area);
+    expect(area.value).toBe("A / m1");
+    expect(area.selectionStart).toBe(2);
+    expect(area.selectionEnd).toBe(5);
+    expect(host.textContent).toContain("autosave, preview and send are paused");
+    expect(host.querySelector('section[aria-label="Reply"] [aria-hidden=true]')).not.toBeNull();
+    expect(button(host, "preview").disabled).toBe(true);
+    await settle(750);
+    expect(writes).toEqual([]);
+    await act(async () => gate.resolve(json({ entries })));
+    await settle();
+    expect(host.querySelector("textarea")).toBe(area);
+    expect(host.textContent).not.toContain("autosave, preview and send are paused");
+    await settle(750);
+    expect(writes).toHaveLength(1);
+    expect(writes[0]!.body).toMatchObject({
+      accountId: "B",
+      replyToEntry: "older",
+      body: "A / m1",
+    });
+  });
+
   it.each([
     [true, false],
     [false, false],

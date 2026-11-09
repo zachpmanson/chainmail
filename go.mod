@@ -8,7 +8,7 @@ require (
 	github.com/gofrs/flock v0.13.0
 	github.com/teambition/rrule-go v1.8.2
 	github.com/yuin/goldmark v1.7.13
-	github.com/zachpmanson/docket/gmail v0.0.0-20261028111617-a9102963acb4
+	github.com/zachpmanson/docket/gmail v0.0.0-20261109103945-12552c23036b
 	golang.org/x/net v0.57.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/text v0.40.0

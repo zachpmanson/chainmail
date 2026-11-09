@@ -24,8 +24,13 @@ const localeHost = "---------- Forwarded message ---------\nDa: Alex Vale <alex@
 func seedLegacyLocale(t *testing.T, s *Store) (int64, int64, int64) {
 	t.Helper()
 	p := person(t, s, "alex@example.test", "Alex Vale")
-	h, err := s.Put(Entry{Source: SourceMail, ExtID: "mail:synthetic-host", TS: time.Date(2026, 10, 7, 1, 2, 0, 0, time.UTC), Container: "synthetic-locales", BodyText: localeHost}, &Mail{MessageID: "synthetic-host"}, nil)
+	h, err := s.Put(Entry{Source: SourceMail, ExtID: "mail:synthetic-host", TS: time.Date(2026, 10, 7, 1, 2, 0, 0, time.UTC), Container: "synthetic-locales", BodyText: localeHost}, nil, nil)
 	if err != nil {
+		t.Fatal(err)
+	}
+	// Seed legacy mail metadata directly: the modern mail writer also records
+	// reaction references, whose table intentionally does not exist at v28.
+	if _, err := s.db.Exec(`insert into mail_detail(entry_id,message_id) values(?,'synthetic-host')`, h.ID); err != nil {
 		t.Fatal(err)
 	}
 	res, err := s.db.Exec(`insert into entries(source,ext_id,kind,ts,person_id,container,subject,body_text,body_sha,quoted,ingested_at) values('mail',?,'message',?,?,?,'Monthly bulletin',?,?,1,0)`, unnest.TextKey(localeOwn), time.Date(2026, 10, 7, 1, 2, 0, 0, time.UTC).Unix(), p, "synthetic-locales", localeOwn, "opaque-legacy-hash")
