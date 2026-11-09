@@ -448,7 +448,7 @@ func twinCopiesCached(q corpusQuery, person int64, cache *twinBodyCache) ([]twin
 		       (select count(*) from attachments a where a.entry_id = e.id), e.source,
 		       coalesce(e.parent_id,0), e.derived`+columns+`
 		from entries e`+join+`
-		where e.person_id = ? and e.source = ?
+		where e.person_id = ? and e.source = ? and `+nonReactionTwinSQL+`
 		order by e.ts, e.id`, person, SourceMail)
 	if err != nil {
 		return nil, fmt.Errorf("reading the entries of person %d: %w", person, err)
@@ -994,6 +994,21 @@ func collapseGroup(tx corpusWriter, s *Store, c TwinCollapse) error {
 
 // absorb moves one dropped copy's evidence onto the survivor and deletes it.
 func absorb(tx corpusWriter, s *Store, keep, drop int64) error {
+	var source bool
+	if err := tx.QueryRow(`select exists(select 1 from reaction_sources r join reaction_inspections i on i.source_ext_id=r.source_ext_id where r.entry_id in (?,?) and i.candidate=1)`, keep, drop).Scan(&source); err != nil {
+		return err
+	}
+	if source {
+		return fmt.Errorf("refusing to twin-merge a reaction notification identity")
+	}
+	// Exact references survive target absorption without borrowing the survivor's ID.
+	if _, err := tx.Exec(`insert into reaction_message_refs(reference,entry_id) select reference,? from reaction_message_refs where entry_id=? on conflict do nothing`, keep, drop); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`update gmail_copies set entry_id=? where entry_id=?`, keep, drop); err != nil {
+		return fmt.Errorf("moving target mailbox copies: %w", err)
+	}
+
 	// The survivor may already hold a sighting or a participation the dropped copy
 	// also holds, and both are keyed on the entry — so repoint what does not
 	// collide and clear what does, as a person merge does.
@@ -1241,7 +1256,7 @@ func nearbyCopies(s *Store, person int64, wall time.Time) ([]twinCopy, error) {
 		       coalesce(e.body_text,''), coalesce(e.body_html,''),
 		       (select count(*) from attachments a where a.entry_id = e.id)
 		from entries e
-		where e.person_id = ? and e.source = ? and e.ts between ? and ?
+		where e.person_id = ? and e.source = ? and `+nonReactionTwinSQL+` and e.ts between ? and ?
 		order by e.id`, person, SourceMail,
 		wall.Add(-26*time.Hour).Unix(), wall.Add(26*time.Hour).Unix())
 	if err != nil {

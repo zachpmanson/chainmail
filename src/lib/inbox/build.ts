@@ -2,6 +2,7 @@ import { useRef } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { $api } from "../api/api";
 import { slug, untitledName } from "./route";
+import { useAccountId } from "./useAccountId";
 
 export interface PageRequest {
   /** Root ext ids of the chains to put on the page, in the order they were chosen. */
@@ -15,6 +16,7 @@ export interface PageRequest {
 }
 
 export function useBuildPage() {
+  const accountId = useAccountId();
   const navigate = useNavigate();
   const pendingName = useRef("");
   const build = $api.useMutation("post", "/v1/spec", {
@@ -33,6 +35,7 @@ export function useBuildPage() {
     build.mutate({
       body: {
         chains: req.chains,
+        ...(accountId ? { accountId } : {}),
         name: pendingName.current,
         ...(title ? { title } : {}),
         ...(req.me?.length ? { me: req.me } : {}),

@@ -889,10 +889,10 @@ type PersonSummary struct {
 func People(s *Store) ([]PersonSummary, error) {
 	rows, err := s.db.Query(`
 		select pe.id, pe.display_name, pe.prefer_original,
-		       (select count(*) from participants x
-		         where x.person_id = pe.id and x.role = 'from'),
-		       (select count(*) from participants x
-		         where x.person_id = pe.id and x.role in ('to','cc'))
+		       (select count(*) from participants x join entries e on e.id=x.entry_id
+		         where ` + ordinaryEntrySQL + ` and x.person_id = pe.id and x.role = 'from'),
+		       (select count(*) from participants x join entries e on e.id=x.entry_id
+		         where ` + ordinaryEntrySQL + ` and x.person_id = pe.id and x.role in ('to','cc'))
 		from people pe
 		order by 4 desc, 5 desc, pe.display_name`)
 	if err != nil {
@@ -1119,8 +1119,8 @@ func PersonByID(s *Store, id int64) (PersonSummary, error) {
 	var p PersonSummary
 	err := s.db.QueryRow(`
 		select pe.id, pe.display_name, pe.prefer_original,
-		       (select count(*) from participants x where x.person_id = pe.id and x.role = 'from'),
-		       (select count(*) from participants x where x.person_id = pe.id and x.role in ('to','cc'))
+		       (select count(*) from participants x join entries e on e.id=x.entry_id where `+ordinaryEntrySQL+` and x.person_id = pe.id and x.role = 'from'),
+		       (select count(*) from participants x join entries e on e.id=x.entry_id where `+ordinaryEntrySQL+` and x.person_id = pe.id and x.role in ('to','cc'))
 		from people pe where pe.id = ?`, id).
 		Scan(&p.PersonID, &p.DisplayName, &p.PreferOriginal, &p.Sent, &p.Received)
 	if err != nil {

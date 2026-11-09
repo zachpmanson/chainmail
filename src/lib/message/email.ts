@@ -6,6 +6,7 @@ import { senderTitle } from "./who";
 
 /** The email's own parts, as a bubble draws them. */
 export type MessageEmail = {
+  reactions?: Entry["reactions"];
   /** the sender as displayed; absent on a message with no name on it */
   sender?: string;
   /** hover text for the sender, e.g. "Ada Okoye <ada@example.com>"; defaults to the name */
@@ -34,6 +35,7 @@ export type MessageEmail = {
 /** The thread pane doesn't label orgs, so `org` is left off. */
 export function emailFromCorpus(e: CorpusEntry): MessageEmail {
   return {
+    reactions: e.reactions,
     sender: e.author,
     senderTitle: senderTitle(e),
     fromEmail: e.fromEmail,
@@ -55,6 +57,7 @@ export function emailFromSpec(
   whoTitle: (name: string) => string,
 ): MessageEmail {
   return {
+    reactions: e.reactions,
     sender: e.sender,
     senderTitle: whoTitle(e.sender ?? ""),
     fromEmail: e.fromEmail,

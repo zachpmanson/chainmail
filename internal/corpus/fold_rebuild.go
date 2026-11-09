@@ -29,7 +29,7 @@ func rebuildFoldIndex(ctx context.Context, conn *sql.Conn, r boiler.Rules, alias
 	rows, err := conn.QueryContext(ctx, `select e.id,coalesce(e.person_id,0),coalesce(d.from_addr,''),e.body_text,
  exists(select 1 from sightings g where g.entry_id=e.id and g.kind='direct')
  from entries e left join mail_detail d on d.entry_id=e.id
- where e.source='mail' and e.body_text is not null and e.body_text!=''`)
+ where e.source='mail' and e.body_text is not null and e.body_text!='' and `+ordinaryEntrySQL)
 	if err != nil {
 		return err
 	}

@@ -9,10 +9,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/zachpmanson/docket/gmail/mail"
 	_ "modernc.org/sqlite"
 )
 
@@ -50,14 +54,16 @@ type Entry struct {
 
 // Mail holds the fields that only make sense for a mail entry.
 type Mail struct {
-	GmailID    string
-	MessageID  string
-	InReplyTo  string
-	References []string
-	From       string
-	To         string
-	Cc         string
-	Labels     []string
+	ReactionInspection *mail.ReactionInspection
+	SourceDate         string
+	GmailID            string
+	MessageID          string
+	InReplyTo          string
+	References         []string
+	From               string
+	To                 string
+	Cc                 string
+	Labels             []string
 }
 
 // Attachment is the metadata a source states about a file on a message. The
@@ -205,6 +211,16 @@ func (s *Store) PutForAccount(accountID string, e Entry, m *Mail, atts []Attachm
 			on conflict(account_id, gmail_id) do update set entry_id=excluded.entry_id, labels=excluded.labels`,
 			accountID, m.GmailID, res.ID, string(labels)); err != nil {
 			return res, fmt.Errorf("recording Gmail copy %q in account %q: %w", m.GmailID, accountID, err)
+		}
+	}
+	if m != nil {
+		if m.MessageID != "" {
+			if _, err := tx.Exec(`insert into reaction_message_refs(reference,entry_id) values(?,?) on conflict do nothing`, m.MessageID, res.ID); err != nil {
+				return res, err
+			}
+		}
+		if err := putReactionEvidence(tx, accountID, e, m, res.ID); err != nil {
+			return res, err
 		}
 	}
 	return res, tx.Commit()
@@ -697,4 +713,42 @@ func nullStr(s string) any {
 		return nil
 	}
 	return s
+}
+
+// OpenReadOnly accepts only a frozen private snapshot, never a live WAL corpus.
+// immutable prevents SQLite from creating WAL/SHM while merely previewing mail.
+func OpenReadOnly(path string) (*Store, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() || info.Mode().Perm()&0o222 != 0 {
+		return nil, errors.New("preview requires a regular frozen snapshot with no write bits (0400 recommended); never chmod the live corpus")
+	}
+	for _, suffix := range []string{"-wal", "-shm", "-journal"} {
+		if _, err := os.Lstat(path + suffix); err == nil {
+			return nil, fmt.Errorf("preview refuses live SQLite companion %s; use a frozen consistent snapshot", suffix)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return nil, err
+		}
+	}
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return nil, err
+	}
+	uri := (&url.URL{Scheme: "file", Path: absolute}).String() + "?mode=ro&immutable=1&_pragma=query_only(1)&_pragma=foreign_keys(1)"
+	db, err := sql.Open("sqlite", uri)
+	if err != nil {
+		return nil, err
+	}
+	var version int
+	if err = db.QueryRow(`select coalesce(max(v),0) from schema_version`).Scan(&version); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if version != len(migrations) {
+		db.Close()
+		return nil, fmt.Errorf("preview requires current schema (%d), got %d; migrate separately", len(migrations), version)
+	}
+	return &Store{db: db}, nil
 }

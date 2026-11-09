@@ -294,7 +294,7 @@ func embedSelection(model string, dim int) (string, []any) {
 		left join mail_detail md on md.entry_id = e.id
 		left join slack_detail sd on sd.entry_id = e.id
 		left join entry_embeddings v on v.entry_id = e.id and v.model = ?
-		where ` + notNoiseSQL(noise) + `
+		where ` + ordinaryEntrySQL + ` and ` + notNoiseSQL(noise) + `
 		  and (v.entry_id is null or v.body_sha <> e.body_sha
 		       or v.prep <> ? or v.dim <> ?)`,
 		[]any{model, prepVersion, dim}

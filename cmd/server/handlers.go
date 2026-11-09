@@ -757,10 +757,11 @@ func (s *server) semanticFor(ctx context.Context, mode, text string) (*corpus.Se
 }
 
 type specRequest struct {
-	Chains  []string     `json:"chains"`
-	Title   string       `json:"title"`
-	Me      []string     `json:"me"`
-	Queries []spec.Query `json:"queries"`
+	AccountID string       `json:"accountId,omitempty"`
+	Chains    []string     `json:"chains"`
+	Title     string       `json:"title"`
+	Me        []string     `json:"me"`
+	Queries   []spec.Query `json:"queries"`
 	// Name, when set, saves the built page under /view/<name> so it survives a
 	// refresh (and a reboot) and can be reopened from its URL. The client
 	// chooses it — the URL it pushes has to match — and the server validates it
@@ -813,6 +814,7 @@ func (s *server) spec(w http.ResponseWriter, r *http.Request) {
 
 	started := time.Now()
 	sp, err := spec.Generate(s.store, spec.Options{
+		AccountID: req.AccountID,
 		ExtIDs:    req.Chains,
 		Title:     req.Title,
 		Me:        req.Me,
@@ -2826,12 +2828,38 @@ func (s *server) entry(w http.ResponseWriter, r *http.Request) {
 		failLookup(w, err)
 		return
 	}
+	ok, err := s.store.EntryAccessible(shown.ExtID, r.URL.Query().Get("accountId"))
+	if err != nil {
+		fail(w, 500, err)
+		return
+	}
+	if !ok {
+		fail(w, 404, corpus.ErrNotFound)
+		return
+	}
 	drawing, err := s.rendered(shown.ExtID)
 	if err != nil {
 		fail(w, http.StatusInternalServerError, err)
 		return
 	}
-	send(w, http.StatusOK, toCorpusEntry(shown, drawing))
+	out := toCorpusEntry(shown, drawing)
+	reactions, _, err := s.store.ReactionsFor(r.URL.Query().Get("accountId"), []string{shown.ExtID})
+	if err != nil {
+		fail(w, 500, err)
+		return
+	}
+	out.Reactions = reactions[shown.ExtID]
+	out.ReactionEvidence, err = s.store.ReactionEvidence(shown.ExtID, r.URL.Query().Get("accountId"))
+	if err != nil {
+		fail(w, 500, err)
+		return
+	}
+	out.ReactionStatus, err = s.store.ReactionStatus(shown.ExtID, r.URL.Query().Get("accountId"))
+	if err != nil {
+		fail(w, 500, err)
+		return
+	}
+	send(w, http.StatusOK, out)
 }
 
 // rendered is one entry as a page build would draw it. The failure is returned
@@ -2859,15 +2887,35 @@ func (s *server) chain(w http.ResponseWriter, r *http.Request) {
 	// (see chainSummary): a client reading a thread on its own — in a window of its
 	// own, say — must not wear a different subject or different counts from the row
 	// that opened it.
-	meta, err := s.store.ChainMeta(id)
+
+	accountID := r.URL.Query().Get("accountId")
+	visible := shown[:0]
+	ids := make([]string, 0, len(shown))
+	for _, sh := range shown {
+		ok, err := s.store.EntryAccessible(sh.ExtID, accountID)
+		if err != nil {
+			fail(w, 500, err)
+			return
+		}
+		if ok {
+			visible = append(visible, sh)
+			ids = append(ids, sh.ExtID)
+		}
+	}
+	shown = visible
+	if len(shown) == 0 {
+		fail(w, 404, corpus.ErrNotFound)
+		return
+	}
+	meta, err := s.store.ChainMetaForAccount(id, r.URL.Query().Get("accountId"))
 	if err != nil {
 		failLookup(w, err)
 		return
 	}
-
-	ids := make([]string, 0, len(shown))
-	for _, sh := range shown {
-		ids = append(ids, sh.ExtID)
+	reactions, hidden, err := s.store.ReactionsFor(accountID, ids)
+	if err != nil {
+		fail(w, 500, err)
+		return
 	}
 	// One render for the whole trail rather than one per entry: the conversion is
 	// per entry, but the queries behind it are not, and a trail is read as a unit.
@@ -2882,11 +2930,17 @@ func (s *server) chain(w http.ResponseWriter, r *http.Request) {
 	}
 	out := chainResponse{RootExtID: id, Entries: make([]corpusEntry, 0, len(shown))}
 	for _, sh := range shown {
-		out.Entries = append(out.Entries, toCorpusEntry(sh, rendered[sh.ExtID]))
+		if _, hide := hidden[sh.ExtID]; hide {
+			continue
+		}
+		entry := toCorpusEntry(sh, rendered[sh.ExtID])
+		entry.Reactions = reactions[sh.ExtID]
+		out.Entries = append(out.Entries, entry)
 	}
 	// The entries come in conversation order, so the fallback below takes the
 	// earliest message that carried a subject.
 	out.Summary = toChainSummary(meta)
+	out.Summary.Entries = len(out.Entries)
 	if out.Summary.Subject == "" {
 		// A root with no subject of its own is named by the first message that has
 		// one, which is what a reader recognises the thread by. The search path makes
@@ -2894,6 +2948,9 @@ func (s *server) chain(w http.ResponseWriter, r *http.Request) {
 		// so the conversation's own order decides — and the two agree wherever the
 		// root carries a subject, which is nearly always.
 		for _, sh := range shown {
+			if _, hide := hidden[sh.ExtID]; hide {
+				continue
+			}
 			if sh.Subject != "" {
 				out.Summary.Subject = sh.Subject
 				break

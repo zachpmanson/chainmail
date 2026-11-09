@@ -674,8 +674,8 @@ func (s *Store) byRecency(q Query, where string, args []any) ([]candidate, error
 // filters renders the structural half of the query. It always returns a
 // non-empty predicate so callers can concatenate without special-casing.
 func (q Query) filters() (string, []any) {
-	var preds []string
-	var args []any
+	ordinary, args := ordinaryForAccountSQL(q.AccountID)
+	preds := []string{ordinary}
 
 	if !q.Since.IsZero() {
 		preds = append(preds, "e.ts >= ?")
@@ -894,7 +894,11 @@ type ChainMeta struct {
 
 // chainMetaOf summarises the chain rooted at rootID.
 func (s *Store) chainMetaOf(rootID int64) (ChainMeta, error) {
-	meta, err := s.chainMeta([]int64{rootID})
+	return s.chainMetaOfForAccount(rootID, "")
+}
+
+func (s *Store) chainMetaOfForAccount(rootID int64, accountID string) (ChainMeta, error) {
+	meta, err := s.chainMetaForAccount([]int64{rootID}, accountID)
 	if err != nil {
 		return ChainMeta{}, err
 	}
@@ -937,6 +941,18 @@ func (s *Store) chainMetaForAccount(roots []int64, accountID string) (map[int64]
 	}
 	ph, args := placeholders(roots)
 	unreadSQL, unreadArgs := mailboxLabelSQL(accountID, UnreadLabel)
+	ordinary, ordinaryArgs := ordinaryForAccountSQL(accountID)
+	scope, scopeArgs := accountEntrySQL("e", accountID)
+	rootScope, rootArgs := accountEntrySQL("rootEntry", accountID)
+	countArgs := append([]any{}, args...)
+	countArgs = append(countArgs, walkDepthCap)
+	countArgs = append(countArgs, rootArgs...)
+	countArgs = append(countArgs, rootArgs...)
+	for range 4 {
+		countArgs = append(countArgs, ordinaryArgs...)
+	}
+	countArgs = append(countArgs, unreadArgs...)
+	countArgs = append(countArgs, scopeArgs...)
 	// The unread count is a count of entries, not of rows: the participant join
 	// multiplies a chain's rows by its cast, so counting the join would report a
 	// message unread once per person on it. count(distinct ...) is what keeps the
@@ -957,20 +973,21 @@ func (s *Store) chainMetaForAccount(roots []int64, accountID string) (map[int64]
 		)
 		select d.root,
 		       (select ext_id from entries where id = d.root),
-		       (select coalesce(subject,'') from entries where id = d.root),
-		       (select coalesce(container,'') from entries where id = d.root),
-		       count(distinct d.id),
-		       min(e.ts), max(e.ts),
+		       coalesce((select coalesce(subject,'') from entries rootEntry where id = d.root and `+rootScope+`),''),
+		       coalesce((select coalesce(container,'') from entries rootEntry where id = d.root and `+rootScope+`),''),
+		       count(distinct case when `+ordinary+` then d.id end),
+		       coalesce(min(case when `+ordinary+` then e.ts end),min(e.ts)), coalesce(max(case when `+ordinary+` then e.ts end),max(e.ts)),
 		       group_concat(distinct e.source),
-		       count(distinct p.person_id),
+		       count(distinct case when `+ordinary+` then p.person_id end),
 		       count(distinct a.rowid),
 		       count(distinct case when `+unreadSQL+` then d.id end)
 		from down d join entries e on e.id = d.id
 		     left join participants p on p.entry_id = e.id
 		     left join mail_detail md on md.entry_id = e.id
 		     left join attachments a on a.entry_id = e.id
+ where `+scope+`
 		group by d.root`,
-		append(append(args, walkDepthCap), unreadArgs...)...)
+		countArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("summarising chains: %w", err)
 	}

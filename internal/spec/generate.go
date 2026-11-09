@@ -16,6 +16,7 @@ import (
 type Options struct {
 	// Containers are mail thread ids (entries.container); every entry in them is
 	// selected.
+	AccountID  string
 	Containers []string
 	// EntryIDs are corpus row ids, as an FTS or vector query returns them.
 	EntryIDs []int64
@@ -67,6 +68,17 @@ func Generate(store *corpus.Store, opts Options) (Spec, error) {
 	if store == nil {
 		return Spec{}, errors.New("spec: nil store")
 	}
+	if opts.AccountID == "" && opts.Params != nil {
+		opts.AccountID = opts.Params.AccountID
+	}
+	if opts.AccountID != "" {
+		params := RunParams{}
+		if opts.Params != nil {
+			params = *opts.Params
+		}
+		params.AccountID = opts.AccountID
+		opts.Params = &params
+	}
 	db := store.DB()
 
 	seedIDs, err := seeds(db, opts)
@@ -90,6 +102,31 @@ func Generate(store *corpus.Store, opts Options) (Spec, error) {
 		return Spec{}, errors.New("spec: selection resolved to no entries")
 	}
 
+	extIDs := make([]string, 0, len(rows))
+	visible := rows[:0]
+	for _, r := range rows {
+		ok, err := store.EntryAccessible(r.ExtID, opts.AccountID)
+		if err != nil {
+			return Spec{}, err
+		}
+		if ok {
+			visible = append(visible, r)
+			extIDs = append(extIDs, r.ExtID)
+		}
+	}
+	reactions, hidden, err := store.ReactionsFor(opts.AccountID, extIDs)
+	if err != nil {
+		return Spec{}, err
+	}
+	rows = visible[:0]
+	for _, r := range visible {
+		if _, hide := hidden[r.ExtID]; !hide {
+			rows = append(rows, r)
+		}
+	}
+	if len(rows) == 0 {
+		return Spec{}, errors.New("spec: no accessible authored entries selected")
+	}
 	inferred, zoneStats, err := inferZones(store, rows)
 	if err != nil {
 		return Spec{}, err
@@ -177,6 +214,9 @@ func Generate(store *corpus.Store, opts Options) (Spec, error) {
 		Threads:      b.threads(rows),
 		SourceNotes:  b.notes(rows),
 		Messages:     b.messages,
+	}
+	for i := range spec.Messages {
+		spec.Messages[i].Reactions = reactions[spec.Messages[i].ExtID]
 	}
 	if spec.Title == "" {
 		spec.Title = rows[0].Subject

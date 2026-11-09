@@ -118,6 +118,7 @@ it("Braid focuses the title, keeps build/settings/query semantics, and retains t
   expect(build.mutate).toHaveBeenLastCalledWith({
     body: {
       chains: ["mail:a", "mail:b"],
+      accountId: "personal",
       name: expect.any(String),
       me: ["reader@example.test"],
       queries,
@@ -128,6 +129,7 @@ it("Braid focuses the title, keeps build/settings/query semantics, and retains t
   expect(build.mutate).toHaveBeenLastCalledWith({
     body: {
       chains: ["mail:a", "mail:b"],
+      accountId: "personal",
       name: "my-braid",
       title: "My braid",
       me: ["reader@example.test"],

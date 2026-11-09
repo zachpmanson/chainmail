@@ -14,6 +14,7 @@ export default function ComposerFields({
   suggestions,
   mine = [],
   busy,
+  hideAudience = false,
 }: {
   draft: Draft;
   onDraft: (patch: Partial<Draft>) => void;
@@ -30,10 +31,14 @@ export default function ComposerFields({
   suggestions: Address[];
   mine?: string[];
   busy: boolean;
+  hideAudience?: boolean;
 }) {
   return (
     <>
-      <div className="mb-2 flex flex-col gap-1.5 text-xs text-muted">
+      <div
+        aria-hidden={hideAudience || undefined}
+        className={hideAudience ? "hidden" : "mb-2 flex flex-col gap-1.5 text-xs text-muted"}
+      >
         {mode.kind === "reply" && !mode.editingRecipients ? (
           <RecipientSummary
             to={draft.to}

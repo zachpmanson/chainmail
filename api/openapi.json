@@ -621,6 +621,15 @@
               "description": ""
             },
             "example": "mail:<c0ffee-1@example.com>"
+          },
+          {
+            "name": "accountId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Restrict received-reaction/source/target associations to copies accessible in this Gmail account."
           }
         ],
         "responses": {
@@ -721,6 +730,15 @@
               "description": ""
             },
             "example": "mail:<c0ffee-1@example.com>"
+          },
+          {
+            "name": "accountId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Restrict received-reaction/source/target associations to copies accessible in this Gmail account."
           }
         ],
         "responses": {
@@ -2809,6 +2827,84 @@
             "items": {
               "$ref": "#/components/schemas/TrailEdit"
             }
+          },
+          "reactions": {
+            "type": "array",
+            "description": "Received reaction notification events grouped by the exact Unicode emoji sequence. From is a sender claim, not authenticated intent. Distinct source notification IDs, not per-reactor current state.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "emoji",
+                "events"
+              ],
+              "properties": {
+                "emoji": {
+                  "type": "string"
+                },
+                "events": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "sourceExtId",
+                      "claimedFrom",
+                      "date",
+                      "body",
+                      "sourceLink"
+                    ],
+                    "properties": {
+                      "sourceExtId": {
+                        "type": "string"
+                      },
+                      "claimedFrom": {
+                        "type": "string"
+                      },
+                      "date": {
+                        "type": "string"
+                      },
+                      "body": {
+                        "type": "string"
+                      },
+                      "sourceLink": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "reactionEvidence": {
+            "type": "array",
+            "description": "Versioned per-copy inspection JSON and digest; absent when not inspected. Direct source inspection only.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "digest",
+                "evidence",
+                "sourceDigest"
+              ],
+              "properties": {
+                "digest": {
+                  "type": "string"
+                },
+                "evidence": {
+                  "type": "string",
+                  "description": "Original serialized structural inspection evidence, not authenticated intent."
+                },
+                "sourceDigest": {
+                  "type": "string",
+                  "description": "Exact source/envelope/attachment snapshot digest; unchanged bodies alone do not establish unchanged MIME evidence."
+                }
+              }
+            }
+          },
+          "reactionStatus": {
+            "type": "string",
+            "description": "Resolved or conservative fallback reason for direct source inspection."
           }
         }
       },
@@ -2906,7 +3002,7 @@
           },
           "entries": {
             "type": "integer",
-            "description": "Entries in the whole chain."
+            "description": "Authored messages, excluding only safely resolved reaction-only source notifications. Corpus totals and provider label/unread counts still include sources."
           },
           "people": {
             "type": "integer",
@@ -3037,6 +3133,10 @@
             "description": "When set, saves the built page under /view/<name> so it survives a refresh (and a reboot) and can be reopened from its URL. The client chooses it; the server validates it. Letters, digits, '.', '_', '-'; no slashes and no '..'. Blank builds without saving.",
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
             "example": "solar-install-quote"
+          },
+          "accountId": {
+            "type": "string",
+            "description": "Limit selected messages and received-reaction/target associations to this account; preserved in runParams for refresh."
           }
         }
       },
@@ -4252,6 +4352,10 @@
               "since": {
                 "type": "string",
                 "description": "YYYY-MM-DD floor on entry dates."
+              },
+              "accountId": {
+                "type": "string",
+                "description": "Gmail account visibility boundary, preserved on saved-page refresh. Omitted means the local unified corpus."
               }
             }
           },
@@ -4564,6 +4668,14 @@
                   "description": "Thumbnail as a data: URI. Never a URL — the page renders without a network.",
                   "pattern": "^data:image/"
                 },
+                "previewW": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "previewH": {
+                  "type": "integer",
+                  "minimum": 1
+                },
                 "blobSha": {
                   "type": "string",
                   "description": "Digest of the attachment's bytes in the corpus, present only once they have been pulled. It is what lets a client ask for the file rather than send the reader back to Gmail for something we already hold."
@@ -4588,14 +4700,54 @@
                 "skip": {
                   "type": "string",
                   "description": "Why the corpus does not hold these bytes, recorded when a pull decided it never will: too large, gone from the sender's copy, nothing to fetch by. Present means the file is not coming, so a page can explain the chip and stop offering to fetch it. The value is the corpus's own word; the page owns the phrasing."
+                }
+              }
+            }
+          },
+          "reactions": {
+            "type": "array",
+            "description": "Received reaction notification events grouped by the exact Unicode emoji sequence. From is a sender claim, not authenticated intent. Distinct source notification IDs, not per-reactor current state.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "emoji",
+                "events"
+              ],
+              "properties": {
+                "emoji": {
+                  "type": "string"
                 },
-                "previewW": {
-                  "type": "integer",
-                  "minimum": 1
-                },
-                "previewH": {
-                  "type": "integer",
-                  "minimum": 1
+                "events": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "sourceExtId",
+                      "claimedFrom",
+                      "date",
+                      "body",
+                      "sourceLink"
+                    ],
+                    "properties": {
+                      "sourceExtId": {
+                        "type": "string"
+                      },
+                      "claimedFrom": {
+                        "type": "string"
+                      },
+                      "date": {
+                        "type": "string"
+                      },
+                      "body": {
+                        "type": "string"
+                      },
+                      "sourceLink": {
+                        "type": "string"
+                      }
+                    }
+                  }
                 }
               }
             }

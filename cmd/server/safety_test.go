@@ -164,8 +164,11 @@ func TestOAuthValidatesBeforeActivatingCredential(t *testing.T) {
 			state, accountID := beginFakeLogin(t, srv, query)
 			path, _ := gmailclient.AccountTokenPath(accountID)
 			if tc.activationFails {
-				// Docket stages a rename at .tmp; a directory makes saving fail even as root.
-				if err := os.MkdirAll(path+".tmp", 0o700); err != nil {
+				// Fail the activation write path independently of temporary-file naming.
+				if err := os.Remove(path + ".lock"); err != nil && !os.IsNotExist(err) {
+					t.Fatal(err)
+				}
+				if err := os.MkdirAll(path+".lock", 0o700); err != nil {
 					t.Fatal(err)
 				}
 			}

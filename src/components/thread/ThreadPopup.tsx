@@ -1,10 +1,12 @@
 import { $api } from "../../lib/api/api";
 import ThreadPane from "./ThreadPane";
+import { useAccountId } from "../../lib/inbox/useAccountId";
 
 /** The reading pane in its own window. It knows only the id, so its head comes from the chain read. */
 export default function ThreadPopup({ rootExtId }: { rootExtId: string }) {
+  const accountId = useAccountId();
   const chain = $api.useQuery("get", "/v1/chains/{rootExtId}", {
-    params: { path: { rootExtId } },
+    params: { path: { rootExtId }, query: { accountId } },
   });
   const summary = chain.data?.summary;
 

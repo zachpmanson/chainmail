@@ -82,9 +82,12 @@ type entryHit struct {
 }
 
 type corpusEntry struct {
-	ExtID  string `json:"extId"`
-	Source string `json:"source"`
-	Quoted bool   `json:"quoted"`
+	Reactions        []corpus.Reaction         `json:"reactions,omitempty"`
+	ReactionEvidence []corpus.ReactionEvidence `json:"reactionEvidence,omitempty"`
+	ReactionStatus   string                    `json:"reactionStatus,omitempty"`
+	ExtID            string                    `json:"extId"`
+	Source           string                    `json:"source"`
+	Quoted           bool                      `json:"quoted"`
 	// Mine is whether the reader wrote this, by the corpus's own resolution of
 	// the addresses they named rather than a comparison of strings (see
 	// spec.Rendered.Mine). Carried on the chain read so the reading pane can mark

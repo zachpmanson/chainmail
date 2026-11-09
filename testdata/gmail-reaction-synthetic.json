@@ -1,0 +1,53 @@
+{
+  "id": "synthetic-reaction",
+  "thread_id": "synthetic-thread",
+  "message_id": "<synthetic-reaction@example.test>",
+  "in_reply_to": "<synthetic-target@example.test>",
+  "from": "Casey Lake <casey@example.test>",
+  "to": "Alex Vale <alex@example.test>",
+  "date": "Sat, 07 Nov 2026 10:00:00 +0000",
+  "subject": "Re: Synthetic target",
+  "body": "❤️\nCasey Lake reacted via Gmail\n\nOn Fri, Nov 6, 2026 at 9:27 PM Alex Vale <alex@example.test> wrote:\n> Synthetic target content.\n",
+  "body_html": "<p>❤️</p><p>Casey Lake reacted via Gmail</p><div class=\"gmail_quote\"><blockquote>Synthetic target content.</blockquote></div>",
+  "html_status": "present",
+  "labels": [
+    "INBOX",
+    "UNREAD"
+  ],
+  "reaction_inspection": {
+    "version": 2,
+    "emoji_version": "Unicode Emoji 16.0 (fully-qualified)",
+    "status": "candidate",
+    "layout": "alternative",
+    "in_reply_to": [
+      "<synthetic-target@example.test>"
+    ],
+    "target_message_id": "<synthetic-target@example.test>",
+    "candidates": [
+      {
+        "format": "gmail-email-reaction/v1",
+        "part_path": "0.1",
+        "mime_type": "text/vnd.google.email-reaction+json",
+        "body": "{\"version\":1,\"emoji\":\"❤️\"}",
+        "body_complete": true,
+        "version": 1,
+        "emoji": "❤️",
+        "status": "candidate"
+      }
+    ],
+    "fallbacks": [
+      {
+        "part_path": "0.0",
+        "mime_type": "text/plain",
+        "decoded_bytes": 133,
+        "body_complete": true
+      },
+      {
+        "part_path": "0.2",
+        "mime_type": "text/html",
+        "decoded_bytes": 129,
+        "body_complete": true
+      }
+    ]
+  }
+}

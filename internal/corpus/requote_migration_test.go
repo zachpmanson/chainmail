@@ -43,6 +43,16 @@ func TestQuoteRepairMigrationRebuildsBothIndexesWithoutChangingSource(t *testing
 	if _, err := s.DB().Exec(`delete from schema_version where v>=26`); err != nil {
 		t.Fatal(err)
 	}
+	for _, table := range []string{"reaction_inspections", "reaction_message_refs", "gmail_copies", "reaction_sources", "sightings"} {
+		for _, op := range []string{"insert", "update", "delete"} {
+			if _, err := s.DB().Exec("drop trigger reactions_" + table + "_" + op); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if _, err := s.DB().Exec(`drop view reaction_active; drop view reaction_resolved;drop view reaction_agreed;drop table reaction_inspections;drop table reaction_sources;drop table reaction_message_refs;drop table reaction_applies`); err != nil {
+		t.Fatal(err)
+	}
 	// Remove the later migration too, modelling a real contiguous v25 schema.
 	for _, in := range []string{"entries", "mail_detail", "sightings", "attachments", "people", "identities", "participants", "domain_aliases"} {
 		for _, op := range []string{"insert", "update", "delete"} {

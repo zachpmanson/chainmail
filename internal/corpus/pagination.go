@@ -63,7 +63,7 @@ func (s *Store) browseCandidates(q Query) ([]candidate, error) {
    where d.depth < ?
  ), spans as (
    select d.root, r.ext_id, max(e.ts) as last from down d
-   join entries e on e.id=d.id join entries r on r.id=d.root group by d.root
+   join entries e on e.id=d.id join entries r on r.id=d.root where `+ordinaryEntrySQL+` group by d.root
  ), page as (
    select root from spans where `+continuation+` order by last desc, ext_id asc limit ?
  )

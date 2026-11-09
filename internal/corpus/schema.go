@@ -653,4 +653,6 @@ create trigger fold_sightings_insert after insert on sightings
 	`create table twins_body_cache (
  entry_id integer primary key, format_version integer not null,
  input_digest blob not null, payload blob not null);`,
+	// 29: received reaction evidence, exact references and non-destructive views.
+	reactionsMigration(),
 }

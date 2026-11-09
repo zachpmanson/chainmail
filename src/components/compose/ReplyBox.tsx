@@ -109,6 +109,7 @@ export default function ReplyBox({
   all,
   onAll,
   aimed,
+  scopePending = false,
 }: {
   thread: { rootExtId: string };
   answer: CorpusEntry;
@@ -117,9 +118,13 @@ export default function ReplyBox({
   all: boolean;
   onAll: (all: boolean) => void;
   aimed: number;
+  scopePending?: boolean;
 }) {
+  const scopePendingRef = useRef(scopePending);
+  scopePendingRef.current = scopePending;
   const queryClient = useQueryClient();
   const routeAccountId = useAccountId();
+  const continuityAccount = useRef(routeAccountId ?? "");
   const [{ own, html, accountId, editingRecipients, step }, dispatch] = useReducer(reduce, {
     own: "",
     html: true,
@@ -197,6 +202,7 @@ export default function ReplyBox({
   // Replies have no subject field; the server derives it.
   const draft: Draft = { to, cc, subject: "", body: own };
   const onDraft = (patch: Partial<Draft>) => {
+    continuityAccount.current = displayedAccountId;
     ownership.edit();
     selected.edit();
     if (patch.to) recipients.changeTo(patch.to);
@@ -237,6 +243,7 @@ export default function ReplyBox({
         writeRevision.current,
       ]),
       owner: draftIdRef.current ? draftIdentity(displayedAccountId, draftIdRef.current) : undefined,
+      continuityAccountId: continuityAccount.current,
       busy:
         busyRef.current ||
         pendingWrites.current > 0 ||
@@ -258,6 +265,7 @@ export default function ReplyBox({
       },
     }),
     hydrate: (saved) => {
+      continuityAccount.current = saved.accountId;
       saveGeneration.current++;
       reviewInput.invalidate();
       dispatch({ type: "edit" });
@@ -291,6 +299,7 @@ export default function ReplyBox({
   // edit and replace it; a draft ID returned by create is reused by later saves.
   useEffect(() => {
     if (
+      scopePending ||
       (!own.trim() && !draftIdRef.current) ||
       !displayedAccountId ||
       !answer.extId ||
@@ -314,7 +323,7 @@ export default function ReplyBox({
       saveQueue.current = saveQueue.current
         .catch(() => undefined)
         .then(async () => {
-          if (generation !== saveGeneration.current) return;
+          if (generation !== saveGeneration.current || scopePendingRef.current) return;
           const id = draftIdRef.current;
           if (acknowledgedSaveRef.current === JSON.stringify([generation, id, draftInputKey]))
             return;
@@ -352,6 +361,7 @@ export default function ReplyBox({
   }, [
     own,
     selected.blocked,
+    scopePending,
     draftSaveError,
     busy,
     draftInput,
@@ -375,7 +385,7 @@ export default function ReplyBox({
 
   // Nothing is written to the mailbox, so a failure here has cost nothing.
   const review = () =>
-    selected.blocked
+    scopePendingRef.current || selected.blocked
       ? Promise.resolve()
       : run(
           async () => {
@@ -391,6 +401,7 @@ export default function ReplyBox({
   // The server files the sent message into the corpus in the same request, so the
   // thread is re-read rather than drawn optimistically.
   async function ship() {
+    if (scopePendingRef.current) return;
     if (selected.blocked || step.kind !== "reviewing" || !previewIsCurrent) return;
     const { plan, reviewed } = step;
     let sending = false;
@@ -472,6 +483,7 @@ export default function ReplyBox({
   }
 
   async function discardDraft() {
+    if (scopePendingRef.current) return;
     const id = draftIdRef.current;
     if (!id || !window.confirm("Discard this Gmail reply draft?")) return;
     const ownerGeneration = saveGeneration.current;
@@ -496,28 +508,38 @@ export default function ReplyBox({
     }, errText);
   }
 
-  const errorAlert = error ? (
-    <InlineAlert>
-      {error}
-      {sendFailed ? " Check Gmail before attempting to send again." : ""}
-    </InlineAlert>
-  ) : null;
+  const errorAlert =
+    error && !scopePending ? (
+      <InlineAlert>
+        {error}
+        {sendFailed ? " Check Gmail before attempting to send again." : ""}
+      </InlineAlert>
+    ) : null;
 
   return (
     <div className="mt-4 mb-1 rounded-lg border border-line bg-card px-3 py-2" ref={host}>
-      {drafts.isError ? (
+      {!scopePending && drafts.isError ? (
         <DraftReadError
           error={drafts.error}
           retrying={drafts.isFetching}
           onRetry={() => void drafts.refetch()}
         />
       ) : null}
-      {draftSaveError ? <DraftSaveError error={draftSaveError} draft={recoveryDraft} /> : null}
-      <DraftCompatibilityNotice check={selected.preflight} draft={recoveryDraft} />
+      {!scopePending && draftSaveError ? (
+        <DraftSaveError error={draftSaveError} draft={recoveryDraft} />
+      ) : null}
+      {!scopePending ? (
+        <DraftCompatibilityNotice check={selected.preflight} draft={recoveryDraft} />
+      ) : null}
       <section aria-label="Reply" aria-busy={selected.preflight.pending || undefined}>
         {step.kind === "reviewing" ? (
           <>
-            <ReplyPlan plan={step.plan} />
+            <div
+              className={scopePending ? "hidden" : undefined}
+              aria-hidden={scopePending || undefined}
+            >
+              <ReplyPlan plan={step.plan} />
+            </div>
             {errorAlert}
             <footer className="mt-2 flex flex-wrap items-center justify-end gap-2">
               <Button
@@ -538,7 +560,9 @@ export default function ReplyBox({
                   variant="danger"
                   density="compact"
                   type="button"
-                  disabled={busy || selected.blocked || !previewIsCurrent || to.length === 0}
+                  disabled={
+                    scopePending || busy || selected.blocked || !previewIsCurrent || to.length === 0
+                  }
                   onClick={() => void ship()}
                 >
                   {busy ? "Sending…" : "send this reply"}
@@ -550,6 +574,7 @@ export default function ReplyBox({
           <>
             {errorAlert}
             <ComposerFields
+              hideAudience={scopePending}
               mode={{
                 kind: "reply",
                 editingRecipients,
@@ -562,6 +587,7 @@ export default function ReplyBox({
                   disabled={busy || selected.editingBlocked}
                   onChange={(id) => {
                     if (selected.coordinator && !selected.coordinator.detach(id)) return;
+                    continuityAccount.current = id;
                     selected.edit();
                     ownership.edit();
                     reviewInput.invalidate();
@@ -618,7 +644,7 @@ export default function ReplyBox({
                   variant="danger"
                   density="compact"
                   type="button"
-                  disabled={busy}
+                  disabled={scopePending || busy}
                   onClick={() => void discardDraft()}
                 >
                   Discard draft
@@ -632,6 +658,7 @@ export default function ReplyBox({
                   to.length === 0 ? "Add somebody in to before previewing this reply." : undefined
                 }
                 disabled={
+                  scopePending ||
                   busy ||
                   selected.blocked ||
                   own.trim() === "" ||
@@ -653,19 +680,21 @@ export default function ReplyBox({
           </Button>
         </InlineAlert>
       ) : null}
-      <DraftCards
-        accountId={displayedAccountId}
-        editingId={draftId || undefined}
-        drafts={(drafts.data ?? []).filter(
-          (item) =>
-            item.kind === "reply" &&
-            item.accountId === displayedAccountId &&
-            draftDestination(item) === thread.rootExtId &&
-            !selected.coordinator?.isRetired(item.accountId, item.id),
-        )}
-        loading={drafts.isPending}
-        onSelect={(item) => selected.coordinator?.select(item)}
-      />
+      {!scopePending ? (
+        <DraftCards
+          accountId={displayedAccountId}
+          editingId={draftId || undefined}
+          drafts={(drafts.data ?? []).filter(
+            (item) =>
+              item.kind === "reply" &&
+              item.accountId === displayedAccountId &&
+              draftDestination(item) === thread.rootExtId &&
+              !selected.coordinator?.isRetired(item.accountId, item.id),
+          )}
+          loading={drafts.isPending}
+          onSelect={(item) => selected.coordinator?.select(item)}
+        />
+      ) : null}
     </div>
   );
 }

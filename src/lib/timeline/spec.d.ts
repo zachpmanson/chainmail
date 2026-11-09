@@ -83,6 +83,10 @@ export interface Timeline {
      * YYYY-MM-DD floor on entry dates.
      */
     since?: string;
+    /**
+     * Gmail account visibility boundary, preserved on saved-page refresh. Omitted means the local unified corpus.
+     */
+    accountId?: string;
   };
   /**
    * Searches run, so a null result is interpretable.
@@ -218,6 +222,19 @@ export interface Entry {
    */
   meta?: boolean;
   mentions?: string[];
+  /**
+   * Received reaction notification events grouped by the exact Unicode emoji sequence. From is a sender claim, not authenticated intent. Distinct source notification IDs, not per-reactor current state.
+   */
+  reactions?: {
+    emoji: string;
+    events: {
+      sourceExtId: string;
+      claimedFrom: string;
+      date: string;
+      body: string;
+      sourceLink: string;
+    }[];
+  }[];
   attachments?: {
     name: string;
     kind?: string;

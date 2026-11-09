@@ -367,12 +367,13 @@ func convertMessage(m *mail.Message) mailingest.Message {
 		atts[i].PartID = a.PartID
 	}
 	return mailingest.Message{
-		Envelope:      convertEnvelope(m.Envelope),
-		Body:          m.Body,
-		Truncated:     m.Truncated,
-		BodyHTML:      m.BodyHTML,
-		HTMLStatus:    m.HTMLStatus,
-		HTMLTruncated: m.HTMLTruncated,
-		Attachments:   atts,
+		Envelope:           convertEnvelope(m.Envelope),
+		ReactionInspection: m.ReactionInspection,
+		Body:               m.Body,
+		Truncated:          m.Truncated,
+		BodyHTML:           m.BodyHTML,
+		HTMLStatus:         m.HTMLStatus,
+		HTMLTruncated:      m.HTMLTruncated,
+		Attachments:        atts,
 	}
 }
