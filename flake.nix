@@ -89,6 +89,7 @@
             # the backend (corpus, ingest, later the server) is Go
             pkgs.go
             pkgs.gopls
+            pkgs.python3 # offline cross-app format report comparator (stdlib only)
             pkgs.sqlite            # for poking at a corpus by hand
           ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [ pkgs.chromium ]; # offline layout smoke tests
 

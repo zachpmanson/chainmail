@@ -264,7 +264,8 @@ func ApplySchedule(e ical.Event, s Schedule, now time.Time) error {
 			p.Value = strings.Replace(p.Value, workHoursMarker, "", 1)
 		}
 	}
-	for name, value := range map[string]time.Time{"DTSTART": start, "DTEND": start.Add(5 * time.Minute)} {
+	// A local DTEND inside the repeated DST hour can reparse an hour late.
+	for name, value := range map[string]time.Time{"DTSTART": start, "DTEND": start.Add(5 * time.Minute).UTC()} {
 		p := e.Props.Get(name)
 		if p == nil {
 			p = ical.NewProp(name)
@@ -272,6 +273,10 @@ func ApplySchedule(e ical.Event, s Schedule, now time.Time) error {
 			p = e.Props.Get(name)
 		}
 		p.SetDateTime(value)
+		if name == "DTEND" {
+			// SetDateTime(UTC) leaves an existing TZID parameter untouched.
+			p.Params.Del("TZID")
+		}
 	}
 	e.Props.Del("DURATION")
 	e.Props.Del("RRULE")
