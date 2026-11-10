@@ -85,17 +85,34 @@ export function dropSchemeVariants(root: { styleSheets?: ArrayLike<CSSStyleSheet
   for (const sheet of Array.from(root.styleSheets ?? [])) dropFrom(sheet);
 }
 
-function dropFrom(group: CSSStyleSheet | CSSGroupingRule): void {
-  const rules = group.cssRules;
+// Remote CSS can apply while the browser forbids reading its CSSOM.
+function readableRules(group: { cssRules?: CSSRuleList }): CSSRuleList | undefined {
+  try {
+    return group.cssRules;
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "name" in error &&
+      error.name === "SecurityError"
+    )
+      return undefined;
+    throw error;
+  }
+}
+
+function dropFrom(group: CSSStyleSheet | CSSGroupingRule, rules = readableRules(group)): void {
+  if (!rules) return;
   // Backwards: deleting a rule shifts every rule after it.
   for (let i = rules.length - 1; i >= 0; i--) {
     // Duck-typed so `@supports` and other grouping rules are walked too.
     const rule = rules[i] as CSSRule & { cssRules?: CSSRuleList; conditionText?: string };
-    if (!rule.cssRules) continue;
+    const nested = readableRules(rule);
+    if (!nested) continue;
     if (/prefers-color-scheme/i.test(rule.conditionText ?? "")) {
       group.deleteRule(i);
       continue;
     }
-    dropFrom(rule as unknown as CSSGroupingRule);
+    dropFrom(rule as unknown as CSSGroupingRule, nested);
   }
 }
