@@ -21,6 +21,8 @@ export default function DraftCards({
   const selected =
     selection?.active && selection.accountId === accountId ? selection.id : undefined;
   const pending = Boolean(selected && selection?.loading);
+  // The editor already shows this draft; autosave must not add a second preview.
+  if (editingId && (!selected || selected === editingId) && !pending) return null;
   const focused = selected ?? editingId;
   const visible = focused
     ? drafts.filter((draft) => draft.accountId === accountId && draft.id === focused)

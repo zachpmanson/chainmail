@@ -94,21 +94,32 @@ it.each([
   const host = await render(cards({ drafts: [{ ...own, body }] }));
   expect(host.textContent).toContain(label);
 });
-it("hides other cards for an owned editor and restores them when editing ends", async () => {
+it("hides the redundant owned card and other choices until editing ends", async () => {
   let host = await render(cards());
   expect(host.querySelectorAll("[data-draft]")).toHaveLength(2);
   host = await render(cards({ editingId: own.id }));
-  expect(host.querySelectorAll("[data-draft]")).toHaveLength(1);
-  expect(host.textContent).toContain("Current draft");
+  expect(host.querySelector('[aria-label="Saved Gmail drafts"]')).toBeNull();
+  expect(host.textContent).not.toContain("Current draft");
   expect(host.textContent).not.toContain("Other draft");
   host = await render(cards());
   expect(host.querySelectorAll("[data-draft]")).toHaveLength(2);
 });
-it("matches the current editor by account as well as opaque draft ID", async () => {
+it("does not expose a foreign draft sharing the current editor's opaque ID", async () => {
   const foreign = { ...own, accountId: "B", subject: "Foreign account draft" };
   const host = await render(cards({ drafts: [own, foreign], editingId: own.id }));
-  expect(host.querySelectorAll("[data-draft]")).toHaveLength(1);
+  expect(host.querySelectorAll("[data-draft]")).toHaveLength(0);
   expect(host.textContent).not.toContain("Foreign account draft");
+});
+it("preserves the owned selection's loading/clear controls, then hides its duplicate", async () => {
+  const selected = coordinator(own.id, true);
+  let host = await render(cards({ editingId: own.id, selected }));
+  expect(host.querySelector('[data-draft="own"]')?.getAttribute("aria-busy")).toBe("true");
+  expect(host.textContent).toContain("Loading selected draft");
+  expect(host.textContent).not.toContain("Other draft");
+  await pick(host.querySelector("button")!);
+  expect(selected.clear).toHaveBeenCalledOnce();
+  host = await render(cards({ editingId: own.id, selected: coordinator(own.id) }));
+  expect(host.querySelector('[aria-label="Saved Gmail drafts"]')).toBeNull();
 });
 it("keeps only a selected draft even before the editor has adopted its ID", async () => {
   const host = await render(cards({ editingId: own.id, selected: coordinator(other.id) }));

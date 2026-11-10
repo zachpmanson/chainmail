@@ -186,7 +186,7 @@ describe("real editor and provider with memory history", () => {
       method: "PUT",
       body: { body: "Newer words", expectedMessageId: "revision-1" },
     });
-    await pick(cards.querySelector("button")!);
+    expect(host.querySelector('[aria-label="Saved Gmail drafts"]')).toBeNull();
     expect(history.location.state.__TSR_index).toBe(index + 1);
     expect(host.querySelector("textarea")!.value).toBe("Newer words");
   });
@@ -250,7 +250,7 @@ describe("real editor and provider with memory history", () => {
   });
 });
 
-it("a real selected reply targets the older raw parent and hides the other draft cards", async () => {
+it("a real selected reply targets the older raw parent without duplicating the editor in cards", async () => {
   const reply: SavedDraft = {
     ...saved,
     kind: "reply",
@@ -276,7 +276,7 @@ it("a real selected reply targets the older raw parent and hides the other draft
   await settle(750);
   expect(
     [...host.querySelectorAll("[data-draft]")].map((card) => card.getAttribute("data-draft")),
-  ).toEqual([saved.id]);
+  ).toEqual([]);
   expect(writes).toEqual([]);
   await words(host, "A real reply edit");
   await settle(750);

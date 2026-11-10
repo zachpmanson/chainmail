@@ -456,7 +456,8 @@ describe("read-only compatibility admission", () => {
         await act(async () => check.resolve(refused()));
         await settle();
       }
-      await pick(button(host, "Open draft"));
+      expect(host.querySelectorAll("[data-draft]")).toHaveLength(0);
+      await navigate(selected());
       await settle();
       expect(host.querySelector("textarea")!.disabled).toBe(true);
       expect(host.textContent).toContain("could not confirm");
@@ -664,15 +665,60 @@ describe("selected detail epoch and owner safety", () => {
   });
 });
 
+describe("autosave without a duplicate draft preview", () => {
+  it.each(["compose", "reply", "popup"])(
+    "keeps %s autosaves out of the cards while preserving reopening and editing",
+    async (kind) => {
+      realHosts = true;
+      store.clear();
+      const open = kind === "compose" ? "compose" : "root";
+      const search = { accountId: "A", open, ...(kind === "popup" ? { popup: "1" } : {}) };
+      const { host, router, navigate } = await mount(
+        `/?accountId=A&open=${open}${kind === "popup" ? "&popup=1" : ""}`,
+      );
+      const area = host.querySelector("textarea")!;
+      await words(host, "First saved words");
+      await settle(750);
+      expect(writes.map((item) => item.method)).toEqual(["POST"]);
+      expect(host.querySelector('[aria-label="Saved Gmail drafts"]')).toBeNull();
+      expect(router.state.location.search.draft).toBeUndefined();
+      expect(host.querySelector("textarea")).toBe(area);
+      expect(button(host, "Discard draft")).toBeTruthy();
+      await words(host, "Updated saved words");
+      area.setSelectionRange(2, 5);
+      await settle(750);
+      expect(writes.map((item) => item.method)).toEqual(["POST", "PUT"]);
+      expect(writes[1]!.body).toMatchObject({
+        expectedMessageId: "m1",
+        body: "Updated saved words",
+      });
+      expect(host.querySelector('[aria-label="Saved Gmail drafts"]')).toBeNull();
+      expect(host.querySelector("textarea")).toBe(area);
+      expect([area.selectionStart, area.selectionEnd]).toEqual([2, 5]);
+      expect(detailReads()).toEqual([]);
+      await navigate({ accountId: "A" });
+      await navigate(search);
+      const card = host.querySelector<HTMLElement>(`[data-draft="${saved.id}"]`)!;
+      expect(card.textContent).toContain("Updated saved words");
+      await pick(button(card, "Open draft"));
+      await settle();
+      expect(host.querySelector("textarea")!.value).toBe("Updated saved words");
+      expect(host.querySelector('[aria-label="Saved Gmail drafts"]')).toBeNull();
+      await settle(750);
+      expect(writes).toHaveLength(2);
+    },
+  );
+});
+
 describe("provider lifetime across different editor component mounts", () => {
   it.each(["compose", "reply", "popup"])(
-    "adopts %s's own autosaved card without losing newer live input during its deferred GET",
+    "adopts %s's own autosaved URL without losing newer live input during its deferred GET",
     async (kind) => {
       realHosts = true;
       store.clear();
       const pending = deferred<Response>();
       detail = () => pending.promise;
-      const { host, router } = await mount(
+      const { host, router, navigate } = await mount(
         `/?accountId=A&open=${kind === "compose" ? "compose" : "root"}${kind === "popup" ? "&popup=1" : ""}`,
       );
       await words(host, "Locally autosaved m1");
@@ -681,14 +727,20 @@ describe("provider lifetime across different editor component mounts", () => {
       const created = { ...store.get(owner("A", saved.id))! };
       const area = host.querySelector("textarea");
       await words(host, "Newer not-yet-saved input");
-      await pick(button(host, "Open draft"));
+      expect(host.querySelector('[aria-label="Saved Gmail drafts"]')).toBeNull();
+      await navigate({
+        accountId: "A",
+        draft: saved.id,
+        open: kind === "compose" ? "compose" : "root",
+        ...(kind === "popup" ? { popup: "1" } : {}),
+      });
       expect(router.state.location.search.draft).toBe(saved.id);
       expect(router.state.location.search.popup).toBe(kind === "popup" ? "1" : undefined);
       expect(window.confirm).not.toHaveBeenCalled();
       expect
         .soft(
           host.querySelector("textarea"),
-          "own-card adoption must not unmount the live editor while detail is pending",
+          "own-draft URL adoption must not unmount the live editor while detail is pending",
         )
         .toBe(area);
       expect.soft(host.querySelector("textarea")?.value).toBe("Newer not-yet-saved input");
@@ -1042,7 +1094,7 @@ describe("reviewed editor preservation regressions", () => {
       const put = deferred<Response>();
       detail = () => get.promise;
       mutation = (method) => (method === "PUT" ? put.promise : undefined);
-      const { host, router } = await mount(
+      const { host, router, navigate } = await mount(
         `/?${explicit ? "accountId=A&" : ""}open=root${popup ? "&popup=1" : ""}`,
       );
       await words(host, "First saved");
@@ -1057,7 +1109,13 @@ describe("reviewed editor preservation regressions", () => {
       expect(writes.map((w) => w.method)).toEqual(["POST", "PUT"]);
       await words(host, "NEW words during PUT");
       area.setSelectionRange(2, 5);
-      await pick(button(host, "Open draft"));
+      expect(host.querySelector('[aria-label="Saved Gmail drafts"]')).toBeNull();
+      await navigate({
+        accountId: "A",
+        draft: saved.id,
+        open: "root",
+        ...(popup ? { popup: "1" } : {}),
+      });
       expect(router.state.location.search).toMatchObject({
         accountId: "A",
         draft: saved.id,
