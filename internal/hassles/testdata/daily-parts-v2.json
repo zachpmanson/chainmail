@@ -1,0 +1,456 @@
+{
+  "contract": "hassles-daily-parts/2",
+  "provenance": "Parent-authored literal rosters/UTC instants; standard SHA256/Base64 only, no compiler or recurrence evaluator",
+  "cases": [
+    {
+      "name": "plain24-single",
+      "task": "00000000-0000-4000-8000-000000000001",
+      "incarnation": "00000000-0000-4000-8000-000000000002",
+      "input": {
+        "title": "Buy [docket] supplies",
+        "start": "2027-02-12T09:17",
+        "timeZone": "Australia/Melbourne",
+        "cadence": "hourly",
+        "interval": 24.0,
+        "until": "",
+        "workHours": false
+      },
+      "expected": {
+        "payload": "hassles-daily-parts/2\ntask=00000000-0000-4000-8000-000000000001\nincarnation=00000000-0000-4000-8000-000000000002\ntimezone=Australia/Melbourne\nstart=2027-02-12T09:17\nminutes=1440\nwork=0\nuntil=-\nmember=09,2027-02-12T09:17,52bebc2b014c15a9b2d936df6aca8fbad7ac16fecf764d90f9df58530ae61fca\n",
+        "planHash": "5b6e9945490f4044e31bcd09b64ce2dd07c9a9ae950d03def2db9d02c722296c",
+        "members": [
+          {
+            "hour": 9,
+            "memberID": "52bebc2b014c15a9b2d936df6aca8fbad7ac16fecf764d90f9df58530ae61fca",
+            "anchorLocal": "2027-02-12T09:17",
+            "anchorEpochMillis": 1802384220000,
+            "endEpochMillis": 1802384520000,
+            "minutes": [
+              17
+            ],
+            "rrule": "FREQ=DAILY;INTERVAL=1;WKST=MO;BYMINUTE=17",
+            "duration": "PT5M",
+            "description": "[hassle:v2 task=00000000-0000-4000-8000-000000000001 incarnation=00000000-0000-4000-8000-000000000002 member=52bebc2b014c15a9b2d936df6aca8fbad7ac16fecf764d90f9df58530ae61fca plan=5b6e9945490f4044e31bcd09b64ce2dd07c9a9ae950d03def2db9d02c722296c]\n[chainmail:hourly:v2 minutes=1440]\n[hassle:parts:v2 data=aGFzc2xlcy1kYWlseS1wYXJ0cy8yCnRhc2s9MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxCmluY2FybmF0aW9uPTAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMgp0aW1lem9uZT1BdXN0cmFsaWEvTWVsYm91cm5lCnN0YXJ0PTIwMjctMDItMTJUMDk6MTcKbWludXRlcz0xNDQwCndvcms9MAp1bnRpbD0tCm1lbWJlcj0wOSwyMDI3LTAyLTEyVDA5OjE3LDUyYmViYzJiMDE0YzE1YTliMmQ5MzZkZjZhY2E4ZmJhZDdhYzE2ZmVjZjc2NGQ5MGY5ZGY1ODUzMGFlNjFmY2EK]"
+          }
+        ]
+      }
+    },
+    {
+      "name": "plain24-minute00",
+      "task": "00000000-0000-4000-8000-000000000001",
+      "incarnation": "00000000-0000-4000-8000-000000000002",
+      "input": {
+        "title": "Synthetic",
+        "start": "2027-02-12T09:00",
+        "timeZone": "Australia/Melbourne",
+        "cadence": "hourly",
+        "interval": 24.0,
+        "until": "",
+        "workHours": false
+      },
+      "expected": {
+        "payload": "hassles-daily-parts/2\ntask=00000000-0000-4000-8000-000000000001\nincarnation=00000000-0000-4000-8000-000000000002\ntimezone=Australia/Melbourne\nstart=2027-02-12T09:00\nminutes=1440\nwork=0\nuntil=-\nmember=09,2027-02-12T09:00,52bebc2b014c15a9b2d936df6aca8fbad7ac16fecf764d90f9df58530ae61fca\n",
+        "planHash": "af03be0f6084d0fd5986b225ca6fb81b91f21f766d4a8d995ec8955b8bb0944f",
+        "members": [
+          {
+            "hour": 9,
+            "memberID": "52bebc2b014c15a9b2d936df6aca8fbad7ac16fecf764d90f9df58530ae61fca",
+            "anchorLocal": "2027-02-12T09:00",
+            "anchorEpochMillis": 1802383200000,
+            "endEpochMillis": 1802383500000,
+            "minutes": [
+              0
+            ],
+            "rrule": "FREQ=DAILY;INTERVAL=1;WKST=MO;BYMINUTE=0",
+            "duration": "PT5M",
+            "description": "[hassle:v2 task=00000000-0000-4000-8000-000000000001 incarnation=00000000-0000-4000-8000-000000000002 member=52bebc2b014c15a9b2d936df6aca8fbad7ac16fecf764d90f9df58530ae61fca plan=af03be0f6084d0fd5986b225ca6fb81b91f21f766d4a8d995ec8955b8bb0944f]\n[chainmail:hourly:v2 minutes=1440]\n[hassle:parts:v2 data=aGFzc2xlcy1kYWlseS1wYXJ0cy8yCnRhc2s9MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxCmluY2FybmF0aW9uPTAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMgp0aW1lem9uZT1BdXN0cmFsaWEvTWVsYm91cm5lCnN0YXJ0PTIwMjctMDItMTJUMDk6MDAKbWludXRlcz0xNDQwCndvcms9MAp1bnRpbD0tCm1lbWJlcj0wOSwyMDI3LTAyLTEyVDA5OjAwLDUyYmViYzJiMDE0YzE1YTliMmQ5MzZkZjZhY2E4ZmJhZDdhYzE2ZmVjZjc2NGQ5MGY5ZGY1ODUzMGFlNjFmY2EK]"
+          }
+        ]
+      }
+    },
+    {
+      "name": "plain2-finite-single",
+      "task": "00000000-0000-4000-8000-000000000001",
+      "incarnation": "00000000-0000-4000-8000-000000000002",
+      "input": {
+        "title": "Synthetic",
+        "start": "2027-02-12T09:47",
+        "timeZone": "Australia/Melbourne",
+        "cadence": "hourly",
+        "interval": 2.0,
+        "until": "2027-02-12T10:00",
+        "workHours": false
+      },
+      "expected": {
+        "payload": "hassles-daily-parts/2\ntask=00000000-0000-4000-8000-000000000001\nincarnation=00000000-0000-4000-8000-000000000002\ntimezone=Australia/Melbourne\nstart=2027-02-12T09:47\nminutes=120\nwork=0\nuntil=2027-02-12T10:00\nmember=09,2027-02-12T09:47,52bebc2b014c15a9b2d936df6aca8fbad7ac16fecf764d90f9df58530ae61fca\n",
+        "planHash": "fe304c0c9467b8cea34ff95ed581174fd5334f6881de738efdf3332f7bbf7333",
+        "members": [
+          {
+            "hour": 9,
+            "memberID": "52bebc2b014c15a9b2d936df6aca8fbad7ac16fecf764d90f9df58530ae61fca",
+            "anchorLocal": "2027-02-12T09:47",
+            "anchorEpochMillis": 1802386020000,
+            "endEpochMillis": 1802386320000,
+            "minutes": [
+              47
+            ],
+            "rrule": "FREQ=DAILY;UNTIL=20270211T230000Z;INTERVAL=1;WKST=MO;BYMINUTE=47",
+            "duration": "PT5M",
+            "description": "[hassle:v2 task=00000000-0000-4000-8000-000000000001 incarnation=00000000-0000-4000-8000-000000000002 member=52bebc2b014c15a9b2d936df6aca8fbad7ac16fecf764d90f9df58530ae61fca plan=fe304c0c9467b8cea34ff95ed581174fd5334f6881de738efdf3332f7bbf7333]\n[chainmail:hourly:v2 minutes=120]\n[hassle:parts:v2 data=aGFzc2xlcy1kYWlseS1wYXJ0cy8yCnRhc2s9MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxCmluY2FybmF0aW9uPTAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMgp0aW1lem9uZT1BdXN0cmFsaWEvTWVsYm91cm5lCnN0YXJ0PTIwMjctMDItMTJUMDk6NDcKbWludXRlcz0xMjAKd29yaz0wCnVudGlsPTIwMjctMDItMTJUMTA6MDAKbWVtYmVyPTA5LDIwMjctMDItMTJUMDk6NDcsNTJiZWJjMmIwMTRjMTVhOWIyZDkzNmRmNmFjYThmYmFkN2FjMTZmZWNmNzY0ZDkwZjlkZjU4NTMwYWU2MWZjYQo]"
+          }
+        ]
+      }
+    },
+    {
+      "name": "workhalf-inclusive-Monday",
+      "task": "00000000-0000-4000-8000-000000000001",
+      "incarnation": "00000000-0000-4000-8000-000000000002",
+      "input": {
+        "title": "Synthetic",
+        "start": "2027-02-12T16:47",
+        "timeZone": "Australia/Melbourne",
+        "cadence": "hourly",
+        "interval": 0.5,
+        "until": "2027-02-15T09:17",
+        "workHours": true
+      },
+      "expected": {
+        "payload": "hassles-daily-parts/2\ntask=00000000-0000-4000-8000-000000000001\nincarnation=00000000-0000-4000-8000-000000000002\ntimezone=Australia/Melbourne\nstart=2027-02-12T16:47\nminutes=30\nwork=1\nuntil=2027-02-15T09:17\nmember=09,2027-02-15T09:17,52bebc2b014c15a9b2d936df6aca8fbad7ac16fecf764d90f9df58530ae61fca\nmember=16,2027-02-12T16:47,4e60cd76d09f1d17ce2c791b717f086aed1382edbe33cffa59755e6f37fd934d\n",
+        "planHash": "9a6fc369d29f533e91d13c52043db0ad8227d81106dd3acea7a1eefa1b1ee825",
+        "members": [
+          {
+            "hour": 9,
+            "memberID": "52bebc2b014c15a9b2d936df6aca8fbad7ac16fecf764d90f9df58530ae61fca",
+            "anchorLocal": "2027-02-15T09:17",
+            "anchorEpochMillis": 1802643420000,
+            "endEpochMillis": 1802643720000,
+            "minutes": [
+              17,
+              47
+            ],
+            "rrule": "FREQ=DAILY;UNTIL=20270214T221700Z;INTERVAL=1;WKST=MO;BYMINUTE=17,47;BYDAY=MO,TU,WE,TH,FR",
+            "duration": "PT5M",
+            "description": "[hassle:v2 task=00000000-0000-4000-8000-000000000001 incarnation=00000000-0000-4000-8000-000000000002 member=52bebc2b014c15a9b2d936df6aca8fbad7ac16fecf764d90f9df58530ae61fca plan=9a6fc369d29f533e91d13c52043db0ad8227d81106dd3acea7a1eefa1b1ee825]\n[chainmail:hourly:v2 minutes=30]\n[hassle:parts:v2 data=aGFzc2xlcy1kYWlseS1wYXJ0cy8yCnRhc2s9MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxCmluY2FybmF0aW9uPTAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMgp0aW1lem9uZT1BdXN0cmFsaWEvTWVsYm91cm5lCnN0YXJ0PTIwMjctMDItMTJUMTY6NDcKbWludXRlcz0zMAp3b3JrPTEKdW50aWw9MjAyNy0wMi0xNVQwOToxNwptZW1iZXI9MDksMjAyNy0wMi0xNVQwOToxNyw1MmJlYmMyYjAxNGMxNWE5YjJkOTM2ZGY2YWNhOGZiYWQ3YWMxNmZlY2Y3NjRkOTBmOWRmNTg1MzBhZTYxZmNhCm1lbWJlcj0xNiwyMDI3LTAyLTEyVDE2OjQ3LDRlNjBjZDc2ZDA5ZjFkMTdjZTJjNzkxYjcxN2YwODZhZWQxMzgyZWRiZTMzY2ZmYTU5NzU1ZTZmMzdmZDkzNGQK]"
+          },
+          {
+            "hour": 16,
+            "memberID": "4e60cd76d09f1d17ce2c791b717f086aed1382edbe33cffa59755e6f37fd934d",
+            "anchorLocal": "2027-02-12T16:47",
+            "anchorEpochMillis": 1802411220000,
+            "endEpochMillis": 1802411520000,
+            "minutes": [
+              17,
+              47
+            ],
+            "rrule": "FREQ=DAILY;UNTIL=20270214T221700Z;INTERVAL=1;WKST=MO;BYMINUTE=17,47;BYDAY=MO,TU,WE,TH,FR",
+            "duration": "PT5M",
+            "description": "[hassle:v2 task=00000000-0000-4000-8000-000000000001 incarnation=00000000-0000-4000-8000-000000000002 member=4e60cd76d09f1d17ce2c791b717f086aed1382edbe33cffa59755e6f37fd934d plan=9a6fc369d29f533e91d13c52043db0ad8227d81106dd3acea7a1eefa1b1ee825]\n[chainmail:hourly:v2 minutes=30]\n[hassle:parts:v2 data=aGFzc2xlcy1kYWlseS1wYXJ0cy8yCnRhc2s9MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxCmluY2FybmF0aW9uPTAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMgp0aW1lem9uZT1BdXN0cmFsaWEvTWVsYm91cm5lCnN0YXJ0PTIwMjctMDItMTJUMTY6NDcKbWludXRlcz0zMAp3b3JrPTEKdW50aWw9MjAyNy0wMi0xNVQwOToxNwptZW1iZXI9MDksMjAyNy0wMi0xNVQwOToxNyw1MmJlYmMyYjAxNGMxNWE5YjJkOTM2ZGY2YWNhOGZiYWQ3YWMxNmZlY2Y3NjRkOTBmOWRmNTg1MzBhZTYxZmNhCm1lbWJlcj0xNiwyMDI3LTAyLTEyVDE2OjQ3LDRlNjBjZDc2ZDA5ZjFkMTdjZTJjNzkxYjcxN2YwODZhZWQxMzgyZWRiZTMzY2ZmYTU5NzU1ZTZmMzdmZDkzNGQK]"
+          }
+        ]
+      }
+    },
+    {
+      "name": "workhalf-Friday10:47",
+      "task": "00000000-0000-4000-8000-000000000001",
+      "incarnation": "00000000-0000-4000-8000-000000000002",
+      "input": {
+        "title": "Synthetic",
+        "start": "2027-02-12T10:47",
+        "timeZone": "Australia/Melbourne",
+        "cadence": "hourly",
+        "interval": 0.5,
+        "until": "",
+        "workHours": true
+      },
+      "expected": {
+        "payload": "hassles-daily-parts/2\ntask=00000000-0000-4000-8000-000000000001\nincarnation=00000000-0000-4000-8000-000000000002\ntimezone=Australia/Melbourne\nstart=2027-02-12T10:47\nminutes=30\nwork=1\nuntil=-\nmember=09,2027-02-15T09:17,52bebc2b014c15a9b2d936df6aca8fbad7ac16fecf764d90f9df58530ae61fca\nmember=10,2027-02-12T10:47,80a4df2a740ecd565c4d70b2c88ad0ef84f229969762445c2644b6711e7a92e6\nmember=11,2027-02-12T11:17,46e4110fdb33c31e47b223fd07aa8184694694b6494f02203fd68e76ca494790\nmember=12,2027-02-12T12:17,56bd2d7351f4fb002dd27dfe6d33e1c1c73b5c307dc8fd881f1b24535176ef78\nmember=13,2027-02-12T13:17,b5a1481a07f6f88ef42d8f44af8386fa9e7504bf4b38e3fd37c046b4b291da2c\nmember=14,2027-02-12T14:17,f2028255d413c9b2a9574a21667101462da1963a8cde4652363779f574f04e0f\nmember=15,2027-02-12T15:17,77a462e9a288216ef992210baa89bafb39911ea74977ce7733d7b3a65ae33cc0\nmember=16,2027-02-12T16:17,4e60cd76d09f1d17ce2c791b717f086aed1382edbe33cffa59755e6f37fd934d\n",
+        "planHash": "caf34a5d18f5de1a86a3853bba4215f5e183a5013c7288b270d625bd2cbdbb4a",
+        "members": [
+          {
+            "hour": 9,
+            "memberID": "52bebc2b014c15a9b2d936df6aca8fbad7ac16fecf764d90f9df58530ae61fca",
+            "anchorLocal": "2027-02-15T09:17",
+            "anchorEpochMillis": 1802643420000,
+            "endEpochMillis": 1802643720000,
+            "minutes": [
+              17,
+              47
+            ],
+            "rrule": "FREQ=DAILY;INTERVAL=1;WKST=MO;BYMINUTE=17,47;BYDAY=MO,TU,WE,TH,FR",
+            "duration": "PT5M",
+            "description": "[hassle:v2 task=00000000-0000-4000-8000-000000000001 incarnation=00000000-0000-4000-8000-000000000002 member=52bebc2b014c15a9b2d936df6aca8fbad7ac16fecf764d90f9df58530ae61fca plan=caf34a5d18f5de1a86a3853bba4215f5e183a5013c7288b270d625bd2cbdbb4a]\n[chainmail:hourly:v2 minutes=30]\n[hassle:parts:v2 data=aGFzc2xlcy1kYWlseS1wYXJ0cy8yCnRhc2s9MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxCmluY2FybmF0aW9uPTAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMgp0aW1lem9uZT1BdXN0cmFsaWEvTWVsYm91cm5lCnN0YXJ0PTIwMjctMDItMTJUMTA6NDcKbWludXRlcz0zMAp3b3JrPTEKdW50aWw9LQptZW1iZXI9MDksMjAyNy0wMi0xNVQwOToxNyw1MmJlYmMyYjAxNGMxNWE5YjJkOTM2ZGY2YWNhOGZiYWQ3YWMxNmZlY2Y3NjRkOTBmOWRmNTg1MzBhZTYxZmNhCm1lbWJlcj0xMCwyMDI3LTAyLTEyVDEwOjQ3LDgwYTRkZjJhNzQwZWNkNTY1YzRkNzBiMmM4OGFkMGVmODRmMjI5OTY5NzYyNDQ1YzI2NDRiNjcxMWU3YTkyZTYKbWVtYmVyPTExLDIwMjctMDItMTJUMTE6MTcsNDZlNDExMGZkYjMzYzMxZTQ3YjIyM2ZkMDdhYTgxODQ2OTQ2OTRiNjQ5NGYwMjIwM2ZkNjhlNzZjYTQ5NDc5MAptZW1iZXI9MTIsMjAyNy0wMi0xMlQxMjoxNyw1NmJkMmQ3MzUxZjRmYjAwMmRkMjdkZmU2ZDMzZTFjMWM3M2I1YzMwN2RjOGZkODgxZjFiMjQ1MzUxNzZlZjc4Cm1lbWJlcj0xMywyMDI3LTAyLTEyVDEzOjE3LGI1YTE0ODFhMDdmNmY4OGVmNDJkOGY0NGFmODM4NmZhOWU3NTA0YmY0YjM4ZTNmZDM3YzA0NmI0YjI5MWRhMmMKbWVtYmVyPTE0LDIwMjctMDItMTJUMTQ6MTcsZjIwMjgyNTVkNDEzYzliMmE5NTc0YTIxNjY3MTAxNDYyZGExOTYzYThjZGU0NjUyMzYzNzc5ZjU3NGYwNGUwZgptZW1iZXI9MTUsMjAyNy0wMi0xMlQxNToxNyw3N2E0NjJlOWEyODgyMTZlZjk5MjIxMGJhYTg5YmFmYjM5OTExZWE3NDk3N2NlNzczM2Q3YjNhNjVhZTMzY2MwCm1lbWJlcj0xNiwyMDI3LTAyLTEyVDE2OjE3LDRlNjBjZDc2ZDA5ZjFkMTdjZTJjNzkxYjcxN2YwODZhZWQxMzgyZWRiZTMzY2ZmYTU5NzU1ZTZmMzdmZDkzNGQK]"
+          },
+          {
+            "hour": 10,
+            "memberID": "80a4df2a740ecd565c4d70b2c88ad0ef84f229969762445c2644b6711e7a92e6",
+            "anchorLocal": "2027-02-12T10:47",
+            "anchorEpochMillis": 1802389620000,
+            "endEpochMillis": 1802389920000,
+            "minutes": [
+              17,
+              47
+            ],
+            "rrule": "FREQ=DAILY;INTERVAL=1;WKST=MO;BYMINUTE=17,47;BYDAY=MO,TU,WE,TH,FR",
+            "duration": "PT5M",
+            "description": "[hassle:v2 task=00000000-0000-4000-8000-000000000001 incarnation=00000000-0000-4000-8000-000000000002 member=80a4df2a740ecd565c4d70b2c88ad0ef84f229969762445c2644b6711e7a92e6 plan=caf34a5d18f5de1a86a3853bba4215f5e183a5013c7288b270d625bd2cbdbb4a]\n[chainmail:hourly:v2 minutes=30]\n[hassle:parts:v2 data=aGFzc2xlcy1kYWlseS1wYXJ0cy8yCnRhc2s9MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxCmluY2FybmF0aW9uPTAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMgp0aW1lem9uZT1BdXN0cmFsaWEvTWVsYm91cm5lCnN0YXJ0PTIwMjctMDItMTJUMTA6NDcKbWludXRlcz0zMAp3b3JrPTEKdW50aWw9LQptZW1iZXI9MDksMjAyNy0wMi0xNVQwOToxNyw1MmJlYmMyYjAxNGMxNWE5YjJkOTM2ZGY2YWNhOGZiYWQ3YWMxNmZlY2Y3NjRkOTBmOWRmNTg1MzBhZTYxZmNhCm1lbWJlcj0xMCwyMDI3LTAyLTEyVDEwOjQ3LDgwYTRkZjJhNzQwZWNkNTY1YzRkNzBiMmM4OGFkMGVmODRmMjI5OTY5NzYyNDQ1YzI2NDRiNjcxMWU3YTkyZTYKbWVtYmVyPTExLDIwMjctMDItMTJUMTE6MTcsNDZlNDExMGZkYjMzYzMxZTQ3YjIyM2ZkMDdhYTgxODQ2OTQ2OTRiNjQ5NGYwMjIwM2ZkNjhlNzZjYTQ5NDc5MAptZW1iZXI9MTIsMjAyNy0wMi0xMlQxMjoxNyw1NmJkMmQ3MzUxZjRmYjAwMmRkMjdkZmU2ZDMzZTFjMWM3M2I1YzMwN2RjOGZkODgxZjFiMjQ1MzUxNzZlZjc4Cm1lbWJlcj0xMywyMDI3LTAyLTEyVDEzOjE3LGI1YTE0ODFhMDdmNmY4OGVmNDJkOGY0NGFmODM4NmZhOWU3NTA0YmY0YjM4ZTNmZDM3YzA0NmI0YjI5MWRhMmMKbWVtYmVyPTE0LDIwMjctMDItMTJUMTQ6MTcsZjIwMjgyNTVkNDEzYzliMmE5NTc0YTIxNjY3MTAxNDYyZGExOTYzYThjZGU0NjUyMzYzNzc5ZjU3NGYwNGUwZgptZW1iZXI9MTUsMjAyNy0wMi0xMlQxNToxNyw3N2E0NjJlOWEyODgyMTZlZjk5MjIxMGJhYTg5YmFmYjM5OTExZWE3NDk3N2NlNzczM2Q3YjNhNjVhZTMzY2MwCm1lbWJlcj0xNiwyMDI3LTAyLTEyVDE2OjE3LDRlNjBjZDc2ZDA5ZjFkMTdjZTJjNzkxYjcxN2YwODZhZWQxMzgyZWRiZTMzY2ZmYTU5NzU1ZTZmMzdmZDkzNGQK]"
+          },
+          {
+            "hour": 11,
+            "memberID": "46e4110fdb33c31e47b223fd07aa8184694694b6494f02203fd68e76ca494790",
+            "anchorLocal": "2027-02-12T11:17",
+            "anchorEpochMillis": 1802391420000,
+            "endEpochMillis": 1802391720000,
+            "minutes": [
+              17,
+              47
+            ],
+            "rrule": "FREQ=DAILY;INTERVAL=1;WKST=MO;BYMINUTE=17,47;BYDAY=MO,TU,WE,TH,FR",
+            "duration": "PT5M",
+            "description": "[hassle:v2 task=00000000-0000-4000-8000-000000000001 incarnation=00000000-0000-4000-8000-000000000002 member=46e4110fdb33c31e47b223fd07aa8184694694b6494f02203fd68e76ca494790 plan=caf34a5d18f5de1a86a3853bba4215f5e183a5013c7288b270d625bd2cbdbb4a]\n[chainmail:hourly:v2 minutes=30]\n[hassle:parts:v2 data=aGFzc2xlcy1kYWlseS1wYXJ0cy8yCnRhc2s9MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxCmluY2FybmF0aW9uPTAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMgp0aW1lem9uZT1BdXN0cmFsaWEvTWVsYm91cm5lCnN0YXJ0PTIwMjctMDItMTJUMTA6NDcKbWludXRlcz0zMAp3b3JrPTEKdW50aWw9LQptZW1iZXI9MDksMjAyNy0wMi0xNVQwOToxNyw1MmJlYmMyYjAxNGMxNWE5YjJkOTM2ZGY2YWNhOGZiYWQ3YWMxNmZlY2Y3NjRkOTBmOWRmNTg1MzBhZTYxZmNhCm1lbWJlcj0xMCwyMDI3LTAyLTEyVDEwOjQ3LDgwYTRkZjJhNzQwZWNkNTY1YzRkNzBiMmM4OGFkMGVmODRmMjI5OTY5NzYyNDQ1YzI2NDRiNjcxMWU3YTkyZTYKbWVtYmVyPTExLDIwMjctMDItMTJUMTE6MTcsNDZlNDExMGZkYjMzYzMxZTQ3YjIyM2ZkMDdhYTgxODQ2OTQ2OTRiNjQ5NGYwMjIwM2ZkNjhlNzZjYTQ5NDc5MAptZW1iZXI9MTIsMjAyNy0wMi0xMlQxMjoxNyw1NmJkMmQ3MzUxZjRmYjAwMmRkMjdkZmU2ZDMzZTFjMWM3M2I1YzMwN2RjOGZkODgxZjFiMjQ1MzUxNzZlZjc4Cm1lbWJlcj0xMywyMDI3LTAyLTEyVDEzOjE3LGI1YTE0ODFhMDdmNmY4OGVmNDJkOGY0NGFmODM4NmZhOWU3NTA0YmY0YjM4ZTNmZDM3YzA0NmI0YjI5MWRhMmMKbWVtYmVyPTE0LDIwMjctMDItMTJUMTQ6MTcsZjIwMjgyNTVkNDEzYzliMmE5NTc0YTIxNjY3MTAxNDYyZGExOTYzYThjZGU0NjUyMzYzNzc5ZjU3NGYwNGUwZgptZW1iZXI9MTUsMjAyNy0wMi0xMlQxNToxNyw3N2E0NjJlOWEyODgyMTZlZjk5MjIxMGJhYTg5YmFmYjM5OTExZWE3NDk3N2NlNzczM2Q3YjNhNjVhZTMzY2MwCm1lbWJlcj0xNiwyMDI3LTAyLTEyVDE2OjE3LDRlNjBjZDc2ZDA5ZjFkMTdjZTJjNzkxYjcxN2YwODZhZWQxMzgyZWRiZTMzY2ZmYTU5NzU1ZTZmMzdmZDkzNGQK]"
+          },
+          {
+            "hour": 12,
+            "memberID": "56bd2d7351f4fb002dd27dfe6d33e1c1c73b5c307dc8fd881f1b24535176ef78",
+            "anchorLocal": "2027-02-12T12:17",
+            "anchorEpochMillis": 1802395020000,
+            "endEpochMillis": 1802395320000,
+            "minutes": [
+              17,
+              47
+            ],
+            "rrule": "FREQ=DAILY;INTERVAL=1;WKST=MO;BYMINUTE=17,47;BYDAY=MO,TU,WE,TH,FR",
+            "duration": "PT5M",
+            "description": "[hassle:v2 task=00000000-0000-4000-8000-000000000001 incarnation=00000000-0000-4000-8000-000000000002 member=56bd2d7351f4fb002dd27dfe6d33e1c1c73b5c307dc8fd881f1b24535176ef78 plan=caf34a5d18f5de1a86a3853bba4215f5e183a5013c7288b270d625bd2cbdbb4a]\n[chainmail:hourly:v2 minutes=30]\n[hassle:parts:v2 data=aGFzc2xlcy1kYWlseS1wYXJ0cy8yCnRhc2s9MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxCmluY2FybmF0aW9uPTAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMgp0aW1lem9uZT1BdXN0cmFsaWEvTWVsYm91cm5lCnN0YXJ0PTIwMjctMDItMTJUMTA6NDcKbWludXRlcz0zMAp3b3JrPTEKdW50aWw9LQptZW1iZXI9MDksMjAyNy0wMi0xNVQwOToxNyw1MmJlYmMyYjAxNGMxNWE5YjJkOTM2ZGY2YWNhOGZiYWQ3YWMxNmZlY2Y3NjRkOTBmOWRmNTg1MzBhZTYxZmNhCm1lbWJlcj0xMCwyMDI3LTAyLTEyVDEwOjQ3LDgwYTRkZjJhNzQwZWNkNTY1YzRkNzBiMmM4OGFkMGVmODRmMjI5OTY5NzYyNDQ1YzI2NDRiNjcxMWU3YTkyZTYKbWVtYmVyPTExLDIwMjctMDItMTJUMTE6MTcsNDZlNDExMGZkYjMzYzMxZTQ3YjIyM2ZkMDdhYTgxODQ2OTQ2OTRiNjQ5NGYwMjIwM2ZkNjhlNzZjYTQ5NDc5MAptZW1iZXI9MTIsMjAyNy0wMi0xMlQxMjoxNyw1NmJkMmQ3MzUxZjRmYjAwMmRkMjdkZmU2ZDMzZTFjMWM3M2I1YzMwN2RjOGZkODgxZjFiMjQ1MzUxNzZlZjc4Cm1lbWJlcj0xMywyMDI3LTAyLTEyVDEzOjE3LGI1YTE0ODFhMDdmNmY4OGVmNDJkOGY0NGFmODM4NmZhOWU3NTA0YmY0YjM4ZTNmZDM3YzA0NmI0YjI5MWRhMmMKbWVtYmVyPTE0LDIwMjctMDItMTJUMTQ6MTcsZjIwMjgyNTVkNDEzYzliMmE5NTc0YTIxNjY3MTAxNDYyZGExOTYzYThjZGU0NjUyMzYzNzc5ZjU3NGYwNGUwZgptZW1iZXI9MTUsMjAyNy0wMi0xMlQxNToxNyw3N2E0NjJlOWEyODgyMTZlZjk5MjIxMGJhYTg5YmFmYjM5OTExZWE3NDk3N2NlNzczM2Q3YjNhNjVhZTMzY2MwCm1lbWJlcj0xNiwyMDI3LTAyLTEyVDE2OjE3LDRlNjBjZDc2ZDA5ZjFkMTdjZTJjNzkxYjcxN2YwODZhZWQxMzgyZWRiZTMzY2ZmYTU5NzU1ZTZmMzdmZDkzNGQK]"
+          },
+          {
+            "hour": 13,
+            "memberID": "b5a1481a07f6f88ef42d8f44af8386fa9e7504bf4b38e3fd37c046b4b291da2c",
+            "anchorLocal": "2027-02-12T13:17",
+            "anchorEpochMillis": 1802398620000,
+            "endEpochMillis": 1802398920000,
+            "minutes": [
+              17,
+              47
+            ],
+            "rrule": "FREQ=DAILY;INTERVAL=1;WKST=MO;BYMINUTE=17,47;BYDAY=MO,TU,WE,TH,FR",
+            "duration": "PT5M",
+            "description": "[hassle:v2 task=00000000-0000-4000-8000-000000000001 incarnation=00000000-0000-4000-8000-000000000002 member=b5a1481a07f6f88ef42d8f44af8386fa9e7504bf4b38e3fd37c046b4b291da2c plan=caf34a5d18f5de1a86a3853bba4215f5e183a5013c7288b270d625bd2cbdbb4a]\n[chainmail:hourly:v2 minutes=30]\n[hassle:parts:v2 data=aGFzc2xlcy1kYWlseS1wYXJ0cy8yCnRhc2s9MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxCmluY2FybmF0aW9uPTAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMgp0aW1lem9uZT1BdXN0cmFsaWEvTWVsYm91cm5lCnN0YXJ0PTIwMjctMDItMTJUMTA6NDcKbWludXRlcz0zMAp3b3JrPTEKdW50aWw9LQptZW1iZXI9MDksMjAyNy0wMi0xNVQwOToxNyw1MmJlYmMyYjAxNGMxNWE5YjJkOTM2ZGY2YWNhOGZiYWQ3YWMxNmZlY2Y3NjRkOTBmOWRmNTg1MzBhZTYxZmNhCm1lbWJlcj0xMCwyMDI3LTAyLTEyVDEwOjQ3LDgwYTRkZjJhNzQwZWNkNTY1YzRkNzBiMmM4OGFkMGVmODRmMjI5OTY5NzYyNDQ1YzI2NDRiNjcxMWU3YTkyZTYKbWVtYmVyPTExLDIwMjctMDItMTJUMTE6MTcsNDZlNDExMGZkYjMzYzMxZTQ3YjIyM2ZkMDdhYTgxODQ2OTQ2OTRiNjQ5NGYwMjIwM2ZkNjhlNzZjYTQ5NDc5MAptZW1iZXI9MTIsMjAyNy0wMi0xMlQxMjoxNyw1NmJkMmQ3MzUxZjRmYjAwMmRkMjdkZmU2ZDMzZTFjMWM3M2I1YzMwN2RjOGZkODgxZjFiMjQ1MzUxNzZlZjc4Cm1lbWJlcj0xMywyMDI3LTAyLTEyVDEzOjE3LGI1YTE0ODFhMDdmNmY4OGVmNDJkOGY0NGFmODM4NmZhOWU3NTA0YmY0YjM4ZTNmZDM3YzA0NmI0YjI5MWRhMmMKbWVtYmVyPTE0LDIwMjctMDItMTJUMTQ6MTcsZjIwMjgyNTVkNDEzYzliMmE5NTc0YTIxNjY3MTAxNDYyZGExOTYzYThjZGU0NjUyMzYzNzc5ZjU3NGYwNGUwZgptZW1iZXI9MTUsMjAyNy0wMi0xMlQxNToxNyw3N2E0NjJlOWEyODgyMTZlZjk5MjIxMGJhYTg5YmFmYjM5OTExZWE3NDk3N2NlNzczM2Q3YjNhNjVhZTMzY2MwCm1lbWJlcj0xNiwyMDI3LTAyLTEyVDE2OjE3LDRlNjBjZDc2ZDA5ZjFkMTdjZTJjNzkxYjcxN2YwODZhZWQxMzgyZWRiZTMzY2ZmYTU5NzU1ZTZmMzdmZDkzNGQK]"
+          },
+          {
+            "hour": 14,
+            "memberID": "f2028255d413c9b2a9574a21667101462da1963a8cde4652363779f574f04e0f",
+            "anchorLocal": "2027-02-12T14:17",
+            "anchorEpochMillis": 1802402220000,
+            "endEpochMillis": 1802402520000,
+            "minutes": [
+              17,
+              47
+            ],
+            "rrule": "FREQ=DAILY;INTERVAL=1;WKST=MO;BYMINUTE=17,47;BYDAY=MO,TU,WE,TH,FR",
+            "duration": "PT5M",
+            "description": "[hassle:v2 task=00000000-0000-4000-8000-000000000001 incarnation=00000000-0000-4000-8000-000000000002 member=f2028255d413c9b2a9574a21667101462da1963a8cde4652363779f574f04e0f plan=caf34a5d18f5de1a86a3853bba4215f5e183a5013c7288b270d625bd2cbdbb4a]\n[chainmail:hourly:v2 minutes=30]\n[hassle:parts:v2 data=aGFzc2xlcy1kYWlseS1wYXJ0cy8yCnRhc2s9MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxCmluY2FybmF0aW9uPTAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMgp0aW1lem9uZT1BdXN0cmFsaWEvTWVsYm91cm5lCnN0YXJ0PTIwMjctMDItMTJUMTA6NDcKbWludXRlcz0zMAp3b3JrPTEKdW50aWw9LQptZW1iZXI9MDksMjAyNy0wMi0xNVQwOToxNyw1MmJlYmMyYjAxNGMxNWE5YjJkOTM2ZGY2YWNhOGZiYWQ3YWMxNmZlY2Y3NjRkOTBmOWRmNTg1MzBhZTYxZmNhCm1lbWJlcj0xMCwyMDI3LTAyLTEyVDEwOjQ3LDgwYTRkZjJhNzQwZWNkNTY1YzRkNzBiMmM4OGFkMGVmODRmMjI5OTY5NzYyNDQ1YzI2NDRiNjcxMWU3YTkyZTYKbWVtYmVyPTExLDIwMjctMDItMTJUMTE6MTcsNDZlNDExMGZkYjMzYzMxZTQ3YjIyM2ZkMDdhYTgxODQ2OTQ2OTRiNjQ5NGYwMjIwM2ZkNjhlNzZjYTQ5NDc5MAptZW1iZXI9MTIsMjAyNy0wMi0xMlQxMjoxNyw1NmJkMmQ3MzUxZjRmYjAwMmRkMjdkZmU2ZDMzZTFjMWM3M2I1YzMwN2RjOGZkODgxZjFiMjQ1MzUxNzZlZjc4Cm1lbWJlcj0xMywyMDI3LTAyLTEyVDEzOjE3LGI1YTE0ODFhMDdmNmY4OGVmNDJkOGY0NGFmODM4NmZhOWU3NTA0YmY0YjM4ZTNmZDM3YzA0NmI0YjI5MWRhMmMKbWVtYmVyPTE0LDIwMjctMDItMTJUMTQ6MTcsZjIwMjgyNTVkNDEzYzliMmE5NTc0YTIxNjY3MTAxNDYyZGExOTYzYThjZGU0NjUyMzYzNzc5ZjU3NGYwNGUwZgptZW1iZXI9MTUsMjAyNy0wMi0xMlQxNToxNyw3N2E0NjJlOWEyODgyMTZlZjk5MjIxMGJhYTg5YmFmYjM5OTExZWE3NDk3N2NlNzczM2Q3YjNhNjVhZTMzY2MwCm1lbWJlcj0xNiwyMDI3LTAyLTEyVDE2OjE3LDRlNjBjZDc2ZDA5ZjFkMTdjZTJjNzkxYjcxN2YwODZhZWQxMzgyZWRiZTMzY2ZmYTU5NzU1ZTZmMzdmZDkzNGQK]"
+          },
+          {
+            "hour": 15,
+            "memberID": "77a462e9a288216ef992210baa89bafb39911ea74977ce7733d7b3a65ae33cc0",
+            "anchorLocal": "2027-02-12T15:17",
+            "anchorEpochMillis": 1802405820000,
+            "endEpochMillis": 1802406120000,
+            "minutes": [
+              17,
+              47
+            ],
+            "rrule": "FREQ=DAILY;INTERVAL=1;WKST=MO;BYMINUTE=17,47;BYDAY=MO,TU,WE,TH,FR",
+            "duration": "PT5M",
+            "description": "[hassle:v2 task=00000000-0000-4000-8000-000000000001 incarnation=00000000-0000-4000-8000-000000000002 member=77a462e9a288216ef992210baa89bafb39911ea74977ce7733d7b3a65ae33cc0 plan=caf34a5d18f5de1a86a3853bba4215f5e183a5013c7288b270d625bd2cbdbb4a]\n[chainmail:hourly:v2 minutes=30]\n[hassle:parts:v2 data=aGFzc2xlcy1kYWlseS1wYXJ0cy8yCnRhc2s9MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxCmluY2FybmF0aW9uPTAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMgp0aW1lem9uZT1BdXN0cmFsaWEvTWVsYm91cm5lCnN0YXJ0PTIwMjctMDItMTJUMTA6NDcKbWludXRlcz0zMAp3b3JrPTEKdW50aWw9LQptZW1iZXI9MDksMjAyNy0wMi0xNVQwOToxNyw1MmJlYmMyYjAxNGMxNWE5YjJkOTM2ZGY2YWNhOGZiYWQ3YWMxNmZlY2Y3NjRkOTBmOWRmNTg1MzBhZTYxZmNhCm1lbWJlcj0xMCwyMDI3LTAyLTEyVDEwOjQ3LDgwYTRkZjJhNzQwZWNkNTY1YzRkNzBiMmM4OGFkMGVmODRmMjI5OTY5NzYyNDQ1YzI2NDRiNjcxMWU3YTkyZTYKbWVtYmVyPTExLDIwMjctMDItMTJUMTE6MTcsNDZlNDExMGZkYjMzYzMxZTQ3YjIyM2ZkMDdhYTgxODQ2OTQ2OTRiNjQ5NGYwMjIwM2ZkNjhlNzZjYTQ5NDc5MAptZW1iZXI9MTIsMjAyNy0wMi0xMlQxMjoxNyw1NmJkMmQ3MzUxZjRmYjAwMmRkMjdkZmU2ZDMzZTFjMWM3M2I1YzMwN2RjOGZkODgxZjFiMjQ1MzUxNzZlZjc4Cm1lbWJlcj0xMywyMDI3LTAyLTEyVDEzOjE3LGI1YTE0ODFhMDdmNmY4OGVmNDJkOGY0NGFmODM4NmZhOWU3NTA0YmY0YjM4ZTNmZDM3YzA0NmI0YjI5MWRhMmMKbWVtYmVyPTE0LDIwMjctMDItMTJUMTQ6MTcsZjIwMjgyNTVkNDEzYzliMmE5NTc0YTIxNjY3MTAxNDYyZGExOTYzYThjZGU0NjUyMzYzNzc5ZjU3NGYwNGUwZgptZW1iZXI9MTUsMjAyNy0wMi0xMlQxNToxNyw3N2E0NjJlOWEyODgyMTZlZjk5MjIxMGJhYTg5YmFmYjM5OTExZWE3NDk3N2NlNzczM2Q3YjNhNjVhZTMzY2MwCm1lbWJlcj0xNiwyMDI3LTAyLTEyVDE2OjE3LDRlNjBjZDc2ZDA5ZjFkMTdjZTJjNzkxYjcxN2YwODZhZWQxMzgyZWRiZTMzY2ZmYTU5NzU1ZTZmMzdmZDkzNGQK]"
+          },
+          {
+            "hour": 16,
+            "memberID": "4e60cd76d09f1d17ce2c791b717f086aed1382edbe33cffa59755e6f37fd934d",
+            "anchorLocal": "2027-02-12T16:17",
+            "anchorEpochMillis": 1802409420000,
+            "endEpochMillis": 1802409720000,
+            "minutes": [
+              17,
+              47
+            ],
+            "rrule": "FREQ=DAILY;INTERVAL=1;WKST=MO;BYMINUTE=17,47;BYDAY=MO,TU,WE,TH,FR",
+            "duration": "PT5M",
+            "description": "[hassle:v2 task=00000000-0000-4000-8000-000000000001 incarnation=00000000-0000-4000-8000-000000000002 member=4e60cd76d09f1d17ce2c791b717f086aed1382edbe33cffa59755e6f37fd934d plan=caf34a5d18f5de1a86a3853bba4215f5e183a5013c7288b270d625bd2cbdbb4a]\n[chainmail:hourly:v2 minutes=30]\n[hassle:parts:v2 data=aGFzc2xlcy1kYWlseS1wYXJ0cy8yCnRhc2s9MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxCmluY2FybmF0aW9uPTAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMgp0aW1lem9uZT1BdXN0cmFsaWEvTWVsYm91cm5lCnN0YXJ0PTIwMjctMDItMTJUMTA6NDcKbWludXRlcz0zMAp3b3JrPTEKdW50aWw9LQptZW1iZXI9MDksMjAyNy0wMi0xNVQwOToxNyw1MmJlYmMyYjAxNGMxNWE5YjJkOTM2ZGY2YWNhOGZiYWQ3YWMxNmZlY2Y3NjRkOTBmOWRmNTg1MzBhZTYxZmNhCm1lbWJlcj0xMCwyMDI3LTAyLTEyVDEwOjQ3LDgwYTRkZjJhNzQwZWNkNTY1YzRkNzBiMmM4OGFkMGVmODRmMjI5OTY5NzYyNDQ1YzI2NDRiNjcxMWU3YTkyZTYKbWVtYmVyPTExLDIwMjctMDItMTJUMTE6MTcsNDZlNDExMGZkYjMzYzMxZTQ3YjIyM2ZkMDdhYTgxODQ2OTQ2OTRiNjQ5NGYwMjIwM2ZkNjhlNzZjYTQ5NDc5MAptZW1iZXI9MTIsMjAyNy0wMi0xMlQxMjoxNyw1NmJkMmQ3MzUxZjRmYjAwMmRkMjdkZmU2ZDMzZTFjMWM3M2I1YzMwN2RjOGZkODgxZjFiMjQ1MzUxNzZlZjc4Cm1lbWJlcj0xMywyMDI3LTAyLTEyVDEzOjE3LGI1YTE0ODFhMDdmNmY4OGVmNDJkOGY0NGFmODM4NmZhOWU3NTA0YmY0YjM4ZTNmZDM3YzA0NmI0YjI5MWRhMmMKbWVtYmVyPTE0LDIwMjctMDItMTJUMTQ6MTcsZjIwMjgyNTVkNDEzYzliMmE5NTc0YTIxNjY3MTAxNDYyZGExOTYzYThjZGU0NjUyMzYzNzc5ZjU3NGYwNGUwZgptZW1iZXI9MTUsMjAyNy0wMi0xMlQxNToxNyw3N2E0NjJlOWEyODgyMTZlZjk5MjIxMGJhYTg5YmFmYjM5OTExZWE3NDk3N2NlNzczM2Q3YjNhNjVhZTMzY2MwCm1lbWJlcj0xNiwyMDI3LTAyLTEyVDE2OjE3LDRlNjBjZDc2ZDA5ZjFkMTdjZTJjNzkxYjcxN2YwODZhZWQxMzgyZWRiZTMzY2ZmYTU5NzU1ZTZmMzdmZDkzNGQK]"
+          }
+        ]
+      }
+    },
+    {
+      "name": "spring01:59-five-elapsed-minutes",
+      "task": "00000000-0000-4000-8000-000000000001",
+      "incarnation": "00000000-0000-4000-8000-000000000002",
+      "input": {
+        "title": "Synthetic",
+        "start": "2027-10-03T01:59",
+        "timeZone": "Australia/Melbourne",
+        "cadence": "hourly",
+        "interval": 24.0,
+        "until": "",
+        "workHours": false
+      },
+      "expected": {
+        "payload": "hassles-daily-parts/2\ntask=00000000-0000-4000-8000-000000000001\nincarnation=00000000-0000-4000-8000-000000000002\ntimezone=Australia/Melbourne\nstart=2027-10-03T01:59\nminutes=1440\nwork=0\nuntil=-\nmember=01,2027-10-03T01:59,262458825bf9c2ac8cb5b70add49fa2a660fd092b2ab0e21bd164ef91ba7ad81\n",
+        "planHash": "4c60e7a0cee63e4cd18709e955019d73d7832badc3d5f1b5e0da35bed5694552",
+        "members": [
+          {
+            "hour": 1,
+            "memberID": "262458825bf9c2ac8cb5b70add49fa2a660fd092b2ab0e21bd164ef91ba7ad81",
+            "anchorLocal": "2027-10-03T01:59",
+            "anchorEpochMillis": 1822492740000,
+            "endEpochMillis": 1822493040000,
+            "minutes": [
+              59
+            ],
+            "rrule": "FREQ=DAILY;INTERVAL=1;WKST=MO;BYMINUTE=59",
+            "duration": "PT5M",
+            "description": "[hassle:v2 task=00000000-0000-4000-8000-000000000001 incarnation=00000000-0000-4000-8000-000000000002 member=262458825bf9c2ac8cb5b70add49fa2a660fd092b2ab0e21bd164ef91ba7ad81 plan=4c60e7a0cee63e4cd18709e955019d73d7832badc3d5f1b5e0da35bed5694552]\n[chainmail:hourly:v2 minutes=1440]\n[hassle:parts:v2 data=aGFzc2xlcy1kYWlseS1wYXJ0cy8yCnRhc2s9MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxCmluY2FybmF0aW9uPTAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMgp0aW1lem9uZT1BdXN0cmFsaWEvTWVsYm91cm5lCnN0YXJ0PTIwMjctMTAtMDNUMDE6NTkKbWludXRlcz0xNDQwCndvcms9MAp1bnRpbD0tCm1lbWJlcj0wMSwyMDI3LTEwLTAzVDAxOjU5LDI2MjQ1ODgyNWJmOWMyYWM4Y2I1YjcwYWRkNDlmYTJhNjYwZmQwOTJiMmFiMGUyMWJkMTY0ZWY5MWJhN2FkODEK]"
+          }
+        ]
+      }
+    },
+    {
+      "name": "fall01:59-five-elapsed-minutes",
+      "task": "00000000-0000-4000-8000-000000000001",
+      "incarnation": "00000000-0000-4000-8000-000000000002",
+      "input": {
+        "title": "Synthetic",
+        "start": "2027-04-04T01:59",
+        "timeZone": "Australia/Melbourne",
+        "cadence": "hourly",
+        "interval": 24.0,
+        "until": "",
+        "workHours": false
+      },
+      "expected": {
+        "payload": "hassles-daily-parts/2\ntask=00000000-0000-4000-8000-000000000001\nincarnation=00000000-0000-4000-8000-000000000002\ntimezone=Australia/Melbourne\nstart=2027-04-04T01:59\nminutes=1440\nwork=0\nuntil=-\nmember=01,2027-04-04T01:59,262458825bf9c2ac8cb5b70add49fa2a660fd092b2ab0e21bd164ef91ba7ad81\n",
+        "planHash": "d1499d136009e9c978c45e4b012c6fb24989f995139ad311b980c94fb443ada4",
+        "members": [
+          {
+            "hour": 1,
+            "memberID": "262458825bf9c2ac8cb5b70add49fa2a660fd092b2ab0e21bd164ef91ba7ad81",
+            "anchorLocal": "2027-04-04T01:59",
+            "anchorEpochMillis": 1806764340000,
+            "endEpochMillis": 1806764640000,
+            "minutes": [
+              59
+            ],
+            "rrule": "FREQ=DAILY;INTERVAL=1;WKST=MO;BYMINUTE=59",
+            "duration": "PT5M",
+            "description": "[hassle:v2 task=00000000-0000-4000-8000-000000000001 incarnation=00000000-0000-4000-8000-000000000002 member=262458825bf9c2ac8cb5b70add49fa2a660fd092b2ab0e21bd164ef91ba7ad81 plan=d1499d136009e9c978c45e4b012c6fb24989f995139ad311b980c94fb443ada4]\n[chainmail:hourly:v2 minutes=1440]\n[hassle:parts:v2 data=aGFzc2xlcy1kYWlseS1wYXJ0cy8yCnRhc2s9MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxCmluY2FybmF0aW9uPTAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMgp0aW1lem9uZT1BdXN0cmFsaWEvTWVsYm91cm5lCnN0YXJ0PTIwMjctMDQtMDRUMDE6NTkKbWludXRlcz0xNDQwCndvcms9MAp1bnRpbD0tCm1lbWJlcj0wMSwyMDI3LTA0LTA0VDAxOjU5LDI2MjQ1ODgyNWJmOWMyYWM4Y2I1YjcwYWRkNDlmYTJhNjYwZmQwOTJiMmFiMGUyMWJkMTY0ZWY5MWJhN2FkODEK]"
+          }
+        ]
+      }
+    },
+    {
+      "name": "maxyear-finite-omits-overflow",
+      "task": "00000000-0000-4000-8000-000000000001",
+      "incarnation": "00000000-0000-4000-8000-000000000002",
+      "input": {
+        "title": "Synthetic",
+        "start": "2100-12-31T23:47",
+        "timeZone": "Australia/Melbourne",
+        "cadence": "hourly",
+        "interval": 2.0,
+        "until": "2100-12-31T23:59",
+        "workHours": false
+      },
+      "expected": {
+        "payload": "hassles-daily-parts/2\ntask=00000000-0000-4000-8000-000000000001\nincarnation=00000000-0000-4000-8000-000000000002\ntimezone=Australia/Melbourne\nstart=2100-12-31T23:47\nminutes=120\nwork=0\nuntil=2100-12-31T23:59\nmember=23,2100-12-31T23:47,385a2efe3b6ae222c84cc8afae982b327ff34fb6d911c7f1fde5ec9934fa55b9\n",
+        "planHash": "758e3461b755545a475918f691f0aecfe1dda10f34de95dd9ac30b329af1892c",
+        "members": [
+          {
+            "hour": 23,
+            "memberID": "385a2efe3b6ae222c84cc8afae982b327ff34fb6d911c7f1fde5ec9934fa55b9",
+            "anchorLocal": "2100-12-31T23:47",
+            "anchorEpochMillis": 4133940420000,
+            "endEpochMillis": 4133940720000,
+            "minutes": [
+              47
+            ],
+            "rrule": "FREQ=DAILY;UNTIL=21001231T125900Z;INTERVAL=1;WKST=MO;BYMINUTE=47",
+            "duration": "PT5M",
+            "description": "[hassle:v2 task=00000000-0000-4000-8000-000000000001 incarnation=00000000-0000-4000-8000-000000000002 member=385a2efe3b6ae222c84cc8afae982b327ff34fb6d911c7f1fde5ec9934fa55b9 plan=758e3461b755545a475918f691f0aecfe1dda10f34de95dd9ac30b329af1892c]\n[chainmail:hourly:v2 minutes=120]\n[hassle:parts:v2 data=aGFzc2xlcy1kYWlseS1wYXJ0cy8yCnRhc2s9MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxCmluY2FybmF0aW9uPTAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMgp0aW1lem9uZT1BdXN0cmFsaWEvTWVsYm91cm5lCnN0YXJ0PTIxMDAtMTItMzFUMjM6NDcKbWludXRlcz0xMjAKd29yaz0wCnVudGlsPTIxMDAtMTItMzFUMjM6NTkKbWVtYmVyPTIzLDIxMDAtMTItMzFUMjM6NDcsMzg1YTJlZmUzYjZhZTIyMmM4NGNjOGFmYWU5ODJiMzI3ZmYzNGZiNmQ5MTFjN2YxZmRlNWVjOTkzNGZhNTViOQo]"
+          }
+        ]
+      }
+    }
+  ],
+  "rejections": [
+    {
+      "name": "plain-half",
+      "start": "2027-02-12T09:17",
+      "minutes": 30,
+      "work": false,
+      "until": ""
+    },
+    {
+      "name": "plain-hour",
+      "start": "2027-02-12T09:17",
+      "minutes": 60,
+      "work": false,
+      "until": ""
+    },
+    {
+      "name": "plain2-even",
+      "start": "2027-02-12T10:17",
+      "minutes": 120,
+      "work": false,
+      "until": ""
+    },
+    {
+      "name": "plain24-at02",
+      "start": "2027-02-12T02:17",
+      "minutes": 1440,
+      "work": false,
+      "until": ""
+    },
+    {
+      "name": "hour02-grid-before-tiny-end",
+      "start": "2027-02-12T10:17",
+      "minutes": 120,
+      "work": false,
+      "until": "2027-02-12T10:18"
+    },
+    {
+      "name": "end-equals-start",
+      "start": "2027-02-12T09:17",
+      "minutes": 120,
+      "work": false,
+      "until": "2027-02-12T09:17"
+    },
+    {
+      "name": "work-weekend",
+      "start": "2027-02-13T09:17",
+      "minutes": 120,
+      "work": true,
+      "until": ""
+    },
+    {
+      "name": "work-outside",
+      "start": "2027-02-12T08:17",
+      "minutes": 120,
+      "work": true,
+      "until": ""
+    },
+    {
+      "name": "ambiguous-original",
+      "start": "2027-04-04T02:17",
+      "minutes": 1440,
+      "work": false,
+      "until": ""
+    },
+    {
+      "name": "unbounded-derived-year-overflow",
+      "start": "2100-12-31T23:47",
+      "minutes": 120,
+      "work": false,
+      "until": ""
+    }
+  ]
+}
