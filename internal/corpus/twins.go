@@ -184,6 +184,8 @@ type twinCopy struct {
 	// prose is words again with the markup residue removed: what the positional
 	// test needs, and what the identity gates must not use. See proseWords.
 	prose []string
+	// Exact own-plaintext evidence; mailbox values require a positive mention HTML proof.
+	plain string
 	links quoteLinks
 	atts  int
 	// Fresh graph/recipient evidence, never stored in the body-reduction cache.
@@ -503,6 +505,7 @@ func reduceTwinBody(c *twinCopy, body string) {
 	c.words = copyWords(body, c.bodyHTML, c.quoted)
 	c.prose = proseWords(body, c.bodyHTML, c.quoted)
 	c.links = copyLinks(body, c.bodyHTML, c.quoted)
+	c.plain = plainTwinEvidence(body, c.bodyHTML, c.quoted)
 }
 
 // copyWords is the tokens of what the sender wrote themselves, with the history
@@ -641,7 +644,7 @@ func groupTwinsCount(copies []twinCopy, comparisons *int) ([][]twinCopy, []TwinD
 			// A short copy is only paired with a mailbox copy that can vouch for it
 			// by subject or by sharing its thread; every other pairing still meets
 			// the floor in twinnable, where the refusal names the offset.
-			if short && !shortVouched(copies[i], copies[j]) && !vouchedQuoteLinks(copies[i], copies[j]) {
+			if short && !shortVouched(copies[i], copies[j]) && !vouchedQuoteLinks(copies[i], copies[j]) && !plainTwinnable(copies[i], copies[j]) {
 				continue
 			}
 			if comparisons != nil {
@@ -722,6 +725,9 @@ func twinnable(a, b twinCopy) (string, bool) {
 	// will do" is every second message in a mailbox — so the floor still holds.
 	if (len(a.words) < minTwinTokens || len(b.words) < minTwinTokens) &&
 		!shortVouched(a, b) {
+		if plainTwinnable(a, b) {
+			return "", true
+		}
 		return "the copy at a plausible offset has fewer than 25 words of its own: " +
 			offsetLabel(off), false
 	}
@@ -730,11 +736,17 @@ func twinnable(a, b twinCopy) (string, bool) {
 		short, long = long, short
 	}
 	if recall := float64(textsim.Overlap(short, long)) / float64(len(short)); recall < minTwinRecall {
+		if plainTwinnable(a, b) {
+			return "", true
+		}
 		return fmt.Sprintf("a copy at a plausible offset says something else: %s, "+
 			"holding %.0f%% of the shorter one's words", offsetLabel(off), recall*100), false
 	}
 	if textsim.HeadSimilarity(a.words, b.words, twinHeadRun, twinHeadWindow) < minTwinHead ||
 		textsim.HeadSimilarity(b.words, a.words, twinHeadRun, twinHeadWindow) < minTwinHead {
+		if plainTwinnable(a, b) {
+			return "", true
+		}
 		return "a copy at a plausible offset shares this one's words but not its " +
 			"opening, which is what a shared signature looks like: " + offsetLabel(off), false
 	}
@@ -1298,9 +1310,7 @@ func nearbyCopies(s *Store, person int64, wall time.Time) ([]twinCopy, error) {
 			continue
 		}
 		o.wall = time.Unix(ts, 0).UTC()
-		o.words = copyWords(body, o.bodyHTML, o.quoted)
-		o.prose = proseWords(body, o.bodyHTML, o.quoted)
-		o.links = copyLinks(body, o.bodyHTML, o.quoted)
+		reduceTwinBody(&o, body)
 		out = append(out, o)
 	}
 	if err := rows.Err(); err != nil {
@@ -1328,8 +1338,8 @@ func FindTwin(s *Store, person int64, wall time.Time, text, subject, container s
 	}
 	// No length pre-check: a short block can still be vouched for by a mailbox
 	// copy on the same thread, and twinnable applies the floor per pair.
-	c := twinCopy{quoted: true, wall: wall, subject: subject, container: container,
-		words: copyWords(text, "", true), prose: proseWords(text, "", true), links: copyLinks(text, "", true)}
+	c := twinCopy{quoted: true, wall: wall, subject: subject, container: container}
+	reduceTwinBody(&c, text)
 	near, err := nearbyCopies(s, person, wall)
 	if err != nil {
 		return 0, false, fmt.Errorf("looking for a twin of a recovered block: %w", err)
@@ -1369,8 +1379,8 @@ func FindDerived(s *Store, person int64, wall time.Time, text, subject, containe
 	if person == 0 {
 		return DerivedMatch{}, false, nil
 	}
-	c := twinCopy{quoted: true, wall: wall, subject: subject, container: container,
-		words: copyWords(text, "", true), prose: proseWords(text, "", true), links: copyLinks(text, "", true)}
+	c := twinCopy{quoted: true, wall: wall, subject: subject, container: container}
+	reduceTwinBody(&c, text)
 	near, err := nearbyCopies(s, person, wall)
 	if err != nil {
 		return DerivedMatch{}, false, fmt.Errorf("looking for the base of a modified block: %w", err)

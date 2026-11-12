@@ -23,7 +23,7 @@ func TestTwinBodyCodecAndExactInputs(t *testing.T) {
 				reduceTwinBody(&c, text)
 				payload := encodeTwinBody(&c)
 				var got twinCopy
-				if payload == nil || !decodeTwinBody(payload, &got) || !reflect.DeepEqual(c.words, got.words) || !reflect.DeepEqual(c.prose, got.prose) || !reflect.DeepEqual(c.links, got.links) {
+				if payload == nil || !decodeTwinBody(payload, &got) || !reflect.DeepEqual(c.words, got.words) || !reflect.DeepEqual(c.prose, got.prose) || !reflect.DeepEqual(c.links, got.links) || c.plain != got.plain {
 					t.Fatalf("codec %q %q quoted=%v", text, html, quoted)
 				}
 				key := twinBodyDigest("mail", text, html, quoted)
@@ -70,9 +70,34 @@ func TestTwinBodyMalformedCodec(t *testing.T) {
 	trailing := append(bytes.Clone(good), 0)
 	sum = sha256.Sum256(trailing[sha256.Size:])
 	copy(trailing, sum[:])
-	for _, b := range [][]byte{nil, good[:20], good[:len(good)-1], append([]byte{0}, good[1:]...), badCount, trailing, make([]byte, twinBodyMaxPayload+1)} {
-		before := twinCopy{words: []string{"untouched"}}
-		if decodeTwinBody(b, &before) || !reflect.DeepEqual(before.words, []string{"untouched"}) {
+	malformed := [][]byte{nil, good[:20], good[:len(good)-1], append([]byte{0}, good[1:]...), badCount, trailing, make([]byte, twinBodyMaxPayload+1)}
+	// The fifth array is a singleton empty string here (count + string length).
+	// Terminate each replacement correctly so only singleton validation rejects it.
+	for _, plain := range [][]string{{}, nil, {"", ""}} {
+		badPlain := bytes.Clone(good[:len(good)-8])
+		count := uint32(len(plain))
+		if plain == nil {
+			count = ^uint32(0)
+		}
+		badPlain = binary.LittleEndian.AppendUint32(badPlain, count)
+		for _, value := range plain {
+			badPlain = binary.LittleEndian.AppendUint32(badPlain, uint32(len(value)))
+			badPlain = append(badPlain, value...)
+		}
+		sum = sha256.Sum256(badPlain[sha256.Size:])
+		copy(badPlain, sum[:])
+		malformed = append(malformed, badPlain)
+	}
+	untouched := func() twinCopy {
+		return twinCopy{
+			words: []string{"untouched words"}, prose: []string{"untouched prose"},
+			links: quoteLinks{shape: []string{"untouched", "\x00"}, urls: []string{"https://example.test/Case?x=Y"}, words: 1},
+			plain: "untouched plaintext",
+		}
+	}
+	for _, b := range malformed {
+		before, want := untouched(), untouched()
+		if decodeTwinBody(b, &before) || !reflect.DeepEqual(before, want) {
 			t.Fatal("malformed accepted/partial assignment")
 		}
 	}
@@ -379,7 +404,7 @@ func TestTwinBodyPublicationBatchesAndNewerRace(t *testing.T) {
 	if err != nil || calls != 3 || reconcileState(t, s) != state {
 		t.Fatalf("calls=%d err=%v", calls, err)
 	}
-	if _, err := s.db.Exec(`update twins_body_cache set format_version=2 where entry_id=1`); err != nil {
+	if _, err := s.db.Exec(`update twins_body_cache set format_version=? where entry_id=1`, twinBodyVersion+1); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := publishTwinBodies(context.Background(), rows[:1], state.Source, s.guardedReconcileWrite); err != nil {
@@ -387,7 +412,7 @@ func TestTwinBodyPublicationBatchesAndNewerRace(t *testing.T) {
 	}
 	var version int
 	scanTwinCache(t, s.db.QueryRow(`select format_version from twins_body_cache where entry_id=1`), &version)
-	if version != 2 {
+	if version != twinBodyVersion+1 {
 		t.Fatal("publication downgraded concurrent newer writer")
 	}
 }

@@ -10,7 +10,7 @@ import (
 )
 
 // Bump for changes anywhere in HTML/Peel/preamble/image/token/link reduction.
-const twinBodyVersion = 2
+const twinBodyVersion = 3
 
 // Cache limits do not limit matching: oversized or budget-exhausted entries
 // are reduced normally, without retaining a payload for publication.
@@ -83,8 +83,8 @@ func (cache *twinBodyCache) reduce(c *twinCopy, body, source string, version int
 // Binary length framing preserves arbitrary URL bytes, ordered repetitions, and
 // nil versus empty arrays. Checksum verification precedes all token allocation.
 func encodeTwinBody(c *twinCopy) []byte {
-	arrays := [][]string{c.words, c.prose, c.links.shape, c.links.urls}
-	size, count := sha256.Size+5*4, 0
+	arrays := [][]string{c.words, c.prose, c.links.shape, c.links.urls, {c.plain}}
+	size, count := sha256.Size+6*4, 0
 	for _, a := range arrays {
 		count += len(a)
 		if count > twinBodyMaxStrings {
@@ -119,7 +119,7 @@ func encodeTwinBody(c *twinCopy) []byte {
 }
 
 func decodeTwinBody(payload []byte, c *twinCopy) bool {
-	if len(payload) < sha256.Size+5*4 || len(payload) > twinBodyMaxPayload {
+	if len(payload) < sha256.Size+6*4 || len(payload) > twinBodyMaxPayload {
 		return false
 	}
 	sum := sha256.Sum256(payload[sha256.Size:])
@@ -139,7 +139,7 @@ func decodeTwinBody(payload []byte, c *twinCopy) bool {
 	if words > twinBodyMaxStrings {
 		return false
 	}
-	var arrays [4][]string
+	var arrays [5][]string
 	total := 0
 	for i := range arrays {
 		n, ok := take()
@@ -167,10 +167,11 @@ func decodeTwinBody(payload []byte, c *twinCopy) bool {
 		}
 		arrays[i] = a
 	}
-	if len(p) != 0 {
+	if len(p) != 0 || len(arrays[4]) != 1 {
 		return false
 	}
 	c.words, c.prose = arrays[0], arrays[1]
+	c.plain = arrays[4][0]
 	c.links = quoteLinks{shape: arrays[2], urls: arrays[3], words: int(words)}
 	return true
 }

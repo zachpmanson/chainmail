@@ -63,12 +63,21 @@ func TestSlurpDurableCleanGateAndRestart(t *testing.T) {
 }
 
 func TestSlurpQuoteParserUpgradeInvalidatesOldCheckpoint(t *testing.T) {
+	testSlurpOldRulesCheckpoint(t, 1)
+}
+
+func TestSlurpPlainTwinUpgradeInvalidatesOldCheckpoint(t *testing.T) {
+	testSlurpOldRulesCheckpoint(t, 5)
+}
+
+func testSlurpOldRulesCheckpoint(t *testing.T, version int) {
+	t.Helper()
 	path, s := gateStore(t)
 	if _, err := s.DB().Exec(`insert into people(display_name) values('Ada Example')`); err != nil {
 		t.Fatal(err)
 	}
-	// Version 1 covered these exact source rows before the opener-boundary fix.
-	if _, err := s.DB().Exec(`update reconcile_state set covered_revision=source_revision, rules_version=1, covered_version=1, ready=1`); err != nil {
+	// The old rules covered these exact source rows before this algorithm upgrade.
+	if _, err := s.DB().Exec(`update reconcile_state set covered_revision=source_revision, rules_version=?, covered_version=?, ready=1`, version, version); err != nil {
 		t.Fatal(err)
 	}
 	before, err := s.ReconciliationState()
