@@ -40,9 +40,10 @@ type Reply struct {
 // written in are this package's, and a quote's heading names the same sender and
 // the same instant its own bubble prints. Composing it anywhere else would be a
 // second renderer of one message, which is exactly what the pane and a page build
-// were made to share. The send handler is the only caller, and the body it hands
-// to the mailbox is this — so what the reader is shown as the plan is the message
-// itself rather than a draft of one.
+// were made to share. Draft saves and sends share this composer. A restored draft
+// already carries its quote: only an exact match of this parent's heading and
+// quoted text, at a paragraph boundary, is reused rather than appended again.
+// Words added below a restored quote stay below it in both renderings.
 //
 // The shape is the transcript's own:
 //
@@ -72,6 +73,11 @@ type Reply struct {
 // answer to that message, and a heading with no quote under it says exactly that.
 func ComposeReply(own string, t corpus.ReplyTarget) Reply {
 	head := replyHeading(t)
+	quotedText := quoteText(t.Body)
+	after := ""
+	if before, rest, found := strings.Cut(own, "\n\n"+head+"\n"+quotedText); found && !strings.HasPrefix(strings.TrimLeft(rest, " \t"), ">") {
+		own, after = before+"\n\n", rest
+	}
 
 	var text strings.Builder
 	text.WriteString(own)
@@ -84,7 +90,8 @@ func ComposeReply(own string, t corpus.ReplyTarget) Reply {
 	}
 	text.WriteString(head)
 	text.WriteString("\n")
-	text.WriteString(quoteText(t.Body))
+	text.WriteString(quotedText)
+	text.WriteString(after)
 
 	var html strings.Builder
 	html.WriteString(markdownBlocks(own))
@@ -96,6 +103,8 @@ func ComposeReply(own string, t corpus.ReplyTarget) Reply {
 		html.WriteString(quoted)
 		html.WriteString("\n</blockquote>\n")
 	}
+
+	html.WriteString(markdownBlocks(after))
 
 	return Reply{Text: text.String(), HTML: html.String()}
 }

@@ -234,7 +234,11 @@ preview shows the text part, which is the one that says what the message says.
 **Gmail drafts sync across clients.** Chainmail autosaves compose and reply text to Gmail,
 shows the account's saved drafts in the new-message composer, and automatically resumes a
 reply draft when its Gmail thread is opened. Gmail remains the source of truth; Chainmail
-keeps no draft database. Saving/updating/deleting drafts requires `-draft-mail`
+keeps no draft database. Saved replies include the same attributed plain-text quote as the
+send preview, and restoring a draft retains both the authored text and that quote. An exact
+quote of the same parent is reused on subsequent saves and sends, even when more words
+have been added below it; other quoted text is left alone. Saving/updating/deleting drafts
+requires `-draft-mail`
 (`enableDraftMail` in the Nix module), off by default. Sending a saved draft still requires
 `-send-mail`. Both grants matter because this server is loopback-only with no authentication:
 anyone who can reach it can use an enabled draft-write endpoint. Draft send uses Gmail's

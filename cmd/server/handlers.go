@@ -1997,9 +1997,8 @@ type sendRequest struct {
 	// is to a message: which thread it belongs to is the mailbox's answer, by way of
 	// the In-Reply-To it threads on.
 	Entry string `json:"entry"`
-	// Body is the reader's own words, with no quote in them: the quoted message and
-	// its attribution are added by this server, and the answer's body is what the
-	// two make together.
+	// Body is the editable text. The server adds the parent's quote, or reuses an
+	// exact copy already present in a restored draft.
 	Body string `json:"body"`
 	// Confirm false asks what the reply would be; true sends it. Nothing is written
 	// without it, which is why a client that forgets the field previews rather than

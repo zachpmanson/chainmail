@@ -1964,7 +1964,7 @@ export interface components {
              */
             entry: string;
             /**
-             * @description The reader's own words, with no quote in them: the message being answered, quoted and attributed, is added by this server — so the quote a reply carries is written once, by the same code, whichever client asked for it. An empty body is refused, because the reply would then be the quote alone.
+             * @description The reader's words. The server adds the answered message's attributed quote, or reuses an exact quote of the same parent already present in a restored draft, without duplicating it. Words added below that quote stay below it. Other quoted text is preserved. An empty body is refused.
              * @example The 14th works. I'll confirm the roof access with the fitters.
              */
             body: string;
@@ -2153,6 +2153,7 @@ export interface components {
             to?: string[];
             cc?: string[];
             subject: string;
+            /** @description Draft text. For a reply, the server persists the answered message's attributed plain-text quote beneath it. An exact quote of the same parent in a restored body is reused rather than duplicated, preserving words added below it. New-message drafts are saved unchanged. */
             body: string;
             /** @description Corpus ext id of the Gmail message this draft answers. Omitted to/cc lists use authoritative mailbox defaults; explicit empty lists remain explicit. */
             replyToEntry?: string;
@@ -2168,6 +2169,7 @@ export interface components {
             to?: string;
             cc?: string;
             subject?: string;
+            /** @description Saved plain-text body, including the attributed quote for a Chainmail reply draft. Restored verbatim. */
             body?: string;
         };
         DraftResponse: {

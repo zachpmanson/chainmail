@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/zachpmanson/chainmail/internal/corpus"
+	"github.com/zachpmanson/chainmail/internal/spec"
 
 	"github.com/zachpmanson/chainmail/internal/gmailclient"
 	"google.golang.org/api/googleapi"
@@ -219,6 +220,13 @@ func TestDraftSaveCheckWitnessReplyPlanningAndResolution(t *testing.T) {
 			if tc.status == "supported" {
 				if out.Context != "reply" || len(checker.planned) != 1 || checker.parents[0] != "parent-copy" || checker.planned[0].Subject != "Re: Actual mailbox subject" || checker.planned[0].Cc != "" {
 					t.Fatalf("planning=%+v parents=%v", checker.planned, checker.parents)
+				}
+				target, err := h.store.ReplyTarget("mail:parent")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if checker.planned[0].Body != spec.ComposeReply(d.Body, target).Text {
+					t.Fatalf("save-check did not check the composed draft body: %q", checker.planned[0].Body)
 				}
 				if len(checker.replies) != 1 || checker.replies[0].send || checker.replies[0].cc == nil || len(checker.replies[0].cc) != 0 || len(checker.replies[0].to) != 2 {
 					t.Fatalf("reply=%+v", checker.replies)
