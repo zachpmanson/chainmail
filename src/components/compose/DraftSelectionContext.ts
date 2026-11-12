@@ -7,6 +7,8 @@ export type LeaveSnapshot = {
   /** Explicit From detach witness, separate from view continuity. */
   transferAccountId?: string;
   owner?: string;
+  /** Exact, acknowledged state that a fresh editor can reconstruct without local buffer transfer. */
+  popout?: { accountId: string; id?: string; messageId?: string; target: string };
   kind?: "compose" | "reply";
   destination?: string;
   target?: string;

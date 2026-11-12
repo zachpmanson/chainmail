@@ -53,6 +53,7 @@ const saved: SavedDraft = {
   body: "A / m1",
 };
 const render = domHarness();
+const renderPopup = domHarness();
 const json = (value: unknown, status = 200) =>
   new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json" } });
 function deferred<T>() {
@@ -133,7 +134,7 @@ function View() {
   }
   return search.q ? h(SelectLike) : h(InboxLike);
 }
-async function mount(url = `/?accountId=A&draft=${saved.id}&open=compose`) {
+async function mount(url = `/?accountId=A&draft=${saved.id}&open=compose`, target = render) {
   const root = createRootRoute({ component: Root });
   const index = createRoute({
     getParentRoute: () => root,
@@ -149,7 +150,7 @@ async function mount(url = `/?accountId=A&draft=${saved.id}&open=compose`) {
   });
   const client = makeQueryClient();
   await router.load();
-  const host = await render(h(QueryClientProvider, { client }, h(RouterProvider, { router })));
+  const host = await target(h(QueryClientProvider, { client }, h(RouterProvider, { router })));
   await settle();
   // Detail admission is followed by a separate read-only preflight query.
   await settle();
@@ -957,16 +958,17 @@ describe("authoritative destination and exact parent", () => {
     });
     const open = vi.spyOn(window, "open").mockReturnValue(null);
     const { host, router } = await mount(`/?accountId=A&draft=${saved.id}&open=root`);
-    const link = host.querySelector<HTMLAnchorElement>('[aria-label="Open in new window"]')!;
-    const target = new URL(link.href);
-    expect(Object.fromEntries(target.searchParams)).toEqual({
+    const control = host.querySelector<HTMLButtonElement>('[aria-label="Open in new window"]')!;
+    await pick(control);
+    const target = new URL(String(open.mock.calls[0]![0]));
+    expect(Object.fromEntries(target.searchParams)).toMatchObject({
       open: "root",
       popup: "1",
       draft: saved.id,
       accountId: "A",
+      handoff: expect.any(String),
     });
-    await pick(link);
-    expect(open).toHaveBeenCalledWith(link.href, "_blank", expect.stringContaining("popup=yes"));
+    expect(open).toHaveBeenCalledWith(target.href, "_blank", expect.stringContaining("popup=yes"));
     expect(router.state.location.search.open).toBe("root");
     await settle(750);
     expect(writes).toEqual([]);
@@ -1492,4 +1494,695 @@ describe("quiet live draft workflow", () => {
       expect(writes).toHaveLength(before);
     },
   );
+});
+
+describe("managed popup ownership with two actual editor hosts", () => {
+  it("moves a blank reader only after a noopener destination prepares; Return remounts fresh state", async () => {
+    realHosts = true;
+    let destination = "";
+    vi.spyOn(window, "open").mockImplementation((url) => {
+      destination = String(url);
+      return null;
+    });
+    vi.spyOn(window, "close").mockImplementation(() => {});
+    const source = await mount("/?accountId=A&open=root");
+    expect(source.host.querySelector("textarea")).not.toBeNull();
+    await pick(source.host.querySelector('[aria-label="Open in new window"]')!);
+    expect(source.host.querySelector("textarea")).not.toBeNull();
+    expect(source.host.querySelector("fieldset")!.disabled).toBe(true);
+    expect(window.open).toHaveBeenCalledWith(
+      expect.any(String),
+      "_blank",
+      expect.stringContaining("noopener"),
+    );
+    const popup = await mount(
+      new URL(destination).pathname + new URL(destination).search,
+      renderPopup,
+    );
+    await settle(100);
+    expect(source.host.querySelector("textarea")).toBeNull();
+    expect(source.host.textContent).toContain("This thread is in its own window");
+    expect(popup.host.querySelector("textarea")).not.toBeNull();
+    expect(writes).toEqual([]);
+    await source.navigate({ accountId: "A", open: "different" });
+    await source.navigate({ accountId: "A", open: "root" });
+    expect(source.host.querySelector("textarea")).toBeNull();
+    await pick(button(popup.host, "Return to main window"));
+    await settle(100);
+    expect(popup.host.querySelector("textarea")).toBeNull();
+    expect(source.host.querySelector("textarea")).not.toBeNull();
+    expect(window.close).toHaveBeenCalled();
+    expect(writes).toEqual([]);
+  });
+
+  it("moves a current acknowledged autosave ID absent from the source URL, preserving its exact target", async () => {
+    realHosts = true;
+    let destination = "";
+    vi.spyOn(window, "open").mockImplementation((url) => {
+      destination = String(url);
+      return null;
+    });
+    const source = await mount("/?accountId=A&open=root");
+    await words(source.host, "Only one owner");
+    await settle(750);
+    expect(source.router.state.location.search.draft).toBeUndefined();
+    await pick(source.host.querySelector('[aria-label="Open in new window"]')!);
+    expect(new URL(destination).searchParams.get("draft")).toBe(saved.id);
+    const popup = await mount(
+      new URL(destination).pathname + new URL(destination).search,
+      renderPopup,
+    );
+    await settle(100);
+    expect(source.host.querySelector("textarea")).toBeNull();
+    expect(popup.host.querySelector("textarea")!.value).toBe("Only one owner");
+    expect(writes).toHaveLength(1);
+    await words(popup.host, "Popup owns the next save");
+    await settle(750);
+    expect(writes).toHaveLength(2);
+    expect(writes[1]!.method).toBe("PUT");
+    vi.spyOn(window, "close").mockImplementation(() => {});
+    const beforeReturn = detailReads().length;
+    await pick(button(popup.host, "Return to main window"));
+    await settle(100);
+    expect(source.host.querySelector("textarea")!.value).toBe("Popup owns the next save");
+    expect(detailReads().length).toBeGreaterThan(beforeReturn);
+    expect(writes).toHaveLength(2);
+  });
+
+  it("blocks unsaved debounce, pending save and nondefault options without discarding input", async () => {
+    realHosts = true;
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const source = await mount("/?accountId=A&open=root");
+    await words(source.host, "Unsaved");
+    await pick(source.host.querySelector('[aria-label="Open in new window"]')!);
+    expect(open).not.toHaveBeenCalled();
+    expect(source.host.querySelector("textarea")!.value).toBe("Unsaved");
+    const held = deferred<Response>();
+    mutation = () => held.promise;
+    await settle(750);
+    await pick(source.host.querySelector('[aria-label="Open in new window"]')!);
+    expect(open).not.toHaveBeenCalled();
+    await act(async () =>
+      held.resolve(
+        json({
+          ...saved,
+          kind: "reply",
+          resolution: "resolved",
+          rootId: "root",
+          replyToEntry: "newer",
+          body: "Unsaved",
+        }),
+      ),
+    );
+    await settle();
+    const html = [...source.host.querySelectorAll("input[type=checkbox]")].find((node) =>
+      node.closest("label")?.textContent?.includes("send html"),
+    ) as HTMLInputElement;
+    expect(html).toBeTruthy();
+    await pick(html);
+    await pick(source.host.querySelector('[aria-label="Open in new window"]')!);
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it("retains the source when destination preparation refuses a draft", async () => {
+    realHosts = true;
+    const reply = {
+      ...saved,
+      kind: "reply" as const,
+      resolution: "resolved" as const,
+      rootId: "root",
+      replyToEntry: "older",
+    };
+    store.set(owner("A", saved.id), reply);
+    let destination = "";
+    vi.spyOn(window, "open").mockImplementation((url) => {
+      destination = String(url);
+      return null;
+    });
+    const source = await mount(`/?accountId=A&open=root&draft=${saved.id}`);
+    await pick(source.host.querySelector('[aria-label="Open in new window"]')!);
+    preflight = async () => json({ status: "unsupported", context: "reply" });
+    const popup = await mount(
+      new URL(destination).pathname + new URL(destination).search,
+      renderPopup,
+    );
+    await settle(100);
+    expect(source.host.querySelector("textarea")!.value).toBe(saved.body);
+    expect(source.host.querySelector("fieldset")!.disabled).toBe(false);
+    expect(popup.host.querySelector("textarea")).toBeNull();
+    expect(writes).toEqual([]);
+  });
+});
+
+describe("popup protocol failure boundaries", () => {
+  it("times out a blocked/null popup without releasing the source and rejects mismatched ready messages", async () => {
+    realHosts = true;
+    let destination = "";
+    vi.spyOn(window, "open").mockImplementation((url) => {
+      destination = String(url);
+      return null;
+    });
+    const original = window.setTimeout.bind(window);
+    let timeout: (() => void) | undefined;
+    vi.spyOn(window, "setTimeout").mockImplementation(((
+      handler: TimerHandler,
+      delay?: number,
+      ...args: unknown[]
+    ) => {
+      if (delay === 10000) {
+        timeout = handler as () => void;
+        return 123456789;
+      }
+      return original(handler, delay, ...args);
+    }) as typeof window.setTimeout);
+    const source = await mount("/?accountId=A&open=root");
+    await pick(source.host.querySelector('[aria-label="Open in new window"]')!);
+    const token = new URL(destination).searchParams.get("handoff")!;
+    const unrelated = new BroadcastChannel(`chainmail-popout-${token}`);
+    unrelated.postMessage({
+      type: "ready",
+      location: { root: "other", account: "A", target: "newer" },
+    });
+    await settle();
+    expect(source.host.querySelector("textarea")).not.toBeNull();
+    await source.navigate({ accountId: "A", open: "elsewhere" });
+    expect(source.router.state.location.search.open).toBe("root");
+    await act(async () => timeout!());
+    await settle();
+    expect(source.host.querySelector("textarea")).not.toBeNull();
+    expect(source.host.querySelector("fieldset")!.disabled).toBe(false);
+    expect(source.host.textContent).toContain("No prepared popup replied");
+    unrelated.close();
+  });
+
+  it("keeps malformed managed popup URLs inert without falling back to a reader", async () => {
+    realHosts = true;
+    const popup = await mount("/?accountId=A&open=root&popup=1&handoff=wrong");
+    expect(popup.host.querySelector("textarea")).toBeNull();
+    expect(popup.host.querySelector(".stream")).toBeNull();
+    expect(popup.host.textContent).toContain("could not be verified");
+    expect(writes).toEqual([]);
+  });
+
+  it("returns the current no-ID state after popup discard, never its originally selected draft", async () => {
+    realHosts = true;
+    const reply = {
+      ...saved,
+      kind: "reply" as const,
+      resolution: "resolved" as const,
+      rootId: "root",
+      replyToEntry: "older",
+    };
+    store.set(owner("A", saved.id), reply);
+    let destination = "";
+    vi.spyOn(window, "open").mockImplementation((url) => {
+      destination = String(url);
+      return null;
+    });
+    vi.spyOn(window, "close").mockImplementation(() => {});
+    const source = await mount(`/?accountId=A&open=root&draft=${saved.id}`);
+    await pick(source.host.querySelector('[aria-label="Open in new window"]')!);
+    const popup = await mount(
+      new URL(destination).pathname + new URL(destination).search,
+      renderPopup,
+    );
+    await settle(100);
+    await pick(button(popup.host, "Discard draft"));
+    await settle(100);
+    expect(popup.host.querySelector("textarea")!.value).toBe("");
+    await pick(button(popup.host, "Return to main window"));
+    await settle(100);
+    expect(source.router.state.location.search.draft).toBeUndefined();
+    expect(source.host.querySelector("textarea")!.value).toBe("");
+    expect(writes.map((request) => request.method)).toEqual(["DELETE"]);
+  });
+});
+
+it("freshly admits the same selected draft ID on Return instead of resurrecting the old source detail", async () => {
+  realHosts = true;
+  store.set(owner("A", saved.id), {
+    ...saved,
+    kind: "reply",
+    resolution: "resolved",
+    rootId: "root",
+    replyToEntry: "older",
+  });
+  let destination = "";
+  vi.spyOn(window, "open").mockImplementation((url) => {
+    destination = String(url);
+    return null;
+  });
+  vi.spyOn(window, "close").mockImplementation(() => {});
+  const source = await mount(`/?accountId=A&open=root&draft=${saved.id}`);
+  await pick(source.host.querySelector('[aria-label="Open in new window"]')!);
+  const popup = await mount(
+    new URL(destination).pathname + new URL(destination).search,
+    renderPopup,
+  );
+  await settle(100);
+  await words(popup.host, "Fresh returned words");
+  await settle(750);
+  const beforeReturn = detailReads().length;
+  await pick(button(popup.host, "Return to main window"));
+  await settle(100);
+  expect(source.host.querySelector("textarea")!.value).toBe("Fresh returned words");
+  expect(detailReads().length).toBeGreaterThan(beforeReturn);
+  expect(writes.map((write) => write.method)).toEqual(["PUT"]);
+});
+
+// Regression contracts exercise both real provider/router hosts; transport data stays invented.
+describe("reviewed managed-window boundaries", () => {
+  async function begin(url = "/?accountId=A&open=root") {
+    realHosts = true;
+    let destination = "";
+    vi.spyOn(window, "open").mockImplementation((url) => {
+      destination = String(url);
+      return null;
+    });
+    vi.spyOn(window, "close").mockImplementation(() => {});
+    const source = await mount(url);
+    await pick(source.host.querySelector('[aria-label="Open in new window"]')!);
+    return { source, destination: () => destination };
+  }
+  async function receive(destination: string) {
+    const url = new URL(destination);
+    const popup = await mount(url.pathname + url.search, renderPopup);
+    await settle(100);
+    return popup;
+  }
+  const reply = () => ({
+    ...saved,
+    kind: "reply" as const,
+    resolution: "resolved" as const,
+    rootId: "root",
+    replyToEntry: "older",
+  });
+
+  it("refuses same-ID external revision drift before releasing the source", async () => {
+    store.set(owner("A", saved.id), reply());
+    const { source, destination } = await begin(`/?accountId=A&open=root&draft=${saved.id}`);
+    store.set(owner("A", saved.id), {
+      ...reply(),
+      messageId: "external-m2",
+      body: "External words",
+    });
+    const popup = await receive(destination());
+    expect(source.host.querySelector("textarea")!.value).toBe(saved.body);
+    expect(source.host.querySelector("fieldset")!.disabled).toBe(false);
+    expect(popup.host.querySelector("textarea")).toBeNull();
+    expect(writes).toEqual([]);
+  });
+
+  it("hydrates the checked body, not a later same-ID detail; fresh guards retain that body on drift", async () => {
+    store.set(owner("A", saved.id), reply());
+    const { source, destination } = await begin(`/?accountId=A&open=root&draft=${saved.id}`);
+    let checks = 0;
+    preflight = async () => {
+      if (++checks === 1) {
+        store.set(owner("A", saved.id), {
+          ...reply(),
+          messageId: "external-m2",
+          body: "Different body",
+        });
+        return json({
+          status: "supported",
+          context: "reply",
+          unchangedCompatible: true,
+          bodyEditCompatible: true,
+        });
+      }
+      return json({ status: "revision_changed", context: "reply" });
+    };
+    const popup = await receive(destination());
+    expect(source.host.querySelector("textarea")).toBeNull();
+    expect(popup.host.querySelector("textarea")!.value).toBe(saved.body);
+    expect(popup.host.querySelector("textarea")!.disabled).toBe(true);
+    expect(popup.host.textContent).toContain("changed in Gmail");
+    expect(writes).toEqual([]);
+  });
+
+  it("keeps same-scope draft-card selection managed and blocks ordinary scope escape", async () => {
+    store.set(owner("A", saved.id), reply());
+    const { source, destination } = await begin();
+    const popup = await receive(destination());
+    await pick(button(popup.host, "Open draft"));
+    expect(popup.router.state.location.search.popup).toBe("1");
+    expect(popup.router.state.location.search.handoff).toBe(
+      new URL(destination()).searchParams.get("handoff"),
+    );
+    expect(popup.host.querySelector("textarea")!.value).toBe(saved.body);
+    expect(button(popup.host, "Return to main window")).toBeTruthy();
+    await popup.navigate({ accountId: "A", open: "other" });
+    expect(popup.router.state.location.search.open).toBe("root");
+    expect(popup.host.textContent).toContain("Use Return to main window");
+    await source.navigate({ accountId: "A", open: "other" });
+    expect(source.host.querySelector("textarea")).not.toBeNull();
+    expect(popup.router.state.location.search.open).not.toBe(
+      source.router.state.location.search.open,
+    );
+    expect(writes).toEqual([]);
+  });
+
+  it("preserves pending real AddressField text in both directions, but allows expanded empty fields", async () => {
+    realHosts = true;
+    let destination = "";
+    const open = vi.spyOn(window, "open").mockImplementation((url) => {
+      destination = String(url);
+      return null;
+    });
+    vi.spyOn(window, "close").mockImplementation(() => {});
+    const source = await mount("/?accountId=A&open=root");
+    await pick(source.host.querySelector<HTMLButtonElement>('button[title="Edit recipients"]')!);
+    const input = source.host.querySelector<HTMLInputElement>('[aria-label="to addresses"]')!;
+    await type(input, "not-yet-accepted@example.test");
+    await pick(source.host.querySelector('[aria-label="Open in new window"]')!);
+    expect(open).not.toHaveBeenCalled();
+    expect(input.value).toBe("not-yet-accepted@example.test");
+    await type(input, "");
+    await pick(source.host.querySelector('[aria-label="Open in new window"]')!);
+    const popup = await receive(destination);
+    await pick(popup.host.querySelector<HTMLButtonElement>('button[title="Edit recipients"]')!);
+    const other = popup.host.querySelector<HTMLInputElement>('[aria-label="cc addresses"]')!;
+    await type(other, "pending@example.test");
+    await pick(button(popup.host, "Return to main window"));
+    expect(source.host.querySelector("textarea")).toBeNull();
+    expect(other.value).toBe("pending@example.test");
+    await type(other, "");
+    await pick(button(popup.host, "Return to main window"));
+    await settle(100);
+    expect(popup.host.querySelector("textarea")).toBeNull();
+    expect(source.host.querySelector("textarea")).not.toBeNull();
+    expect(writes).toEqual([]);
+  });
+
+  it("keeps the popup usable on definite Return refusal, then accepts a retry", async () => {
+    store.clear();
+    const { source, destination } = await begin();
+    const popup = await receive(destination());
+    await source.navigate({ accountId: "A", open: "compose" });
+    await pick(button(popup.host, "Return to main window"));
+    await settle(100);
+    expect(popup.host.querySelector("textarea")!.disabled).toBe(false);
+    expect(popup.host.textContent).toContain("cannot accept");
+    expect(source.host.querySelector('aside[aria-label="Compose email"]')).not.toBeNull();
+    await source.navigate({ accountId: "A", open: "root" });
+    await pick(button(popup.host, "Return to main window"));
+    await settle(100);
+    expect(popup.host.querySelector("textarea")).toBeNull();
+    expect(source.host.querySelector("textarea")).not.toBeNull();
+    await settle(750);
+    expect(writes).toEqual([]);
+  });
+
+  it("refuses a changed saved Return revision without dropping the popup buffer", async () => {
+    store.set(owner("A", saved.id), reply());
+    const { source, destination } = await begin(`/?accountId=A&open=root&draft=${saved.id}`);
+    const popup = await receive(destination());
+    store.set(owner("A", saved.id), {
+      ...reply(),
+      messageId: "external-m2",
+      body: "External words",
+    });
+    await pick(button(popup.host, "Return to main window"));
+    await settle(100);
+    expect(popup.host.querySelector("textarea")!.value).toBe(saved.body);
+    expect(popup.host.querySelector("textarea")!.disabled).toBe(false);
+    expect(source.host.querySelector("textarea")).toBeNull();
+    expect(writes).toEqual([]);
+  });
+
+  it.each([false, true])(
+    "moves and returns a verified reader-only thread (hoisted mail: %s)",
+    async (hoisted) => {
+      const original = entries;
+      entries = entries.map((entry) => ({
+        ...entry,
+        source: "slack",
+        permalink: "https://chat.invalid/message",
+      }));
+      if (hoisted) entries = [original[0]!, { ...entries[1]!, edits: [{ id: "older" }] }];
+      const { source, destination } = await begin();
+      expect(source.host.querySelector("textarea")).toBeNull();
+      const popup = await receive(destination());
+      expect(source.host.querySelector(".stream")).toBeNull();
+      expect(popup.host.querySelector(".stream")).not.toBeNull();
+      expect(popup.host.querySelector("textarea")).toBeNull();
+      await pick(button(popup.host, "Return to main window"));
+      await settle(100);
+      expect(source.host.querySelector(".stream")).not.toBeNull();
+      expect(popup.host.querySelector(".stream")).toBeNull();
+      expect(writes).toEqual([]);
+    },
+  );
+
+  it.each(["/?q=chat&open=root", "/?label=&open=root"])(
+    "moves and returns a verified unscoped reader in %s without selecting a mailbox",
+    async (url) => {
+      entries = entries.map((entry) => ({
+        ...entry,
+        source: "slack",
+        permalink: "https://chat.invalid/message",
+      }));
+      const { source, destination } = await begin(url);
+      expect(new URL(destination()).searchParams.get("accountId")).toBe("");
+      const popup = await receive(destination());
+      expect(source.host.querySelector(".stream")).toBeNull();
+      expect(popup.host.querySelector(".stream")).not.toBeNull();
+      expect(popup.host.querySelector("textarea")).toBeNull();
+      await pick(button(popup.host, "Return to main window"));
+      await settle(100);
+      expect(source.router.state.location.search.accountId).toBe("");
+      expect(source.host.querySelector(".stream")).not.toBeNull();
+      expect(popup.host.querySelector(".stream")).toBeNull();
+      expect(
+        reads.filter((url) => url.startsWith("/v1/chains/") && url.includes("accountId=A")),
+      ).toEqual([]);
+      expect(writes).toEqual([]);
+    },
+  );
+
+  it("does not admit an unscoped reply offer through the reader-only exception", async () => {
+    realHosts = true;
+    const token = "00000000-0000-0000-0000-000000000000";
+    const channel = new BroadcastChannel(`chainmail-popout-${token}`);
+    const location = { root: "root", account: "", mode: "reply", target: "newer" };
+    channel.onmessage = ({ data }) => {
+      if (data.type === "hello") channel.postMessage({ type: "offer", location });
+    };
+    const popup = await mount(`/?accountId=&open=root&popup=1&handoff=${token}`, renderPopup);
+    await settle(100);
+    channel.postMessage({ type: "commit", location });
+    await settle(100);
+    expect(popup.host.querySelector("textarea")).toBeNull();
+    expect(popup.host.querySelector(".stream")).toBeNull();
+    expect(reads.filter((url) => url.startsWith("/v1/chains/"))).toEqual([]);
+    expect(writes).toEqual([]);
+    channel.close();
+  });
+
+  it.each(["preparation", "commit"])(
+    "permanently tombstones a pagehidden popup during %s, including after pageshow",
+    async (phase) => {
+      const { source, destination } = await begin();
+      const gate = deferred<Response>();
+      if (phase === "preparation") chainRead = () => gate.promise.then((reply) => reply.clone());
+      const post = BroadcastChannel.prototype.postMessage;
+      let commit: (() => void) | undefined;
+      vi.spyOn(BroadcastChannel.prototype, "postMessage").mockImplementation(function (
+        this: BroadcastChannel,
+        packet,
+      ) {
+        if (phase === "commit" && packet.type === "commit") commit = () => post.call(this, packet);
+        else post.call(this, packet);
+      });
+      const popup = await receive(destination());
+      expect(popup.host.querySelector("textarea")).toBeNull();
+      if (phase === "commit") {
+        expect(commit).toBeDefined();
+        expect(source.host.querySelector("textarea")).toBeNull();
+      }
+      await act(async () => {
+        window.dispatchEvent(new Event("pagehide"));
+        window.dispatchEvent(new Event("pageshow"));
+        gate.resolve(json({ entries }));
+      });
+      await settle(100);
+      if (commit) await act(async () => commit!());
+      await settle(100);
+      expect(popup.host.querySelector("textarea")).toBeNull();
+      expect(popup.host.querySelector(".stream")).toBeNull();
+      expect(popup.host.textContent).toContain("move was abandoned");
+      if (phase === "preparation") {
+        expect(source.host.querySelector("textarea")).not.toBeNull();
+        expect(source.host.querySelector("fieldset")!.disabled).toBe(false);
+      } else expect(source.host.textContent).toContain("This thread is in its own window");
+      expect(writes).toEqual([]);
+    },
+  );
+
+  it.each([false, true])(
+    "recovers the native-released current owner after another main editor blocks admission (discarded: %s)",
+    async (discarded) => {
+      store.clear();
+      if (discarded) store.set(owner("A", saved.id), reply());
+      const { source, destination } = await begin(
+        `/?accountId=A&open=root${discarded ? `&draft=${saved.id}` : ""}`,
+      );
+      const popup = await receive(destination());
+      if (discarded) {
+        await pick(button(popup.host, "Discard draft"));
+        await settle(100);
+      } else {
+        await words(popup.host, "Current popup-created owner");
+        await settle(750);
+      }
+      await source.navigate({ accountId: "A", open: "compose" });
+      await act(async () => window.dispatchEvent(new Event("pagehide")));
+      await settle(100);
+      expect(popup.host.querySelector("textarea")).toBeNull();
+      expect(source.host.querySelector('aside[aria-label="Compose email"]')).not.toBeNull();
+      await source.navigate({ accountId: "A", open: "root" });
+      expect(source.host.querySelector("textarea")).toBeNull();
+      await pick(button(source.host, "Reopen saved state"));
+      await settle(100);
+      expect(source.router.state.location.search.draft).toBe(discarded ? undefined : saved.id);
+      expect(source.host.querySelector("textarea")!.value).toBe(
+        discarded ? "" : "Current popup-created owner",
+      );
+      expect(writes.map((write) => write.method)).toEqual([discarded ? "DELETE" : "POST"]);
+      await settle(750);
+      expect(writes).toHaveLength(1);
+    },
+  );
+
+  it("treats pending recipient query alone as dirty native-close input without accepting it", async () => {
+    store.clear();
+    const { source, destination } = await begin();
+    const popup = await receive(destination());
+    await pick(popup.host.querySelector<HTMLButtonElement>('button[title="Edit recipients"]')!);
+    const input = popup.host.querySelector<HTMLInputElement>('[aria-label="cc addresses"]')!;
+    await type(input, "unaccepted@example.test");
+    const unload = new Event("beforeunload", { cancelable: true });
+    await act(async () => window.dispatchEvent(unload));
+    expect(unload.defaultPrevented).toBe(true);
+    expect(input.value).toBe("unaccepted@example.test");
+    expect(source.host.querySelector("textarea")).toBeNull();
+    await settle(750);
+    expect(writes).toEqual([]);
+  });
+
+  it("does not classify an unresolved chain as reader-only", async () => {
+    realHosts = true;
+    const gate = deferred<Response>();
+    chainRead = () => gate.promise;
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const source = await mount("/?accountId=A&open=root");
+    await pick(source.host.querySelector('[aria-label="Open in new window"]')!);
+    expect(open).not.toHaveBeenCalled();
+    await act(async () => gate.resolve(json({ entries: [] })));
+  });
+
+  it("native pagehide releases the current saved ID, while beforeunload cancellation and BFCache resume do not enable two editors", async () => {
+    store.clear();
+    const { source, destination } = await begin();
+    const popup = await receive(destination());
+    await words(popup.host, "Created in popup");
+    await settle(750);
+    const unload = new Event("beforeunload", { cancelable: true });
+    await act(async () => {
+      window.dispatchEvent(unload);
+    });
+    expect(unload.defaultPrevented).toBe(true);
+    expect(popup.host.querySelector("textarea")!.value).toBe("Created in popup");
+    expect(source.host.querySelector("textarea")).toBeNull();
+    await act(async () => {
+      window.dispatchEvent(new Event("pagehide"));
+    });
+    await settle(100);
+    expect(popup.host.querySelector("textarea")).toBeNull();
+    expect(source.host.querySelector("textarea")!.value).toBe("Created in popup");
+    expect(source.router.state.location.search.draft).toBe(saved.id);
+    await act(async () => {
+      window.dispatchEvent(new Event("pageshow"));
+    });
+    expect(popup.host.querySelector("textarea")).toBeNull();
+    await settle(750);
+    expect(writes.map((write) => write.method)).toEqual(["POST"]);
+  });
+  it("requires explicit closure confirmation to recover uncertain native leave without stale input", async () => {
+    store.clear();
+    const { source, destination } = await begin();
+    const popup = await receive(destination());
+    await pick(popup.host.querySelector<HTMLButtonElement>('button[title="Edit recipients"]')!);
+    await type(
+      popup.host.querySelector<HTMLInputElement>('[aria-label="to addresses"]')!,
+      "unaccepted@example.test",
+    );
+    await act(async () => {
+      window.dispatchEvent(new Event("pagehide"));
+    });
+    await settle(100);
+    expect(source.host.querySelector("textarea")).toBeNull();
+    expect(popup.host.querySelector("textarea")).toBeNull();
+    expect(source.host.textContent).toContain("without an acknowledged return");
+    vi.mocked(window.confirm).mockReturnValue(false);
+    await pick(button(source.host, "Reopen saved state"));
+    expect(source.host.querySelector("textarea")).toBeNull();
+    vi.mocked(window.confirm).mockReturnValue(true);
+    await pick(button(source.host, "Reopen saved state"));
+    await settle(100);
+    expect(source.host.querySelector("textarea")!.value).toBe("");
+    expect(source.host.textContent).toContain("Unsaved popup input was not recovered");
+    expect(writes).toEqual([]);
+  });
+
+  it("does not reuse a prepared snapshot on a later deliberate saved-draft reopening", async () => {
+    store.set(owner("A", saved.id), reply());
+    const { source, destination } = await begin(`/?accountId=A&open=root&draft=${saved.id}`);
+    const popup = await receive(destination());
+    await pick(button(popup.host, "Return to main window"));
+    await settle(100);
+    expect(source.host.querySelector("textarea")!.value).toBe(saved.body);
+    await source.navigate({ accountId: "A" });
+    store.set(owner("A", saved.id), {
+      ...reply(),
+      messageId: "m3",
+      body: "Fresh deliberate reopening",
+    });
+    await source.navigate({ accountId: "A", open: "root", draft: saved.id });
+    expect(source.host.querySelector("textarea")!.value).toBe("Fresh deliberate reopening");
+    expect(writes).toEqual([]);
+  });
+
+  it("ignores a late Return preparation after cancellation without reserving the main window", async () => {
+    store.set(owner("A", saved.id), reply());
+    const { source, destination } = await begin(`/?accountId=A&open=root&draft=${saved.id}`);
+    const popup = await receive(destination());
+    const gate = deferred<Response>();
+    detail = () => gate.promise;
+    const original = window.setTimeout.bind(window);
+    let timeout: (() => void) | undefined;
+    vi.spyOn(window, "setTimeout").mockImplementation(((
+      handler: TimerHandler,
+      delay?: number,
+      ...args: unknown[]
+    ) => {
+      if (delay === 10000) {
+        timeout = handler as () => void;
+        return 123456789;
+      }
+      return original(handler, delay, ...args);
+    }) as typeof window.setTimeout);
+    await pick(button(popup.host, "Return to main window"));
+    await act(async () => timeout!());
+    await settle(100);
+    expect(popup.host.querySelector("textarea")!.disabled).toBe(false);
+    await act(async () => gate.resolve(json(reply())));
+    await settle(100);
+    expect(popup.host.querySelector("textarea")!.value).toBe(saved.body);
+    expect(source.host.querySelector("textarea")).toBeNull();
+    await source.navigate({ accountId: "A", open: "compose" });
+    expect(source.router.state.location.search.open).toBe("compose");
+    expect(writes).toEqual([]);
+  });
 });

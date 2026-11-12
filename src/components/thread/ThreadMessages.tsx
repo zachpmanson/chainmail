@@ -1,7 +1,8 @@
 import { useDraftCoordinator } from "../compose/DraftSelectionContext";
+import { useThreadPopouts, type PopoutLocation } from "../compose/ThreadPopoutContext";
 import DraftCards from "../compose/DraftCards";
 import InlineAlert from "../ui/InlineAlert";
-import { Fragment, useEffect, useMemo, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { $api, type CorpusEntry } from "../../lib/api/api";
 import { useAccountId } from "../../lib/inbox/useAccountId";
 import { attach } from "../../client/behaviour";
@@ -32,6 +33,15 @@ export default function ThreadMessages({
   const accountId = useAccountId();
   const coordinator = useDraftCoordinator();
   const selected = coordinator?.selection;
+  const popouts = useThreadPopouts();
+  const moved = popouts?.initialTarget;
+  const [dismissedMove, setDismissedMove] = useState<PopoutLocation>();
+  const movedTarget =
+    moved !== dismissedMove &&
+    moved?.root === thread.rootExtId &&
+    (!accountId || moved.account === accountId)
+      ? moved.target
+      : undefined;
   const selectedReply =
     selected?.draft?.kind === "reply" && selected.draft.rootId === thread.rootExtId
       ? selected.draft
@@ -68,12 +78,43 @@ export default function ThreadMessages({
               : undefined) ??
             "",
         }
-      : undefined,
+      : movedTarget
+        ? { entries, parent: movedTarget }
+        : undefined,
     entries,
   );
   const { landed, endLanding } = useLandOnNewest(thread.rootExtId, shown);
 
   const continuity = useReplyContinuity(answer, thread.rootExtId, accountId, coordinator);
+  useEffect(() => {
+    if (
+      !popouts ||
+      !fetched.data ||
+      fetched.isPending ||
+      fetched.isFetching ||
+      fetched.isError ||
+      continuity.answer ||
+      continuity.scopePending ||
+      selected?.active
+    )
+      return;
+    const witness = { root: thread.rootExtId, account: accountId ?? "", mode: "reader" as const };
+    popouts.reader.current = witness;
+    return () => {
+      if (popouts.reader.current === witness) popouts.reader.current = undefined;
+    };
+  }, [
+    popouts,
+    accountId,
+    fetched.data,
+    fetched.isPending,
+    fetched.isFetching,
+    fetched.isError,
+    continuity.answer,
+    continuity.scopePending,
+    selected?.active,
+    thread.rootExtId,
+  ]);
   const notice = fetched.isPending
     ? "Loading the thread…"
     : shown.length === 0
@@ -141,6 +182,7 @@ export default function ThreadMessages({
             if (!coordinator?.approve()) return;
             coordinator.detach(accountId ?? "");
           }
+          setDismissedMove(moved);
           aim(extId);
         }}
         flip={flip}

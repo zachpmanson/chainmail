@@ -17,7 +17,7 @@ import ComposeDone from "./ComposeDone";
 import ComposeForm from "./ComposeForm";
 import DraftReadError from "./DraftReadError";
 import ComposePreview from "./ComposePreview";
-import { emptyDraft, parseAddressHeader, type Draft } from "./Draft";
+import { emptyDraft, isEmptyDraft, parseAddressHeader, type Draft } from "./Draft";
 
 import useAccounts from "./useAccounts";
 import useBusyTask from "./useBusyTask";
@@ -86,6 +86,8 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
     step: { kind: "editing" },
   });
   const { busy, busyRef, operationRevision, error, clearError, run } = useBusyTask();
+  const latestDraft = useRef(draft);
+  latestDraft.current = draft;
   const [draftId, setDraftId] = useState("");
   const [draftSaveError, setDraftSaveError] = useState("");
   const acknowledgedSaveRef = useRef("");
@@ -205,22 +207,20 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
     },
   });
 
+  const autosaveAllowed = Boolean(
+    displayedAccountId &&
+    !selected.blocked &&
+    !drafts.isPending &&
+    !drafts.isError &&
+    !draftSaveError &&
+    !busy &&
+    step.kind === "editing",
+  );
+  const autosaveScope = useRef({ account: displayedAccountId, allowed: autosaveAllowed });
+  autosaveScope.current = { account: displayedAccountId, allowed: autosaveAllowed };
+
   useEffect(() => {
-    if (
-      (!draft.subject.trim() &&
-        !draft.body.trim() &&
-        !draft.to.length &&
-        !draft.cc.length &&
-        !draftIdRef.current) ||
-      !displayedAccountId ||
-      selected.blocked ||
-      drafts.isPending ||
-      drafts.isError ||
-      draftSaveError ||
-      busy ||
-      step.kind !== "editing"
-    )
-      return;
+    if (!autosaveAllowed || (isEmptyDraft(draft) && !draftIdRef.current)) return;
     const generation = saveGeneration.current;
     if (
       acknowledgedSaveRef.current ===
@@ -234,8 +234,16 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
       saveQueue.current = saveQueue.current
         .catch(() => undefined)
         .then(async () => {
-          if (generation !== saveGeneration.current) return;
+          if (
+            generation !== saveGeneration.current ||
+            autosaveScope.current.account !== displayedAccountId ||
+            !autosaveScope.current.allowed ||
+            busyRef.current
+          )
+            return;
           const id = draftIdRef.current;
+          // The debounce may have queued this create just before a synchronous clear.
+          if (!id && isEmptyDraft(latestDraft.current)) return;
           if (acknowledgedSaveRef.current === JSON.stringify([generation, id, draftInputKey]))
             return;
           const body = {
@@ -272,6 +280,9 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
     return () => window.clearTimeout(timer);
   }, [
     draft,
+    draftId,
+    autosaveAllowed,
+    busyRef,
     selected.blocked,
     draftSaveError,
     busy,
@@ -448,6 +459,7 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
             <ComposeForm
               draft={draft}
               onDraft={(patch) => {
+                latestDraft.current = { ...latestDraft.current, ...patch };
                 selected.edit();
                 dispatch({ type: "draft", patch });
               }}

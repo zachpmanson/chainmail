@@ -6,6 +6,7 @@ import HeaderRow from "./HeaderRow";
 export default function RecipientRows({
   draft,
   onDraft,
+  onRecipientQuery,
   from,
   target,
   suggestions,
@@ -14,6 +15,7 @@ export default function RecipientRows({
 }: {
   draft: Draft;
   onDraft: (patch: Partial<Draft>) => void;
+  onRecipientQuery?: (field: "to" | "cc", query: string) => void;
   from: ReactNode;
   target?: ReactNode;
   suggestions: Address[];
@@ -30,6 +32,7 @@ export default function RecipientRows({
       </HeaderRow>
       <HeaderRow label="to:">
         <AddressField
+          onPendingQuery={(query) => onRecipientQuery?.("to", query)}
           label="to"
           value={draft.to}
           onChange={(to) => onDraft({ to })}
@@ -41,6 +44,7 @@ export default function RecipientRows({
       </HeaderRow>
       <HeaderRow label="cc:">
         <AddressField
+          onPendingQuery={(query) => onRecipientQuery?.("cc", query)}
           label="cc"
           value={draft.cc}
           onChange={(cc) => onDraft({ cc })}

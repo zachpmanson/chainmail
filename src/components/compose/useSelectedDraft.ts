@@ -24,8 +24,8 @@ export default function useSelectedDraft({
   const edits = useRef(0);
   const pending = useRef({ epoch: selection?.epoch, edits: edits.current });
   const [appliedEpoch, setAppliedEpoch] = useState<number>();
-  const latest = useRef({ hydrate, snapshot });
-  latest.current = { hydrate, snapshot };
+  const latest = useRef({ hydrate, snapshot, edits: edits.current });
+  latest.current = { hydrate, snapshot, edits: edits.current };
   const [replacement, setReplacement] = useState(false);
   if (pending.current.epoch !== selection?.epoch)
     pending.current = { epoch: selection?.epoch, edits: edits.current };
@@ -36,6 +36,7 @@ export default function useSelectedDraft({
       const snapshot = latest.current.snapshot();
       return {
         ...snapshot,
+        popout: edits.current === latest.current.edits ? snapshot.popout : undefined,
         revision: JSON.stringify([edits.current, snapshot.revision]),
         invalidate: () => {
           pending.current.edits = edits.current;

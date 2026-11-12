@@ -54,6 +54,8 @@ export interface SearchParams {
   draft?: string;
   /** Render a focused thread-only page intended for a script-sized popup. */
   popup?: string;
+  /** Opaque, one-attempt popup ownership channel. Never editable mail content. */
+  handoff?: string;
 }
 
 const isMode = (m: unknown): m is SearchMode =>
@@ -72,6 +74,12 @@ function validateSearchParams(search: Record<string, unknown>): SearchParams {
     open: typeof search.open === "string" ? search.open : undefined,
     // Also accept the numeric popup flag from legacy parser/caller input.
     popup: search.popup === 1 ? "1" : typeof search.popup === "string" ? search.popup : undefined,
+    handoff:
+      search.handoff === undefined
+        ? undefined
+        : typeof search.handoff === "string"
+          ? search.handoff
+          : "",
   };
 }
 

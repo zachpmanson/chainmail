@@ -338,6 +338,163 @@ async function editWords(reply: boolean, body: string) {
     });
 }
 
+describe("blank initial draft prevention", () => {
+  async function changeBody(reply: boolean, body: string) {
+    await act(async () => {
+      if (reply) fields().onDraft({ body });
+      else form().onDraft({ body });
+    });
+    await settle();
+  }
+
+  it.each([true, false])(
+    "does not create untouched or whitespace-only drafts (reply: %s)",
+    async (reply) => {
+      await mount(reply);
+      await autosave();
+      await changeBody(reply, " \t\n\u00a0\ufeff");
+      await autosave();
+      expect(draftWrites()).toEqual([]);
+      expect(requests.filter((request) => request.method === "DELETE")).toEqual([]);
+    },
+  );
+
+  it.each([true, false])(
+    "does not create words erased before the debounce (reply: %s)",
+    async (reply) => {
+      await mount(reply);
+      await changeBody(reply, "Words not yet saved");
+      await changeBody(reply, "");
+      await autosave();
+      expect(draftWrites()).toEqual([]);
+    },
+  );
+
+  it.each([true, false])(
+    "checks synchronous input before a queued create starts (reply: %s)",
+    async (reply) => {
+      await mount(reply);
+      await changeBody(reply, "Stale queued words");
+      await act(async () => {
+        // Run the debounce, but clear before the Promise queue can start its request.
+        vi.advanceTimersByTime(700);
+        if (reply) fields().onDraft({ body: "" });
+        else form().onDraft({ body: "" });
+      });
+      await settle();
+      await autosave();
+      expect(draftWrites()).toEqual([]);
+      expect(reply ? fields().draft.body : form().draft.body).toBe("");
+      await changeBody(reply, "Retyped words must still save");
+      await autosave();
+      expect(draftWrites().map((request) => [request.method, request.body.body])).toEqual([
+        ["POST", "Retyped words must still save"],
+      ]);
+    },
+  );
+
+  it("checks all compose fields after a queued metadata draft is reset", async () => {
+    await mount(false);
+    await act(async () => {
+      form().onDraft({
+        to: [{ address: "custom@example.test" }],
+        subject: "Custom subject",
+        body: "Stale queued words",
+      });
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(700);
+      form().onDraft({ to: [], cc: [], subject: "", body: "" });
+    });
+    await settle();
+    await autosave();
+    expect(draftWrites()).toEqual([]);
+  });
+
+  it.each([true, false])(
+    "leaves a selected pre-existing blank draft untouched (reply: %s)",
+    async (reply) => {
+      selectFixture({
+        ...saved,
+        body: " \t\n",
+        subject: "Preserve this custom saved subject",
+        ...(reply ? {} : { kind: "compose", resolution: "compose" }),
+      });
+      await mount(reply);
+      await autosave();
+      expect(draftWrites()).toEqual([]);
+      expect(requests.filter((request) => request.method === "DELETE")).toEqual([]);
+      expect(reply ? fields().draft.body : form().draft.body).toBe(" \t\n");
+    },
+  );
+
+  it.each([true, false])(
+    "keeps an in-flight create's ID and safely persists the cleared input (reply: %s)",
+    async (reply) => {
+      const first = deferred<Response>();
+      const normal = handle;
+      handle = (request) =>
+        request.method === "POST" && new URL(request.url).pathname === "/v1/drafts"
+          ? first.promise
+          : normal(request);
+      await mount(reply);
+      await changeBody(reply, "Already sent to the provider");
+      await autosave();
+      await changeBody(reply, "");
+      await autosave();
+      expect(draftWrites()).toHaveLength(1);
+      await act(async () => first.resolve(json({ ...saved, messageId: "created-revision" })));
+      await settle();
+      await autosave();
+      expect(draftWrites().map((request) => [request.method, request.body.body])).toEqual([
+        ["POST", "Already sent to the provider"],
+        ["PUT", ""],
+      ]);
+      expect(draftWrites()[1]!.path).toBe("/v1/drafts/d1");
+      expect(draftWrites()[1]!.body.expectedMessageId).toBe("created-revision");
+      expect(reply ? fields().draft.body : form().draft.body).toBe("");
+      expect(requests.filter((request) => request.method === "DELETE")).toEqual([]);
+      await changeBody(reply, "New words after clearing");
+      await autosave();
+      expect(draftWrites().at(-1)!.method).toBe("PUT");
+      expect(draftWrites().at(-1)!.body.body).toBe("New words after clearing");
+      expect(draftWrites().filter((request) => request.method === "POST")).toHaveLength(1);
+    },
+  );
+
+  it.each([
+    [true, "\u200b"],
+    [false, "\u200b"],
+    [true, "<!-- literal user text -->"],
+    [false, "<!-- literal user text -->"],
+  ] as const)("preserves literal body content (reply: %s, body: %j)", async (reply, body) => {
+    await mount(reply);
+    await changeBody(reply, body);
+    await autosave();
+    expect(draftWrites()).toHaveLength(1);
+    expect(draftWrites()[0]!.body.body).toBe(body);
+  });
+
+  it.each([
+    { to: [{ address: "custom@example.test" }] },
+    { cc: [{ address: "custom@example.test" }] },
+    { subject: "Custom subject" },
+    { subject: " " },
+  ])("preserves a custom compose metadata-only draft: %j", async (patch) => {
+    await mount(false);
+    await act(async () => form().onDraft(patch));
+    await autosave();
+    expect(draftWrites()).toHaveLength(1);
+    expect(draftWrites()[0]!.body).toMatchObject({
+      body: "",
+      ...(patch.subject !== undefined ? { subject: patch.subject } : {}),
+      ...(patch.to ? { to: ["custom@example.test"] } : {}),
+      ...(patch.cc ? { cc: ["custom@example.test"] } : {}),
+    });
+    expect(requests.filter((request) => request.method === "DELETE")).toEqual([]);
+  });
+});
+
 describe("quiet autosave lifecycle", () => {
   it.each([true, false])(
     "keeps autosave failures persistent without touching unrelated notifications (reply: %s)",

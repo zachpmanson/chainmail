@@ -1,4 +1,4 @@
-import { useDraftCoordinator } from "../compose/DraftSelectionContext";
+import { useThreadPopouts } from "../compose/ThreadPopoutContext";
 import {
   IconArrowLeft,
   IconCircle,
@@ -49,7 +49,7 @@ export default function ThreadPane({
   className?: string;
 }) {
   const accountId = useAccountId();
-  const selected = useDraftCoordinator()?.selection;
+  const popouts = useThreadPopouts();
 
   const tree = usePrefs((s) => s.tree);
   const setTree = usePrefs((s) => s.setTree);
@@ -76,6 +76,25 @@ export default function ThreadPane({
       say(refusal(error, "-mail-write", VERBS[request.action] ?? "That change"), "fail");
     },
   });
+
+  if (thread && popouts?.away(thread.rootExtId, accountId))
+    return (
+      <aside aria-label={label} className="ibread p-4 text-sm text-muted">
+        <Button type="button" density="compact" onClick={onClose}>
+          {backLabel}
+        </Button>
+        <p>This thread is in its own window. Use Return to main window there to move it back.</p>
+        <Button type="button" onClick={() => popouts.focus(thread.rootExtId, accountId)}>
+          Focus thread window
+        </Button>
+        <Button type="button" onClick={() => popouts.recover(thread.rootExtId, accountId)}>
+          Reopen saved state
+        </Button>
+        <p>
+          Only reopen after closing the other window. Unsaved popup input cannot be recovered here.
+        </p>
+      </aside>
+    );
 
   return (
     <aside
@@ -110,17 +129,10 @@ export default function ThreadPane({
               <IconButton
                 aria-label="Open in new window"
                 title="Open in new window"
-                href={`/?open=${encodeURIComponent(thread.rootExtId)}&popup=1${selected?.draft?.kind === "reply" && selected.draft.rootId === thread.rootExtId && selected.id ? `&draft=${encodeURIComponent(selected.id)}` : ""}${accountId ? `&accountId=${encodeURIComponent(accountId)}` : ""}`}
-                target="_blank"
-                rel="noopener"
+                disabled={popouts?.frozen || !popouts}
                 onClick={(event) => {
-                  // Deliberately a popup: if the browser blocks it, don't fall back to a tab or navigation.
                   event.preventDefault();
-                  window.open(
-                    event.currentTarget.href,
-                    "_blank",
-                    "popup=yes,width=900,height=800,resizable=yes,scrollbars=yes,noopener",
-                  );
+                  popouts?.start(thread.rootExtId, accountId);
                 }}
               >
                 <IconExternalLink aria-hidden="true" />
@@ -214,7 +226,9 @@ export default function ThreadPane({
             ) : null}
           </div>
           <div className="min-h-0 min-w-0 flex-1 overflow-auto [&_.stream]:p-4 [&_.stream]:pb-40 [&_.stream_.pan.people]:mt-0 [&_.stream_.pan.people]:mb-4">
-            <ThreadMessages thread={thread} tree={tree} />
+            <fieldset disabled={popouts?.frozen} className="m-0 min-w-0 border-0 p-0">
+              <ThreadMessages thread={thread} tree={tree} />
+            </fieldset>
           </div>
         </>
       ) : (

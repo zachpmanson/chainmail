@@ -9,6 +9,7 @@ import RecipientSummary from "./RecipientSummary";
 export default function ComposerFields({
   draft,
   onDraft,
+  onRecipientQuery,
   mode,
   from,
   suggestions,
@@ -18,6 +19,7 @@ export default function ComposerFields({
 }: {
   draft: Draft;
   onDraft: (patch: Partial<Draft>) => void;
+  onRecipientQuery?: (field: "to" | "cc", query: string) => void;
   /** Compose always shows the recipient rows and a subject; reply collapses its rows behind a summary. */
   mode:
     | { kind: "compose" }
@@ -51,6 +53,7 @@ export default function ComposerFields({
           <RecipientRows
             draft={draft}
             onDraft={onDraft}
+            onRecipientQuery={onRecipientQuery}
             from={from}
             target={mode.kind === "reply" ? mode.target : undefined}
             suggestions={suggestions}

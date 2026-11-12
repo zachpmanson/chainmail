@@ -21,6 +21,7 @@ const state = vi.hoisted(() => ({
   compact: false,
   composing: false,
   draftSave: vi.fn(),
+  popout: vi.fn(),
   mail: vi.fn(),
   read: vi.fn(),
   readPending: false,
@@ -74,6 +75,9 @@ vi.mock("../src/lib/ui/useOwnToast", () => ({ default: () => vi.fn() }));
 vi.mock("../src/lib/ui/useLoadMore", () => ({ default: () => {} }));
 vi.mock("../src/components/compose/ComposeContext", () => ({
   useCompose: () => ({ composing: state.composing, closeCompose: vi.fn() }),
+}));
+vi.mock("../src/components/compose/ThreadPopoutContext", () => ({
+  useThreadPopouts: () => ({ start: state.popout, away: () => false, frozen: false }),
 }));
 vi.mock("../src/components/thread/ThreadMessages", () => ({ default: () => null }));
 
@@ -470,9 +474,8 @@ describe("all write surfaces use the displayed account", () => {
         state.labels.mock.calls.every(([init]) => init.params.query.accountId === "work"),
       ).toBe(true);
       const popup = pane.findByProps({ "aria-label": "Open in new window" });
-      const url = new URL(popup.props.href, "http://localhost");
-      expect(url.searchParams.get("accountId")).toBe("work");
-      expect(url.searchParams.get("popup")).toBe("1");
+      act(() => popup.props.onClick({ preventDefault: vi.fn() }));
+      expect(state.popout).toHaveBeenLastCalledWith("S", "work");
     },
   );
 

@@ -1,6 +1,6 @@
 import { Autocomplete } from "@base-ui/react/autocomplete";
 import { IconX } from "@tabler/icons-react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Button from "../ui/Button";
 
 /** Text that matches no suggestion still becomes a chip once it looks like an
@@ -65,6 +65,7 @@ export default function AddressField({
   taken = [],
   mine = [],
   disabled = false,
+  onPendingQuery,
 }: {
   /** "to" or "cc"; the accessible name of the input and every chip. */
   label: string;
@@ -77,8 +78,19 @@ export default function AddressField({
   /** The reader's own addresses, which a reply is not sent to. */
   mine?: string[];
   disabled?: boolean;
+  onPendingQuery?: (query: string) => void;
 }) {
   const [query, setQuery] = useState("");
+  const pendingQueryListener = useRef(onPendingQuery);
+  pendingQueryListener.current = onPendingQuery;
+  useEffect(() => {
+    pendingQueryListener.current?.("");
+    return () => pendingQueryListener.current?.("");
+  }, []);
+  const changeQuery = (next: string) => {
+    onPendingQuery?.(next);
+    setQuery(next);
+  };
   const [open, setOpen] = useState(false);
   const highlighted = useRef<Address | undefined>(undefined);
   const [refused, setRefused] = useState<string | null>(null);
@@ -130,7 +142,7 @@ export default function AddressField({
       return;
     }
     onChange([...value, who]);
-    setQuery("");
+    changeQuery("");
     setRefused(null);
     setOpen(false);
     highlighted.current = undefined;
@@ -147,7 +159,7 @@ export default function AddressField({
           const who = rows.find((a) => addressWords(a) === text);
           if (who) add(who);
         } else if (details.reason === "input-change") {
-          setQuery(text);
+          changeQuery(text);
           setRefused(null);
           setOpen(true);
         }
@@ -201,7 +213,7 @@ export default function AddressField({
               e.preventDefault();
               e.preventBaseUIHandler();
               e.stopPropagation();
-              setQuery("");
+              changeQuery("");
               setRefused(null);
               setOpen(false);
             } else if (e.key === "Backspace" && query === "" && value.length) {

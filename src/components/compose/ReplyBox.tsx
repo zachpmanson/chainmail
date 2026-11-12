@@ -134,6 +134,9 @@ export default function ReplyBox({
     step: editing,
   });
   const { connected } = useAccounts();
+  const pendingRecipientQueries = useRef({ to: "", cc: "" });
+  const latestOwn = useRef(own);
+  latestOwn.current = own;
   const displayedAccountId = accountId || (connected.length === 1 ? (connected[0]?.id ?? "") : "");
   const [draftId, setDraftId] = useState("");
   const [draftSaveError, setDraftSaveError] = useState("");
@@ -208,7 +211,10 @@ export default function ReplyBox({
     selected.edit();
     if (patch.to) recipients.changeTo(patch.to);
     if (patch.cc) recipients.changeCc(patch.cc);
-    if (patch.body !== undefined) dispatch({ type: "words", own: patch.body });
+    if (patch.body !== undefined) {
+      latestOwn.current = patch.body;
+      dispatch({ type: "words", own: patch.body });
+    }
   };
   // A ref rather than a document query: this is one box among any the shell has drawn.
   const host = useRef<HTMLDivElement | null>(null);
@@ -242,8 +248,33 @@ export default function ReplyBox({
         sendFailed,
         operationRevision.current,
         writeRevision.current,
+        pendingRecipientQueries.current,
       ]),
       owner: draftIdRef.current ? draftIdentity(displayedAccountId, draftIdRef.current) : undefined,
+      popout:
+        !pendingRecipientQueries.current.to &&
+        !pendingRecipientQueries.current.cc &&
+        !scopePendingRef.current &&
+        !selected.blocked &&
+        !error &&
+        !draftSaveError &&
+        !busyRef.current &&
+        pendingWrites.current === 0 &&
+        step.kind === "editing" &&
+        all &&
+        html &&
+        displayedAccountId &&
+        ((!draftIdRef.current && own === "" && !recipients.edited.to && !recipients.edited.cc) ||
+          (draftIdRef.current &&
+            acknowledgedSaveRef.current ===
+              JSON.stringify([saveGeneration.current, draftIdRef.current, draftInputKey])))
+          ? {
+              accountId: displayedAccountId,
+              id: draftIdRef.current || undefined,
+              messageId: draftIdRef.current ? draftMessageIdRef.current : undefined,
+              target: answer.extId,
+            }
+          : undefined,
       continuityAccountId: continuityAccount.current,
       transferAccountId: transferAccount.current,
       busy:
@@ -254,6 +285,8 @@ export default function ReplyBox({
         deleteDraft.isPending,
       dirty: Boolean(
         own ||
+        pendingRecipientQueries.current.to ||
+        pendingRecipientQueries.current.cc ||
         recipients.edited.to ||
         recipients.edited.cc ||
         !all ||
@@ -298,22 +331,32 @@ export default function ReplyBox({
     },
   });
 
+  const autosaveAllowed = Boolean(
+    !scopePending &&
+    displayedAccountId &&
+    answer.extId &&
+    !drafts.isPending &&
+    !drafts.isError &&
+    !draftSaveError &&
+    !busy &&
+    !selected.blocked &&
+    step.kind === "editing",
+  );
+  const autosaveScope = useRef({
+    account: displayedAccountId,
+    target: answer.extId,
+    allowed: autosaveAllowed,
+  });
+  autosaveScope.current = {
+    account: displayedAccountId,
+    target: answer.extId,
+    allowed: autosaveAllowed,
+  };
+
   // Autosave to Gmail. Queue writes so an older request cannot land after a newer
   // edit and replace it; a draft ID returned by create is reused by later saves.
   useEffect(() => {
-    if (
-      scopePending ||
-      (!own.trim() && !draftIdRef.current) ||
-      !displayedAccountId ||
-      !answer.extId ||
-      drafts.isPending ||
-      drafts.isError ||
-      draftSaveError ||
-      busy ||
-      selected.blocked ||
-      step.kind !== "editing"
-    )
-      return;
+    if (!autosaveAllowed || (!own.trim() && !draftIdRef.current)) return;
     const generation = saveGeneration.current;
     if (
       acknowledgedSaveRef.current ===
@@ -326,8 +369,18 @@ export default function ReplyBox({
       saveQueue.current = saveQueue.current
         .catch(() => undefined)
         .then(async () => {
-          if (generation !== saveGeneration.current || scopePendingRef.current) return;
+          if (
+            generation !== saveGeneration.current ||
+            scopePendingRef.current ||
+            autosaveScope.current.account !== displayedAccountId ||
+            autosaveScope.current.target !== answer.extId ||
+            !autosaveScope.current.allowed ||
+            busyRef.current
+          )
+            return;
           const id = draftIdRef.current;
+          // A create already sent still owns its response; only unsent blank creates stop.
+          if (!id && !latestOwn.current.trim()) return;
           if (acknowledgedSaveRef.current === JSON.stringify([generation, id, draftInputKey]))
             return;
           const body = {
@@ -363,6 +416,9 @@ export default function ReplyBox({
     return () => window.clearTimeout(timer);
   }, [
     own,
+    draftId,
+    autosaveAllowed,
+    busyRef,
     selected.blocked,
     scopePending,
     draftSaveError,
@@ -577,6 +633,9 @@ export default function ReplyBox({
           <>
             {errorAlert}
             <ComposerFields
+              onRecipientQuery={(field, query) => {
+                pendingRecipientQueries.current[field] = query;
+              }}
               hideAudience={scopePending}
               mode={{
                 kind: "reply",

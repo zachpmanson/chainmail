@@ -4,6 +4,10 @@ export type Draft = { to: Address[]; cc: Address[]; subject: string; body: strin
 
 export const emptyDraft: Draft = { to: [], cc: [], subject: "", body: "" };
 
+export function isEmptyDraft(draft: Draft): boolean {
+  return !draft.subject && !draft.body.trim() && !draft.to.length && !draft.cc.length;
+}
+
 export function parseAddressHeader(header?: string): Address[] {
   if (!header) return [];
   const parts: string[] = [];
