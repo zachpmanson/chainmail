@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -164,11 +165,19 @@ func TestOAuthValidatesBeforeActivatingCredential(t *testing.T) {
 			state, accountID := beginFakeLogin(t, srv, query)
 			path, _ := gmailclient.AccountTokenPath(accountID)
 			if tc.activationFails {
-				// Fail the activation write path independently of temporary-file naming.
+				// Read-only opens can accept directories on macOS. A regular-file
+				// parent makes the lock target fail with ENOTDIR on both platforms.
+				if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+					t.Fatal(err)
+				}
 				if err := os.Remove(path + ".lock"); err != nil && !os.IsNotExist(err) {
 					t.Fatal(err)
 				}
-				if err := os.MkdirAll(path+".lock", 0o700); err != nil {
+				blocker := filepath.Join(t.TempDir(), "not-a-directory")
+				if err := os.WriteFile(blocker, nil, 0o600); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink(filepath.Join(blocker, "lock"), path+".lock"); err != nil {
 					t.Fatal(err)
 				}
 			}
