@@ -8,7 +8,9 @@ import (
 	"net/mail"
 	"strings"
 
+	"github.com/zachpmanson/chainmail/internal/corpus"
 	"github.com/zachpmanson/chainmail/internal/gmailclient"
+	"github.com/zachpmanson/chainmail/internal/spec"
 )
 
 type draftMailbox interface {
@@ -275,22 +277,16 @@ func (s *server) saveDraft(w http.ResponseWriter, req draftRequest) {
 func (s *server) planDraftRequest(accountID string, mb mailbox, req draftRequest) (draftRequest, string, int, error) {
 	replyToMessageID := ""
 	if req.ReplyToEntry != "" {
-		entries, err := s.store.ChainEntries(req.ReplyToEntry)
+		target, err := s.store.ReplyTarget(req.ReplyToEntry)
 		if err != nil {
 			return req, "", http.StatusInternalServerError, fmt.Errorf("resolving reply thread: %w", err)
 		}
-		for _, entry := range entries {
-			if entry.ExtID != req.ReplyToEntry {
-				continue
-			}
-			if copy, ok := copyForAccount(entry, accountID); ok {
-				replyToMessageID = copy.GmailID
-			}
-			break
-		}
-		if replyToMessageID == "" {
+		copy, ok := copyForAccount(corpus.ChainEntry{Copies: target.Copies}, accountID)
+		if !ok {
 			return req, "", http.StatusBadRequest, errors.New("replyToEntry has no Gmail message in the selected account")
 		}
+		replyToMessageID = copy.GmailID
+		req.Body = spec.ComposeReply(req.Body, target).Text
 		// Nil lists belong to the mailbox, not to corpus header estimates. Resolve
 		// Reply-To and reply-all defaults before the draft makes them explicit.
 		plan, err := mb.Reply(replyToMessageID, gmailclient.ReplyBody{Text: req.Body}, gmailclient.ReplyOptions{Send: false, All: req.ReplyAll, To: req.To, Cc: req.Cc})
@@ -478,7 +474,7 @@ func (s *server) checkDraftSaveWithContext(w http.ResponseWriter, accountID stri
 			send(w, http.StatusOK, out)
 			return
 		}
-		d.To, d.Cc, d.Subject = strings.Join(req.To, ", "), strings.Join(req.Cc, ", "), req.Subject
+		d.To, d.Cc, d.Subject, d.Body = strings.Join(req.To, ", "), strings.Join(req.Cc, ", "), req.Subject, req.Body
 	default:
 		out.Status = "unsupported"
 		send(w, http.StatusOK, out)

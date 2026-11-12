@@ -8,6 +8,7 @@ import (
 
 	"github.com/zachpmanson/chainmail/internal/corpus"
 	"github.com/zachpmanson/chainmail/internal/gmailclient"
+	"github.com/zachpmanson/chainmail/internal/spec"
 )
 
 type draftFake struct {
@@ -199,7 +200,11 @@ func TestReplyDraftPersistsMailboxDefaultsAndExplicitOverrides(t *testing.T) {
 			if len(fake.replies) != 1 || fake.replies[0].send || fake.replies[0].all != tc.all {
 				t.Fatalf("non-sending planner calls = %+v", fake.replies)
 			}
-			if len(fake.saved) != 1 || fake.saved[0].To != tc.wantTo || fake.saved[0].Cc != tc.wantCc || fake.saved[0].Subject != "Re: Authoritative subject" || fake.saved[0].Body != "My words" {
+			target, err := h.store.ReplyTarget(extAda1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(fake.saved) != 1 || fake.saved[0].To != tc.wantTo || fake.saved[0].Cc != tc.wantCc || fake.saved[0].Subject != "Re: Authoritative subject" || fake.saved[0].Body != spec.ComposeReply("My words", target).Text {
 				t.Fatalf("saved = %+v, want to=%q cc=%q", fake.saved, tc.wantTo, tc.wantCc)
 			}
 			if tc.recipients == "" && (fake.replies[0].to != nil || fake.replies[0].cc != nil) {

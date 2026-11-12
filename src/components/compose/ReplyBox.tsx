@@ -41,7 +41,7 @@ type Step =
     };
 
 type State = {
-  /** The reader's words alone; the quote is added on the way out. */
+  /** The editable text; restored Gmail drafts also carry their saved quote. */
   own: string;
   html: boolean;
   accountId: string;
