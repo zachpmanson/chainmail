@@ -505,29 +505,9 @@ func ReadDailyPartsV2Groups(objects []caldav.CalendarObject, location Location, 
 		texts := []string{}
 		if o.Data == nil || o.Data.Component == nil {
 			uidUncertain = true
+			texts = groupEvidence(nil, uidCounts, &uidUncertain, &physical)
 		} else {
-			for _, e := range o.Data.Events() {
-				if len(e.Props["UID"]) == 0 {
-					uidUncertain = true
-				}
-				for _, p := range e.Props["UID"] {
-					values, err := p.TextList()
-					if err != nil || len(values) != 1 || values[0] == "" {
-						uidUncertain = true
-					}
-					for _, uid := range values {
-						uidCounts[uid]++
-						physical.UID = uid
-					}
-				}
-				for _, p := range e.Props["DESCRIPTION"] {
-					values, err := p.TextList()
-					if err != nil {
-						values = []string{p.Value}
-					}
-					texts = append(texts, values...)
-				}
-			}
+			texts = groupEvidence(o.Data.Component, uidCounts, &uidUncertain, &physical)
 		}
 		for _, text := range texts {
 			physical.Reserved = physical.Reserved || dailyPartsReserved(text)
