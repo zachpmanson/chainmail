@@ -1,5 +1,6 @@
 node_modules/
 .direnv/
+.pi-subagents/
 dist/
 cmd/server/dist/
 out/
