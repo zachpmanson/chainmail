@@ -36,7 +36,7 @@ export function projectTasks(base: HassleTask[], operations: Operation[]): Hassl
     const schedule = request.schedule ?? task?.schedule ?? null;
     tasks.set(op.rowId, {
       id: op.rowId,
-      title: schedule?.title ?? task?.title ?? "Reminder",
+      title: request.title ?? schedule?.title ?? task?.title ?? "Reminder",
       schedule,
       revision: "",
       resources: task?.resources ?? 0,
@@ -140,7 +140,10 @@ export class HassleOperations {
       })
     )
       return false;
-    const rowId = request.action === "create" ? `task:${request.id.toLowerCase()}` : request.id;
+    const rowId =
+      request.action === "create"
+        ? `${request.schedule?.cadence === "hourly" ? "v2" : "task"}:${request.id.toLowerCase()}`
+        : request.id;
     if (
       this.snapshot.operations.some(
         (op) =>

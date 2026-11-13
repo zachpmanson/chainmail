@@ -2,6 +2,7 @@ package hassles
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"reflect"
@@ -168,7 +169,7 @@ func TestHourlyAllChoicesRetryEditAndCompletion(t *testing.T) {
 			c, _ := NewCalendar(testID, s, now)
 			f := &completionBackend{objects: []caldav.CalendarObject{{Path: testCollection + "hassle-" + testID + ".ics", ETag: `"1"`, Data: c}}}
 			in := Mutation{Location: Location{CalendarID: testCollection}, Action: "create", ID: testID, Schedule: s}
-			if result, err := Mutate(context.Background(), f, in, now); err != nil || result.Message != "Already created" || len(f.writes) != 0 {
+			if result, err := Mutate(context.Background(), f, in, now); !errors.Is(err, ErrConflict) || len(f.writes) != 0 {
 				t.Fatalf("retry %g/%v: %+v %v", interval, checked, result, err)
 			}
 			// Title-only edits retain all original recurrence and description bytes.

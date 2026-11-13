@@ -2,6 +2,7 @@ package hassles
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -286,7 +287,12 @@ func TestWorkHoursCompletionAndCreateRetry(t *testing.T) {
 		o := caldav.CalendarObject{Path: testCollection + "hassle-" + testID + ".ics", ETag: `"1"`, Data: calendar}
 		f := &completionBackend{objects: []caldav.CalendarObject{o}}
 		in := Mutation{Location: Location{CalendarID: testCollection}, Action: "create", ID: testID, Schedule: s}
-		if result, err := Mutate(context.Background(), f, in, now); err != nil || result.Message != "Already created" || len(f.writes) != 0 {
+		result, err := Mutate(context.Background(), f, in, now)
+		if cadence == "hourly" {
+			if !errors.Is(err, ErrConflict) || len(f.writes) != 0 {
+				t.Fatalf("repeated hourly UUID accepted: %+v %v", result, err)
+			}
+		} else if err != nil || result.Message != "Already created" || len(f.writes) != 0 {
 			t.Fatalf("retry %s: %+v %v", cadence, result, err)
 		}
 		if cadence == "once" {

@@ -5921,7 +5921,8 @@
               "done",
               "delete",
               "adopt",
-              "done-instance"
+              "done-instance",
+              "rename"
             ]
           },
           "id": {
@@ -5956,6 +5957,10 @@
             "type": "string",
             "pattern": "^[0-9a-f]{64}$",
             "description": "done-instance only. Copy instance.token from inventory."
+          },
+          "title": {
+            "type": "string",
+            "description": "Rename only: one-line title, maximum 500 bytes. Changes only SUMMARY on actual known group members."
           }
         },
         "required": [
@@ -5963,7 +5968,7 @@
           "action",
           "id"
         ],
-        "description": "Adopt is metadata-only and requires the original resource: digest ID, original revision, a stable adoptId UUID and explicit dryRun. Commit (dryRun:false) also requires adoptHash from the saved preview. No nonzero schedule is accepted. Adoption-only fields are rejected on all other actions. done-instance requires revision, instanceAt, instanceToken and explicit dryRun; no schedule/adoption fields. A changed displayed occurrence or stale revision conflicts, never completes another occurrence."
+        "description": "Adopt is metadata-only and requires the original resource: digest ID, original revision, a stable adoptId UUID and explicit dryRun. Commit (dryRun:false) also requires adoptHash from the saved preview. No nonzero schedule is accepted. Adoption-only fields are rejected on all other actions. done-instance requires revision, instanceAt, instanceToken and explicit dryRun; no schedule/adoption fields. A changed displayed occurrence or stale revision conflicts, never completes another occurrence. Hourly creates use native DAILY-parts v2 resources grouped into one reminder. v2 supports rename and whole-group done/delete only. Writes are conditional and non-atomic; refresh after any failure. Repeated create UUID claims are refused."
       },
       "HassleResult": {
         "type": "object",

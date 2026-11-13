@@ -30,6 +30,12 @@ func validDigest(value string) bool {
 
 // Presence-aware dryRun prevents adoption flags being silently ignored by delete/create.
 func ValidateAdoptionFields(in Mutation) error {
+	if in.Action == "rename" && (in.Schedule != (Schedule{}) || !validDigest(in.Revision)) {
+		return errors.New("rename requires a revision and title only; schedule editing is unavailable")
+	}
+	if in.Action != "rename" && in.Title != "" {
+		return errors.New("title is only valid for rename")
+	}
 	if in.Action != "done-instance" && (in.InstanceAt != nil || in.InstanceToken != nil) {
 		return errors.New("instanceAt and instanceToken are only valid for done-instance")
 	}

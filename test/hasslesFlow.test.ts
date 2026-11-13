@@ -132,31 +132,19 @@ it("submits hourly work-hours schedules, preserves a failed-create draft and edi
   const dialog = document.querySelector('[role="dialog"][aria-modal="true"]')!;
   expect(document.querySelectorAll('[role="dialog"][aria-modal="true"]')).toHaveLength(1);
   expect(dialog.querySelector('[role="dialog"]')).toBeNull();
-  const editForm = dialog.querySelector('section[aria-label="Edit hassle"]')!;
-  expect(editForm.classList.contains("border")).toBe(false);
-  expect(editForm.classList.contains("p-4")).toBe(false);
-  expect(dialog.classList.contains("box-border")).toBe(true);
-  expect(addForm().classList.contains("border")).toBe(true);
-  expect(addForm().classList.contains("p-4")).toBe(true);
-  expect(checkbox(dialog).checked).toBe(true);
-  expect(dialog.textContent).not.toContain("Reminders outside");
-  expect(repeat(dialog).value).toBe("hourly");
-  expect(field("Every", dialog).querySelector("select")!.value).toBe("0.5");
-  await click(checkbox(dialog));
-  await click(button("Save reminder"));
-  expect((writes().at(-1)!.body as { schedule: { workHours: boolean } }).schedule.workHours).toBe(
-    false,
-  );
-  expect(document.querySelector('section[aria-label="Reminders"] p')?.textContent).not.toContain(
-    "work",
-  );
+  expect(dialog.querySelectorAll("input")).toHaveLength(1);
+  expect(dialog.querySelector("select")).toBeNull();
+  await type(dialog.querySelector<HTMLInputElement>('[aria-label="Title"]')!, "Office renamed");
+  await click(button("Save title"));
+  expect(writes().at(-1)!.body).toMatchObject({ action: "rename", title: "Office renamed" });
+  expect(writes().at(-1)!.body).not.toHaveProperty("schedule");
 });
 it.each(
   [0.5, 1, 2, 3, 4, 6, 8, 12, 24].flatMap((interval) =>
     [false, true].map((workHours) => ({ interval, workHours })),
   ),
 )(
-  "roundtrips hourly $interval / work hours $workHours through create retry and edit",
+  "creates hourly $interval / work hours $workHours and renames only its title",
   async ({ interval, workHours }) => {
     await choose();
     await type(titleInput(), "Supported slots");
@@ -176,16 +164,12 @@ it.each(
     expect(writes().at(-1)!.body).toEqual(first);
     await click(button("Edit"));
     const dialog = document.querySelector('[role="dialog"][aria-modal="true"]')!;
-    expect(field("Every", dialog).querySelector("select")!.value).toBe(String(interval));
-    const checkbox = dialog.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
-    expect(checkbox.checked).toBe(workHours);
-    await click(checkbox);
-    await click(button("Save reminder"));
-    expect((writes().at(-1)!.body as { schedule: unknown }).schedule).toMatchObject({
-      cadence: "hourly",
-      interval,
-      workHours: !workHours,
-    });
+    expect(dialog.querySelector("select")).toBeNull();
+    expect(dialog.querySelector('input[type="checkbox"]')).toBeNull();
+    await type(dialog.querySelector<HTMLInputElement>('[aria-label="Title"]')!, "Renamed slots");
+    await click(button("Save title"));
+    expect(writes().at(-1)!.body).toMatchObject({ action: "rename", title: "Renamed slots" });
+    expect(writes().at(-1)!.body).not.toHaveProperty("schedule");
   },
 );
 it("validates work-hours first reminders without moving them or sending a write", async () => {
@@ -372,7 +356,7 @@ it("keeps Add hassle inline through create, pencil-icon editing and tick-icon Do
   expect(titleInput().value).toBe("Unsaved next hassle");
   await click(button("All instances:"));
   expect(document.querySelector('[role="dialog"][aria-modal="true"]')!.textContent).toContain(
-    "Permanently remove all reminders for this hassle from Calendar. This cannot be undone.",
+    "Permanently remove all 1 Calendar resources for this hassle. This cannot be undone.",
   );
   await click(button("Remove all reminders"));
   expect(document.body.textContent).toContain("No hassles");
@@ -1503,4 +1487,62 @@ it("blocks cached-calendar writes through pending selection and publishes only c
   newConfig.resolve();
   await settle();
   expect(rowAction("Edit Confirmed calendar create").disabled).toBe(false);
+});
+
+it("renames only the native title and confirms deletion of its actual resource count", async () => {
+  await choose();
+  fixture.handle("/__hassles_fixture", "POST", {
+    tasks: [
+      {
+        id: "v2:offline-native",
+        revision: "native-revision",
+        title: "Native title",
+        reminder: "Every 0.5 hours · Until 2027-02-12T17:00 Melbourne",
+        resources: 8,
+        writable: true,
+        restriction: "",
+        instance: null,
+        instanceRestriction: "No instance action",
+        schedule: {
+          title: "Native title",
+          start: "2027-02-12T09:00",
+          timeZone: "Australia/Melbourne",
+          cadence: "hourly",
+          interval: 0.5,
+          until: "2027-02-12T17:00",
+          workHours: true,
+        },
+        timing: { state: "unknown", next: null, last: null, note: "Next time is approximate" },
+      },
+    ],
+  });
+  await click(refresh());
+  expect(document.querySelectorAll("[data-hassle-title]")).toHaveLength(1);
+  expect(document.querySelector('[aria-label="This instance only: Native title"]')).toBeNull();
+  expect(document.querySelector("[data-hassle-summary]")?.textContent).toContain("Every 0.5 hours");
+  await click(button("Edit"));
+  let dialog = document.querySelector('[role="dialog"][aria-modal="true"]')!;
+  expect(dialog.querySelectorAll("input")).toHaveLength(1);
+  expect(dialog.querySelector("select")).toBeNull();
+  await click(button("Cancel"));
+  expect(writes("rename")).toHaveLength(0);
+  await click(button("Edit"));
+  dialog = document.querySelector('[role="dialog"][aria-modal="true"]')!;
+  await type(dialog.querySelector<HTMLInputElement>('[aria-label="Title"]')!, "New native title");
+  await click(button("Save title"));
+  expect(writes("rename").at(-1)!.body).toEqual({
+    location: fixtureLocation,
+    action: "rename",
+    id: "v2:offline-native",
+    revision: "native-revision",
+    title: "New native title",
+  });
+  await click(button("Delete"));
+  dialog = document.querySelector('[role="dialog"][aria-modal="true"]')!;
+  expect(dialog.textContent).toContain("New native title");
+  expect(dialog.textContent).toContain("all 8 Calendar resources");
+  expect(writes("done")).toHaveLength(0);
+  await click(button("Remove all reminders"));
+  expect(writes("done")).toHaveLength(1);
+  expect(document.querySelector("[data-hassle-title]")).toBeNull();
 });

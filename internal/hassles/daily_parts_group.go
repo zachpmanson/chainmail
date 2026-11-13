@@ -467,6 +467,11 @@ func dailyPartsStrongETag(tag string) bool {
 // Snapshot bounds cannot establish producer query completeness or the client's
 // 16 MiB HTTP response bound; those remain separate fresh-admission evidence.
 func ReadDailyPartsV2Groups(objects []caldav.CalendarObject, location Location, now time.Time) (DailyPartsGroupInventoryModel, error) {
+	return readDailyPartsV2Groups(objects, location, now, false)
+}
+
+// Ordinary group actions can manage known remaining members after a partial write.
+func readDailyPartsV2Groups(objects []caldav.CalendarObject, location Location, now time.Time, remaining bool) (DailyPartsGroupInventoryModel, error) {
 	out := DailyPartsGroupInventoryModel{Location: location}
 	_ = now
 	collection, err := Collection(location.CalendarID)
@@ -630,7 +635,7 @@ func ReadDailyPartsV2Groups(objects []caldav.CalendarObject, location Location, 
 				if group.Plan == nil {
 					group.Plan = meta.Plan
 					group.Title = title
-				} else if group.Plan.Payload() != meta.Plan.Payload() || group.Plan.PlanHash() != meta.Plan.PlanHash() || group.Title != title {
+				} else if group.Plan.Payload() != meta.Plan.Payload() || group.Plan.PlanHash() != meta.Plan.PlanHash() || (!remaining && group.Title != title) {
 					deny("Conflicting plan, incarnation or title")
 				}
 				if seen[meta.MemberID] {
@@ -644,7 +649,7 @@ func ReadDailyPartsV2Groups(objects []caldav.CalendarObject, location Location, 
 		}
 		if group.Plan == nil {
 			deny("No validated full plan")
-		} else {
+		} else if !remaining {
 			if len(group.Members) != len(group.Plan.Members()) {
 				deny("Incomplete or extra physical roster")
 			}

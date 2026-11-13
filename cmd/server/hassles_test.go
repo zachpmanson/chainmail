@@ -30,6 +30,7 @@ type calendarFixture struct {
 	deny     bool
 	conflict bool
 	serial   int
+	failAt   int
 }
 
 func (f *calendarFixture) Calendars(context.Context) ([]hassles.Calendar, error) {
@@ -46,7 +47,7 @@ func (f *calendarFixture) Write(_ context.Context, _, href, etag, body string) e
 	if strings.Contains(body, "FREQ=HOURLY") {
 		return errors.New("offline provider rejects native HOURLY")
 	}
-	if f.conflict {
+	if f.conflict || f.failAt == f.writes {
 		return hassles.ErrConflict
 	}
 	if f.deny {
@@ -254,11 +255,11 @@ func TestHasslesHourlyWorkHoursTransport(t *testing.T) {
 	if r := h.do(t, "POST", "/v1/hassles", hassleJSON(t, in)); r.status != 200 {
 		t.Fatal("hourly work-hours create rejected", r.status, string(r.body))
 	}
-	if r := h.do(t, "POST", "/v1/hassles", hassleJSON(t, in)); r.status != 200 || !strings.Contains(string(r.body), "Already created") {
-		t.Fatal("hourly retry rejected", r.status, string(r.body))
+	if r := h.do(t, "POST", "/v1/hassles", hassleJSON(t, in)); r.status != 409 || len(f.objects) != 8 {
+		t.Fatal("repeated hourly UUID accepted", r.status, string(r.body))
 	}
 	rule := f.objects[0].Data.Events()[0].Props.Get("RRULE").Value
-	if rule != "FREQ=DAILY;INTERVAL=1;BYHOUR=9,10,11,12,13,14,15,16;BYMINUTE=0,30;BYDAY=MO,TU,WE,TH,FR" {
+	if rule != "FREQ=DAILY;INTERVAL=1;WKST=MO;BYMINUTE=0,30;BYDAY=MO,TU,WE,TH,FR" {
 		t.Fatal("wrong provider encoding", rule)
 	}
 	before = f.calls

@@ -2290,11 +2290,11 @@ export interface components {
             /** @constant */
             dedicated: true;
         };
-        /** @description Adopt is metadata-only and requires the original resource: digest ID, original revision, a stable adoptId UUID and explicit dryRun. Commit (dryRun:false) also requires adoptHash from the saved preview. No nonzero schedule is accepted. Adoption-only fields are rejected on all other actions. done-instance requires revision, instanceAt, instanceToken and explicit dryRun; no schedule/adoption fields. A changed displayed occurrence or stale revision conflicts, never completes another occurrence. */
+        /** @description Adopt is metadata-only and requires the original resource: digest ID, original revision, a stable adoptId UUID and explicit dryRun. Commit (dryRun:false) also requires adoptHash from the saved preview. No nonzero schedule is accepted. Adoption-only fields are rejected on all other actions. done-instance requires revision, instanceAt, instanceToken and explicit dryRun; no schedule/adoption fields. A changed displayed occurrence or stale revision conflicts, never completes another occurrence. Hourly creates use native DAILY-parts v2 resources grouped into one reminder. v2 supports rename and whole-group done/delete only. Writes are conditional and non-atomic; refresh after any failure. Repeated create UUID claims are refused. */
         HassleMutation: {
             location: components["schemas"]["HassleLocation"];
             /** @enum {string} */
-            action: "create" | "edit" | "done" | "delete" | "adopt" | "done-instance";
+            action: "create" | "edit" | "done" | "delete" | "adopt" | "done-instance" | "rename";
             id: string;
             revision?: string;
             schedule?: components["schemas"]["HassleSchedule"];
@@ -2314,6 +2314,8 @@ export interface components {
             instanceAt?: string;
             /** @description done-instance only. Copy instance.token from inventory. */
             instanceToken?: string;
+            /** @description Rename only: one-line title, maximum 500 bytes. Changes only SUMMARY on actual known group members. */
+            title?: string;
         };
         HassleResult: {
             removed: number;

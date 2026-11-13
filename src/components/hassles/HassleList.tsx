@@ -1,5 +1,5 @@
 import { Tabs } from "@base-ui/react/tabs";
-import { IconCheck, IconChecks, IconPencil } from "@tabler/icons-react";
+import { IconCheck, IconChecks, IconPencil, IconTrash } from "@tabler/icons-react";
 import type { HassleTask } from "../../lib/hassles/forms";
 import { hassleGroups, type HassleTab } from "../../lib/hassles/groups";
 import { hassleSummary } from "../../lib/hassles/summary";
@@ -91,27 +91,41 @@ export default function HassleList({
                           >
                             <IconPencil aria-hidden="true" />
                           </IconButton>
+                          {!task.id.startsWith("v2:") ? (
+                            <IconButton
+                              aria-label={`This instance only: ${task.title}`}
+                              title={
+                                task.instance
+                                  ? `This instance only: ${task.title}`
+                                  : `${task.title}: ${task.instanceRestriction || "This instance only unavailable"}`
+                              }
+                              disabled={
+                                busy || blocked.has(task.id) || !task.writable || !task.instance
+                              }
+                              onClick={() => onDoneInstance(task)}
+                            >
+                              <IconCheck aria-hidden="true" />
+                            </IconButton>
+                          ) : null}
                           <IconButton
-                            aria-label={`This instance only: ${task.title}`}
+                            aria-label={
+                              task.id.startsWith("v2:")
+                                ? `Delete ${task.title}`
+                                : `All instances: ${task.title}`
+                            }
                             title={
-                              task.instance
-                                ? `This instance only: ${task.title}`
-                                : `${task.title}: ${task.instanceRestriction || "This instance only unavailable"}`
+                              task.id.startsWith("v2:")
+                                ? `Delete ${task.title}`
+                                : `All instances: ${task.title}`
                             }
-                            disabled={
-                              busy || blocked.has(task.id) || !task.writable || !task.instance
-                            }
-                            onClick={() => onDoneInstance(task)}
-                          >
-                            <IconCheck aria-hidden="true" />
-                          </IconButton>
-                          <IconButton
-                            aria-label={`All instances: ${task.title}`}
-                            title={`All instances: ${task.title}`}
                             disabled={busy || blocked.has(task.id) || !task.writable}
                             onClick={() => onDone(task)}
                           >
-                            <IconChecks aria-hidden="true" />
+                            {task.id.startsWith("v2:") ? (
+                              <IconTrash aria-hidden="true" />
+                            ) : (
+                              <IconChecks aria-hidden="true" />
+                            )}
                           </IconButton>
                         </div>
                       </div>

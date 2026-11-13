@@ -8,6 +8,7 @@ import DialogShell from "../ui/DialogShell";
 import InlineAlert from "../ui/InlineAlert";
 import HassleForm from "./HassleForm";
 import HassleList from "./HassleList";
+import HassleTitleForm from "./HassleTitleForm";
 
 type Editor = { task: HassleTask };
 export default function HassleInventory({
@@ -47,7 +48,7 @@ export default function HassleInventory({
         {state.create.request && !state.create.writing ? (
           <>
             <p className="text-sm text-muted">
-              Retry sends the exact original reminder. It may already be saved.
+              Changes may have partially applied. Refresh Calendar before starting a new reminder.
             </p>
             <Button onClick={store.newCreate}>Start a separate new hassle</Button>
           </>
@@ -86,6 +87,9 @@ export default function HassleInventory({
             Retry refresh
           </Button>
         ) : null}
+        <Button disabled={busy || state.refreshing} onClick={store.refresh}>
+          Refresh Calendar
+        </Button>
         <HassleList
           tasks={projectTasks(inventory.data?.tasks ?? [], state.operations)}
           busy={busy}
@@ -117,22 +121,40 @@ export default function HassleInventory({
           onClose={() => setEditor(null)}
           panelClassName="box-border w-[min(34rem,95vw)] overflow-y-auto p-5"
         >
-          <HassleForm
-            initial={editor.task.schedule ?? undefined}
-            busy={busy || blocked.has(editor.task.id)}
-            error=""
-            onClose={() => setEditor(null)}
-            onSave={(schedule) => {
-              const task = editor.task;
-              if (
-                store.submit(
-                  { location, action: "edit", id: task.id, revision: task.revision, schedule },
-                  task,
+          {editor.task.id.startsWith("v2:") ? (
+            <HassleTitleForm
+              title={editor.task.title}
+              busy={busy || blocked.has(editor.task.id)}
+              onClose={() => setEditor(null)}
+              onSave={(title) => {
+                const task = editor.task;
+                if (
+                  store.submit(
+                    { location, action: "rename", id: task.id, revision: task.revision, title },
+                    task,
+                  )
                 )
-              )
-                setEditor(null);
-            }}
-          />
+                  setEditor(null);
+              }}
+            />
+          ) : (
+            <HassleForm
+              initial={editor.task.schedule ?? undefined}
+              busy={busy || blocked.has(editor.task.id)}
+              error=""
+              onClose={() => setEditor(null)}
+              onSave={(schedule) => {
+                const task = editor.task;
+                if (
+                  store.submit(
+                    { location, action: "edit", id: task.id, revision: task.revision, schedule },
+                    task,
+                  )
+                )
+                  setEditor(null);
+              }}
+            />
+          )}
         </DialogShell>
       ) : null}
       {removing ? (
@@ -143,7 +165,8 @@ export default function HassleInventory({
         >
           <h2 className="mt-0 text-lg">Done with {removing.title}?</h2>
           <p>
-            Permanently remove all reminders for this hassle from Calendar. This cannot be undone.
+            Permanently remove all {removing.resources} Calendar resources for this hassle. This
+            cannot be undone.
           </p>
           <div className="flex justify-end gap-2">
             <Button onClick={() => setRemoving(null)}>Cancel</Button>

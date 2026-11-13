@@ -317,8 +317,8 @@ func TestDailyPartsOldReaderWhollyCanceledUsesPreviouslyCapturedRequests(t *test
 
 func TestDailyPartsOldReaderDocketAddedBOUNDARYCounterexamples(t *testing.T) {
 	p := dailyV2Compile(t, dailyV2Schedule("2027-02-12T09:17", 24, false, ""))
-	// Not a safety negative: adding Docket can reopen generic old all-instance
-	// removal even when strict v2 recognition and schedule editing are refused.
+	// Inventory remains a historical reference for the old writable hole.
+	// Current mutation admission must reject that legacy-ID escape.
 	for _, action := range []string{"delete", "done"} {
 		t.Run("BOUNDARY/full-v2-plus-Docket/"+action, func(t *testing.T) {
 			objects := dailyGroupObjects(t, p)
@@ -336,8 +336,8 @@ func TestDailyPartsOldReaderDocketAddedBOUNDARYCounterexamples(t *testing.T) {
 				t.Fatal(err)
 			}
 			result, err := Mutate(context.Background(), b, in, now)
-			if err != nil || result.Removed != 1 || len(b.writes) != 1 || b.writes[0].body != "" || b.objectCalls != 1 {
-				t.Fatalf("expected demonstrated generic removal boundary: %+v %v", result, err)
+			if !errors.Is(err, ErrConflict) || result.Removed != 0 || len(b.writes) != 0 || b.objectCalls != 1 {
+				t.Fatalf("legacy-ID escape was not rejected after a fresh read: %+v %v", result, err)
 			}
 			if snapshot(t, objects) != before {
 				t.Fatal("boundary backend unexpectedly mutated fixture")

@@ -64,7 +64,9 @@ export function hasslesFixture() {
       if (method === "GET")
         return mode === "inventory-error" ? fail(502, "Inventory unavailable") : ok({ tasks });
       const mutation = body as Mutation;
-      if (!["create", "edit", "done", "delete", "done-instance"].includes(mutation.action))
+      if (
+        !["create", "edit", "rename", "done", "delete", "done-instance"].includes(mutation.action)
+      )
         return fail(400, "Offline fixture does not support this task action");
       if (JSON.stringify(mutation.location) !== JSON.stringify(location))
         return fail(409, "Location changed; refresh");
@@ -73,8 +75,10 @@ export function hasslesFixture() {
       if (mode === "conflict") return fail(409, "Calendar changed; refresh before trying again");
       if (mutation.action === "create") {
         if (!mutation.schedule) return fail(400, "Schedule required");
-        const id = `task:${mutation.id}`;
+        const native = mutation.schedule.cadence === "hourly";
+        const id = `${native ? "v2" : "task"}:${mutation.id}`;
         const existing = tasks.find((t) => t.id === id);
+        if (native && existing) return fail(409, "Create UUID already claimed; refresh Calendar");
         if (existing && JSON.stringify(existing.schedule) !== JSON.stringify(mutation.schedule))
           return fail(409, "Create ID already used with a different schedule");
         if (!existing)
@@ -82,21 +86,34 @@ export function hasslesFixture() {
             id,
             revision: String(++revision),
             title: mutation.schedule.title,
-            reminder: `${mutation.schedule.start} Australia/Melbourne · ${mutation.schedule.cadence}`,
-            resources: 1,
+            reminder: native
+              ? `Every ${mutation.schedule.interval} hours${mutation.schedule.until ? ` · Until ${mutation.schedule.until}` : ""}`
+              : `${mutation.schedule.start} Australia/Melbourne · ${mutation.schedule.cadence}`,
+            resources: native
+              ? Array.from({ length: 24 }, (_, hour) => hour).filter(
+                  (hour) =>
+                    (!mutation.schedule!.workHours || (hour >= 9 && hour < 17)) &&
+                    (mutation.schedule!.interval < 1 ||
+                      (hour - Number(mutation.schedule!.start.slice(11, 13)) + 24) %
+                        mutation.schedule!.interval ===
+                        0),
+                ).length
+              : 1,
             writable: true,
             restriction: "",
-            instance: {
-              at: new Date(wallInstant(mutation.schedule.start)!)
-                .toISOString()
-                .replace(".000Z", "Z"),
-              token: "fixture-token",
-            },
+            instance: native
+              ? null
+              : {
+                  at: new Date(wallInstant(mutation.schedule.start)!)
+                    .toISOString()
+                    .replace(".000Z", "Z"),
+                  token: "fixture-token",
+                },
             instanceRestriction: "",
             schedule: mutation.schedule,
             timing: {
-              state: "upcoming",
-              next: new Date(wallInstant(mutation.schedule.start)!).toISOString(),
+              state: native ? "unknown" : "upcoming",
+              next: native ? null : new Date(wallInstant(mutation.schedule.start)!).toISOString(),
               last: null,
               note: "",
             },
@@ -119,6 +136,11 @@ export function hasslesFixture() {
             task.instance.at = task.timing.next.replace(".000Z", "Z");
             task.revision = String(++revision);
           }
+        } else if (mutation.action === "rename") {
+          if (!mutation.title) return fail(400, "Title required");
+          task.title = mutation.title;
+          if (task.schedule) task.schedule = { ...task.schedule, title: mutation.title };
+          task.revision = String(++revision);
         } else if (mutation.action === "edit") {
           if (!mutation.schedule) return fail(400, "Schedule required");
           task.title = mutation.schedule.title;

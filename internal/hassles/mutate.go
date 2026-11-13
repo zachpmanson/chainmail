@@ -15,6 +15,7 @@ type Mutation struct {
 	Action        string   `json:"action"`
 	ID            string   `json:"id"`
 	Revision      string   `json:"revision"`
+	Title         string   `json:"title,omitempty"`
 	Schedule      Schedule `json:"schedule"`
 	AdoptID       *string  `json:"adoptId,omitempty"`
 	AdoptHash     *string  `json:"adoptHash,omitempty"`
@@ -64,14 +65,64 @@ func Mutate(ctx context.Context, b Backend, in Mutation, now time.Time) (Result,
 	if err != nil {
 		return result, err
 	}
-	tasks, err := Inventory(objects, now)
+	var tasks []Task
+	if strings.HasPrefix(in.ID, "v2:") {
+		tasks, err = SelectedInventory(objects, in.Location, now)
+	} else {
+		tasks, err = Inventory(objects, now)
+	}
 	if err != nil {
 		return result, err
+	}
+	// Legacy IDs never grant mutation authority over reserved native metadata.
+	// Check the target, not unrelated rows, so ordinary legacy calendars remain usable.
+	if !strings.HasPrefix(in.ID, "v2:") && in.Action != "create" {
+		for _, task := range tasks {
+			for _, object := range task.members {
+				if object.Data == nil || (task.ID != in.ID && !(in.Action == "adopt" && "resource:"+digest(object.Path) == in.ID)) {
+					continue
+				}
+				for _, event := range object.Data.Events() {
+					for _, prop := range event.Props["DESCRIPTION"] {
+						text, _ := prop.Text()
+						if dailyPartsReserved(text) {
+							return result, ErrConflict
+						}
+					}
+				}
+			}
+		}
 	}
 	if in.Action == "adopt" {
 		return adoptReminder(ctx, b, in, objects, tasks)
 	}
 	if in.Action == "create" {
+		if in.Schedule.Cadence == "hourly" {
+			for _, task := range tasks {
+				if task.ID == "task:"+strings.ToLower(in.ID) || task.ID == "v2:"+strings.ToLower(in.ID) {
+					return result, ErrConflict
+				}
+			}
+			return createDailyParts(ctx, b, in, objects, now)
+		}
+		for _, o := range objects {
+			if o.Data == nil {
+				continue
+			}
+			for _, e := range o.Data.Events() {
+				for _, p := range e.Props["DESCRIPTION"] {
+					text, _ := p.Text()
+					if !dailyPartsReserved(text) {
+						continue
+					}
+					for _, hint := range dailyPartsHints(text) {
+						if hint == strings.ToLower(in.ID) {
+							return result, ErrConflict
+						}
+					}
+				}
+			}
+		}
 		c, err := NewCalendar(in.ID, in.Schedule, now)
 		if err != nil {
 			return result, err
@@ -111,7 +162,12 @@ func Mutate(ctx context.Context, b Backend, in Mutation, now time.Time) (Result,
 	if !task.Writable {
 		return result, errors.New(task.Restriction)
 	}
+	if strings.HasPrefix(task.ID, "v2:") && in.Action != "rename" && in.Action != "done" && in.Action != "delete" {
+		return result, errors.New("recurring reminder supports only title rename and whole-reminder deletion")
+	}
 	switch in.Action {
+	case "rename":
+		return renameReminder(ctx, b, in, task)
 	case "done-instance":
 		return completeInstance(ctx, b, in, task, now)
 	case "edit":
@@ -136,7 +192,7 @@ func Mutate(ctx context.Context, b Backend, in Mutation, now time.Time) (Result,
 	case "delete", "done":
 		for _, o := range task.members {
 			if err := b.Write(ctx, in.Location.CalendarID, o.Path, o.ETag, ""); err != nil {
-				return result, fmt.Errorf("removed %d of %d resources; refresh inventory before retrying: %w", result.Removed, task.Resources, err)
+				return result, fmt.Errorf("removed %d of %d resources; Changes may have partially applied; refresh Calendar before retrying: %w", result.Removed, task.Resources, err)
 			}
 			result.Removed++
 		}

@@ -187,7 +187,7 @@ func (s *server) hassleInventory(w http.ResponseWriter, r *http.Request) {
 		fail(w, 502, err)
 		return
 	}
-	tasks, err := hassles.Inventory(objects, time.Now())
+	tasks, err := hassles.SelectedInventory(objects, loc, time.Now())
 	if err != nil {
 		fail(w, 502, err)
 		return
@@ -219,7 +219,7 @@ func (s *server) hassleMutation(w http.ResponseWriter, r *http.Request) {
 	if !decodeHassle(w, r, &in) {
 		return
 	}
-	if in.Action != "create" && in.Action != "edit" && in.Action != "done" && in.Action != "delete" && in.Action != "adopt" && in.Action != "done-instance" {
+	if in.Action != "create" && in.Action != "rename" && in.Action != "edit" && in.Action != "done" && in.Action != "delete" && in.Action != "adopt" && in.Action != "done-instance" {
 		fail(w, 400, errors.New("unsupported task action"))
 		return
 	}
@@ -247,7 +247,21 @@ func (s *server) hassleMutation(w http.ResponseWriter, r *http.Request) {
 		fail(w, 409, err)
 		return
 	}
-	result, err := hassles.Mutate(ctx, b, in, time.Now())
+	guarded := selectedHassleWriter{Backend: b, check: func() error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		stored, err := s.hassleLocation()
+		if err != nil {
+			return err
+		}
+		if !s.hasslesEnabled || stored != in.Location {
+			return hassles.ErrConflict
+		}
+		_, err = s.connectedAccount(in.Location.AccountID)
+		return err
+	}}
+	result, err := hassles.Mutate(ctx, guarded, in, time.Now())
 	if err != nil {
 		status := http.StatusBadGateway
 		if errors.Is(err, hassles.ErrConflict) {
@@ -257,4 +271,16 @@ func (s *server) hassleMutation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	send(w, 200, result)
+}
+
+type selectedHassleWriter struct {
+	hassles.Backend
+	check func() error
+}
+
+func (b selectedHassleWriter) Write(ctx context.Context, collection, href, etag, body string) error {
+	if err := b.check(); err != nil {
+		return err
+	}
+	return b.Backend.Write(ctx, collection, href, etag, body)
 }
