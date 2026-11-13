@@ -1,3 +1,4 @@
+import { canWrite, isLegacy } from "./native";
 import { hashKey, QueryClient } from "@tanstack/react-query";
 import { $api, fetchClient } from "../api/api";
 import type { components } from "../api/api.d";
@@ -134,10 +135,10 @@ export class HassleOperations {
   };
   submit(request: HassleRequest, original?: HassleTask): boolean {
     if (
-      this.client.isMutating({
-        predicate: (mutation) =>
-          mutation.options.mutationKey?.includes("/v1/hassles/location") ?? false,
-      })
+      !canWrite(this.client) ||
+      (original && !isLegacy(original)) ||
+      request.id.startsWith("v2:") ||
+      request.schedule?.cadence === "hourly"
     )
       return false;
     const rowId = request.action === "create" ? `task:${request.id.toLowerCase()}` : request.id;

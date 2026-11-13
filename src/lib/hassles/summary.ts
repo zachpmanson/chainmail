@@ -36,11 +36,14 @@ export function hassleSummary(task: HassleTask, now = Date.now()): string {
   const instant = Date.parse(
     (task.timing.state === "past" ? task.timing.last : task.timing.next) ?? "",
   );
-  if (!Number.isFinite(instant)) return task.reminder;
+
+  if (!Number.isFinite(instant) && !task.displaySchedule) return task.reminder;
   const prefix = task.timing.state === "past" ? "Last: " : task.timing.note ? "Known next: " : "";
   const allDay = task.timing.state === "past" ? task.timing.lastAllDay : task.timing.nextAllDay;
-  const parts = [prefix + dateTime(instant, now, allDay)];
-  const schedule = task.schedule;
+  const parts = [
+    Number.isFinite(instant) ? prefix + dateTime(instant, now, allDay) : task.reminder,
+  ];
+  const schedule = task.displaySchedule ?? task.schedule;
   if (schedule && schedule.cadence !== "once") {
     parts.push(
       schedule.cadence === "weekdays"

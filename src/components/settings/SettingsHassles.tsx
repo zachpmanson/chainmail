@@ -1,4 +1,5 @@
-import { useIsMutating } from "@tanstack/react-query";
+import useNativeOperations from "../../lib/hassles/useNativeOperations";
+import HassleRecovery from "../hassles/HassleRecovery";
 import { $api } from "../../lib/api/api";
 import { locationKey } from "../../lib/hassles/forms";
 import { errText } from "../../lib/ui/errText";
@@ -8,11 +9,7 @@ import SettingsSection from "./SettingsSection";
 
 export default function SettingsHassles() {
   const config = $api.useQuery("get", "/v1/hassles/location", {}, { staleTime: 0 });
-  const mutations = useIsMutating({
-    predicate: (m) =>
-      m.options.mutationKey?.some((k) => typeof k === "string" && k.startsWith("/v1/hassles")) ??
-      false,
-  });
+  const native = useNativeOperations();
   const location = config.data?.location;
   return (
     <SettingsSection
@@ -20,6 +17,7 @@ export default function SettingsHassles() {
       title="Hassles"
       description="Choose one connected account and a dedicated reminder calendar."
     >
+      <HassleRecovery />
       {config.isError ? <InlineAlert compact>{errText(config.error)}</InlineAlert> : null}
       {config.isPending ? <p>Reading reminder settings…</p> : null}
       {config.data && !config.data.enabled ? (
@@ -32,7 +30,7 @@ export default function SettingsHassles() {
         <HassleLocationPicker
           key={locationKey(location)}
           location={location}
-          busy={mutations > 0 || config.isFetching || config.isError}
+          busy={native.busy || config.isFetching || config.isError}
           onSaved={() => {
             void config.refetch();
           }}

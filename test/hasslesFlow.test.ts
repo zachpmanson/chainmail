@@ -78,116 +78,6 @@ afterEach(async () => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
-it("submits hourly work-hours schedules, preserves a failed-create draft and edits the checkbox", async () => {
-  await choose();
-  const checkbox = (scope: ParentNode = addForm()) =>
-    scope.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
-  expect(checkbox().checked).toBe(false);
-  const hourly = [...repeat().options].find((o) => o.value === "hourly")!;
-  expect(hourly.disabled).toBe(false);
-  expect([...repeat().options].map((option) => option.value)).toEqual([
-    "once",
-    "hourly",
-    "daily",
-    "weekdays",
-    "weekly",
-    "monthly",
-    "yearly",
-  ]);
-  await type(titleInput(), "Office cycle");
-  await select(firstReminder(), "custom");
-  await type(customStart(), "2027-01-01T09:00");
-  await select(repeat(), "hourly");
-  const every = field("Every", addForm()).querySelector("select")!;
-  expect([...every.options].map((option) => Number(option.value))).toEqual([
-    0.5, 1, 2, 3, 4, 6, 8, 12, 24,
-  ]);
-  await select(every, "0.5");
-  expect(field("Every", addForm()).textContent).toContain("hours");
-  expect(every.classList.contains("min-w-14")).toBe(true);
-  expect(every.parentElement!.classList.contains("flex-wrap")).toBe(true);
-  await click(checkbox());
-  expect(addForm().textContent).not.toContain("Reminders outside");
-  fixture.handle("/__hassles_fixture", "POST", { mode: "read-only" });
-  await click(button("Add hassle"));
-  const writes = () =>
-    fixture.requests.filter((r) => r.method === "POST" && r.path.endsWith("/v1/hassles"));
-  const first = writes().at(-1)!.body as {
-    id: string;
-    schedule: { cadence: string; interval: number; workHours: boolean };
-  };
-  expect(first.schedule).toMatchObject({ cadence: "hourly", interval: 0.5, workHours: true });
-  expect(checkbox().checked).toBe(true);
-  await click(button("Ended"));
-  await click(button("Upcoming"));
-  fixture.handle("/__hassles_fixture", "POST", { mode: "normal" });
-  await click(button("Add hassle"));
-  expect(writes().at(-1)!.body).toEqual(first);
-  expect(checkbox().checked).toBe(false);
-  expect(document.querySelector("[data-hassle-heading] [data-hassle-work]")?.textContent).toBe(
-    "work",
-  );
-  expect(document.querySelector("[data-hassle-summary]")?.textContent).not.toContain("work");
-  await click(button("Edit"));
-  const dialog = document.querySelector('[role="dialog"][aria-modal="true"]')!;
-  expect(document.querySelectorAll('[role="dialog"][aria-modal="true"]')).toHaveLength(1);
-  expect(dialog.querySelector('[role="dialog"]')).toBeNull();
-  const editForm = dialog.querySelector('section[aria-label="Edit hassle"]')!;
-  expect(editForm.classList.contains("border")).toBe(false);
-  expect(editForm.classList.contains("p-4")).toBe(false);
-  expect(dialog.classList.contains("box-border")).toBe(true);
-  expect(addForm().classList.contains("border")).toBe(true);
-  expect(addForm().classList.contains("p-4")).toBe(true);
-  expect(checkbox(dialog).checked).toBe(true);
-  expect(dialog.textContent).not.toContain("Reminders outside");
-  expect(repeat(dialog).value).toBe("hourly");
-  expect(field("Every", dialog).querySelector("select")!.value).toBe("0.5");
-  await click(checkbox(dialog));
-  await click(button("Save reminder"));
-  expect((writes().at(-1)!.body as { schedule: { workHours: boolean } }).schedule.workHours).toBe(
-    false,
-  );
-  expect(document.querySelector('section[aria-label="Reminders"] p')?.textContent).not.toContain(
-    "work",
-  );
-});
-it.each(
-  [0.5, 1, 2, 3, 4, 6, 8, 12, 24].flatMap((interval) =>
-    [false, true].map((workHours) => ({ interval, workHours })),
-  ),
-)(
-  "roundtrips hourly $interval / work hours $workHours through create retry and edit",
-  async ({ interval, workHours }) => {
-    await choose();
-    await type(titleInput(), "Supported slots");
-    await select(firstReminder(), "custom");
-    await type(customStart(), "2027-01-01T16:45");
-    await select(repeat(), "hourly");
-    await select(field("Every", addForm()).querySelector("select")!, String(interval));
-    if (workHours)
-      await click(addForm().querySelector<HTMLInputElement>('input[type="checkbox"]')!);
-    fixture.handle("/__hassles_fixture", "POST", { mode: "read-only" });
-    await click(button("Add hassle"));
-    const writes = () =>
-      fixture.requests.filter((r) => r.method === "POST" && r.path.endsWith("/v1/hassles"));
-    const first = writes().at(-1)!.body;
-    fixture.handle("/__hassles_fixture", "POST", { mode: "normal" });
-    await click(button("Add hassle"));
-    expect(writes().at(-1)!.body).toEqual(first);
-    await click(button("Edit"));
-    const dialog = document.querySelector('[role="dialog"][aria-modal="true"]')!;
-    expect(field("Every", dialog).querySelector("select")!.value).toBe(String(interval));
-    const checkbox = dialog.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
-    expect(checkbox.checked).toBe(workHours);
-    await click(checkbox);
-    await click(button("Save reminder"));
-    expect((writes().at(-1)!.body as { schedule: unknown }).schedule).toMatchObject({
-      cadence: "hourly",
-      interval,
-      workHours: !workHours,
-    });
-  },
-);
 it("validates work-hours first reminders without moving them or sending a write", async () => {
   await choose();
   await type(titleInput(), "Invalid office time");
@@ -822,9 +712,10 @@ it("global refresh reads config then only the exact selected inventory, preservi
   const requests = fixture.requests.slice(start);
   expect(requests.map((r) => [r.method, new URL(r.path, "http://localhost").pathname])).toEqual([
     ["GET", "/v1/hassles/location"],
+    ["GET", "/v1/hassles/recovery"],
     ["GET", "/v1/hassles"],
   ]);
-  const query = new URL(requests[1]!.path, "http://localhost").searchParams;
+  const query = new URL(requests[2]!.path, "http://localhost").searchParams;
   expect(Object.fromEntries(query)).toEqual(fixtureLocation);
   expect(mailRead).toHaveBeenCalledTimes(beforeMail);
   expect(otherRead).toHaveBeenCalledTimes(beforeOther);
@@ -958,7 +849,7 @@ it("keeps cached rows and Add usable through unrelated reads and writes", async 
     releaseWrite = resolve;
   });
   await click(button("Add hassle"));
-  expect(rowAction("Edit Existing reminder").disabled).toBe(false);
+  expect(rowAction("Edit Existing reminder").disabled).toBe(true);
   expect(titleInput().disabled).toBe(true);
   expect(button("Saving…").disabled).toBe(true);
   await act(async () => {
@@ -1144,15 +1035,13 @@ async function navigateAwayAndBack() {
   await settle();
 }
 
-it("projects edit before processing and independently creates and completes another row", async () => {
+it("projects a legacy edit while globally blocking another row and Add", async () => {
   await choose();
   await add("Alpha");
   await add("Beta");
   const edit = deferred();
-  const complete = deferred();
   processing = async (_request, body) => {
     if (body.action === "edit") await edit.promise;
-    if (body.action === "done-instance") await complete.promise;
   };
   await click(rowAction("Edit Alpha"));
   await type(
@@ -1160,25 +1049,16 @@ it("projects edit before processing and independently creates and completes anot
     "Alpha edited",
   );
   await click(button("Save reminder"));
-  expect(document.querySelector('[role="dialog"][aria-modal="true"]')).toBeNull();
   expect(rowAction("Edit Alpha edited").disabled).toBe(true);
-  expect(rowAction("Edit Beta").disabled).toBe(false);
-  expect(titleInput().disabled).toBe(false);
-  expect(writes("edit")).toHaveLength(0); // processing, not just response delivery, is gated
+  expect(rowAction("Edit Beta").disabled).toBe(true);
+  expect(titleInput().disabled).toBe(true);
   await click(rowAction("This instance only: Beta"));
-  expect(rowAction("Edit Beta").closest("li")!.textContent).toContain("Updating next reminder…");
-  expect(rowAction("Edit Beta").closest("li")!.textContent).not.toContain("Tomorrow");
-  await add("Gamma");
-  expect(rowAction("Edit Gamma").disabled).toBe(false);
-  expect(rowAction("Edit Alpha edited").disabled).toBe(true);
-  complete.resolve();
-  await settle();
-  expect(rowAction("Edit Beta").disabled).toBe(false);
-  expect(rowAction("Edit Alpha edited").disabled).toBe(true);
+  expect(writes("done-instance")).toHaveLength(0);
   edit.resolve();
   await settle();
-  expect(rowAction("Edit Alpha edited").disabled).toBe(false);
-  expect(writes("edit")).toHaveLength(1);
+  expect(rowAction("Edit Beta").disabled).toBe(false);
+  expect(titleInput().disabled).toBe(false);
+  await click(rowAction("This instance only: Beta"));
   expect(writes("done-instance")).toHaveLength(1);
 });
 
@@ -1195,7 +1075,7 @@ it("retains acknowledged removal after failed GET; retry refresh never resends P
   await click(rowAction("All instances: Remove me"));
   await click(button("Remove all reminders"));
   expect(rowAction("Edit Remove me")).toBeNull();
-  expect(titleInput().disabled).toBe(false);
+  expect(titleInput().disabled).toBe(true);
   fixture.handle("/__hassles_fixture", "POST", { mode: "inventory-error" });
   response.resolve();
   await settle();
@@ -1247,46 +1127,26 @@ it("persists a lost-response create's exact UUID/payload as Add across remount",
   expect(titleInput().value).toBe("");
 });
 
-it("keeps an intermediate read from retiring a later settle or stranding earlier success", async () => {
+it("blocks a second write until the first mutation settles, even with readback held", async () => {
   await choose();
   await add("First");
   await add("Second");
-  const firstResponse = deferred();
-  const secondResponse = deferred();
-  const firstRead = deferred();
-  const secondRead = deferred();
-  let reads = 0;
+  const response = deferred();
+  const read = deferred();
   delivery = async (request, body) => {
-    if (body.action === "done-instance") {
-      const task = body.id as string;
-      const firstId = (writes("create")[0]!.body as { id: string }).id;
-      await (task === `task:${firstId}` ? firstResponse.promise : secondResponse.promise);
-    }
-    if (request.method === "GET" && new URL(request.url).pathname === "/v1/hassles") {
-      reads++;
-      await (reads === 1 ? firstRead.promise : secondRead.promise);
-    }
+    if (body.action === "done-instance") await response.promise;
+    if (request.method === "GET" && new URL(request.url).pathname === "/v1/hassles")
+      await read.promise;
   };
   await click(rowAction("This instance only: First"));
+  expect(rowAction("This instance only: Second").disabled).toBe(true);
   await click(rowAction("This instance only: Second"));
-  firstResponse.resolve();
+  expect(writes("done-instance")).toHaveLength(1);
+  response.resolve();
   await settle();
-  expect(reads).toBe(1);
-  secondResponse.resolve();
+  read.resolve();
   await settle();
-  expect(rowAction("Edit First").disabled).toBe(true);
-  expect(rowAction("Edit Second").disabled).toBe(true);
-  firstRead.resolve();
-  await settle();
-  expect(reads).toBe(2);
-  expect(rowAction("Edit First").disabled).toBe(false);
-  expect(rowAction("Edit Second").disabled).toBe(true);
-  secondRead.resolve();
-  await settle();
-  expect(rowAction("Edit Second").disabled).toBe(false);
-  const before = writes("done-instance").length;
-  await click(rowAction("This instance only: Second"));
-  expect(writes("done-instance")).toHaveLength(before + 1); // authoritative replacement witness
+  expect(rowAction("This instance only: Second").disabled).toBe(false);
 });
 
 it("restores only failed edit draft without stealing an unrelated open editor", async () => {
@@ -1304,9 +1164,10 @@ it("restores only failed edit draft without stealing an unrelated open editor", 
     "Captured draft",
   );
   await click(button("Save reminder"));
-  await click(rowAction("Edit Other edit"));
+  expect(rowAction("Edit Other edit").disabled).toBe(true);
   response.resolve();
   await settle();
+  await click(rowAction("Edit Other edit"));
   expect(document.querySelector<HTMLTextAreaElement>('[role="dialog"] textarea')!.value).toBe(
     "Other edit",
   );
@@ -1373,7 +1234,7 @@ it("reserves a row synchronously against same-tick instance double clicks", asyn
   });
   await settle();
   expect(writes("done-instance")).toHaveLength(1);
-  expect(titleInput().disabled).toBe(false);
+  expect(titleInput().disabled).toBe(true);
   response.resolve();
   await settle();
 });
@@ -1476,7 +1337,7 @@ it("blocks cached-calendar writes through pending selection and publishes only c
   await settle();
   expect(reads).toBe(1);
   expect(titleInput().disabled).toBe(true);
-  expect(button("Saving…").disabled).toBe(true);
+  expect(button("Add hassle").disabled).toBe(true);
   expect(rowAction("Edit Old selected task").disabled).toBe(true);
   expect(rowAction("This instance only: Old selected task").disabled).toBe(true);
   expect(rowAction("All instances: Old selected task").disabled).toBe(true);

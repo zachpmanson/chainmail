@@ -1,4 +1,5 @@
 import { QueryClient } from "@tanstack/react-query";
+import { $api } from "../src/lib/api/api";
 import { afterEach, expect, it, vi } from "vitest";
 import { defaultSchedule, type HassleTask } from "../src/lib/hassles/forms";
 import {
@@ -86,6 +87,10 @@ it("restores a failed delete against the freshest base, not the captured snapsho
 });
 it("isolates stores by canonical location and QueryClient", () => {
   const client = new QueryClient();
+  client.setQueryData($api.queryOptions("get", "/v1/hassles/location", {}).queryKey, {
+    enabled: true,
+    recovery: { status: "ready", fence: "11111111-1111-4111-8111-111111111111:1" },
+  });
   const first = hassleOperations(client, location);
   expect(
     hassleOperations(client, { calendarId: location.calendarId, accountId: location.accountId }),
@@ -108,60 +113,49 @@ function json(data: unknown, status = 200) {
     headers: { "Content-Type": "application/json" },
   });
 }
+function recoveryResponse(request: Request) {
+  if (new URL(request.url).pathname === "/v1/hassles/recovery")
+    return json({ status: "ready", fence: "11111111-1111-4111-8111-111111111111:1" });
+}
 async function tick() {
   await new Promise((resolve) => setTimeout(resolve, 10));
 }
 
-it.each([false, true])(
-  "settles independent failure/success in either response order (failure first: %s)",
-  async (failureFirst) => {
-    const client = new QueryClient();
-    const store = hassleOperations(client, location);
-    const a = deferred(),
-      b = deferred();
-    let authoritative = [task("A"), task("B")];
-    vi.stubGlobal("fetch", async (request: Request) => {
-      if (request.method === "GET") return json({ tasks: authoritative });
-      const body = (await request.json()) as HassleRequest;
-      if (body.id === "A") {
-        await a.promise;
-        return json({ error: "Denied" }, 502);
-      }
-      await b.promise;
-      authoritative = [task("A")];
-      return json({ message: "Removed", removed: 1 });
-    });
-    const edit = op("A", "edit");
-    expect(store.submit(edit.request, edit.original)).toBe(true);
-    expect(store.submit(edit.request, edit.original)).toBe(false);
-    expect(
-      store.submit({ location, action: "done", id: "B", revision: "original" }, task("B")),
-    ).toBe(true);
-    (failureFirst ? a : b).resolve();
-    await tick();
-    (failureFirst ? b : a).resolve();
-    await tick();
-    await tick();
-    const state = store.getSnapshot();
-    expect(state.operations).toHaveLength(1);
-    expect(state.operations[0]!).toMatchObject({ rowId: "A", status: "failed", blocked: false });
-    expect(
-      projectTasks(
-        client.getQueryData<{ tasks: HassleTask[] }>(store.options.queryKey)!.tasks,
-        state.operations,
-      ).map((t) => t.id),
-    ).toEqual(["A"]);
-    client.clear();
-  },
-);
+it("serializes writes across legacy rows", async () => {
+  const client = new QueryClient();
+  client.setQueryData($api.queryOptions("get", "/v1/hassles/location", {}).queryKey, {
+    enabled: true,
+    recovery: { status: "ready", fence: "11111111-1111-4111-8111-111111111111:1" },
+  });
+  const store = hassleOperations(client, location);
+  const gate = deferred();
+  vi.stubGlobal("fetch", async (request: Request) => {
+    const recovery = recoveryResponse(request);
+    if (recovery) return recovery;
+    if (request.method === "POST") await gate.promise;
+    return json(request.method === "GET" ? { tasks: [] } : { message: "Updated", removed: 0 });
+  });
+  expect(store.submit(op("A", "edit").request, task("A"))).toBe(true);
+  expect(store.submit(op("B", "done").request, task("B"))).toBe(false);
+  gate.resolve();
+  await tick();
+  await tick();
+  client.clear();
+});
 
 it("ignores a cancelled stale read delivered after a newer read, without resurrecting a create", async () => {
   const client = new QueryClient();
+  client.setQueryData($api.queryOptions("get", "/v1/hassles/location", {}).queryKey, {
+    enabled: true,
+    recovery: { status: "ready", fence: "11111111-1111-4111-8111-111111111111:1" },
+  });
   const store = hassleOperations(client, location);
   const stale = deferred();
   let reads = 0;
   let saved: HassleTask | undefined;
   vi.stubGlobal("fetch", async (request: Request) => {
+    const recovery = recoveryResponse(request);
+    if (recovery) return recovery;
     if (request.method === "GET") {
       if (++reads === 1) {
         await stale.promise;
@@ -191,11 +185,17 @@ it("ignores a cancelled stale read delivered after a newer read, without resurre
 
 it("does not retire a write from an older read or manual cache replacement; newer retry tokens survive", async () => {
   const client = new QueryClient();
+  client.setQueryData($api.queryOptions("get", "/v1/hassles/location", {}).queryKey, {
+    enabled: true,
+    recovery: { status: "ready", fence: "11111111-1111-4111-8111-111111111111:1" },
+  });
   const store = hassleOperations(client, location);
   const read = deferred(),
     write = deferred();
   let reads = 0;
   vi.stubGlobal("fetch", async (request: Request) => {
+    const recovery = recoveryResponse(request);
+    if (recovery) return recovery;
     if (request.method === "GET") {
       if (++reads === 1) await read.promise;
       return json({ tasks: [task("A")] });
@@ -219,6 +219,8 @@ it("does not retire a write from an older read or manual cache replacement; newe
   const oldToken = store.getSnapshot().operations[0]!.token;
   const retry = deferred();
   vi.stubGlobal("fetch", async (request: Request) => {
+    const recovery = recoveryResponse(request);
+    if (recovery) return recovery;
     if (request.method === "GET") return json({ tasks: [task("A")] });
     await retry.promise;
     return json({ message: "Updated", removed: 0 });

@@ -1,3 +1,4 @@
+import useNativeOperations from "../../lib/hassles/useNativeOperations";
 import { $api } from "../../lib/api/api";
 import Button from "../ui/Button";
 import ButtonLink from "../ui/ButtonLink";
@@ -7,6 +8,12 @@ import InlineAlert from "../ui/InlineAlert";
 
 /** Mailbox connection and disconnection controls, including their confirmation boundary. */
 export default function SettingsAccounts() {
+  const native = useNativeOperations();
+  const config = $api.useQuery("get", "/v1/hassles/location", {}, { staleTime: 0 });
+  const bound = (id: string) =>
+    id === config.data?.location.accountId ||
+    id === native.state.recovery?.pending?.location.accountId ||
+    id === native.state.request?.location.accountId;
   const auth = $api.useQuery("get", "/auth/status", {});
   const disconnect = $api.useMutation("post", "/auth/accounts/{accountId}/disconnect", {
     onSuccess: () => auth.refetch(),
@@ -39,8 +46,17 @@ export default function SettingsAccounts() {
                       type="button"
                       variant="secondary"
                       aria-label={`Disconnect ${label}`}
-                      disabled={disconnect.isPending}
+                      disabled={
+                        disconnect.isPending ||
+                        (bound(account.id) && (native.busy || !!native.state.request))
+                      }
+                      title={
+                        bound(account.id) && (native.busy || !!native.state.request)
+                          ? "Review reminder operation status before disconnecting this account"
+                          : undefined
+                      }
                       onClick={() => {
+                        if (bound(account.id) && (native.busy || !!native.state.request)) return;
                         const warning =
                           account.id === "legacy"
                             ? " This also removes the shared Docket token."

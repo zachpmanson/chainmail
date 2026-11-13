@@ -21,6 +21,7 @@ export default function HassleForm({
   editing = !!initial,
   locked = false,
   busy,
+  saving = busy,
   error,
   onSave,
   onClose,
@@ -29,6 +30,7 @@ export default function HassleForm({
   editing?: boolean;
   locked?: boolean;
   busy: boolean;
+  saving?: boolean;
   error: string;
   onSave: (schedule: HassleSchedule) => void;
   onClose?: () => void;
@@ -57,9 +59,11 @@ export default function HassleForm({
           if (busy) return;
           const clean = { ...schedule, title: schedule.title.replace(/[\r\n]+/g, " ").trim() };
           const problem =
-            endMode === "date" && clean.cadence !== "once" && !clean.until
-              ? "Choose a repeat end date and time."
-              : validateSchedule(clean);
+            editing && clean.cadence === "hourly"
+              ? "Existing reminders cannot be edited to hourly. Create a separate hourly hassle instead."
+              : endMode === "date" && clean.cadence !== "once" && !clean.until
+                ? "Choose a repeat end date and time."
+                : validateSchedule(clean);
           setValidation(problem ?? "");
           if (!problem) onSave(clean);
         }}
@@ -206,7 +210,7 @@ export default function HassleForm({
             </Button>
           ) : null}
           <Button type="submit" variant="primary" disabled={busy}>
-            {busy ? "Saving…" : editing ? "Save reminder" : "Add hassle"}
+            {saving ? "Saving…" : editing ? "Save reminder" : "Add hassle"}
           </Button>
         </div>
       </form>

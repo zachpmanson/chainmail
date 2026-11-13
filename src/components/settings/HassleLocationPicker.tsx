@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { $api } from "../../lib/api/api";
+import { canSelect } from "../../lib/hassles/native";
 import { type HassleLocation } from "../../lib/hassles/forms";
 import { errText } from "../../lib/ui/errText";
 import Button from "../ui/Button";
@@ -106,11 +107,12 @@ export default function HassleLocationPicker({
             !dedicated ||
             !calendars.data?.calendars.some((c) => c.id === calendarId)
           }
-          onClick={() =>
+          onClick={() => {
+            if (!canSelect(client)) return;
             save.mutate({
               body: { location: { accountId, calendarId }, previous: location, dedicated: true },
-            })
-          }
+            });
+          }}
         >
           Use calendar
         </Button>

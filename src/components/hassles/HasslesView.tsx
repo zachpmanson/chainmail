@@ -1,4 +1,5 @@
-import { useIsMutating } from "@tanstack/react-query";
+import useNativeOperations from "../../lib/hassles/useNativeOperations";
+import HassleRecovery from "./HassleRecovery";
 import { useEffect } from "react";
 import { $api } from "../../lib/api/api";
 import { locationKey } from "../../lib/hassles/forms";
@@ -16,10 +17,7 @@ export default function HasslesView() {
     };
   }, []);
   const config = $api.useQuery("get", "/v1/hassles/location", {}, { staleTime: 0 });
-  const selecting = useIsMutating({
-    predicate: (mutation) =>
-      mutation.options.mutationKey?.includes("/v1/hassles/location") ?? false,
-  });
+  const native = useNativeOperations();
   const location = config.data?.location;
   const selected = !!location?.accountId && !!location.calendarId;
   return (
@@ -27,6 +25,7 @@ export default function HasslesView() {
       aria-label="Hassles"
       className="@container mx-auto box-border flex w-full max-w-[125rem] flex-col gap-4 px-4 py-5"
     >
+      <HassleRecovery />
       {config.isError ? <InlineAlert>{errText(config.error)}</InlineAlert> : null}
       {config.isPending ? <p>Reading reminder settings…</p> : null}
       {config.data && !config.data.enabled ? (
@@ -41,7 +40,7 @@ export default function HasslesView() {
         <HassleInventory
           key={locationKey(location)}
           location={location}
-          disabled={config.isError || selecting > 0}
+          disabled={config.isError || native.busy}
         />
       ) : null}
     </main>

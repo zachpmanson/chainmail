@@ -1,3 +1,5 @@
+import useNativeOperations from "../../lib/hassles/useNativeOperations";
+import { isNative, ready, type GroupRequest } from "../../lib/hassles/native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useSyncExternalStore } from "react";
 import { type HassleLocation, type HassleTask } from "../../lib/hassles/forms";
@@ -21,12 +23,21 @@ export default function HassleInventory({
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   const inventory = useQuery(store.options);
   const [editor, setEditor] = useState<Editor | null>(null);
-  const [removing, setRemoving] = useState<HassleTask | null>(null);
+  const [refusal, setRefusal] = useState("");
+  const [removing, setRemoving] = useState<{ task: HassleTask; request?: GroupRequest } | null>(
+    null,
+  );
+  const native = useNativeOperations();
+  const nativeCreate =
+    native.state.request?.group.action === "create" ? native.state.request.group : undefined;
   const createBusy =
     disabled ||
+    native.busy ||
+    !!native.state.request ||
     state.create.writing ||
     (inventory.isError && !inventory.data && !state.create.request);
-  const busy = disabled || (inventory.isError && !inventory.data);
+  const busy =
+    disabled || native.busy || !!native.state.request || (inventory.isError && !inventory.data);
   const blocked = new Set(state.operations.filter((op) => op.blocked).map((op) => op.rowId));
   return (
     <section
@@ -36,20 +47,38 @@ export default function HassleInventory({
       {/* Side by side needs two 40rem tracks and one gap: 83rem of the parent container. */}
       <div className="min-w-0">
         <HassleForm
-          key={state.create.id}
-          initial={state.create.request?.schedule}
+          key={`${state.create.id}:${native.state.createKey}`}
+          initial={nativeCreate?.schedule ?? state.create.request?.schedule}
           editing={false}
-          locked={!!state.create.request}
+          locked={!!state.create.request || !!nativeCreate}
           busy={createBusy}
-          error={state.create.error}
-          onSave={store.create}
+          saving={state.create.writing || (!!nativeCreate && native.state.writing)}
+          error={nativeCreate ? native.state.error : state.create.error}
+          onSave={(schedule) =>
+            schedule.cadence === "hourly"
+              ? native.store.create(location, schedule)
+              : store.create(schedule)
+          }
         />
+        {native.state.request && !native.state.writing && ready(native.state.recovery) ? (
+          <>
+            <p className="text-sm text-muted">
+              The original operation will not be resent. A separate creation may duplicate a
+              reminder already saved.
+            </p>
+            <Button disabled={native.busy} onClick={native.store.newCreate}>
+              Start a separate new hassle
+            </Button>
+          </>
+        ) : null}
         {state.create.request && !state.create.writing ? (
           <>
             <p className="text-sm text-muted">
               Retry sends the exact original reminder. It may already be saved.
             </p>
-            <Button onClick={store.newCreate}>Start a separate new hassle</Button>
+            <Button disabled={busy} onClick={store.newCreate}>
+              Start a separate new hassle
+            </Button>
           </>
         ) : null}
       </div>
@@ -87,7 +116,19 @@ export default function HassleInventory({
           </Button>
         ) : null}
         <HassleList
-          tasks={projectTasks(inventory.data?.tasks ?? [], state.operations)}
+          tasks={projectTasks(
+            [
+              ...(inventory.data?.tasks ?? []),
+              ...(native.state.request &&
+              native.state.original &&
+              native.state.request.location.accountId === location.accountId &&
+              native.state.request.location.calendarId === location.calendarId &&
+              !inventory.data?.tasks.some((task) => task.id === native.state.original!.id)
+                ? [native.state.original]
+                : []),
+            ],
+            state.operations,
+          )}
           busy={busy}
           blocked={blocked}
           onEdit={(task) => setEditor({ task })}
@@ -106,7 +147,14 @@ export default function HassleInventory({
               task,
             );
           }}
-          onDone={setRemoving}
+          onDone={(task) => {
+            if (busy) return;
+            const captured = structuredClone(task);
+            const request = isNative(task) ? native.store.captureDelete(task, location) : undefined;
+            if (isNative(task) && !request) return;
+            setRefusal("");
+            setRemoving({ task: captured, request });
+          }}
         />
       </section>
       {/* The empty right track centres the list. It shrinks to 0 before the layout stacks. */}
@@ -137,21 +185,52 @@ export default function HassleInventory({
       ) : null}
       {removing ? (
         <DialogShell
-          label="Finish hassle"
+          label={removing.request ? "Delete hassle" : "Finish hassle"}
           onClose={() => setRemoving(null)}
-          panelClassName="max-w-full p-5"
+          panelClassName="box-border w-[min(34rem,95vw)] min-w-0 max-w-full overflow-y-auto p-5 wrap-anywhere"
         >
-          <h2 className="mt-0 text-lg">Done with {removing.title}?</h2>
+          <h2 className="mt-0 text-lg">
+            {removing.request ? "Delete" : "Done with"} {removing.task.title}?
+          </h2>
+          {removing.request ? (
+            <p>
+              {removing.task.resources} components · {removing.request.location.accountId} ·{" "}
+              {removing.request.location.calendarId}
+            </p>
+          ) : null}
           <p>
             Permanently remove all reminders for this hassle from Calendar. This cannot be undone.
           </p>
+          {refusal ||
+          (removing.request &&
+            (native.state.request ||
+              removing.request.group.fence !== native.state.recovery?.fence)) ? (
+            <InlineAlert>
+              {refusal ||
+                "This confirmation is stale or another original operation is retained. Close it and review operation status before confirming again."}
+            </InlineAlert>
+          ) : null}
           <div className="flex justify-end gap-2">
             <Button onClick={() => setRemoving(null)}>Cancel</Button>
             <Button
               variant="danger"
-              disabled={busy || blocked.has(removing.id)}
+              disabled={
+                busy ||
+                blocked.has(removing.task.id) ||
+                (!!removing.request &&
+                  (!!native.state.request ||
+                    removing.request.group.fence !== native.state.recovery?.fence))
+              }
               onClick={() => {
-                const task = removing;
+                const task = removing.task;
+                if (removing.request) {
+                  if (native.store.submit(removing.request, task)) setRemoving(null);
+                  else
+                    setRefusal(
+                      "This confirmation cannot be submitted. Close it and review the original operation; it will not be rebased or resent.",
+                    );
+                  return;
+                }
                 if (
                   store.submit(
                     { location, action: "done", id: task.id, revision: task.revision },

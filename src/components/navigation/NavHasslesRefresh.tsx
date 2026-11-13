@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { IconRefresh } from "@tabler/icons-react";
 import { useIsFetching, useIsMutating, useQueryClient } from "@tanstack/react-query";
+import { hassleMutation, nativeOperations } from "../../lib/hassles/native";
 import { $api } from "../../lib/api/api";
 import { errText } from "../../lib/ui/errText";
 import { pushToast } from "../../lib/ui/toasts";
@@ -13,29 +14,17 @@ export default function NavHasslesRefresh() {
     predicate: (query) =>
       typeof query.queryKey[1] === "string" && query.queryKey[1].startsWith("/v1/hassles"),
   });
-  const writing = useIsMutating({
-    predicate: (mutation) =>
-      mutation.options.mutationKey?.some(
-        (key) => typeof key === "string" && key.startsWith("/v1/hassles"),
-      ) ?? false,
-  });
+  const writing = useIsMutating({ predicate: hassleMutation });
   const refresh = async () => {
     setBusy(true);
     try {
       const config = await qc.fetchQuery(
         $api.queryOptions("get", "/v1/hassles/location", {}, { staleTime: 0, retry: false }),
       );
-      if (config.enabled && config.location.accountId && config.location.calendarId) {
-        await qc.invalidateQueries(
-          {
-            exact: true,
-            queryKey: $api.queryOptions("get", "/v1/hassles", {
-              params: { query: config.location },
-            }).queryKey,
-          },
-          { cancelRefetch: false, throwOnError: true },
-        );
-      }
+      const store = nativeOperations(qc);
+      await store.status();
+      await store.refreshOperation();
+      if (config.enabled) await store.inventory(config.location, true);
     } catch (error) {
       pushToast(`Refreshing hassles failed: ${errText(error)}`, "fail");
     } finally {

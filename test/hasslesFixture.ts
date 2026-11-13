@@ -55,10 +55,16 @@ export function hasslesFixture() {
         location = input.location as Location;
         tasks = buckets.get(JSON.stringify(location)) ?? [];
       }
-      return ok({ enabled: mode !== "disabled", location });
+      return ok({
+        enabled: mode !== "disabled",
+        location,
+        recovery: { status: "ready", fence: "11111111-1111-4111-8111-111111111111:1" },
+      });
     }
     if (url.pathname.startsWith("/v1/hassles") && mode === "disconnected")
       return fail(409, "Selected account is disconnected; reconnect it");
+    if (url.pathname === "/v1/hassles/recovery")
+      return ok({ status: "ready", fence: "11111111-1111-4111-8111-111111111111:1" });
     if (url.pathname === "/v1/hassles/calendars") return ok({ calendars });
     if (url.pathname === "/v1/hassles") {
       if (method === "GET")

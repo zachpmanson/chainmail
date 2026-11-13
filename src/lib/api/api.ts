@@ -1,11 +1,13 @@
 import createFetchClient, { type Middleware } from "openapi-fetch";
 import createQueryClient from "openapi-react-query";
+import { parseRecovery } from "../hassles/recovery";
 import type { components, paths } from "./api.d";
 
 /** Carries the server's own message, which is the actionable part. */
 export class ApiError extends Error {
   readonly status: number;
   undoToken?: string;
+  recovery?: ReturnType<typeof parseRecovery>;
   /** From Retry-After, in ms. Set only when the service said when to come back. */
   readonly retryAfterMs?: number;
   constructor(status: number, message: string, retryAfterMs?: number) {
@@ -65,6 +67,8 @@ const declineAsError: Middleware = {
       typeof body.undoToken === "string"
     )
       error.undoToken = body.undoToken;
+    if (body && typeof body === "object" && "recovery" in body)
+      error.recovery = parseRecovery(body.recovery);
     throw error;
   },
 };

@@ -1,5 +1,6 @@
 import { Tabs } from "@base-ui/react/tabs";
-import { IconCheck, IconChecks, IconPencil } from "@tabler/icons-react";
+import { IconCheck, IconChecks, IconPencil, IconTrash } from "@tabler/icons-react";
+import { isNative, isLegacy } from "../../lib/hassles/native";
 import type { HassleTask } from "../../lib/hassles/forms";
 import { hassleGroups, type HassleTab } from "../../lib/hassles/groups";
 import { hassleSummary } from "../../lib/hassles/summary";
@@ -67,7 +68,7 @@ export default function HassleList({
                         >
                           {task.title}
                         </h3>
-                        {task.schedule?.workHours ? (
+                        {(task.displaySchedule ?? task.schedule)?.workHours ? (
                           <span data-hassle-work className="shrink-0">
                             <StatusBadge tone="neutral">work</StatusBadge>
                           </span>
@@ -81,38 +82,56 @@ export default function HassleList({
                           <span className="min-w-0 wrap-break-word">{hassleSummary(task)}</span>
                         </p>
                         <div data-hassle-actions className="flex shrink-0 items-center gap-3">
-                          <IconButton
-                            aria-label={`Edit ${task.title}`}
-                            title="Edit"
-                            disabled={
-                              busy || blocked.has(task.id) || !task.writable || !task.schedule
-                            }
-                            onClick={() => onEdit(task)}
-                          >
-                            <IconPencil aria-hidden="true" />
-                          </IconButton>
-                          <IconButton
-                            aria-label={`This instance only: ${task.title}`}
-                            title={
-                              task.instance
-                                ? `This instance only: ${task.title}`
-                                : `${task.title}: ${task.instanceRestriction || "This instance only unavailable"}`
-                            }
-                            disabled={
-                              busy || blocked.has(task.id) || !task.writable || !task.instance
-                            }
-                            onClick={() => onDoneInstance(task)}
-                          >
-                            <IconCheck aria-hidden="true" />
-                          </IconButton>
-                          <IconButton
-                            aria-label={`All instances: ${task.title}`}
-                            title={`All instances: ${task.title}`}
-                            disabled={busy || blocked.has(task.id) || !task.writable}
-                            onClick={() => onDone(task)}
-                          >
-                            <IconChecks aria-hidden="true" />
-                          </IconButton>
+                          {isLegacy(task) ? (
+                            <>
+                              <IconButton
+                                aria-label={`Edit ${task.title}`}
+                                title="Edit"
+                                disabled={
+                                  busy || blocked.has(task.id) || !task.writable || !task.schedule
+                                }
+                                onClick={() => onEdit(task)}
+                              >
+                                <IconPencil aria-hidden="true" />
+                              </IconButton>
+                              <IconButton
+                                aria-label={`This instance only: ${task.title}`}
+                                title={
+                                  task.instance
+                                    ? `This instance only: ${task.title}`
+                                    : `${task.title}: ${task.instanceRestriction || "This instance only unavailable"}`
+                                }
+                                disabled={
+                                  busy || blocked.has(task.id) || !task.writable || !task.instance
+                                }
+                                onClick={() => onDoneInstance(task)}
+                              >
+                                <IconCheck aria-hidden="true" />
+                              </IconButton>
+                              <IconButton
+                                aria-label={`All instances: ${task.title}`}
+                                title={`All instances: ${task.title}`}
+                                disabled={busy || blocked.has(task.id) || !task.writable}
+                                onClick={() => onDone(task)}
+                              >
+                                <IconChecks aria-hidden="true" />
+                              </IconButton>
+                            </>
+                          ) : isNative(task) ? (
+                            <IconButton
+                              aria-label={`Delete ${task.title}`}
+                              title={`Delete ${task.title}`}
+                              disabled={
+                                busy ||
+                                blocked.has(task.id) ||
+                                task.groupStatus !== "ready" ||
+                                !task.capabilities?.delete
+                              }
+                              onClick={() => onDone(task)}
+                            >
+                              <IconTrash aria-hidden="true" />
+                            </IconButton>
+                          ) : null}
                         </div>
                       </div>
                       {task.timing.note ? (
