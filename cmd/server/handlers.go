@@ -76,6 +76,7 @@ const (
 type server struct {
 	hasslesEnabled bool
 	hasslesMu      sync.Mutex
+	leaseHassles   hassleLeaseProvider
 	openHassles    func(context.Context, string) (hassles.Backend, error)
 	// One store for the process. database/sql is a pool and safe for concurrent
 	// use, and the corpus is WAL, so the CLI can write while this reads. Opening
@@ -210,6 +211,8 @@ func (s *server) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/hassles/location", methods(map[string]http.HandlerFunc{http.MethodGet: s.getHassleLocation, http.MethodPost: s.setHassleLocation}))
 	mux.HandleFunc("/v1/hassles/calendars", get(s.hassleCalendars))
+	mux.HandleFunc("/v1/hassles/groups", post(s.hassleGroupMutation))
+	mux.HandleFunc("/v1/hassles/recovery", methods(map[string]http.HandlerFunc{http.MethodGet: s.hassleRecoveryStatus, http.MethodPost: s.hassleRecoveryReconcile}))
 	mux.HandleFunc("/v1/hassles", methods(map[string]http.HandlerFunc{http.MethodGet: s.hassleInventory, http.MethodPost: s.hassleMutation}))
 	// The method is checked in the handler rather than in the pattern, so that a
 	// wrong one answers with the same JSON error shape as everything else
@@ -371,6 +374,16 @@ func (s *server) authStatus(w http.ResponseWriter, r *http.Request) {
 // disabled. The account row stays so existing copies keep their provenance.
 func (s *server) disconnectAccount(w http.ResponseWriter, r *http.Request) {
 	accountID := strings.TrimSpace(r.PathValue("accountId"))
+	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
+	defer cancel()
+	release, gateErr := s.hassleDisconnectGate(ctx, accountID)
+	if gateErr != nil {
+		fail(w, http.StatusConflict, gateErr)
+		return
+	}
+	defer release()
+	s.authMu.Lock()
+	defer s.authMu.Unlock()
 	accounts, err := s.store.GmailAccounts()
 	if err != nil {
 		fail(w, http.StatusInternalServerError, err)

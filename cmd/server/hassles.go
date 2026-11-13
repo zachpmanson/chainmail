@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/emersion/go-webdav/caldav"
 	"github.com/zachpmanson/chainmail/internal/corpus"
 	"github.com/zachpmanson/chainmail/internal/gmailclient"
 	"github.com/zachpmanson/chainmail/internal/hassles"
@@ -17,6 +18,7 @@ import (
 type hassleConfig struct {
 	Enabled  bool             `json:"enabled"`
 	Location hassles.Location `json:"location"`
+	Recovery hassleRecovery   `json:"recovery"`
 }
 
 func (s *server) hassleLocation() (hassles.Location, error) {
@@ -94,14 +96,12 @@ func (s *server) hassleGrant(w http.ResponseWriter) bool {
 	return true
 }
 func (s *server) getHassleLocation(w http.ResponseWriter, r *http.Request) {
-	s.hasslesMu.Lock()
-	defer s.hasslesMu.Unlock()
 	loc, err := s.hassleLocation()
 	if err != nil {
 		fail(w, 500, err)
 		return
 	}
-	send(w, 200, hassleConfig{s.hasslesEnabled, loc})
+	send(w, 200, hassleConfig{s.hasslesEnabled, loc, s.localHassleRecovery(r.Context())})
 }
 func (s *server) setHassleLocation(w http.ResponseWriter, r *http.Request) {
 	if !s.hassleGrant(w) {
@@ -119,8 +119,17 @@ func (s *server) setHassleLocation(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, errors.New("acknowledge that every event in this dedicated calendar will be treated as a task"))
 		return
 	}
-	s.hasslesMu.Lock()
+	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
+	defer cancel()
+	if !s.admitHassle(w) {
+		return
+	}
 	defer s.hasslesMu.Unlock()
+	store, release, ok := s.hassleEmptyLease(w, ctx)
+	if !ok {
+		return
+	}
+	defer release()
 	old, err := s.hassleLocation()
 	if err != nil {
 		fail(w, 500, err)
@@ -130,8 +139,6 @@ func (s *server) setHassleLocation(w http.ResponseWriter, r *http.Request) {
 		fail(w, 409, hassles.ErrConflict)
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
-	defer cancel()
 	b, err := s.hassleBackend(ctx, in.Location.AccountID)
 	if err == nil {
 		err = validateHassleCalendar(ctx, b, in.Location.CalendarID)
@@ -145,7 +152,7 @@ func (s *server) setHassleLocation(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, err)
 		return
 	}
-	send(w, 200, hassleConfig{s.hasslesEnabled, in.Location})
+	send(w, 200, hassleConfig{s.hasslesEnabled, in.Location, inspectHassleRecovery(ctx, store)})
 }
 func (s *server) hassleCalendars(w http.ResponseWriter, r *http.Request) {
 	if !s.hassleGrant(w) {
@@ -172,7 +179,9 @@ func (s *server) hassleInventory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	loc := hassles.Location{AccountID: r.URL.Query().Get("accountId"), CalendarID: r.URL.Query().Get("calendarId")}
-	s.hasslesMu.Lock()
+	if !s.admitHassle(w) {
+		return
+	}
 	defer s.hasslesMu.Unlock()
 	b, ctx, cancel, err := s.selectedHassles(r, loc)
 	if cancel != nil {
@@ -182,12 +191,26 @@ func (s *server) hassleInventory(w http.ResponseWriter, r *http.Request) {
 		fail(w, 409, err)
 		return
 	}
-	objects, err := b.Objects(ctx, loc.CalendarID)
+	reader, ok := b.(hassles.GroupReader)
+	if !ok {
+		fail(w, 503, errors.New("full calendar snapshot unavailable"))
+		return
+	}
+	snapshot, err := reader.Snapshot(ctx, loc.CalendarID)
 	if err != nil {
 		fail(w, 502, err)
 		return
 	}
-	tasks, err := hassles.Inventory(objects, time.Now())
+	writesAvailable := false
+	store, release, leaseErr := s.acquireHassleLease(ctx)
+	if leaseErr == nil {
+		defer release()
+		writesAvailable = inspectHassleRecovery(ctx, store).Status == "ready"
+	}
+	if _, bindingErr := s.hassleBinding(ctx, loc); bindingErr != nil {
+		writesAvailable = false
+	}
+	tasks, err := hassles.LocatedInventory(snapshot, loc, time.Now(), writesAvailable)
 	if err != nil {
 		fail(w, 502, err)
 		return
@@ -197,20 +220,25 @@ func (s *server) hassleInventory(w http.ResponseWriter, r *http.Request) {
 	}{tasks})
 }
 func (s *server) selectedHassles(r *http.Request, loc hassles.Location) (hassles.Backend, context.Context, context.CancelFunc, error) {
+	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
+	b, err := s.selectedHasslesContext(ctx, loc)
+	return b, ctx, cancel, err
+}
+func (s *server) selectedHasslesContext(ctx context.Context, loc hassles.Location) (hassles.Backend, error) {
 	stored, err := s.hassleLocation()
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 	if loc.AccountID == "" || loc != stored {
-		return nil, nil, nil, errors.New("reminder location changed or is unselected; refresh and select again")
+		return nil, errors.New("reminder location changed or is unselected; refresh and select again")
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
 	b, err := s.hassleBackend(ctx, loc.AccountID)
 	if err == nil {
 		err = validateHassleCalendar(ctx, b, loc.CalendarID)
 	}
-	return b, ctx, cancel, err
+	return b, err
 }
+
 func (s *server) hassleMutation(w http.ResponseWriter, r *http.Request) {
 	if !s.hassleGrant(w) {
 		return
@@ -231,23 +259,51 @@ func (s *server) hassleMutation(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, errors.New("invalid task UUID"))
 		return
 	}
+	if (in.Action == "create" || in.Action == "edit") && in.Schedule.Cadence == "hourly" {
+		fail(w, 400, errors.New("hourly writes require DAILY-parts groups; refresh the client"))
+		return
+	}
 	if in.Action == "create" || in.Action == "edit" {
 		if _, _, err := in.Schedule.Validate(); err != nil {
 			fail(w, 400, err)
 			return
 		}
 	}
-	s.hasslesMu.Lock()
+	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
+	defer cancel()
+	if !s.admitHassle(w) {
+		return
+	}
 	defer s.hasslesMu.Unlock()
-	b, ctx, cancel, err := s.selectedHassles(r, in.Location)
-	if cancel != nil {
-		defer cancel()
+	_, release, ok := s.hassleEmptyLease(w, ctx)
+	if !ok {
+		return
+	}
+	defer release()
+	binding, err := s.hassleBinding(ctx, in.Location)
+	if err != nil {
+		fail(w, 409, err)
+		return
+	}
+	b, err := s.selectedHasslesContext(ctx, in.Location)
+	if err != nil {
+		fail(w, 409, err)
+		return
+	}
+	reader, ok := b.(hassles.GroupReader)
+	if !ok {
+		fail(w, 503, errors.New("full calendar namespace guard unavailable"))
+		return
+	}
+	snapshot, err := reader.Snapshot(ctx, in.Location.CalendarID)
+	if err == nil {
+		err = hassles.GuardLegacyMutation(snapshot, in, time.Now())
 	}
 	if err != nil {
 		fail(w, 409, err)
 		return
 	}
-	result, err := hassles.Mutate(ctx, b, in, time.Now())
+	result, err := hassles.Mutate(ctx, legacySnapshotBackend{Backend: b, snapshot: snapshot, binding: binding, check: s.checkHassleBinding}, in, time.Now())
 	if err != nil {
 		status := http.StatusBadGateway
 		if errors.Is(err, hassles.ErrConflict) {
@@ -257,4 +313,23 @@ func (s *server) hassleMutation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	send(w, 200, result)
+}
+
+// The guarded full snapshot, not an event-filtered second read, is legacy authority.
+type legacySnapshotBackend struct {
+	hassles.Backend
+	snapshot hassles.GroupSnapshot
+	binding  hassles.GroupBinding
+	check    hassles.GroupBindingCheck
+}
+
+func (b legacySnapshotBackend) Objects(context.Context, string) ([]caldav.CalendarObject, error) {
+	return b.snapshot.Objects, nil
+}
+
+func (b legacySnapshotBackend) Write(ctx context.Context, calendar, href, etag, body string) error {
+	if err := b.check(ctx, b.binding); err != nil {
+		return fmt.Errorf("%w: %v", hassles.ErrConflict, err)
+	}
+	return b.Backend.Write(ctx, calendar, href, etag, body)
 }

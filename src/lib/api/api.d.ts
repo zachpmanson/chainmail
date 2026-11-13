@@ -808,13 +808,13 @@ export interface paths {
         };
         /**
          * Raw all-master reminder inventory (no time window)
-         * @description Requires explicit -hassles grant for upstream access. Only the selected dedicated calendar is used; conditional writes may partially fail and require inventory refresh. No scheduler or local task storage.
+         * @description Location-aware full VCALENDAR inventory. V2 cards carry logical displaySchedule independently of unknown next timing and explicit delete-only capabilities. Structural readiness alone grants no writes or upstream ACL.
          */
         get: operations["hassleInventory"];
         put?: never;
         /**
          * Create, safely edit, or remove all resources of a task
-         * @description Requires explicit -hassles grant for upstream access. Only the selected dedicated calendar is used; conditional writes may partially fail and require inventory refresh. No scheduler or local task storage.
+         * @description Legacy non-hourly reference path with 45-second budget. Requires healthy empty leased operation store and full-snapshot reserved namespace guard. Cached hourly create/edit requests must refresh; no BYHOUR fallback.
          */
         post: operations["hassleMutation"];
         delete?: never;
@@ -857,6 +857,41 @@ export interface paths {
         get: operations["checkDraftSave"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/hassles/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Exclusive injected operation-store lease. Server-selected actor/location only. Three-minute invocation budget. Matching pending requests reconcile read-only; never resume writes. No production store fallback. */
+        post: operations["hassleGroupMutation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/hassles/recovery": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Local-only validated status, including when the original account is offline. No Calendar calls. Busy is transient; a later explicit local status read can observe ready. */
+        get: operations["hassleRecoveryStatus"];
+        put?: never;
+        /** @description Explicit read-only Calendar reconciliation of the original stored pending request and binding. No new intent or retargeting; never issues Calendar writes. */
+        post: operations["hassleRecoveryReconcile"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2246,6 +2281,7 @@ export interface components {
         HassleConfig: {
             enabled: boolean;
             location: components["schemas"]["HassleLocation"];
+            recovery: components["schemas"]["HassleRecovery"];
         };
         HassleCalendar: {
             id: string;
@@ -2280,6 +2316,13 @@ export interface components {
             timing: components["schemas"]["HassleTiming"];
             instance: components["schemas"]["HassleInstance"] | null;
             instanceRestriction: string;
+            /** @enum {string} */
+            format?: "daily-parts-v2";
+            /** @enum {string} */
+            groupStatus?: "ready" | "read-only";
+            incarnation?: string;
+            displaySchedule?: components["schemas"]["HassleSchedule"];
+            capabilities?: components["schemas"]["HassleGroupCapabilities"];
         };
         HassleInventory: {
             tasks: components["schemas"]["HassleTask"][];
@@ -2402,6 +2445,71 @@ export interface components {
              * @enum {string}
              */
             status?: "supported" | "unsupported" | "indeterminate" | "revision_changed";
+        };
+        HassleGroupCapabilities: {
+            delete: boolean;
+            edit: boolean;
+            complete: boolean;
+            instance: boolean;
+        };
+        HassleGroupPending: {
+            operationId: string;
+            /** @enum {string} */
+            action: "create" | "delete";
+            title: string;
+            components: number;
+            location: components["schemas"]["HassleLocation"];
+        };
+        HassleRecovery: {
+            /** @enum {string} */
+            status: "unavailable" | "busy" | "pending" | "ready";
+            fence?: string;
+            pending?: components["schemas"]["HassleGroupPending"];
+        };
+        HassleGroupSchedule: {
+            title: string;
+            /** @description Australia/Melbourne wall time YYYY-MM-DDTHH:mm; DST gaps and overlaps rejected */
+            start: string;
+            /** @enum {string} */
+            timeZone: "Australia/Melbourne";
+            /** @enum {string} */
+            cadence: "hourly";
+            /** @description Accepts exactly 0.5, 1, 2, 3, 4, 6, 8, 12 or 24 hours. */
+            interval: number;
+            until: string;
+            /** @description Required explicitly. Skip outside Monday–Friday 09:00 inclusive–17:00 exclusive Australia/Melbourne; interval phase is preserved. */
+            workHours: boolean;
+        };
+        HassleGroupCreate: {
+            /** @enum {string} */
+            action: "create";
+            operationId: string;
+            task: string;
+            incarnation: string;
+            fence: string;
+            schedule: components["schemas"]["HassleGroupSchedule"];
+        };
+        HassleGroupDelete: {
+            /** @enum {string} */
+            action: "delete";
+            operationId: string;
+            task: string;
+            incarnation: string;
+            fence: string;
+            revision: string;
+        };
+        HassleGroupRequest: components["schemas"]["HassleGroupCreate"] | components["schemas"]["HassleGroupDelete"];
+        HassleLocatedGroupRequest: {
+            location: components["schemas"]["HassleLocation"];
+            group: components["schemas"]["HassleGroupRequest"];
+        };
+        HassleRecoveryRequest: {
+            expectedOperationId?: string;
+        };
+        HassleGroupResult: {
+            recovery: components["schemas"]["HassleRecovery"];
+            settled: boolean;
+            error?: string;
         };
     };
     responses: never;
@@ -4428,6 +4536,138 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Error"];
                 };
+            };
+        };
+    };
+    hassleGroupMutation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HassleLocatedGroupRequest"];
+            };
+        };
+        responses: {
+            /** @description Validated local state; no resource bodies, hrefs or ETags */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HassleGroupResult"];
+                };
+            };
+            /** @description Strict request validation failed */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Feature grant or origin refused */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Operation unavailable, conflicting or unsettled */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HassleGroupResult"] | {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Full calendar transport unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    hassleRecoveryStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Validated local state; no resource bodies, hrefs or ETags */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HassleRecovery"];
+                };
+            };
+        };
+    };
+    hassleRecoveryReconcile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HassleRecoveryRequest"];
+            };
+        };
+        responses: {
+            /** @description Validated local state; no resource bodies, hrefs or ETags */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HassleGroupResult"];
+                };
+            };
+            /** @description Strict request validation failed */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Feature grant or origin refused */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Operation unavailable, conflicting or unsettled */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HassleGroupResult"] | {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Full calendar transport unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

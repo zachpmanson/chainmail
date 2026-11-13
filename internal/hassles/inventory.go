@@ -31,17 +31,22 @@ func marker(description string) (string, bool) {
 }
 
 type Task struct {
-	ID                  string    `json:"id"`
-	Revision            string    `json:"revision"`
-	Title               string    `json:"title"`
-	Reminder            string    `json:"reminder"`
-	Resources           int       `json:"resources"`
-	Writable            bool      `json:"writable"`
-	Restriction         string    `json:"restriction"`
-	Schedule            *Schedule `json:"schedule"`
-	Instance            *Instance `json:"instance"`
-	InstanceRestriction string    `json:"instanceRestriction"`
-	Timing              Timing    `json:"timing"`
+	Format              string             `json:"format,omitempty"`
+	GroupStatus         string             `json:"groupStatus,omitempty"`
+	Incarnation         string             `json:"incarnation,omitempty"`
+	DisplaySchedule     *Schedule          `json:"displaySchedule,omitempty"`
+	Capabilities        *GroupCapabilities `json:"capabilities,omitempty"`
+	ID                  string             `json:"id"`
+	Revision            string             `json:"revision"`
+	Title               string             `json:"title"`
+	Reminder            string             `json:"reminder"`
+	Resources           int                `json:"resources"`
+	Writable            bool               `json:"writable"`
+	Restriction         string             `json:"restriction"`
+	Schedule            *Schedule          `json:"schedule"`
+	Instance            *Instance          `json:"instance"`
+	InstanceRestriction string             `json:"instanceRestriction"`
+	Timing              Timing             `json:"timing"`
 	members             []caldav.CalendarObject
 	active              bool
 }

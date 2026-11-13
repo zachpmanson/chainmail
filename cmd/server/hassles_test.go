@@ -84,6 +84,7 @@ func hassleHarness(t *testing.T) (*harness, *calendarFixture, hassles.Location) 
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	h := testServer(t)
 	h.hasslesEnabled = true
+	injectHassleLease(t, h)
 	f := &calendarFixture{}
 	h.openHassles = func(_ context.Context, id string) (hassles.Backend, error) {
 		if id != "personal" {
@@ -242,35 +243,17 @@ func TestHasslesRejectsUnsupportedCadenceBeforeUpstream(t *testing.T) {
 	}
 }
 
-func TestHasslesHourlyWorkHoursTransport(t *testing.T) {
+// HTTP policy now rejects legacy hourly bodies; internal hourly tests retain the reference transport fixtures.
+func TestHasslesLegacyHourlyHTTPRefusesFallback(t *testing.T) {
 	h, f, loc := hassleHarness(t)
 	chooseHassles(t, h, loc)
-	in := hassles.Mutation{Location: loc, Action: "create", ID: hassleUUID, Schedule: hassles.Schedule{Title: "Office", Start: "2026-11-06T18:00", TimeZone: hassles.Zone, Cadence: "hourly", Interval: 0.5, WorkHours: true}}
-	before := f.calls
-	if r := h.do(t, "POST", "/v1/hassles", hassleJSON(t, in)); r.status != 400 || f.calls != before {
-		t.Fatal("out-of-hours start reached upstream", r.status, string(r.body))
-	}
-	in.Schedule.Start = "2026-11-06T09:00"
-	if r := h.do(t, "POST", "/v1/hassles", hassleJSON(t, in)); r.status != 200 {
-		t.Fatal("hourly work-hours create rejected", r.status, string(r.body))
-	}
-	if r := h.do(t, "POST", "/v1/hassles", hassleJSON(t, in)); r.status != 200 || !strings.Contains(string(r.body), "Already created") {
-		t.Fatal("hourly retry rejected", r.status, string(r.body))
-	}
-	rule := f.objects[0].Data.Events()[0].Props.Get("RRULE").Value
-	if rule != "FREQ=DAILY;INTERVAL=1;BYHOUR=9,10,11,12,13,14,15,16;BYMINUTE=0,30;BYDAY=MO,TU,WE,TH,FR" {
-		t.Fatal("wrong provider encoding", rule)
-	}
-	before = f.calls
-	for _, interval := range []float64{0.6, 5, 7, 999} {
-		in.Schedule.Interval = interval
-		if r := h.do(t, "POST", "/v1/hassles", hassleJSON(t, in)); r.status != 400 || f.calls != before {
-			t.Fatal("unsupported interval reached upstream", interval, r.status, string(r.body))
+	for _, action := range []string{"create", "edit"} {
+		in := hassles.Mutation{Location: loc, Action: action, ID: hassleUUID, Schedule: hassles.Schedule{Title: "Office", Start: "2026-11-06T09:00", TimeZone: hassles.Zone, Cadence: "hourly", Interval: 0.5, WorkHours: true}}
+		before := f.calls
+		r := h.do(t, "POST", "/v1/hassles", hassleJSON(t, in))
+		if r.status != 400 || f.calls != before || f.writes != 0 {
+			t.Fatalf("hourly fallback reached provider: %d %s", r.status, r.body)
 		}
-	}
-	in.Schedule.Cadence, in.Schedule.Interval = "daily", 0.5
-	if r := h.do(t, "POST", "/v1/hassles", hassleJSON(t, in)); r.status != 400 || f.calls != before {
-		t.Fatal("fractional daily interval reached upstream", r.status, string(r.body))
 	}
 }
 

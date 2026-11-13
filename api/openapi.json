@@ -2145,7 +2145,7 @@
       "get": {
         "operationId": "hassleInventory",
         "summary": "Raw all-master reminder inventory (no time window)",
-        "description": "Requires explicit -hassles grant for upstream access. Only the selected dedicated calendar is used; conditional writes may partially fail and require inventory refresh. No scheduler or local task storage.",
+        "description": "Location-aware full VCALENDAR inventory. V2 cards carry logical displaySchedule independently of unknown next timing and explicit delete-only capabilities. Structural readiness alone grants no writes or upstream ACL.",
         "parameters": [
           {
             "name": "accountId",
@@ -2208,7 +2208,7 @@
       "post": {
         "operationId": "hassleMutation",
         "summary": "Create, safely edit, or remove all resources of a task",
-        "description": "Requires explicit -hassles grant for upstream access. Only the selected dedicated calendar is used; conditional writes may partially fail and require inventory refresh. No scheduler or local task storage.",
+        "description": "Legacy non-hourly reference path with 45-second budget. Requires healthy empty leased operation store and full-snapshot reserved namespace guard. Cached hourly create/edit requests must refresh; no BYHOUR fallback.",
         "requestBody": {
           "required": true,
           "content": {
@@ -2425,6 +2425,148 @@
             }
           }
         }
+      }
+    },
+    "/v1/hassles/groups": {
+      "post": {
+        "operationId": "hassleGroupMutation",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HassleLocatedGroupRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Validated local state; no resource bodies, hrefs or ETags",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HassleGroupResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Strict request validation failed"
+          },
+          "403": {
+            "description": "Feature grant or origin refused"
+          },
+          "409": {
+            "description": "Operation unavailable, conflicting or unsettled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/HassleGroupResult"
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Full calendar transport unavailable"
+          }
+        },
+        "description": "Exclusive injected operation-store lease. Server-selected actor/location only. Three-minute invocation budget. Matching pending requests reconcile read-only; never resume writes. No production store fallback."
+      }
+    },
+    "/v1/hassles/recovery": {
+      "get": {
+        "operationId": "hassleRecoveryStatus",
+        "description": "Local-only validated status, including when the original account is offline. No Calendar calls. Busy is transient; a later explicit local status read can observe ready.",
+        "responses": {
+          "200": {
+            "description": "Validated local state; no resource bodies, hrefs or ETags",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HassleRecovery"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "hassleRecoveryReconcile",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HassleRecoveryRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Validated local state; no resource bodies, hrefs or ETags",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HassleGroupResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Strict request validation failed"
+          },
+          "403": {
+            "description": "Feature grant or origin refused"
+          },
+          "409": {
+            "description": "Operation unavailable, conflicting or unsettled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/HassleGroupResult"
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Full calendar transport unavailable"
+          }
+        },
+        "description": "Explicit read-only Calendar reconciliation of the original stored pending request and binding. No new intent or retargeting; never issues Calendar writes."
       }
     }
   },
@@ -5714,11 +5856,15 @@
           },
           "location": {
             "$ref": "#/components/schemas/HassleLocation"
+          },
+          "recovery": {
+            "$ref": "#/components/schemas/HassleRecovery"
           }
         },
         "required": [
           "enabled",
-          "location"
+          "location",
+          "recovery"
         ]
       },
       "HassleCalendar": {
@@ -5854,6 +6000,28 @@
           },
           "instanceRestriction": {
             "type": "string"
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "daily-parts-v2"
+            ]
+          },
+          "groupStatus": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "read-only"
+            ]
+          },
+          "incarnation": {
+            "type": "string"
+          },
+          "displaySchedule": {
+            "$ref": "#/components/schemas/HassleSchedule"
+          },
+          "capabilities": {
+            "$ref": "#/components/schemas/HassleGroupCapabilities"
           }
         },
         "required": [
@@ -6260,6 +6428,258 @@
             ]
           }
         }
+      },
+      "HassleGroupCapabilities": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "delete": {
+            "type": "boolean"
+          },
+          "edit": {
+            "type": "boolean"
+          },
+          "complete": {
+            "type": "boolean"
+          },
+          "instance": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "delete",
+          "edit",
+          "complete",
+          "instance"
+        ]
+      },
+      "HassleGroupPending": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "create",
+              "delete"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "components": {
+            "type": "integer"
+          },
+          "location": {
+            "$ref": "#/components/schemas/HassleLocation"
+          }
+        },
+        "required": [
+          "operationId",
+          "action",
+          "title",
+          "components",
+          "location"
+        ]
+      },
+      "HassleRecovery": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "unavailable",
+              "busy",
+              "pending",
+              "ready"
+            ]
+          },
+          "fence": {
+            "type": "string"
+          },
+          "pending": {
+            "$ref": "#/components/schemas/HassleGroupPending"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "HassleGroupSchedule": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "start": {
+            "type": "string",
+            "description": "Australia/Melbourne wall time YYYY-MM-DDTHH:mm; DST gaps and overlaps rejected"
+          },
+          "timeZone": {
+            "type": "string",
+            "enum": [
+              "Australia/Melbourne"
+            ]
+          },
+          "cadence": {
+            "type": "string",
+            "enum": [
+              "hourly"
+            ]
+          },
+          "interval": {
+            "type": "number",
+            "minimum": 0.5,
+            "maximum": 24,
+            "description": "Accepts exactly 0.5, 1, 2, 3, 4, 6, 8, 12 or 24 hours."
+          },
+          "until": {
+            "type": "string"
+          },
+          "workHours": {
+            "type": "boolean",
+            "description": "Required explicitly. Skip outside Monday–Friday 09:00 inclusive–17:00 exclusive Australia/Melbourne; interval phase is preserved."
+          }
+        },
+        "required": [
+          "title",
+          "start",
+          "timeZone",
+          "cadence",
+          "interval",
+          "until",
+          "workHours"
+        ]
+      },
+      "HassleGroupCreate": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "create"
+            ]
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "task": {
+            "type": "string"
+          },
+          "incarnation": {
+            "type": "string"
+          },
+          "fence": {
+            "type": "string"
+          },
+          "schedule": {
+            "$ref": "#/components/schemas/HassleGroupSchedule"
+          }
+        },
+        "required": [
+          "action",
+          "operationId",
+          "task",
+          "incarnation",
+          "fence",
+          "schedule"
+        ]
+      },
+      "HassleGroupDelete": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "delete"
+            ]
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "task": {
+            "type": "string"
+          },
+          "incarnation": {
+            "type": "string"
+          },
+          "fence": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "operationId",
+          "task",
+          "incarnation",
+          "fence",
+          "revision"
+        ]
+      },
+      "HassleGroupRequest": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/HassleGroupCreate"
+          },
+          {
+            "$ref": "#/components/schemas/HassleGroupDelete"
+          }
+        ]
+      },
+      "HassleLocatedGroupRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "location": {
+            "$ref": "#/components/schemas/HassleLocation"
+          },
+          "group": {
+            "$ref": "#/components/schemas/HassleGroupRequest"
+          }
+        },
+        "required": [
+          "location",
+          "group"
+        ]
+      },
+      "HassleRecoveryRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "expectedOperationId": {
+            "type": "string"
+          }
+        },
+        "required": []
+      },
+      "HassleGroupResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "recovery": {
+            "$ref": "#/components/schemas/HassleRecovery"
+          },
+          "settled": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "recovery",
+          "settled"
+        ]
       }
     }
   }
