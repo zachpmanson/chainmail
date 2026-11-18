@@ -18,5 +18,6 @@ fixtures/*
 !fixtures/synthetic.json
 !fixtures/minimal.json
 !fixtures/eval.synthetic.json
+!fixtures/hassles-favicon.svg
 result
 /corpus

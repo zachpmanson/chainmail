@@ -10,9 +10,25 @@ import HassleInventory from "./HassleInventory";
 export default function HasslesView() {
   useEffect(() => {
     const previous = document.title;
+    const previousIcon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    const icon = previousIcon ?? document.createElement("link");
+    const previousHref = icon.getAttribute("href");
+    const previousType = icon.getAttribute("type");
     document.title = "Hassles";
+    icon.rel = "icon";
+    icon.href = "/hassles-favicon.svg";
+    icon.type = "image/svg+xml";
+    if (!previousIcon) document.head.append(icon);
     return () => {
       document.title = previous;
+      if (!previousIcon) {
+        icon.remove();
+      } else {
+        if (previousHref === null) icon.removeAttribute("href");
+        else icon.setAttribute("href", previousHref);
+        if (previousType === null) icon.removeAttribute("type");
+        else icon.setAttribute("type", previousType);
+      }
     };
   }, []);
   const config = $api.useQuery("get", "/v1/hassles/location", {}, { staleTime: 0 });
