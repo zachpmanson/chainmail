@@ -87,19 +87,34 @@ func ExtractQuoted(store *corpus.Store, hostID int64, host corpus.Entry, body st
 		// A message already in the corpus is not stored again. Its ext_id only
 		// collapses onto this block's key when the quoting client wrote a
 		// Message-ID into the sentinel, which almost none do, so the copies are
-		// reconciled by their clocks instead — see corpus.FindTwin. Only a stated
-		// clock qualifies: an inferred one is the host's instant, and the gap to
-		// the copy would be an artefact of that substitution.
+		// reconciled by current reply-source identity or by clocks. Only a stated
+		// clock qualifies for the latter: an inferred one is the host's instant.
+		detail := fmt.Sprintf("depth %d", rec.Block.Depth)
+		if inferred {
+			detail += ", time inferred from host"
+		}
 		resolved, err := store.ResolveQuotedKey(context.Background(), hostID, rec)
 		if err != nil {
 			return r, err
 		}
 		twin := resolved
+		id, created := resolved, false
+		attached, sourceDerived := false, false
 		var derived corpus.DerivedMatch
-		if !inferred && resolved == 0 {
-			// The subject — or, when the client dropped it, the host's own thread —
-			// vouches for a short block: without one of them the same few words on
-			// two threads would collapse into one message.
+		if resolved == 0 {
+			id, created, sourceDerived, err = corpus.AttachSourceTwin(store, hostID, rec, e, detail)
+			if err != nil {
+				return r, err
+			}
+			attached = id != 0
+			if sourceDerived {
+				r.Derived++
+			} else if attached {
+				twin = id
+			}
+		}
+		if resolved == 0 && !attached && !inferred {
+			// The ordinary fallback retains its existing clock/text gates.
 			t, ok, err := corpus.FindTwin(store, person, ts, rec.Block.Text, rec.Subject, host.Container)
 			if err != nil {
 				return r, err
@@ -117,8 +132,10 @@ func ExtractQuoted(store *corpus.Store, hostID int64, host corpus.Entry, body st
 				}
 			}
 		}
-		id, created := twin, false
-		if twin == 0 {
+		if !attached {
+			id = twin
+		}
+		if twin == 0 && !attached {
 			// The copy is a quoter's modified re-send of an existing message when
 			// FindDerived recognised the overlap; persist that so the renderer can
 			// hoist it into the host as an inline edit rather than re-deriving the
@@ -139,7 +156,7 @@ func ExtractQuoted(store *corpus.Store, hostID int64, host corpus.Entry, body st
 						id, derived.Base, err)
 				}
 			}
-		} else if resolved == 0 {
+		} else if resolved == 0 && !sourceDerived {
 			r.Twinned++
 		}
 		ids[i] = id
@@ -157,12 +174,10 @@ func ExtractQuoted(store *corpus.Store, hostID int64, host corpus.Entry, body st
 			r.Enriched++
 		}
 
-		detail := fmt.Sprintf("depth %d", rec.Block.Depth)
-		if inferred {
-			detail += ", time inferred from host"
-		}
-		if err := store.Sight(id, hostID, "quoted", detail); err != nil {
-			return r, err
+		if !attached {
+			if err := store.Sight(id, hostID, "quoted", detail); err != nil {
+				return r, err
+			}
 		}
 		if person != 0 {
 			if err := corpus.Participate(store, id, person, corpus.RoleFrom); err != nil {

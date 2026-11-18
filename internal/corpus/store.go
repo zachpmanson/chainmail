@@ -439,11 +439,15 @@ func (s *Store) ReindexFTS() error {
 // Sight records that an entry was seen somewhere: directly in the mailbox, or
 // quoted inside another entry.
 func (s *Store) Sight(entryID, seenIn int64, kind, detail string) error {
+	return sight(s.db, entryID, seenIn, kind, detail)
+}
+
+func sight(w corpusWriter, entryID, seenIn int64, kind, detail string) error {
 	var in any
 	if seenIn != 0 {
 		in = seenIn
 	}
-	_, err := s.db.Exec(`
+	_, err := w.Exec(`
 		insert into sightings (entry_id, seen_in, kind, detail) values (?,?,?,?)
 		on conflict do update set detail=case
           when sightings.detail like '%time inferred from host%' then sightings.detail

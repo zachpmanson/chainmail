@@ -15,6 +15,10 @@ func twinHTMLText(raw string) string {
 	if err != nil {
 		return raw
 	}
+	return twinHTMLNodeText(doc)
+}
+
+func twinHTMLNodeText(doc *html.Node) string {
 	var out strings.Builder
 	var visit func(*html.Node)
 	visit = func(n *html.Node) {

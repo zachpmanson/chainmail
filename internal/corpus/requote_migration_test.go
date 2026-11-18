@@ -54,7 +54,7 @@ func TestQuoteRepairMigrationRebuildsBothIndexesWithoutChangingSource(t *testing
 		t.Fatal(err)
 	}
 	// Remove the later migration too, modelling a real contiguous v25 schema.
-	for _, in := range []string{"entries", "mail_detail", "sightings", "attachments", "people", "identities", "participants", "domain_aliases"} {
+	for _, in := range []string{"entries", "mail_detail", "sightings", "attachments", "people", "identities", "participants", "domain_aliases", "gmail_copies"} {
 		for _, op := range []string{"insert", "update", "delete"} {
 			if _, err := s.DB().Exec("drop trigger reconcile_" + in + "_" + op); err != nil {
 				t.Fatal(err)

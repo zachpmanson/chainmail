@@ -189,11 +189,13 @@ type twinCopy struct {
 	links quoteLinks
 	atts  int
 	// Fresh graph/recipient evidence, never stored in the body-reduction cache.
-	parent  int64
-	derived bool
-	empty   bool
-	forward *forwardBody
-	to      []int64
+	sourceTarget   int64
+	sourceRendered bool
+	parent         int64
+	derived        bool
+	empty          bool
+	forward        *forwardBody
+	to             []int64
 }
 
 // CollapseTwins folds together the entries that are one message stored more than
@@ -474,9 +476,6 @@ func twinCopiesCached(q corpusQuery, person int64, cache *twinBodyCache) ([]twin
 		if err := rows.Scan(dest...); err != nil {
 			return nil, err
 		}
-		if c.quoted && !eligible[c.id] {
-			continue
-		}
 		c.wall = time.Unix(ts, 0).UTC()
 		c.empty = strings.TrimSpace(body) == "" && strings.TrimSpace(c.bodyHTML) == ""
 		if cache == nil {
@@ -495,10 +494,25 @@ func twinCopiesCached(q corpusQuery, person int64, cache *twinBodyCache) ([]twin
 	if err := rows.Close(); err != nil {
 		return nil, err
 	}
-	if err := forwardEvidence(q, out); err != nil {
+	var proven []twinCopy
+	for _, c := range out {
+		if c.quoted {
+			var proof sourceTwinProof
+			proof, err = sourceTwinForStored(q, c.id, person, c.container)
+			c.sourceTarget, c.sourceRendered = proof.target, proof.rendered
+			if err != nil {
+				return nil, err
+			}
+			if !eligible[c.id] && c.sourceTarget == 0 {
+				continue
+			}
+		}
+		proven = append(proven, c)
+	}
+	if err := forwardEvidence(q, proven); err != nil {
 		return nil, err
 	}
-	return out, nil
+	return proven, nil
 }
 
 func reduceTwinBody(c *twinCopy, body string) {
@@ -638,13 +652,13 @@ func groupTwinsCount(copies []twinCopy, comparisons *int) ([][]twinCopy, []TwinD
 			// at most 14 hours behind its quoted clock and 12 ahead of it, and two
 			// quoted copies at most 26 hours apart when their quoters sit at
 			// opposite ends of the world.
-			if i == j || copies[j].wall.Sub(copies[i].wall).Abs() > 26*time.Hour {
+			if i == j || (copies[i].sourceTarget != copies[j].id && copies[j].wall.Sub(copies[i].wall).Abs() > 26*time.Hour) {
 				continue
 			}
 			// A short copy is only paired with a mailbox copy that can vouch for it
 			// by subject or by sharing its thread; every other pairing still meets
 			// the floor in twinnable, where the refusal names the offset.
-			if short && !shortVouched(copies[i], copies[j]) && !vouchedQuoteLinks(copies[i], copies[j]) && !plainTwinnable(copies[i], copies[j]) {
+			if short && copies[i].sourceTarget != copies[j].id && !shortVouched(copies[i], copies[j]) && !vouchedQuoteLinks(copies[i], copies[j]) && !plainTwinnable(copies[i], copies[j]) {
 				continue
 			}
 			if comparisons != nil {
@@ -703,6 +717,12 @@ func groupTwinsCount(copies []twinCopy, comparisons *int) ([][]twinCopy, []TwinD
 func twinnable(a, b twinCopy) (string, bool) {
 	if !a.quoted && !b.quoted {
 		return "", false
+	}
+	if a.sourceTarget != 0 {
+		return "", !b.quoted && a.sourceTarget == b.id
+	}
+	if b.sourceTarget != 0 {
+		return "", !a.quoted && b.sourceTarget == a.id
 	}
 	off, ok := twinOffset(a, b)
 	if !ok {
@@ -968,6 +988,11 @@ func annotates(keep, drop twinCopy) (string, bool) {
 		// recovered-only variant was the original, so keep both without a claim.
 		return why, !keep.quoted && drop.quoted
 	}
+	// Exact original-HTML rendering proof certifies joined table-cell tokens
+	// are not inserted prose. Raw-MIME matches retain the ordinary veto below.
+	if drop.sourceTarget == keep.id && drop.sourceRendered {
+		return "", false
+	}
 	d := textsim.Divergences(keep.prose, drop.prose)
 	if !d.Measured {
 		// Too long to align — a machine-generated report rather than anything a
@@ -1220,6 +1245,10 @@ func measureOffset(q corpusQuery, keep, drop int64) (RenderOffset, bool, error) 
 	if err := q.QueryRow(`select ts from entries where id=?`, drop).Scan(&dropTS); err != nil {
 		return RenderOffset{}, false, err
 	}
+	offset, valid := twinOffset(twinCopy{wall: time.Unix(keepTS, 0)}, twinCopy{quoted: true, wall: time.Unix(dropTS, 0)})
+	if !valid {
+		return RenderOffset{}, false, nil
+	}
 	rows, err := q.Query(`
 		select h.id, coalesce(h.person_id,0), h.ts from sightings g
 		join entries h on h.id = g.seen_in
@@ -1236,7 +1265,7 @@ func measureOffset(q corpusQuery, keep, drop int64) (RenderOffset, bool, error) 
 			return RenderOffset{}, false, err
 		}
 		o.At, o.From = time.Unix(at, 0).UTC(), drop
-		o.Off = nearestOffset(int((dropTS - keepTS) / 60))
+		o.Off = offset
 		hosts = append(hosts, o)
 	}
 	if err := rows.Err(); err != nil {

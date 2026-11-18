@@ -18,28 +18,47 @@ import (
 //
 // Returns the entry id and whether this call created it.
 func (s *Store) PutQuoted(e Entry) (int64, bool, error) {
-	if e.ExtID == "" {
-		return 0, false, errors.New("quoted entry needs an ext_id")
+	id, err := quotedEntryID(s.db, e)
+	if err != nil || id != 0 {
+		return id, false, err
 	}
-	if e.TS.IsZero() {
-		return 0, false, fmt.Errorf("quoted entry %s has no timestamp", e.ExtID)
-	}
-	var id int64
-	err := s.db.QueryRow(`select id from entries where source=? and ext_id=?`,
-		e.Source, e.ExtID).Scan(&id)
-	if err == nil {
-		return id, false, nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return 0, false, err
-	}
-
 	tx, err := s.db.Begin()
 	if err != nil {
 		return 0, false, err
 	}
 	defer tx.Rollback()
+	id, created, err := s.insertQuoted(tx, e)
+	if err != nil {
+		return 0, false, err
+	}
+	return id, created, tx.Commit()
+}
 
+func quotedEntryID(q corpusQuery, e Entry) (int64, error) {
+	if e.ExtID == "" {
+		return 0, errors.New("quoted entry needs an ext_id")
+	}
+	if e.TS.IsZero() {
+		return 0, fmt.Errorf("quoted entry %s has no timestamp", e.ExtID)
+	}
+	var id int64
+	err := q.QueryRow(`select id from entries where source=? and ext_id=?`,
+		e.Source, e.ExtID).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	return id, err
+}
+
+func (s *Store) putQuoted(w corpusWriter, e Entry) (int64, bool, error) {
+	id, err := quotedEntryID(w, e)
+	if err != nil || id != 0 {
+		return id, false, err
+	}
+	return s.insertQuoted(w, e)
+}
+
+func (s *Store) insertQuoted(tx corpusWriter, e Entry) (int64, bool, error) {
 	basis := nz(e.QuoteTimeBasis, "stated")
 	precision := e.QuoteTimePrecision
 	if precision == "" {
@@ -61,7 +80,7 @@ func (s *Store) PutQuoted(e Entry) (int64, bool, error) {
 	if err != nil {
 		return 0, false, err
 	}
-	id, err = res.LastInsertId()
+	id, err := res.LastInsertId()
 	if err != nil {
 		return 0, false, err
 	}
@@ -70,7 +89,7 @@ func (s *Store) PutQuoted(e Entry) (int64, bool, error) {
 	if err := s.reindex(tx, id, true, "", ""); err != nil {
 		return 0, false, err
 	}
-	return id, true, tx.Commit()
+	return id, true, nil
 }
 
 // SetParent records a reply edge directly.

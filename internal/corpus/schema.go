@@ -681,4 +681,12 @@ create trigger fold_sightings_insert after insert on sightings
 	 begin update reconcile_state set source_revision=source_revision+1 where id=1; end;`,
 	// 30: received reaction evidence, exact references and non-destructive views.
 	reactionsMigration(),
+	// 31: account membership is reply-source identity evidence, not label state.
+	`create trigger reconcile_gmail_copies_insert after insert on gmail_copies
+	 begin update reconcile_state set source_revision=source_revision+1 where id=1; end;
+	 create trigger reconcile_gmail_copies_delete after delete on gmail_copies
+	 begin update reconcile_state set source_revision=source_revision+1 where id=1; end;
+	 create trigger reconcile_gmail_copies_update after update of account_id,entry_id on gmail_copies
+	 when old.account_id is not new.account_id or old.entry_id is not new.entry_id
+	 begin update reconcile_state set source_revision=source_revision+1 where id=1; end;`,
 }
