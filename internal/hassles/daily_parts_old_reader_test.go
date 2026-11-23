@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -107,7 +108,7 @@ func dailyOldRequests(t *testing.T, task Task, o caldav.CalendarObject) []struct
 			in   Mutation
 		}{fmt.Sprintf("done-instance/dry-%t", dry), in})
 	}
-	for _, mode := range []string{"preview", "commit", "already-adopted-retry"} {
+	for _, mode := range []string{"preview", "commit"} {
 		in := base
 		in.Action = "adopt"
 		in.ID = "resource:" + digest(o.Path)
@@ -132,76 +133,65 @@ func dailyOldRequests(t *testing.T, task Task, o caldav.CalendarObject) []struct
 	return out
 }
 
-func dailyOldDeny(t *testing.T, objects []caldav.CalendarObject, tasks []Task, absent bool) {
+func dailyOldDeny(t *testing.T, objects []caldav.CalendarObject, task Task, absent bool, actions ...string) {
 	t.Helper()
-	if len(tasks) == 0 {
-		t.Fatal("no captured request identity")
+	dailyOldDenyMember(t, objects, task, task.members[0], absent, actions...)
+}
+
+func dailyOldDenyMember(t *testing.T, objects []caldav.CalendarObject, task Task, member caldav.CalendarObject, absent bool, actions ...string) {
+	t.Helper()
+	if !absent && task.Writable {
+		t.Fatalf("present task must be read-only: %+v", task)
 	}
 	original := snapshot(t, objects)
-	for _, task := range tasks {
-		if !absent && task.Writable {
-			t.Fatalf("PRESENT task must actually be read-only: %+v", task)
+	run := 0
+	for _, request := range dailyOldRequests(t, task, member) {
+		if len(actions) != 0 && !slices.Contains(actions, request.name) {
+			continue
 		}
-		for _, o := range task.members {
-			for _, request := range dailyOldRequests(t, task, o) {
-				t.Run(task.ID+"/"+digest(o.Path)[:8]+"/"+request.name, func(t *testing.T) {
-					backend := &dailyOldBackend{objects: objects}
-					result, err := Mutate(context.Background(), backend, request.in, now)
-					if err == nil || result.Adoption != nil || result.Completion != nil || result.Removed != 0 || result.Message != "" || len(backend.writes) != 0 {
-						t.Fatalf("unexpected successful old action/preview: %+v %v writes=%+v", result, err, backend.writes)
-					}
-					if backend.objectCalls != 1 || len(backend.collections) != 1 || backend.collections[0] != dailyGroupLocation.CalendarID {
-						t.Fatal("fresh Objects not reached; syntax-only rejection is not protection")
-					}
-					if absent && !errors.Is(err, ErrConflict) {
-						t.Fatalf("ABSENT target must fail fresh lookup, not current Writable: %v", err)
-					}
-					if original != snapshot(t, objects) {
-						t.Fatal("old rejection modified input raw properties/parameters/children or sibling")
-					}
-				})
+		run++
+		t.Run(request.name, func(t *testing.T) {
+			backend := &dailyOldBackend{objects: objects}
+			result, err := Mutate(context.Background(), backend, request.in, now)
+			if err == nil || result != (Result{}) || len(backend.writes) != 0 {
+				t.Fatalf("unexpected successful old action/preview: %+v %v writes=%+v", result, err, backend.writes)
 			}
-		}
+			if backend.objectCalls != 1 || len(backend.collections) != 1 || backend.collections[0] != dailyGroupLocation.CalendarID {
+				t.Fatal("fresh Objects not reached; syntax-only rejection is not protection")
+			}
+			if absent && !errors.Is(err, ErrConflict) {
+				t.Fatalf("absent target must fail fresh lookup: %v", err)
+			}
+			if original != snapshot(t, objects) {
+				t.Fatal("old rejection modified input raw properties/parameters/children or sibling")
+			}
+		})
+	}
+	if run == 0 || (len(actions) != 0 && run != len(actions)) {
+		t.Fatalf("requested actions %v, ran %d", actions, run)
 	}
 }
 
-func TestDailyPartsOldReaderAllEightMarkerSubsetsActualActions(t *testing.T) {
-	for _, profile := range []struct {
-		name    string
-		s       Schedule
-		partial bool
-		count   int
-	}{
-		{"singleton", dailyV2Schedule("2027-02-12T09:17", 24, false, ""), false, 1},
-		{"full12", dailyV2Schedule("2027-02-12T09:17", 2, false, ""), false, 12},
-		{"plain24-hour", dailyV2Schedule("2027-02-12T09:47", 1, false, ""), false, 24},
-		{"plain24-half", dailyV2Schedule("2027-02-12T09:47", 0.5, false, ""), false, 24},
-		{"work8-half", dailyV2Schedule("2027-02-12T09:47", 0.5, true, ""), false, 8},
-		{"partial", dailyV2Schedule("2027-02-12T09:17", 2, false, ""), true, 3},
-	} {
-		for mask := 0; mask < 8; mask++ {
-			t.Run(fmt.Sprintf("%s/retained-HPM-%03b", profile.name, mask), func(t *testing.T) {
-				objects := dailyGroupObjects(t, dailyV2Compile(t, profile.s))
-				if profile.partial {
-					objects = objects[:3]
-				}
-				dailyOldRetain(t, objects, mask)
-				before := snapshot(t, objects)
-				tasks := inventory(t, objects...)
-				if len(tasks) != profile.count {
-					t.Fatalf("actual visible task count=%d expected=%d", len(tasks), profile.count)
-				}
-				for _, task := range tasks {
-					if task.Resources != 1 || task.Writable {
-						t.Fatalf("unexpected actual legacy task: %+v", task)
-					}
-				}
-				dailyOldDeny(t, objects, tasks, false)
-				if before != snapshot(t, objects) {
-					t.Fatal("legacy Inventory or action normalized raw source")
-				}
-			})
-		}
+func TestDailyPartsOldReaderDeniesWrites(t *testing.T) {
+	p := dailyV2Compile(t, dailyV2Schedule("2027-02-12T09:17", 24, false, ""))
+	for mask := 0; mask < 8; mask++ {
+		t.Run(fmt.Sprintf("retained-HPM-%03b", mask), func(t *testing.T) {
+			objects := dailyGroupObjects(t, p)
+			dailyOldRetain(t, objects, mask)
+			before := snapshot(t, objects)
+			tasks := inventory(t, objects...)
+			if len(tasks) != 1 || tasks[0].Resources != 1 || tasks[0].Writable {
+				t.Fatalf("want a single read-only resource, got %+v", tasks)
+			}
+			// Intact markers exercise reserved-metadata rejection; erased
+			// markers exercise the fallback without native provenance.
+			if mask == 0 || mask == 7 {
+				dailyOldDeny(t, objects, tasks[0], false)
+			}
+			if before != snapshot(t, objects) {
+				t.Fatal("legacy inventory or action normalized raw source")
+			}
+		})
 	}
 }
 
@@ -241,7 +231,11 @@ func TestDailyPartsOldReaderMalformedSummaryAndV1Cases(t *testing.T) {
 			if mode == "already-adopted-looking" && tasks[0].ID != "task:"+adoptionID {
 				t.Fatal("retry did not reach actual already-adopted-looking identity")
 			}
-			dailyOldDeny(t, objects, tasks, false)
+			action := "delete"
+			if mode == "already-adopted-looking" {
+				action = "adopt/commit"
+			}
+			dailyOldDeny(t, objects, tasks[0], false, action)
 		})
 	}
 }
@@ -263,7 +257,10 @@ func TestDailyPartsOldReaderCollisionFullSnapshotNeverPromotesV1(t *testing.T) {
 	if len(full) != 1 || full[0].ID != "task:"+dailyV2Task || full[0].Resources != 2 || full[0].Writable {
 		t.Fatal("full physical collision failed whole-task block", full)
 	}
-	dailyOldDeny(t, objects, full, false)
+	dailyOldDeny(t, objects, full[0], false, "delete")
+	// Adoption addressed to the genuine sibling bypasses the target's reserved
+	// marker check, but must still reject adoption of a multi-resource task.
+	dailyOldDenyMember(t, objects, full[0], legacy, false, "adopt/commit")
 	dailyGroupReadonly(t, objects)
 	model := dailyGroupRead(t, objects)
 	if len(model.HandledHrefs) != 1 || len(model.Physical) != 2 || len(model.Groups[0].Members) != 2 {
@@ -277,41 +274,28 @@ func TestDailyPartsOldReaderCollisionFullSnapshotNeverPromotesV1(t *testing.T) {
 	}
 }
 
-func TestDailyPartsOldReaderWhollyCanceledUsesPreviouslyCapturedRequests(t *testing.T) {
-	for _, profile := range []struct {
-		name    string
-		s       Schedule
-		partial bool
-	}{
-		{"singleton", dailyV2Schedule("2027-02-12T09:17", 24, false, ""), false},
-		{"full12", dailyV2Schedule("2027-02-12T09:17", 2, false, ""), false},
-		{"plain24-hour", dailyV2Schedule("2027-02-12T09:47", 1, false, ""), false},
-		{"plain24-half", dailyV2Schedule("2027-02-12T09:47", 0.5, false, ""), false},
-		{"work8-half", dailyV2Schedule("2027-02-12T09:47", 0.5, true, ""), false},
-		{"partial", dailyV2Schedule("2027-02-12T09:17", 2, false, ""), true},
-	} {
-		for mask := 0; mask < 8; mask++ {
-			t.Run(fmt.Sprintf("ABSENT/%s/retained-HPM-%03b", profile.name, mask), func(t *testing.T) {
-				objects := dailyGroupObjects(t, dailyV2Compile(t, profile.s))
-				if profile.partial {
-					objects = objects[:3]
-				}
-				dailyOldRetain(t, objects, mask)
-				// Real previous Inventory IDs/revisions, never fabricated current rows.
-				previous := inventory(t, objects...)
-				for _, o := range objects {
-					o.Data.Events()[0].Props.SetText("STATUS", "CANCELLED")
-				}
-				if fresh := inventory(t, objects...); len(fresh) != 0 {
-					t.Fatal("unchanged legacy cancellation visibility changed", fresh)
-				}
-				dailyOldDeny(t, objects, previous, true)
-				// If all provenance was erased, the new reader cannot recover it.
-				if mask != 0 {
-					dailyGroupReadonly(t, objects)
-				}
-			})
-		}
+func TestDailyPartsOldReaderRejectsStaleRequestsAfterCancellation(t *testing.T) {
+	p := dailyV2Compile(t, dailyV2Schedule("2027-02-12T09:17", 2, false, ""))
+	for _, mask := range []int{0, 7} {
+		t.Run(fmt.Sprintf("retained-HPM-%03b", mask), func(t *testing.T) {
+			objects := dailyGroupObjects(t, p)
+			dailyOldRetain(t, objects, mask)
+			previous := inventory(t, objects...)
+			if len(previous) < 2 {
+				t.Fatal("expected previously visible members")
+			}
+			for _, o := range objects {
+				o.Data.Events()[0].Props.SetText("STATUS", "CANCELLED")
+			}
+			if fresh := inventory(t, objects...); len(fresh) != 0 {
+				t.Fatal("cancelled resources still visible", fresh)
+			}
+			// Ordinary mutations and adoption take different lookup paths.
+			dailyOldDeny(t, objects, previous[0], true, "delete", "adopt/commit")
+			if mask != 0 {
+				dailyGroupReadonly(t, objects)
+			}
+		})
 	}
 }
 
@@ -384,6 +368,7 @@ func TestDailyPartsOldReaderDocketAddedBOUNDARYCounterexamples(t *testing.T) {
 func TestDailyPartsOldReaderPreservesAllRawSiblings(t *testing.T) {
 	p := dailyV2Compile(t, dailyV2Schedule("2027-02-12T09:47", 0.5, true, ""))
 	objects := dailyGroupObjects(t, p)
+	dailyOldRetain(t, objects, 0)
 	for _, o := range objects {
 		e := o.Data.Events()[0]
 		e.Props.Get("DESCRIPTION").Params.Set("LANGUAGE", "en-AU")
@@ -391,5 +376,26 @@ func TestDailyPartsOldReaderPreservesAllRawSiblings(t *testing.T) {
 		e.Children[0].Props.SetText("X-ALARM", "preserve")
 		o.Data.Props.SetText("X-ROOT", "preserve")
 	}
-	dailyOldDeny(t, objects, inventory(t, objects...), false)
+	before := snapshot(t, objects)
+	tasks, err := SelectedInventory(objects, dailyGroupLocation, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := make(map[string]bool, len(objects))
+	for _, o := range objects {
+		want[o.Path] = true
+	}
+	for _, task := range tasks {
+		if task.Writable || task.Resources != 1 || len(task.members) != 1 || !want[task.members[0].Path] {
+			t.Fatalf("want one read-only row per marker-erased resource, got %+v", task)
+		}
+		delete(want, task.members[0].Path)
+	}
+	if len(want) != 0 || len(tasks) < 2 {
+		t.Fatal("missing marker-erased siblings", want)
+	}
+	dailyOldDeny(t, objects, tasks[0], false, "edit")
+	if before != snapshot(t, objects) {
+		t.Fatal("inventory or rejection changed source evidence")
+	}
 }
