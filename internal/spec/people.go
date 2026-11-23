@@ -328,37 +328,59 @@ type castRef struct {
 	others []string
 }
 
-func (r castRef) aliases() []string {
+// cast collects the people a timeline shows, in first-appearance order.
+type cast struct {
+	order       []string
+	rows        map[string]*Participant
+	key         map[string]string         // alias -> the row key it resolved to
+	direct      map[string]bool           // row key -> seen at least once outside a quote
+	mailbox     map[string]map[int64]bool // address -> known corpus people who used it
+	knownSender map[string]bool           // row key -> name came from a sender with a corpus identity
+}
+
+func newCast() *cast {
+	return &cast{
+		rows: map[string]*Participant{}, key: map[string]string{}, direct: map[string]bool{},
+		mailbox: map[string]map[int64]bool{}, knownSender: map[string]bool{},
+	}
+}
+
+// Observe known mailbox owners before resolving any aliases, so it doesn't
+// matter whether an unresolved sender appeared before or after a shared address.
+func (c *cast) noteMailbox(person int64, address string) {
+	if person == 0 || address == "" {
+		return
+	}
+	if c.mailbox[address] == nil {
+		c.mailbox[address] = map[int64]bool{}
+	}
+	c.mailbox[address][person] = true
+}
+
+func (c *cast) aliases(ref castRef) []string {
 	var out []string
-	if r.person != 0 {
-		out = append(out, fmt.Sprintf("p:%d", r.person))
+	if ref.person != 0 {
+		out = append(out, fmt.Sprintf("p:%d", ref.person))
 	}
-	if r.address != "" {
-		out = append(out, "a:"+r.address)
+	if ref.address != "" {
+		if len(c.mailbox[ref.address]) < 2 {
+			out = append(out, "a:"+ref.address)
+		} else if ref.person == 0 {
+			// A header alone can't say which known person used a shared
+			// mailbox. Preserve its own label instead of assigning an author.
+			out = append(out, "shared:"+ref.address+"\x00"+ref.name)
+		}
 	}
-	if len(out) == 0 && r.name != "" {
-		out = append(out, "n:"+strings.ToLower(r.name))
+	if len(out) == 0 && ref.name != "" {
+		out = append(out, "n:"+strings.ToLower(ref.name))
 	}
 	return out
 }
 
-// cast collects the people a timeline shows, in first-appearance order.
-type cast struct {
-	order  []string
-	rows   map[string]*Participant
-	key    map[string]string // alias -> the row key it resolved to
-	direct map[string]bool   // row key -> seen at least once outside a quote
-}
-
-func newCast() *cast {
-	return &cast{rows: map[string]*Participant{}, key: map[string]string{}, direct: map[string]bool{}}
-}
-
-// sender records the author of an entry. Their rendered name is authoritative:
-// it is what the page shows beside their messages, so a row under any other
-// spelling would read as a second person.
-func (c *cast) sender(ref castRef, org string, direct bool) {
-	c.see(ref, org, true, direct)
+// sender records the author of an entry and returns the resolved cast row.
+// A sender's name takes precedence over a recipient's header spelling.
+func (c *cast) sender(ref castRef, org string, direct bool) *Participant {
+	return c.see(ref, org, true, direct)
 }
 
 // recipient records someone addressed on an entry. Their name is whatever
@@ -368,15 +390,15 @@ func (c *cast) recipient(ref castRef, org string, direct bool) {
 	c.see(ref, org, false, direct)
 }
 
-func (c *cast) see(ref castRef, org string, named, direct bool) {
+func (c *cast) see(ref castRef, org string, named, direct bool) *Participant {
 	if ref.name == "" && ref.address == "" {
 		// Neither a name nor an address is not a person, it is an empty header.
-		return
+		return nil
 	}
-	aliases := ref.aliases()
+	aliases := c.aliases(ref)
 	k := c.resolve(aliases)
 	if k == "" {
-		return
+		return nil
 	}
 	row, ok := c.rows[k]
 	if !ok {
@@ -388,10 +410,15 @@ func (c *cast) see(ref castRef, org string, named, direct bool) {
 		c.key[a] = k
 	}
 	for _, a := range ref.others {
-		c.bind("a:"+a, k)
+		if len(c.mailbox[a]) < 2 {
+			c.bind("a:"+a, k)
+		}
 	}
-	if named || row.Name == "" {
+	if row.Name == "" || (named && (ref.person != 0 || !c.knownSender[k])) {
 		row.Name = firstNonEmpty(ref.name, ref.address)
+	}
+	if named && ref.person != 0 {
+		c.knownSender[k] = true
 	}
 	// An address is only ever added, never overwritten: a later sighting knowing
 	// less than an earlier one must not take knowledge away.
@@ -408,6 +435,7 @@ func (c *cast) see(ref castRef, org string, named, direct bool) {
 	if direct {
 		c.direct[k] = true
 	}
+	return row
 }
 
 // bind links an alias to whichever row it belongs to, so that a later appearance

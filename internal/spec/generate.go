@@ -3,6 +3,7 @@ package spec
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -179,6 +180,11 @@ func Generate(store *corpus.Store, opts Options) (Spec, error) {
 		orgs:      newOrgResolver(orgs, addrs),
 		prev:      &previewer{dir: opts.UploadDir, blob: opts.Blobs},
 	}
+	for person, addresses := range b.addrs {
+		for _, address := range addresses {
+			b.cast.noteMailbox(person, address)
+		}
+	}
 	for _, r := range rows {
 		b.rowByID[r.ID] = r
 		// An org is inferred from a sender's mail domain, and a quote-recovered
@@ -188,7 +194,9 @@ func Generate(store *corpus.Store, opts Options) (Spec, error) {
 		// carried across from wherever it was resolvable — which is what the
 		// resolver's recording half does.
 		if r.PersonID != 0 {
-			b.orgs.note(r.PersonID, parseAddr(r.From).Address)
+			address := parseAddr(r.From).Address
+			b.orgs.note(r.PersonID, address)
+			b.cast.noteMailbox(r.PersonID, address)
 		}
 	}
 	// Attribute every inline (cid) image to the quoted message that placed it
@@ -197,6 +205,13 @@ func Generate(store *corpus.Store, opts Options) (Spec, error) {
 
 	for _, r := range rows {
 		b.add(r)
+	}
+	// Later appearances can change a cast row's name. Use that final name
+	// for all its messages, without changing the anchors assigned above.
+	for i, sender := range b.senderRows {
+		if sender != nil && b.messages[i].Sender != "" {
+			b.messages[i].Sender = sender.Name
+		}
 	}
 	// Parents and subjects, once every entry has an id: a row visited late (a message
 	// recovered from a quotation carries its quoter's wall clock as ts) can be another
@@ -241,13 +256,14 @@ type builder struct {
 	// me is the reader, as the addresses they named and the humans the corpus
 	// resolved them to. One value for both surfaces that ask: this page build and
 	// the trail render the reading pane draws. See me.go.
-	me       meSet
-	ids      *idAllocator
-	idOf     map[int64]string    // corpus id -> spec id, for parent edges
-	rowByID  map[int64]*entryRow // every selected entry, for sighting lookups
-	subjOf   map[int64]string    // corpus id -> subject, to spot a new chain
-	slot     map[int64]int       // corpus id -> where its entry landed, to link parents
-	messages []Entry
+	me         meSet
+	ids        *idAllocator
+	idOf       map[int64]string    // corpus id -> spec id, for parent edges
+	rowByID    map[int64]*entryRow // every selected entry, for sighting lookups
+	subjOf     map[int64]string    // corpus id -> subject, to spot a new chain
+	slot       map[int64]int       // corpus id -> where its entry landed, to link parents
+	messages   []Entry
+	senderRows []*Participant // aligned with messages; nil for an unrecorded sender
 
 	// cast is the participants panel; part and addrs are the corpus's own
 	// participation record, which is the only source for a Slack author or for
@@ -374,7 +390,7 @@ func (b *builder) add(r *entryRow) {
 	b.slot[r.ID] = len(b.messages)
 	b.messages = append(b.messages, e)
 
-	b.meet(r, e.Sender, e.Org, from, to, cc)
+	b.senderRows = append(b.senderRows, b.meet(r, e.Sender, e.Org, from, to, cc))
 }
 
 // linkParents resolves each entry's parent to the parent's spec id, and decides which
@@ -413,13 +429,13 @@ func (b *builder) linkParents(rows []*entryRow) {
 // meet records everyone this entry involves, in the order the page reads: its
 // author, then the people the corpus says were addressed on it, then anyone
 // named in a header the corpus did not resolve to a person.
-func (b *builder) meet(r *entryRow, sender, org string, from addr, to, cc []addr) {
+func (b *builder) meet(r *entryRow, sender, org string, from addr, to, cc []addr) *Participant {
 	ref := b.ref(r.PersonID, sender, from.Address)
 	// The sender's row is handed the org their own bubbles carry, rather than
 	// resolving it a second time from the address the corpus happens to list
 	// first: the panel is read as the key to the transcript's colours, so the two
 	// must be the same value and not merely two attempts at the same answer.
-	b.cast.sender(ref, org, r.Direct)
+	row := b.cast.sender(ref, org, r.Direct)
 	for _, p := range b.part[r.ID] {
 		if p.Role == corpus.RoleFrom {
 			// Already recorded, under the name the transcript shows beside their
@@ -433,7 +449,20 @@ func (b *builder) meet(r *entryRow, sender, org string, from addr, to, cc []addr
 	// rare — 16 entries of 31k on the corpus this was measured against carry a To:
 	// line with no participants rows behind it — but the panel is not the place to
 	// lose them.
-	for _, a := range append(append([]addr{}, to...), cc...) {
+	b.meetHeaderRecipients(r, to, corpus.RoleTo)
+	b.meetHeaderRecipients(r, cc, corpus.RoleCc)
+	return row
+}
+
+func (b *builder) meetHeaderRecipients(r *entryRow, header []addr, role string) {
+	for _, a := range header {
+		owners := b.cast.mailbox[a.Address]
+		if len(owners) > 1 && slices.ContainsFunc(b.part[r.ID], func(p partRow) bool {
+			return p.Role == role && owners[p.Person] && p.Name == a.Who()
+		}) {
+			// Already recorded as a resolved recipient on this entry.
+			continue
+		}
 		ref := b.ref(0, a.Who(), a.Address)
 		b.cast.recipient(ref, b.orgFor(0, ref.address), r.Direct)
 	}

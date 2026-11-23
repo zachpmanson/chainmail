@@ -94,6 +94,82 @@ func TestTheCastNamesASenderAsTheTranscriptDoes(t *testing.T) {
 	}
 }
 
+func TestSenderAliasesShareThePanelNameWithoutChangingAnchors(t *testing.T) {
+	s := open(t)
+	const email = "ada@example.test"
+	ada := person(t, s, "Ada Example", email)
+	for _, m := range []msg{
+		{ext: "mail:<earlier@example.test>", ts: "2026-10-08T06:56:00Z", container: "T-alias", subject: "Aliases",
+			messageID: "<earlier@example.test>", from: "A. Example <" + email + ">", gmail: "alias-earlier"},
+		{ext: "mail:<later@example.test>", ts: "2026-10-08T08:00:00Z", container: "T-alias", subject: "Aliases",
+			messageID: "<later@example.test>", from: "Ada Example <" + email + ">", person: ada, gmail: "alias-later"},
+		{ext: "mail:<last@example.test>", ts: "2026-10-08T09:00:00Z", container: "T-alias", subject: "Aliases",
+			messageID: "<last@example.test>", from: "Ada E. <" + email + ">", gmail: "alias-last"},
+	} {
+		id := put(t, s, m)
+		if err := s.Sight(id, 0, "direct", ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sp := generate(t, s, Options{Containers: []string{"T-alias"}})
+	if len(sp.Participants) != 1 || sp.Participants[0].Name != "Ada Example" || sp.Participants[0].Email != email {
+		t.Fatalf("want one participant under the resolved name, got %+v", sp.Participants)
+	}
+	if len(sp.Messages) != 3 || sp.Messages[0].ID != "m-20261008-0656-ae" {
+		t.Fatalf("want all three messages and unchanged first anchor, got %+v", sp.Messages)
+	}
+	for _, m := range sp.Messages {
+		if m.Sender != sp.Participants[0].Name || m.FromEmail != email {
+			t.Errorf("message %s sender = %q <%s>, want participant name and original address", m.ID, m.Sender, m.FromEmail)
+		}
+	}
+}
+
+func TestSharedMailboxDoesNotMergeKnownAndUnresolvedSenders(t *testing.T) {
+	s := open(t)
+	ada := person(t, s, "Ada Example", "ada@example.test")
+	bea := person(t, s, "Bea Example", "bea@example.test")
+	for _, who := range []struct {
+		name, local, hour string
+		person            int64
+	}{
+		{"B. Example", "unresolved-first", "05", 0},
+		{"Ada Example", "ada", "06", ada},
+		{"Bea Example", "bea", "07", bea},
+		{"Ada Example", "ada-again", "08", ada},
+		{"B. Example", "unresolved-last", "09", 0},
+	} {
+		m := msg{ext: "mail:<" + who.local + "@example.test>", ts: "2026-10-08T" + who.hour + ":00:00Z",
+			container: "T-shared", subject: "Shared mailbox", messageID: "<" + who.local + "@example.test>",
+			from: who.name + " <team@example.test>", person: who.person, gmail: who.local}
+		if who.person == bea {
+			m.to = "Ada Example <team@example.test>"
+			m.cc = "Unresolved Recipient <team@example.test>"
+		}
+		id := put(t, s, m)
+		if err := s.Sight(id, 0, "direct", ""); err != nil {
+			t.Fatal(err)
+		}
+		if who.person == bea {
+			if err := corpus.Participate(s, id, ada, corpus.RoleTo); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	sp := generate(t, s, Options{Containers: []string{"T-shared"}})
+	if len(sp.Participants) != 4 || len(castNames(sp)) != 4 || len(sp.Messages) != 5 {
+		t.Fatalf("want two known authors, two unresolved labels, and five messages, got %+v / %+v", sp.Participants, sp.Messages)
+	}
+	if _, ok := castNames(sp)["Unresolved Recipient"]; !ok {
+		t.Errorf("lost the unresolved Cc recipient: %+v", sp.Participants)
+	}
+	for i, want := range []string{"B. Example", "Ada Example", "Bea Example", "Ada Example", "B. Example"} {
+		if got := sp.Messages[i].Sender; got != want {
+			t.Errorf("message %d sender = %q, want %q", i, got, want)
+		}
+	}
+}
+
 // A Slack message has no From header at all: its author exists only as a person
 // id and a participants row.
 func TestSlackAuthorsAreInTheCast(t *testing.T) {
