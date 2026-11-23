@@ -87,9 +87,6 @@ export default function HassleInventory({
             Retry refresh
           </Button>
         ) : null}
-        <Button disabled={busy || state.refreshing} onClick={store.refresh}>
-          Refresh Calendar
-        </Button>
         <HassleList
           tasks={projectTasks(inventory.data?.tasks ?? [], state.operations)}
           busy={busy}

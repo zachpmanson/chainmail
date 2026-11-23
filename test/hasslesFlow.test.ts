@@ -767,8 +767,12 @@ it("resolves presets at selection and keeps that payload and UUID on uncertain r
   await click(button("Add hassle"));
   expect(writes().at(-1)!.body).toEqual(first);
 });
-it("global refresh reads config then only the exact selected inventory, preserving draft and retry UUID", async () => {
+it("the header refresh reads only the selected inventory without a duplicate list button", async () => {
   await choose();
+  const reminders = document.querySelector('[aria-label="Reminders"]')!;
+  expect(
+    [...reminders.querySelectorAll("button")].map((button) => button.textContent?.trim()),
+  ).not.toContain("Refresh Calendar");
   fixture.handle("/__hassles_fixture", "POST", { mode: "read-only" });
   await add("Keep through refresh");
   const writes = () =>
