@@ -51,51 +51,28 @@ func swept(t *testing.T, srv *harness, ago time.Duration) {
 	}
 }
 
-// The pulse: a cadence has elapsed since the last ingest, so the tick runs one —
-// and having run it, does not run another the next time the loop looks.
-func TestASweepRunsWhenItsCadenceHasElapsed(t *testing.T) {
-	srv, runs := sweepable(t, "")
-	swept(t, srv, 11*time.Minute)
-
-	srv.sweepIfDue(context.Background())
-	if *runs != 1 {
-		t.Fatalf("%d sweeps, want one: the last ingest was a whole cadence ago", *runs)
-	}
-	if got := srv.lastSlurp(); got.IsZero() {
-		t.Error("the sweep left no stamp, so the next tick would sweep again immediately")
-	}
-
-	srv.sweepIfDue(context.Background())
-	if *runs != 1 {
-		t.Errorf("%d sweeps, want one: a sweep was just made, and the cadence has not elapsed again", *runs)
-	}
-}
-
-// The cadence decides, measured from the last attempt rather than from the last
-// tick — a host that restarts, or a loop that misses a beat, still ingests on
-// its schedule rather than on the loop's.
+// The cadence is measured from the persisted last attempt, not from the last tick.
 func TestTheCadenceDecidesWhenTheNextSweepIsDue(t *testing.T) {
 	srv, runs := sweepable(t, "")
-	now := time.Now()
-
-	for _, c := range []struct {
-		ago  time.Duration
-		want int
-	}{
-		{ago: 9 * time.Minute, want: 0},  // inside the cadence
-		{ago: 11 * time.Minute, want: 1}, // past it
-		{ago: 0, want: 1},                // just swept, so nothing now
-		{ago: 10 * time.Minute, want: 2}, // exactly the cadence: due
-	} {
-		if err := srv.store.PutSetting(corpus.SettingSlurpAt,
-			now.Add(-c.ago).UTC().Format(time.RFC3339)); err != nil {
-			t.Fatalf("storing the last sweep: %v", err)
-		}
+	tick := func(want int) {
+		t.Helper()
 		srv.sweepIfDue(context.Background())
-		if *runs != c.want {
-			t.Errorf("last sweep %s ago: %d runs, want %d", c.ago, *runs, c.want)
+		if *runs != want {
+			t.Fatalf("after tick: %d sweeps, want %d", *runs, want)
 		}
 	}
+
+	swept(t, srv, 9*time.Minute)
+	tick(0)
+	swept(t, srv, 11*time.Minute)
+	before := srv.lastSlurp()
+	tick(1)
+	if !srv.lastSlurp().After(before) {
+		t.Fatal("successful sweep did not advance the persisted attempt stamp")
+	}
+	tick(1) // The sweep's own stamp prevents a rerun.
+	swept(t, srv, 10*time.Minute)
+	tick(2) // Exactly the cadence is due.
 }
 
 // A sweep that failed still happened: the stamp is written before the walk, so a

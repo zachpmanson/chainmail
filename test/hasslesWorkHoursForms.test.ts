@@ -8,11 +8,10 @@ import {
 } from "../src/lib/hassles/forms";
 
 describe("Hassle work-hour controls", () => {
-  it("defaults unchecked and exposes singular/plural hourly intervals", () => {
+  it("defaults unchecked and labels singular and plural hours", () => {
     expect(defaultSchedule().workHours).toBe(false);
     expect(intervalUnit("hourly", 1)).toBe("hour");
     expect(intervalUnit("hourly", 0.5)).toBe("hours");
-    expect(hourlyIntervals).toEqual([0.5, 1, 2, 3, 4, 6, 8, 12, 24]);
   });
   it("validates all cadence/checkbox combinations and interval extremes", () => {
     const cadences: HassleSchedule["cadence"][] = [

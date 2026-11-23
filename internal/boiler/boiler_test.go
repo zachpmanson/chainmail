@@ -163,6 +163,10 @@ func TestAShortTailIsLeftAloneBecauseTheControlCostsALine(t *testing.T) {
 			fmt.Sprintf("Point %d.", i), "Ada"))
 	}
 	if f, ok := Detect(msgs, Default())[10]; ok {
-		t.Errorf("fold = %+v, want none: one line is below MinLines", f)
+		t.Errorf("fold = %+v, want none: one line is below the default minimum", f)
+	}
+	want := Fold{Lines: 1, Count: 6, Senders: 1, Scope: Author}
+	if got := Detect(msgs, Rules{MinLines: 1})[10]; got != want {
+		t.Errorf("fold with MinLines=1 = %+v, want %+v", got, want)
 	}
 }

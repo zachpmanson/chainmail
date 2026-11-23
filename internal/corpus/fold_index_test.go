@@ -180,6 +180,26 @@ func TestFoldIndexMutationParity(t *testing.T) {
 	r := boiler.Default()
 	first := foldParity(t, s, r)
 	t.Logf("initial: %+v", first)
+
+	ctx := context.Background()
+	cy := idOf(t, s, "mail:<loom-3@loom.example>")
+	msgs, _, err := freshFoldEvidence(ctx, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fold := boiler.Detect(msgs, r)[cy]
+	if fold.Scope != boiler.Domain {
+		t.Fatalf("fixture must prove a domain fold for the selected one-off sender: %+v", fold)
+	}
+	got, err := s.SelectedFolds(ctx, []int64{cy}, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[int64]boiler.Fold{cy: fold}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("singleton selection = %v, want %v", got, want)
+	}
+
 	id := idOf(t, s, "mail:<ada-1@weave.example>")
 	mutations := []struct {
 		q    string

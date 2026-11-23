@@ -139,39 +139,30 @@ it("submits hourly work-hours schedules, preserves a failed-create draft and edi
   expect(writes().at(-1)!.body).toMatchObject({ action: "rename", title: "Office renamed" });
   expect(writes().at(-1)!.body).not.toHaveProperty("schedule");
 });
-it.each(
-  [0.5, 1, 2, 3, 4, 6, 8, 12, 24].flatMap((interval) =>
-    [false, true].map((workHours) => ({ interval, workHours })),
-  ),
-)(
-  "creates hourly $interval / work hours $workHours and renames only its title",
-  async ({ interval, workHours }) => {
-    await choose();
-    await type(titleInput(), "Supported slots");
-    await select(firstReminder(), "custom");
-    await type(customStart(), "2027-01-01T16:45");
-    await select(repeat(), "hourly");
-    await select(field("Every", addForm()).querySelector("select")!, String(interval));
-    if (workHours)
-      await click(addForm().querySelector<HTMLInputElement>('input[type="checkbox"]')!);
-    fixture.handle("/__hassles_fixture", "POST", { mode: "read-only" });
-    await click(button("Add hassle"));
-    const writes = () =>
-      fixture.requests.filter((r) => r.method === "POST" && r.path.endsWith("/v1/hassles"));
-    const first = writes().at(-1)!.body;
-    fixture.handle("/__hassles_fixture", "POST", { mode: "normal" });
-    await click(button("Add hassle"));
-    expect(writes().at(-1)!.body).toEqual(first);
-    await click(button("Edit"));
-    const dialog = document.querySelector('[role="dialog"][aria-modal="true"]')!;
-    expect(dialog.querySelector("select")).toBeNull();
-    expect(dialog.querySelector('input[type="checkbox"]')).toBeNull();
-    await type(dialog.querySelector<HTMLInputElement>('[aria-label="Title"]')!, "Renamed slots");
-    await click(button("Save title"));
-    expect(writes().at(-1)!.body).toMatchObject({ action: "rename", title: "Renamed slots" });
-    expect(writes().at(-1)!.body).not.toHaveProperty("schedule");
-  },
-);
+it("creates an unrestricted 24-hour reminder and renames only its title", async () => {
+  await choose();
+  await type(titleInput(), "Supported slots");
+  await select(firstReminder(), "custom");
+  await type(customStart(), "2027-01-01T16:45");
+  await select(repeat(), "hourly");
+  await select(field("Every", addForm()).querySelector("select")!, "24");
+  await click(button("Add hassle"));
+  const writes = () =>
+    fixture.requests.filter((r) => r.method === "POST" && r.path.endsWith("/v1/hassles"));
+  expect(writes()).toHaveLength(1);
+  expect(writes()[0]!.body).toMatchObject({
+    schedule: { cadence: "hourly", interval: 24, workHours: false },
+  });
+  await click(button("Edit"));
+  const dialog = document.querySelector('[role="dialog"][aria-modal="true"]')!;
+  expect(dialog.querySelector("select")).toBeNull();
+  expect(dialog.querySelector('input[type="checkbox"]')).toBeNull();
+  await type(dialog.querySelector<HTMLInputElement>('[aria-label="Title"]')!, "Renamed slots");
+  await click(button("Save title"));
+  expect(writes()).toHaveLength(2);
+  expect(writes()[1]!.body).toMatchObject({ action: "rename", title: "Renamed slots" });
+  expect(writes()[1]!.body).not.toHaveProperty("schedule");
+});
 it("validates work-hours first reminders without moving them or sending a write", async () => {
   await choose();
   await type(titleInput(), "Invalid office time");

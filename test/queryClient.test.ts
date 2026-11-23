@@ -4,14 +4,7 @@ import { makeQueryClient } from "../src/lib/api/queryClient";
 import { ApiError } from "../src/lib/api/api";
 
 describe("shared retry safety", () => {
-  it.each([
-    "compose send",
-    "reply send",
-    "draft send",
-    "draft create",
-    "draft update",
-    "draft delete",
-  ])("does not replay %s after the write succeeds but its response is lost", async () => {
+  it("does not replay a write that succeeds but its response is lost", async () => {
     const client = makeQueryClient();
     let writes = 0;
     const observer = new MutationObserver(client, {

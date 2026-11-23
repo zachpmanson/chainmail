@@ -62,6 +62,9 @@ it("puts work at the heading's top right and controls beside the grey summary", 
   expect(work.classList.contains("shrink-0")).toBe(true);
   expect(title.textContent?.trim()).toBe(task.title);
   expect(work.textContent).toBe("work");
+  expect(row.querySelectorAll("[data-hassle-work] > span")).toHaveLength(1);
+  expect(work.querySelector("span")?.classList.contains("rounded-full")).toBe(true);
+  expect(row.textContent).not.toContain("Mon–Fri 9–5");
   expect(heading.nextElementSibling).toBe(details);
   expect(summary.parentElement).toBe(details);
   expect(actions.parentElement).toBe(details);
@@ -80,7 +83,7 @@ it("puts work at the heading's top right and controls beside the grey summary", 
   ]);
 });
 
-it.each([false, null])(
+it.each([false, undefined, null])(
   "has no badge for workHours=%s and leaves the title flexible",
   (workHours) => {
     const row = card({
@@ -88,6 +91,7 @@ it.each([false, null])(
       schedule: workHours === null ? null : { ...task.schedule!, workHours },
     });
     expect(row.querySelector("[data-hassle-work]")).toBeNull();
+    expect(row.textContent).not.toContain("Mon–Fri 9–5");
     expect(row.querySelector("[data-hassle-title]")?.classList.contains("flex-1")).toBe(true);
   },
 );
@@ -155,4 +159,5 @@ it.each([
   expect([...row.querySelectorAll("button")].map((button) => button.disabled)).toEqual(
     value.disabled,
   );
+  if (!value.writable) expect(row.querySelector("[data-hassle-work]")?.textContent).toBe("work");
 });

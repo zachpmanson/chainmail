@@ -94,6 +94,16 @@ func idOf(t *testing.T, s *Store, ext string) int64 {
 // per group and the scope is drawn around whole groups.
 func TestASelectionIsFoldedTheWayTheWholeCorpusFoldsIt(t *testing.T) {
 	s := signedCorpus(t)
+	// Before warming the cache, a sender with only one message must inherit a
+	// notice whose other copies belong to an unselected sender in the domain.
+	cy := idOf(t, s, "mail:<loom-3@loom.example>")
+	cold, err := s.BoilerplateFor([]int64{cy})
+	if err != nil {
+		t.Fatalf("folding Cy's message: %v", err)
+	}
+	if cold[cy].Scope != boiler.Domain {
+		t.Fatalf("cold selection scope = %v, want the organisation's", cold[cy].Scope)
+	}
 	want := wholeCorpusFolds(t, s)
 
 	for _, ext := range []string{
@@ -113,27 +123,6 @@ func TestASelectionIsFoldedTheWayTheWholeCorpusFoldsIt(t *testing.T) {
 		if !reflect.DeepEqual(got[id], want[id]) {
 			t.Errorf("%s: scoped fold %+v, whole corpus %+v", ext, got[id], want[id])
 		}
-	}
-}
-
-// The case the scope is shaped around: an organisation is folded for a sender
-// whose own message is the only one the selection holds. Cy sent the notice once;
-// the two other copies that prove it belong to somebody else, and they are in the
-// scope because the domain is — not because Cy's message could have found them.
-func TestAOneOffSenderInheritsTheirOrganisationsNotice(t *testing.T) {
-	s := signedCorpus(t)
-	cy := idOf(t, s, "mail:<loom-3@loom.example>")
-
-	got, err := s.BoilerplateFor([]int64{cy})
-	if err != nil {
-		t.Fatalf("folding Cy's message: %v", err)
-	}
-	fold, ok := got[cy]
-	if !ok {
-		t.Fatal("the notice was not folded for the sender who appears once")
-	}
-	if fold.Scope != boiler.Domain {
-		t.Errorf("scope: got %v, want the organisation's", fold.Scope)
 	}
 }
 
