@@ -21,13 +21,22 @@ Configured calendar details and its settings link stay in Settings, not the Hass
 
 New hourly reminders (including every 0.5 hours) use native DAILY-parts v2:
 up to 24 Calendar resources, or 8 for work hours, displayed as one card.
-Finite repeat ends can use fewer resources. Timing is approximate; an unknown
-next time does not prevent managing the reminder. Calendar remains the source of truth.
+Finite repeat ends can use fewer resources. Complete, consistent work-hours groups
+can show exact timing and use **This instance only**. The server checks the fresh
+physical roster and excludes the selected start on just one recurring master; it
+never deletes the series to complete an occurrence. Partial groups, mixed titles,
+and grids outside work hours do not supply an exact witness. Calendar remains the
+source of truth when timing is approximate.
 
 The pencil opens a title-only Save/Cancel form. Rename changes only SUMMARY;
-there is no v2 schedule editor or single-instance completion. The trash control
-confirms the captured title and actual resource count before deleting the whole group.
-Both actions use a fresh revision and the actual resource hrefs/ETags.
+there is no v2 schedule editor. The trash control confirms the captured title
+and actual resource count before deleting the whole group. All actions use a
+fresh revision and the actual resource hrefs/ETags.
+
+The physical reader accepts the original `DISPLAY`/`Reminder`/`PT0S` alarm and the
+[Google zero-offset representation](https://www.eclipse.org/lists/eclipse-cloud/msg00030.html)
+(`DISPLAY`/`This is an event reminder`/`P0D`). These are exact single start-of-event
+alarms; other shapes remain unsupported. Neither form is rewritten on completion.
 
 Writes are serial, conditional and non-atomic. A failure stops immediately and
 refreshes Calendar; changes may have partially applied. Known consistent remaining
@@ -40,8 +49,9 @@ Phone notification delivery is not live-verified.
 
 ## Existing schedules: behavior and limits
 
-The legacy schedule editor and instance-completion behavior below remain available
-for existing v1 reminders and other cadences; they do not apply to v2 hourly groups.
+The legacy schedule editor remains available for existing v1 reminders and other
+cadences. The physical-instance API below also serves supported v2 work-hours
+groups; it does not make their schedules editable.
 
 - All raw VEVENT masters are read without a time window, including past one-offs,
   exhausted series and distant reminders. No occurrence duplication or background

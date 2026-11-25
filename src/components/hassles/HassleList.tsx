@@ -91,22 +91,20 @@ export default function HassleList({
                           >
                             <IconPencil aria-hidden="true" />
                           </IconButton>
-                          {!task.id.startsWith("v2:") ? (
-                            <IconButton
-                              aria-label={`This instance only: ${task.title}`}
-                              title={
-                                task.instance
-                                  ? `This instance only: ${task.title}`
-                                  : `${task.title}: ${task.instanceRestriction || "This instance only unavailable"}`
-                              }
-                              disabled={
-                                busy || blocked.has(task.id) || !task.writable || !task.instance
-                              }
-                              onClick={() => onDoneInstance(task)}
-                            >
-                              <IconCheck aria-hidden="true" />
-                            </IconButton>
-                          ) : null}
+                          <IconButton
+                            aria-label={`This instance only: ${task.title}`}
+                            title={
+                              task.instance
+                                ? `This instance only: ${task.title}`
+                                : `${task.title}: ${task.instanceRestriction || "This instance only unavailable"}`
+                            }
+                            disabled={
+                              busy || blocked.has(task.id) || !task.writable || !task.instance
+                            }
+                            onClick={() => onDoneInstance(task)}
+                          >
+                            <IconCheck aria-hidden="true" />
+                          </IconButton>
                           <IconButton
                             aria-label={
                               task.id.startsWith("v2:")

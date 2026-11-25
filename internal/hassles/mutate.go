@@ -162,8 +162,8 @@ func Mutate(ctx context.Context, b Backend, in Mutation, now time.Time) (Result,
 	if !task.Writable {
 		return result, errors.New(task.Restriction)
 	}
-	if strings.HasPrefix(task.ID, "v2:") && in.Action != "rename" && in.Action != "done" && in.Action != "delete" {
-		return result, errors.New("recurring reminder supports only title rename and whole-reminder deletion")
+	if strings.HasPrefix(task.ID, "v2:") && in.Action != "rename" && in.Action != "done" && in.Action != "delete" && in.Action != "done-instance" {
+		return result, errors.New("recurring reminder does not support schedule editing")
 	}
 	switch in.Action {
 	case "rename":

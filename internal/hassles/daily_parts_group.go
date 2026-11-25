@@ -352,10 +352,9 @@ func dailyPartsAlarm(e ical.Event) bool {
 	if a == nil || a.Name != "VALARM" || len(a.Children) != 0 {
 		return false
 	}
-	if !profileProps(a, map[string]string{"ACTION": "DISPLAY", "DESCRIPTION": "Reminder", "TRIGGER": "PT0S"}, nil) {
-		return false
-	}
-	return true
+	return profileProps(a, map[string]string{"ACTION": "DISPLAY", "DESCRIPTION": "Reminder", "TRIGGER": "PT0S"}, nil) ||
+		// Google also serializes a start-of-event DISPLAY alarm in this form.
+		profileProps(a, map[string]string{"ACTION": "DISPLAY", "DESCRIPTION": "This is an event reminder", "TRIGGER": "P0D"}, nil)
 }
 
 func dailyPartsExclusions(e ical.Event, meta *DailyPartsV2Metadata) bool {

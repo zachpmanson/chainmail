@@ -53,7 +53,7 @@ func SelectedInventory(objects []caldav.CalendarObject, loc Location, now time.T
 		}
 	}
 	for _, group := range model.Groups {
-		task := Task{ID: "v2:" + group.Task, Revision: group.Revision, Title: group.Title, Resources: len(group.Members), Writable: group.StructuralReady, Timing: Timing{State: "unknown", Note: "Next reminder time is approximate; view Calendar for details."}, InstanceRestriction: "Only rename and whole-reminder deletion are available", active: true}
+		task := Task{ID: "v2:" + group.Task, Revision: group.Revision, Title: group.Title, Resources: len(group.Members), Writable: group.StructuralReady, Timing: Timing{State: "unknown", Note: "Next reminder time is approximate; view Calendar for details."}, InstanceRestriction: "This instance only unavailable: no exact occurrence", active: true}
 		if task.Title == "" {
 			task.Title = "Unsupported recurring reminder"
 		}
@@ -80,6 +80,11 @@ func SelectedInventory(objects []caldav.CalendarObject, loc Location, now time.T
 		}
 		if mixed {
 			task.Restriction += " Titles differ across Calendar resources; rename to set one title."
+		}
+		// Partial and mixed groups retain whole-group management, but cannot
+		// supply an exact occurrence from the complete, consistent roster.
+		if task.Writable && !mixed && group.Plan != nil && len(group.Members) == len(group.Plan.members) {
+			applyDailyPartsTiming(&task, group, now)
 		}
 		out = append(out, task)
 	}

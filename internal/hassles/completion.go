@@ -175,6 +175,9 @@ func completeInstance(ctx context.Context, b Backend, in Mutation, task *Task, n
 		}
 		preview := &Completion{InstanceAt: *in.InstanceAt, Operation: "delete-resource", ResourceID: "resource:" + digest(o.Path), Before: before}
 		body := ""
+		if e.Props.Get("RRULE") == nil && strings.HasPrefix(task.ID, "v2:") {
+			return result, ErrConflict // A DAILY-parts occurrence must never delete its master.
+		}
 		if e.Props.Get("RRULE") != nil {
 			copy := cloneCalendar(o.Data)
 			event := copy.Events()[0]

@@ -25,8 +25,11 @@ func TestHasslesSimpleNativeChoices(t *testing.T) {
 					t.Fatal(r.status, string(r.body))
 				}
 				tasks := hassleList(t, h)
-				if len(f.objects) != len(plan.Members()) || len(tasks) != 1 || tasks[0].ID != "v2:"+hassleUUID || !tasks[0].Writable || tasks[0].Instance != nil || tasks[0].Schedule == nil || tasks[0].Schedule.Interval != interval {
+				if len(f.objects) != len(plan.Members()) || len(tasks) != 1 || tasks[0].ID != "v2:"+hassleUUID || !tasks[0].Writable || tasks[0].Schedule == nil || tasks[0].Schedule.Interval != interval {
 					t.Fatalf("bad native inventory: %+v / %d", tasks, len(f.objects))
+				}
+				if (tasks[0].Instance != nil) != work || (tasks[0].Timing.State == "unknown") == work {
+					t.Fatalf("unexpected native timing or witness: %+v", tasks[0])
 				}
 				writes := f.writes
 				if r := h.do(t, "POST", "/v1/hassles", hassleJSON(t, in)); r.status != 409 || f.writes != writes {

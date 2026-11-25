@@ -1484,6 +1484,50 @@ it("blocks cached-calendar writes through pending selection and publishes only c
   expect(rowAction("Edit Confirmed calendar create").disabled).toBe(false);
 });
 
+it("completes an exact native work-hours instance without removing the group", async () => {
+  await choose();
+  const at = "2027-02-12T00:30:00Z";
+  fixture.handle("/__hassles_fixture", "POST", {
+    tasks: [
+      {
+        id: "v2:offline-work-hours",
+        revision: "work-hours-revision",
+        title: "Work-hours reminder",
+        reminder: "Every 3 hours",
+        resources: 2,
+        writable: true,
+        restriction: "",
+        instance: { at, token: "work-hours-witness" },
+        instanceRestriction: "",
+        schedule: {
+          title: "Work-hours reminder",
+          start: "2027-02-12T11:30",
+          timeZone: "Australia/Melbourne",
+          cadence: "hourly",
+          interval: 3,
+          until: "",
+          workHours: true,
+        },
+        timing: { state: "upcoming", next: at, last: null, note: "" },
+      },
+    ],
+  });
+  await click(refresh());
+  await click(rowAction("This instance only: Work-hours reminder"));
+  expect(writes("done-instance").at(-1)!.body).toEqual({
+    location: fixtureLocation,
+    action: "done-instance",
+    id: "v2:offline-work-hours",
+    revision: "work-hours-revision",
+    instanceAt: at,
+    instanceToken: "work-hours-witness",
+    dryRun: false,
+  });
+  expect(writes("done")).toHaveLength(0);
+  expect(writes("delete")).toHaveLength(0);
+  expect(document.querySelector("[data-hassle-title]")?.textContent).toBe("Work-hours reminder");
+});
+
 it("renames only the native title and confirms deletion of its actual resource count", async () => {
   await choose();
   fixture.handle("/__hassles_fixture", "POST", {
@@ -1513,7 +1557,9 @@ it("renames only the native title and confirms deletion of its actual resource c
   });
   await click(refresh());
   expect(document.querySelectorAll("[data-hassle-title]")).toHaveLength(1);
-  expect(document.querySelector('[aria-label="This instance only: Native title"]')).toBeNull();
+  expect(rowAction("This instance only: Native title").disabled).toBe(true);
+  await click(rowAction("This instance only: Native title"));
+  expect(writes("done-instance")).toHaveLength(0);
   expect(document.querySelector("[data-hassle-summary]")?.textContent).toContain("Every 0.5 hours");
   await click(button("Edit"));
   let dialog = document.querySelector('[role="dialog"][aria-modal="true"]')!;

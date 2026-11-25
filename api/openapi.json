@@ -5968,7 +5968,7 @@
           "action",
           "id"
         ],
-        "description": "Adopt is metadata-only and requires the original resource: digest ID, original revision, a stable adoptId UUID and explicit dryRun. Commit (dryRun:false) also requires adoptHash from the saved preview. No nonzero schedule is accepted. Adoption-only fields are rejected on all other actions. done-instance requires revision, instanceAt, instanceToken and explicit dryRun; no schedule/adoption fields. A changed displayed occurrence or stale revision conflicts, never completes another occurrence. Hourly creates use native DAILY-parts v2 resources grouped into one reminder. v2 supports rename and whole-group done/delete only. Writes are conditional and non-atomic; refresh after any failure. Repeated create UUID claims are refused."
+        "description": "Adopt is metadata-only and requires the original resource: digest ID, original revision, a stable adoptId UUID and explicit dryRun. Commit (dryRun:false) also requires adoptHash from the saved preview. No nonzero schedule is accepted. Adoption-only fields are rejected on all other actions. done-instance requires revision, instanceAt, instanceToken and explicit dryRun; no schedule/adoption fields. A changed displayed occurrence or stale revision conflicts, never completes another occurrence. Hourly creates use native DAILY-parts v2 resources grouped into one reminder. v2 supports rename and whole-group done/delete; done-instance is available for complete, consistent work-hours groups with an exact occurrence witness. Writes are conditional and non-atomic; refresh after any failure. Repeated create UUID claims are refused."
       },
       "HassleResult": {
         "type": "object",
