@@ -46,6 +46,31 @@ func (b *dailyPartsCompletionBackend) Write(_ context.Context, collection, href,
 	return nil
 }
 
+func TestWebDailyPartsCompletionOfOnlyOccurrence(t *testing.T) {
+	ctx := context.Background()
+	b := &dailyPartsCompletionBackend{}
+	loc := dailyGroupLocation
+	now := time.Date(2027, 2, 12, 0, 0, 0, 0, time.UTC)
+	s := dailyV2Schedule("2027-02-12T11:30", 3, true, "2027-02-12T11:31")
+	if _, err := Mutate(ctx, b, Mutation{Location: loc, Action: "create", ID: dailyV2Task, Schedule: s}, now); err != nil {
+		t.Fatal(err)
+	}
+	tasks, err := SelectedInventory(b.objects, loc, now)
+	if err != nil || len(tasks) != 1 || tasks[0].Instance == nil {
+		t.Fatalf("no completion witness: %+v, %v", tasks, err)
+	}
+	task := tasks[0]
+	dry := false
+	in := Mutation{Location: loc, Action: "done-instance", ID: task.ID, Revision: task.Revision, InstanceAt: &task.Instance.At, InstanceToken: &task.Instance.Token, DryRun: &dry}
+	if _, err := Mutate(ctx, b, in, now); err != nil {
+		t.Fatal(err)
+	}
+	tasks, err = SelectedInventory(b.objects, loc, now)
+	if err != nil || len(tasks) != 1 || !tasks[0].Writable || tasks[0].Instance != nil || tasks[0].Timing.State != "past" || tasks[0].Timing.Last != nil || len(b.objects) != 1 {
+		t.Fatalf("expected an undated ended task with a manageable Calendar master: %+v, %v", tasks, err)
+	}
+}
+
 func TestWebDailyPartsWorkHoursCompletion(t *testing.T) {
 	ctx := context.Background()
 	b := &dailyPartsCompletionBackend{}

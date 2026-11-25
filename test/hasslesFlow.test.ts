@@ -586,6 +586,23 @@ it("separates ended reminders from ongoing/unknown schedules and shares Melbourn
         title: "Unknown imported",
         timing: { state: "unknown", next: null, last: null, note: "Unsupported schedule" },
       },
+      {
+        ...sample,
+        id: "v2:completed",
+        title: "Fully completed hourly reminder",
+        writable: true,
+        restriction: "",
+        schedule: {
+          title: "Fully completed hourly reminder",
+          start: "2027-02-12T11:30",
+          timeZone: "Australia/Melbourne",
+          cadence: "hourly",
+          interval: 3,
+          until: "2027-02-12T11:31",
+          workHours: true,
+        },
+        timing: { state: "past", next: null, last: null, note: "" },
+      },
     ],
   });
   await click(refresh());
@@ -607,7 +624,10 @@ it("separates ended reminders from ongoing/unknown schedules and shares Melbourn
   await click(button("Ended"));
   expect(
     [...document.querySelectorAll('[role="tabpanel"] h3')].map((el) => el.textContent),
-  ).toEqual(["Ended once"]);
+  ).toEqual(["Ended once", "Fully completed hourly reminder"]);
+  expect(rowAction("Edit Fully completed hourly reminder").disabled).toBe(false);
+  expect(rowAction("Delete Fully completed hourly reminder").disabled).toBe(false);
+  expect(rowAction("This instance only: Fully completed hourly reminder").disabled).toBe(true);
   expect(document.body.textContent).not.toContain("Overdue");
 });
 it("keeps recurrence controls in one row and names the actual interval unit", async () => {

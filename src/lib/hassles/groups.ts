@@ -20,7 +20,10 @@ export function hassleGroups(tasks: HassleTask[], tab: HassleTab, now = Date.now
     .filter((task) => {
       if (tab === "upcoming") return task.timing.state !== "past";
       const last = task.timing.last ? Date.parse(task.timing.last) : NaN;
-      return task.timing.state === "past" && last >= now - 30 * 86400000 && last < now;
+      if (task.timing.state !== "past") return false;
+      // A fully completed DAILY-parts series still has a manageable master.
+      if (task.id.startsWith("v2:") && !task.timing.last) return true;
+      return last >= now - 30 * 86400000 && last < now;
     })
     .map((task) => ({
       task,

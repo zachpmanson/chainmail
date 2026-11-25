@@ -145,6 +145,8 @@ groups; it does not make their schedules editable.
   reminder was long ago. Ended shows the **last 30 days** of ended reminders,
   not completion history. Each group appears once, ordered by earliest next reminder
   (Upcoming) or most recent last reminder (Ended), under Melbourne-date day headers.
+  Fully completed hourly series with no remaining occurrence date stay in the undated
+  Ended group so their Calendar masters can still be renamed or deleted.
   Unsupported/incomplete schedules stay visible in Upcoming, undated when no next
   occurrence is known; they are never inferred to be ended from their original start.
 - One `[hassle:v1 task=<UUID>]` description marker groups resources within the selected
