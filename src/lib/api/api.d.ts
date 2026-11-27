@@ -2189,6 +2189,12 @@ export interface components {
             replyToEntry?: string;
             /** @description Current stored corpus graph root ext ID for replyToEntry. Present only for resolved reply. Root can retain unresolved external parent_ref. Never Gmail threadId. */
             rootId?: string;
+            /** @description Draft detail only: a uniquely matched Chainmail quote of the resolved parent, separated from the editable text above and below. If absent, the editor must preserve the full body. */
+            replyBody?: {
+                before: string;
+                quote: string;
+                after: string;
+            };
         } & components["schemas"]["Draft"];
         DraftDeleteResponse: {
             accountId: string;

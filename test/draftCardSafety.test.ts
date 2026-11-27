@@ -320,7 +320,7 @@ describe("read-only compatibility admission", () => {
       );
       expect(host.querySelector("textarea")!.value).toBe(draft.body);
       expect(host.querySelector("textarea")!.disabled).toBe(true);
-      if (kind === "compose") expect(button(host, "Cancel").disabled).toBe(false);
+      if (kind === "compose") expect(button(host, "Stop editing draft").disabled).toBe(false);
       const request = reads.find((url) => url.includes("/save-check"))!;
       expect(new URL(request, "https://synthetic.invalid").searchParams.get("accountId")).toBe("A");
       expect(
@@ -1377,6 +1377,58 @@ describe("reviewed editor preservation regressions", () => {
   });
 });
 
+describe("stop editing a saved draft", () => {
+  it.each([false, true])("dismisses and reopens the saved draft (reply: %s)", async (reply) => {
+    if (reply)
+      store.set(owner("A", saved.id), {
+        ...saved,
+        kind: "reply",
+        resolution: "resolved",
+        rootId: "root",
+        replyToEntry: "older",
+      });
+    const open = reply ? "root" : "compose";
+    const { host, router, navigate } = await mount(
+      `/?accountId=A&draft=${saved.id}&open=${open}${reply ? "" : "&popup=1"}`,
+    );
+    const stop = button(host, "Stop editing draft");
+    expect(stop.disabled).toBe(false);
+    if (reply) {
+      const replyAll = host.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+      expect(replyAll.checked).toBe(true);
+      await pick(replyAll);
+      await settle(750);
+      expect(writes.map((w) => w.method)).toEqual(["PUT"]);
+      expect(writes[0]?.body.replyAll).not.toBe(true);
+    } else {
+      const to = host.querySelector<HTMLInputElement>('input[aria-label="to addresses"]')!;
+      await type(to, "not-added@example.test");
+      vi.mocked(window.confirm).mockReturnValueOnce(false);
+      await pick(stop);
+      expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining("Recipient text"));
+      expect(to.value).toBe("not-added@example.test");
+      expect(router.state.location.search.draft).toBe(saved.id);
+      await key(to, "Escape");
+      vi.mocked(window.confirm).mockClear();
+    }
+    const priorWrites = writes.length;
+    await pick(stop);
+    await settle();
+    expect(router.state.location.search.draft).toBeUndefined();
+    expect(router.state.location.search.open).toBe(reply ? "root" : undefined);
+    expect(router.state.location.search.popup).toBeUndefined();
+    expect(host.querySelector("textarea")).toBeNull();
+    expect(writes).toHaveLength(priorWrites);
+    expect(store.has(owner("A", saved.id))).toBe(true);
+    await navigate({ accountId: "A", draft: saved.id, open });
+    expect(window.confirm).not.toHaveBeenCalled();
+    expect(host.querySelector("textarea")?.value).toBe(saved.body);
+    if (reply)
+      expect(host.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked).toBe(true);
+    expect(writes).toHaveLength(priorWrites);
+  });
+});
+
 describe("quiet live draft workflow", () => {
   it.each([false, true])(
     "keeps live body metadata and editing usable (reply: %s)",
@@ -1419,10 +1471,9 @@ describe("quiet live draft workflow", () => {
       const second = deferred<Response>();
       mutation = (method) => (method === "POST" ? first.promise : second.promise);
       const { host } = await mount("/?accountId=A&open=compose");
-      const cancel = button(host, "Cancel");
       await words(host, "First words");
       await settle(750);
-      expect(cancel.disabled).toBe(true);
+      expect(button(host, "Cancel").disabled).toBe(true);
       expect(host.querySelector("textarea")!.disabled).toBe(false);
       const to = host.querySelector<HTMLInputElement>('input[aria-label="to addresses"]')!;
       expect(to.disabled).toBe(false);
@@ -1435,12 +1486,13 @@ describe("quiet live draft workflow", () => {
       );
       await settle();
       if (!failure) {
-        expect(cancel.disabled).toBe(true);
+        expect(button(host, "Cancel").disabled).toBe(true);
+        expect(button(host, "Stop editing draft").disabled).toBe(true);
         expect(writes.map((w) => w.method)).toEqual(["POST", "PUT"]);
         await act(async () => second.resolve(json({ ...saved, messageId: "m2" })));
         await settle();
       }
-      expect(cancel.disabled).toBe(false);
+      expect(button(host, failure ? "Cancel" : "Stop editing draft").disabled).toBe(false);
       expect(host.querySelector("textarea")!.value).toBe("Queued words");
       if (failure) expect(writes.map((w) => w.method)).toEqual(["POST"]);
     },

@@ -13,6 +13,7 @@ export type LeaveSnapshot = {
   revision?: string;
   busy: boolean;
   dirty: boolean;
+  stopReady?: boolean;
   invalidate: () => void;
 };
 export type DraftSelection = {
@@ -31,6 +32,7 @@ export type DraftCoordinator = {
   clear: () => void;
   detach: (account: string) => boolean;
   approve: () => boolean;
+  stopEditing: (owner: string, onStop?: () => void) => void;
   retire: (account: string, id: string) => void;
   isRetired: (account: string, id: string) => boolean;
 };

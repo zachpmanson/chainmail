@@ -75,7 +75,7 @@ func ComposeReply(own string, t corpus.ReplyTarget) Reply {
 	head := replyHeading(t)
 	quotedText := quoteText(t.Body)
 	after := ""
-	if before, rest, found := strings.Cut(own, "\n\n"+head+"\n"+quotedText); found && !strings.HasPrefix(strings.TrimLeft(rest, " \t"), ">") {
+	if before, rest, found := cutReplyQuote(own, head+"\n"+quotedText); found {
 		own, after = before+"\n\n", rest
 	}
 
@@ -107,6 +107,29 @@ func ComposeReply(own string, t corpus.ReplyTarget) Reply {
 	html.WriteString(markdownBlocks(after))
 
 	return Reply{Text: text.String(), HTML: html.String()}
+}
+
+// DraftReplyBody separates a saved reply for editing without changing its wire body.
+type DraftReplyBody struct {
+	Before string `json:"before"`
+	Quote  string `json:"quote"`
+	After  string `json:"after"`
+}
+
+// SplitDraftReply recognizes only a single complete Chainmail quote of the resolved
+// parent. Unrecognized text stays editable rather than being silently removed.
+func SplitDraftReply(body string, t corpus.ReplyTarget) *DraftReplyBody {
+	quote := replyHeading(t) + "\n" + quoteText(t.Body)
+	before, after, found := cutReplyQuote(body, quote)
+	if !found || strings.Contains(body[len(before)+1:], "\n\n"+quote) {
+		return nil
+	}
+	return &DraftReplyBody{Before: before, Quote: quote, After: after}
+}
+
+func cutReplyQuote(body, quote string) (before, after string, found bool) {
+	before, after, found = strings.Cut(body, "\n\n"+quote)
+	return before, after, found && !strings.HasPrefix(strings.TrimLeft(after, " \t"), ">")
 }
 
 // replyHeading is the line a quote is introduced by: the instant in the page's own

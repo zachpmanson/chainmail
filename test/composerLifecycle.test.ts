@@ -95,6 +95,9 @@ const replyProps = {
   all: true,
   onAll: vi.fn(),
   aimed: 0,
+  stopped: false,
+  onStop: vi.fn(),
+  onResume: vi.fn(),
 };
 const closeCompose = vi.fn();
 let root: ReactTestRenderer;
@@ -151,6 +154,12 @@ function selectFixture(draft: SavedDraft = saved, epoch = 1) {
     select: () => {},
     clear: () => {},
     detach: () => true,
+    stopEditing: vi.fn((owner, onStop) => {
+      const snapshot = selectionFixture.current?.editor.current?.();
+      if (snapshot?.owner !== owner || !snapshot?.stopReady || snapshot.busy) return;
+      snapshot.invalidate();
+      onStop?.();
+    }),
     isRetired: (account, id) => retired.has(JSON.stringify([account, id])),
     retire: (account, id) => {
       retired.add(JSON.stringify([account, id]));
@@ -197,6 +206,7 @@ async function autosave() {
 
 beforeEach(async () => {
   closeCompose.mockClear();
+  replyProps.onStop.mockClear();
   clearToasts();
   selectionFixture.current = null;
   vi.useFakeTimers();
@@ -337,6 +347,47 @@ async function editWords(reply: boolean, body: string) {
       form().onDraft({ to: [{ address: "to@example.test" }], body });
     });
 }
+
+it("restores a locked parent quote, preserving the words on both sides on autosave", async () => {
+  const quote = "On Friday, Sender wrote:\n> The original message.\n";
+  const after = "\nAnother thought.";
+  selectFixture({
+    ...saved,
+    body: `OLD SAVED WORDS\n\n${quote}${after}`,
+    replyBody: { before: "OLD SAVED WORDS", quote, after },
+  });
+  await mount();
+  expect(fields().draft.body).toBe("OLD SAVED WORDS");
+  expect(root.root.findByType("blockquote").children.join("")).toBe(quote);
+  expect(root.root.findByType("textarea").props.value).toBe(after);
+  await autosave();
+  expect(requests.filter((r) => r.method === "PUT")).toHaveLength(0);
+  await typeReply("UPDATED WORDS");
+  await autosave();
+  expect(requests.find((r) => r.method === "PUT")?.body.body).toBe(
+    `UPDATED WORDS\n\n${quote}${after}`,
+  );
+});
+
+it("stops editing an acknowledged reply without deleting it, but blocks while a save is unsettled", async () => {
+  const normal = handle;
+  const save = deferred<Response>();
+  handle = (req) => (req.method === "PUT" ? save.promise : normal(req));
+  await mountSelected();
+  expect(button("Stop editing draft").props.disabled).toBe(false);
+  await typeReply("Keep these latest words");
+  expect(button("Stop editing draft").props.disabled).toBe(true);
+  await autosave();
+  expect(button("Stop editing draft").props.disabled).toBe(true);
+  expect(fields().draft.body).toBe("Keep these latest words");
+  await act(async () => save.resolve(json({ ...saved, messageId: "m2" })));
+  await settle();
+  await click("Stop editing draft");
+  expect(replyProps.onStop).toHaveBeenCalledOnce();
+  expect(fields().draft.body).toBe("");
+  expect(requests.filter((r) => r.method !== "GET").map((r) => r.method)).toEqual(["PUT"]);
+  expect(selectionFixture.current?.isRetired("acct", "d1")).toBe(false);
+});
 
 describe("quiet autosave lifecycle", () => {
   it.each([true, false])(

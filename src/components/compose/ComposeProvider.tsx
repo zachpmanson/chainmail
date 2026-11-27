@@ -325,6 +325,36 @@ export default function ComposeProvider({
             });
             return true;
           },
+          stopEditing: (owner, onStop) => {
+            const snapshot = editor.current?.();
+            const current = router.buildLocation({ search: true, hash: true, state: true });
+            const currentSearch = current.search as SearchParams;
+            if (
+              current.pathname !== "/" ||
+              currentSearch.open !== snapshot?.destination ||
+              (currentSearch.draft !== undefined &&
+                draftIdentity(currentSearch.accountId ?? "", currentSearch.draft) !== owner) ||
+              snapshot?.owner !== owner ||
+              !snapshot.stopReady ||
+              snapshot.busy
+            )
+              return;
+            snapshot.invalidate();
+            setNotice("");
+            onStop?.();
+            if (snapshot.kind === "compose" || currentSearch.draft !== undefined)
+              void navigate({
+                to: "/",
+                search: {
+                  ...currentSearch,
+                  open: snapshot.kind === "compose" ? undefined : currentSearch.open,
+                  popup: snapshot.kind === "compose" ? undefined : currentSearch.popup,
+                  draft: undefined,
+                },
+                replace: true,
+                ignoreBlocker: true,
+              });
+          },
           retire: (a, d) => {
             retired.current.add(draftIdentity(a, d));
             removeCachedDraft(client, a, d);

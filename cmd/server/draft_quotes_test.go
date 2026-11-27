@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/zachpmanson/chainmail/internal/corpus"
+	"github.com/zachpmanson/chainmail/internal/gmailclient"
 	"github.com/zachpmanson/chainmail/internal/spec"
 )
 
@@ -36,13 +37,22 @@ func TestReplyDraftRestoresAndResavesTheQuoteExactlyOnce(t *testing.T) {
 			t.Fatalf("save %d lost or duplicated quote: response=%q, mailbox=%q, want=%q", i, d.Body, fake.saved[i].Body, want.Text)
 		}
 		path, method = "/v1/drafts/"+d.ID, "PUT"
+		// Simulate Gmail returning the saved reply's threading headers.
+		d.Draft.ReplyHeaders = gmailclient.ReplyHeaders{InReplyTo: []string{strings.TrimPrefix(extAda1, "mail:")}}
+		fake.drafts[d.ID] = d.Draft
 		read := h.do(t, "GET", path, nil)
 		if read.status != 200 {
 			t.Fatalf("restore: status %d: %s", read.status, read.body)
 		}
+		assertNavigationSchema(t, read.body)
 		restored := decode[draftResponse](t, read)
 		if restored.Body != want.Text {
 			t.Fatalf("restore lost quote: %q", restored.Body)
+		}
+		split := restored.ReplyBody
+		if split == nil || split.Before != "**My answer.**\n\n> My own quotation." ||
+			split.Before+"\n\n"+split.Quote+split.After != restored.Body || split.After != "" {
+			t.Fatalf("restore did not separate the quote: %+v", split)
 		}
 		list := h.do(t, "GET", "/v1/drafts", nil)
 		if list.status != 200 {

@@ -3,6 +3,7 @@ import DraftCompatibilityNotice from "./DraftCompatibilityNotice";
 import DraftCards from "./DraftCards";
 import useSelectedDraft from "./useSelectedDraft";
 import { draftIdentity } from "../../lib/ui/draftSelection";
+import { canStopEditingDraft, confirmUncommittedRecipients } from "../../lib/message/draftStop";
 import { useEffect, useMemo, useReducer, useRef, useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { $api, type ComposeResponse } from "../../lib/api/api";
@@ -80,6 +81,7 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
   const routeAccountId = useAccountId();
   const { connected } = useAccounts();
   const queryClient = useQueryClient();
+  const host = useRef<HTMLElement>(null);
   const [{ draft, accountId, step }, dispatch] = useReducer(reduce, {
     draft: emptyDraft,
     accountId: routeAccountId ?? "",
@@ -136,6 +138,15 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
     [reviewInput],
   );
 
+  const stopReady = () =>
+    canStopEditingDraft({
+      generation: saveGeneration.current,
+      id: draftIdRef.current,
+      inputKey: draftInputKey,
+      acknowledgement: acknowledgedSaveRef.current,
+      pending: pendingWrites.current > 0 || busyRef.current,
+      failed: Boolean(draftSaveError || sendFailed),
+    });
   const selected = useSelectedDraft({
     kind: "compose",
     account: displayedAccountId,
@@ -143,7 +154,7 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
     snapshot: () => ({
       kind: "compose",
       destination: "compose",
-
+      stopReady: stopReady(),
       revision: JSON.stringify([
         draftInputKey,
         step.kind,
@@ -392,6 +403,7 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
     <aside
       className="ibread flex min-w-0 flex-col overflow-auto bg-bg min-[60rem]:h-full min-[60rem]:min-h-0 min-[60rem]:px-5"
       aria-label="Compose email"
+      ref={host}
     >
       <div className="mt-4 mb-1 rounded-lg border border-line bg-card px-3 py-2">
         {step.kind === "sent" ? (
@@ -473,6 +485,15 @@ export default function ComposeBox({ onClose }: { onClose: () => void }) {
                 onClose();
               }}
               onDiscard={draftId ? () => void discardDraft() : undefined}
+              onStop={
+                draftId && selected.coordinator
+                  ? () => {
+                      if (!stopReady() || !confirmUncommittedRecipients(host.current)) return;
+                      selected.coordinator?.stopEditing(draftIdentity(displayedAccountId, draftId));
+                    }
+                  : undefined
+              }
+              stopDisabled={!stopReady() || pendingWriteCount > 0}
             />
           </>
         )}

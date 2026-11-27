@@ -46,6 +46,34 @@ func TestReplyDeduplicationDoesNotDiscardAuthoredQuotes(t *testing.T) {
 	}
 }
 
+func TestSplitDraftReplyPreservesWordsAndDeclinesAmbiguousQuotes(t *testing.T) {
+	target := corpus.ReplyTarget{Author: "Bo", Body: "A date.\n\n> Earlier", TS: at(t)}
+	quote := ComposeReply("", target).Text
+	for _, before := range []string{"", "My words.\n\n> My quotation.\n"} {
+		for _, after := range []string{"", "\nWords below.\n\n> My other quotation.\n"} {
+			body := before + quote + after
+			split := SplitDraftReply(body, target)
+			if split == nil || split.Before != before || split.After != after || split.Before+"\n\n"+split.Quote+split.After != body {
+				t.Fatalf("split changed %q: %+v", body, split)
+			}
+			if got := ComposeReply("Edited: "+split.Before+"\n\n"+split.Quote+split.After, target).Text; got != "Edited: "+body {
+				t.Fatalf("edited round trip = %q; wanted %q", got, "Edited: "+body)
+			}
+		}
+	}
+	for _, body := range []string{
+		"Only my own words.",
+		strings.ReplaceAll(quote, "A date.", "Another date."),
+		quote + "  > An extra quoted line.\n",
+		quote + quote,
+		quote + quote[1:],
+	} {
+		if got := SplitDraftReply(body, target); got != nil {
+			t.Fatalf("hid edited or ambiguous text in %q: %+v", body, got)
+		}
+	}
+}
+
 func TestWordsAddedBelowRestoredQuoteStayBelowIt(t *testing.T) {
 	target := corpus.ReplyTarget{Author: "Bo Halvorsen", Body: "The date.", HTML: "<p>The <b>date</b>.</p>", TS: at(t)}
 	first := ComposeReply("My answer.", target)

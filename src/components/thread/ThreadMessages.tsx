@@ -1,7 +1,7 @@
 import { useDraftCoordinator } from "../compose/DraftSelectionContext";
 import DraftCards from "../compose/DraftCards";
 import InlineAlert from "../ui/InlineAlert";
-import { Fragment, useEffect, useMemo, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { $api, type CorpusEntry } from "../../lib/api/api";
 import { useAccountId } from "../../lib/inbox/useAccountId";
 import { attach } from "../../client/behaviour";
@@ -32,6 +32,10 @@ export default function ThreadMessages({
   const accountId = useAccountId();
   const coordinator = useDraftCoordinator();
   const selected = coordinator?.selection;
+  const stopScope = JSON.stringify([thread.rootExtId, accountId]);
+  const [stopped, setStopped] = useState<{ scope: string; epoch?: number }>();
+  const composerStopped =
+    stopped?.scope === stopScope && (!selected?.active || stopped.epoch === selected.epoch);
   const selectedReply =
     selected?.draft?.kind === "reply" && selected.draft.rootId === thread.rootExtId
       ? selected.draft
@@ -141,6 +145,7 @@ export default function ThreadMessages({
             if (!coordinator?.approve()) return;
             coordinator.detach(accountId ?? "");
           }
+          setStopped(undefined);
           aim(extId);
         }}
         flip={flip}
@@ -178,6 +183,9 @@ export default function ThreadMessages({
           all={all}
           onAll={setAll}
           aimed={aimed}
+          stopped={composerStopped}
+          onStop={() => setStopped({ scope: stopScope, epoch: selected?.epoch })}
+          onResume={() => setStopped(undefined)}
         />
       ) : null}
     </div>

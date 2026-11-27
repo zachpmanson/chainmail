@@ -19,6 +19,8 @@ export default function ComposeForm({
   onSubmit,
   onClose,
   onDiscard,
+  onStop,
+  stopDisabled = false,
 }: {
   draft: Draft;
   onDraft: (patch: Partial<Draft>) => void;
@@ -31,6 +33,8 @@ export default function ComposeForm({
   onSubmit: (event: FormEvent) => void;
   onClose: () => void;
   onDiscard?: () => void;
+  onStop?: () => void;
+  stopDisabled?: boolean;
 }) {
   const form = useRef<HTMLFormElement>(null);
   const people = usePersonAddresses();
@@ -80,15 +84,29 @@ export default function ComposeForm({
             Discard draft
           </Button>
         ) : null}
-        <Button
-          variant="subtle"
-          density="compact"
-          type="button"
-          disabled={busy || cancelDisabled}
-          onClick={onClose}
-        >
-          Cancel
-        </Button>
+        {!onStop || stopDisabled ? (
+          <Button
+            variant="subtle"
+            density="compact"
+            type="button"
+            disabled={busy || cancelDisabled}
+            onClick={onClose}
+          >
+            Cancel
+          </Button>
+        ) : null}
+        {onStop ? (
+          <Button
+            variant="subtle"
+            density="compact"
+            type="button"
+            disabled={busy || cancelDisabled || stopDisabled}
+            title="Close the editor after the current changes are saved to Gmail."
+            onClick={onStop}
+          >
+            Stop editing draft
+          </Button>
+        ) : null}
         <Button
           variant="subtle"
           density="compact"

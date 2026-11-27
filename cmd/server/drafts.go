@@ -35,11 +35,12 @@ type draftRequest struct {
 }
 
 type draftResponse struct {
-	AccountID    string `json:"accountId"`
-	Kind         string `json:"kind"`
-	Resolution   string `json:"resolution"`
-	ReplyToEntry string `json:"replyToEntry,omitempty"`
-	RootID       string `json:"rootId,omitempty"`
+	AccountID    string               `json:"accountId"`
+	Kind         string               `json:"kind"`
+	Resolution   string               `json:"resolution"`
+	ReplyToEntry string               `json:"replyToEntry,omitempty"`
+	RootID       string               `json:"rootId,omitempty"`
+	ReplyBody    *spec.DraftReplyBody `json:"replyBody,omitempty"`
 	gmailclient.Draft
 }
 
@@ -196,7 +197,13 @@ func (s *server) draft(w http.ResponseWriter, r *http.Request) {
 			fail(w, gmailDraftErrorStatus(err), fmt.Errorf("reading draft: %w", err))
 			return
 		}
-		send(w, http.StatusOK, s.draftResponse(accountID, d))
+		out := s.draftResponse(accountID, d)
+		if out.Kind == "reply" {
+			if target, err := s.store.ReplyTarget(out.ReplyToEntry); err == nil {
+				out.ReplyBody = spec.SplitDraftReply(d.Body, target)
+			}
+		}
+		send(w, http.StatusOK, out)
 	case http.MethodPut:
 		if !s.draftMailEnabled {
 			fail(w, http.StatusForbidden, errors.New("saving Gmail drafts is disabled: restart with -draft-mail to enable draft writes"))

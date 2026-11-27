@@ -28,6 +28,7 @@ function coordinator(id: string, loading = false): DraftCoordinator {
     clear: vi.fn(),
     detach: () => true,
     approve: () => true,
+    stopEditing: vi.fn(),
     retire: vi.fn(),
     isRetired: () => false,
   };

@@ -22,11 +22,13 @@ import InlineAlert from "../ui/InlineAlert";
 import AccountSelect from "./AccountSelect";
 import ReplyPlan from "./ReplyPlan";
 import ReplyTarget from "./ReplyTarget";
+import RestoredReplyQuote from "./RestoredReplyQuote";
 import useAccounts from "./useAccounts";
 import useBusyTask from "./useBusyTask";
 import useReplyRecipients from "./useReplyRecipients";
 import ReviewInput, { type ReviewedInput } from "../../lib/message/reviewedInput";
 import DraftOwnership, { removeCachedDraft } from "../../lib/message/draftOwnership";
+import { canStopEditingDraft, confirmUncommittedRecipients } from "../../lib/message/draftStop";
 import type { components } from "../../lib/api/api.d";
 
 type ReplyInput = Omit<components["schemas"]["SendRequest"], "confirm">;
@@ -41,8 +43,8 @@ type Step =
     };
 
 type State = {
-  /** The editable text; restored Gmail drafts also carry their saved quote. */
   own: string;
+  restored?: { quote: string; after: string; showAfter: boolean };
   html: boolean;
   accountId: string;
   /** The recipient fields and sender selector start closed behind a summary line. */
@@ -53,6 +55,8 @@ type State = {
 type Action =
   | { type: "retarget"; accountId: string }
   | { type: "words"; own: string }
+  | { type: "restored"; own: string; restored?: State["restored"] }
+  | { type: "afterQuote"; after: string }
   | { type: "html"; html: boolean }
   | { type: "account"; accountId: string }
   | { type: "editRecipients" }
@@ -63,13 +67,40 @@ type Action =
 
 const editing: Step = { kind: "editing" };
 
+function authoredWords(before: string, after: string) {
+  return before && after ? `${before}\n\n${after}` : before || after;
+}
+
+function replyBody(
+  before: string,
+  restored?: Pick<NonNullable<State["restored"]>, "quote" | "after">,
+) {
+  if (!restored) return before;
+  // A new quotation typed below the locked block must not extend that block.
+  const separator = /^[ \t]*>/.test(restored.after) ? "\n" : "";
+  return `${before}\n\n${restored.quote}${separator}${restored.after}`;
+}
+
 function reduce(state: State, action: Action): State {
   switch (action.type) {
     // A plan quotes the message it was made for, so retargeting drops it; the words stay.
     case "retarget":
-      return { ...state, accountId: action.accountId, editingRecipients: false, step: editing };
+      return {
+        ...state,
+        own: state.restored ? authoredWords(state.own, state.restored.after) : state.own,
+        restored: undefined,
+        accountId: action.accountId,
+        editingRecipients: false,
+        step: editing,
+      };
     case "words":
       return { ...state, own: action.own };
+    case "restored":
+      return { ...state, own: action.own, restored: action.restored };
+    case "afterQuote":
+      return state.restored
+        ? { ...state, restored: { ...state.restored, after: action.after } }
+        : state;
     case "html":
       return { ...state, html: action.html };
     case "account":
@@ -89,7 +120,7 @@ function reduce(state: State, action: Action): State {
     case "edit":
       return { ...state, step: editing };
     case "sent":
-      return { ...state, own: "", editingRecipients: false, step: editing };
+      return { ...state, own: "", restored: undefined, editingRecipients: false, step: editing };
     case "sendFailed":
       return state.step.kind === "reviewing"
         ? { ...state, step: { ...state.step, sendFailed: true } }
@@ -109,6 +140,9 @@ export default function ReplyBox({
   all,
   onAll,
   aimed,
+  stopped,
+  onStop,
+  onResume,
   scopePending = false,
 }: {
   thread: { rootExtId: string };
@@ -118,6 +152,9 @@ export default function ReplyBox({
   all: boolean;
   onAll: (all: boolean) => void;
   aimed: number;
+  stopped: boolean;
+  onStop: () => void;
+  onResume: () => void;
   scopePending?: boolean;
 }) {
   const scopePendingRef = useRef(scopePending);
@@ -126,13 +163,16 @@ export default function ReplyBox({
   const routeAccountId = useAccountId();
   const continuityAccount = useRef(routeAccountId ?? "");
   const transferAccount = useRef<string>();
-  const [{ own, html, accountId, editingRecipients, step }, dispatch] = useReducer(reduce, {
-    own: "",
-    html: true,
-    accountId: routeAccountId ?? "",
-    editingRecipients: false,
-    step: editing,
-  });
+  const [{ own, restored, html, accountId, editingRecipients, step }, dispatch] = useReducer(
+    reduce,
+    {
+      own: "",
+      html: true,
+      accountId: routeAccountId ?? "",
+      editingRecipients: false,
+      step: editing,
+    },
+  );
   const { connected } = useAccounts();
   const displayedAccountId = accountId || (connected.length === 1 ? (connected[0]?.id ?? "") : "");
   const [draftId, setDraftId] = useState("");
@@ -143,6 +183,7 @@ export default function ReplyBox({
   const saveGeneration = useRef(0);
   const saveQueue = useRef(Promise.resolve());
   const pendingWrites = useRef(0);
+  const [pendingWriteCount, setPendingWriteCount] = useState(0);
   const writeRevision = useRef(0);
   const drafts = $api.useQuery(
     "get",
@@ -156,8 +197,10 @@ export default function ReplyBox({
   const updateDraft = $api.useMutation("put", "/v1/drafts/{id}");
   const deleteDraft = $api.useMutation("delete", "/v1/drafts/{id}");
   const recipients = useReplyRecipients(answer, all, displayedAccountId);
+  const authored = authoredWords(own, restored?.after ?? "");
+  const body = replyBody(own, restored);
   const ownership = useRef(new DraftOwnership()).current;
-  ownership.enter(JSON.stringify([answer.extId, displayedAccountId]), Boolean(own));
+  ownership.enter(JSON.stringify([answer.extId, displayedAccountId]), Boolean(authored));
   const { to, cc } = recipients;
   const restoreRecipients = recipients.restore;
   const { busy, busyRef, operationRevision, error, clearError, run } = useBusyTask();
@@ -170,23 +213,23 @@ export default function ReplyBox({
       ...recipients.edited,
       replyAll: all,
       subject: answer.subject?.startsWith("Re:") ? answer.subject : `Re: ${answer.subject ?? ""}`,
-      body: own,
+      body,
       replyToEntry: answer.extId,
     }),
-    [displayedAccountId, recipients.edited, all, answer.subject, own, answer.extId],
+    [displayedAccountId, recipients.edited, all, answer.subject, body, answer.extId],
   );
   const draftInputKey = JSON.stringify(draftInput);
   const recoveryDraft = {
     to: to.map(addressWords),
     cc: cc.map(addressWords),
     subject: draftInput.subject,
-    body: own,
+    body,
   };
   const sendFailed = step.kind === "reviewing" && step.sendFailed;
   const reviewInput = useRef(new ReviewInput<ReplyInput>()).current;
   reviewInput.update({
     entry: answer.extId,
-    body: own,
+    body,
     all,
     html,
     ...(displayedAccountId ? { accountId: displayedAccountId } : {}),
@@ -224,6 +267,16 @@ export default function ReplyBox({
     setDraftId("");
   }, [answer.extId, effectiveRouteAccountId]);
 
+  const stopReady = () =>
+    !scopePendingRef.current &&
+    canStopEditingDraft({
+      generation: saveGeneration.current,
+      id: draftIdRef.current,
+      inputKey: draftInputKey,
+      acknowledgement: acknowledgedSaveRef.current,
+      pending: pendingWrites.current > 0 || busyRef.current,
+      failed: Boolean(draftSaveError || sendFailed),
+    });
   const selected = useSelectedDraft({
     kind: "reply",
     account: displayedAccountId,
@@ -233,6 +286,7 @@ export default function ReplyBox({
       kind: "reply",
       destination: thread.rootExtId,
       target: answer.extId,
+      stopReady: stopReady(),
       revision: JSON.stringify([
         draftInputKey,
         all,
@@ -252,21 +306,24 @@ export default function ReplyBox({
         createDraft.isPending ||
         updateDraft.isPending ||
         deleteDraft.isPending,
-      dirty: Boolean(
-        own ||
-        recipients.edited.to ||
-        recipients.edited.cc ||
-        !all ||
-        !html ||
-        draftSaveError ||
-        sendFailed,
-      ),
+      dirty:
+        !stopped &&
+        Boolean(
+          authored ||
+          recipients.edited.to ||
+          recipients.edited.cc ||
+          !all ||
+          !html ||
+          draftSaveError ||
+          sendFailed,
+        ),
       invalidate: () => {
         saveGeneration.current++;
         reviewInput.invalidate();
       },
     }),
     hydrate: (saved) => {
+      onResume();
       continuityAccount.current = saved.accountId;
       transferAccount.current = undefined;
       saveGeneration.current++;
@@ -278,7 +335,12 @@ export default function ReplyBox({
       setDraftId(saved.id);
       const to = parseAddressHeader(saved.to);
       const cc = parseAddressHeader(saved.cc);
-      dispatch({ type: "words", own: saved.body ?? "" });
+      const split = saved.replyBody;
+      const restored =
+        split && replyBody(split.before, split) === saved.body
+          ? { ...split, showAfter: Boolean(split.after.trim()) }
+          : undefined;
+      dispatch({ type: "restored", own: restored?.before ?? saved.body ?? "", restored });
       restoreRecipients(to, cc);
       const input = {
         accountId: displayedAccountId,
@@ -302,8 +364,9 @@ export default function ReplyBox({
   // edit and replace it; a draft ID returned by create is reused by later saves.
   useEffect(() => {
     if (
+      stopped ||
       scopePending ||
-      (!own.trim() && !draftIdRef.current) ||
+      (!authored.trim() && !draftIdRef.current) ||
       !displayedAccountId ||
       !answer.extId ||
       drafts.isPending ||
@@ -323,6 +386,7 @@ export default function ReplyBox({
     const timer = window.setTimeout(() => {
       writeRevision.current++;
       pendingWrites.current++;
+      setPendingWriteCount(pendingWrites.current);
       saveQueue.current = saveQueue.current
         .catch(() => undefined)
         .then(async () => {
@@ -358,11 +422,13 @@ export default function ReplyBox({
         })
         .finally(() => {
           pendingWrites.current--;
+          setPendingWriteCount(pendingWrites.current);
         });
     }, 700);
     return () => window.clearTimeout(timer);
   }, [
-    own,
+    authored,
+    stopped,
     selected.blocked,
     scopePending,
     draftSaveError,
@@ -505,10 +571,27 @@ export default function ReplyBox({
       draftMessageIdRef.current = "";
       setDraftId("");
       setDraftSaveError("");
-      dispatch({ type: "words", own: "" });
+      dispatch({ type: "sent" });
       recipients.untouch();
       await queryClient.invalidateQueries({ queryKey: ["get", "/v1/drafts"] });
     }, errText);
+  }
+
+  function stopEditing() {
+    if (!stopReady() || !confirmUncommittedRecipients(host.current)) return;
+    if (!html && !window.confirm("Stop editing? The send HTML option is not saved in Gmail."))
+      return;
+    selected.coordinator?.stopEditing(draftIdentity(displayedAccountId, draftIdRef.current), () => {
+      draftIdRef.current = "";
+      draftMessageIdRef.current = "";
+      setDraftId("");
+      dispatch({ type: "sent" });
+      dispatch({ type: "html", html: true });
+      onAll(true);
+      recipients.untouch();
+      clearError();
+      onStop();
+    });
   }
 
   const errorAlert =
@@ -531,11 +614,15 @@ export default function ReplyBox({
       {!scopePending && draftSaveError ? (
         <DraftSaveError error={draftSaveError} draft={recoveryDraft} />
       ) : null}
-      {!scopePending ? (
+      {!scopePending && !stopped ? (
         <DraftCompatibilityNotice check={selected.preflight} draft={recoveryDraft} />
       ) : null}
-      <section aria-label="Reply" aria-busy={selected.preflight.pending || undefined}>
-        {step.kind === "reviewing" ? (
+      <section
+        aria-label="Reply"
+        hidden={stopped}
+        aria-busy={selected.preflight.pending || undefined}
+      >
+        {stopped ? null : step.kind === "reviewing" ? (
           <>
             <div
               className={scopePending ? "hidden" : undefined}
@@ -610,6 +697,19 @@ export default function ReplyBox({
               mine={recipients.mine}
               busy={busy || selected.editingBlocked}
             />
+            {restored && !scopePending ? (
+              <RestoredReplyQuote
+                quote={restored.quote}
+                after={restored.after}
+                showAfter={restored.showAfter}
+                disabled={busy || selected.editingBlocked}
+                onAfter={(after) => {
+                  selected.edit();
+                  ownership.edit();
+                  dispatch({ type: "afterQuote", after });
+                }}
+              />
+            ) : null}
             <footer className="mt-2 flex flex-wrap items-center justify-end gap-2">
               <div className="mr-auto flex flex-wrap items-center gap-4">
                 <CheckboxRow
@@ -641,7 +741,7 @@ export default function ReplyBox({
                 >
                   send html
                 </CheckboxRow>
-                <BodyWordCount body={own} />
+                <BodyWordCount body={authored} />
               </div>
               {draftId ? (
                 <Button
@@ -652,6 +752,18 @@ export default function ReplyBox({
                   onClick={() => void discardDraft()}
                 >
                   Discard draft
+                </Button>
+              ) : null}
+              {draftId && selected.coordinator ? (
+                <Button
+                  variant="subtle"
+                  density="compact"
+                  type="button"
+                  disabled={!stopReady() || pendingWriteCount > 0}
+                  title="Close the editor after the current changes are saved to Gmail."
+                  onClick={stopEditing}
+                >
+                  Stop editing draft
                 </Button>
               ) : null}
               <Button
@@ -665,7 +777,7 @@ export default function ReplyBox({
                   scopePending ||
                   busy ||
                   selected.blocked ||
-                  own.trim() === "" ||
+                  authored.trim() === "" ||
                   (recipients.toTouched && to.length === 0)
                 }
                 onClick={() => void review()}
@@ -676,7 +788,12 @@ export default function ReplyBox({
           </>
         )}
       </section>
-      {selected.replacement ? (
+      {stopped && !scopePending ? (
+        <Button variant="subtle" density="compact" type="button" onClick={onResume}>
+          Write a reply
+        </Button>
+      ) : null}
+      {selected.replacement && !stopped ? (
         <InlineAlert>
           New input arrived while the selected draft was loading.{" "}
           <Button type="button" density="compact" onClick={selected.replace}>
